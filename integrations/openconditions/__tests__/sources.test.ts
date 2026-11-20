@@ -7,7 +7,7 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, test, vi } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { setup } from "../index.js";
 import manifest from "../manifest.json" with { type: "json" };
@@ -24,6 +24,18 @@ import { CROWD_CREDIT } from "./fixtures/crowd.js";
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 import sourcesAnswer from "./fixtures/sources.json" with { type: "json" };
 import conditionsSources from "./fixtures/sources-conditions.json" with { type: "json" };
+
+/** An OC source the integration maps; the test fails if it maps to no domain. */
+function dataSource(source: Parameters<typeof toDataSource>[0]) {
+  const mapped = toDataSource(source);
+  assert.isDefined(mapped, `${source.id} maps to no OpenMapX domain`);
+  return mapped;
+}
+function connectedClient(...args: Parameters<typeof createOpenConditionsClient>) {
+  const client = createOpenConditionsClient(...args);
+  assert.exists(client, "the OpenConditions client is not configured");
+  return client;
+}
 
 const BASE_URL = "http://openconditions.test:4100";
 const OPERATOR = { OPENCONDITIONS_URL: BASE_URL, OPENCONDITIONS_OPERATOR_TOKEN: "t".repeat(32) };
@@ -143,7 +155,7 @@ describe("toDataSource", () => {
     // The host accepts it with the manifest rules of this integration.
     expect(validateDataSource(ds, manifest.domains).valid).toBe(true);
 
-    const roads = toDataSource(NDW)!;
+    const roads = dataSource(NDW);
     expect(roads).toMatchObject({
       domain: "road-conditions",
       commercialUse: "yes",
@@ -154,10 +166,10 @@ describe("toDataSource", () => {
     expect(roads).not.toHaveProperty("reviewedAt");
     expect(validateDataSource(roads, manifest.domains).valid).toBe(true);
 
-    expect(toDataSource(OSM)!.providerCountry).toBe("INT");
+    expect(dataSource(OSM).providerCountry).toBe("INT");
     const eu = ocSource({ region: "eu" });
     delete (eu as { country?: unknown }).country;
-    expect(toDataSource(eu)!.providerCountry).toBe("EU");
+    expect(dataSource(eu).providerCountry).toBe("EU");
   });
 
   test("shows a captured custom definition without a mutable name lookup", () => {
@@ -176,14 +188,16 @@ describe("toDataSource", () => {
         },
       ],
     };
-    const tfl = toDataSource(ocSource({ license: TFL_LICENSE, licensing }))!;
+    const tfl = dataSource(ocSource({ license: TFL_LICENSE, licensing }));
     expect(formatLicensing(tfl.licensing)).toBe(TFL_LICENSE_NAME);
     expect(validateDataSource(tfl, manifest.domains).valid).toBe(true);
-    expect(formatLicensing(toDataSource(ocSource())!.licensing!)).toBe("CC-BY-4.0");
+    const { licensing: defaultLicensing } = dataSource(ocSource());
+    assert.isDefined(defaultLicensing);
+    expect(formatLicensing(defaultLicensing)).toBe("CC-BY-4.0");
   });
 
   test("share-alike makes a granted redistribution conditional; a terms note is a usage condition", () => {
-    const osm = toDataSource(
+    const osm = dataSource(
       ocSource({
         id: "osm-fuel",
         license: "ODbL-1.0",
@@ -198,7 +212,7 @@ describe("toDataSource", () => {
         },
         licensing: licensingFromDeclaration("ODbL-1.0", undefined),
       }),
-    )!;
+    );
     expect(osm.redistribution).toEqual({ sourceData: "conditional", derivedData: "conditional" });
     expect(osm.usageConditions).toEqual([
       "Share-alike: a derived database is published under the ODbL",
@@ -208,7 +222,7 @@ describe("toDataSource", () => {
     expect(validateDataSource(osm, manifest.domains).valid).toBe(true);
 
     // Share-alike does not grant a right the source denies or leaves unstated.
-    const denied = toDataSource(
+    const denied = dataSource(
       ocSource({
         rights: {
           ...ocSource().rights,
@@ -217,7 +231,7 @@ describe("toDataSource", () => {
           shareAlike: true,
         },
       }),
-    )!;
+    );
     expect(denied.redistribution).toEqual({ sourceData: "no", derivedData: "unknown" });
     expect(denied.usageConditions).toEqual([SHARE_ALIKE]);
 
@@ -228,8 +242,9 @@ describe("toDataSource", () => {
   test("maps the /sources entries OpenConditions serves, terms note and share-alike included", () => {
     const answer = sourcesAnswer as unknown as OcSourceList;
     expect(answer.scope).toBe("operator");
-    const byId = new Map(answer.sources.map((s) => [s.id, toDataSource(s)!]));
-    const tankerkoenig = byId.get("de-tankerkoenig-fuel")!;
+    const byId = new Map(answer.sources.map((s) => [s.id, dataSource(s)]));
+    const tankerkoenig = byId.get("de-tankerkoenig-fuel");
+    assert.isDefined(tankerkoenig);
     expect(tankerkoenig.usageConditions).toEqual([
       "API data must not be obtained or passed on by mineral oil companies, filling-station operators or IT providers working for them; a public API cannot exclude them",
     ]);
@@ -240,7 +255,7 @@ describe("toDataSource", () => {
       providerCountry: "DE",
       redistribution: { sourceData: "no", derivedData: "yes" },
     });
-    expect(byId.get("osm-fuel")!.usageConditions).toEqual([SHARE_ALIKE]);
+    expect(byId.get("osm-fuel")?.usageConditions).toEqual([SHARE_ALIKE]);
     expect(byId.get("nl-ndw-events")).not.toHaveProperty("usageConditions");
     for (const ds of byId.values()) {
       expect(validateDataSource(ds, manifest.domains).valid, ds.sourceId).toBe(true);
@@ -248,7 +263,7 @@ describe("toDataSource", () => {
   });
 
   test("maps an OC parking feed to the parking-sites domain", () => {
-    const parking = toDataSource(
+    const parking = dataSource(
       ocSource({
         id: "de-bw-mobidata-parking",
         name: "MobiData BW ParkAPI car parking sites",
@@ -258,13 +273,13 @@ describe("toDataSource", () => {
         accessMode: "bulk",
         restricted: false,
       }),
-    )!;
+    );
     expect(parking).toMatchObject({ sourceId: "de-bw-mobidata-parking", domain: "parking-sites" });
     expect(validateDataSource(parking, manifest.domains).valid).toBe(true);
   });
 
   test("maps an OC hazards feed to the hazards domain", () => {
-    const hazards = toDataSource(
+    const hazards = dataSource(
       ocSource({
         id: "usgs-quakes",
         name: "USGS earthquakes",
@@ -277,15 +292,13 @@ describe("toDataSource", () => {
         accessMode: "bulk",
         restricted: false,
       }),
-    )!;
+    );
     expect(hazards).toMatchObject({ sourceId: "usgs-quakes", domain: "hazards" });
     expect(validateDataSource(hazards, manifest.domains).valid).toBe(true);
   });
 
   test("maps the OC weather, vehicles and border feeds to their own domains", () => {
-    const listed = (conditionsSources.sources as unknown as OcSource[]).map(
-      (s) => toDataSource(s)!,
-    );
+    const listed = (conditionsSources.sources as unknown as OcSource[]).map((s) => dataSource(s));
     expect(listed.map((d) => [d.sourceId, d.domain])).toEqual([
       ["ca-cbsa-waits", "border-crossings"],
       ["fi-digitraffic-maintenance", "service-vehicles"],
@@ -305,7 +318,7 @@ describe("toDataSource", () => {
   });
 
   test("maps an OC camera feed to the cameras domain with its image hosts as media hosts", () => {
-    const cameras = toDataSource(
+    const cameras = dataSource(
       ocSource({
         id: "gb-eng-tfl-cameras",
         name: "TfL JamCams",
@@ -316,7 +329,7 @@ describe("toDataSource", () => {
         restricted: false,
         imageHosts: ["s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/"],
       }),
-    )!;
+    );
     expect(cameras).toMatchObject({
       sourceId: "gb-eng-tfl-cameras",
       domain: "cameras",
@@ -327,7 +340,7 @@ describe("toDataSource", () => {
     expect(validateDataSource(cameras, manifest.domains).valid).toBe(true);
 
     // A camera feed without image hosts has none to admit; another domain never has any.
-    const osm = toDataSource(ocSource({ id: "osm-cameras", domain: "cameras" }))!;
+    const osm = dataSource(ocSource({ id: "osm-cameras", domain: "cameras" }));
     expect(osm).not.toHaveProperty("mediaHosts");
     expect(osm.endUserExposure).toBe("mixed");
     expect(toDataSource(ocSource())).toMatchObject({ endUserExposure: "server-only" });
@@ -341,13 +354,13 @@ describe("toDataSource", () => {
     expect(camera("tfl.gov.uk")).toMatchObject({ sourceId: "gb-eng-tfl-cameras" });
     expect(camera("tfl.gov.uk")).not.toHaveProperty("mediaHosts");
     expect(camera({ host: "tfl.gov.uk" })).not.toHaveProperty("mediaHosts");
-    expect(camera([42, null, "tfl.gov.uk"])!.mediaHosts).toEqual(["tfl.gov.uk"]);
+    expect(camera([42, null, "tfl.gov.uk"])?.mediaHosts).toEqual(["tfl.gov.uk"]);
     expect(camera([42])).not.toHaveProperty("mediaHosts");
   });
 
   test("an image host the proxy would refuse costs its stills, never the source", () => {
     const camera = (imageHosts: string[]) =>
-      toDataSource(ocSource({ id: "gb-eng-tfl-cameras", domain: "cameras", imageHosts }))!;
+      dataSource(ocSource({ id: "gb-eng-tfl-cameras", domain: "cameras", imageHosts }));
     const listed = camera([
       "*.co.uk",
       "s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/",
@@ -442,10 +455,10 @@ describe("toDataSource", () => {
     });
     const http = fakeHttpClient(() => listOf(NDW, hidden));
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
-    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!);
+    const sync = startSourceSync(ctx, connectedClient(OPERATOR, http));
     await sync.first;
     sync.stop();
-    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
   });
 });
 
@@ -460,19 +473,19 @@ describe("startSourceSync", () => {
   test("supplies the sources at activation and refreshes them on the interval", async () => {
     let answer: unknown = listOf(NDW, ocSource({ domain: "ev", id: "de-x-ev" }));
     const http = fakeHttpClient((req) => (req.url === `${BASE_URL}/sources` ? answer : undefined));
-    const client = createOpenConditionsClient(OPERATOR, http)!;
+    const client = connectedClient(OPERATOR, http);
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
 
     const sync = startSourceSync(ctx, client, { intervalMs: 1000 });
     await sync.first;
 
     expect(ctx.registered.dataSourceLists).toHaveLength(1);
-    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
 
     answer = listOf(NDW, ocSource());
     await vi.advanceTimersByTimeAsync(1000);
     expect(ctx.registered.dataSourceLists).toHaveLength(2);
-    expect(ctx.registered.dataSourceLists[1]!.map((d) => d.sourceId)).toEqual([
+    expect(ctx.registered.dataSourceLists[1]?.map((d) => d.sourceId)).toEqual([
       "nl-ndw-events",
       "de-tankerkoenig-fuel",
     ]);
@@ -496,14 +509,14 @@ describe("startSourceSync", () => {
     const http = fakeHttpClient((req) => (req.url === `${BASE_URL}/sources` ? answer : undefined));
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
     const credits: unknown[] = [];
-    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!, {
+    const sync = startSourceSync(ctx, connectedClient(OPERATOR, http), {
       intervalMs: 1000,
       onCrowd: (credit) => credits.push(credit),
     });
     await sync.first;
     expect(credits).toEqual([CROWD_CREDIT]);
     // The crowd is no feed: it is not supplied to the host as a data source.
-    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
 
     // A link that is no web URL is left out; a credit without a licence is none.
     answer = { ...listOf(NDW), crowd: { ...crowd, url: "javascript:alert(1)" } };
@@ -523,21 +536,21 @@ describe("startSourceSync", () => {
     const publicCtx = createMockIntegrationContext({ id: "openconditions", http: publicHttp });
     const publicSync = startSourceSync(
       publicCtx,
-      createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, publicHttp)!,
+      connectedClient({ OPENCONDITIONS_URL: BASE_URL }, publicHttp),
     );
     await publicSync.first;
     publicSync.stop();
     // A restricted source's records are never served in the public scope.
-    expect(publicCtx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual([
+    expect(publicCtx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual([
       "nl-ndw-events",
     ]);
 
     const http = fakeHttpClient(() => listOf(NDW, ocSource()));
     const operatorCtx = createMockIntegrationContext({ id: "openconditions", http });
-    const operatorSync = startSourceSync(operatorCtx, createOpenConditionsClient(OPERATOR, http)!);
+    const operatorSync = startSourceSync(operatorCtx, connectedClient(OPERATOR, http));
     await operatorSync.first;
     operatorSync.stop();
-    expect(operatorCtx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual([
+    expect(operatorCtx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual([
       "nl-ndw-events",
       "de-tankerkoenig-fuel",
     ]);
@@ -548,17 +561,17 @@ describe("startSourceSync", () => {
     // public scope, so the restricted sources' records never arrive.
     const http = fakeHttpClient(() => publicListOf(NDW, ocSource(), OSM));
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
-    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!);
+    const sync = startSourceSync(ctx, connectedClient(OPERATOR, http));
     await sync.first;
     sync.stop();
-    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
   });
 
   test("an answer without its scope is malformed and keeps the last list", async () => {
     let answer: unknown = listOf(NDW, ocSource());
     const http = fakeHttpClient(() => answer);
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
-    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!, {
+    const sync = startSourceSync(ctx, connectedClient(OPERATOR, http), {
       intervalMs: 1000,
     });
     await sync.first;
@@ -579,7 +592,7 @@ describe("startSourceSync", () => {
       if (!up) throw new Error("connect ECONNREFUSED");
       return req.url === `${BASE_URL}/sources` ? listOf(NDW) : undefined;
     });
-    const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+    const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
 
     const sync = startSourceSync(ctx, client, { intervalMs: 1000, retryMs: 100 });
@@ -600,7 +613,7 @@ describe("startSourceSync", () => {
     const ctx2 = createMockIntegrationContext({ id: "openconditions", http: malformed });
     const sync2 = startSourceSync(
       ctx2,
-      createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, malformed)!,
+      connectedClient({ OPENCONDITIONS_URL: BASE_URL }, malformed),
       { intervalMs: 1000 },
     );
     await sync2.first;
@@ -609,7 +622,7 @@ describe("startSourceSync", () => {
 
     await vi.advanceTimersByTimeAsync(100);
     expect(ctx.registered.dataSourceLists).toHaveLength(2);
-    expect(ctx.registered.dataSourceLists[1]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[1]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
     sync.stop();
   });
 });
@@ -643,16 +656,15 @@ describe("startSourceSync logging", () => {
     });
     const { lines, log } = recordingLog();
     const ctx = createMockIntegrationContext({ id: "openconditions", http, log });
-    const sync = startSourceSync(
-      ctx,
-      createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!,
-      { intervalMs: 1000, retryMs: 100 },
-    );
+    const sync = startSourceSync(ctx, connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http), {
+      intervalMs: 1000,
+      retryMs: 100,
+    });
     await sync.first;
     await vi.advanceTimersByTimeAsync(500);
     const outages = lines.filter((l) => l.level === "warn" && /\/sources/.test(l.message));
     expect(outages).toHaveLength(1);
-    expect(outages[0]!.message).toMatch(/ECONNREFUSED/);
+    expect(outages[0]?.message).toMatch(/ECONNREFUSED/);
 
     up = true;
     await vi.advanceTimersByTimeAsync(100);
@@ -673,20 +685,18 @@ describe("startSourceSync logging", () => {
     );
     const { lines, log } = recordingLog();
     const ctx = createMockIntegrationContext({ id: "openconditions", http, log });
-    const sync = startSourceSync(
-      ctx,
-      createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!,
-      { intervalMs: 1000 },
-    );
+    const sync = startSourceSync(ctx, connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http), {
+      intervalMs: 1000,
+    });
     await sync.first;
-    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+    expect(ctx.registered.dataSourceLists[0]?.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
     const invalid = lines.filter((l) => l.level === "warn");
     expect(invalid).toHaveLength(1);
-    expect(invalid[0]!.message).toMatch(/de-broken-fuel/);
+    expect(invalid[0]?.message).toMatch(/de-broken-fuel/);
     const unmapped = lines.filter((l) => /de-x-ev/.test(l.message));
     expect(unmapped).toHaveLength(1);
-    expect(unmapped[0]!.level).toBe("debug");
-    expect(unmapped[0]!.message).toMatch(/no OpenMapX domain/);
+    expect(unmapped[0]?.level).toBe("debug");
+    expect(unmapped[0]?.message).toMatch(/no OpenMapX domain/);
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(lines.filter((l) => /de-broken-fuel/.test(l.message))).toHaveLength(2);
@@ -714,12 +724,12 @@ describe("createLiveSources", () => {
     expect(live.ready).toBe(false);
     expect(live.has("nl-ndw-events")).toBe(false);
 
-    live.update([toDataSource(NDW)!, toDataSource(ocSource())!]);
+    live.update([dataSource(NDW), dataSource(ocSource())]);
     expect(live.ready).toBe(true);
     expect(live.has("nl-ndw-events")).toBe(true);
     expect(live.link("de-tankerkoenig-fuel")).toBe("https://creativecommons.tankerkoenig.de");
 
-    live.update([toDataSource(NDW)!]);
+    live.update([dataSource(NDW)]);
     expect(live.has("de-tankerkoenig-fuel")).toBe(false);
     expect(live.link("de-tankerkoenig-fuel")).toBeUndefined();
   });
@@ -729,7 +739,7 @@ describe("createLiveSources", () => {
     live.updateCrowd(CROWD_CREDIT);
     expect(live.has("crowd")).toBe(false);
 
-    live.update([toDataSource(NDW)!]);
+    live.update([dataSource(NDW)]);
     expect(live.has("crowd")).toBe(true);
     expect(live.crowd()).toEqual(CROWD_CREDIT);
     expect(live.crowd()).not.toBe(live.crowd());
@@ -756,10 +766,11 @@ describe("createLiveSources", () => {
       ],
     };
     const live = createLiveSources();
-    live.update([toDataSource(ocSource({ licensing }))!]);
-    const captured = live.captureCredits!();
+    live.update([dataSource(ocSource({ licensing }))]);
+    assert.isDefined(live.captureCredits);
+    const captured = live.captureCredits();
     live.update([]);
-    expect(captured.contributors("de-tankerkoenig-fuel")?.[0].licensing).toEqual(licensing);
+    expect(captured.contributors("de-tankerkoenig-fuel")?.[0]?.licensing).toEqual(licensing);
   });
 });
 
@@ -780,13 +791,18 @@ describe("setup", () => {
     const [road] = ctx.registered.roadConditions;
     const [fuel] = ctx.registered.fuelStations;
     const [parking] = ctx.registered.parkingSites;
-    expect(await parking!.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
-    expect(await parking!.getSite("oc:feature:x")).toBeNull();
-    expect(await road!.getEvents(BBOX)).toEqual([]);
-    await expect(road!.getRoutingEvents!(BBOX)).rejects.toThrow(/source list/);
-    expect(await road!.getFlow!(BBOX)).toEqual([]);
-    expect(await fuel!.searchStations(BBOX)).toEqual({ stations: [], partial: "unavailable" });
-    expect(await fuel!.getStation("oc:feature:x")).toBeNull();
+    assert.isDefined(road);
+    assert.isDefined(fuel);
+    assert.isDefined(parking);
+    assert.isDefined(road.getRoutingEvents);
+    assert.isDefined(road.getFlow);
+    expect(await parking.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
+    expect(await parking.getSite("oc:feature:x")).toBeNull();
+    expect(await road.getEvents(BBOX)).toEqual([]);
+    await expect(road.getRoutingEvents(BBOX)).rejects.toThrow(/source list/);
+    expect(await road.getFlow(BBOX)).toEqual([]);
+    expect(await fuel.searchStations(BBOX)).toEqual({ stations: [], partial: "unavailable" });
+    expect(await fuel.getStation("oc:feature:x")).toBeNull();
     expect(http.calls.length).toBe(callsBefore);
   });
 
@@ -833,9 +849,11 @@ describe("setup", () => {
       await setup(ctx, OPERATOR);
       const [road] = ctx.registered.roadConditions;
       const [fuel] = ctx.registered.fuelStations;
-      const { stations } = await fuel!.searchStations(BBOX);
+      assert.isDefined(road);
+      assert.isDefined(fuel);
+      const { stations } = await fuel.searchStations(BBOX);
       return {
-        events: (await road!.getEvents(BBOX)).map((e) => e.id),
+        events: (await road.getEvents(BBOX)).map((e) => e.id),
         credited: new Set(stations.flatMap((s) => s.attributions.map((a) => a.sourceId))),
       };
     };
@@ -865,13 +883,15 @@ describe("setup", () => {
     expect(ctx.registered.dataSourceLists).toHaveLength(1);
     const [provider] = ctx.registered.fuelStations;
 
-    const [station] = (await provider!.searchStations(BBOX)).stations;
+    assert.isDefined(provider);
+    const [station] = (await provider.searchStations(BBOX)).stations;
+    assert.isDefined(station);
 
-    expect(station!.attributions.find((a) => a.sourceId === "osm-fuel")).toMatchObject({
+    expect(station.attributions.find((a) => a.sourceId === "osm-fuel")).toMatchObject({
       name: "© OpenStreetMap contributors",
       url: "https://www.openstreetmap.org/copyright",
     });
-    expect(station!.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")!.url).toBe(
+    expect(station.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")?.url).toBe(
       "https://creativecommons.tankerkoenig.de",
     );
   });
@@ -882,7 +902,9 @@ describe("setup", () => {
     const answer = structuredClone(featuresResponse) as unknown as {
       records: { provenance: { attribution: Record<string, unknown> } }[];
     };
-    const attribution = answer.records[0]!.provenance.attribution;
+    const [record] = answer.records;
+    assert.isDefined(record);
+    const attribution = record.provenance.attribution;
     const http = fakeHttpClient((req) => {
       if (req.url === `${BASE_URL}/sources`) {
         return listOf(
@@ -916,14 +938,16 @@ describe("setup", () => {
     await setup(ctx, OPERATOR);
     const [provider] = ctx.registered.fuelStations;
 
-    const [station] = (await provider!.searchStations(BBOX)).stations;
+    assert.isDefined(provider);
+    const [station] = (await provider.searchStations(BBOX)).stations;
+    assert.isDefined(station);
 
-    expect(station!.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")).toMatchObject({
+    expect(station.attributions.find((a) => a.sourceId === "de-tankerkoenig-fuel")).toMatchObject({
       licensing: attribution.licensing,
     });
     // An SPDX id stays as it is, whatever name the list gives it.
-    expect(
-      formatLicensing(station!.attributions.find((a) => a.sourceId === "osm-fuel")!.licensing!),
-    ).toBe("ODbL-1.0");
+    const osmLicensing = station.attributions.find((a) => a.sourceId === "osm-fuel")?.licensing;
+    assert.isDefined(osmLicensing);
+    expect(formatLicensing(osmLicensing)).toBe("ODbL-1.0");
   });
 });

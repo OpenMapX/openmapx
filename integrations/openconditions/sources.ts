@@ -471,18 +471,23 @@ export function createLiveSources(): UpdatableLiveSources {
     },
     captureCredits() {
       const captured = new Map(
-        Array.from(links?.keys() ?? [], (sourceId) => [
-          sourceId,
-          snapshotContributors(
-            receipts.get(sourceId) ?? [],
-            notices.has(sourceId) ? [{ sourceId, name: notices.get(sourceId)! }] : [],
-          ),
-        ]),
+        Array.from(links?.keys() ?? [], (sourceId) => {
+          const notice = notices.get(sourceId);
+          return [
+            sourceId,
+            snapshotContributors(
+              receipts.get(sourceId) ?? [],
+              notice === undefined ? [] : [{ sourceId, name: notice }],
+            ),
+          ];
+        }),
       );
       const capturedNotices = new Map(notices);
       return {
-        contributors: (sourceId) =>
-          captured.has(sourceId) ? snapshotContributors(captured.get(sourceId)!) : undefined,
+        contributors: (sourceId) => {
+          const credits = captured.get(sourceId);
+          return credits === undefined ? undefined : snapshotContributors(credits);
+        },
         noticeOf: (sourceId) =>
           captured.has(sourceId) ? capturedNotices.get(sourceId) : undefined,
       };

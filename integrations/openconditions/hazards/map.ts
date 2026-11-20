@@ -377,6 +377,14 @@ export function gridCellsOf(cells: unknown, metadata?: unknown): FireDensityCell
       return [];
     }
     const [lon, lat, count, sum, max] = cell as number[];
+    if (
+      lon === undefined ||
+      lat === undefined ||
+      count === undefined ||
+      sum === undefined ||
+      max === undefined
+    )
+      return [];
     const metadata = receipts.get(`${lon},${lat}`);
     const captured = parseContributors(metadata?.["contributors"]);
     const nativeIds = metadata?.["native_sources"];
@@ -390,10 +398,10 @@ export function gridCellsOf(cells: unknown, metadata?: unknown): FireDensityCell
 
     return [
       {
-        point: [lon!, lat!] as [number, number],
-        count: count!,
-        frpSumMW: sum!,
-        frpMaxMW: max!,
+        point: [lon, lat] as [number, number],
+        count,
+        frpSumMW: sum,
+        frpMaxMW: max,
         sources: [...exactIds],
         ...field("lineageComplete", bool(metadata?.["lineage_complete"])),
         ...(nativeSources === undefined ? {} : { nativeSources: [...nativeSources] }),

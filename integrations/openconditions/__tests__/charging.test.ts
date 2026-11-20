@@ -4,7 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { recordToChargingSite } from "../charging/map.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
 import { createOpenConditionsClient } from "../client.js";
@@ -49,9 +49,27 @@ const clone = <T>(value: T): T => structuredClone(value);
 type Body = { records: Rec[]; latest: Record<string, Rec[]>; offers: Record<string, Rec[]> };
 
 const body = () => clone(featuresResponse) as unknown as Body & Rec;
-const recordOf = (b: Body) => b.records[0]!;
-const latestOf = (b: Body) => b.latest[SITE_ID]! as unknown as LatestReading[];
-const offersOf = (b: Body) => b.offers[SITE_ID]!;
+function recordOf(b: Body): Rec {
+  const [record] = b.records;
+  assert.isDefined(record, "the answer has no record");
+  return record;
+}
+function latestOf(b: Body): LatestReading[] {
+  const latest = b.latest[SITE_ID];
+  assert.isDefined(latest, "the answer has no readings for its site");
+  return latest as unknown as LatestReading[];
+}
+function offersOf(b: Body): Rec[] {
+  const offers = b.offers[SITE_ID];
+  assert.isDefined(offers, "the answer has no offers for its site");
+  return offers;
+}
+/** An element the fixture is known to hold; the test fails if it is missing. */
+function nth<T>(values: readonly T[], index: number): T {
+  const value = values[index];
+  assert.isDefined(value, `no element at ${index}`);
+  return value;
+}
 
 type Responder = (req: FakeHttpRequest) => unknown;
 
@@ -67,7 +85,8 @@ const EVERY_SOURCE: LiveSources = {
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
+  assert.exists(client);
   return { http, provider: createChargingSiteProvider(client, sources, { now: () => now }) };
 }
 
@@ -80,6 +99,12 @@ const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" }
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
   recordToChargingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
+/** A mapped site; the test fails if the answer maps to none. */
+function mappedSite(b: Body, excluded: (id: string) => boolean = () => false) {
+  const site = mapped(b, excluded);
+  assert.isNotNull(site, "the answer maps to no charging site");
+  return site;
+}
 
 describe("charging-sites-openconditions", () => {
   test("maps a canonical OC site with two EVSEs, their connectors, statuses and a tariff", async () => {
@@ -87,17 +112,17 @@ describe("charging-sites-openconditions", () => {
 
     const { sites, partial } = await provider.searchSites(BBOX);
 
-    expect(http.calls[0]!.options?.params).toEqual({
+    expect(http.calls[0]?.options?.params).toEqual({
       bbox: BBOX.join(","),
       kind: "charging_site",
       canonical: 1,
       expand: "components,latest,offers",
       limit: 400,
     });
-    expect(http.calls[0]!.options?.maxResponseBytes).toBe(16 * 1024 * 1024);
+    expect(http.calls[0]?.options?.maxResponseBytes).toBe(16 * 1024 * 1024);
     expect(partial).toBeUndefined();
     expect(sites).toHaveLength(1);
-    const site = sites[0]!;
+    const site = nth(sites, 0);
     expect(site).toMatchObject({
       id: MOBIDATA_MEMBER,
       name: "Ladepark Karlsruhe Kaiserstraße",
@@ -146,7 +171,7 @@ describe("charging-sites-openconditions", () => {
     });
     expect(second).toMatchObject({ key: "EVSE-2", status: "occupied", stale: false });
     // The connector's own reading, not its EVSE's, and no cross-talk between EVSEs.
-    expect(second!.connectors).toEqual([
+    expect(second?.connectors).toEqual([
       expect.objectContaining({
         key: "EVSE-2/1",
         standard: "IEC_62196_T2_COMBO",
@@ -192,22 +217,24 @@ describe("charging-sites-openconditions", () => {
   });
 
   test("an EVSE reading past validUntil is stale", async () => {
-    const fresh = (await providerWith(listing(body())).provider.searchSites(BBOX)).sites[0]!;
+    const fresh = nth((await providerWith(listing(body())).provider.searchSites(BBOX)).sites, 0);
     expect(fresh.evses[0]).toMatchObject({ status: "available", stale: false });
 
     const later = (
       await providerWith(listing(body()), EVERY_SOURCE, LATER).provider.searchSites(BBOX)
-    ).sites[0]!;
+    ).sites[0];
+    assert.isDefined(later);
     // The status stays, marked stale, on the EVSE and on the connector reading.
     expect(later.evses[0]).toMatchObject({ status: "available", stale: true });
-    expect(later.evses[1]!.connectors[0]).toMatchObject({ status: "charging", stale: true });
+    expect(later.evses[1]?.connectors[0]).toMatchObject({ status: "charging", stale: true });
     // A point without a reading has nothing to go stale.
-    expect(later.evses[0]!.connectors[0]!.stale).toBe(false);
+    expect(later.evses[0]?.connectors[0]?.stale).toBe(false);
   });
 
   test("an EVSE of quantity 4 from OSM stays one EVSE with quantity 4", async () => {
-    const site = (await providerWith(listing(body())).provider.searchSites(BBOX)).sites[0]!;
-    const osm = site.evses.find((e) => e.key === "osm-charging/socket")!;
+    const site = nth((await providerWith(listing(body())).provider.searchSites(BBOX)).sites, 0);
+    const osm = site.evses.find((e) => e.key === "osm-charging/socket");
+    assert.isDefined(osm);
     expect(osm).toMatchObject({
       quantity: 4,
       stale: false,
@@ -218,7 +245,7 @@ describe("charging-sites-openconditions", () => {
   });
 
   test("connector tariffIds point at the site's tariffs; an unreferenced tariff applies site-wide", async () => {
-    const site = (await providerWith(listing(body())).provider.searchSites(BBOX)).sites[0]!;
+    const site = nth((await providerWith(listing(body())).provider.searchSites(BBOX)).sites, 0);
     expect(site.tariffs.map((t) => t.id)).toEqual([TARIFF, OSM_TARIFF]);
     const referenced = new Set(site.evses.flatMap((e) => e.connectors.flatMap((c) => c.tariffIds)));
     expect([...referenced]).toEqual([TARIFF]);
@@ -227,8 +254,8 @@ describe("charging-sites-openconditions", () => {
     // A reference to a tariff that is not on the site is not kept.
     const answer = body();
     offersOf(answer).splice(0, 1);
-    const without = mapped(answer)!;
-    expect(without.evses[0]!.connectors[0]!.tariffIds).toEqual([]);
+    const without = mappedSite(answer);
+    expect(without.evses[0]?.connectors[0]?.tariffIds).toEqual([]);
     expect(without.tariffs.map((t) => t.id)).toEqual([OSM_TARIFF]);
   });
 
@@ -245,7 +272,7 @@ describe("charging-sites-openconditions", () => {
     } as LatestReading);
     const { provider } = providerWith(listing(answer));
 
-    const all = (await provider.searchSites(BBOX)).sites[0]!;
+    const all = nth((await provider.searchSites(BBOX)).sites, 0);
     expect(all.sources).toEqual([MOBIDATA, OSM]);
     expect(all.tariffs).toHaveLength(2);
     expect(all.attributions.map((a) => a.name)).toEqual([
@@ -269,14 +296,15 @@ describe("charging-sites-openconditions", () => {
     });
 
     const [site] = (await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites;
-    expect(site!.sources).toEqual([MOBIDATA]);
-    expect(site!.attributions.map((a) => a.sourceId)).toEqual([MOBIDATA, MOBIDATA]);
+    assert.isDefined(site);
+    expect(site.sources).toEqual([MOBIDATA]);
+    expect(site.attributions.map((a) => a.sourceId)).toEqual([MOBIDATA, MOBIDATA]);
     // The newer fused reading with OSM among its contributors goes whole, leaving MobiData's own; OSM's EVSE and tariff go with it.
-    expect(all.evses[0]!.statusAt).toBe("2026-10-06T02:58:00Z");
-    expect(site!.evses.map((e) => e.key)).toEqual(["EVSE-1", "EVSE-2"]);
-    expect(site!.evses[0]).toMatchObject({ status: "available", statusAt: "2026-10-06T02:55:00Z" });
-    expect(site!.evses[1]!.status).toBe("occupied");
-    expect(site!.tariffs.map((t) => t.id)).toEqual([TARIFF]);
+    expect(all.evses[0]?.statusAt).toBe("2026-10-06T02:58:00Z");
+    expect(site.evses.map((e) => e.key)).toEqual(["EVSE-1", "EVSE-2"]);
+    expect(site.evses[0]).toMatchObject({ status: "available", statusAt: "2026-10-06T02:55:00Z" });
+    expect(site.evses[1]?.status).toBe("occupied");
+    expect(site.tariffs.map((t) => t.id)).toEqual([TARIFF]);
 
     // Without its survivor source the site goes: its name and operator are MobiData's.
     const none = await provider.searchSites(BBOX, { excludedSourceIds: [MOBIDATA] });
@@ -295,8 +323,8 @@ describe("charging-sites-openconditions", () => {
 
   test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
-    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
+    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer), 0).provenance = CROWD_PROVENANCE;
     const site = recordToChargingSite(
       recordOf(answer),
       latestOf(answer),
@@ -304,14 +332,15 @@ describe("charging-sites-openconditions", () => {
       () => false,
       CROWD_SOURCES,
       FRESH,
-    )!;
+    );
+    assert.isNotNull(site);
     expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
   });
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {
     const answer = body();
-    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    const site = mapped(answer, (sourceId) => sourceId === "crowd")!;
+    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    const site = mappedSite(answer, (sourceId) => sourceId === "crowd");
     expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
 
@@ -380,15 +409,16 @@ describe("charging-sites-openconditions", () => {
     );
 
     const site = await provider.getSite(id);
+    assert.isNotNull(site);
 
     expect(http.calls).toHaveLength(1);
-    expect(http.calls[0]!.options?.params).toEqual({ expand: "components,latest,offers" });
+    expect(http.calls[0]?.options?.params).toEqual({ expand: "components,latest,offers" });
     expect(site).toMatchObject({ id, name: "Schnellladepunkt Durlacher Tor", sources: [MOBIDATA] });
-    expect(site!.evses[0]!.connectors[0]).toMatchObject({
+    expect(site.evses[0]?.connectors[0]).toMatchObject({
       maxPowerKw: 300,
       tariffIds: [expect.any(String)],
     });
-    expect(site!.tariffs).toHaveLength(1);
+    expect(site.tariffs).toHaveLength(1);
   });
 
   test("a searched site is opened from a fresh read of the box around it, by any of its ids", async () => {
@@ -400,7 +430,8 @@ describe("charging-sites-openconditions", () => {
     const opened = await provider.getSite(SITE_ID);
 
     expect(opened).toMatchObject({ id: SITE_ID, sources: [MOBIDATA, OSM] });
-    const reread = http.calls.at(-1)!;
+    const reread = http.calls.at(-1);
+    assert.isDefined(reread);
     expect(reread.url).toBe(`${BASE_URL}/features`);
     const [w, s, e, n] = String(reread.options?.params?.bbox).split(",").map(Number) as [
       number,
@@ -445,7 +476,7 @@ describe("charging-sites-openconditions", () => {
       amenities: ["restaurant", "wifi"],
     });
 
-    const bare = mapped(body())!;
+    const bare = mappedSite(body());
     for (const field of [
       "openingHoursExceptions",
       "chargingWhenClosed",
@@ -460,7 +491,7 @@ describe("charging-sites-openconditions", () => {
   test("structured opening hours stand in for a missing OSM string", () => {
     const answer = body();
     recordOf(answer).openingHours = { twentyFourSeven: true };
-    expect(mapped(answer)!.openingHours).toBe("24/7");
+    expect(mappedSite(answer).openingHours).toBe("24/7");
   });
 
   test("the site's and each tariff's energy mix are read, what cannot be read left out", () => {
@@ -484,8 +515,8 @@ describe("charging-sites-openconditions", () => {
         ],
       },
     };
-    offersOf(answer)[0]!.energyMix = { isGreen: false };
-    const site = mapped(answer)!;
+    nth(offersOf(answer), 0).energyMix = { isGreen: false };
+    const site = mappedSite(answer);
     expect(site.energyMix).toEqual({
       isGreen: true,
       supplierName: "EnBW",
@@ -496,7 +527,7 @@ describe("charging-sites-openconditions", () => {
       ],
       impacts: [{ category: "carbon_dioxide", gPerKwh: 0 }],
     });
-    expect(site.tariffs[0]!.energyMix).toEqual({ isGreen: false, sources: [], impacts: [] });
+    expect(site.tariffs[0]?.energyMix).toEqual({ isGreen: false, sources: [], impacts: [] });
 
     (record.details as Rec).energyMix = { sources: [{ source: "wind", pct: "60" }] };
     expect(mapped(answer)).not.toHaveProperty("energyMix");
@@ -504,25 +535,26 @@ describe("charging-sites-openconditions", () => {
 
   test("a tariff element priced for a booking says which part of it", () => {
     const answer = body();
-    const tariff = offersOf(answer)[0]!;
+    const tariff = nth(offersOf(answer), 0);
     tariff.elements = [
       {
         components: [{ type: "flat", price: { amount: "5.00", currency: "EUR" } }],
         restrictions: { booking: "booking_cancellation_fees" },
       },
     ];
-    expect(mapped(answer)!.tariffs[0]!.elements[0]!.restrictions).toEqual({
+    expect(mappedSite(answer).tariffs[0]?.elements[0]?.restrictions).toEqual({
       booking: "booking_cancellation_fees",
     });
   });
 
   test("each EVSE carries its parking restrictions", () => {
     const answer = body();
-    const evse = (recordOf(answer).components as Rec[]).find((c) => c.key === "EVSE-2")!;
+    const evse = (recordOf(answer).components as Rec[]).find((c) => c.key === "EVSE-2");
+    assert.isDefined(evse);
     evse.details = { ...(evse.details as Rec), parkingRestrictions: ["taxis", "tenants"] };
-    const evses = mapped(answer)!.evses;
-    expect(evses.find((e) => e.key === "EVSE-1")!.parkingRestrictions).toEqual(["ev_only"]);
-    expect(evses.find((e) => e.key === "EVSE-2")!.parkingRestrictions).toEqual([
+    const evses = mappedSite(answer).evses;
+    expect(evses.find((e) => e.key === "EVSE-1")?.parkingRestrictions).toEqual(["ev_only"]);
+    expect(evses.find((e) => e.key === "EVSE-2")?.parkingRestrictions).toEqual([
       "taxis",
       "tenants",
     ]);
@@ -530,7 +562,7 @@ describe("charging-sites-openconditions", () => {
 
   test("a site opens without a disallowed source, as the search listed it", async () => {
     const { provider } = providerWith((req) => (req.method === "getResponse" ? NOT_FOUND : body()));
-    const listed = (await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites[0]!;
+    const listed = nth((await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites, 0);
 
     expect(await provider.getSite(listed.id, { excludedSourceIds: [OSM] })).toEqual(listed);
   });

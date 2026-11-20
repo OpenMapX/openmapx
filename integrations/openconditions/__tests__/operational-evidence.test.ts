@@ -4,7 +4,7 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createCameraProvider } from "../cameras/provider.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
 import { createOpenConditionsClient } from "../client.js";
@@ -87,7 +87,8 @@ function readerWith(
   scopes: SourceScopes = scopesOf(),
 ) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient(env, http)!;
+  const client = createOpenConditionsClient(env, http);
+  assert.exists(client);
   return { http, client, reader: createSiteEvidenceReader(client, scopes) };
 }
 
@@ -498,17 +499,22 @@ describe("site coverage evidence from OpenConditions", () => {
     const parking = createParkingSiteProvider(client, EVERY_SOURCE, { evidence: reader });
     const fuel = createFuelStationProvider(client, EVERY_SOURCE, { evidence: reader });
     const road = createRoadConditionsProvider(client, EVERY_SOURCE);
+    assert.isDefined(charging.getOperationalEvidence);
+    assert.isDefined(parking.getOperationalEvidence);
+    assert.isDefined(fuel.getOperationalEvidence);
+    assert.isDefined(road.getOperationalEvidence);
 
-    expect((await charging.getOperationalEvidence!()).feeds).toHaveLength(6);
-    expect((await parking.getOperationalEvidence!()).feeds).toHaveLength(2);
-    expect((await fuel.getOperationalEvidence!()).feeds).toHaveLength(3);
+    expect((await charging.getOperationalEvidence()).feeds).toHaveLength(6);
+    expect((await parking.getOperationalEvidence()).feeds).toHaveLength(2);
+    expect((await fuel.getOperationalEvidence()).feeds).toHaveLength(3);
     const cameras = createCameraProvider(
       client,
       { ...EVERY_SOURCE, mediaHosts: () => [] },
       { evidence: reader },
     );
-    expect((await cameras.getOperationalEvidence!()).feeds).toEqual([]);
-    const roads = await road.getOperationalEvidence!();
+    assert.isDefined(cameras.getOperationalEvidence);
+    expect((await cameras.getOperationalEvidence()).feeds).toEqual([]);
+    const roads = await road.getOperationalEvidence();
     expect(roads.feeds.map((feed) => feed.sourceId)).toEqual(["nl-ndw-events"]);
     expect(roads.feeds[0]?.coverage).toBeUndefined();
     // Without a reader a place provider has no operational evidence.
@@ -574,10 +580,16 @@ describe("site coverage evidence from OpenConditions", () => {
     );
     const ctx = createMockIntegrationContext({ id: "openconditions", http });
     await setup(ctx, { OPENCONDITIONS_URL: BASE_URL });
+    const [charging] = ctx.registered.chargingSites;
+    const [parking] = ctx.registered.parkingSites;
+    const [fuelStations] = ctx.registered.fuelStations;
+    assert.isDefined(charging?.getOperationalEvidence);
+    assert.isDefined(parking?.getOperationalEvidence);
+    assert.isDefined(fuelStations?.getOperationalEvidence);
     const [, , fuel] = await Promise.all([
-      ctx.registered.chargingSites[0]!.getOperationalEvidence!(),
-      ctx.registered.parkingSites[0]!.getOperationalEvidence!(),
-      ctx.registered.fuelStations[0]!.getOperationalEvidence!(),
+      charging.getOperationalEvidence(),
+      parking.getOperationalEvidence(),
+      fuelStations.getOperationalEvidence(),
     ]);
 
     expect(http.calls.filter((call) => call.url.endsWith("/coverage"))).toHaveLength(1);

@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import {
   asModified,
   CROWD,
@@ -127,7 +127,9 @@ it("projects fused captures from every original supplier without crediting the s
       provenance: { sourceId: "@fused", attribution: {}, mergedSources: [] },
     }),
   ).toEqual([]);
-  reading.provenance.mergedSources[0]!.attribution.provider = "Later terms";
+  const [merged] = reading.provenance.mergedSources;
+  assert.isDefined(merged);
+  merged.attribution.provider = "Later terms";
   expect(credits[0]?.attributionText).toBe("Feed A");
 });
 
@@ -192,5 +194,5 @@ it("never marks the instance's own crowd reports, nor a credit built on its own,
   ).not.toHaveProperty("modified");
   const [crowd] = asModified([{ sourceId: CROWD, name: "Contributors" }]);
   expect(crowd).not.toHaveProperty("modified");
-  expect(asModified([{ sourceId: "feed", name: "Feed" }])[0]!.modified).toBe(true);
+  expect(asModified([{ sourceId: "feed", name: "Feed" }])[0]?.modified).toBe(true);
 });

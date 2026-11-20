@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { recordToChargingSite } from "../charging/map.js";
 import type { Rec } from "../features/record.js";
 import { recordToParkingSite } from "../parking/map.js";
@@ -127,10 +127,16 @@ describe("captured producer receipts", () => {
 
   for (const domain of ["charging", "parking"] as const) {
     const fixture = domain === "charging" ? charging : parking;
-    const map = (offers: Rec[]) =>
-      domain === "charging"
-        ? recordToChargingSite(fixture.records[0]!, [], offers, (id) => id === "excluded")
-        : recordToParkingSite(fixture.records[0]!, [], offers, (id) => id === "excluded");
+    const map = (offers: Rec[]) => {
+      const [record] = fixture.records;
+      assert.isDefined(record);
+      const site =
+        domain === "charging"
+          ? recordToChargingSite(record, [], offers, (id) => id === "excluded")
+          : recordToParkingSite(record, [], offers, (id) => id === "excluded");
+      assert.isNotNull(site, "the fixture maps to no site");
+      return site;
+    };
     const offer = {
       id: "price",
       kind: domain === "charging" ? "energy_tariff" : "parking_rate",
@@ -148,7 +154,7 @@ describe("captured producer receipts", () => {
       provenance,
     };
     it(`carries accepted ${domain} prices' own captured receipts into site credits`, () => {
-      const result = map([offer])!;
+      const result = map([offer]);
       const prices = "tariffs" in result ? result.tariffs : result.rates;
       expect(prices).toHaveLength(1);
       expect(prices[0]?.contributors).toEqual(expect.arrayContaining(expected));
@@ -161,7 +167,7 @@ describe("captured producer receipts", () => {
       const result = map([
         { ...offer, elements: [] },
         { ...offer, provenance: { ...provenance, sourceId: "excluded" } },
-      ])!;
+      ]);
       expect(
         result.attributions.some(
           (c) => c.sourceId === "captured-feed" || c.sourceId === "historical-feed",
@@ -173,7 +179,7 @@ describe("captured producer receipts", () => {
       { contributors: null },
       { contributors: [{ sourceId: "native", name: "Native price" }] },
     ])(`preserves native ${domain} offer receipts: $contributors`, ({ contributors }) => {
-      const result = map([{ ...offer, contributors }])!;
+      const result = map([{ ...offer, contributors }]);
       const prices = "tariffs" in result ? result.tariffs : result.rates;
       expect(prices[0]?.contributors).toEqual(contributors ?? []);
       expect(result.attributions.some((c) => c.sourceId === "captured-feed")).toBe(false);

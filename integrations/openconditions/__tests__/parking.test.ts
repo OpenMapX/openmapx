@@ -4,7 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
@@ -49,9 +49,27 @@ const clone = <T>(value: T): T => structuredClone(value);
 type Body = { records: Rec[]; latest: Record<string, Rec[]>; offers: Record<string, Rec[]> };
 
 const body = () => clone(featuresResponse) as unknown as Body & Rec;
-const recordOf = (b: Body) => b.records[0]!;
-const latestOf = (b: Body) => b.latest[SITE_ID]! as unknown as LatestReading[];
-const offersOf = (b: Body) => b.offers[SITE_ID]!;
+function recordOf(b: Body): Rec {
+  const [record] = b.records;
+  assert.isDefined(record, "the answer has no record");
+  return record;
+}
+function latestOf(b: Body): LatestReading[] {
+  const latest = b.latest[SITE_ID];
+  assert.isDefined(latest, "the answer has no readings for its site");
+  return latest as unknown as LatestReading[];
+}
+function offersOf(b: Body): Rec[] {
+  const offers = b.offers[SITE_ID];
+  assert.isDefined(offers, "the answer has no offers for its site");
+  return offers;
+}
+/** An element the fixture is known to hold; the test fails if it is missing. */
+function nth<T>(values: readonly T[], index: number): T {
+  const value = values[index];
+  assert.isDefined(value, `no element at ${index}`);
+  return value;
+}
 
 type Responder = (req: FakeHttpRequest) => unknown;
 
@@ -67,7 +85,8 @@ const EVERY_SOURCE: LiveSources = {
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
+  assert.exists(client);
   return { http, provider: createParkingSiteProvider(client, sources, { now: () => now }) };
 }
 
@@ -80,6 +99,12 @@ const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" }
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
   recordToParkingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
+/** A mapped site; the test fails if the answer maps to none. */
+function mappedSite(b: Body, excluded: (id: string) => boolean = () => false) {
+  const site = mapped(b, excluded);
+  assert.isNotNull(site, "the answer maps to no parking site");
+  return site;
+}
 
 describe("parking-sites-openconditions", () => {
   test("maps a canonical OC car park with areas, site counts and a rate", async () => {
@@ -87,17 +112,17 @@ describe("parking-sites-openconditions", () => {
 
     const { sites, partial } = await provider.searchSites(BBOX);
 
-    expect(http.calls[0]!.options?.params).toEqual({
+    expect(http.calls[0]?.options?.params).toEqual({
       bbox: BBOX.join(","),
       kind: "parking_site",
       canonical: 1,
       expand: "components,latest,offers",
       limit: 400,
     });
-    expect(http.calls[0]!.options?.maxResponseBytes).toBe(16 * 1024 * 1024);
+    expect(http.calls[0]?.options?.maxResponseBytes).toBe(16 * 1024 * 1024);
     expect(partial).toBeUndefined();
     expect(sites).toHaveLength(1);
-    const site = sites[0]!;
+    const site = nth(sites, 0);
     expect(site).toMatchObject({
       // The survivor member's id, which stays when the cluster's membership changes.
       id: MOBIDATA_MEMBER,
@@ -162,7 +187,10 @@ describe("parking-sites-openconditions", () => {
       contributors: [MOBIDATA],
     } as LatestReading);
 
-    const fresh = (await providerWith(listing(clone(answer))).provider.searchSites(BBOX)).sites[0]!;
+    const fresh = nth(
+      (await providerWith(listing(clone(answer))).provider.searchSites(BBOX)).sites,
+      0,
+    );
     expect(fresh).toMatchObject({ available: 160, stale: false });
     expect(fresh.areas[0]).toEqual({
       key: "car:disabled",
@@ -177,7 +205,8 @@ describe("parking-sites-openconditions", () => {
 
     const later = (
       await providerWith(listing(answer), EVERY_SOURCE, LATER).provider.searchSites(BBOX)
-    ).sites[0]!;
+    ).sites[0];
+    assert.isDefined(later);
     // The counts stay, marked stale: the site's past 03:55, the area's past 04:05.
     expect(later).toMatchObject({ available: 160, status: "open", stale: true });
     expect(later.areas[0]).toMatchObject({ available: 2, stale: true });
@@ -194,9 +223,10 @@ describe("parking-sites-openconditions", () => {
     const { provider } = providerWith(listing(body()), live);
 
     const [site] = (await provider.searchSites(BBOX)).sites;
+    assert.isDefined(site);
 
-    expect(site!.sources).toEqual([MOBIDATA, OSM]);
-    expect(site!.attributions).toEqual([
+    expect(site.sources).toEqual([MOBIDATA, OSM]);
+    expect(site.attributions).toEqual([
       {
         sourceId: MOBIDATA,
         name: MOBIDATA_PROVIDER,
@@ -299,7 +329,7 @@ describe("parking-sites-openconditions", () => {
         },
       ],
     };
-    const site = mapped(answer)!;
+    const site = mappedSite(answer);
     expect(site.sources).toEqual([OSM, MOBIDATA]);
     expect(site.attributions).toContainEqual({
       sourceId: MOBIDATA,
@@ -321,7 +351,7 @@ describe("parking-sites-openconditions", () => {
       publisher: { name: "Stadt Karlsruhe" },
     });
     // An excluded member's upstream publishers go with it.
-    const without = mapped(answer, (id) => id === MOBIDATA)!;
+    const without = mappedSite(answer, (id) => id === MOBIDATA);
     expect(without.attributions.map((a) => a.name)).toEqual(["© OpenStreetMap contributors"]);
   });
 
@@ -329,7 +359,7 @@ describe("parking-sites-openconditions", () => {
     const answer = body();
     const provenance = recordOf(answer).provenance as Rec;
     provenance.upstream = [{ publisher: "Stadt Karlsruhe", recordId: "66" }];
-    const { attributions } = mapped(answer)!;
+    const { attributions } = mappedSite(answer);
     expect(attributions.map((a) => a.name)).toEqual([
       MOBIDATA_PROVIDER,
       "© OpenStreetMap contributors",
@@ -350,25 +380,26 @@ describe("parking-sites-openconditions", () => {
       source: "@fused",
       contributors: [MOBIDATA, OSM],
     } as LatestReading);
-    const osmRate = clone(offersOf(answer)[0]!);
+    const osmRate = clone(nth(offersOf(answer), 0));
     osmRate.id = "oc:offer:osm-parking:node/1725394191:1";
     (osmRate.provenance as Rec).sourceId = OSM;
     offersOf(answer).push(osmRate);
     const { provider } = providerWith(listing(answer));
 
-    const all = (await provider.searchSites(BBOX)).sites[0]!;
+    const all = nth((await provider.searchSites(BBOX)).sites, 0);
     expect(all.trend).toBe("filling");
     expect(all.rates).toHaveLength(2);
 
     const [site] = (await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites;
-    expect(site!.sources).toEqual([MOBIDATA]);
-    expect(site!.attributions.map((a) => a.sourceId)).toEqual([MOBIDATA, MOBIDATA]);
+    assert.isDefined(site);
+    expect(site.sources).toEqual([MOBIDATA]);
+    expect(site.attributions.map((a) => a.sourceId)).toEqual([MOBIDATA, MOBIDATA]);
     // OSM's areas had no readings; they go with it, as does the reading it contributed to.
-    expect(site!.areas).toEqual([]);
-    expect(site!.trend).toBeUndefined();
+    expect(site.areas).toEqual([]);
+    expect(site.trend).toBeUndefined();
     expect(site).toMatchObject({ available: 160, status: "open" });
-    expect(site!.rates).toHaveLength(1);
-    expect(site!.rates[0]!.rows[0]).toMatchObject({ kind: "per_hour", amount: 2 });
+    expect(site.rates).toHaveLength(1);
+    expect(site.rates[0]?.rows[0]).toMatchObject({ kind: "per_hour", amount: 2 });
 
     // Without its survivor source the site goes: its name and counts are MobiData's.
     const none = await provider.searchSites(BBOX, { excludedSourceIds: [MOBIDATA] });
@@ -464,6 +495,7 @@ describe("parking-sites-openconditions", () => {
     let answer = body();
     const { provider } = providerWith((req) => (req.method === "getResponse" ? NOT_FOUND : answer));
     const [searched] = (await provider.searchSites(BBOX)).sites;
+    assert.isDefined(searched);
 
     // A new OSM member links in: the cluster, and so its canonical id, is a new one.
     answer = body();
@@ -476,7 +508,7 @@ describe("parking-sites-openconditions", () => {
     const provenance = record.provenance as { derivedFrom: { records: Rec[] } };
     provenance.derivedFrom.records.push({ class: "feature", id: "oc:feature:osm-parking:way/9" });
 
-    const opened = await provider.getSite(searched!.id);
+    const opened = await provider.getSite(searched.id);
     expect(opened).toMatchObject({ id: MOBIDATA_MEMBER, name: "Karstadt", available: 160 });
   });
 
@@ -489,17 +521,18 @@ describe("parking-sites-openconditions", () => {
     );
 
     const site = await provider.getSite(MOBIDATA_MEMBER);
+    assert.isNotNull(site);
 
     expect(http.calls).toHaveLength(1);
-    expect(http.calls[0]!.options?.params).toEqual({ expand: "components,latest,offers" });
+    expect(http.calls[0]?.options?.params).toEqual({ expand: "components,latest,offers" });
     expect(site).toMatchObject({
       id: MOBIDATA_MEMBER,
       name: "Karstadt",
       available: 160,
       sources: [MOBIDATA, OSM],
     });
-    expect(site!.rates).toHaveLength(1);
-    expect(site!.areas.map((a) => a.key)).toEqual(["car:disabled", "car:women"]);
+    expect(site.rates).toHaveLength(1);
+    expect(site.areas.map((a) => a.key)).toEqual(["car:disabled", "car:women"]);
   });
 
   test("a searched site is opened from a fresh read of the box around it, by any of its ids", async () => {
@@ -513,7 +546,8 @@ describe("parking-sites-openconditions", () => {
     expect(await provider.getSite(OSM_MEMBER)).toMatchObject({ id: OSM_MEMBER, name: "Karstadt" });
     expect(await provider.getSite(MOBIDATA_MEMBER)).toMatchObject({ id: MOBIDATA_MEMBER });
     expect(http.calls.map((c) => c.method)).toEqual(["get", "get", "get"]);
-    const params = http.calls[0]!.options?.params as Rec;
+    const params = http.calls[0]?.options?.params;
+    assert.isDefined(params);
     expect(params).toMatchObject({
       kind: "parking_site",
       canonical: 1,
@@ -533,7 +567,7 @@ describe("parking-sites-openconditions", () => {
 
   test("a site opens without a disallowed source, as the search listed it", async () => {
     const { provider } = providerWith((req) => (req.method === "getResponse" ? NOT_FOUND : body()));
-    const listed = (await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites[0]!;
+    const listed = nth((await provider.searchSites(BBOX, { excludedSourceIds: [OSM] })).sites, 0);
 
     expect(await provider.getSite(listed.id, { excludedSourceIds: [OSM] })).toEqual(listed);
   });
@@ -550,9 +584,9 @@ describe("recordToParkingSite", () => {
     for (const lifecycle of ["temporarily_closed", "decommissioned"]) {
       const answer = body();
       recordOf(answer).lifecycle = lifecycle;
-      expect(mapped(answer)!.closed, lifecycle).toBe(true);
+      expect(mappedSite(answer).closed, lifecycle).toBe(true);
     }
-    expect(mapped(body())!.closed).toBe(false);
+    expect(mappedSite(body()).closed).toBe(false);
   });
 
   test("free, audience, operator, texts and website come from the record", () => {
@@ -585,14 +619,14 @@ describe("recordToParkingSite", () => {
     record.access = { audience: "public", payment: ["cash", "credit_card"] };
     expect(mapped(answer)).toMatchObject({ audience: "public", free: false });
     delete record.access;
-    const plain = mapped(answer)!;
+    const plain = mappedSite(answer);
     expect(plain).not.toHaveProperty("free");
     expect(plain).not.toHaveProperty("audience");
   });
 
   test("durations in any unit become minutes", () => {
     const answer = body();
-    const rate = offersOf(answer)[0]!;
+    const rate = nth(offersOf(answer), 0);
     const row = (minDuration: Rec | undefined, maxDuration: Rec) => ({
       components: [{ type: "flat", price: { amount: "1.00", currency: "EUR" } }],
       restrictions: { ...(minDuration ? { minDuration } : {}), maxDuration },
@@ -604,7 +638,7 @@ describe("recordToParkingSite", () => {
       // A unit OMX cannot read leaves the bound out rather than guessing it.
       row(undefined, { value: 3, unit: "fortnight" }),
     ];
-    expect(mapped(answer)!.rates[0]!.rows).toEqual([
+    expect(mappedSite(answer).rates[0]?.rows).toEqual([
       { kind: "flat", amount: 1, fromMin: 15, toMin: 90 },
       { kind: "flat", amount: 1, toMin: 20_160 },
       { kind: "flat", amount: 1, toMin: 525_960 },
@@ -614,11 +648,11 @@ describe("recordToParkingSite", () => {
 
   test("an offer without a priced row, or of another kind, is no rate", () => {
     const answer = body();
-    const rate = offersOf(answer)[0]!;
+    const rate = nth(offersOf(answer), 0);
     const other = { ...clone(rate), kind: "charging_tariff" };
     rate.elements = [{ components: [{ type: "flat", price: { amount: "n/a", currency: "EUR" } }] }];
     offersOf(answer).push(other);
-    expect(mapped(answer)!.rates).toEqual([]);
+    expect(mappedSite(answer).rates).toEqual([]);
   });
 
   test("of two areas under one key, the counted one wins", () => {
@@ -632,7 +666,7 @@ describe("recordToParkingSite", () => {
       },
       ...(record.components as Rec[]),
     ];
-    const areas = mapped(answer)!.areas;
+    const areas = mappedSite(answer).areas;
     expect(areas.map((a) => a.key)).toEqual(["car:disabled", "car:women"]);
     expect(areas[0]).toMatchObject({ capacity: 5 });
   });
@@ -641,13 +675,16 @@ describe("recordToParkingSite", () => {
     const answer = body();
     const record = recordOf(answer);
     const components = record.components as Rec[];
-    components[0]!.details = {
-      ...(components[0]!.details as Rec),
+    const [firstArea, secondArea] = components;
+    assert.isDefined(firstArea);
+    assert.isDefined(secondArea);
+    firstArea.details = {
+      ...(firstArea.details as Rec),
       maxStay: { value: 3, unit: "h" },
       hours: { osm: "Mo-Fr 08:00-18:00" },
     };
-    components[1]!.details = {
-      ...(components[1]!.details as Rec),
+    secondArea.details = {
+      ...(secondArea.details as Rec),
       hours: { spec: [{ days: ["SA", "SU"], opens: "10:00", closes: "16:00" }] },
       maxStay: { value: 2, unit: "fortnight" },
     };
@@ -670,7 +707,7 @@ describe("recordToParkingSite", () => {
         },
       },
     ];
-    const areas = mapped(answer)!.areas;
+    const areas = mappedSite(answer).areas;
     expect(areas.map((a) => [a.key, a.hours, a.maxStayMin])).toEqual([
       ["car:disabled", "Mo-Fr 08:00-18:00", 180],
       ["car:women", "Sa,Su 10:00-16:00", undefined],
@@ -695,7 +732,7 @@ describe("recordToParkingSite", () => {
       amenities: ["toilets", "shower"],
     });
 
-    const bare = mapped(body())!;
+    const bare = mappedSite(body());
     expect(bare).not.toHaveProperty("maxStayMin");
     expect(bare).not.toHaveProperty("reservation");
     expect(bare).not.toHaveProperty("amenities");
@@ -703,8 +740,8 @@ describe("recordToParkingSite", () => {
 
   test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
-    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
+    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer), 0).provenance = CROWD_PROVENANCE;
     const site = recordToParkingSite(
       recordOf(answer),
       latestOf(answer),
@@ -712,14 +749,15 @@ describe("recordToParkingSite", () => {
       () => false,
       CROWD_SOURCES,
       FRESH,
-    )!;
+    );
+    assert.isNotNull(site);
     expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
   });
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {
     const answer = body();
-    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    const site = mapped(answer, (sourceId) => sourceId === "crowd")!;
+    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    const site = mappedSite(answer, (sourceId) => sourceId === "crowd");
     expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
 });

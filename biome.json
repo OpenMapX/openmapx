@@ -291,6 +291,7 @@
       "includes": [
         "apps/ops-agent/**",
         "apps/transitous-runner/**",
+        "integrations/openconditions/**",
         "packages/air-quality/**",
         "packages/brands/**",
         "packages/cli/**",

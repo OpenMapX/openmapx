@@ -7,7 +7,7 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { pointOf, textOf } from "../hazards/map.js";
 import { createHazardsProvider } from "../hazards/provider.js";
@@ -60,8 +60,14 @@ const COPERNICUS_LICENSE = {
  * The EUMETSAT SLSTR feed as `/sources` lists it. The hazards fixture predates
  * the feed, so the entry is written here in the shape of the FIRMS entries.
  */
+/** A value the fixture is known to hold; the test fails if it is missing. */
+function found<T>(value: T | null | undefined, what = "fixture value"): T {
+  assert.exists(value, `${what} is missing`);
+  return value;
+}
+
 function slstrSource(): OcSource {
-  const modis = ocSources().find((s) => s.id === MODIS)!;
+  const modis = found(ocSources().find((s) => s.id === MODIS));
   return {
     ...modis,
     id: SLSTR,
@@ -110,7 +116,7 @@ function providerWith(responder: Responder, sources: LiveSources = liveSources()
     const params = (req.options?.params ?? {}) as Record<string, unknown>;
     return responder(path, params);
   });
-  const client = createOpenConditionsClient(OPERATOR, http)!;
+  const client = found(createOpenConditionsClient(OPERATOR, http));
   const now = () => new Date("2026-10-09T02:00:00.000Z");
   const provider: HazardsProvider = createHazardsProvider(client, sources, { now });
   return { provider, calls: http.calls };
@@ -190,7 +196,7 @@ describe("alerts", () => {
   test("an alert drawn from a location table credits the table beside its source; one without credits none", async () => {
     const DGU =
       "Contains information of the State Geodetic Administration of the Republic of Croatia (Državna geodetska uprava) under the Open Licence: Upravne jedinice INSPIRE, 2026-10-11, https://geoportal.dgu.hr/services/atom/au/xml; county boundaries simplified";
-    const template = (alertsAnswer.records as unknown as Rec[])[0]!;
+    const template = found((alertsAnswer.records as unknown as Rec[])[0]);
     const location = template.location as Rec;
     const croatian = {
       ...template,
@@ -209,6 +215,8 @@ describe("alerts", () => {
     };
     const { provider } = providerWith(() => ({ records: [template, croatian], next: null }));
     const [austria, croatia] = (await provider.getAlerts(BBOX)).alerts;
+    assert.isDefined(austria);
+    assert.isDefined(croatia);
 
     const credit = {
       sourceId: METEOALARM,
@@ -235,10 +243,10 @@ describe("alerts", () => {
       // The county outlines are simplified into the alert's area: the table's data is changed.
       modified: true,
     };
-    expect(croatia!.contributors).toContainEqual(credit);
+    expect(croatia.contributors).toContainEqual(credit);
     // MeteoAlarm's warning only names the counties; drawing them changes nothing it said.
     const meteoalarm = (alert: typeof croatia) =>
-      alert!.contributors!.filter(
+      found(alert.contributors).filter(
         (c) => c.sourceId === METEOALARM && !c.attributionText?.startsWith("Contains"),
       );
     expect(meteoalarm(croatia).some((c) => c.name !== NOTICE && c.licensing !== undefined)).toBe(
@@ -248,12 +256,12 @@ describe("alerts", () => {
     expect(meteoalarm(croatia).every((c) => c.modified === undefined)).toBe(true);
     // Austria's area is unioned and simplified from MeteoAlarm's own region shapes.
     expect(meteoalarm(austria).some((c) => c.modified === true)).toBe(true);
-    expect(croatia!.contributors!.filter((c) => c.attributionText === DGU)).toHaveLength(1);
+    expect(found(croatia.contributors).filter((c) => c.attributionText === DGU)).toHaveLength(1);
     // The Open Licence's statement stays beside the drawn area, with its licence linked.
     const shown = buildAttributionPresentation(credit as Attribution, "map").visibleHtml;
     expect(shown).toContain("Državna geodetska uprava");
     expect(shown).toContain('href="https://data.gov.hr/otvorena-dozvola"');
-    expect(austria!.contributors!.some((c) => c.name.startsWith("DGU"))).toBe(false);
+    expect(found(austria.contributors).some((c) => c.name.startsWith("DGU"))).toBe(false);
   });
 
   test("asks for simplified geometries when the caller does", async () => {
@@ -278,7 +286,7 @@ describe("alerts", () => {
   });
 
   test("reads pages up to 20,000 situations and says the area is partly covered beyond", async () => {
-    const template = (alertsAnswer.records as unknown as Rec[])[0]!;
+    const template = found((alertsAnswer.records as unknown as Rec[])[0]);
     const records = Array.from({ length: 25_000 }, (_, i) => ({ ...template, id: `a${i}` }));
     const { provider, calls } = providerWith((path, params) =>
       path === "/situations" ? paged(records, params) : undefined,
@@ -288,12 +296,12 @@ describe("alerts", () => {
     expect(calls).toHaveLength(4);
     expect(result.alerts).toHaveLength(20_000);
     expect(result.partial).toBe("area");
-    expect(calls[0]!.options?.maxResponseBytes).toBe(64 * 1024 * 1024);
+    expect(calls[0]?.options?.maxResponseBytes).toBe(64 * 1024 * 1024);
   });
 
   test("texts come in the requested language, else the first the alert carries", async () => {
     const { provider } = providerWith(serve);
-    const english = (await provider.getAlerts(BBOX, { lang: "en-US" })).alerts[0]!;
+    const english = found((await provider.getAlerts(BBOX, { lang: "en-US" })).alerts[0]);
     expect(english).toMatchObject({
       event: "Thunderstormwarning",
       headline: "Thunderstormwarning",
@@ -303,13 +311,13 @@ describe("alerts", () => {
     expect(english.description).toContain("thunderstorms are possible");
     expect(english.instruction).toContain("BE AWARE");
 
-    const other = (await provider.getAlerts(BBOX, { lang: "fr" })).alerts[0]!;
+    const other = found((await provider.getAlerts(BBOX, { lang: "fr" })).alerts[0]);
     expect(other.headline).toBe("Gewitterwarnung");
     expect(other.description).toContain("Gewittern");
   });
 
   test("a record of another origin passes without being a listed feed; a feed record of an unlisted source does not", async () => {
-    const template = (alertsAnswer.records as unknown as Rec[])[0]!;
+    const template = found((alertsAnswer.records as unknown as Rec[])[0]);
     const provenance = template.provenance as Rec;
     const crowd = {
       ...template,
@@ -337,7 +345,10 @@ describe("natural hazards", () => {
   const hazards = async () =>
     (await providerWith(serve).provider.getNaturalHazards(BBOX, { types: ["earthquake"] })).hazards;
   const byId = (list: Awaited<ReturnType<typeof hazards>>, id: string) =>
-    list.find((h) => h.id === `oc:situation:${id}`)!;
+    found(
+      list.find((h) => h.id === `oc:situation:${id}`),
+      id,
+    );
 
   test("an earthquake carries its depth, tsunami flag and event page", async () => {
     const quake = byId(await hazards(), "usgs-quakes:us6000u0xi");
@@ -368,9 +379,9 @@ describe("natural hazards", () => {
   test("a severity of no impact stays none, not unknown", async () => {
     const answer = clone(naturalAnswer);
     const records = answer.records as unknown as Rec[];
-    const quake = records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    const quake = found(records.find((r) => String(r.id).endsWith("us6000u0xi")));
     quake.severity = { label: "none" };
-    const other = records.find((r) => String(r.id).endsWith("us6000ty43"))!;
+    const other = found(records.find((r) => String(r.id).endsWith("us6000ty43")));
     other.severity = { label: "none", declaredRaw: "green" };
     const { provider } = providerWith((path) => (path === "/situations" ? answer : undefined));
     const list = (await provider.getNaturalHazards(BBOX, { types: ["earthquake"] })).hazards;
@@ -383,17 +394,17 @@ describe("natural hazards", () => {
 
   test("a polygon hazard is drawn at the vertex mean of its outer rings", async () => {
     const fire = byId(await hazards(), "us-nifc-fires:DB5448A6-FCAC-4041-A817-6F8198161DBA");
-    const record = (naturalAnswer.records as unknown as Rec[]).find((r) =>
-      String(r.id).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
-    )!;
+    const record = found(
+      (naturalAnswer.records as unknown as Rec[]).find((r) =>
+        String(r.id).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
+      ),
+    );
     const geometry = (record.location as { geometry: GeoJSON.MultiPolygon }).geometry;
-    const vertices = geometry.coordinates.flatMap((polygon) => polygon[0]!.slice(0, -1));
-    const mean = [
-      vertices.reduce((sum, p) => sum + p[0]!, 0) / vertices.length,
-      vertices.reduce((sum, p) => sum + p[1]!, 0) / vertices.length,
-    ];
-    expect(fire.point[0]).toBeCloseTo(mean[0]!, 9);
-    expect(fire.point[1]).toBeCloseTo(mean[1]!, 9);
+    const vertices = geometry.coordinates.flatMap((polygon) => found(polygon[0]).slice(0, -1));
+    const meanLng = vertices.reduce((sum, p) => sum + found(p[0]), 0) / vertices.length;
+    const meanLat = vertices.reduce((sum, p) => sum + found(p[1]), 0) / vertices.length;
+    expect(fire.point[0]).toBeCloseTo(meanLng, 9);
+    expect(fire.point[1]).toBeCloseTo(meanLat, 9);
     expect(fire).toMatchObject({
       type: "wildfire",
       subtype: "wildfire_perimeter",
@@ -434,15 +445,17 @@ describe("natural hazards", () => {
       [west, 54],
       [west, 50],
     ];
-    const east = pointOf({ type: "Polygon", coordinates: [ring(179, -179)] })!;
+    const east = found(pointOf({ type: "Polygon", coordinates: [ring(179, -179)] }));
     expect(Math.abs(east[0])).toBeCloseTo(180, 9);
     expect(east[1]).toBe(52);
-    const shifted = pointOf({ type: "Polygon", coordinates: [ring(178, -178)] })!;
+    const shifted = found(pointOf({ type: "Polygon", coordinates: [ring(178, -178)] }));
     expect(Math.abs(shifted[0])).toBeCloseTo(180, 9);
-    const west = pointOf({
-      type: "MultiPolygon",
-      coordinates: [[ring(179, 180)], [ring(-180, -178)]],
-    })!;
+    const west = found(
+      pointOf({
+        type: "MultiPolygon",
+        coordinates: [[ring(179, 180)], [ring(-180, -178)]],
+      }),
+    );
     expect(west[0]).toBeCloseTo(-179.75, 9);
     expect(pointOf({ type: "Polygon", coordinates: [] })).toBeNull();
   });
@@ -493,7 +506,7 @@ describe("natural hazards", () => {
 
   test("a hazard of a type the contract does not name is left out", async () => {
     const answer = clone(naturalAnswer) as unknown as { records: Rec[] };
-    answer.records[0] = { ...answer.records[0]!, type: "meteor" };
+    answer.records[0] = { ...found(answer.records[0]), type: "meteor" };
     const { provider } = providerWith(() => answer);
     const result = await provider.getNaturalHazards(BBOX, { types: ["earthquake"] });
     expect(result.hazards).toHaveLength(naturalAnswer.records.length - 1);
@@ -501,7 +514,7 @@ describe("natural hazards", () => {
 
   test("names come in the requested language", async () => {
     const answer = clone(naturalAnswer) as unknown as { records: Rec[] };
-    const quake = answer.records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    const quake = found(answer.records.find((r) => String(r.id).endsWith("us6000u0xi")));
     (quake.details as Rec).name = [
       { lang: "en", text: "Norsup" },
       { lang: "fr", text: "Norsup (fr)" },
@@ -510,7 +523,7 @@ describe("natural hazards", () => {
     const named = async (lang?: string) =>
       (
         await provider.getNaturalHazards(BBOX, { types: ["earthquake"], ...(lang ? { lang } : {}) })
-      ).hazards.find((h) => h.id.endsWith("us6000u0xi"))!.name;
+      ).hazards.find((h) => h.id.endsWith("us6000u0xi"))?.name;
     expect(await named("fr-CA")).toBe("Norsup (fr)");
     expect(await named("de")).toBe("Norsup");
     expect(await named()).toBe("Norsup");
@@ -582,9 +595,9 @@ describe("fire detections", () => {
   });
 
   test("an SLSTR read keeps only the SLSTR feed; confidence is the class with its percentage", async () => {
-    const modis = (fire.records as unknown as Rec[]).find(
-      (r) => (r.provenance as Rec).sourceId === MODIS,
-    )!;
+    const modis = found(
+      (fire.records as unknown as Rec[]).find((r) => (r.provenance as Rec).sourceId === MODIS),
+    );
     const reading = {
       ...clone(modis),
       id: `oc:observation:${SLSTR}:1`,
@@ -613,7 +626,7 @@ describe("fire detections", () => {
       dayNight: "night",
       sources: [SLSTR],
     });
-    expect(result.pixels[0]!.contributors?.map((c) => c.sourceId)).toContain(SLSTR);
+    expect(result.pixels[0]?.contributors?.map((c) => c.sourceId)).toContain(SLSTR);
   });
 
   test("a read stops at the limit and says the area is partly covered", async () => {
@@ -638,7 +651,7 @@ describe("fire detections", () => {
 
   test("a reading without a radiated power is left out", async () => {
     const answer = clone(fire) as unknown as { records: Rec[]; next: null };
-    answer.records[0] = { ...answer.records[0]!, result: { type: "text", value: "n/a" } };
+    answer.records[0] = { ...found(answer.records[0]), result: { type: "text", value: "n/a" } };
     const { provider } = providerWith(() => answer);
     const result = await provider.getFirePixels(BBOX, { since, instrument: "viirs", limit: 5000 });
     expect(result.pixels).toHaveLength(9);
@@ -690,12 +703,17 @@ describe("fire detections", () => {
     for (const [west, south, east, north] of strips) {
       // One-degree cells: a box counts every cell its edges touch.
       const cells =
-        (Math.floor(east!) - Math.floor(west!) + 1) * (Math.floor(north!) - Math.floor(south!) + 1);
+        (Math.floor(found(east)) - Math.floor(found(west)) + 1) *
+        (Math.floor(found(north)) - Math.floor(found(south)) + 1);
       expect(cells).toBeLessThanOrEqual(50_000);
     }
-    expect(strips[0]![0]).toBe(-180);
-    expect(strips.at(-1)![2]).toBe(180);
-    for (let i = 1; i < strips.length; i++) expect(strips[i]![0]).toBe(strips[i - 1]![2]);
+    expect(strips[0]?.[0]).toBe(-180);
+    expect(strips.at(-1)?.[2]).toBe(180);
+    let previousEast: number | undefined;
+    for (const [west, , east] of strips) {
+      if (previousEast !== undefined) expect(west).toBe(previousEast);
+      previousEast = east;
+    }
     // Every strip answered the same cells: each is counted once.
     expect(result.cells).toHaveLength(7);
     expect(result.sources).toEqual([MODIS, VIIRS]);
@@ -922,9 +940,9 @@ describe("captured hazard contributor receipts", () => {
     ];
     record.contributors = captured;
     const { provider } = providerWith(() => ({ records: [record], next: null }));
-    const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+    const alert = found((await provider.getAlerts(BBOX)).alerts[0]);
     expect(alert).toMatchObject({ contributors: captured });
-    captured[0]!.name = "Changed after acquisition";
+    found(captured[0]).name = "Changed after acquisition";
     expect((alert as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
       "Captured publisher",
     );
@@ -936,7 +954,7 @@ describe("captured hazard contributor receipts", () => {
 test("copies exact live metadata and required notices when a legacy hazard is acquired", async () => {
   const live = liveSources();
   const { provider } = providerWith(() => clone(alertsAnswer), live);
-  const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+  const alert = found((await provider.getAlerts(BBOX)).alerts[0]);
   const receipt = structuredClone(alert.contributors);
   expect(receipt?.some((a) => a.name === NOTICE)).toBe(true);
   expect(

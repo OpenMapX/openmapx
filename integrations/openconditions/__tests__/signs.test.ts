@@ -4,7 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import type { LatestReading } from "../features/record.js";
 import { setup } from "../index.js";
@@ -44,7 +44,8 @@ function providerWith(answer: unknown, sources: LiveSources = EVERY_SOURCE) {
   const http = fakeHttpClient((req: FakeHttpRequest) =>
     req.url === `${BASE_URL}/features` ? answer : undefined,
   );
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
+  assert.exists(client);
   return { http, provider: createMessageSignProvider(client, sources) };
 }
 
@@ -107,19 +108,23 @@ describe("message-signs-openconditions", () => {
 
   test("shows a sign whose display reading is gone with an unknown status and no message", () => {
     const answer = body();
-    const sign = recordToMessageSign(answer.records[0]!, []);
+    const [record] = answer.records;
+    assert.isDefined(record);
+    const sign = recordToMessageSign(record, []);
     expect(sign).toMatchObject({ status: "unknown", pages: [] });
     expect(sign?.updatedAt).toBeUndefined();
   });
 
   test("takes no message from a sign that is not in service", () => {
     const answer = body();
-    const [reading] = answer.latest[SHOWING]! as unknown as LatestReading[];
-    ((reading!.result as Rec).value as Rec).workingStatus = "fault";
-    const sign = recordToMessageSign(
-      answer.records[0]!,
-      answer.latest[SHOWING] as unknown as LatestReading[],
-    );
+    const readings = answer.latest[SHOWING] as unknown as LatestReading[] | undefined;
+    const [reading] = readings ?? [];
+    const [record] = answer.records;
+    assert.isDefined(readings);
+    assert.isDefined(reading);
+    assert.isDefined(record);
+    ((reading.result as Rec).value as Rec).workingStatus = "fault";
+    const sign = recordToMessageSign(record, readings);
     expect(sign).toMatchObject({ status: "fault", pages: [] });
   });
 

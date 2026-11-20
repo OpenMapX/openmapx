@@ -104,7 +104,7 @@ export function recordToFuelStation(
     const vehicleScope = lorryOnly(details);
     const held = products.findIndex((p) => p.key === key);
     // Two products under one key are one product: a priced one replaces an unpriced one.
-    if (held !== -1 && products[held]!.price !== undefined) continue;
+    if (products[held]?.price !== undefined) continue;
     const priced = reading("fuel.price", rawKey);
     const stocked = reading("fuel.product_available", rawKey);
     if (excluded(source) && priced === undefined && stocked === undefined) continue;

@@ -57,7 +57,7 @@ it("projects a historical upstream source's complete capture instead of the curr
   expect(parseContributors(results)).toEqual(results);
   expect(JSON.stringify(results)).not.toContain("licenseUrl");
   captured.attribution.publisher.name = "Changed later";
-  expect(results[0].publisher?.name).toBe("Original authority");
+  expect(results[0]?.publisher?.name).toBe("Original authority");
   captured.attribution.publisher.name = "Original authority";
 });
 
@@ -105,7 +105,7 @@ it("retains independently captured terms links as canonical evidence without inv
     ],
     NO_SOURCES,
   );
-  expect(result.licensing).toEqual({
+  expect(result?.licensing).toEqual({
     ...licensing,
     declarations: [{ text: "CC-BY-4.0", url: "https://historical.example/original-terms" }],
   });
@@ -136,6 +136,6 @@ it("keeps an explicit captured parent identity and never substitutes the current
     ],
     { ...NO_SOURCES, link: () => "https://wrong-current.example/" },
   );
-  expect(result.sourceId).toBe("original-parent");
-  expect(result.url).toBe("https://historical.example/data");
+  expect(result?.sourceId).toBe("original-parent");
+  expect(result?.url).toBe("https://historical.example/data");
 });
