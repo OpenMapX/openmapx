@@ -26,6 +26,10 @@
     "./query-expansion": {
       "types": "./query-expansion.ts",
       "default": "./query-expansion.ts"
+    },
+    "./records": {
+      "types": "./records.ts",
+      "default": "./records.ts"
     }
   },
   "dependencies": {

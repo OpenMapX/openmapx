@@ -14,6 +14,7 @@ import {
   type ReverseGeocodingResult,
   type SearchResult,
 } from "@openmapx/core";
+import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
 
 // Populated by setup(ctx); see setPeliasUrl.
 const DEFAULT_PELIAS_URL = "http://localhost:4300";
@@ -42,6 +43,21 @@ interface PeliasProperties {
 interface PeliasFeature {
   geometry: PeliasGeometry;
   properties: PeliasProperties;
+}
+
+/** Features with coordinates in range and the label the caller shows. */
+function usable(
+  features: readonly PeliasFeature[],
+  label: (properties: PeliasProperties) => string | undefined,
+) {
+  return usableGeocoderRecords(
+    features,
+    (f) => ({
+      coordinates: lngLatOrNull(f.geometry?.coordinates?.[0], f.geometry?.coordinates?.[1]),
+      label: f.properties ? label(f.properties) : undefined,
+    }),
+    "Pelias features",
+  );
 }
 
 interface PeliasResponse {
@@ -99,10 +115,10 @@ export const peliasService: GeocodingProviderImpl = {
     const params: Record<string, string> = { text: query, size: "10" };
     if (lang) params.lang = lang;
     const data = await fetchPelias("/v1/search", params);
-    return data.features.map((f) => ({
+    return usable(data.features, (p) => p.label).map(({ record: f, coordinates }) => ({
       id: makeIdFromGid(f.properties.gid),
       label: f.properties.label,
-      coordinates: f.geometry.coordinates,
+      coordinates,
       type: mapLayer(f.properties.layer),
       confidence: f.properties.confidence,
     }));
@@ -140,7 +156,7 @@ export const peliasService: GeocodingProviderImpl = {
       params["focus.point.lon"] = String(bias.proximity[0]);
     }
     const data = await fetchPelias("/v1/autocomplete", params);
-    return data.features.map((f) => {
+    return usable(data.features, (p) => p.name).map(({ record: f, coordinates }) => {
       const p = f.properties;
       const sublabelParts = [p.locality, p.region, p.country].filter(Boolean);
       const sublabel = sublabelParts.length > 0 ? sublabelParts.join(", ") : undefined;
@@ -148,7 +164,7 @@ export const peliasService: GeocodingProviderImpl = {
         id: makeIdFromGid(p.gid),
         label: p.name,
         sublabel,
-        coordinates: f.geometry.coordinates,
+        coordinates,
         type: mapLayer(p.layer),
       };
     });

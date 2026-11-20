@@ -207,3 +207,20 @@ describe("Pelias geocoding provider", () => {
     expect(unbiased.has("focus.point.lat")).toBe(false);
   });
 });
+
+describe("Pelias features that cannot be shown", () => {
+  it("drops a feature without coordinates or label, and rejects an answer with none left", async () => {
+    const feature = (coordinates: unknown, label: string) => ({
+      geometry: { type: "Point", coordinates },
+      properties: { gid: "openstreetmap:venue:node/1", layer: "venue", label, name: label },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ features: [feature([13.4, 52.5], "Cafe"), feature([13.4, 52.5], "")] }),
+    );
+    const results = await peliasService.geocode("cafe");
+    expect(results.map((r) => r.label)).toEqual(["Cafe"]);
+
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [feature(null, "Nowhere")] }));
+    await expect(peliasService.geocode("cafe")).rejects.toThrow(/no usable records/);
+  });
+});

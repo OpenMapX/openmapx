@@ -401,3 +401,20 @@ it("keeps the same acquired endpoint for supplemental native-name data", async (
   expect(result.searchMatch?.value).toBe("Köln");
   expect(result.sourceIds).toEqual(["photon"]);
 });
+
+describe("Photon features that cannot be shown", () => {
+  it("drops a feature without usable coordinates, and rejects an answer with none left", async () => {
+    const feature = (coordinates: unknown, name: string) => ({
+      geometry: { coordinates },
+      properties: { osm_type: "N", osm_id: 1, osm_key: "amenity", osm_value: "cafe", name },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ features: [feature([13.4, 52.5], "Cafe"), feature([13.4], "Broken")] }),
+    );
+    const results = await photonService.geocode("cafe");
+    expect(results.map((r) => r.label)).toEqual(["Cafe"]);
+
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [feature([200, 52.5], "Far")] }));
+    await expect(photonService.geocode("cafe")).rejects.toThrow(/no usable records/);
+  });
+});

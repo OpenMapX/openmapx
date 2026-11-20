@@ -24,6 +24,7 @@ import {
 } from "@openmapx/core";
 import type { HttpClient, Logger } from "@openmapx/integration-framework";
 import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
+import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
@@ -254,6 +255,18 @@ function mapType(placeType: string[]): SearchResult["type"] {
   return "region";
 }
 
+/** Features with coordinates in range and a place name. */
+function usable(features: readonly MaptilerFeature[]) {
+  return usableGeocoderRecords(
+    features,
+    (f) => ({
+      coordinates: lngLatOrNull(f.geometry?.coordinates?.[0], f.geometry?.coordinates?.[1]),
+      label: f.place_name || f.text,
+    }),
+    "MapTiler features",
+  );
+}
+
 /** The MapTiler key's shared daily budget is spent; search degrades until it resets. */
 export class MaptilerBudgetSpentError extends Error {
   readonly code = "quota_exhausted";
@@ -308,7 +321,7 @@ export function createMaptilerGeocodingService(
       const params: Record<string, string> = { limit: "10", types: SEARCH_TYPES };
       if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
       const data = await fetchMaptiler(query, params, lang);
-      return data.features.map((f) => {
+      return usable(data.features).map(({ record: f, coordinates }) => {
         const localities = localitiesOf(f);
         const addressEvidence = addressEvidenceOf(f);
         return {
@@ -322,7 +335,7 @@ export function createMaptilerGeocodingService(
           name: f.text,
           ...(f.matching_text ? { aliases: [f.matching_text] } : {}),
           ...(localities.length ? { localities } : {}),
-          coordinates: f.geometry.coordinates,
+          coordinates,
           type: mapType(f.place_type),
           confidence: f.relevance,
           rawCategory: f.properties?.categories?.[0],
@@ -363,7 +376,7 @@ export function createMaptilerGeocodingService(
       };
       if (bias) params.proximity = `${bias.proximity[0]},${bias.proximity[1]}`;
       const data = await fetchMaptiler(query, params, lang);
-      return data.features.map((f) => {
+      return usable(data.features).map(({ record: f, coordinates }) => {
         const category = f.properties?.categories?.[0];
         const fame = fameOf(f);
         const addressEvidence = addressEvidenceOf(f);
@@ -376,7 +389,7 @@ export function createMaptilerGeocodingService(
             : {}),
           label: autocompleteLabel(f),
           sublabel: f.place_name,
-          coordinates: f.geometry.coordinates,
+          coordinates,
           type: mapType(f.place_type),
           iconPath: category ? resolvePoiIconPath(category) : undefined,
           rawCategory: rawCategoryOf(f),

@@ -16,6 +16,7 @@ import type {
   SearchResult,
 } from "@openmapx/core";
 import { fetchJson, normalizeSearchTerm, resolvePoiIconPath } from "@openmapx/core";
+import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
 
 // Populated by setup(ctx); see setPhotonUrl.
 const DEFAULT_PHOTON_URL = "https://photon.komoot.io";
@@ -112,6 +113,18 @@ function makeId(p: PhotonProperties): string {
   return `osm:${full}/${p.osm_id}`;
 }
 
+/** Features with coordinates in range and something to call them by. */
+function usable(features: readonly PhotonFeature[]) {
+  return usableGeocoderRecords(
+    features,
+    (f) => ({
+      coordinates: lngLatOrNull(f.geometry?.coordinates?.[0], f.geometry?.coordinates?.[1]),
+      label: f.properties ? buildLabel(f.properties) : undefined,
+    }),
+    "Photon features",
+  );
+}
+
 function buildLabel(p: PhotonProperties): string {
   const parts: string[] = [];
   if (p.name) parts.push(p.name);
@@ -149,10 +162,10 @@ export const photonService: GeocodingProviderImpl = {
     }
     const data = await fetchPhoton(params, "/api", lang, endpoint);
     const sourceIds = photonSourceIds(endpoint);
-    return data.features.map((f) => ({
+    return usable(data.features).map(({ record: f, coordinates }) => ({
       id: makeId(f.properties),
       label: buildLabel(f.properties),
-      coordinates: f.geometry.coordinates,
+      coordinates,
       type: mapType(f.properties.osm_key),
       confidence: 1,
       rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
@@ -221,7 +234,7 @@ export const photonService: GeocodingProviderImpl = {
       endpoint,
     );
     const sourceIds = photonSourceIds(endpoint);
-    return features.map((f) => {
+    return usable(features).map(({ record: f, coordinates }) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);
       const native = nativeNames.get(makeId(f.properties));
@@ -229,7 +242,7 @@ export const photonService: GeocodingProviderImpl = {
         id: makeId(f.properties),
         label: short,
         sublabel: short !== full ? full : undefined,
-        coordinates: f.geometry.coordinates,
+        coordinates,
         type: mapType(f.properties.osm_key),
         iconPath: resolvePoiIconPath(f.properties.osm_value),
         rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,

@@ -400,3 +400,28 @@ describe("Nominatim geocoding provider", () => {
     expect(await nominatimService.reverseGeocode(0, 0)).toBeNull();
   });
 });
+
+describe("Nominatim results that cannot be shown", () => {
+  const result = (id: number, lat: string, lon: string, display_name = `Place ${id}`) => ({
+    place_id: id,
+    osm_type: "node",
+    osm_id: id,
+    lat,
+    lon,
+    display_name,
+    category: "amenity",
+    type: "cafe",
+    importance: 0.5,
+  });
+
+  it("drops a result without coordinates or name, and rejects an answer with none left", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([result(1, "52.5", "13.4"), result(2, "", "13.4"), result(3, "52.5", "13.4", "")]),
+    );
+    const results = await nominatimService.geocode("cafe");
+    expect(results.map((r) => r.coordinates)).toEqual([[13.4, 52.5]]);
+
+    mockFetch.mockResolvedValueOnce(mockOk([result(4, "91", "13.4")]));
+    await expect(nominatimService.geocode("cafe")).rejects.toThrow(/no usable records/);
+  });
+});

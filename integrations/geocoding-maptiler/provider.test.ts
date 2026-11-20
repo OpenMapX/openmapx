@@ -683,3 +683,24 @@ describe("address primary labels", () => {
     expect((await maptilerGeocodingService.autocomplete("Cafe"))[0].label).toBe("Cafe 66");
   });
 });
+
+describe("MapTiler features that cannot be shown", () => {
+  it("drops a feature without usable coordinates, and rejects an answer with none left", async () => {
+    const feature = (id: string, coordinates: unknown) => ({
+      id,
+      text: id,
+      place_name: id,
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ features: [feature("poi.1", [13.4, 52.5]), feature("poi.2", [13.4, 95])] }),
+    );
+    const results = await maptilerGeocodingService.geocode("x");
+    expect(results.map((r) => r.id)).toEqual(["maptiler:poi.1"]);
+
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [feature("poi.3", null)] }));
+    await expect(maptilerGeocodingService.autocomplete("x")).rejects.toThrow(/no usable records/);
+  });
+});
