@@ -153,6 +153,33 @@ describe("ModelStore", () => {
     store.dispose();
   });
 
+  it("refuses models that reference external images or buffers", async () => {
+    for (const option of [
+      { externalImageUri: "https://third-party.example/texture.png" },
+      { externalBufferUri: "https://third-party.example/extra.bin" },
+    ]) {
+      const fetchImpl = vi.fn(async () => glbResponse(option));
+      const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
+      store.request("a", "low", "/a.glb", 0);
+      await settle();
+      expect(store.failure("a")).toBe("skipped");
+      expect(store.get("a", "low")).toBeUndefined();
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      store.dispose();
+    }
+  });
+
+  it("accepts embedded data URIs", async () => {
+    const fetchImpl = vi.fn(async () =>
+      glbResponse({ externalBufferUri: "data:application/octet-stream;base64,AAAAAA==" }),
+    );
+    const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
+    store.request("a", "low", "/a.glb", 0);
+    await settle();
+    expect(store.get("a", "low")).toBeDefined();
+    store.dispose();
+  });
+
   it("exposes positions in model-root space for footprints", async () => {
     const fetchImpl = vi.fn(async () => glbResponse({ size: 7 }));
     const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });

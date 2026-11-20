@@ -2,6 +2,7 @@ import {
   BufferAttribute,
   type BufferGeometry,
   type Group,
+  LoadingManager,
   type Material,
   type Mesh,
   MeshBasicMaterial,
@@ -51,6 +52,45 @@ const MAX_BUSY_RETRIES = 3;
 const TEXTURE_SLOTS = ["map", "emissiveMap", "normalMap", "roughnessMap", "metalnessMap", "aoMap"];
 
 const keyOf = (assetId: string, lod: Lod) => `${assetId}|${lod}`;
+
+const GLB_MAGIC = 0x46546c67;
+const JSON_CHUNK = 0x4e4f534a;
+
+class ExternalResourceError extends Error {}
+
+const isEmbedded = (uri: unknown) =>
+  uri === undefined || (typeof uri === "string" && uri.startsWith("data:"));
+
+/**
+ * A landmark GLB must carry everything it needs: buffers and images either in
+ * the binary chunk or as data URIs. A reference to any other URI would make
+ * the browser contact a third party, which the proxy exists to prevent.
+ */
+function assertSelfContained(glb: ArrayBuffer): void {
+  const view = new DataView(glb);
+  if (glb.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC)
+    throw new ExternalResourceError("Not a binary glTF");
+  const jsonLength = view.getUint32(12, true);
+  if (view.getUint32(16, true) !== JSON_CHUNK || 20 + jsonLength > glb.byteLength)
+    throw new ExternalResourceError("Binary glTF without a JSON chunk");
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(glb, 20, jsonLength))) as {
+    buffers?: { uri?: unknown }[];
+    images?: { uri?: unknown }[];
+  };
+  for (const entry of [...(json.buffers ?? []), ...(json.images ?? [])]) {
+    if (!isEmbedded(entry.uri))
+      throw new ExternalResourceError("Model references an external file");
+  }
+}
+
+/** Defence in depth: the loader may only resolve embedded resources. */
+function embeddedOnlyManager(): LoadingManager {
+  const manager = new LoadingManager();
+  manager.setURLModifier((url) =>
+    url.startsWith("data:") || url.startsWith("blob:") ? url : "data:,",
+  );
+  return manager;
+}
 
 function meshesOf(scene: Group): Mesh[] {
   const meshes: Mesh[] = [];
@@ -176,7 +216,7 @@ function wrapModel(key: string, scene: Group): LoadedModel {
  */
 export class ModelStore {
   private readonly options: Required<Omit<ModelStoreOptions, "fetch">> & { fetch: typeof fetch };
-  private readonly loader = new GLTFLoader();
+  private readonly loader = new GLTFLoader(embeddedOnlyManager());
   private readonly resident = new Map<string, LoadedModel>();
   private readonly touched = new Map<string, number>();
   private readonly queue = new Map<string, Request>();
@@ -322,7 +362,15 @@ export class ModelStore {
         return;
       }
       if (!response.ok) throw new Error(`Landmark model answered ${response.status}`);
-      const gltf = await this.loader.parseAsync(await response.arrayBuffer(), "");
+      const glb = await response.arrayBuffer();
+      try {
+        assertSelfContained(glb);
+      } catch {
+        this.failures.set(request.assetId, { state: "skipped" });
+        this.notify();
+        return;
+      }
+      const gltf = await this.loader.parseAsync(glb, "");
       if (this.disposed || controller.signal.aborted) return;
       const model = wrapModel(key, gltf.scene);
       this.failures.delete(request.assetId);

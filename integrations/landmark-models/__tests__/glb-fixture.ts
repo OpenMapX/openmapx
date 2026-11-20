@@ -3,7 +3,15 @@
  * positions, normals, a named material and an optional `_FLOODLIGHT` attribute.
  */
 export function makeGlb(
-  options: { materialName?: string; floodlight?: boolean; size?: number } = {},
+  options: {
+    materialName?: string;
+    floodlight?: boolean;
+    size?: number;
+    /** Reference an image by URI instead of embedding it. */
+    externalImageUri?: string;
+    /** Declare a second buffer loaded from a URI. */
+    externalBufferUri?: string;
+  } = {},
 ): ArrayBuffer {
   const size = options.size ?? 10;
   const positions = new Float32Array([0, 0, 0, size, 0, 0, size, size, 0, 0, 0, size]);
@@ -37,10 +45,19 @@ export function makeGlb(
     materials: [
       {
         name: options.materialName ?? "stone",
-        pbrMetallicRoughness: { baseColorFactor: [0.8, 0.8, 0.8, 1] },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.8, 0.8, 0.8, 1],
+          ...(options.externalImageUri ? { baseColorTexture: { index: 0 } } : {}),
+        },
       },
     ],
-    buffers: [{ byteLength: bin.byteLength }],
+    ...(options.externalImageUri
+      ? { textures: [{ source: 0 }], images: [{ uri: options.externalImageUri }] }
+      : {}),
+    buffers: [
+      { byteLength: bin.byteLength },
+      ...(options.externalBufferUri ? [{ uri: options.externalBufferUri, byteLength: 4 }] : []),
+    ],
     bufferViews: views.map((view) => ({ buffer: 0, ...view })),
     accessors: [
       {
