@@ -23,7 +23,7 @@ const ALLOWED: Record<string, { count: number; reason: string }> = {
   "apps/web/src/components/panels/parking/useSaveParking.ts": {
     count: 1,
     reason:
-      "an observerless fetchQuery that fills a saved spot's address after the panel closes, sharing the map's reverse-geocode cache entry",
+      "an observerless fetchQuery that fills a saved spot's address after the panel closes. It shares the map's reverse-geocode cache entry, so it can join the map's signal-taking lookup, which the closing panel cancels; it then asks again with its own query function, which nothing cancels",
   },
 };
 

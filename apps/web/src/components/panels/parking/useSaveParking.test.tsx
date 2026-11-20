@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { renderHook as renderBareHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,8 +21,10 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
-function renderHook<T>(hook: () => T) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderHook<T>(
+  hook: () => T,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return renderBareHook(hook, {
     wrapper: ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -108,6 +110,32 @@ describe("useSaveParking", () => {
     await result.current.saveAt([6.6, 51.55], { address: "Am Kuhteich 42" });
     expect(state.reverse).not.toHaveBeenCalled();
     expect(state.update).not.toHaveBeenCalled();
+  });
+
+  it("still stores the address when it joined a map lookup that the closing panel cancels", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The map's lookup of the same spot, under the shared key, cancelled on abort.
+    const mapLookup = renderHook(
+      () =>
+        useQuery({
+          queryKey: ["reverse-geocode", 6.6, 51.55, "en"],
+          queryFn: ({ signal }) =>
+            new Promise<null>((_, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason));
+            }),
+        }),
+      client,
+    );
+    await waitFor(() => expect(mapLookup.result.current.fetchStatus).toBe("fetching"));
+
+    const { result } = renderHook(() => useSaveParking(), client);
+    await expect(result.current.saveAt([6.6, 51.55], {})).resolves.toBe("saved");
+    mapLookup.unmount();
+
+    await waitFor(() =>
+      expect(state.update).toHaveBeenCalledWith({ id: "p1", address: "Unter den Linden 37" }),
+    );
+    expect(state.reverse).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the spot when the lookup fails", async () => {
