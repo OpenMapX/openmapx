@@ -934,7 +934,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     reply.header("cache-control", "no-store");
     try {
       return await inspectOvertureRecovery(sql, dataDir, req.query.region);
-    } catch {
+    } catch (err) {
+      req.log.error({ err }, "Overture prerequisite inspection failed");
       reply.code(503);
       return { error: "Overture prerequisite inspection is unavailable" };
     }
