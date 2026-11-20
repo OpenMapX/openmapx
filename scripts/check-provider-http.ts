@@ -77,10 +77,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
   "credentialed-fetch-json": {},
   "null-island": {
     "integrations/transit-motis/adapter.ts": { count: 14, reason: NULL_ISLAND_PENDING },
-    "integrations/transit-opentransportdata-ch/provider.ts": {
-      count: 4,
-      reason: NULL_ISLAND_PENDING,
-    },
     "integrations/transit-ris-routing/provider.ts": { count: 2, reason: NULL_ISLAND_PENDING },
   },
 };

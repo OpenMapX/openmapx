@@ -1986,13 +1986,42 @@ function stopEventCalls(stopEvent: OjpStopEvent): OjpCall[] {
   ]);
 }
 
+/**
+ * A call's position: OJP's own, else the stop point's, else the service
+ * point's. Null when none of them is placed.
+ */
+function callPosition(
+  call: OjpCall,
+  ...fallbacks: Array<{ lat?: number | null; lng?: number | null } | undefined>
+): { lat: number; lng: number } | null {
+  const candidates = [
+    { lat: call.geoPosition?.latitude, lng: call.geoPosition?.longitude },
+    ...fallbacks,
+  ];
+  for (const candidate of candidates) {
+    const lat = candidate?.lat;
+    const lng = candidate?.lng;
+    if (
+      typeof lat === "number" &&
+      typeof lng === "number" &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng)
+    ) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
 function mapJourneyStopFromCall(
   runtime: SwissProviderRuntime,
   call: OjpCall,
   datasets: SwissStopDatasets,
-): VehicleJourney["stops"][number] {
+): VehicleJourney["stops"][number] | null {
   const rawRef = call.stopPointRef;
   const { servicePoint, stopPoint } = rawRef ? findServicePoint(rawRef, datasets) : {};
+  const position = callPosition(call, stopPoint, servicePoint);
+  if (!position) return null;
   const scheduledArrival = call.arrivalTimetabled;
   const expectedArrival = call.arrivalEstimated;
   const scheduledDeparture = call.departureTimetabled;
@@ -2008,8 +2037,8 @@ function mapJourneyStopFromCall(
       computeDelaySeconds(scheduledArrival, expectedArrival),
     expectedArrival,
     expectedDeparture,
-    lat: call.geoPosition?.latitude ?? stopPoint?.lat ?? servicePoint?.lat ?? 0,
-    lng: call.geoPosition?.longitude ?? stopPoint?.lng ?? servicePoint?.lng ?? 0,
+    lat: position.lat,
+    lng: position.lng,
     name: call.name || stopPoint?.designationOfficial || servicePoint?.name || rawRef || "Unknown",
     platform: call.estimatedQuay || call.plannedQuay,
     scheduledArrival,
@@ -2024,9 +2053,11 @@ function mapRouteStopFromCall(
   datasets: SwissStopDatasets,
   mode: TransportMode,
   sequence: number,
-): SwissRouteStop {
+): SwissRouteStop | null {
   const rawRef = call.stopPointRef ?? `route-stop:${sequence}:${call.name ?? "unknown"}`;
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
+  const position = callPosition(call, stopPoint, servicePoint);
+  if (!position) return null;
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
   return {
     contributors: swissContributors(
@@ -2037,8 +2068,8 @@ function mapRouteStopFromCall(
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
-    lat: call.geoPosition?.latitude ?? stopPoint?.lat ?? servicePoint?.lat ?? 0,
-    lng: call.geoPosition?.longitude ?? stopPoint?.lng ?? servicePoint?.lng ?? 0,
+    lat: position.lat,
+    lng: position.lng,
     modes: uniqueModes([mode, ...servicePointModes(servicePoint)]),
     name: call.name || stopPoint?.designationOfficial || servicePoint?.name || rawRef,
     parentStationId: servicePoint ? providerId(servicePoint.servicePointSloid) : undefined,
@@ -3186,9 +3217,11 @@ async function getRoutesForStop(
     );
     if (!route) continue;
     routes.set(route.id, mergeTransitRoute(routes.get(route.id), route));
-    const stops = stopEventCalls(stopEvent).map((call, index) =>
-      mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
-    );
+    // A stop that cannot be placed is left out of the observed route.
+    const stops = stopEventCalls(stopEvent).flatMap((call, index) => {
+      const stop = mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1);
+      return stop ? [stop] : [];
+    });
     await rememberObservedRoute(runtime, route, {
       hintStopId: stopId,
       operatorRefs: collectServiceOperatorRefs(stopEvent.service),
@@ -3421,9 +3454,10 @@ async function getVehicleJourney(
     if (route) {
       await rememberObservedRoute(runtime, route, {
         operatorRefs: collectServiceOperatorRefs(tripInfo.service),
-        stops: calls.map((call, index) =>
-          mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
-        ),
+        stops: calls.flatMap((call, index) => {
+          const stop = mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1);
+          return stop ? [stop] : [];
+        }),
         tripId: candidate,
       });
     }
@@ -3464,13 +3498,16 @@ async function getVehicleJourney(
       serviceInfo,
       occupancyForecast,
     );
+    // A stop that cannot be placed is left out of the journey.
+    const stops = calls.flatMap((call) => {
+      const stop = mapJourneyStopFromCall(runtime, call, datasets);
+      return stop ? [stop] : [];
+    });
     return {
       contributors: snapshotContributors(
         swissContributors(runtime, "ojp"),
         resolvedServiceInfo?.contributors ?? [],
-        contributorsForRecords(
-          calls.map((call) => mapJourneyStopFromCall(runtime, call, datasets)),
-        ),
+        contributorsForRecords(stops),
         formationDetails?.contributors ?? [],
       ),
       formation: mapOjpFormation(tripInfo.service?.datedTrainNumberRefs),
@@ -3493,7 +3530,7 @@ async function getVehicleJourney(
       provider: PROVIDER,
       remarks: serviceRemarks(runtime, tripInfo.service),
       serviceInfo: resolvedServiceInfo,
-      stops: calls.map((call) => mapJourneyStopFromCall(runtime, call, datasets)),
+      stops,
     };
   }
 
