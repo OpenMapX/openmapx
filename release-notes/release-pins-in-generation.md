@@ -24,15 +24,13 @@ services, service configuration and secrets.
 
 ## Who is affected
 
-Every installation upgrading from an earlier release, and operators who read or
-edited the overlay file. Release manifests published before this change carry no
-migration information, so rollback to one of them is refused.
+Every installation, and operators who read or edited the overlay file. Release
+manifests published before this change carry no migration information, so
+rollback to one of them is refused.
 
 ## Required action
 
-Install this release fresh, or after upgrading run `pnpm openmapx compose
-release` (or apply the release through **System → Updates**) so that the applied
-configuration pins it; then remove the old overlay file and the
-`state/ops-agent/releases/store` directory by hand. Read the rollback section of
-the upgrade guide before using `openmapx control rollback`, and re-apply any
-configuration change you still want after a rollback.
+Install fresh, as `update-system-fresh-install.md` describes; the fresh
+installation starts without the overlay file and the old release store. Read the
+rollback section of the upgrade guide before using `openmapx control rollback`,
+and re-apply any configuration change you still want after a rollback.

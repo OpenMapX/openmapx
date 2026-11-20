@@ -14,12 +14,10 @@ now fails like any other operation and releases its ownership.
 
 ## Who is affected
 
-Installations upgrading from an earlier release. The fence's stored format
-changed and no conversion is provided: earlier fence rows are removed by the
-database migration.
+Every installation. The fence's stored format changed and no conversion is
+provided.
 
 ## Required action
 
-Install this release fresh, or upgrade only while no update or configuration
-apply is in progress. Do not restore a database backup taken while an update or
+Install fresh, as `update-system-fresh-install.md` describes. Do not restore a database backup taken while an update or
 configuration apply was running.
