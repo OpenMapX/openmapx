@@ -12,7 +12,6 @@ import { isTransitModeRestriction } from "@openmapx/integration-framework";
 import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
 import type { RisClient } from "@openmapx/mobility-core/ris-client";
 import type {
-  GeoJSONLineString,
   TransportMode,
   TripItinerary,
   TripLeg,
@@ -128,28 +127,9 @@ function eventPosition(event?: RisStopEvent): LatLng | null {
   return latLngOrNull(event?.position?.latitude, event?.position?.longitude);
 }
 
-function makeGeometry(
-  polyline: string | undefined,
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-): GeoJSONLineString {
-  if (polyline) {
-    const coords = decodePolyline(polyline, 5);
-    if (coords.length >= 2) return { type: "LineString", coordinates: coords };
-  }
-  // Straight line fallback
-  return {
-    type: "LineString",
-    coordinates: [
-      [from.lng, from.lat],
-      [to.lng, to.lat],
-    ],
-  };
-}
-
 function resolveStopEvent(
   event: RisStopEvent | undefined,
-  at: { lat: number; lng: number },
+  at: LatLng,
 ): {
   name: string;
   lat: number;
@@ -164,33 +144,88 @@ function resolveStopEvent(
   };
 }
 
-/**
- * A trip leg, or null for a CONNECT leg (a transfer evaluation, not a leg to
- * draw) and for a leg whose ends RIS did not place or time.
- */
-export function mapLeg(leg: RisLeg): TripLeg | null {
-  // Skip CONNECT legs (transfer evaluation entries, not visual legs)
-  if (leg.type === "CONNECT") return null;
+/** A leg with whatever positions and times RIS gave its ends. */
+interface LegDraft {
+  leg: RisLeg;
+  origin?: RisStopEvent;
+  dest?: RisStopEvent;
+  line: [number, number][] | null;
+  from: LatLng | null;
+  to: LatLng | null;
+  startTime?: string;
+  endTime?: string;
+  seconds: number | undefined;
+}
 
-  const isTransit = leg.type === "JOURNEY";
+function draftLeg(leg: RisLeg): LegDraft {
   const origin = leg.departure ?? leg.origin;
   const dest = leg.arrival ?? leg.destination;
-  const from = eventPosition(origin);
-  const to = eventPosition(dest);
-  const startTime = origin?.time ?? origin?.timeSchedule;
-  const endTime = dest?.time ?? dest?.timeSchedule;
-  if (!from || !to || !startTime || !endTime) return null;
+  const decoded = leg.polyline ? decodePolyline(leg.polyline, 5) : [];
+  const line = decoded.length >= 2 ? decoded : null;
+  const lineEnd = (point: [number, number] | undefined) =>
+    point ? latLngOrNull(point[1], point[0]) : null;
+  return {
+    leg,
+    origin,
+    dest,
+    line,
+    from: eventPosition(origin) ?? lineEnd(line?.[0]),
+    to: eventPosition(dest) ?? lineEnd(line?.at(-1)),
+    startTime: origin?.time ?? origin?.timeSchedule,
+    endTime: dest?.time ?? dest?.timeSchedule,
+    seconds: parseElapsedDurationSeconds(leg.duration),
+  };
+}
+
+function shift(time: string | undefined, seconds: number | undefined): string | undefined {
+  if (time === undefined || seconds === undefined) return undefined;
+  const ms = Date.parse(time);
+  return Number.isFinite(ms) ? new Date(ms + seconds * 1000).toISOString() : undefined;
+}
+
+/**
+ * Fills the ends RIS left without a position or time from what the trip
+ * itself proves: a leg's polyline, the neighbouring leg that shares the stop,
+ * the requested origin and destination, and a leg's duration.
+ */
+function completeEnds(drafts: LegDraft[], request?: { origin: LatLng; destination: LatLng }) {
+  const last = drafts.length - 1;
+  for (let i = last; i >= 0; i--) {
+    const d = drafts[i] as LegDraft;
+    d.to ??= i === last ? (request?.destination ?? null) : (drafts[i + 1]?.from ?? null);
+  }
+  for (let i = 0; i <= last; i++) {
+    const d = drafts[i] as LegDraft;
+    d.from ??= i === 0 ? (request?.origin ?? null) : (drafts[i - 1]?.to ?? null);
+    d.startTime ??= drafts[i - 1]?.endTime;
+    d.endTime ??= shift(d.startTime, d.seconds);
+  }
+  for (let i = last; i >= 0; i--) {
+    const d = drafts[i] as LegDraft;
+    d.endTime ??= drafts[i + 1]?.startTime;
+    d.startTime ??= shift(d.endTime, d.seconds === undefined ? undefined : -d.seconds);
+  }
+}
+
+function buildLeg(draft: LegDraft, ends: { from: LatLng; to: LatLng; start: string; end: string }) {
+  const { leg, origin, dest } = draft;
+  const isTransit = leg.type === "JOURNEY";
   const mode: TransportMode = isTransit
     ? (CATEGORY_MODE[leg.transport?.category ?? ""] ?? "rail")
     : "walking";
-
   const result: TripLeg = {
     mode,
-    startTime,
-    endTime,
-    from: resolveStopEvent(origin, from),
-    to: resolveStopEvent(dest, to),
-    geometry: makeGeometry(leg.polyline, from, to),
+    startTime: ends.start,
+    endTime: ends.end,
+    from: resolveStopEvent(origin, ends.from),
+    to: resolveStopEvent(dest, ends.to),
+    geometry: {
+      type: "LineString",
+      coordinates: draft.line ?? [
+        [ends.from.lng, ends.from.lat],
+        [ends.to.lng, ends.to.lat],
+      ],
+    },
   };
 
   if (isTransit && leg.transport) {
@@ -209,16 +244,25 @@ export function mapLeg(leg: RisLeg): TripLeg | null {
   return result;
 }
 
-/** An itinerary, or null when a leg other than a CONNECT cannot be placed or timed. */
-export function mapTrip(trip: RisTrip): TripItinerary | null {
+/**
+ * An itinerary. CONNECT legs (transfer evaluations, not legs to draw) are
+ * skipped. A leg end without a position or time takes one the trip proves
+ * (see {@link completeEnds}); the trip is left out only when an end is still
+ * unplaced or untimed, because such a leg can be neither drawn nor timed.
+ */
+export function mapTrip(
+  trip: RisTrip,
+  request?: { origin: LatLng; destination: LatLng },
+): TripItinerary | null {
+  const drafts = (trip.legs ?? []).filter((leg) => leg.type !== "CONNECT").map(draftLeg);
+  if (drafts.length === 0) return null;
+  completeEnds(drafts, request);
   const legs: TripLeg[] = [];
-  for (const raw of trip.legs ?? []) {
-    if (raw.type === "CONNECT") continue;
-    const leg = mapLeg(raw);
-    if (!leg) return null;
-    legs.push(leg);
+  for (const draft of drafts) {
+    const { from, to, startTime: start, endTime: end } = draft;
+    if (!from || !to || !start || !end) return null;
+    legs.push(buildLeg(draft, { from, to, start, end }));
   }
-  if (legs.length === 0) return null;
   const startTime = legs[0]?.startTime ?? "";
   const endTime = legs[legs.length - 1]?.endTime ?? "";
   const durationMs =
@@ -324,7 +368,10 @@ export async function planJourney(
       if (trips.length === 0) break;
 
       for (const trip of trips) {
-        const itinerary = mapTrip(trip);
+        const itinerary = mapTrip(trip, {
+          origin: { lat: fromLat, lng: fromLng },
+          destination: { lat: toLat, lng: toLng },
+        });
         if (itinerary) allItineraries.push(itinerary);
       }
 
