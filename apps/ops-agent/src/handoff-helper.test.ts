@@ -236,7 +236,8 @@ const host = (onReplace?: (serviceId: string) => Promise<void> | void): HandoffH
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "omx-handoff-"));
   const infraDir = join(root, "infra", "docker");
-  mkdirSync(join(infraDir, "data"), { recursive: true });
+  // The control directories refuse group-writable ancestors, whatever the umask.
+  mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
   provisionControlDirectories(infraDir);
   installation = openControlInstallation({ infraDir, role: "ops-agent" });
   store = openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" });
