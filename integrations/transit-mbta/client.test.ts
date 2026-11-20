@@ -229,7 +229,10 @@ describe("MBTA host transport", () => {
         headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
         body: { data: [] },
       });
-      await apiWebStopControllerIndex({}, { client: f.client }).catch(() => {});
+      const request = apiWebStopControllerIndex({}, { client: f.client });
+      // The spent allowance still answers the 200; the 429 itself fails.
+      if (status === 429) await expect(request).rejects.toThrow();
+      else await expect(request).resolves.toBeDefined();
       expect(f.shared.deferSharedRequests).toHaveBeenCalledWith(
         expect.objectContaining({ delayMs: 40000 }),
       );
@@ -274,6 +277,25 @@ describe("MBTA bounded pagination", () => {
     const result = await collect(f);
     expect(result.data.map((x) => x.id)).toEqual(["a", "b"]);
     expect(f.shared.admitSharedRequest).toHaveBeenCalledTimes(2);
+  });
+  it("joins included resources across pages once per identity", async () => {
+    const f = fixture();
+    const first = "/predictions?page%5Blimit%5D=100&page%5Boffset%5D=0";
+    const route = (id: string, color: string) => ({ type: "route", id, attributes: { color } });
+    const result = await f.client.collect(first, async (offset) =>
+      offset === 0
+        ? {
+            data: [{ type: "prediction", id: "a" }],
+            included: [route("Red", "DA291C")],
+            links: { next: "/predictions?page%5Blimit%5D=100&page%5Boffset%5D=100" },
+          }
+        : {
+            data: [{ type: "prediction", id: "b" }],
+            included: [route("Red", "DA291C"), route("Green", "00843D")],
+          },
+    );
+    expect(result.data.map((x) => x.id)).toEqual(["a", "b"]);
+    expect(result.included.map((x) => `${x.type}:${x.id}`)).toEqual(["route:Red", "route:Green"]);
   });
   it.each([undefined, null, ""])(
     "rejects a terminal next=%s that contradicts a later last page",

@@ -156,6 +156,19 @@ describe("generated dynamic OTP acquisition", () => {
       // GTFS routes carry a colour, emitted without "#" like every other provider's.
       if (family !== "trufi") expect(departures[0]?.route.color).toBe("ff0000");
       expect(f.http.calls).toHaveLength(3);
+      // The selected query must carry the caller's coordinates, text, stop and window.
+      const variables = f.http.calls.map((call) => JSON.parse(String(call.body)).variables);
+      const now = base + 89900;
+      expect(variables).toEqual([
+        { lat: 48, lon: 9, radius: 500, limit: 20 },
+        { name: "Stop" },
+        {
+          id: "feed:1",
+          range: 600,
+          limit: 100,
+          start: family === "trufi" ? new Date(now * 1000).toISOString() : now,
+        },
+      ]);
       expect(f.admit).toHaveBeenCalledTimes(3);
       for (const call of f.http.calls) {
         expect(call.options?.headers).not.toHaveProperty("ET-Client-Name");
