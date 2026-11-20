@@ -58,6 +58,7 @@ export function createContractRouteRegistrar<const R extends Registry>(
     options: RegistrationOptions = {},
   ): void {
     const operation = registry[operationId];
+    if (!operation) throw new Error(`Unknown API operation ${operationId}`);
     const request = ("request" in operation ? operation.request : {}) as Record<string, z.ZodType>;
     const responses = operation.responses as Record<number, ApiResponseContract>;
     const convert = (validator: z.ZodType, identity: string, io: "input" | "output") =>

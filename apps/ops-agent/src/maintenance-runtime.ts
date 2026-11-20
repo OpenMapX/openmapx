@@ -95,6 +95,12 @@ export interface MaintenanceRuntimeDeps {
 }
 
 /** A lease child key derived from the handoff id, so a restarted agent finds it. */
+/** The candidate source the installed maintenance source must carry. */
+function candidateSourceOf(runtime: Parameters<typeof maintenanceSource>[0]) {
+  const { candidateSource } = maintenanceSource(runtime);
+  if (!candidateSource) throw Error("Configuration maintenance source unavailable");
+  return candidateSource;
+}
 function derivedKey(handoffId: string, purpose: string): string {
   const d = createHash("sha256")
     .update(`openmapx-configuration-handoff-${purpose}\0${handoffId}`)
@@ -340,8 +346,10 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       return receipt;
     },
     async runStep(file, ordinal, _signal, emitLog) {
-      const step = file.record.steps[ordinal]!;
-      const planned = file.plan.steps[ordinal]!;
+      const step = file.record.steps[ordinal];
+      const planned = file.plan.steps[ordinal];
+      if (!step || !planned)
+        throw Error(`Configuration maintenance step ${ordinal} is not planned`);
       const operation = planned.operation as OpsOperation;
       const reservation = reservationOf(file, step.phase, ordinal);
       const authority = await root(file);
@@ -368,7 +376,8 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
       }
       // The child is attempted from here: anything that fails is unknown.
       const execution = child.execution;
-      const binding = (await lookupControlChildPhaseBinding(authority, reservation))!;
+      const binding = await lookupControlChildPhaseBinding(authority, reservation);
+      if (!binding) throw Error("Configuration maintenance child binding is missing");
       const inspected = inspectArtifactDelegation({ installation, leaseChild });
       const lease = await adoptArtifactTargetLease({
         peer: verifyLocalControlPeer(installation, {
@@ -396,7 +405,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
           step.phase === "configuration-commit"
             ? (
                 await readConfigurationCandidate(
-                  maintenanceSource(deps.runtime).candidateSource!,
+                  candidateSourceOf(deps.runtime),
                   file.plan.operation.candidateId,
                 )
               ).payload

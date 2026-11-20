@@ -289,6 +289,8 @@
     },
     {
       "includes": [
+        "apps/ops-agent/**",
+        "apps/transitous-runner/**",
         "packages/air-quality/**",
         "packages/brands/**",
         "packages/cli/**",

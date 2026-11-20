@@ -135,7 +135,8 @@ export function installTransitCredentialsRuntime(
       };
       const readMap = (components: string[]) => {
         const parents = components.slice(0, -1),
-          file = components.at(-1)!;
+          file = components.at(-1);
+        if (file === undefined) throw new OpsNotWiredError();
         return withDirectory(parents, (directory) => {
           const before = lstatSync(directory.name(file), { bigint: true });
           const bytes = directory.read(file, 1024 * 1024, false);
@@ -193,12 +194,13 @@ export function installTransitCredentialsRuntime(
         const owned = (await options.ownedServices.inspectOwnedServices(context.signal)).filter(
           (service) => service.serviceId === "data-manager",
         );
-        if (owned.length === 1 && owned[0]!.state === "running") {
+        const [dataManager] = owned;
+        if (owned.length === 1 && dataManager?.state === "running") {
           const observed = JSON.parse(
             (
               await docker(
                 "docker",
-                ["container", "inspect", "--format", "{{json .}}", owned[0]!.containerId],
+                ["container", "inspect", "--format", "{{json .}}", dataManager.containerId],
                 {
                   signal: context.signal,
                   timeout: 15_000,
@@ -211,6 +213,7 @@ export function installTransitCredentialsRuntime(
           const mounts: { Source?: string; Destination?: string; RW?: boolean }[] =
             observed?.Mounts ?? [];
           const mount = mounts.filter((item) => item.Destination === MANAGED && item.RW === false);
+          const mountedSource = mount.length === 1 ? mount[0]?.Source : undefined;
           const expected = join(options.rootDir, ...components),
             canonicalExpected = join(realpathSync(options.rootDir), ...components),
             stableBase = services.configurationGenerationBasePath(options.stack.infraDir, revision),
@@ -231,9 +234,8 @@ export function installTransitCredentialsRuntime(
               ),
             ];
           if (
-            mount.length === 1 &&
-            mount[0]!.Source &&
-            allowedSources.includes(mount[0]!.Source) &&
+            mountedSource &&
+            allowedSources.includes(mountedSource) &&
             environment.includes(`TRANSITOUS_API_KEYS_FILE=${MANAGED}`) &&
             !environment.some(
               (item) =>
@@ -242,14 +244,14 @@ export function installTransitCredentialsRuntime(
             )
           ) {
             const a = lstatSync(expected),
-              b = lstatSync(mount[0]!.Source!);
+              b = lstatSync(mountedSource);
             if (
               a.isFile() &&
               b.isFile() &&
               !b.isSymbolicLink() &&
               a.dev === b.dev &&
               a.ino === b.ino &&
-              realpathSync(expected) === realpathSync(mount[0]!.Source!)
+              realpathSync(expected) === realpathSync(mountedSource)
             )
               appliedCredentialsRevision = services.readAppliedTransitCredentialsRevision(
                 options.stack.infraDir,
@@ -281,12 +283,13 @@ export function installTransitCredentialsRuntime(
         const owned = (await options.ownedServices.inspectOwnedServices(context.signal)).filter(
           (service) => service.serviceId === "data-manager" && service.state === "running",
         );
-        if (owned.length === 1) {
+        const [runningDataManager] = owned;
+        if (owned.length === 1 && runningDataManager) {
           const observed = JSON.parse(
             (
               await docker(
                 "docker",
-                ["container", "inspect", "--format", "{{json .}}", owned[0]!.containerId],
+                ["container", "inspect", "--format", "{{json .}}", runningDataManager.containerId],
                 { signal: context.signal, timeout: 15000, maxBuffer: 256 * 1024 },
               )
             ).stdout,
@@ -300,8 +303,9 @@ export function installTransitCredentialsRuntime(
               mount.RW === false &&
               typeof mount.Source === "string",
           );
+          const mountedDirectory = matches.length === 1 ? matches[0]?.Source : undefined;
           if (
-            matches.length === 1 &&
+            mountedDirectory &&
             !environment.some(
               (value) =>
                 value.startsWith("TRANSITOUS_API_KEYS_PATH=") &&
@@ -314,8 +318,7 @@ export function installTransitCredentialsRuntime(
                 value !== `TRANSITOUS_API_KEYS_FILE=${DEFAULT}`,
             )
           ) {
-            const expectedDirectory = join(options.rootDir, ...HOST_KEYS_DIRECTORY),
-              mountedDirectory = matches[0]!.Source!;
+            const expectedDirectory = join(options.rootDir, ...HOST_KEYS_DIRECTORY);
             const source = lstatSync(expectedDirectory),
               target = lstatSync(mountedDirectory);
             if (

@@ -161,10 +161,8 @@ export function installPreparedExportRuntime(
     const dataRoot = join(source.infraDir, "data"),
       spec = buildArtifactSpec(operation.serviceId);
     const ids = [...new Set([operation.serviceId, ...spec.consumers])];
-    if (
-      !context.ownedTargetLease ||
-      ids.some((id) => !context.ownedTargetLease!.serviceIds.includes(id))
-    )
+    const lease = context.ownedTargetLease;
+    if (!lease || ids.some((id) => !lease.serviceIds.includes(id)))
       throw Error("Original export target closure required");
 
     return services.withConfigurationGenerationWriter(

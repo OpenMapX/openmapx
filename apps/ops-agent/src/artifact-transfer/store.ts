@@ -344,6 +344,12 @@ export class ArtifactTransferStore {
     directory.close();
     return meta;
   }
+  /** The record of a claim this stage admitted; a claim it no longer holds is a conflict. */
+  private claimRecord(meta: Meta, claimId: string) {
+    const record = meta.claims.find((entry) => entry.claim.claimId === claimId);
+    if (!record) failed(409, "Artifact claim ownership changed");
+    return record;
+  }
   private alive(meta: Meta) {
     if (Date.parse(meta.stage.expiresAt) <= this.now()) failed(410, "Artifact stage expired");
     if (meta.policyRevision !== this.revision)
@@ -820,8 +826,13 @@ export class ArtifactTransferStore {
         input.contentLength !== meta.declaredBytes
       )
         failed(422, "Artifact length does not match admitted stage");
-      dir = this.directory(meta);
-      fd = openSync(dir.name("content"), C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW, 0o600);
+      const stageDir = this.directory(meta);
+      dir = stageDir;
+      fd = openSync(
+        stageDir.name("content"),
+        C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW,
+        0o600,
+      );
       const opened = fstatSync(fd, { bigint: true });
       meta.content = {
         dev: String(opened.dev),
@@ -888,8 +899,8 @@ export class ArtifactTransferStore {
       meta.stage.state = "uploaded";
       meta.reservedBytes = bytes;
       this.lock(() => {
-        dir!.check();
-        dir!.fileIdentity("content");
+        stageDir.check();
+        stageDir.fileIdentity("content");
         this.save(meta);
       });
       complete = true;
@@ -1583,11 +1594,8 @@ export class ArtifactTransferStore {
       },
       context,
     );
-    const previous = this.lock(
-      () =>
-        this.owned(claim.stageId, claim.ownerId).claims.find(
-          (record) => record.claim.claimId === claim.claimId,
-        )!,
+    const previous = this.lock(() =>
+      this.claimRecord(this.owned(claim.stageId, claim.ownerId), claim.claimId),
     );
     if (previous.settlement) {
       if (
@@ -2193,11 +2201,8 @@ export class ArtifactTransferStore {
       },
       context,
     );
-    const prior = this.lock(
-      () =>
-        this.owned(claim.stageId, claim.ownerId).claims.find(
-          (record) => record.claim.claimId === claim.claimId,
-        )!,
+    const prior = this.lock(() =>
+      this.claimRecord(this.owned(claim.stageId, claim.ownerId), claim.claimId),
     );
     if (prior.settlement) {
       if (prior.settlement.outcome !== "validated" || !prior.preparation)
@@ -2246,7 +2251,7 @@ export class ArtifactTransferStore {
       };
       this.lock(() => {
         const meta = this.owned(claim.stageId, claim.ownerId);
-        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        const record = this.claimRecord(meta, claim.claimId);
         if (record.settlement || meta.stage.state !== "validating")
           failed(409, "Integration validation ownership changed");
         record.preparation = receipt;
@@ -2259,7 +2264,7 @@ export class ArtifactTransferStore {
     } catch (error) {
       this.lock(() => {
         const meta = this.owned(claim.stageId, claim.ownerId);
-        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        const record = this.claimRecord(meta, claim.claimId);
         if (!record.settlement) {
           record.settlement = { outcome: "failed", receiptId: claim.claimId };
           meta.stage.state = "failed";
@@ -2390,10 +2395,15 @@ export class ArtifactTransferStore {
     let directory: AnchoredDirectory | undefined, file: FileHandle | undefined;
     try {
       controller.signal.throwIfAborted();
-      directory = this.directory(meta);
-      file = await open(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      const stageDir = this.directory(meta);
+      directory = stageDir;
+      const content = await open(
+        stageDir.name("content"),
+        C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK,
+      );
+      file = content;
       const verify = async () => {
-        const stat = await file!.stat({ bigint: true });
+        const stat = await content.stat({ bigint: true });
         if (
           !meta.content ||
           !stat.isFile() ||
@@ -2403,13 +2413,13 @@ export class ArtifactTransferStore {
           String(stat.mtimeNs) !== meta.content.mtimeNs ||
           String(stat.ctimeNs) !== meta.content.ctimeNs ||
           canonicalJson({ dev: meta.content.dev, ino: meta.content.ino }) !==
-            canonicalJson(directory!.fileIdentity("content"))
+            canonicalJson(stageDir.fileIdentity("content"))
         )
           failed(409, "Artifact content changed");
-        directory!.check();
+        stageDir.check();
       };
       await verify();
-      const result = await run(file, controller.signal);
+      const result = await run(content, controller.signal);
       await verify();
       return result;
     } finally {

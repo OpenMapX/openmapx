@@ -2,7 +2,7 @@ import {
   CONFIGURATION_RELEASE_IMAGE_NAMES,
   type ConfigurationReleaseDownloads,
 } from "@openmapx/core/ops";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 
 function downloads(): ConfigurationReleaseDownloads {
@@ -59,15 +59,19 @@ it("observes each exact immutable reference and retains the actual Docker ID sep
 it("accepts the exact selected platform digest for a multi-platform repository pin", async () => {
   const snapshot = downloads();
   const execFile = io();
-  execFile.mockImplementation(async (_file, args) => ({
-    stdout: JSON.stringify({
-      Id: `sha256:${"d".repeat(64)}`,
-      RepoDigests: [`${args[4]!.slice(0, args[4]!.indexOf("@"))}@sha256:${"b".repeat(64)}`],
-      Os: "linux",
-      Architecture: "amd64",
-    }),
-    stderr: "",
-  }));
+  execFile.mockImplementation(async (_file, args) => {
+    const reference = args[4];
+    assert.isDefined(reference, "image inspect was called without a reference");
+    return {
+      stdout: JSON.stringify({
+        Id: `sha256:${"d".repeat(64)}`,
+        RepoDigests: [`${reference.slice(0, reference.indexOf("@"))}@sha256:${"b".repeat(64)}`],
+        Os: "linux",
+        Architecture: "amd64",
+      }),
+      stderr: "",
+    };
+  });
   expect(
     await inspectConfigurationReleaseImages({
       downloads: snapshot,

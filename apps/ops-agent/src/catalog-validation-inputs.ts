@@ -56,11 +56,17 @@ export function installCatalogValidationInputsRuntime(
         ),
         primary = owned.filter((entry) => entry.serviceId === "motis" && entry.state === "running"),
         staging = owned.filter((entry) => entry.serviceId === "motis-staging");
+      const [dataManager] = dm,
+        [primaryMotis] = primary,
+        [stagingMotis] = staging;
       if (
         dm.length !== 1 ||
         primary.length !== 1 ||
         staging.length !== 1 ||
-        primary[0]!.provenance.imageId !== staging[0]!.provenance.imageId
+        !dataManager ||
+        !primaryMotis ||
+        !stagingMotis ||
+        primaryMotis.provenance.imageId !== stagingMotis.provenance.imageId
       )
         throw Error(
           "Run the owned Data Manager and primary MOTIS with the same configured staging image before validation",
@@ -69,7 +75,7 @@ export function installCatalogValidationInputsRuntime(
         (
           await docker(
             "docker",
-            ["container", "inspect", "--format", "{{json .}}", dm[0]!.containerId],
+            ["container", "inspect", "--format", "{{json .}}", dataManager.containerId],
             { signal: context.signal, timeout: 15000, maxBuffer: 256 * 1024 },
           )
         ).stdout,
@@ -108,12 +114,14 @@ export function installCatalogValidationInputsRuntime(
         let root = new AnchoredDirectory(join(options.stack.infraDir, "data"));
         opened.push(root);
         const parts = relative.split("/");
+        const leaf = parts.at(-1);
+        if (leaf === undefined) throw Error("The host-owned source overlay cannot be verified");
         for (const name of parts.slice(0, -1)) {
           root = root.directory(name);
           opened.push(root);
         }
         overlay = parseFeedOverlay(
-          JSON.parse(root.read(parts.at(-1)!, 4 * 1024 * 1024, false).toString("utf8")),
+          JSON.parse(root.read(leaf, 4 * 1024 * 1024, false).toString("utf8")),
         );
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -144,8 +152,8 @@ export function installCatalogValidationInputsRuntime(
           configurationRevisionId: generation,
           credentialsRevision: credentials.consumedCredentialsRevision,
           ...catalogReviewInputDigests(policy, overlay, catalogCompilerSettings(environment)),
-          imageDigest: staging[0]!.provenance.imageId,
-          stagingState: staging[0]!.state,
+          imageDigest: stagingMotis.provenance.imageId,
+          stagingState: stagingMotis.state,
           requiredKeys,
           configuredKeys: credentials.configuredKeys,
         }),

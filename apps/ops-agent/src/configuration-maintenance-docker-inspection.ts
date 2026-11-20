@@ -127,7 +127,16 @@ export async function inspectMaintenanceDockerRuntime(options: {
     const current = containers.filter((value) => value.serviceId === id),
       original = owner.originalContainers.filter((value) => value.serviceId === id),
       spec = expected.services[id];
-    if (!spec || current.length !== 1 || original.length !== 1 || current[0]!.state !== "running")
+    const [owned] = current,
+      [originalContainer] = original;
+    if (
+      !spec ||
+      current.length !== 1 ||
+      original.length !== 1 ||
+      !owned ||
+      !originalContainer ||
+      owned.state !== "running"
+    )
       throw Error("Original applied container expectation unavailable");
     const frozenImage =
         id === "data-manager" && owner.record.generation === "committed"
@@ -156,14 +165,13 @@ export async function inspectMaintenanceDockerRuntime(options: {
         recorded ??
         releaseImage?.imageId ??
         frozenImage?.imageId ??
-        original[0]!.provenance.imageId;
+        originalContainer.provenance.imageId;
     if (
       (frozenImage && spec.image !== frozenImage.imageReference) ||
       (release && (!download || !releaseImage || spec.image !== releaseReference))
     )
       throw Error("Frozen release/coordinator image reference changed");
-    const owned = current[0]!,
-      observed = container.parse(
+    const observed = container.parse(
         JSON.parse(
           (await run(["container", "inspect", "--format", "{{json .}}", owned.containerId])).trim(),
         ),
@@ -259,7 +267,8 @@ export async function inspectMaintenanceDockerRuntime(options: {
       mounts.push({
         targetDigest: keyed(volume.target),
         type: actual.Type,
-        sourceDigest: volume.type === "bind" ? keyed(await bindSource(volume.source!)) : null,
+        sourceDigest:
+          volume.type === "bind" && volume.source ? keyed(await bindSource(volume.source)) : null,
         nameDigest: actual.Name ? keyed(actual.Name) : null,
         readOnly: !actual.RW,
       });

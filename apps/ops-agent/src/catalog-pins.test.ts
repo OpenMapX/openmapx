@@ -67,7 +67,7 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
     for (const [role, token] of [
       ["api", apiToken],
       ["data-manager", dmToken],
-    ]) {
+    ] as const) {
       const tokenFile = join(root, `${role}.token`);
       writeFileSync(tokenFile, token, { mode: 0o600 });
       const client = new OpsClient({ baseUrl, tokenFile });
