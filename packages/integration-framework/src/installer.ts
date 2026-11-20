@@ -20,7 +20,6 @@ import {
   fchmodSync,
   fstatSync,
   fsyncSync,
-  linkSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -31,11 +30,9 @@ import {
   renameSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
 import { scanLicenses } from "@openmapx/core/licenses";
 import {
@@ -600,24 +597,39 @@ export function validateStagedIntegration(
 }
 
 /**
- * Extract an integration `.tar.gz` into `extractRoot` (which must not exist),
- * with the same path, link and size checks as an install. An archive whose
- * only entry is a directory holding `manifest.json` is unwrapped to
- * `promoted`. Returns the directory that holds the integration.
+ * Extract an integration archive into `extractRoot` (which must not exist)
+ * through the bounded artifact reader an install uses: regular files and
+ * directories only, with the archive and its expanded contents each at most
+ * `maxBytes`. An archive whose only entry is a directory holding
+ * `manifest.json` is unwrapped to `promoted`. Returns the directory that holds
+ * the integration and the archive's SHA-256.
  */
-export function extractIntegrationArchive(
-  archivePath: string,
-  extractRoot: string,
-  promoted: string,
-  maxBytes: number = DEFAULT_MAX_ARTIFACT_BYTES,
-): string {
-  assertArtifactFileSize(archivePath, maxBytes);
-  mkdirSync(extractRoot, { mode: INSTALLED_DIRECTORY_MODE });
+export async function extractIntegrationArchive(options: {
+  archivePath: string;
+  extractRoot: string;
+  promoted: string;
+  maxBytes?: number;
+  expectedSha256?: string;
+  signal: AbortSignal;
+}): Promise<{ directory: string; archiveSha256: string }> {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
+  assertArtifactFileSize(options.archivePath, maxBytes);
+  mkdirSync(options.extractRoot, { mode: 0o700 });
   try {
-    extractTarGz(archivePath, extractRoot, maxBytes);
-    return normalizeExtractedArtifactRoot(extractRoot, promoted);
+    const { archiveSha256 } = await extractIntegrationArtifactStream({
+      source: createReadStream(options.archivePath, { highWaterMark: 64 * 1024 }),
+      destination: options.extractRoot,
+      expectedSha256: options.expectedSha256,
+      maxArtifactBytes: maxBytes,
+      maxExpandedBytes: maxBytes,
+      signal: options.signal,
+    });
+    return {
+      directory: normalizeExtractedArtifactRoot(options.extractRoot, options.promoted),
+      archiveSha256,
+    };
   } catch (error) {
-    rmSync(extractRoot, { recursive: true, force: true });
+    rmSync(options.extractRoot, { recursive: true, force: true });
     throw error;
   }
 }
@@ -637,9 +649,7 @@ async function stageArtifactSource(
   const maxArtifactBytes = opts.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
   prepareCustomDir(opts.rootDir);
   mkdirSync(parent, { recursive: true, mode: 0o700 });
-  const extractRoot = join(parent, `artifact-${token}`);
   const archivePath = join(parent, `artifact-${token}.tar.gz`);
-  mkdirSync(extractRoot, { recursive: true, mode: 0o700 });
 
   try {
     let sourcePath = opts.source;
@@ -656,23 +666,16 @@ async function stageArtifactSource(
       sourcePath = archivePath;
     }
 
-    assertArtifactFileSize(sourcePath, maxArtifactBytes);
-    const extracted = await extractIntegrationArtifactStream({
-      source: createReadStream(sourcePath, { highWaterMark: 64 * 1024 }),
-      destination: extractRoot,
+    return await extractIntegrationArchive({
+      archivePath: sourcePath,
+      extractRoot: join(parent, `artifact-${token}`),
+      promoted: join(parent, `source-${token}`),
+      maxBytes: maxArtifactBytes,
       expectedSha256: opts.artifactSha256,
-      maxArtifactBytes,
-      maxExpandedBytes: maxArtifactBytes,
       signal: opts.signal ?? new AbortController().signal,
     });
-
-    const stage = normalizeExtractedArtifactRoot(extractRoot, join(parent, `source-${token}`));
-    if (sourcePath === archivePath) rmSync(archivePath, { force: true });
-    return { directory: stage, archiveSha256: extracted.archiveSha256 };
-  } catch (err) {
-    rmSync(extractRoot, { recursive: true, force: true });
+  } finally {
     rmSync(archivePath, { force: true });
-    throw err;
   }
 }
 
@@ -742,15 +745,6 @@ interface PreparationState {
   journal?: IntegrationPublicationJournal;
   manifest?: Record<string, unknown>;
 }
-type TarDescriptorType = "directory" | "file" | "hardlink" | "symlink";
-
-interface TarDescriptor {
-  type: TarDescriptorType;
-  path: string;
-  linkTarget?: string;
-  payloadOffset: number;
-  payloadLength: number;
-}
 const preparations = new WeakMap<IntegrationArtifactPreparationContext, PreparationState>();
 const preparedHandles = new WeakMap<
   PreparedIntegrationArtifact,
@@ -774,173 +768,6 @@ function workspacePath(state: PreparationState): string {
   return join(stagingDir(state.rootDir), `preparation-${state.preparationId}`);
 }
 
-function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] {
-  const descriptors: TarDescriptor[] = [];
-  let pendingPath: string | undefined;
-  let pendingLinkPath: string | undefined;
-  const base = resolve(destDir);
-  let headerCount = 0;
-  let offset = 0;
-  let reachedEndBlock = false;
-  for (; offset + TAR_BLOCK_BYTES <= data.length; ) {
-    const header = data.subarray(offset, offset + TAR_BLOCK_BYTES);
-    offset += TAR_BLOCK_BYTES;
-    if (isZeroBlock(header)) {
-      reachedEndBlock = true;
-      break;
-    }
-    headerCount += 1;
-    if (headerCount > MAX_TAR_HEADERS) {
-      throw new Error(
-        `Artifact tar header limit exceeded: maximum ${MAX_TAR_HEADERS.toLocaleString("en-US")}`,
-      );
-    }
-
-    const name = readTarString(header, 0, 100);
-    const prefix = readTarString(header, 345, 155);
-    const headerPath = prefix ? `${prefix}/${name}` : name;
-    const headerLinkPath = readTarString(header, 157, 100);
-    const size = parseTarOctal(header, 124, 12);
-    // The entry's mode (offset 100) is not used: installed files get fixed modes.
-    const typeflag = readTarString(header, 156, 1) || "0";
-    const payloadOffset = offset;
-    if (size > data.length - payloadOffset) {
-      throw new Error(`Artifact tar payload is truncated for ${headerPath || "unnamed entry"}`);
-    }
-    const payloadEnd = payloadOffset + size;
-    const paddingLength = (TAR_BLOCK_BYTES - (size % TAR_BLOCK_BYTES)) % TAR_BLOCK_BYTES;
-    if (paddingLength > data.length - payloadEnd) {
-      throw new Error(
-        `Artifact tar payload padding is truncated for ${headerPath || "unnamed entry"}`,
-      );
-    }
-    const fileData = data.subarray(payloadOffset, payloadEnd);
-    offset = payloadEnd + paddingLength;
-
-    if (typeflag === "x") {
-      const records = parsePaxRecords(fileData);
-      pendingPath = records.path ?? pendingPath;
-      pendingLinkPath = records.linkpath ?? pendingLinkPath;
-      continue;
-    }
-    if (typeflag === "g") {
-      parsePaxRecords(fileData, false);
-      continue; // Global PAX metadata does not carry per-entry paths.
-    }
-    if (typeflag === "L") {
-      assertMetadataPathPayloadSize(fileData, "Artifact path");
-      pendingPath = readTarPayloadString(fileData);
-      continue;
-    }
-    if (typeflag === "K") {
-      assertMetadataPathPayloadSize(fileData, "Artifact link target");
-      pendingLinkPath = readTarPayloadString(fileData);
-      continue;
-    }
-
-    const rawPath = pendingPath ?? headerPath;
-    const rawLinkPath = pendingLinkPath ?? headerLinkPath;
-    pendingPath = undefined;
-    pendingLinkPath = undefined;
-    const safePath = safeArchivePath(rawPath);
-    assertArchivePathStructure(safePath, "Artifact path");
-    const target = resolve(destDir, safePath);
-    if (target !== base && !target.startsWith(`${base}${sep}`)) {
-      throw new Error(`Artifact entry escapes extraction directory: ${rawPath}`);
-    }
-
-    if (typeflag === "5") {
-      descriptors.push({
-        type: "directory",
-        path: safePath,
-        payloadOffset,
-        payloadLength: size,
-      });
-      continue;
-    }
-    if (typeflag === "2") {
-      const linkTarget = resolveSymlinkTarget(base, target, rawLinkPath);
-      descriptors.push({
-        type: "symlink",
-        path: safePath,
-        linkTarget: linkTarget.raw,
-        payloadOffset,
-        payloadLength: size,
-      });
-      continue;
-    }
-    if (typeflag === "1") {
-      const linkTarget = validateHardlinkTarget(base, rawLinkPath);
-      descriptors.push({
-        type: "hardlink",
-        path: safePath,
-        linkTarget,
-        payloadOffset,
-        payloadLength: size,
-      });
-      continue;
-    }
-    if (typeflag !== "0") {
-      throw new Error(`Unsupported artifact entry type '${typeflag}' for ${rawPath}`);
-    }
-
-    descriptors.push({
-      type: "file",
-      path: safePath,
-      payloadOffset,
-      payloadLength: size,
-    });
-  }
-  if (!reachedEndBlock && offset !== data.length) {
-    throw new Error("Artifact contains a partial tar header");
-  }
-  return descriptors;
-}
-
-function materializeTarDescriptors(
-  data: Buffer,
-  destDir: string,
-  descriptors: TarDescriptor[],
-): void {
-  const base = resolve(destDir);
-  for (const descriptor of descriptors) {
-    const target = resolve(destDir, descriptor.path);
-    if (descriptor.type === "directory") {
-      assertPathNotThroughSymlink(base, target);
-      mkdirSync(target, { recursive: true });
-      continue;
-    }
-    if (descriptor.type === "symlink") {
-      if (!descriptor.linkTarget) throw new Error("Validated artifact symlink has no target");
-      resolveSymlinkTarget(base, target, descriptor.linkTarget);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      if (existsSync(target)) {
-        throw new Error(`Artifact link target already exists: ${descriptor.path}`);
-      }
-      symlinkSync(descriptor.linkTarget, target);
-      continue;
-    }
-    if (descriptor.type === "hardlink") {
-      if (!descriptor.linkTarget) throw new Error("Validated artifact hardlink has no target");
-      const linkTarget = resolveHardlinkTarget(base, descriptor.linkTarget);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      assertPathNotThroughSymlink(base, target);
-      linkSync(linkTarget, target);
-      continue;
-    }
-
-    assertPathNotThroughSymlink(base, dirname(target));
-    mkdirSync(dirname(target), { recursive: true });
-    assertPathNotThroughSymlink(base, target);
-    writeFileSync(
-      target,
-      data.subarray(descriptor.payloadOffset, descriptor.payloadOffset + descriptor.payloadLength),
-      { mode: INSTALLED_FILE_MODE },
-    );
-  }
-}
 function checkedWorkspace(state: PreparationState): AnchoredDirectory {
   const directory = new AnchoredDirectory(workspacePath(state), undefined, true);
   if (
@@ -2748,217 +2575,3 @@ export function removeIntegration(opts: RemoveOptions): { directory: string } {
     releaseIntegrationComponentLock(lock);
   }
 }
-
-function extractTarGz(archivePath: string, destDir: string, maxBytes: number): void {
-  let data: Buffer;
-  try {
-    data = gunzipSync(readFileSync(archivePath), { maxOutputLength: maxBytes });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
-      throw new Error(`Artifact extracted size exceeds max ${maxBytes} bytes`);
-    }
-    throw err;
-  }
-
-  const descriptors = validateTarDescriptors(data, destDir);
-  materializeTarDescriptors(data, destDir, descriptors);
-}
-
-function isZeroBlock(block: Buffer): boolean {
-  for (const byte of block) {
-    if (byte !== 0) return false;
-  }
-  return true;
-}
-
-function readTarString(block: Buffer, start: number, length: number): string {
-  const slice = block.subarray(start, start + length);
-  const nul = slice.indexOf(0);
-  return slice
-    .subarray(0, nul >= 0 ? nul : undefined)
-    .toString("utf-8")
-    .trim();
-}
-
-function parseTarOctal(block: Buffer, start: number, length: number): number {
-  const raw = readTarString(block, start, length).replace(/\0/g, "").trim();
-  if (!raw) return 0;
-  const value = Number.parseInt(raw, 8);
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`Invalid tar numeric field: ${raw}`);
-  }
-  return value;
-}
-
-function readTarPayloadString(data: Buffer): string {
-  const nul = data.indexOf(0);
-  return data
-    .subarray(0, nul >= 0 ? nul : undefined)
-    .toString("utf-8")
-    .trimEnd();
-}
-
-function parsePaxRecords(data: Buffer, capturePaths = true): Record<string, string> {
-  const records: Record<string, string> = {};
-  let offset = 0;
-  let count = 0;
-  while (offset < data.length) {
-    const space = data.indexOf(0x20, offset);
-    if (space < 0) throw new Error("Invalid PAX payload: unterminated trailing data");
-    if (space - offset > 20) throw new Error("Invalid PAX record length");
-    const lengthRaw = data.subarray(offset, space).toString("utf-8");
-    if (!/^\d+$/.test(lengthRaw)) throw new Error(`Invalid PAX record length: ${lengthRaw}`);
-    const length = Number.parseInt(lengthRaw, 10);
-    if (!Number.isInteger(length) || length <= 0 || offset + length > data.length) {
-      throw new Error(`Invalid PAX record length: ${lengthRaw}`);
-    }
-    count += 1;
-    if (count > MAX_PAX_RECORDS) {
-      throw new Error(`PAX payload exceeds ${MAX_PAX_RECORDS} records`);
-    }
-
-    const recordEnd = offset + length;
-    if (recordEnd <= space + 1 || data[recordEnd - 1] !== 10) {
-      throw new Error("Invalid PAX record: declared length must include a terminating newline");
-    }
-    const record = data.subarray(space + 1, recordEnd - 1);
-    const equals = record.indexOf(0x3d);
-    if (equals <= 0) throw new Error("Invalid PAX record: missing key/value separator");
-    if (capturePaths) {
-      const keyBytes = record.subarray(0, equals);
-      const valueBytes = record.subarray(equals + 1);
-      if (keyBytes.equals(Buffer.from("path"))) {
-        assertArchiveTextBytes(valueBytes, "Artifact path");
-        records.path = valueBytes.toString("utf-8");
-      } else if (keyBytes.equals(Buffer.from("linkpath"))) {
-        assertArchiveTextBytes(valueBytes, "Artifact link target");
-        records.linkpath = valueBytes.toString("utf-8");
-      }
-    }
-    offset += length;
-  }
-  return records;
-}
-
-function assertMetadataPathPayloadSize(data: Buffer, label: string): void {
-  const trailingNul = data.length > 0 && data[data.length - 1] === 0 ? 1 : 0;
-  if (data.length - trailingNul > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-}
-
-function assertArchiveTextBytes(data: Buffer, label: string): void {
-  if (data.length > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-}
-
-function assertArchivePathStructure(path: string, label: string): void {
-  if (Buffer.byteLength(path, "utf-8") > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-  const components = path.split(sep).filter((component) => component && component !== ".");
-  if (components.length > MAX_ARCHIVE_PATH_COMPONENTS) {
-    throw new Error(`${label} exceeds ${MAX_ARCHIVE_PATH_COMPONENTS} components`);
-  }
-  for (const component of components) {
-    if (Buffer.byteLength(component, "utf-8") > MAX_ARCHIVE_PATH_COMPONENT_BYTES) {
-      throw new Error(`${label} component exceeds ${MAX_ARCHIVE_PATH_COMPONENT_BYTES} UTF-8 bytes`);
-    }
-  }
-}
-
-function safeArchivePath(path: string): string {
-  const normalized = normalize(path.replace(/\\/g, "/"));
-  if (
-    !normalized ||
-    normalized === "." ||
-    isAbsolute(normalized) ||
-    /^[A-Za-z]:/.test(normalized) ||
-    normalized === ".." ||
-    normalized.startsWith(`..${sep}`) ||
-    normalized.includes(`${sep}..${sep}`)
-  ) {
-    throw new Error(`Unsafe artifact path: ${path}`);
-  }
-  return normalized;
-}
-
-function assertPathNotThroughSymlink(base: string, target: string): void {
-  const resolvedBase = resolve(base);
-  const resolvedTarget = resolve(target);
-  if (resolvedTarget !== resolvedBase && !resolvedTarget.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Artifact path escapes extraction directory: ${target}`);
-  }
-
-  const rel = relative(resolvedBase, resolvedTarget);
-  if (!rel) return;
-
-  let current = resolvedBase;
-  for (const part of rel.split(sep)) {
-    if (!part) continue;
-    current = join(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) {
-      throw new Error(`Artifact path traverses a symlink: ${relative(resolvedBase, current)}`);
-    }
-  }
-}
-
-function assertSafeLinkText(rawLinkPath: string): string {
-  const linkPath = rawLinkPath.replace(/\\/g, "/");
-  if (!linkPath || linkPath.includes("\0")) {
-    throw new Error("Artifact link has an empty or invalid target");
-  }
-  if (isAbsolute(linkPath) || /^[A-Za-z]:/.test(linkPath)) {
-    throw new Error(`Artifact link target is not relative: ${rawLinkPath}`);
-  }
-  return linkPath;
-}
-
-function resolveSymlinkTarget(
-  base: string,
-  linkPath: string,
-  rawLinkPath: string,
-): { raw: string; resolved: string } {
-  const raw = assertSafeLinkText(rawLinkPath);
-  assertArchivePathStructure(normalize(raw), "Artifact link target");
-  const resolved = resolve(dirname(linkPath), raw);
-  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
-    throw new Error(`Artifact symlink target escapes extraction directory: ${rawLinkPath}`);
-  }
-  return { raw, resolved };
-}
-
-function validateHardlinkTarget(base: string, rawLinkPath: string): string {
-  const linkPath = assertSafeLinkText(rawLinkPath);
-  const safePath = safeArchivePath(linkPath);
-  assertArchivePathStructure(safePath, "Artifact link target");
-  const resolved = resolve(base, safePath);
-  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
-    throw new Error(`Artifact hardlink target escapes extraction directory: ${rawLinkPath}`);
-  }
-  return safePath;
-}
-
-function resolveHardlinkTarget(base: string, rawLinkPath: string): string {
-  const safePath = validateHardlinkTarget(base, rawLinkPath);
-  const resolved = resolve(base, safePath);
-  assertPathNotThroughSymlink(base, resolved);
-  if (!existsSync(resolved)) {
-    throw new Error(`Artifact hardlink target is missing: ${rawLinkPath}`);
-  }
-  return resolved;
-}
-
-const TAR_BLOCK_BYTES = 512;
-const MAX_TAR_HEADERS = 4096;
-const MAX_PAX_RECORDS = 256;
-const MAX_ARCHIVE_PATH_BYTES = 1024;
-const MAX_ARCHIVE_PATH_COMPONENTS = 32;
-const MAX_ARCHIVE_PATH_COMPONENT_BYTES = 255;

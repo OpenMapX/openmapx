@@ -302,12 +302,13 @@ export class IntegrationStore {
       if (sha256File(archive) !== normalizedSource.sha256) {
         throw new Error("The archive does not have the expected SHA-256");
       }
-      const tree = extractIntegrationArchive(
-        archive,
-        join(work, "extracted"),
-        join(work, "unwrapped"),
-        MAX_ARTIFACT_BYTES,
-      );
+      const { directory: tree } = await extractIntegrationArchive({
+        archivePath: archive,
+        extractRoot: join(work, "extracted"),
+        promoted: join(work, "unwrapped"),
+        maxBytes: MAX_ARTIFACT_BYTES,
+        signal,
+      });
       rmSync(archive, { force: true });
       const { id, manifest } = validateStagedIntegration(tree, {
         builtInIds: this.options.builtInIds(),
