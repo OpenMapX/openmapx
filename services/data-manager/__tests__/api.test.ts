@@ -381,10 +381,14 @@ describe("data-manager API", () => {
       expect(admitLocal).not.toHaveBeenCalled();
     });
 
-    it("answers an unexpected admission failure in the transit-source envelope", async () => {
+    it("answers an unexpected admission failure with a fixed text and logs it", async () => {
       const dataDir = createDataDir();
       sourceCatalog(dataDir);
-      const app = createTestApp();
+      const logLines: string[] = [];
+      const app = Fastify({
+        logger: { level: "error", stream: { write: (line: string) => logLines.push(line) } },
+      });
+      apps.push(app);
       registerApi(app, {
         dataDir,
         operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
@@ -400,7 +404,11 @@ describe("data-manager API", () => {
         payload: { ...operatorFeed, region: "de", expectedSourceRevision: revision(dataDir) },
       });
       expect(res.statusCode).toBe(500);
-      expect(res.json()).toEqual({ error: "Execution store unavailable" });
+      expect(res.json()).toEqual({ error: "Transit source request failed" });
+      const logged = logLines
+        .map((line) => JSON.parse(line) as { msg?: string; err?: { message?: string } })
+        .find((entry) => entry.msg === "transit-sources: request failed");
+      expect(logged?.err?.message).toBe("Execution store unavailable");
     });
 
     it("refuses a source change without a durable receiver in the error envelope", async () => {

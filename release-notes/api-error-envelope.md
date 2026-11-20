@@ -24,9 +24,11 @@ failed. These replies drop `ok: false` and keep their other fields:
   where the API passes them through
 - the data-manager search index and notable places 404 before a first build,
   the Overture status 404 and the Overture recovery 503
-- the data-manager transit source reads and changes (400, 404, 409, 500),
-  including `code: "source_action_not_allowed"`, and a source change refused
-  for lack of a durable receiver (503)
+- the data-manager transit source reads and changes (400, 404, 409), including
+  `code: "source_action_not_allowed"`, and a source change refused for lack of
+  a durable receiver (503). An unexpected failure of these routes answers
+  HTTP 500 `{ error: "Transit source request failed" }` and data-manager logs
+  the cause; before, Fastify's default body carried the exception text
 - the API's Compose shutdown guidance (503), Compose start's idempotency refusal
   (400), the admin operation 404 and its input refusal (400), which keeps
   `issues`

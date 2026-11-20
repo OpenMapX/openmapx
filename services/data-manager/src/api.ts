@@ -18,7 +18,6 @@ import {
 } from "@openmapx/core/data-manager-contracts";
 import { RollingStreamBudget } from "@openmapx/core/server";
 import { feedState, jobs } from "@openmapx/db-schema";
-import { parseTransitSource } from "@openmapx/transitous-core";
 import { and, desc, sql as drizzleSql, eq, inArray } from "drizzle-orm";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -413,17 +412,20 @@ function registerOfflinePackageRoutes(
 
 /**
  * Answers a failed transit-source read or change. A `TransitSourceError` carries
- * its status and, for a refused action, its code; any other failure of the route
- * is a 500. Request errors that already carry an HTTP status, such as an oversized
- * body, keep Fastify's reply.
+ * its status, a user-safe text and, for a refused action, its code. Any other
+ * failure of the route is logged and answers a 500 with a fixed text, so a store
+ * or database message never reaches the client. Request errors that already
+ * carry an HTTP status, such as an oversized body, keep Fastify's reply.
  */
-function transitSourceErrorReply(error: Error, _request: FastifyRequest, reply: FastifyReply) {
-  if (!(error instanceof TransitSourceError) && "statusCode" in error) throw error;
-  const known = error instanceof TransitSourceError;
-  return reply.code(known ? error.statusCode : 500).send({
-    error: error.message,
-    ...(known && error.code ? { code: error.code } : {}),
-  });
+function transitSourceErrorReply(error: Error, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof TransitSourceError) {
+    return reply
+      .code(error.statusCode)
+      .send({ error: error.message, ...(error.code ? { code: error.code } : {}) });
+  }
+  if ("statusCode" in error) throw error;
+  request.log.error({ err: error }, "transit-sources: request failed");
+  return reply.code(500).send({ error: "Transit source request failed" });
 }
 
 /** Runs a source change's prepare step; a failure it does not classify is the caller's error. */
