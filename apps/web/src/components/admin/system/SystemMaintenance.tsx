@@ -583,11 +583,18 @@ export function SystemMaintenance({
             <Typography variant="body2">
               Configured channel: {status?.release?.configuredSelector ?? "unknown"}
             </Typography>
+            {/* Only an answered inspection names the channel; without one, a missing pin is unknown. */}
             <Typography variant="body2">
-              Current release (pinned): {status?.release?.currentReleaseId ?? "none"}
+              Current release (pinned):{" "}
+              {status?.release?.configuredSelector === undefined
+                ? "unknown"
+                : (status.release.currentReleaseId ?? "none")}
             </Typography>
             <Typography variant="body2">
-              Checked release: {status?.release?.availableReleaseId ?? "not checked"}
+              Checked release:{" "}
+              {status?.release?.configuredSelector === undefined
+                ? "unknown"
+                : (status.release.availableReleaseId ?? "not checked")}
             </Typography>
             {status?.release?.availableDigest && (
               <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>

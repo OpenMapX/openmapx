@@ -715,3 +715,47 @@ it("clears the pin of the current release, retaining the request key after a los
     client.clear();
   }
 });
+
+it.each([
+  {
+    when: "the agent did not answer",
+    ready: false,
+    release: {},
+    lines: [
+      "Configured channel: unknown",
+      "Current release (pinned): unknown",
+      "Checked release: unknown",
+    ],
+  },
+  {
+    when: "no release is pinned",
+    ready: true,
+    release: { configuredSelector: "main" },
+    lines: [
+      "Configured channel: main",
+      "Current release (pinned): none",
+      "Checked release: not checked",
+    ],
+  },
+])("shows the release selection when $when", async ({ ready, release, lines }) => {
+  const deployment = {
+    dockerAvailable: ready,
+    composeRendered: ready,
+    hostControlConfigured: true,
+    maintenanceReady: ready,
+  };
+  vi.stubGlobal("fetch", async () => Response.json({ deployment, release, images: [] }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <SystemMaintenance />
+      </QueryClientProvider>,
+    );
+    for (const line of lines) expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear the release pin" })).toBeDisabled();
+  } finally {
+    cleanup();
+    client.clear();
+  }
+});
