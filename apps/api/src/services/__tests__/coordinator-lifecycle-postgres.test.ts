@@ -40,7 +40,7 @@ import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyRequest } from "fastify";
 import type postgres from "postgres";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, it as base, describe, expect, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -112,6 +112,33 @@ const coordinatorReferenceCases = [
     sibling: { image: "example/data-manager", tag: "other" },
   },
 ];
+type HostOptions = NonNullable<Parameters<typeof ownedServiceHost>[0]>;
+/** What one test changes in the shared host, agent and API setup. */
+interface CoordinatorScenario {
+  /** A third ordinary target, valhalla, beside motis and the coordinator. */
+  threeTargets: boolean;
+  /** Configuration schemas the host's services declare. */
+  schemas?: HostOptions["schemas"];
+  /** The image references of motis (a sibling) and the data-manager coordinator. */
+  imageReferences?: (typeof coordinatorReferenceCases)[number];
+  /** The old coordinator is stopped, its HTTP paused, before the update starts. */
+  coordinatorStopped: boolean;
+  /** The API's first write of a saved candidate decision fails before delivery. */
+  refuseDecisionWrite: boolean;
+  /** Log the bulk handler's errors; diagnostics only. */
+  logBulkErrors: boolean;
+}
+const ORDINARY: CoordinatorScenario = {
+  threeTargets: false,
+  coordinatorStopped: false,
+  refuseDecisionWrite: false,
+  logBulkErrors: false,
+};
+const it = base.extend<{ scenario: CoordinatorScenario }>({ scenario: ORDINARY });
+/** Sets the scenario of the current suite's tests. */
+function scenario(patch: Partial<CoordinatorScenario>) {
+  it.override("scenario", { ...ORDINARY, ...patch });
+}
 type Fixture = Awaited<ReturnType<typeof createConfigurationPostgresFixture>>;
 const state = vi.hoisted(() => ({ fixture: null as unknown as Fixture }));
 // Only the database connection boundary is replaced; every query/transaction
@@ -144,12 +171,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     const posts = new Map<string, number>();
     const arrivals = new Map<string, number>();
 
-    beforeEach(async (test) => {
+    it.beforeEach(async ({ scenario }) => {
       fixture = await createConfigurationPostgresFixture();
       state.fixture = fixture;
       refusedDecisionWrites = 0;
       issuedKnownRollbacks = 0;
-      if (test.task.name.includes("unused OLD runtime"))
+      if (scenario.refuseDecisionWrite)
         state.fixture = {
           ...fixture,
           sql: new Proxy(fixture.sql, {
@@ -202,29 +229,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "");
-      const references = coordinatorReferenceCases.find((value) =>
-        test.task.name.includes(value.name),
-      );
+      const references = scenario.imageReferences;
       host = await ownedServiceHost({
         withCoordinator: true,
-        ...(test.task.name.includes("three-target") ? { extraServiceIds: ["valhalla"] } : {}),
-        ...(test.task.name.includes("ordinary unrelated configuration")
-          ? {
-              schemas: {
-                motis: { type: "object", properties: { MODE: { type: "string", default: "old" } } },
-              },
-            }
-          : {}),
-        ...(test.task.name.includes("installed credential follow-up")
-          ? {
-              schemas: {
-                "data-manager": {
-                  type: "object",
-                  properties: { TOKEN: { type: "string", "x-openmapx-secret": true } },
-                },
-              },
-            }
-          : {}),
+        ...(scenario.threeTargets ? { extraServiceIds: ["valhalla"] } : {}),
+        ...(scenario.schemas ? { schemas: scenario.schemas } : {}),
         ...(references
           ? { imageReferences: { motis: references.sibling, "data-manager": references.target } }
           : {}),
@@ -248,7 +257,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ),
         Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
       };
-      if (test.task.name.includes("stopped coordinator before pull")) {
+      if (scenario.coordinatorStopped) {
         old.State = "exited";
         await dm.pauseHttp();
       }
@@ -261,7 +270,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).record,
           fixed = candidate.privateCoordinatorLifecycle;
         if (fixed?.action !== "update") throw Error("Actual original sealed Update source missing");
-        if (test.task.name.includes("stopped coordinator before pull")) {
+        if (scenario.coordinatorStopped) {
           const helper = candidate.coordinatorPrerequisite!;
           const actual = JSON.parse(agentAdmission(host.infraDir, helper.root.operationKey));
           console.info(
@@ -449,7 +458,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         try {
           return await handleServiceBulkJob(ctx);
         } catch (error) {
-          if (test.task.name.includes("actual bulk Update"))
+          if (scenario.logBulkErrors)
             console.info(
               "actual bulk boundary error",
               JSON.stringify({
@@ -862,54 +871,64 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(dm.settlementResponseStatuses).toEqual([200]);
     }, 300000);
-    it("carries staged ownership and desired E through the installed credential follow-up's OWN generation", async () => {
-      const { pullKey } = await canceledSuccessfulCoordinatorStage(),
-        original = agentAdmission(host.infraDir, pullKey);
-      const changed = await api.inject({
-        method: "PUT",
-        url: "/api/admin/services/data-manager/credentials/TOKEN",
-        headers: {
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-          "idempotency-key": "task012-staged-credential",
+    describe("with a secret in the coordinator's configuration", () => {
+      scenario({
+        schemas: {
+          "data-manager": {
+            type: "object",
+            properties: { TOKEN: { type: "string", "x-openmapx-secret": true } },
+          },
         },
-        payload: { value: "synthetic-private-credential" },
       });
-      expect(changed.statusCode, changed.body).toBe(200);
-      expect(posts.get("service.pull")).toBe(1);
-      expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-      expect(dm.settlementResponseStatuses).toEqual([200]);
-      expect(agentAdmission(host.infraDir, pullKey)).toBe(original);
-      const jobs = await fixture.db.select().from(schema.adminJob),
-        ownerJob = jobs.find((job) => maintenanceIdOf(job)),
-        owner = JSON.parse(
-          readFileSync(
-            join(
-              host.infraDir,
-              "state/ops-agent/control/maintenance",
-              `${maintenanceIdOf(ownerJob!)}.json`,
+      it("carries staged ownership and desired E through the installed credential follow-up's OWN generation", async () => {
+        const { pullKey } = await canceledSuccessfulCoordinatorStage(),
+          original = agentAdmission(host.infraDir, pullKey);
+        const changed = await api.inject({
+          method: "PUT",
+          url: "/api/admin/services/data-manager/credentials/TOKEN",
+          headers: {
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            "idempotency-key": "task012-staged-credential",
+          },
+          payload: { value: "synthetic-private-credential" },
+        });
+        expect(changed.statusCode, changed.body).toBe(200);
+        expect(posts.get("service.pull")).toBe(1);
+        expect(posts.get("configurationMaintenance.prepare")).toBe(1);
+        expect(dm.settlementResponseStatuses).toEqual([200]);
+        expect(agentAdmission(host.infraDir, pullKey)).toBe(original);
+        const jobs = await fixture.db.select().from(schema.adminJob),
+          ownerJob = jobs.find((job) => maintenanceIdOf(job)),
+          owner = JSON.parse(
+            readFileSync(
+              join(
+                host.infraDir,
+                "state/ops-agent/control/maintenance",
+                `${maintenanceIdOf(ownerJob!)}.json`,
+              ),
+              "utf8",
             ),
-            "utf8",
-          ),
-        );
-      // The credential change recreates data-manager with the image its
-      // reference names now, the one the canceled update pulled, and its
-      // generation records it.
-      expect(owner.plan.coordinatorImage).toMatchObject({
-        action: "apply",
-        imageId: pulledImageId,
-      });
-      expect(
-        services.readGenerationImageIds(host.infraDir, owner.plan.operation.revisionId)[
-          "data-manager"
-        ],
-      ).toBe(pulledImageId);
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
-          (s) => s.serviceId === "data-manager",
-        )?.provenance.imageId,
-      ).toBe(pulledImageId);
-      expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(1);
-    }, 180000);
+          );
+        // The credential change recreates data-manager with the image its
+        // reference names now, the one the canceled update pulled, and its
+        // generation records it.
+        expect(owner.plan.coordinatorImage).toMatchObject({
+          action: "apply",
+          imageId: pulledImageId,
+        });
+        expect(
+          services.readGenerationImageIds(host.infraDir, owner.plan.operation.revisionId)[
+            "data-manager"
+          ],
+        ).toBe(pulledImageId);
+        expect(
+          (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
+            (s) => s.serviceId === "data-manager",
+          )?.provenance.imageId,
+        ).toBe(pulledImageId);
+        expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(1);
+      }, 180000);
+    });
     it("refuses candidate DM staging before Docker while an actual ordinary full-target root remains held", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>();
@@ -1479,55 +1498,62 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       420000,
     );
-    it("applies an ordinary unrelated configuration change after an update was canceled once its pull finished", async () => {
-      await fixture.db
-        .insert(schema.serviceConfig)
-        .values({ id: crypto.randomUUID(), serviceId: "motis", config: { MODE: "old" } });
-      await canceledSuccessfulCoordinatorStage();
-      const before = services.currentConfigurationGeneration(host.infraDir);
-      // The pulled image moved the tag; the running coordinator still runs the
-      // image its generation recorded, so it stays the agent's own.
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
-          (s) => s.serviceId === "data-manager",
-        )?.provenance.imageId,
-      ).toBe(`sha256:${"b".repeat(64)}`);
-      const saved = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/motis/config",
-        headers: {
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-          "idempotency-key": "task012-unrelated-config-after-pull",
+    describe("with a configurable ordinary service", () => {
+      scenario({
+        schemas: {
+          motis: { type: "object", properties: { MODE: { type: "string", default: "old" } } },
         },
-        payload: { config: { MODE: "new" } },
       });
-      expect(saved.statusCode, saved.body).toBe(200);
-      expect((await fixture.db.select().from(schema.serviceConfig))[0]?.config).toEqual({
-        MODE: "new",
-      });
-      expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(before);
-      // The new generation records the image its coordinator reference names now.
-      expect(
-        services.readGenerationImageIds(
-          host.infraDir,
-          services.currentConfigurationGeneration(host.infraDir)!,
-        )["data-manager"],
-      ).toBe(pulledImageId);
-      // A later update recreates the coordinator with the image it pulls.
-      const next = await api.inject({
+      it("applies an ordinary unrelated configuration change after an update was canceled once its pull finished", async () => {
+        await fixture.db
+          .insert(schema.serviceConfig)
+          .values({ id: crypto.randomUUID(), serviceId: "motis", config: { MODE: "old" } });
+        await canceledSuccessfulCoordinatorStage();
+        const before = services.currentConfigurationGeneration(host.infraDir);
+        // The pulled image moved the tag; the running coordinator still runs the
+        // image its generation recorded, so it stays the agent's own.
+        expect(
+          (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
+            (s) => s.serviceId === "data-manager",
+          )?.provenance.imageId,
+        ).toBe(`sha256:${"b".repeat(64)}`);
+        const saved = await api.inject({
           method: "POST",
-          url: "/api/admin/services/bulk-action",
+          url: "/api/admin/services/motis/config",
           headers: {
-            "idempotency-key": randomUUID(),
             "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            "idempotency-key": "task012-unrelated-config-after-pull",
           },
-          payload: { action: "update", serviceIds: ["data-manager"] },
-        }),
-        row = await finished(next.json().jobId);
-      expect(row.status, row.error ?? "No public error").toBe("success");
-      expect(posts.get("service.pull")).toBe(2);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
-    }, 180000);
+          payload: { config: { MODE: "new" } },
+        });
+        expect(saved.statusCode, saved.body).toBe(200);
+        expect((await fixture.db.select().from(schema.serviceConfig))[0]?.config).toEqual({
+          MODE: "new",
+        });
+        expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(before);
+        // The new generation records the image its coordinator reference names now.
+        expect(
+          services.readGenerationImageIds(
+            host.infraDir,
+            services.currentConfigurationGeneration(host.infraDir)!,
+          )["data-manager"],
+        ).toBe(pulledImageId);
+        // A later update recreates the coordinator with the image it pulls.
+        const next = await api.inject({
+            method: "POST",
+            url: "/api/admin/services/bulk-action",
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
+            payload: { action: "update", serviceIds: ["data-manager"] },
+          }),
+          row = await finished(next.json().jobId);
+        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(posts.get("service.pull")).toBe(2);
+        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
+      }, 180000);
+    });
     it.each(["image-id", "reference"] as const)(
       "does not count a coordinator as its own after its %s drifted from what its generation names",
       async (kind) => {
@@ -1903,9 +1929,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       240000,
     );
-    it.each(coordinatorReferenceCases.map((value) => value.name))(
-      "updates the coordinator while another service's reference names its image (%s)",
-      async () => {
+    describe.each(coordinatorReferenceCases)("$name", (references) => {
+      scenario({ imageReferences: references });
+      it("updates the coordinator while another service's reference names its image", async () => {
+        const container = (id: string) =>
+          host.loaded.find((s) => s.manifest.id === id)?.manifest.container;
+        expect(container("motis")).toMatchObject(references.sibling);
+        expect(container("data-manager")).toMatchObject(references.target);
         const reply = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
@@ -1928,37 +1958,39 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           pulledImageId,
         );
         expect(await dm.fenceStates()).toEqual(["settled"]);
-      },
-      180000,
-    );
-    it("starts an initially stopped coordinator before pull using only its clamped original old-revision helper", async () => {
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      await expect(fetch(dm.baseUrl + "/health")).rejects.toThrow();
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const row = await finished(reply.json().jobId);
-      expect(row.status).toBe("success");
-      expect(posts.get("service.start")).toBe(1);
-      expect(posts.get("service.pull")).toBe(1);
-      expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-      const start = host.calls.findIndex(
-          (args) => args.includes("--no-recreate") && args.at(-1) === "data-manager",
-        ),
-        pull = host.calls.findIndex((args) => args[0] === "image" && args[1] === "pull"),
-        recreate = host.calls.findIndex((args) => args.includes("--force-recreate"));
-      expect(start).toBeGreaterThanOrEqual(0);
-      expect(pull).toBeGreaterThan(start);
-      expect(recreate).toBeGreaterThan(pull);
-      expect(host.calls.filter((args) => args.includes("--no-recreate"))).toHaveLength(1);
-      expect(await dm.fenceStates()).toEqual(["settled"]);
-    }, 180000);
+      }, 180000);
+    });
+    describe("with the coordinator stopped", () => {
+      scenario({ coordinatorStopped: true });
+      it("starts an initially stopped coordinator before pull using only its clamped original old-revision helper", async () => {
+        expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
+        await expect(fetch(dm.baseUrl + "/health")).rejects.toThrow();
+        const reply = await api.inject({
+          method: "POST",
+          url: "/api/admin/services/bulk-action",
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
+          payload: { action: "update", serviceIds: ["data-manager"] },
+        });
+        const row = await finished(reply.json().jobId);
+        expect(row.status).toBe("success");
+        expect(posts.get("service.start")).toBe(1);
+        expect(posts.get("service.pull")).toBe(1);
+        expect(posts.get("configurationMaintenance.prepare")).toBe(1);
+        const start = host.calls.findIndex(
+            (args) => args.includes("--no-recreate") && args.at(-1) === "data-manager",
+          ),
+          pull = host.calls.findIndex((args) => args[0] === "image" && args[1] === "pull"),
+          recreate = host.calls.findIndex((args) => args.includes("--force-recreate"));
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(pull).toBeGreaterThan(start);
+        expect(recreate).toBeGreaterThan(pull);
+        expect(host.calls.filter((args) => args.includes("--no-recreate"))).toHaveLength(1);
+        expect(await dm.fenceStates()).toEqual(["settled"]);
+      }, 180000);
+    });
     it("sends no pull when the whole candidate is refused before the update starts", async () => {
       services.writeServiceSelectionFile(host.infraDir, ["motis"]);
       const reply = await api.inject({
@@ -2012,60 +2044,66 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(JSON.stringify(unchanged!.result)).toBe(original);
       expect(posts.get("service.pull") ?? 0).toBe(0);
     }, 180000);
-    it("settles the authenticated unused OLD runtime after a real acknowledged API SQL rollback following image staging", async () => {
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const row = await finished(reply.json().jobId);
-      expect(refusedDecisionWrites).toBe(1);
-      expect(issuedKnownRollbacks).toBeGreaterThan(0);
-      expect(row.status).toBe("failed");
-      // Nothing was saved: the job carries no candidate any more.
-      expect((row.protocol as { candidate?: unknown }).candidate).toBeUndefined();
-      const owner = JSON.parse(
-        readFileSync(
-          join(
-            host.infraDir,
-            "state/ops-agent/control/maintenance",
-            `${maintenanceIdOf(row)}.json`,
+    describe("with the API's decision write refused", () => {
+      scenario({ refuseDecisionWrite: true });
+      it("settles the authenticated unused OLD runtime after a real acknowledged API SQL rollback following image staging", async () => {
+        const reply = await api.inject({
+          method: "POST",
+          url: "/api/admin/services/bulk-action",
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
+          payload: { action: "update", serviceIds: ["data-manager"] },
+        });
+        const row = await finished(reply.json().jobId);
+        expect(refusedDecisionWrites).toBe(1);
+        expect(issuedKnownRollbacks).toBeGreaterThan(0);
+        expect(row.status).toBe("failed");
+        // Nothing was saved: the job carries no candidate any more.
+        expect((row.protocol as { candidate?: unknown }).candidate).toBeUndefined();
+        const owner = JSON.parse(
+          readFileSync(
+            join(
+              host.infraDir,
+              "state/ops-agent/control/maintenance",
+              `${maintenanceIdOf(row)}.json`,
+            ),
+            "utf8",
           ),
-          "utf8",
-        ),
-      );
-      expect(owner.record.state).toBe("settled");
-      expect(owner.record.fenceOutcome).toBe("unused");
-      expect(owner.record.generation).toBe("not_started");
-      expect(posts.get("service.pull")).toBe(1);
-      expect(posts.get("stack.render") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-      expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-      expect(posts.get("configurationMaintenance.settle")).toBe(1);
-      expect(await dm.fenceStates()).toEqual(["settled"]);
-      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
-      // The pulled image is unused; the old coordinator runs the image its
-      // generation recorded, so it stays the agent's own.
-      expect(
-        owner.originalContainers.find((s: { serviceId: string }) => s.serviceId === "data-manager")
-          ?.provenance.imageId,
-      ).toBe(`sha256:${"b".repeat(64)}`);
-      expect(
-        services.readGenerationImageIds(host.infraDir, host.initial.revisionId)["data-manager"],
-      ).toBe(`sha256:${"b".repeat(64)}`);
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
-          (s) => s.serviceId === "data-manager",
-        )?.provenance.imageId,
-      ).toBe(`sha256:${"b".repeat(64)}`);
-      expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
-      expect(row.error ?? "").not.toContain('update "admin_job"');
-      expect(row.error ?? "").not.toContain(host.root);
-    }, 180000);
+        );
+        expect(owner.record.state).toBe("settled");
+        expect(owner.record.fenceOutcome).toBe("unused");
+        expect(owner.record.generation).toBe("not_started");
+        expect(posts.get("service.pull")).toBe(1);
+        expect(posts.get("stack.render") ?? 0).toBe(0);
+        expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
+        expect(posts.get("configurationMaintenance.prepare")).toBe(1);
+        expect(posts.get("configurationMaintenance.settle")).toBe(1);
+        expect(await dm.fenceStates()).toEqual(["settled"]);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+          host.initial.revisionId,
+        );
+        // The pulled image is unused; the old coordinator runs the image its
+        // generation recorded, so it stays the agent's own.
+        expect(
+          owner.originalContainers.find(
+            (s: { serviceId: string }) => s.serviceId === "data-manager",
+          )?.provenance.imageId,
+        ).toBe(`sha256:${"b".repeat(64)}`);
+        expect(
+          services.readGenerationImageIds(host.infraDir, host.initial.revisionId)["data-manager"],
+        ).toBe(`sha256:${"b".repeat(64)}`);
+        expect(
+          (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
+            (s) => s.serviceId === "data-manager",
+          )?.provenance.imageId,
+        ).toBe(`sha256:${"b".repeat(64)}`);
+        expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
+        expect(row.error ?? "").not.toContain('update "admin_job"');
+        expect(row.error ?? "").not.toContain(host.root);
+      }, 180000);
+    });
     it.each([
       { name: "original cleanup", retry: false },
       { name: "fresh explicit retry", retry: true },
@@ -2190,215 +2228,224 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       600000,
     );
-    it.each([false, true])(
-      "preserves the three-target requested revision chain and full selection with noDeps=%s",
-      async (noDeps) => {
-        const serviceIds = ["motis", "data-manager", "valhalla"],
-          reply = await api.inject({
+    describe("with a third ordinary target", () => {
+      scenario({ threeTargets: true });
+      it.each([false, true])(
+        "preserves the three-target requested revision chain and full selection with noDeps=%s",
+        async (noDeps) => {
+          const serviceIds = ["motis", "data-manager", "valhalla"],
+            reply = await api.inject({
+              method: "POST",
+              url: "/api/admin/services/bulk-action",
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
+              payload: { action: "update", serviceIds, noDeps },
+            }),
+            row = await finished(reply.json().jobId);
+          expect(row.status, row.error ?? "No public error").toBe("success");
+          expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
+            serviceIds,
+          );
+          expect(posts.get("service.update")).toBe(2);
+          expect(posts.get("service.pull")).toBe(1);
+          expect(posts.get("configurationMaintenance.prepare")).toBe(1);
+          expect(dm.settlementResponseStatuses).toEqual([200]);
+          const native = readFileSync(nativeTrace, "utf8")
+              .trim()
+              .split("\n")
+              .map((line) => JSON.parse(line) as string[]),
+            recreates = native.filter((args) => args.includes("--force-recreate"));
+          expect(recreates.map((args) => args.at(-1))).toEqual(["motis", "valhalla"]);
+          expect(recreates.every((args) => args.includes("--no-deps") === noDeps)).toBe(true);
+          expect(services.readAppliedServiceIds(host.infraDir, host.loaded)).toEqual(
+            new Set(["data-manager", "motis", "valhalla"]),
+          );
+        },
+        300000,
+      );
+      it("closes a contained three-target pull failure after the acknowledged ordinary prefix without losing that prefix", async () => {
+        host.setImagePullProcess(async (_reference, signal) => {
+          await runContainedProcess(process.execPath, ["-e", "process.exit(17)"], {
+            signal,
+            timeout: 15000,
+            maxBuffer: 1024,
+          });
+        });
+        const reply = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
               "x-openmapx-local-admin": "task012-coordinator-local-admin",
             },
-            payload: { action: "update", serviceIds, noDeps },
+            payload: { action: "update", serviceIds: ["motis", "data-manager", "valhalla"] },
           }),
-          row = await finished(reply.json().jobId);
-        expect(row.status, row.error ?? "No public error").toBe("success");
-        expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
-          serviceIds,
-        );
-        expect(posts.get("service.update")).toBe(2);
-        expect(posts.get("service.pull")).toBe(1);
-        expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-        expect(dm.settlementResponseStatuses).toEqual([200]);
-        const native = readFileSync(nativeTrace, "utf8")
-            .trim()
-            .split("\n")
-            .map((line) => JSON.parse(line) as string[]),
-          recreates = native.filter((args) => args.includes("--force-recreate"));
-        expect(recreates.map((args) => args.at(-1))).toEqual(["motis", "valhalla"]);
-        expect(recreates.every((args) => args.includes("--no-deps") === noDeps)).toBe(true);
-        expect(services.readAppliedServiceIds(host.infraDir, host.loaded)).toEqual(
-          new Set(["data-manager", "motis", "valhalla"]),
-        );
-      },
-      300000,
-    );
-    it("closes a contained three-target pull failure after the acknowledged ordinary prefix without losing that prefix", async () => {
-      host.setImagePullProcess(async (_reference, signal) => {
-        await runContainedProcess(process.execPath, ["-e", "process.exit(17)"], {
-          signal,
-          timeout: 15000,
-          maxBuffer: 1024,
-        });
-      });
-      const reply = await api.inject({
-          method: "POST",
-          url: "/api/admin/services/bulk-action",
-          headers: {
-            "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
-          },
-          payload: { action: "update", serviceIds: ["motis", "data-manager", "valhalla"] },
-        }),
-        id = reply.json().jobId,
-        until = performance.now() + 180000;
-      let row: typeof schema.adminJob.$inferSelect | undefined;
-      for (;;) {
-        [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
-        if (
-          row &&
-          (["success", "failed", "canceled"].includes(row.status) ||
-            (row.result as { observation?: { state: string } })?.observation?.state === "unknown")
-        )
-          break;
-        if (performance.now() > until)
-          throw Error("Actual mixed failure did not become observable");
-        await delay(25);
-      }
-      console.info(
-        "actual three-target contained prefix",
-        JSON.stringify({
-          state: row!.status,
-          error: row!.error,
-          completed: (row!.result as Record<string, unknown>)?.completedServiceIds,
-          observation: (row!.result as Record<string, unknown>)?.observation,
-          posts: [...posts],
-        }),
-      );
-      expect(row!.status).toBe("failed");
-      expect((row!.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
-        "motis",
-      ]);
-      expect(readdirSync(host.candidates)).toHaveLength(0);
-      expect(posts.get("service.update")).toBe(1);
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-    }, 240000);
-    it("closes three-target cancellation after an acknowledged ordinary prefix and successful coordinator staging", async () => {
-      const { id } = await canceledSuccessfulCoordinatorStage([
-          "motis",
-          "data-manager",
-          "valhalla",
-        ]),
-        row = await finished(id);
-      expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
-        "motis",
-      ]);
-      expect(posts.get("service.update")).toBe(1);
-    }, 240000);
-    it.each([
-      ["data-manager", "motis"],
-      ["motis", "data-manager"],
-    ])(
-      "carries each actual bulk Update's own revision in requested order %j",
-      async (first, second) => {
-        const serviceIds = [first, second];
-        const reply = await api.inject({
-          method: "POST",
-          url: "/api/admin/services/bulk-action",
-          headers: {
-            "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
-          },
-          payload: { action: "update", serviceIds },
-        });
-        expect(reply.statusCode).toBe(200);
-        const id = reply.json().jobId,
-          until = Date.now() + 180000;
-        let diagnostic = false;
+          id = reply.json().jobId,
+          until = performance.now() + 180000;
         let row: typeof schema.adminJob.$inferSelect | undefined;
         for (;;) {
           [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
-          const value = { ...(row?.result as object), ...(row?.protocol as object) } as
-            | {
-                observation?: { state?: string; reason?: string };
-                operations?: {
-                  operations?: Record<
-                    string,
-                    {
-                      kind: string;
-                      phase: string;
-                      terminal: boolean;
-                      errorClass?: string;
-                      failureResult?: {
-                        serviceLifecycle?: { phase?: string; failure?: { reason?: string } };
-                      };
-                    }
-                  >;
-                };
-                candidate?: { phase?: string };
-              }
-            | undefined;
-          if (
-            !diagnostic &&
-            (Date.now() >= until - 160000 || value?.observation?.state === "unknown")
-          ) {
-            diagnostic = true;
-            const { readProjection } = await import("../admin-job-projection");
-            try {
-              readProjection(row?.protocol, row?.result);
-              console.info("actual bulk projection valid");
-            } catch (e) {
-              console.info(
-                "actual bulk projection rejected",
-                e instanceof Error ? e.name : "unknown",
-              );
-            }
-            console.info(
-              "actual mixed Update diagnostic",
-              JSON.stringify({
-                order: serviceIds,
-                jobState: row?.status,
-                observation: value?.observation,
-                candidatePhase: value?.candidate?.phase,
-                arrivals: [...arrivals],
-                posts: [...posts],
-                operations: Object.values(value?.operations?.operations ?? {}).map((op) => ({
-                  kind: op.kind,
-                  phase: op.phase,
-                  terminal: op.terminal,
-                  errorClass: op.errorClass,
-                  lifecyclePhase: op.failureResult?.serviceLifecycle?.phase,
-                  lifecycleFailure: op.failureResult?.serviceLifecycle?.failure?.reason,
-                })),
-              }),
-            );
-          }
           if (
             row &&
-            (["failed", "success", "canceled"].includes(row.status) ||
-              value?.observation?.state === "unknown")
+            (["success", "failed", "canceled"].includes(row.status) ||
+              (row.result as { observation?: { state: string } })?.observation?.state === "unknown")
           )
             break;
-          if (Date.now() > until) throw Error("Actual mixed Update did not settle");
-          await delay(20);
+          if (performance.now() > until)
+            throw Error("Actual mixed failure did not become observable");
+          await delay(25);
         }
-        expect(row!.status).toBe("success");
-        const result = row!.result as { completedServiceIds: string[] };
-        expect(result.completedServiceIds).toEqual(serviceIds);
-        expect(posts.get("configurationMaintenance.prepare")).toBe(1);
-        expect(posts.get("configurationMaintenance.apply")).toBe(1);
-        expect(posts.get("configurationMaintenance.settle")).toBe(1);
+        console.info(
+          "actual three-target contained prefix",
+          JSON.stringify({
+            state: row!.status,
+            error: row!.error,
+            completed: (row!.result as Record<string, unknown>)?.completedServiceIds,
+            observation: (row!.result as Record<string, unknown>)?.observation,
+            posts: [...posts],
+          }),
+        );
+        expect(row!.status).toBe("failed");
+        expect((row!.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
+          "motis",
+        ]);
+        expect(readdirSync(host.candidates)).toHaveLength(0);
         expect(posts.get("service.update")).toBe(1);
-        expect(posts.get("service.pull")).toBe(1);
-        const native = readFileSync(nativeTrace, "utf8")
-          .trim()
-          .split("\n")
-          .map((value) => JSON.parse(value) as string[]);
-        expect(
-          native.filter((args) => args.includes("pull") && args.at(-1) === "motis"),
-        ).toHaveLength(1);
-        expect(
-          native.filter((args) => args.includes("--force-recreate") && args.at(-1) === "motis"),
-        ).toHaveLength(1);
-        expect(
-          native.some(
-            (args) => args.includes("--force-recreate") && args.at(-1) === "data-manager",
-          ),
-        ).toBe(false);
-      },
-      240000,
-    );
+        expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
+      }, 240000);
+      it("closes three-target cancellation after an acknowledged ordinary prefix and successful coordinator staging", async () => {
+        const { id } = await canceledSuccessfulCoordinatorStage([
+            "motis",
+            "data-manager",
+            "valhalla",
+          ]),
+          row = await finished(id);
+        expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
+          "motis",
+        ]);
+        expect(posts.get("service.update")).toBe(1);
+      }, 240000);
+    });
+    describe("with bulk handler errors logged", () => {
+      scenario({ logBulkErrors: true });
+      it.each([
+        ["data-manager", "motis"],
+        ["motis", "data-manager"],
+      ])(
+        "carries each actual bulk Update's own revision in requested order %j",
+        async (first, second) => {
+          const serviceIds = [first, second];
+          const reply = await api.inject({
+            method: "POST",
+            url: "/api/admin/services/bulk-action",
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
+            payload: { action: "update", serviceIds },
+          });
+          expect(reply.statusCode).toBe(200);
+          const id = reply.json().jobId,
+            until = Date.now() + 180000;
+          let diagnostic = false;
+          let row: typeof schema.adminJob.$inferSelect | undefined;
+          for (;;) {
+            [row] = await fixture.db
+              .select()
+              .from(schema.adminJob)
+              .where(eq(schema.adminJob.id, id));
+            const value = { ...(row?.result as object), ...(row?.protocol as object) } as
+              | {
+                  observation?: { state?: string; reason?: string };
+                  operations?: {
+                    operations?: Record<
+                      string,
+                      {
+                        kind: string;
+                        phase: string;
+                        terminal: boolean;
+                        errorClass?: string;
+                        failureResult?: {
+                          serviceLifecycle?: { phase?: string; failure?: { reason?: string } };
+                        };
+                      }
+                    >;
+                  };
+                  candidate?: { phase?: string };
+                }
+              | undefined;
+            if (
+              !diagnostic &&
+              (Date.now() >= until - 160000 || value?.observation?.state === "unknown")
+            ) {
+              diagnostic = true;
+              const { readProjection } = await import("../admin-job-projection");
+              try {
+                readProjection(row?.protocol, row?.result);
+                console.info("actual bulk projection valid");
+              } catch (e) {
+                console.info(
+                  "actual bulk projection rejected",
+                  e instanceof Error ? e.name : "unknown",
+                );
+              }
+              console.info(
+                "actual mixed Update diagnostic",
+                JSON.stringify({
+                  order: serviceIds,
+                  jobState: row?.status,
+                  observation: value?.observation,
+                  candidatePhase: value?.candidate?.phase,
+                  arrivals: [...arrivals],
+                  posts: [...posts],
+                  operations: Object.values(value?.operations?.operations ?? {}).map((op) => ({
+                    kind: op.kind,
+                    phase: op.phase,
+                    terminal: op.terminal,
+                    errorClass: op.errorClass,
+                    lifecyclePhase: op.failureResult?.serviceLifecycle?.phase,
+                    lifecycleFailure: op.failureResult?.serviceLifecycle?.failure?.reason,
+                  })),
+                }),
+              );
+            }
+            if (
+              row &&
+              (["failed", "success", "canceled"].includes(row.status) ||
+                value?.observation?.state === "unknown")
+            )
+              break;
+            if (Date.now() > until) throw Error("Actual mixed Update did not settle");
+            await delay(20);
+          }
+          expect(row!.status).toBe("success");
+          const result = row!.result as { completedServiceIds: string[] };
+          expect(result.completedServiceIds).toEqual(serviceIds);
+          expect(posts.get("configurationMaintenance.prepare")).toBe(1);
+          expect(posts.get("configurationMaintenance.apply")).toBe(1);
+          expect(posts.get("configurationMaintenance.settle")).toBe(1);
+          expect(posts.get("service.update")).toBe(1);
+          expect(posts.get("service.pull")).toBe(1);
+          const native = readFileSync(nativeTrace, "utf8")
+            .trim()
+            .split("\n")
+            .map((value) => JSON.parse(value) as string[]);
+          expect(
+            native.filter((args) => args.includes("pull") && args.at(-1) === "motis"),
+          ).toHaveLength(1);
+          expect(
+            native.filter((args) => args.includes("--force-recreate") && args.at(-1) === "motis"),
+          ).toHaveLength(1);
+          expect(
+            native.some(
+              (args) => args.includes("--force-recreate") && args.at(-1) === "data-manager",
+            ),
+          ).toBe(false);
+        },
+        240000,
+      );
+    });
   },
 );
