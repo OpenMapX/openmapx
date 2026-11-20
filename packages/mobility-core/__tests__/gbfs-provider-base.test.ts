@@ -410,8 +410,8 @@ it("captures explicit GBFS owner receipts before parsed-system caching and prese
     new Set(["bicycle"]),
     options,
   );
-  expect(first.vehicles[0].sources).toEqual(["gbfs/native-network"]);
-  expect(first.vehicles[0].contributors).toEqual([receipt]);
+  expect(first.vehicles[0]?.sources).toEqual(["gbfs/native-network"]);
+  expect(first.vehicles[0]?.contributors).toEqual([receipt]);
   expect([...values.values()]).toContainEqual(
     expect.objectContaining({ vehicles: [expect.objectContaining({ contributors: [receipt] })] }),
   );
@@ -423,7 +423,7 @@ it("captures explicit GBFS owner receipts before parsed-system caching and prese
       resolveContributors: () => [{ ...receipt, attributionText: "New registry notice" }],
     },
   );
-  expect(second.vehicles[0].contributors).toEqual([receipt]);
+  expect(second.vehicles[0]?.contributors).toEqual([receipt]);
 });
 
 /** Models the host fence: a writer captured before a clear stores nothing after it. */

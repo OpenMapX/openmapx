@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { Attribution } from "../src/types/attribution.js";
 import type { Freshness } from "../src/types/freshness.js";
 import { type MobilityResult, withAttribution } from "../src/types/result.js";
@@ -31,10 +31,11 @@ describe("withAttribution", () => {
     expect(Array.isArray(result.attributions)).toBe(true);
     expect(result.attributions).toHaveLength(1);
     const [first] = result.attributions;
+    assert.isDefined(first);
     expect(first.sourceId).toBe("delfi-de");
     expect(first.name).toBe("DELFI");
     expect(first.url).toBe("https://www.delfi.de");
-    expect(first.licensing?.bindings[0].license).toMatchObject({
+    expect(first.licensing?.bindings[0]?.license).toMatchObject({
       kind: "spdx",
       expression: "CC-BY-4.0",
     });

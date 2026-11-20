@@ -298,6 +298,7 @@
         "packages/i18n/**",
         "packages/mangrove-client/**",
         "packages/mangrove-react/**",
+        "packages/mobility-core/**",
         "packages/mobility-formats/**",
         "packages/mobility-formats-tomp/**",
         "packages/motis-feed-proxy-config/**",

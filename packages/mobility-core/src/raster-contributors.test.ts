@@ -8,17 +8,15 @@ import {
 
 describe("raster response wire contract", () => {
   it("preserves Unicode and mandatory notice snapshots in an ASCII header", () => {
-    const receipts = [
-      {
-        sourceId: "supplier",
-        name: "© Énergie 日本",
-        attributionText: "First notice\nsecond line",
-        publisher: { name: "Publisher", url: "https://example.test" },
-      },
-    ];
-    const header = encodeRasterContributors(receipts);
+    const receipt = {
+      sourceId: "supplier",
+      name: "© Énergie 日本",
+      attributionText: "First notice\nsecond line",
+      publisher: { name: "Publisher", url: "https://example.test" },
+    };
+    const header = encodeRasterContributors([receipt]);
     expect(header).toMatch(/^[\x20-\x7e]+$/);
-    receipts[0].publisher.name = "Changed";
+    receipt.publisher.name = "Changed";
     const decoded = decodeRasterContributors(header);
     expect(decoded[0]).toMatchObject({
       name: "© Énergie 日本",

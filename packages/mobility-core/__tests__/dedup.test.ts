@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/geo.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/geo.js")>();
@@ -44,8 +44,8 @@ describe("dedupStations", () => {
     });
     const result = dedupStations([station]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("s1");
-    expect(result[0].name).toBe("Station A");
+    expect(result[0]?.id).toBe("s1");
+    expect(result[0]?.name).toBe("Station A");
   });
 
   it("deduplicates by exact coordinate match at 4dp and merges source attribution", () => {
@@ -65,8 +65,8 @@ describe("dedupStations", () => {
     // haversineMeters should not even be called for exact coord match
     const result = dedupStations([a, b]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("s1");
-    expect(result[0].sources).toEqual(["gbfs/lime", "gbfs/bolt"]);
+    expect(result[0]?.id).toBe("s1");
+    expect(result[0]?.sources).toEqual(["gbfs/lime", "gbfs/bolt"]);
   });
 
   it("deduplicates when within 50m and name similarity > 0.6", () => {
@@ -89,7 +89,7 @@ describe("dedupStations", () => {
 
     const result = dedupStations([a, b]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("s1");
+    expect(result[0]?.id).toBe("s1");
   });
 
   it("keeps both when within 50m but name similarity <= 0.6", () => {
@@ -111,8 +111,8 @@ describe("dedupStations", () => {
 
     const result = dedupStations([a, b]);
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe("s1");
-    expect(result[1].id).toBe("s2");
+    expect(result[0]?.id).toBe("s1");
+    expect(result[1]?.id).toBe("s2");
   });
 
   it("keeps both when > 50m apart regardless of name similarity", () => {
@@ -154,9 +154,9 @@ describe("dedupStations", () => {
 
     const result = dedupStations([primary, secondary]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("live-1");
-    expect(result[0].sources).toEqual(["cambio-live", "open-data"]);
-    expect(result[0].availableVehicles).toBe(5);
+    expect(result[0]?.id).toBe("live-1");
+    expect(result[0]?.sources).toEqual(["cambio-live", "open-data"]);
+    expect(result[0]?.availableVehicles).toBe(5);
   });
 
   it("fills missing station detail fields from later duplicate sources", () => {
@@ -183,14 +183,14 @@ describe("dedupStations", () => {
     const result = dedupStations([primary, enrichment]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].website).toBe("https://operator.example");
-    expect(result[0].pricingSummary).toBe("10.90 NOK + 150.00 NOK/h");
-    expect(result[0].rentalUris).toEqual({
+    expect(result[0]?.website).toBe("https://operator.example");
+    expect(result[0]?.pricingSummary).toBe("10.90 NOK + 150.00 NOK/h");
+    expect(result[0]?.rentalUris).toEqual({
       web: undefined,
       android: undefined,
       ios: "ios://example",
     });
-    expect(result[0].address).toEqual({
+    expect(result[0]?.address).toEqual({
       street: undefined,
       city: "Oslo",
       postcode: undefined,
@@ -330,6 +330,7 @@ describe("dedupStations availability", () => {
 
     const [merged] = dedupStations([base, live]);
 
+    assert.isDefined(merged);
     expect(merged.id).toBe("static");
     expect(merged.availableVehicles).toBe(0);
     expect(merged.isActive).toBe(false);
@@ -355,6 +356,7 @@ describe("dedupStations availability", () => {
 
     const [merged] = dedupStations([live, base]);
 
+    assert.isDefined(merged);
     expect(merged.availableVehicles).toBe(2);
     expect(merged.isActive).toBe(true);
   });
@@ -391,8 +393,8 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([gbfs, transitous]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("gbfs/dott-berlin/uuid-1");
-    expect(result[0].sources).toEqual(["gbfs/dott-berlin", "transitous"]);
+    expect(result[0]?.id).toBe("gbfs/dott-berlin/uuid-1");
+    expect(result[0]?.sources).toEqual(["gbfs/dott-berlin", "transitous"]);
   });
 
   it("keeps both when raw IDs differ (genuinely different vehicles)", () => {
@@ -457,8 +459,8 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([gbfs, motis]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("gbfs/foo/uuid-1");
-    expect(result[0].sources).toEqual(["gbfs/foo", "motis"]);
+    expect(result[0]?.id).toBe("gbfs/foo/uuid-1");
+    expect(result[0]?.sources).toEqual(["gbfs/foo", "motis"]);
   });
 
   it("treats 'de-nw-mobidrom-scooter' as an aggregator source", () => {
@@ -475,8 +477,8 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([gbfs, nrw]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("gbfs/voi-berlin/uuid-nrw-1");
-    expect(result[0].sources).toEqual(["gbfs/voi-berlin", "de-nw-mobidrom-scooter"]);
+    expect(result[0]?.id).toBe("gbfs/voi-berlin/uuid-nrw-1");
+    expect(result[0]?.sources).toEqual(["gbfs/voi-berlin", "de-nw-mobidrom-scooter"]);
   });
 
   it("keeps NRW Mobidrom vehicle when no direct-source counterpart exists", () => {
@@ -487,7 +489,7 @@ describe("dedupVehicles", () => {
     });
     const result = dedupVehicles([nrw]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("de-nw-mobidrom-scooter/source-lime-dortmund/uuid-nrw-only");
+    expect(result[0]?.id).toBe("de-nw-mobidrom-scooter/source-lime-dortmund/uuid-nrw-only");
   });
 
   it("merges sources when two aggregator vehicles share a raw ID and no direct-source exists", () => {
@@ -496,8 +498,8 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([mo1, mo2]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("transitous/shared-test-system/vehicle/uuid-1");
-    expect(result[0].sources).toEqual(["transitous", "motis"]);
+    expect(result[0]?.id).toBe("transitous/shared-test-system/vehicle/uuid-1");
+    expect(result[0]?.sources).toEqual(["transitous", "motis"]);
   });
 
   it("keeps non-duplicate aggregator vehicles alongside merged ones", () => {
@@ -512,10 +514,10 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([gbfs, mo1, mo2]);
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe("gbfs/dott/uuid-1");
-    expect(result[0].sources).toEqual(["gbfs/dott", "transitous"]);
-    expect(result[1].id).toBe("transitous/shared-test-system/vehicle/uuid-2");
-    expect(result[1].sources).toEqual(["transitous"]);
+    expect(result[0]?.id).toBe("gbfs/dott/uuid-1");
+    expect(result[0]?.sources).toEqual(["gbfs/dott", "transitous"]);
+    expect(result[1]?.id).toBe("transitous/shared-test-system/vehicle/uuid-2");
+    expect(result[1]?.sources).toEqual(["transitous"]);
   });
 
   it("falls back to extracting the last namespaced ID segment", () => {
@@ -533,7 +535,7 @@ describe("dedupVehicles", () => {
 
     const result = dedupVehicles([a, b]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("gbfs/dott-berlin/2850b11e-abc");
+    expect(result[0]?.id).toBe("gbfs/dott-berlin/2850b11e-abc");
   });
 });
 
@@ -555,6 +557,6 @@ it("does not credit a captured duplicate vehicle that supplies no retained field
   };
   const kept = dedupVehicles([first, duplicate]);
   expect(kept).toHaveLength(1);
-  expect(kept[0].contributors).toEqual([{ sourceId: "gbfs", name: "GBFS" }]);
-  expect(kept[0].sources).toEqual(["gbfs/system"]);
+  expect(kept[0]?.contributors).toEqual([{ sourceId: "gbfs", name: "GBFS" }]);
+  expect(kept[0]?.sources).toEqual(["gbfs/system"]);
 });

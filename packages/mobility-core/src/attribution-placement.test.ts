@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { snapshotContributors } from "./contributors.js";
 import type { LicenseBinding } from "./licensing.js";
 import * as metadata from "./licensing.js";
@@ -24,12 +24,14 @@ describe("captured attribution placement", () => {
     const value = { version: 1, bindings: [{ ...binding, attribution: policy }] };
     const parsed = metadata.parseLicensing(value);
     expect(parsed).toEqual(value);
-    expect(parsed?.bindings[0].attribution).not.toBe(policy);
-    expect(parsed?.bindings[0].attribution?.surfaces).not.toBe(policy.surfaces);
+    const parsedAttribution = parsed?.bindings[0]?.attribution;
+    assert.isDefined(parsedAttribution);
+    expect(parsedAttribution).not.toBe(policy);
+    expect(parsedAttribution.surfaces).not.toBe(policy.surfaces);
     const receipts = snapshotContributors([
       { sourceId: "dataset", name: "Dataset", licensing: parsed },
     ]);
-    expect(receipts[0].licensing?.bindings[0].attribution).toEqual(policy);
+    expect(receipts[0]?.licensing?.bindings[0]?.attribution).toEqual(policy);
   });
   it.each([
     { ...policy, placement: "details", basis: "unresolved", compactText: undefined },

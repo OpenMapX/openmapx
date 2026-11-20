@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { captureGeometryContributors, parseGeometryContributors } from "./geometry-contributors";
 
 const a = { sourceId: "same", name: "A", publisher: { name: "Old publisher" } };
@@ -15,7 +15,9 @@ describe("geometry contributor partitions", () => {
       route.geometryContributors[0],
       { startIndex: 2, endIndex: 3, contributors: [] },
     ]);
-    expect(spans[1].contributors?.[0].publisher).not.toBe(a.publisher);
+    const publisher = spans[1]?.contributors?.[0]?.publisher;
+    assert.isDefined(publisher);
+    expect(publisher).not.toBe(a.publisher);
     expect(captureGeometryContributors({ ...route, geometryContributors: [] })).toEqual([
       { startIndex: 0, endIndex: 3, contributors: [] },
     ]);
@@ -41,7 +43,7 @@ describe("geometry contributor partitions", () => {
         geometry: [0, 1],
         contributors: [a],
         fieldContributors: { duration: [a] },
-      })[0].contributors,
+      })[0]?.contributors,
     ).toEqual([]);
   });
 });

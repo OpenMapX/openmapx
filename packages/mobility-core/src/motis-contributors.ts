@@ -133,7 +133,9 @@ export function annotateLegsWithAttribution(
               ...alt,
               ...(alt.legs
                 ? {
-                    legs: annotateLegsWithAttribution([{ ...itin, legs: alt.legs }], index)[0].legs,
+                    legs:
+                      annotateLegsWithAttribution([{ ...itin, legs: alt.legs }], index)[0]?.legs ??
+                      alt.legs,
                   }
                 : {}),
             })),

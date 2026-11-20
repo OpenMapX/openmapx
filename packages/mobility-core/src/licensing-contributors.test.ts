@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   dataSourceToAttribution,
   parseContributors,
@@ -30,19 +30,26 @@ const receipt = { sourceId: "source-one", name: "Publisher", licensing };
 describe("structured licensing through contribution boundaries", () => {
   it("captures deep metadata and keeps definitions immutable after input changes", () => {
     const input = structuredClone(receipt);
-    const [captured] = parseContributors([input])!;
-    input.licensing.bindings[0].license.name = "Changed after acquisition";
-    input.licensing.bindings[0].conditions.push("Later term");
+    const [captured] = parseContributors([input]) ?? [];
+    const [binding] = input.licensing.bindings;
+    assert.isDefined(captured);
+    assert.isDefined(binding);
+    binding.license.name = "Changed after acquisition";
+    binding.conditions.push("Later term");
     expect(captured).toMatchObject(receipt);
     expect(captured.licensing).not.toBe(input.licensing);
   });
 
   it("does not union distinct definitions, scopes, notices or namespaces sharing a licence reference", () => {
     const other = structuredClone(receipt);
-    other.licensing.bindings[0].license.namespace = "publisher:two";
+    const [otherBinding] = other.licensing.bindings;
+    assert.isDefined(otherBinding);
+    otherBinding.license.namespace = "publisher:two";
     expect(snapshotContributors([receipt, other])).toHaveLength(2);
     const changedNotice = structuredClone(receipt);
-    changedNotice.licensing.bindings[0].notice = "Another required notice";
+    const [noticeBinding] = changedNotice.licensing.bindings;
+    assert.isDefined(noticeBinding);
+    noticeBinding.notice = "Another required notice";
     expect(snapshotContributors([receipt, changedNotice])).toHaveLength(2);
   });
 
@@ -74,7 +81,8 @@ describe("structured licensing through contribution boundaries", () => {
 });
 
 it("preserves special field keys as own data without changing the field-map prototype", () => {
-  const fields = parseFieldContributors(JSON.parse(JSON.stringify({ ["__proto__"]: [receipt] })))!;
+  const fields = parseFieldContributors(JSON.parse(JSON.stringify({ ["__proto__"]: [receipt] })));
+  assert.isDefined(fields);
   expect(Object.hasOwn(fields, "__proto__")).toBe(true);
   expect(Object.getPrototypeOf(fields)).toBe(Object.prototype);
 });
