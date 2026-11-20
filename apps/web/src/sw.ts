@@ -80,7 +80,15 @@ const RECENT_MAP_DATA_CACHE_NAMES = [
   "api-autocomplete",
   "api-weather",
   "api-photos",
+  "api-landmark-cells",
+  "api-landmark-models",
 ] as const;
+
+/** Keep only responses the server allows to be stored (`no-store` answers stay out). */
+const storableOnly = {
+  cacheWillUpdate: async ({ response }: { response: Response }) =>
+    responseAllowsStorage(response) ? response : null,
+};
 const RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE = "openmapx-preferences";
 const RECENT_MAP_DATA_CACHE_PREFERENCE_URL = "/__openmapx/recent-map-data-cache-enabled";
 
@@ -249,6 +257,51 @@ const serwist = new Serwist({
           cacheName: MAP_TILE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
         }),
+      },
+
+      // 3D landmarks. Coverage is global; cells and models reveal which places a
+      // user looked at, so they follow the recent-map-data preference.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          url.pathname === "/api/integrations/landmark-models/coverage",
+        handler: new NetworkFirst({
+          cacheName: "api-landmark-coverage",
+          plugins: [storableOnly, new ExpirationPlugin({ maxEntries: 1 })],
+        }),
+      },
+      {
+        matcher: ({ url }: { url: URL }) =>
+          /^\/api\/integrations\/landmark-models\/cells\//.test(url.pathname),
+        handler: withRecentMapDataCache(
+          new CacheFirst({
+            cacheName: "api-landmark-cells",
+            plugins: [
+              storableOnly,
+              new ExpirationPlugin({
+                maxEntries: 300,
+                maxAgeSeconds: 7 * 24 * 60 * 60,
+                purgeOnQuotaError: true,
+              }),
+            ],
+          }),
+        ),
+      },
+      {
+        matcher: ({ url }: { url: URL }) =>
+          /^\/api\/integrations\/landmark-models\/models\//.test(url.pathname),
+        handler: withRecentMapDataCache(
+          new CacheFirst({
+            cacheName: "api-landmark-models",
+            plugins: [
+              storableOnly,
+              new ExpirationPlugin({
+                maxEntries: 400,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+                purgeOnQuotaError: true,
+              }),
+            ],
+          }),
+        ),
       },
 
       // Mapillary coverage tiles via API proxy — StaleWhileRevalidate

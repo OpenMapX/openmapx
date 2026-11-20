@@ -136,8 +136,18 @@ export const PUBLIC_CACHEABLE_API_PATH_TEMPLATES = [
   "/api/integrations/weather/current",
   "/api/integrations/weather/forecast",
   "/api/integrations/photos/search",
+  "/api/integrations/landmark-models/coverage",
+  "/api/integrations/landmark-models/cells/{x}/{y}",
+  "/api/integrations/landmark-models/models/{provider}/{sha256}.glb",
   "/api/places/{id}",
 ] as const;
+
+/** Landmark coverage, z12 cells and content-addressed models. */
+export function isLandmarkModelsApiPath(pathname: string): boolean {
+  return /^\/api\/integrations\/landmark-models\/(?:coverage|cells\/\d+\/\d+|models\/[a-z0-9-]+\/[0-9a-f]{64}\.glb)$/.test(
+    pathname,
+  );
+}
 
 export function isPublicCacheableApiPath(pathname: string): boolean {
   return (
@@ -154,6 +164,7 @@ export function isPublicCacheableApiPath(pathname: string): boolean {
     /^\/api\/integrations\/routing\/directions(?:\/optimize)?$/.test(pathname) ||
     /^\/api\/integrations\/weather\/(?:current|forecast)$/.test(pathname) ||
     pathname === "/api/integrations/photos/search" ||
+    isLandmarkModelsApiPath(pathname) ||
     (pathname !== "/api/places/search" && /^\/api\/places\/[^/]+$/.test(pathname))
   );
 }

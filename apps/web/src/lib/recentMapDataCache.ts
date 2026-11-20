@@ -12,6 +12,8 @@ export const RECENT_MAP_DATA_CACHE_NAMES = [
   "api-autocomplete",
   "api-weather",
   "api-photos",
+  "api-landmark-cells",
+  "api-landmark-models",
 ] as const;
 
 const RECENT_MAP_DATA_QUERY_KEY_ROOTS = new Set([

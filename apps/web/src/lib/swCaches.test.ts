@@ -300,6 +300,35 @@ describe("service-worker API authority", () => {
       expect(isPublicCacheableApiPath(path)).toBe(false);
   });
 
+  it("landmark coverage, cell and model paths are public cacheable", () => {
+    for (const path of [
+      "/api/integrations/landmark-models/coverage",
+      "/api/integrations/landmark-models/cells/2074/1409",
+      `/api/integrations/landmark-models/models/landmark-models-barrelman/${"a".repeat(64)}.glb`,
+    ])
+      expect(isPublicCacheableApiPath(path)).toBe(true);
+  });
+
+  it("a landmark model path with a short hash is not", () => {
+    expect(isPublicCacheableApiPath("/api/integrations/landmark-models/models/p/abc.glb")).toBe(
+      false,
+    );
+    expect(isPublicCacheableApiPath("/api/integrations/landmark-models/cells/x/1")).toBe(false);
+  });
+
+  it("a no-store landmark cell response is not storable", () => {
+    expect(
+      responseAllowsStorage(
+        new Response("{}", { status: 200, headers: { "cache-control": "no-store" } }),
+      ),
+    ).toBe(false);
+    expect(
+      responseAllowsStorage(
+        new Response("{}", { status: 200, headers: { "cache-control": "public, max-age=86400" } }),
+      ),
+    ).toBe(true);
+  });
+
   it("keeps every non-allowlisted API path network-only", () => {
     expect(isNetworkOnlyApiPath("/api/unknown/new-route")).toBe(true);
     expect(isNetworkOnlyApiPath("/api/admin/audit")).toBe(true);
