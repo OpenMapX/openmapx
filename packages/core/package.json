@@ -1,6 +1,10 @@
 {
   "name": "@openmapx/core",
   "version": "0.1.0",
+  "sideEffects": [
+    "./src/undici-fetch.ts",
+    "./src/stores/streetLevelStore.ts"
+  ],
   "description": "Platform-agnostic business logic for OpenMapX",
   "type": "module",
   "main": "./src/index.ts",
