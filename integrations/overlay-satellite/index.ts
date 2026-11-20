@@ -1,10 +1,13 @@
 import { USER_AGENT } from "@openmapx/core";
 import {
-  createBoundedBinaryProxyStream,
-  MAX_RASTER_TILE_BYTES,
-  RASTER_IMAGE_MEDIA_TYPES,
-} from "@openmapx/core/server";
-import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
+  captureCacheWriter,
+  type HttpClient,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
+import {
+  createTileProxyHandler,
+  createUpstreamImageHandler,
+} from "@openmapx/integration-framework/tile-proxy";
 import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import { XMLParser } from "fast-xml-parser";
 import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
@@ -22,17 +25,20 @@ const CAPABILITIES_CACHE_TTL = 21_600; // 6 hours
 const CAPABILITIES_URL =
   "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&request=GetCapabilities";
 
-async function fetchAndParseCapabilities(): Promise<Capabilities> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
-  const res = await fetch(CAPABILITIES_URL, {
+/** The document is about 6 MB; the ceiling leaves room for growth. */
+const MAX_CAPABILITIES_BYTES = 24 * 1024 * 1024;
+
+async function fetchAndParseCapabilities(http: HttpClient): Promise<Capabilities> {
+  const res = await http.getText(CAPABILITIES_URL, {
+    maxBytes: MAX_CAPABILITIES_BYTES,
+    contentTypes: ["text/xml", "application/xml"],
+    discardErrorBody: true,
     headers: { "User-Agent": USER_AGENT },
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timer));
+    timeoutMs: 30_000,
+  });
+  if (res.status !== 200) throw new Error(`GetCapabilities fetch failed: ${res.status}`);
 
-  if (!res.ok) throw new Error(`GetCapabilities fetch failed: ${res.status}`);
-
-  const xml = await res.text();
+  const xml = res.body;
   const parser = new XMLParser({
     ignoreAttributes: false,
     removeNSPrefix: true,
@@ -97,7 +103,11 @@ export function setup(ctx: IntegrationContext): void {
   // Pre-warm capabilities cache on startup
   captureCacheWriter(ctx.cache)
     .then(async (writer) =>
-      writer.set(CAPABILITIES_CACHE_KEY, await fetchAndParseCapabilities(), CAPABILITIES_CACHE_TTL),
+      writer.set(
+        CAPABILITIES_CACHE_KEY,
+        await fetchAndParseCapabilities(ctx.http),
+        CAPABILITIES_CACHE_TTL,
+      ),
     )
     .catch(() => {});
 
@@ -111,7 +121,7 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       const writer = await captureCacheWriter(ctx.cache);
-      const capabilities = await fetchAndParseCapabilities();
+      const capabilities = await fetchAndParseCapabilities(ctx.http);
       await writer.set(CAPABILITIES_CACHE_KEY, capabilities, CAPABILITIES_CACHE_TTL);
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(capabilities);
@@ -120,88 +130,45 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
-  ctx.registerRoute("GET", "/legends/:filename", async (req, reply) => {
-    const { filename } = req.params as Record<string, string>;
-    if (!/^[\w-]+\.png$/.test(filename)) {
-      reply.status(400).send({ message: "Invalid filename" });
-      return;
-    }
+  ctx.registerRoute(
+    "GET",
+    "/legends/:filename",
+    createUpstreamImageHandler(ctx, {
+      kind: "raster",
+      label: "NASA GIBS legend",
+      url: ({ params }) =>
+        /^[\w-]+\.png$/.test(params.filename ?? "")
+          ? `https://gibs.earthdata.nasa.gov/legends/${params.filename}`
+          : null,
+      maxBytes: 2 * 1024 * 1024,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      fallbackContentType: "image/png",
+      cacheControl: "public, max-age=604800, s-maxage=604800",
+    }),
+  );
 
-    try {
-      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-      const res = await fetch(`https://gibs.earthdata.nasa.gov/legends/${filename}`, {
-        headers: { "User-Agent": USER_AGENT },
-        signal,
-      });
-
-      if (!res.ok) {
-        reply.status(res.status).send({ message: "Legend fetch failed" });
-        return;
-      }
-      const proxy = createBoundedBinaryProxyStream(res, {
-        maxBytes: 2 * 1024 * 1024,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: "image/png",
-        label: "NASA GIBS legend",
-      });
-
-      reply.header("Content-Type", "image/png");
-      reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(proxy.body);
-    } catch {
-      reply.status(502).send({ message: "Legend fetch failed" });
-    }
-  });
-
-  ctx.registerRoute("GET", "/tiles/:layerId/:date/:z/:y/:x", async (req, reply) => {
-    const { layerId, date, z, y, x } = req.params as Record<string, string>;
-
-    const layer = GIBS_LAYER_BY_ID.get(layerId as GibsLayerId);
-    if (!layer) {
-      reply.status(400).send({ message: "Invalid layer" });
-      return;
-    }
-
-    if (!DATE_RE.test(date)) {
-      reply.status(400).send({ message: "Invalid date format" });
-      return;
-    }
-
-    const tileUrl =
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer.identifier}` +
-      `/default/${date}/${layer.tileMatrixSet}/${z}/${y}/${x}.${layer.format}`;
-
-    try {
-      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-      const tileRes = await fetch(tileUrl, {
-        headers: { "User-Agent": USER_AGENT },
-        signal,
-      });
-
-      if (!tileRes.ok) {
-        reply.status(tileRes.status).send({ message: "Tile fetch failed" });
-        return;
-      }
-
-      const contentType = layer.format === "jpg" ? "image/jpeg" : "image/png";
-      const proxy = createBoundedBinaryProxyStream(tileRes, {
-        maxBytes: MAX_RASTER_TILE_BYTES,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: contentType,
-        label: "NASA GIBS tile",
-      });
-      const today = new Date().toISOString().slice(0, 10);
-      const maxAge = date < today ? 86400 : 3600;
-
-      reply.header("Content-Type", contentType);
-      reply.header("Cache-Control", `public, max-age=${maxAge}, s-maxage=${maxAge}`);
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(proxy.body);
-    } catch {
-      reply.status(502).send({ message: "Tile fetch failed" });
-    }
-  });
+  ctx.registerRoute(
+    "GET",
+    "/tiles/:layerId/:date/:z/:y/:x",
+    createTileProxyHandler(ctx, {
+      kind: "raster",
+      label: "NASA GIBS tile",
+      url: ({ z, x, y }, { params }) => {
+        const layer = GIBS_LAYER_BY_ID.get(params.layerId as GibsLayerId);
+        if (!layer || !DATE_RE.test(params.date ?? "") || z > layer.maxZoom) return null;
+        return (
+          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer.identifier}` +
+          `/default/${params.date}/${layer.tileMatrixSet}/${z}/${y}/${x}.${layer.format}`
+        );
+      },
+      timeoutMs: FETCH_TIMEOUT_MS,
+      fallbackContentType: "image/png",
+      cacheControl: ({ params }) => {
+        const today = new Date().toISOString().slice(0, 10);
+        const maxAge = (params.date ?? "") < today ? 86400 : 3600;
+        return `public, max-age=${maxAge}, s-maxage=${maxAge}`;
+      },
+    }),
+    { rateLimitTier: "tile" },
+  );
 }

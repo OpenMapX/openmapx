@@ -19,14 +19,12 @@ vi.mock("@openmapx/noaa-coops-data", () => ({
 import {
   createFencedMemoryCache,
   createMockIntegrationContext,
+  fakeHttpClient,
+  httpStatus,
   type MockIntegrationContext,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { parseHarbourJsonp, setup } from "./index.js";
-
-function mockOkText(text: string) {
-  return new Response(text, { status: 200 });
-}
 
 describe("parseHarbourJsonp", () => {
   it("parses putHarbourMarker lines into [lng,lat] Point features with category->type", () => {
@@ -112,9 +110,15 @@ describe("nautical routes", () => {
 
   describe("/harbors", () => {
     it("fetches JSONP and returns a GeoJSON FeatureCollection", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOkText("putHarbourMarker(101, 9.95, 53.55, 'Hamburg', '', 1);"),
-      );
+      const http = fakeHttpClient({
+        "getHarbours.php": {
+          status: 200,
+          headers: {},
+          body: "putHarbourMarker(101, 9.95, 53.55, 'Hamburg', '', 1);",
+        },
+      });
+      ctx = createMockIntegrationContext({ http });
+      setup(ctx);
 
       const { reply, result } = makeReply();
       await getRoute("/harbors")(
@@ -128,6 +132,21 @@ describe("nautical routes", () => {
       };
       expect(body.type).toBe("FeatureCollection");
       expect(body.features[0].geometry.coordinates).toEqual([9.95, 53.55]);
+      expect(http.calls[0]?.method).toBe("getText");
+      expect(http.calls[0]?.url).toBe(
+        "https://harbour.openseamap.org/getHarbours.php?b=53&t=54&l=9&r=10&zoom=10",
+      );
+    });
+
+    it("answers 502 when the harbour list is unavailable", async () => {
+      ctx = createMockIntegrationContext({ http: fakeHttpClient(() => httpStatus(404)) });
+      setup(ctx);
+      const { reply, result } = makeReply();
+      await getRoute("/harbors")(
+        { query: { south: "53", north: "54", west: "9", east: "10" }, params: {}, body: undefined },
+        reply,
+      );
+      expect(result.status).toBe(502);
     });
 
     it("rejects an inverted bbox (south > north) with 400", async () => {
@@ -472,5 +491,116 @@ describe("/harbor/:id", () => {
     expect(fetchJson).toHaveBeenCalledTimes(1);
     expect([...cache.values.keys()]).toEqual(["harbor:surroundings-v1:53.55,9.95"]);
     expect(JSON.stringify([...cache.values.values()])).not.toMatch(/Hamburg|Spoofed|Neighbour/);
+  });
+});
+
+describe("nautical tile routes", () => {
+  const PNG = new Uint8Array([137, 80, 78, 71]);
+  const png = (contentType?: string) => ({
+    status: 200,
+    headers: contentType ? { "content-type": contentType } : {},
+    stream: new Blob([PNG]).stream(),
+  });
+
+  function tiles(responder: Parameters<typeof fakeHttpClient>[0], config = {}) {
+    const http = fakeHttpClient(responder);
+    const cache = createFencedMemoryCache();
+    const ctx = createMockIntegrationContext({ http, cache, config });
+    setup(ctx);
+    const call = async (path: string, params: Record<string, string>) => {
+      const route = ctx.registered.routes.find((r) => r.path === path);
+      if (!route) throw new Error(`route ${path} not registered`);
+      const result: {
+        status: number;
+        body: unknown;
+        headers: Record<string, string>;
+        type?: string;
+      } = { status: 200, body: undefined, headers: {} };
+      const send = (data: unknown) => {
+        result.body = data;
+      };
+      await route.handler(
+        { query: {}, params, body: undefined, clientKey: "c", headers: {} },
+        {
+          send,
+          status: (code) => {
+            result.status = code;
+            return { send };
+          },
+          header: (name, value) => {
+            result.headers[name.toLowerCase()] = value;
+          },
+          type: (value) => {
+            result.type = value;
+          },
+        },
+      );
+      return { result, route };
+    };
+    return { http, cache, call };
+  }
+
+  it.each([
+    ["/seamark/:z/:x/:y", "seamark:5:16:10"],
+    ["/depth/contour/:z/:x/:y", "depth:contour:5:16:10"],
+    ["/depth/relief/:z/:x/:y", "depth:relief:5:16:10"],
+    ["/noaa/:z/:x/:y", "noaa:5:16:10"],
+    ["/charts/no/:z/:x/:y", "charts:no:5:16:10"],
+  ])("%s buffers the tile under its cache key on the tile tier", async (path, key) => {
+    const { http, cache, call } = tiles(() => png("image/png"));
+
+    const first = await call(path, { z: "5", x: "16", y: "10.png" });
+    const second = await call(path, { z: "5", x: "16", y: "10" });
+
+    expect(first.route.options?.rateLimitTier).toBe("tile");
+    for (const { result } of [first, second]) {
+      expect(result.status).toBe(200);
+      expect(result.type).toBe("image/png");
+      expect(result.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+      expect([...(result.body as Buffer)]).toEqual([...PNG]);
+    }
+    expect(http.calls).toHaveLength(1);
+    expect(http.calls[0]?.method).toBe("getStream");
+    expect(await cache.get(key)).toEqual({
+      data: Buffer.from(PNG).toString("base64"),
+      contentType: "image/png",
+    });
+  });
+
+  it("requests seamark tiles from the configured base and WMS tiles with the tile's bbox", async () => {
+    const { http, call } = tiles(() => png(), {
+      seamarkTileBase: "https://seamark.example/",
+    });
+
+    await call("/seamark/:z/:x/:y", { z: "1", x: "1", y: "0" });
+    await call("/depth/relief/:z/:x/:y", { z: "1", x: "1", y: "0" });
+
+    expect(http.calls[0]?.url).toBe("https://seamark.example/1/1/0.png");
+    const relief = new URL(http.calls[1]?.url ?? "");
+    expect(relief.searchParams.get("crs")).toBe("EPSG:3857");
+    expect(relief.searchParams.get("format")).toBe("image/jpeg");
+    expect(relief.searchParams.get("transparent")).toBeNull();
+    const [minX, minY, maxX, maxY] = (relief.searchParams.get("bbox") ?? "").split(",").map(Number);
+    expect(minX).toBe(0);
+    expect(minY).toBeCloseTo(0, 6);
+    expect(maxX).toBeCloseTo(20_037_508.34, 1);
+    expect(maxY).toBeCloseTo(20_037_508.34, 1);
+  });
+
+  it.each([
+    ["x beyond the zoom grid", { z: "2", x: "4", y: "0" }],
+    ["a zoom above 22", { z: "23", x: "0", y: "0" }],
+    ["a fractional coordinate", { z: "2", x: "1.5", y: "0" }],
+  ])("refuses %s without an upstream request", async (_label, params) => {
+    const { http, call } = tiles(() => png());
+    expect((await call("/seamark/:z/:x/:y", params)).result.status).toBe(400);
+    expect(http.calls).toHaveLength(0);
+  });
+
+  it("answers 502 for an upstream failure without caching it", async () => {
+    const { http, cache, call } = tiles(() => httpStatus(503));
+    expect((await call("/noaa/:z/:x/:y", { z: "1", x: "0", y: "0" })).result.status).toBe(502);
+    expect(await cache.get("noaa:1:0:0")).toBeNull();
+    expect(http.calls).toHaveLength(1);
   });
 });

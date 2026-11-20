@@ -9,6 +9,9 @@ vi.mock("@openmapx/core", async (importActual) => {
 
 import {
   createMockIntegrationContext,
+  createRecordingReply,
+  fakeHttpClient,
+  httpStatus,
   type MockIntegrationContext,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
@@ -285,5 +288,56 @@ describe("/hiking/shelters route", () => {
       reply,
     );
     expect(result.status).toBe(400);
+  });
+});
+
+describe("hiking tile route", () => {
+  function tileRoute(responder: Parameters<typeof fakeHttpClient>[0]) {
+    const http = fakeHttpClient(responder);
+    const ctx = createMockIntegrationContext({ http });
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/tiles/:z/:x/:y.png");
+    if (!route) throw new Error("tile route not registered");
+    const call = async (params: Record<string, string>) => {
+      const { reply, result } = createRecordingReply();
+      await route.handler(
+        { query: {}, params, body: undefined, clientKey: "c", headers: {} },
+        reply,
+      );
+      return result;
+    };
+    return { http, route, call };
+  }
+
+  const png = () => ({
+    status: 200,
+    headers: { "content-type": "image/png" },
+    stream: new Blob([new Uint8Array([1])]).stream(),
+  });
+
+  it("proxies a valid Waymarked Trails tile on the tile tier", async () => {
+    const { http, route, call } = tileRoute(png);
+
+    const result = await call({ z: "12", x: "2138", y: "1420" });
+
+    expect(route.options?.rateLimitTier).toBe("tile");
+    expect(result.status).toBe(200);
+    expect(result.contentType).toBe("image/png");
+    expect(http.calls[0]?.url).toBe("https://tile.waymarkedtrails.org/hiking/12/2138/1420.png");
+  });
+
+  it.each([
+    ["a fractional coordinate", { z: "12", x: "2138.5", y: "1420" }],
+    ["a zoom above 18", { z: "19", x: "0", y: "0" }],
+    ["y outside the grid", { z: "1", x: "0", y: "2" }],
+  ])("refuses %s without an upstream request", async (_label, params) => {
+    const { http, call } = tileRoute(png);
+    expect((await call(params)).status).toBe(400);
+    expect(http.calls).toHaveLength(0);
+  });
+
+  it("answers 502 for upstream throttling", async () => {
+    const { call } = tileRoute(() => httpStatus(429));
+    expect((await call({ z: "1", x: "0", y: "0" })).status).toBe(502);
   });
 });

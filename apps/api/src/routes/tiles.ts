@@ -5,6 +5,7 @@ import {
   readBoundedBinaryResponse,
 } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
+import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   encodeRasterContributors,
@@ -13,7 +14,6 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
-import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
 import {
   discardUpstreamResponse,
   normalizeUpstreamResponseStream,

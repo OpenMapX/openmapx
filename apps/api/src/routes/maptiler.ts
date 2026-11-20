@@ -6,6 +6,7 @@ import {
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
+import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import {
   maptilerDailyBudget,
@@ -16,7 +17,6 @@ import { loadMapSettings } from "../utils/map-settings.js";
 import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
-import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
 import {
   discardUpstreamResponse,
   normalizeUpstreamResponseStream,

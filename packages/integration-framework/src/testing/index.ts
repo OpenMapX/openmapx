@@ -293,6 +293,41 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
   };
 }
 
+export interface RecordedReply {
+  status: number;
+  body: unknown;
+  /** Header names lowercased. */
+  headers: Record<string, string>;
+  contentType?: string;
+}
+
+/** A route reply that records what a handler sent. The status defaults to 200. */
+export function createRecordingReply(): {
+  reply: Parameters<RouteHandler>[1];
+  result: RecordedReply;
+} {
+  const result: RecordedReply = { status: 200, body: undefined, headers: {} };
+  const send = (data: unknown) => {
+    result.body = data;
+  };
+  return {
+    result,
+    reply: {
+      send,
+      status: (code) => {
+        result.status = code;
+        return { send };
+      },
+      header: (name, value) => {
+        result.headers[name.toLowerCase()] = value;
+      },
+      type: (contentType) => {
+        result.contentType = contentType;
+      },
+    },
+  };
+}
+
 /** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };

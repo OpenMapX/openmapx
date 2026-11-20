@@ -1,9 +1,4 @@
-import { createPlace, fetchJson, readBoundedResponseText, USER_AGENT } from "@openmapx/core";
-import {
-  MAX_RASTER_TILE_BYTES,
-  RASTER_IMAGE_MEDIA_TYPES,
-  readBoundedBinaryResponse,
-} from "@openmapx/core/server";
+import { createPlace, fetchJson, USER_AGENT } from "@openmapx/core";
 import {
   captureCacheWriter,
   dataSourceToAttribution,
@@ -12,6 +7,11 @@ import {
   serializeContributors,
   snapshotContributors,
 } from "@openmapx/integration-framework";
+import {
+  createTileProxyHandler,
+  tileBoundsWebMercator,
+  type WebMercatorTileCoordinates,
+} from "@openmapx/integration-framework/tile-proxy";
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import {
@@ -33,6 +33,14 @@ import {
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_HARBOUR_LIST_BYTES = 2 * 1024 * 1024;
+/** The harbour list is JSONP from a PHP endpoint; its declared type varies. */
+const HARBOUR_LIST_MEDIA_TYPES = [
+  "text/plain",
+  "text/html",
+  "text/javascript",
+  "application/javascript",
+  "application/x-javascript",
+];
 const SEAMARK_CACHE_TTL = 24 * 60 * 60; // 24h — OpenSeaMap tiles refresh daily
 const DEPTH_CONTOUR_CACHE_TTL = 7 * 24 * 60 * 60; // 7d — contour data is very stable
 const DEPTH_RELIEF_CACHE_TTL = 30 * 24 * 60 * 60; // 30d — GEBCO updates yearly
@@ -156,85 +164,26 @@ interface HarborDetail extends ContributingRecord {
   };
 }
 
-/** Convert XYZ tile to EPSG:3857 bbox (left, bottom, right, top in meters). */
-function tileToWebMercatorBbox(z: number, x: number, y: number): [number, number, number, number] {
-  const EARTH_CIRCUMFERENCE = 40075016.685578488;
-  const halfCircumference = EARTH_CIRCUMFERENCE / 2;
-  const resolution = EARTH_CIRCUMFERENCE / 2 ** z;
-  const minX = -halfCircumference + x * resolution;
-  const maxX = minX + resolution;
-  const maxY = halfCircumference - y * resolution;
-  const minY = maxY - resolution;
-  return [minX, minY, maxX, maxY];
-}
-
-function parseTileParams(req: {
-  params: Record<string, string>;
-}): { z: number; x: number; y: number } | null {
-  const z = Number.parseInt(req.params.z, 10);
-  const x = Number.parseInt(req.params.x, 10);
-  const yRaw = req.params.y?.replace(/\.png$/, "");
-  const y = Number.parseInt(yRaw ?? "", 10);
-  if (
-    !Number.isFinite(z) ||
-    !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    z < 0 ||
-    z > 22 ||
-    x < 0 ||
-    y < 0
-  ) {
-    return null;
-  }
-  return { z, x, y };
-}
-
-async function fetchWithTimeout(
-  url: string,
-  init?: RequestInit,
-  requestSignal?: AbortSignal,
-): Promise<Response | null> {
-  try {
-    const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-    const signals = [init?.signal, requestSignal, timeoutSignal].filter(
-      (signal): signal is AbortSignal => signal !== undefined && signal !== null,
-    );
-    return await fetch(url, {
-      ...init,
-      headers: { "User-Agent": USER_AGENT, ...(init?.headers ?? {}) },
-      signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function fetchAndCacheTile(
-  ctx: IntegrationContext,
-  cacheKey: string,
-  ttl: number,
-  upstreamUrl: string,
-  signal?: AbortSignal,
-): Promise<Buffer | null> {
-  const cached = await ctx.cache.get<{ data: string }>(cacheKey);
-  if (cached?.data) {
-    return Buffer.from(cached.data, "base64");
-  }
-  const writer = await captureCacheWriter(ctx.cache);
-  const res = await fetchWithTimeout(upstreamUrl, undefined, signal);
-  if (!res?.ok) return null;
-  try {
-    const { data } = await readBoundedBinaryResponse(res, {
-      maxBytes: MAX_RASTER_TILE_BYTES,
-      allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-      fallbackContentType: "image/png",
-      label: "nautical tile",
-    });
-    await writer.set(cacheKey, { data: data.toString("base64") }, ttl);
-    return data;
-  } catch {
-    return null;
-  }
+/** WMS 1.1.1 names the projection `srs`; 1.3.0 names it `crs`. */
+function wmsTileUrl(
+  base: string,
+  tile: WebMercatorTileCoordinates,
+  params: { version: "1.1.1" | "1.3.0"; layers: string; format: string; transparent: boolean },
+): string {
+  const [minX, minY, maxX, maxY] = tileBoundsWebMercator(tile);
+  const url = new URL(base);
+  url.searchParams.set("service", "WMS");
+  url.searchParams.set("version", params.version);
+  url.searchParams.set("request", "GetMap");
+  url.searchParams.set("layers", params.layers);
+  url.searchParams.set("styles", "");
+  url.searchParams.set(params.version === "1.1.1" ? "srs" : "crs", "EPSG:3857");
+  url.searchParams.set("bbox", `${minX},${minY},${maxX},${maxY}`);
+  url.searchParams.set("width", "256");
+  url.searchParams.set("height", "256");
+  url.searchParams.set("format", params.format);
+  if (params.transparent) url.searchParams.set("transparent", "TRUE");
+  return url.toString();
 }
 
 export function parseHarbourJsonp(text: string): HarborFeature[] {
@@ -391,212 +340,110 @@ export function setup(ctx: IntegrationContext): void {
     (ctx.config.harbourApiUrl as string | undefined) ??
     "https://harbour.openseamap.org/getHarbours.php";
 
-  // ---- Seamark tile proxy -------------------------------------------------
-  ctx.registerRoute("GET", "/seamark/:z/:x/:y", async (req, reply) => {
-    const params = parseTileParams(req);
-    if (!params) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-    const { z, x, y } = params;
-    const cacheKey = `seamark:${z}:${x}:${y}`;
-    const upstream = `${seamarkBase}/${z}/${x}/${y}.png`;
-    const buf = await fetchAndCacheTile(ctx, cacheKey, SEAMARK_CACHE_TTL, upstream, req.signal);
-    if (!buf) {
-      reply.status(502).send({ message: "Seamark tile fetch failed" });
-      return;
-    }
-    reply.header("Content-Type", "image/png");
-    reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.send(buf);
-  });
+  const tileProxy = (
+    label: string,
+    url: (tile: WebMercatorTileCoordinates) => string,
+    cache: { key: (tile: WebMercatorTileCoordinates) => string; ttlSeconds: number },
+    cacheControl: string,
+    fallbackContentType = "image/png",
+  ) =>
+    createTileProxyHandler(ctx, {
+      kind: "raster",
+      label,
+      url,
+      ySuffix: ".png",
+      timeoutMs: FETCH_TIMEOUT_MS,
+      fallbackContentType,
+      cacheControl,
+      cache,
+    });
 
-  // ---- Depth contour tile proxy (OpenSeaMap WMS) -------------------------
-  ctx.registerRoute("GET", "/depth/contour/:z/:x/:y", async (req, reply) => {
-    const params = parseTileParams(req);
-    if (!params) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-    const { z, x, y } = params;
-    const [minX, minY, maxX, maxY] = tileToWebMercatorBbox(z, x, y);
-    const wmsUrl = new URL(depthWmsUrl);
-    wmsUrl.searchParams.set("service", "WMS");
-    wmsUrl.searchParams.set("version", "1.1.1");
-    wmsUrl.searchParams.set("request", "GetMap");
-    wmsUrl.searchParams.set("layers", "openseamap:contour,openseamap:contour2");
-    wmsUrl.searchParams.set("styles", "");
-    wmsUrl.searchParams.set("srs", "EPSG:3857");
-    wmsUrl.searchParams.set("bbox", `${minX},${minY},${maxX},${maxY}`);
-    wmsUrl.searchParams.set("width", "256");
-    wmsUrl.searchParams.set("height", "256");
-    wmsUrl.searchParams.set("format", "image/png");
-    wmsUrl.searchParams.set("transparent", "TRUE");
+  ctx.registerRoute(
+    "GET",
+    "/seamark/:z/:x/:y",
+    tileProxy(
+      "Seamark tile",
+      ({ z, x, y }) => `${seamarkBase}/${z}/${x}/${y}.png`,
+      { key: ({ z, x, y }) => `seamark:${z}:${x}:${y}`, ttlSeconds: SEAMARK_CACHE_TTL },
+      "public, max-age=86400, s-maxage=86400",
+    ),
+    { rateLimitTier: "tile" },
+  );
 
-    const cacheKey = `depth:contour:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(
-      ctx,
-      cacheKey,
-      DEPTH_CONTOUR_CACHE_TTL,
-      wmsUrl.toString(),
-      req.signal,
-    );
-    if (!buf) {
-      reply.status(502).send({ message: "Depth contour tile fetch failed" });
-      return;
-    }
-    reply.header("Content-Type", "image/png");
-    reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.send(buf);
-  });
+  ctx.registerRoute(
+    "GET",
+    "/depth/contour/:z/:x/:y",
+    tileProxy(
+      "Depth contour tile",
+      (tile) =>
+        wmsTileUrl(depthWmsUrl, tile, {
+          version: "1.1.1",
+          layers: "openseamap:contour,openseamap:contour2",
+          format: "image/png",
+          transparent: true,
+        }),
+      { key: ({ z, x, y }) => `depth:contour:${z}:${x}:${y}`, ttlSeconds: DEPTH_CONTOUR_CACHE_TTL },
+      "public, max-age=604800, s-maxage=604800",
+    ),
+    { rateLimitTier: "tile" },
+  );
 
-  // ---- Depth relief tile proxy (GEBCO WMS) -------------------------------
-  ctx.registerRoute("GET", "/depth/relief/:z/:x/:y", async (req, reply) => {
-    const params = parseTileParams(req);
-    if (!params) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-    const { z, x, y } = params;
-    const [minX, minY, maxX, maxY] = tileToWebMercatorBbox(z, x, y);
-    const wmsUrl = new URL(gebcoWmsUrl);
-    wmsUrl.searchParams.set("service", "WMS");
-    wmsUrl.searchParams.set("version", "1.3.0");
-    wmsUrl.searchParams.set("request", "GetMap");
-    wmsUrl.searchParams.set("layers", "GEBCO_LATEST");
-    wmsUrl.searchParams.set("styles", "");
-    wmsUrl.searchParams.set("crs", "EPSG:3857");
-    wmsUrl.searchParams.set("bbox", `${minX},${minY},${maxX},${maxY}`);
-    wmsUrl.searchParams.set("width", "256");
-    wmsUrl.searchParams.set("height", "256");
-    wmsUrl.searchParams.set("format", "image/jpeg");
+  ctx.registerRoute(
+    "GET",
+    "/depth/relief/:z/:x/:y",
+    tileProxy(
+      "GEBCO relief tile",
+      (tile) =>
+        wmsTileUrl(gebcoWmsUrl, tile, {
+          version: "1.3.0",
+          layers: "GEBCO_LATEST",
+          format: "image/jpeg",
+          transparent: false,
+        }),
+      { key: ({ z, x, y }) => `depth:relief:${z}:${x}:${y}`, ttlSeconds: DEPTH_RELIEF_CACHE_TTL },
+      "public, max-age=2592000, s-maxage=2592000",
+      "image/jpeg",
+    ),
+    { rateLimitTier: "tile" },
+  );
 
-    const cacheKey = `depth:relief:${z}:${x}:${y}`;
-    const cached = await ctx.cache.get<{ data: string; contentType: string }>(cacheKey);
-    if (
-      cached?.data &&
-      RASTER_IMAGE_MEDIA_TYPES.includes(
-        cached.contentType as (typeof RASTER_IMAGE_MEDIA_TYPES)[number],
-      )
-    ) {
-      reply.header("Content-Type", cached.contentType);
-      reply.header("Cache-Control", "public, max-age=2592000, s-maxage=2592000");
-      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(Buffer.from(cached.data, "base64"));
-      return;
-    }
-    const writer = await captureCacheWriter(ctx.cache);
-    const res = await fetchWithTimeout(wmsUrl.toString(), undefined, req.signal);
-    if (!res?.ok) {
-      reply.status(502).send({ message: "GEBCO tile fetch failed" });
-      return;
-    }
-    let buf: Buffer;
-    let contentType: string;
-    try {
-      ({ data: buf, contentType } = await readBoundedBinaryResponse(res, {
-        maxBytes: MAX_RASTER_TILE_BYTES,
-        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
-        fallbackContentType: "image/jpeg",
-        label: "GEBCO relief tile",
-      }));
-    } catch {
-      reply.status(502).send({ message: "GEBCO tile fetch failed" });
-      return;
-    }
-    await writer.set(
-      cacheKey,
-      { data: buf.toString("base64"), contentType },
-      DEPTH_RELIEF_CACHE_TTL,
-    );
-    reply.header("Content-Type", contentType);
-    reply.header("Cache-Control", "public, max-age=2592000, s-maxage=2592000");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.send(buf);
-  });
+  ctx.registerRoute(
+    "GET",
+    "/noaa/:z/:x/:y",
+    tileProxy(
+      "NOAA chart tile",
+      (tile) =>
+        wmsTileUrl(noaaWmsUrl, tile, {
+          version: "1.3.0",
+          layers: NOAA_WMS_LAYER,
+          format: "image/png",
+          transparent: true,
+        }),
+      { key: ({ z, x, y }) => `noaa:${z}:${x}:${y}`, ttlSeconds: NOAA_CACHE_TTL },
+      "public, max-age=604800, s-maxage=604800",
+    ),
+    { rateLimitTier: "tile" },
+  );
 
-  // ---- NOAA Maritime Chart Service tile proxy ---------------------------
-  ctx.registerRoute("GET", "/noaa/:z/:x/:y", async (req, reply) => {
-    const params = parseTileParams(req);
-    if (!params) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-    const { z, x, y } = params;
-    const [minX, minY, maxX, maxY] = tileToWebMercatorBbox(z, x, y);
-    const wmsUrl = new URL(noaaWmsUrl);
-    wmsUrl.searchParams.set("service", "WMS");
-    wmsUrl.searchParams.set("version", "1.3.0");
-    wmsUrl.searchParams.set("request", "GetMap");
-    wmsUrl.searchParams.set("layers", NOAA_WMS_LAYER);
-    wmsUrl.searchParams.set("styles", "");
-    wmsUrl.searchParams.set("crs", "EPSG:3857");
-    wmsUrl.searchParams.set("bbox", `${minX},${minY},${maxX},${maxY}`);
-    wmsUrl.searchParams.set("width", "256");
-    wmsUrl.searchParams.set("height", "256");
-    wmsUrl.searchParams.set("format", "image/png");
-    wmsUrl.searchParams.set("transparent", "TRUE");
-
-    const cacheKey = `noaa:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(
-      ctx,
-      cacheKey,
-      NOAA_CACHE_TTL,
-      wmsUrl.toString(),
-      req.signal,
-    );
-    if (!buf) {
-      reply.status(502).send({ message: "NOAA chart tile fetch failed" });
-      return;
-    }
-    reply.header("Content-Type", "image/png");
-    reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.send(buf);
-  });
-
-  // ---- Kartverket Sjøkart 2 (Norway) ------------------------------------
-  // Free + commercial use under NLOD 2.0. Coverage: Norway + Svalbard.
-  ctx.registerRoute("GET", "/charts/no/:z/:x/:y", async (req, reply) => {
-    const params = parseTileParams(req);
-    if (!params) {
-      reply.status(400).send({ message: "Invalid tile coordinates" });
-      return;
-    }
-    const { z, x, y } = params;
-    const [minX, minY, maxX, maxY] = tileToWebMercatorBbox(z, x, y);
-    const wmsUrl = new URL(kartverketWmsUrl);
-    wmsUrl.searchParams.set("service", "WMS");
-    wmsUrl.searchParams.set("version", "1.3.0");
-    wmsUrl.searchParams.set("request", "GetMap");
-    wmsUrl.searchParams.set("layers", kartverketLayer);
-    wmsUrl.searchParams.set("styles", "");
-    wmsUrl.searchParams.set("crs", "EPSG:3857");
-    wmsUrl.searchParams.set("bbox", `${minX},${minY},${maxX},${maxY}`);
-    wmsUrl.searchParams.set("width", "256");
-    wmsUrl.searchParams.set("height", "256");
-    wmsUrl.searchParams.set("format", "image/png");
-    wmsUrl.searchParams.set("transparent", "TRUE");
-
-    const cacheKey = `charts:no:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(
-      ctx,
-      cacheKey,
-      NOAA_CACHE_TTL,
-      wmsUrl.toString(),
-      req.signal,
-    );
-    if (!buf) {
-      reply.status(502).send({ message: "Kartverket chart tile fetch failed" });
-      return;
-    }
-    reply.header("Content-Type", "image/png");
-    reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.send(buf);
-  });
+  // Kartverket Sjøkart 2 (Norway): free and commercial use under NLOD 2.0.
+  // Coverage: Norway and Svalbard.
+  ctx.registerRoute(
+    "GET",
+    "/charts/no/:z/:x/:y",
+    tileProxy(
+      "Kartverket chart tile",
+      (tile) =>
+        wmsTileUrl(kartverketWmsUrl, tile, {
+          version: "1.3.0",
+          layers: kartverketLayer,
+          format: "image/png",
+          transparent: true,
+        }),
+      { key: ({ z, x, y }) => `charts:no:${z}:${x}:${y}`, ttlSeconds: NOAA_CACHE_TTL },
+      "public, max-age=604800, s-maxage=604800",
+    ),
+    { rateLimitTier: "tile" },
+  );
 
   // ---- Harbour list (JSONP → GeoJSON) ------------------------------------
   ctx.registerRoute("GET", "/harbors", async (req, reply) => {
@@ -632,16 +479,19 @@ export function setup(ctx: IntegrationContext): void {
     url.searchParams.set("r", String(east));
     url.searchParams.set("zoom", String(zoom));
 
-    const res = await fetchWithTimeout(url.toString(), undefined, req.signal);
-    if (!res?.ok) {
-      reply.status(502).send({ message: "Harbour list fetch failed" });
-      return;
-    }
     let text: string;
     try {
-      text = await readBoundedResponseText(res, MAX_HARBOUR_LIST_BYTES, {
-        label: "OpenSeaMap harbour list",
+      const res = await ctx.http.getText(url.toString(), {
+        maxBytes: MAX_HARBOUR_LIST_BYTES,
+        contentTypes: HARBOUR_LIST_MEDIA_TYPES,
+        fallbackContentType: "text/plain",
+        discardErrorBody: true,
+        headers: { "User-Agent": USER_AGENT },
+        timeoutMs: FETCH_TIMEOUT_MS,
+        signal: req.signal,
       });
+      if (res.status !== 200) throw new Error(`OpenSeaMap harbour list HTTP ${res.status}`);
+      text = res.body;
     } catch {
       reply.status(502).send({ message: "Harbour list fetch failed" });
       return;

@@ -402,7 +402,9 @@ services:
   to choose the per-client bucket: `expensive` for a route that calls a costly or
   quota-bound upstream, `routing` for directions a navigating client re-requests,
   `typeahead` for one a client calls while the user types,
-  `tile` for map-tile fan-out, or the default `public`. The incoming request's headers are
+  `tile` for map-tile fan-out, or the default `public`. Relay map tiles with
+  `createTileProxyHandler`, which validates the tile coordinates first; see
+  [Tile proxies](./integration-system.md#tile-proxies). The incoming request's headers are
   forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);
   Node lowercases every header name when parsing the request, so read
   `req.headers["if-none-match"]`, not `req.headers["If-None-Match"]`.

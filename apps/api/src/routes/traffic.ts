@@ -1,3 +1,4 @@
+import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { FastifyPluginAsync } from "fastify";
 import {
   type ProviderDailyBudget,
@@ -8,7 +9,6 @@ import { getTrafficProvider } from "../services/traffic.factory";
 import { TrafficProviderHttpError } from "../services/traffic.provider";
 import { bindRequestAbort } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth";
-import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
 import { normalizeUpstreamResponseStream } from "../utils/upstream-response.js";
 
 const TOMTOM_TRAFFIC_MAX_ZOOM = 22;

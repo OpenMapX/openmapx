@@ -1,21 +1,11 @@
 import {
   createMockIntegrationContext,
   createPassthroughCache,
+  createRecordingReply,
+  fakeHttpClient,
+  httpStatus,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const coreMocks = vi.hoisted(() => ({
-  fetchJson: vi.fn(),
-}));
-
-vi.mock("@openmapx/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@openmapx/core")>();
-  return {
-    ...actual,
-    fetchJson: coreMocks.fetchJson,
-  };
-});
-
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildRainViewerTileUrl, canonicalizeRainViewerHost, setup } from "./index.js";
 
 interface Sent {
@@ -24,16 +14,18 @@ interface Sent {
 }
 
 async function callRadarMeta(host: string) {
-  coreMocks.fetchJson.mockResolvedValue({
-    host,
-    radar: {
-      past: [{ time: 1, path: "/v2/radar/1" }],
-      nowcast: [],
+  const http = fakeHttpClient({
+    "api.rainviewer.com/public/weather-maps.json": {
+      host,
+      radar: {
+        past: [{ time: 1, path: "/v2/radar/1" }],
+        nowcast: [],
+      },
     },
   });
   const cacheSet = vi.fn(async () => undefined);
   const cache = { ...createPassthroughCache(), set: cacheSet };
-  const ctx = createMockIntegrationContext({ cache });
+  const ctx = createMockIntegrationContext({ cache, http });
   setup(ctx);
   const route = ctx.registered.routes.find((candidate) => candidate.path === "/radar/meta");
   if (!route) throw new Error("no /radar/meta route");
@@ -52,10 +44,6 @@ async function callRadarMeta(host: string) {
   await route.handler({ query: {}, params: {}, headers: {} } as never, reply as never);
   return { cacheSet, sent };
 }
-
-beforeEach(() => {
-  coreMocks.fetchJson.mockReset();
-});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -106,6 +94,24 @@ describe("RainViewer metadata host", () => {
     expect(cacheSet).not.toHaveBeenCalled();
   });
 
+  it("answers 502 without caching when RainViewer fails", async () => {
+    const cacheSet = vi.fn(async () => undefined);
+    const ctx = createMockIntegrationContext({
+      cache: { ...createPassthroughCache(), set: cacheSet },
+      http: fakeHttpClient(() => httpStatus(503)),
+    });
+    setup(ctx);
+    const route = ctx.registered.routes.find((candidate) => candidate.path === "/radar/meta");
+    const { reply, result } = createRecordingReply();
+    await route?.handler(
+      { query: {}, params: {}, body: undefined, clientKey: "c", headers: {} },
+      reply,
+    );
+
+    expect(result).toMatchObject({ status: 502, body: { message: "RainViewer unavailable" } });
+    expect(cacheSet).not.toHaveBeenCalled();
+  });
+
   it.each([
     ".attacker.example",
     "@127.0.0.1",
@@ -132,37 +138,99 @@ describe("RainViewer metadata host", () => {
           nowcast: [],
         }) as T,
     };
-    const ctx = createMockIntegrationContext({ cache });
+    const http = fakeHttpClient(() => ({
+      status: 200,
+      headers: { "content-type": "image/png" },
+      stream: new Blob([new Uint8Array([1, 2, 3])]).stream(),
+    }));
+    const ctx = createMockIntegrationContext({ cache, http });
     setup(ctx);
     const route = ctx.registered.routes.find(
       (candidate) => candidate.path === "/radar/tile/:z/:x/:y",
     );
     if (!route) throw new Error("no radar tile route");
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(new Uint8Array([1, 2, 3]), {
-        status: 200,
-        headers: { "content-type": "image/png" },
-      }),
-    );
-    const reply = {
-      status: vi.fn().mockReturnThis(),
-      header: vi.fn().mockReturnThis(),
-      send: vi.fn().mockReturnThis(),
-    };
+    const { reply, result } = createRecordingReply();
 
     await route.handler(
       {
         query: { path: framePath },
         params: { z: "8", x: "130", y: "84" },
+        body: undefined,
+        clientKey: "c",
         headers: {},
         signal: new AbortController().signal,
-      } as never,
-      reply as never,
+      },
+      reply,
     );
 
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    const requestedUrl = new URL(String(fetchSpy.mock.calls[0]?.[0]));
+    expect(result.status).toBe(200);
+    expect(route.options?.rateLimitTier).toBe("tile");
+    expect(http.calls).toHaveLength(1);
+    const requestedUrl = new URL(http.calls[0]?.url ?? "");
     expect(requestedUrl.origin).toBe("https://tilecache.rainviewer.com");
     expect(requestedUrl.pathname).toContain("/.attacker.example/256/8/130/84/");
+  });
+});
+
+describe("OpenWeatherMap tile route", () => {
+  function owmRoute(responder: Parameters<typeof fakeHttpClient>[0]) {
+    const http = fakeHttpClient(responder);
+    const ctx = createMockIntegrationContext({ http, config: { owmApiKey: "owm-secret" } });
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/tiles/:layer/:z/:x/:y.png");
+    if (!route) throw new Error("no OWM tile route");
+    const call = async (params: Record<string, string>) => {
+      const { reply, result } = createRecordingReply();
+      await route.handler(
+        { query: {}, params, body: undefined, clientKey: "c", headers: {} },
+        reply,
+      );
+      return result;
+    };
+    return { http, route, call };
+  }
+
+  const png = () => ({
+    status: 200,
+    headers: { "content-type": "image/png" },
+    stream: new Blob([new Uint8Array([1])]).stream(),
+  });
+
+  it("requests the validated tile with the key in the query on the tile tier", async () => {
+    const { http, route, call } = owmRoute(png);
+
+    const result = await call({ layer: "temp_new", z: "3", x: "4", y: "2" });
+
+    expect(result.status).toBe(200);
+    expect(route.options?.rateLimitTier).toBe("tile");
+    expect(http.calls[0]?.url).toBe(
+      "https://tile.openweathermap.org/map/temp_new/3/4/2.png?appid=owm-secret",
+    );
+  });
+
+  it.each([
+    ["an encoded slash in y", { z: "3", x: "4", y: "..%2F..%2Fdata%2F2.5%2Fweather" }],
+    ["a decoded traversal in x", { z: "3", x: "../../data", y: "2" }],
+    ["a fractional coordinate", { z: "3", x: "4.5", y: "2" }],
+    ["x outside the zoom grid", { z: "3", x: "8", y: "2" }],
+  ])("refuses %s before spending the key", async (_label, coordinates) => {
+    const { http, call } = owmRoute(png);
+
+    const result = await call({ layer: "temp_new", ...coordinates });
+
+    expect(result.status).toBe(400);
+    expect(http.calls).toHaveLength(0);
+  });
+
+  it("does not relay an upstream authorization failure to the browser", async () => {
+    const { call } = owmRoute(() => httpStatus(401));
+    const result = await call({ layer: "temp_new", z: "3", x: "4", y: "2" });
+    expect(result.status).toBe(502);
+  });
+
+  it("refuses unknown layers", async () => {
+    const { http, call } = owmRoute(png);
+    expect((await call({ layer: "secret_layer", z: "1", x: "0", y: "0" })).status).toBe(400);
+    expect(http.calls).toHaveLength(0);
   });
 });

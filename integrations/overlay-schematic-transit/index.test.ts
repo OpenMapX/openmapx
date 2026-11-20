@@ -1,104 +1,60 @@
 import { USER_AGENT } from "@openmapx/core";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ResponseOptions, StreamHttpResponse } from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  createRecordingReply,
+  type FakeHttpResponder,
+  fakeHttpClient,
+  httpStatus,
+} from "@openmapx/integration-framework/testing";
+import { describe, expect, it } from "vitest";
 import { setup } from "./index.js";
 
-type Handler = (
-  req: { params: Record<string, string>; query: Record<string, string>; signal?: AbortSignal },
-  reply: Reply,
-) => Promise<void> | void;
-
-class Reply {
-  statusCode = 200;
-  headers: Record<string, string> = {};
-  contentType: string | undefined;
-  body: unknown;
-  sent = false;
-  status(code: number) {
-    this.statusCode = code;
-    return this;
-  }
-  header(name: string, value: string) {
-    this.headers[name.toLowerCase()] = value;
-    return this;
-  }
-  type(value: string) {
-    this.contentType = value;
-    return this;
-  }
-  send(payload?: unknown) {
-    this.body = payload;
-    this.sent = true;
-  }
+function mvt(bytes = 64): StreamHttpResponse {
+  return {
+    status: 200,
+    headers: { "content-type": "application/octet-stream" },
+    stream: new Blob([new Uint8Array(bytes)]).stream(),
+  };
 }
 
-const mockFetch = vi.fn();
-
-function tileRoute(ctx: ReturnType<typeof createMockIntegrationContext>): {
-  handler: Handler;
-  options: { rateLimitTier?: string } | undefined;
-} {
+function setupWith(responder: FakeHttpResponder, config: Record<string, unknown> = {}) {
+  const http = fakeHttpClient(responder);
+  const ctx = createMockIntegrationContext({ http, config });
+  setup(ctx);
   const route = ctx.registered.routes.find((r) => r.path === "/tiles/:network/:layout/:z/:x/:y");
   if (!route) throw new Error("tile route not registered");
-  return { handler: route.handler as unknown as Handler, options: route.options };
-}
-
-function mvtResponse(bytes = 64): Response {
-  return new Response(new Uint8Array(bytes), {
-    status: 200,
-    headers: { "content-type": "application/octet-stream", "content-length": String(bytes) },
-  });
+  const call = async (params: Record<string, string>) => {
+    const { reply, result } = createRecordingReply();
+    await route.handler({ query: {}, params, body: undefined, clientKey: "c", headers: {} }, reply);
+    return result;
+  };
+  return { http, route, call };
 }
 
 describe("overlay-schematic-transit tile proxy", () => {
-  let ctx: ReturnType<typeof createMockIntegrationContext>;
-
-  beforeEach(() => {
-    vi.stubGlobal("fetch", mockFetch);
-    mockFetch.mockReset();
-    ctx = createMockIntegrationContext();
-    setup(ctx);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("registers the tile route on the tile rate-limit tier", () => {
-    const { options } = tileRoute(ctx);
-    expect(options?.rateLimitTier).toBe("tile");
+    expect(setupWith(() => mvt()).route.options?.rateLimitTier).toBe("tile");
   });
 
-  it("proxies a valid tile with week-long caching headers", async () => {
-    mockFetch.mockResolvedValue(mvtResponse());
-    const { handler } = tileRoute(ctx);
-    const reply = new Reply();
-    await handler(
-      {
-        params: { network: "subway-lightrail", layout: "octi", z: "11", x: "1100", y: "671" },
-        query: {},
-      },
-      reply,
-    );
-    expect(mockFetch).toHaveBeenCalledOnce();
-    const url = String(mockFetch.mock.calls[0][0]);
-    expect(url).toBe("https://loom.cs.uni-freiburg.de/tiles/subway-lightrail/octi/11/1100/671.mvt");
-    expect(reply.statusCode).toBe(200);
-    expect(reply.headers["cache-control"]).toBe("public, max-age=604800, s-maxage=604800");
-    expect(reply.headers["cross-origin-resource-policy"]).toBe("cross-origin");
-    expect(reply.contentType).toBe("application/octet-stream");
-    expect(reply.sent).toBe(true);
-  });
+  it("proxies a valid tile with week-long caching headers and the application user agent", async () => {
+    const { http, call } = setupWith(() => mvt());
+    const result = await call({
+      network: "subway-lightrail",
+      layout: "octi",
+      z: "11",
+      x: "1100",
+      y: "671",
+    });
 
-  it("identifies tile requests with the shared application user agent", async () => {
-    mockFetch.mockResolvedValue(mvtResponse());
-    const { handler } = tileRoute(ctx);
-    await handler(
-      { params: { network: "tram", layout: "geo", z: "3", x: "1", y: "1" }, query: {} },
-      new Reply(),
-    );
-    const options = mockFetch.mock.calls[0][1] as RequestInit;
-    expect(new Headers(options.headers).get("user-agent")).toBe(USER_AGENT);
+    expect(http.calls.map((c) => c.url)).toEqual([
+      "https://loom.cs.uni-freiburg.de/tiles/subway-lightrail/octi/11/1100/671.mvt",
+    ]);
+    expect((http.calls[0]?.options as ResponseOptions).headers?.["User-Agent"]).toBe(USER_AGENT);
+    expect(result.status).toBe(200);
+    expect(result.headers["cache-control"]).toBe("public, max-age=604800, s-maxage=604800");
+    expect(result.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+    expect(result.contentType).toBe("application/octet-stream");
   });
 
   it.each([
@@ -112,64 +68,43 @@ describe("overlay-schematic-transit tile proxy", () => {
       params: { network: "tram", layout: "geo", z: "..", x: "1", y: "1" },
     },
     { name: "non-numeric x", params: { network: "tram", layout: "geo", z: "3", x: "a", y: "1" } },
-    { name: "three-digit z", params: { network: "tram", layout: "geo", z: "123", x: "1", y: "1" } },
-  ])("rejects $name with 400 and no upstream fetch", async ({ params }) => {
-    const { handler } = tileRoute(ctx);
-    const reply = new Reply();
-    await handler({ params, query: {} }, reply);
-    expect(reply.statusCode).toBe(400);
-    expect(mockFetch).not.toHaveBeenCalled();
+    { name: "zoom above 22", params: { network: "tram", layout: "geo", z: "123", x: "1", y: "1" } },
+    {
+      name: "x outside the grid",
+      params: { network: "tram", layout: "geo", z: "1", x: "2", y: "0" },
+    },
+  ])("rejects $name with 400 and no upstream request", async ({ params }) => {
+    const { http, call } = setupWith(() => mvt());
+    expect((await call(params)).status).toBe(400);
+    expect(http.calls).toHaveLength(0);
   });
 
   it("maps upstream 404 (empty area) to a cacheable empty 204", async () => {
-    mockFetch.mockResolvedValue(new Response("<html>not found</html>", { status: 404 }));
-    const { handler } = tileRoute(ctx);
-    const reply = new Reply();
-    await handler(
-      { params: { network: "tram", layout: "geo", z: "11", x: "300", y: "700" }, query: {} },
-      reply,
-    );
-    expect(reply.statusCode).toBe(204);
-    expect(reply.headers["cache-control"]).toBe("public, max-age=86400");
-    expect(reply.body).toBeUndefined();
+    const { call } = setupWith(() => httpStatus(404));
+    const result = await call({ network: "tram", layout: "geo", z: "11", x: "300", y: "700" });
+    expect(result.status).toBe(204);
+    expect(result.headers["cache-control"]).toBe("public, max-age=86400");
+    expect(result.body).toBeUndefined();
   });
 
-  it("passes through an upstream 500", async () => {
-    mockFetch.mockResolvedValue(new Response("boom", { status: 500 }));
-    const { handler } = tileRoute(ctx);
-    const reply = new Reply();
-    await handler(
-      { params: { network: "rail", layout: "geo", z: "3", x: "1", y: "1" }, query: {} },
-      reply,
-    );
-    expect(reply.statusCode).toBe(500);
-  });
-
-  it("answers 502 when the upstream fetch throws", async () => {
-    mockFetch.mockRejectedValue(new Error("connect timeout"));
-    const { handler } = tileRoute(ctx);
-    const reply = new Reply();
-    await handler(
-      { params: { network: "rail", layout: "geo", z: "3", x: "1", y: "1" }, query: {} },
-      reply,
-    );
-    expect(reply.statusCode).toBe(502);
+  it("answers 502 for an upstream 500 or a failed request", async () => {
+    const failed = setupWith(() => httpStatus(500));
+    expect(
+      (await failed.call({ network: "rail", layout: "geo", z: "3", x: "1", y: "1" })).status,
+    ).toBe(502);
+    const thrown = setupWith(() => {
+      throw new Error("connect timeout");
+    });
+    expect(
+      (await thrown.call({ network: "rail", layout: "geo", z: "3", x: "1", y: "1" })).status,
+    ).toBe(502);
   });
 
   it("respects a configured tileBaseUrl override", async () => {
-    mockFetch.mockResolvedValue(mvtResponse());
-    const custom = createMockIntegrationContext({
-      config: { tileBaseUrl: "https://loom.example.org/tiles/" },
+    const { http, call } = setupWith(() => mvt(), {
+      tileBaseUrl: "https://loom.example.org/tiles/",
     });
-    setup(custom);
-    const { handler } = tileRoute(custom);
-    const reply = new Reply();
-    await handler(
-      { params: { network: "rail", layout: "geo", z: "3", x: "1", y: "1" }, query: {} },
-      reply,
-    );
-    expect(String(mockFetch.mock.calls[0][0])).toBe(
-      "https://loom.example.org/tiles/rail/geo/3/1/1.mvt",
-    );
+    await call({ network: "rail", layout: "geo", z: "3", x: "1", y: "1" });
+    expect(http.calls[0]?.url).toBe("https://loom.example.org/tiles/rail/geo/3/1/1.mvt");
   });
 });

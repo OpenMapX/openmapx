@@ -1,8 +1,16 @@
 // IntegrationContext and RouteHandler live in integration-framework, NOT core.
 
 import type { StreetLevelImage } from "@openmapx/core";
-import type { IntegrationContext, StreetLevelProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type {
+  IntegrationContext,
+  ResponseOptions,
+  StreetLevelProvider,
+} from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  createRecordingReply,
+  fakeHttpClient,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
@@ -98,21 +106,36 @@ describe("upstream failure handling", () => {
     expect(reply.status).toHaveBeenCalledWith(502);
   });
 
-  it("rejects a non-vector tile response with a normalized 502", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("not a tile", { headers: { "Content-Type": "text/html" } })),
+  it("asks the host for vector media types and answers 502 when it refuses the response", async () => {
+    const http = fakeHttpClient(() => {
+      throw new Error("integration HTTP response has unexpected content type");
+    });
+    const ctx = createMockIntegrationContext({
+      manifest: structuredClone(manifest) as IntegrationContext["manifest"],
+      config: { instanceUrl: "https://example.test/api" },
+      http,
+    });
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/tiles/:z/:x/:y");
+    const { reply, result } = createRecordingReply();
+    await route?.handler(
+      {
+        params: { z: "12", x: "1", y: "2" },
+        query: {},
+        body: undefined,
+        clientKey: "c",
+        headers: {},
+      },
+      reply,
     );
 
-    const { ctx, routes } = buildCtx();
-    setup(ctx);
-    const reply = makeReply();
-    await routes
-      .find((r) => r.path === "/tiles/:z/:x/:y")
-      ?.handler({ params: { z: "12", x: "1", y: "2" }, query: {} } as never, reply as never);
-
-    expect(reply.status).toHaveBeenCalledWith(502);
-    expect(reply.send).toHaveBeenCalledWith({ message: "Panoramax tile unavailable" });
+    expect(route?.options?.rateLimitTier).toBe("tile");
+    expect(http.calls[0]?.url).toBe("https://example.test/api/map/12/1/2.mvt");
+    expect((http.calls[0]?.options as ResponseOptions).contentTypes).toContain(
+      "application/vnd.mapbox-vector-tile",
+    );
+    expect(result.status).toBe(502);
+    expect(result.body).toEqual({ error: "Panoramax vector tile unavailable" });
   });
 
   it("still reports genuine absence as 404", async () => {

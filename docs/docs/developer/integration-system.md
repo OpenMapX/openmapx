@@ -1025,6 +1025,44 @@ Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, 
 bursty integration tile traffic retains its dedicated tier. Do not add integration
 paths to the global URL-pattern limiter.
 
+#### Tile proxies
+
+A route that relays map tiles from an upstream uses `createTileProxyHandler`
+from the server-only `@openmapx/integration-framework/tile-proxy` entry instead
+of its own `fetch`:
+
+```ts
+ctx.registerRoute(
+  "GET",
+  "/tiles/:z/:x/:y.png",
+  createTileProxyHandler(ctx, {
+    kind: "raster",
+    label: "Waymarked Trails tile",
+    url: ({ z, x, y }) => `https://tile.example.org/${z}/${x}/${y}.png`,
+    maxZoom: 18,
+    fallbackContentType: "image/png",
+    cacheControl: "public, max-age=604800, s-maxage=604800",
+  }),
+  { rateLimitTier: "tile" },
+);
+```
+
+The handler accepts only decimal `z`, `x` and `y` path parameters inside the Web
+Mercator grid up to `maxZoom` (default 22) and answers 400 before any upstream
+request otherwise, so a path parameter can never reach the upstream URL
+unchecked. `url` receives the parsed tile and the request and may return `null`
+to answer 400 for other invalid parameters. `kind` selects the raster or vector
+media-type allowlist and byte ceiling. The tile streams through
+`ctx.http.getStream`; with `cache` it is buffered into `ctx.cache.withCache`
+instead. Upstream 404 answers 404, `empty` maps "no data"
+statuses to 204, and every other failure answers 502 with `{ error }`. Logs name
+the label and status but never the URL, because keys often sit in the query.
+Keep the path literal in `registerRoute` so OpenAPI extraction sees it, and wrap
+the handler in your own when a gate must answer first.
+`createUpstreamImageHandler` applies the same rules to a fixed-path image such as
+a legend. `parseWebMercatorTileCoordinates` and `tileBoundsWebMercator` (WMS
+`bbox` values) are exported for routes that need them directly.
+
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, other upstream 4xx responses, authentication failures,
 and invalid payloads affect the circuit; valid empty results, policy rejection,

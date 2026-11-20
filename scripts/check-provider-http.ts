@@ -65,8 +65,6 @@ const MOVES_TO_HOST_CLIENT =
 const NULL_ISLAND_PENDING =
   "Payload validation for this provider replaces the zero fallback with a rejected or omitted record.";
 
-const MOVES_TO_TILE_PROXY = "Tile proxy; it moves to the shared tile proxy handler.";
-
 export const EXCEPTIONS: ProviderHttpExceptions = {
   "raw-fetch": {
     "integrations/geocoding-motis/provider.ts": {
@@ -92,23 +90,8 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       count: 1,
       reason: MOVES_TO_HOST_CLIENT,
     },
-    "integrations/overlay-hiking/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
-    "integrations/overlay-nautical/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
-    "integrations/overlay-satellite/index.ts": { count: 3, reason: MOVES_TO_TILE_PROXY },
-    "integrations/overlay-schematic-transit/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
-    "integrations/overlay-weather/index.ts": { count: 2, reason: MOVES_TO_TILE_PROXY },
-    "integrations/overlay-winter-sports/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
-    "integrations/street-level-imagery-mapillary/index.ts": {
-      count: 1,
-      reason: MOVES_TO_TILE_PROXY,
-    },
-    "integrations/street-level-imagery-panoramax/index.ts": {
-      count: 1,
-      reason: MOVES_TO_TILE_PROXY,
-    },
   },
   "credentialed-fetch-json": {
-    "integrations/overlay-weather/index.ts": { count: 1, reason: MOVES_TO_TILE_PROXY },
     "integrations/geocoding-maptiler/provider.ts": { count: 2, reason: MOVES_TO_HOST_CLIENT },
     "integrations/hotels/liteapi.ts": { count: 2, reason: MOVES_TO_HOST_CLIENT },
     "integrations/photos-flickr/provider.ts": { count: 1, reason: MOVES_TO_HOST_CLIENT },
