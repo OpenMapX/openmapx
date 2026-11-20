@@ -11,12 +11,10 @@ import type {
   TrafficApplicationSnapshot,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fakeHttpClient } from "@openmapx/integration-framework/testing";
 import Fastify from "fastify";
 import { verifyRouteTraffic } from "../../../integrations/routing/traffic-application.js";
-import {
-  setValhallaUrl,
-  valhallaService,
-} from "../../../integrations/routing-valhalla/provider.js";
+import { createValhallaService } from "../../../integrations/routing-valhalla/provider.js";
 import {
   boundCondition,
   effect,
@@ -101,7 +99,23 @@ const deps = {
   csv: "way_id,dir,current_kph,free_flow_kph,los\n",
   waysToEdges: ways,
 };
-setValhallaUrl(baseUrl);
+// The proof talks to a loopback proxy, so a plain fetch stands in for the host's client.
+const valhallaHttp = fakeHttpClient(async ({ url, body, options }) => {
+  const requestUrl = new URL(url);
+  for (const [name, value] of Object.entries(options?.params ?? {})) {
+    if (value !== undefined) requestUrl.searchParams.set(name, String(value));
+  }
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: body as string,
+  });
+  return { status: response.status, headers: {}, body: await response.text() };
+});
+const valhallaService = createValhallaService(valhallaHttp, () => ({
+  url: baseUrl,
+  bidirectionalAlternates: true,
+}));
 const waypoints: [number, number][] = [
   [12.996, 52],
   [13.024, 52],
