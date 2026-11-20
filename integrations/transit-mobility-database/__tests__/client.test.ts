@@ -121,7 +121,7 @@ describe("MdbClient", () => {
   it("returns the cached feed list when ctx.cache has a hit", async () => {
     const cached = [{ id: "mdb-cached", data_type: "gtfs" }];
     const cache: CacheClient = {
-      get: vi.fn(async () => cached),
+      get: vi.fn(async () => cached) as unknown as CacheClient["get"],
       set: vi.fn(async () => {}),
       del: vi.fn(async () => {}),
       withCache: vi.fn(),

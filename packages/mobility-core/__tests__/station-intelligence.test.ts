@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deriveStationIntelligence } from "../src/station-intelligence.js";
+import {
+  deriveStationIntelligence,
+  type StationIntelligenceInput,
+} from "../src/station-intelligence.js";
 import type {
   TransitPlatformDetail,
   TransitStopAreaSummary,
@@ -21,7 +24,12 @@ const parking = (realtime: boolean) =>
     freeSpaces: realtime ? 12 : undefined,
   }) as unknown as TransitStopParking;
 
-const base = { siblingStops: [], childStops: [], platforms: [], parking: [] };
+const base: StationIntelligenceInput = {
+  siblingStops: [],
+  childStops: [],
+  platforms: [],
+  parking: [],
+};
 
 describe("deriveStationIntelligence", () => {
   it("grades a lone single-mode stop as simple", () => {
@@ -63,9 +71,12 @@ describe("deriveStationIntelligence", () => {
       },
       "major_interchange",
     ],
-  ] as const)("grades %s", (_label, extra, complexity) => {
-    expect(deriveStationIntelligence({ ...base, ...extra }).complexity).toBe(complexity);
-  });
+  ] satisfies Array<[string, Partial<StationIntelligenceInput>, string]>)(
+    "grades %s",
+    (_label, extra, complexity) => {
+      expect(deriveStationIntelligence({ ...base, ...extra }).complexity).toBe(complexity);
+    },
+  );
 
   it("reports realtime parking only when a car park publishes free spaces", () => {
     expect(deriveStationIntelligence({ ...base, parking: [parking(false)] })).toMatchObject({
