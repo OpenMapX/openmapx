@@ -72,9 +72,9 @@ describe("nautical routes", () => {
     const route = ctx.registered.routes.find((r) => r.path === path);
     if (!route) throw new Error(`route ${path} not registered`);
     return (
-      request: { query: Record<string, string>; params: Record<string, string>; body: unknown },
+      request: Parameters<typeof route.handler>[0],
       reply: Parameters<typeof route.handler>[1],
-    ) => route.handler({ ...request, clientKey: "c", headers: {} }, reply);
+    ) => route.handler(request, reply);
   }
 
   const makeReply = createRecordingReply;
@@ -129,7 +129,7 @@ describe("nautical routes", () => {
       setup(ctx);
       const { reply, result } = makeReply();
       await getRoute("/harbors")(
-        { query: { south: "53", north: "54", west: "9", east: "10" }, params: {}, body: undefined },
+        routeRequest({ query: { south: "53", north: "54", west: "9", east: "10" } }),
         reply,
       );
       expect(result.status).toBe(502);
@@ -285,7 +285,7 @@ describe("nautical routes", () => {
       const query = { west: "-72", south: "41", east: "-70", north: "43" };
       const request = async () => {
         const { reply, result } = makeReply();
-        await getRoute("/stations")({ query, params: {}, body: undefined }, reply);
+        await getRoute("/stations")(routeRequest({ query }), reply);
         return result as {
           status: number;
           body: { features: Array<{ properties: { id: string } }> };
