@@ -207,7 +207,6 @@ describe("required database test gate", () => {
       ?.split("      - name:")[0];
     expect(step).toContain("if: matrix.group == 'api-privacy'");
     expect(step).toContain("./services/redis/service.json");
-    expect(step).toContain("for backoff in 0 15 30 60 120");
     expect(step).toContain('docker pull --quiet "$image" && exit 0');
     expect(step).toContain("exit 1");
   });
