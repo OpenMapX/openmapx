@@ -1,87 +1,25 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { codeOnly, productionSources } from "../../__tests__/support/sourceScan";
 
 /**
  * `snapToRoute` scans a whole route per call. It lives only in test support as
  * the numerical reference for the prepared matcher, so no production module may
- * reference it.
+ * reference it. Doc-comment references to it, the matcher's own contract notes,
+ * are prose and do not count.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../../../../..");
 const ROOTS = ["packages/core/src", "apps/web/src", "integrations"];
-const SOURCE_SUFFIXES = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"];
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".next", ".turbo", "coverage"]);
-
-/**
- * Blank out comments and string/template literals so only real code is matched.
- * Doc-comment references to `snapToRoute` — the matcher's own contract notes —
- * are prose, not callers, and must never trip the gate.
- */
-function codeOnly(source: string): string {
-  const out: string[] = [];
-  let i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    const next = source[i + 1];
-    if (c === "/" && next === "/") {
-      while (i < source.length && source[i] !== "\n") {
-        out.push(" ");
-        i++;
-      }
-      continue;
-    }
-    if (c === "/" && next === "*") {
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) {
-        out.push(source[i] === "\n" ? "\n" : " ");
-        i++;
-      }
-      out.push(" ", " ");
-      i += 2;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") {
-      out.push(" ");
-      i++;
-      while (i < source.length && source[i] !== c) {
-        if (source[i] === "\\") {
-          out.push(" ");
-          i++;
-        }
-        out.push(source[i] === "\n" ? "\n" : " ");
-        i++;
-      }
-      out.push(" ");
-      i++;
-      continue;
-    }
-    out.push(c);
-    i++;
-  }
-  return out.join("");
-}
-
-/** Production source files: no tests, no fixtures, no build output. */
-function productionSources(dir: string, found: string[]): string[] {
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) {
-      if (SKIP_DIRS.has(entry) || entry.includes("test")) continue;
-      productionSources(path, found);
-      continue;
-    }
-    if (entry.includes("test")) continue;
-    if (!SOURCE_SUFFIXES.some((s) => entry.endsWith(s))) continue;
-    found.push(path);
-  }
-  return found;
-}
 
 describe("snapToRoute production callers", () => {
-  const files = ROOTS.flatMap((root) => productionSources(join(REPO_ROOT, root), []));
-  const referencing = files
-    .filter((path) => /\bsnapToRoute\b/.test(codeOnly(readFileSync(path, "utf8"))))
+  const referencing = ROOTS.flatMap((root) => productionSources(join(REPO_ROOT, root)))
+    .filter((path) => {
+      const text = readFileSync(path, "utf8");
+      return text.includes("snapToRoute") && /\bsnapToRoute\b/.test(codeOnly(text, path));
+    })
     .map((path) => relative(REPO_ROOT, path).split(sep).join("/"))
     .sort();
 

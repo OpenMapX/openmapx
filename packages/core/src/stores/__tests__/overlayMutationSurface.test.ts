@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { codeOnly, productionSources } from "../../__tests__/support/sourceScan";
 
 /**
  * The overlay registry's exclusion-aware transactions (runOverlayTransaction,
@@ -21,75 +22,6 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../../../../..");
 const ROOTS = ["packages/core/src", "apps/web/src", "integrations"];
-const SOURCE_SUFFIXES = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"];
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".next", ".turbo", "coverage"]);
-
-/**
- * Blank out comments and string/template literals so only real code is
- * matched — mirrors packages/core/src/navigation/__tests__/snapToRouteOwnership.test.ts.
- */
-function codeOnly(source: string): string {
-  const out: string[] = [];
-  let i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    const next = source[i + 1];
-    if (c === "/" && next === "/") {
-      while (i < source.length && source[i] !== "\n") {
-        out.push(" ");
-        i++;
-      }
-      continue;
-    }
-    if (c === "/" && next === "*") {
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) {
-        out.push(source[i] === "\n" ? "\n" : " ");
-        i++;
-      }
-      out.push(" ", " ");
-      i += 2;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") {
-      out.push(" ");
-      i++;
-      while (i < source.length && source[i] !== c) {
-        if (source[i] === "\\") {
-          out.push(" ");
-          i++;
-        }
-        out.push(source[i] === "\n" ? "\n" : " ");
-        i++;
-      }
-      out.push(" ");
-      i++;
-      continue;
-    }
-    out.push(c);
-    i++;
-  }
-  return out.join("");
-}
-
-/** Production source files: no tests, no fixtures, no build output. */
-function productionSources(dir: string, found: string[]): string[] {
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) {
-      if (SKIP_DIRS.has(entry) || entry.includes("test")) continue;
-      productionSources(path, found);
-      continue;
-    }
-    if (entry.includes("test")) continue;
-    if (!SOURCE_SUFFIXES.some((s) => entry.endsWith(s))) continue;
-    found.push(path);
-  }
-  return found;
-}
-
-function toRepoPath(path: string): string {
-  return relative(REPO_ROOT, path).split(sep).join("/");
-}
 
 const REGISTRY_IMPL_FILE = "packages/core/src/stores/overlayRegistry.ts";
 
@@ -112,28 +44,32 @@ const TOGGLE_OVERLAY_CALLERS = [
   REGISTRY_IMPL_FILE,
 ];
 
-describe("overlay mutation surface", () => {
-  const files = ROOTS.flatMap((root) => productionSources(join(REPO_ROOT, root), []));
+/** Repository paths of the production files whose code (not prose) matches `pattern`. */
+function filesMatching(names: readonly string[], pattern: RegExp): string[] {
+  return ROOTS.flatMap((root) => productionSources(join(REPO_ROOT, root)))
+    .filter((path) => {
+      const text = readFileSync(path, "utf8");
+      return names.some((name) => text.includes(name)) && pattern.test(codeOnly(text, path));
+    })
+    .map((path) => relative(REPO_ROOT, path).split(sep).join("/"))
+    .sort();
+}
 
+describe("overlay mutation surface", () => {
   it("references toggleOverlay( only from the known production callers plus its own definition", () => {
-    const referencing = files
-      .filter((path) => /\btoggleOverlay\(/.test(codeOnly(readFileSync(path, "utf8"))))
-      .map(toRepoPath)
-      .sort();
-    expect(referencing).toEqual([...TOGGLE_OVERLAY_CALLERS].sort());
+    expect(filesMatching(["toggleOverlay"], /\btoggleOverlay\(/)).toEqual(
+      [...TOGGLE_OVERLAY_CALLERS].sort(),
+    );
   });
 
   it("confines direct openPanel/closePanel/setLayerVisible/closeExclusionPeers callers to the documented allow-list", () => {
-    const pattern =
-      /\.(openPanel|closePanel|setLayerVisible)\(|\bcloseExclusionPeers\(|\bs\.(openPanel|closePanel|setLayerVisible)\b/;
-    const hits = files
-      .filter((path) => pattern.test(codeOnly(readFileSync(path, "utf8"))))
-      .map(toRepoPath)
-      .filter(
-        (path) =>
-          path !== REGISTRY_IMPL_FILE && path !== "packages/core/src/stores/createOverlayStore.ts",
-      )
-      .sort();
+    const hits = filesMatching(
+      ["openPanel", "closePanel", "setLayerVisible", "closeExclusionPeers"],
+      /\.(openPanel|closePanel|setLayerVisible)\(|\bcloseExclusionPeers\(|\bs\.(openPanel|closePanel|setLayerVisible)\b/,
+    ).filter(
+      (path) =>
+        path !== REGISTRY_IMPL_FILE && path !== "packages/core/src/stores/createOverlayStore.ts",
+    );
     expect(hits).toEqual(Object.keys(DIRECT_MUTATION_ALLOWED).sort());
   });
 });
