@@ -4,6 +4,8 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
+import { useLocale, useTranslations } from "next-intl";
+import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 
 type OsmExtract = NonNullable<AdminServiceData["osmExtract"]>;
 
@@ -14,10 +16,15 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 /** How long ago the extract's data was current, coarsely: hours within two days, else days. */
-export function extractAge(timestamp: string, now: number): string {
+export function extractAge(
+  timestamp: string,
+  now: number,
+  locale: string,
+  t: AdminTranslator,
+): string {
   const elapsed = Math.max(0, now - Date.parse(timestamp));
-  const format = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-  if (elapsed < HOUR_MS) return "less than an hour ago";
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  if (elapsed < HOUR_MS) return t("extractAgeUnderAnHour");
   if (elapsed < 2 * DAY_MS) return format.format(-Math.floor(elapsed / HOUR_MS), "hour");
   return format.format(-Math.floor(elapsed / DAY_MS), "day");
 }
@@ -44,14 +51,16 @@ export function OsmExtractDetails({
   extract: OsmExtract | undefined;
   now?: number;
 }) {
+  const t = useTranslations("adminServices");
+  const locale = useLocale();
   if (!extract) {
     return (
       <Box>
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          Data as of
+          {t("dataAsOf")}
         </Typography>
         <Typography variant="body2" sx={{ color: "text.secondary" }}>
-          Unknown: the file records no replication time
+          {t("unknownTheFileRecordsNo")}
         </Typography>
       </Box>
     );
@@ -61,14 +70,14 @@ export function OsmExtractDetails({
     <>
       <Box>
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          Data as of
+          {t("dataAsOf")}
         </Typography>
         <Typography variant="body2">
-          {formatDate(extract.timestamp)} ({extractAge(extract.timestamp, now)})
+          {formatDate(extract.timestamp)} ({extractAge(extract.timestamp, now, locale, t)})
         </Typography>
         {stale && (
           <Chip
-            label={`Older than ${STALE_EXTRACT_DAYS} days`}
+            label={t("olderThanStaleExtractDays", { STALE_EXTRACT_DAYS })}
             color="warning"
             size="small"
             sx={{ mt: 0.5 }}
@@ -78,7 +87,7 @@ export function OsmExtractDetails({
       {extract.replicationUrl && (
         <Box>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            Update feed (for NOMINATIM_REPLICATION_URL)
+            {t("updateFeedForNominatimReplication")}
           </Typography>
           <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
             {extract.replicationUrl}

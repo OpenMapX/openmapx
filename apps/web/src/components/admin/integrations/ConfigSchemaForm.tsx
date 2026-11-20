@@ -5,6 +5,7 @@ import type {
   ConfigurationOwnership,
 } from "@openmapx/core/api-contracts";
 import { useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
@@ -36,6 +37,7 @@ export function ConfigSchemaForm({
   ownership,
   onSaved,
 }: ConfigSchemaFormProps) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client, integrationId);
 
@@ -60,7 +62,7 @@ export function ConfigSchemaForm({
       onSave={async (diff) => {
         await saveMutation.mutateAsync(diff);
       }}
-      emptyMessage="No editable configuration fields. Only secrets and the enabled toggle are available for this integration."
+      emptyMessage={t("noEditableConfigurationFieldsOnly")}
     />
   );
 }

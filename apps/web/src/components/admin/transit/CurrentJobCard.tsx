@@ -14,6 +14,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
@@ -45,6 +46,7 @@ function SummaryMetric({ label, children }: { label: string; children: ReactNode
 }
 
 function RunningJobDetail({ jobId }: { jobId: string }) {
+  const t = useTranslations("adminTransit");
   const { data, isLoading } = useTransitJobDetail(jobId);
 
   if (isLoading) {
@@ -77,16 +79,20 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
         }}
       >
         <Chip
-          label={`Job ${jobId.slice(0, 8)}`}
+          label={t("jobJobid", { jobId: jobId.slice(0, 8) })}
           size="small"
           variant="outlined"
           sx={{ fontFamily: "monospace" }}
         />
-        <Chip label={`${stages.length} stage(s) recorded`} size="small" variant="outlined" />
+        <Chip
+          label={t("lengthStageSRecorded", { length: stages.length })}
+          size="small"
+          variant="outlined"
+        />
         {latest && (
           <JobStatusChip
             status={latest.status}
-            label={`stage: ${latest.stage} (${latest.status})`}
+            label={t("stageStageStatus", { stage: latest.stage, status: latest.status })}
             variant="filled"
           />
         )}
@@ -96,6 +102,7 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 }
 
 export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
+  const t = useTranslations("adminTransit");
   const showToast = useAdminToast();
   const [syncReview, setSyncReview] = useState(false);
   const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
@@ -109,10 +116,10 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
 
   const onRestart = () => {
     restartMutation.mutate(undefined, {
-      onSuccess: () => showToast("MOTIS restart triggered", "success"),
+      onSuccess: () => showToast(t("motisRestartTriggered"), "success"),
       onError: (err) =>
         showToast(
-          adminErrorMessage(err, err instanceof Error ? err.message : "Failed to restart MOTIS"),
+          adminErrorMessage(err, err instanceof Error ? err.message : t("failedToRestartMotis")),
           "error",
         ),
     });
@@ -127,7 +134,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           onQueued={(jobId) => {
             setQueuedJobId(jobId);
             setSyncReview(false);
-            showToast(`Sync queued (${jobId.slice(0, 8)}…)`, "success");
+            showToast(t("syncQueuedJobid", { jobId: jobId.slice(0, 8) }), "success");
             void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
           }}
         />
@@ -152,7 +159,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             fontWeight: 700,
           }}
         >
-          {inflight ? "Sync in progress" : "Pipeline idle"}
+          {inflight ? t("syncInProgress") : t("pipelineIdle")}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {!inflight && (
@@ -164,7 +171,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               onClick={onRestart}
               disabled={restartMutation.isPending}
             >
-              Restart MOTIS
+              {t("restartMotis")}
             </Button>
             <Button
               size="small"
@@ -173,7 +180,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               onClick={onSync}
               disabled={syncReview}
             >
-              Run sync now
+              {t("runSyncNow")}
             </Button>
           </Stack>
         )}
@@ -186,8 +193,10 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               color: "text.secondary",
             }}
           >
-            Started {formatTransitAdminTimestamp(inflight.startedAt)} ·{" "}
-            {durationSecs(inflight.startedAt)}s elapsed
+            {t("startedStartedatStartedat2SElapsed", {
+              startedAt: formatTransitAdminTimestamp(inflight.startedAt),
+              startedAt2: durationSecs(inflight.startedAt),
+            })}
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />
         </Stack>
@@ -200,13 +209,13 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             flexWrap: "wrap",
           }}
         >
-          <SummaryMetric label="Last sync">
+          <SummaryMetric label={t("lastSync")}>
             <Typography variant="body2">{formatTransitAdminTimestamp(state.lastSyncAt)}</Typography>
           </SummaryMetric>
-          <SummaryMetric label="Last status">
+          <SummaryMetric label={t("lastStatus")}>
             <JobStatusChip status={state.lastSyncStatus} />
           </SummaryMetric>
-          <SummaryMetric label="Total feeds tracked">
+          <SummaryMetric label={t("totalFeedsTracked")}>
             <Typography variant="body2">{state.feedCount}</Typography>
           </SummaryMetric>
         </Stack>
@@ -214,7 +223,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
       {queuedJobId && <AdminJobLink id={queuedJobId} source="data-manager" />}
       {state.lastSyncStatus === "failed" && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          Last sync run failed. Inspect the job detail below for the failing stage.
+          {t("lastSyncRunFailedInspect")}
         </Alert>
       )}
     </Paper>

@@ -3,6 +3,7 @@
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 
 interface Actor {
   id: string;
@@ -22,7 +23,9 @@ interface ActorCellProps {
  * a source-specific fallback label when the action came from automation or
  * another internal subsystem.
  */
-export function ActorCell({ actorId, actor, fallbackLabel = "System" }: ActorCellProps) {
+export function ActorCell({ actorId, actor, fallbackLabel: fallback }: ActorCellProps) {
+  const t = useTranslations("adminActivity");
+  const fallbackLabel = fallback ?? t("system");
   if (!actorId) {
     return (
       <Typography
@@ -66,7 +69,7 @@ export function ActorCell({ actorId, actor, fallbackLabel = "System" }: ActorCel
 
   // User row no longer exists — show truncated id with a hint.
   return (
-    <Tooltip title={`${actorId} (user no longer exists)`}>
+    <Tooltip title={t("actoridUserNoLongerExists", { actorId })}>
       <Typography
         variant="caption"
         sx={{

@@ -24,6 +24,7 @@ import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import type { AdminNavigationAccess } from "@/lib/admin/adminNavigation";
 import { buildAdminSearchEntries, searchAdminEntries } from "@/lib/admin/adminSearch";
+import { useSettingText } from "@/lib/admin/useSettingText";
 import { useActivityClient } from "./activity/activityQueries";
 
 export function AdminSearch({
@@ -40,6 +41,8 @@ export function AdminSearch({
         authority.owner.actorId === actorId &&
         authority.owner.apiUrl === apiUrl));
   const t = useTranslations("adminNavigation");
+  const ts = useTranslations("adminShared");
+  const settingText = useSettingText();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -122,17 +125,43 @@ export function AdminSearch({
   });
   const entries = useMemo(
     () =>
-      buildAdminSearchEntries({ role, selfHosted }, metadata.data).map((entry) =>
-        entry.id.includes(":") ||
-        ["email-smtp", "transit-sources", "backup-retention", "release-selector"].includes(entry.id)
-          ? entry
-          : {
-              ...entry,
-              title: t(`destinations.${entry.id}.label`),
-              description: t(`destinations.${entry.id}.description`),
-            },
-      ),
-    [role, selfHosted, metadata.data, t],
+      buildAdminSearchEntries(
+        { role, selfHosted },
+        metadata.data && {
+          ...metadata.data,
+          settings: metadata.data.settings.map((setting) => ({
+            ...setting,
+            ...settingText(setting),
+          })),
+        },
+      ).map((entry) => {
+        if (entry.id.startsWith("integration:"))
+          return { ...entry, description: ts("searchIntegration") };
+        if (entry.id.startsWith("service:")) return { ...entry, description: ts("searchService") };
+        if (entry.id === "email-smtp")
+          return { ...entry, description: ts("searchEmailSmtpDescription") };
+        if (entry.id === "transit-sources")
+          return { ...entry, description: ts("searchTransitSourcesDescription") };
+        if (entry.id === "backup-retention")
+          return {
+            ...entry,
+            title: ts("searchBackupRetention"),
+            description: ts("searchBackupRetentionDescription"),
+          };
+        if (entry.id === "release-selector")
+          return {
+            ...entry,
+            title: ts("searchReleaseChannel"),
+            description: ts("searchReleaseChannelDescription"),
+          };
+        if (entry.id.includes(":")) return entry;
+        return {
+          ...entry,
+          title: t(`destinations.${entry.id}.label`),
+          description: t(`destinations.${entry.id}.description`),
+        };
+      }),
+    [role, selfHosted, metadata.data, t, ts, settingText],
   );
   const results = searchAdminEntries(entries, query);
   useEffect(() => {

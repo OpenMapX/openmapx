@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { AccountProvisioningResult, AdminReauthProofRef } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import {
@@ -21,13 +22,6 @@ import { AccountMailStatus } from "./AccountMailStatus";
 import { AdminReauthenticationDialog } from "./AdminReauthenticationDialog";
 
 type User = { id: string; name: string; email: string; emailVerified: boolean };
-const labels: Record<AccountRecoveryAction, string> = {
-  invitation: "Send invitation",
-  "verification-email": "Send verification email",
-  verify: "Verify email manually",
-  "reset-password": "Send password reset",
-  password: "Set temporary password",
-};
 export function AccountRecoveryActions({ user }: { user: User }) {
   const scope = useAccountAdmin();
   return (
@@ -38,6 +32,14 @@ export function AccountRecoveryActions({ user }: { user: User }) {
   );
 }
 function RecoveryForm({ user }: { user: User }) {
+  const t = useTranslations("adminUsers");
+  const labels: Record<AccountRecoveryAction, string> = {
+    invitation: t("recoveryInvitation"),
+    "verification-email": t("recoveryVerificationEmail"),
+    verify: t("recoveryVerify"),
+    "reset-password": t("recoveryResetPassword"),
+    password: t("recoveryPassword"),
+  };
   const [action, setAction] = useState<AccountRecoveryAction | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [reason, setReason] = useState(""),
@@ -85,14 +87,9 @@ function RecoveryForm({ user }: { user: User }) {
     };
   return (
     <Stack id="account-recovery" sx={{ gap: 2 }}>
-      <Typography variant="h6">Account recovery</Typography>
-      <Typography variant="body2">
-        Password setup does not verify an email address. Verify identity separately before assisted
-        verification. Each action requires a fresh administrator sign-in.
-      </Typography>
-      {success && (
-        <Alert severity="success">Account action completed. Check mail status separately.</Alert>
-      )}
+      <Typography variant="h6">{t("accountRecovery")}</Typography>
+      <Typography variant="body2">{t("passwordSetupDoesNotVerify")}</Typography>
+      {success && <Alert severity="success">{t("accountActionCompletedCheckMail")}</Alert>}
       <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
         {(Object.keys(labels) as AccountRecoveryAction[]).map((value) => (
           <Button
@@ -118,26 +115,20 @@ function RecoveryForm({ user }: { user: User }) {
       </Stack>
       <AccountMailStatus userId={user.id} />
       <Dialog open={!!action && !reauth} onClose={close} maxWidth="xs" fullWidth>
-        <DialogTitle>{action ? labels[action] : "Account recovery"}</DialogTitle>
+        <DialogTitle>{action ? labels[action] : t("accountRecovery")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
             <Typography>
               {user.name} — {user.email}
             </Typography>
             {action === "verify" && (
-              <Alert severity="warning">
-                This bypasses email-link verification. Confirm the person’s identity and current
-                address outside this flow.
-              </Alert>
+              <Alert severity="warning">{t("thisBypassesEmailLinkVerification")}</Alert>
             )}
             {action === "password" && (
               <>
-                <Alert severity="warning">
-                  Existing sessions and reset links will be revoked. Share the temporary password
-                  through a secure channel. Email verification stays unchanged.
-                </Alert>
+                <Alert severity="warning">{t("existingSessionsAndResetLinks")}</Alert>
                 <TextField
-                  label="Temporary password"
+                  label={t("temporaryPassword")}
                   type="password"
                   autoComplete="new-password"
                   value={password}
@@ -150,16 +141,18 @@ function RecoveryForm({ user }: { user: User }) {
             {needsReason && (
               <TextField
                 select
-                label="Reason"
+                label={t("reason")}
                 value={reason}
                 onChange={(e) => edit(() => setReason(e.target.value))}
                 disabled={mutation.isPending}
                 slotProps={{ select: { native: true } }}
               >
-                <option value="">Select a reason</option>
-                <option value="identity_verified_out_of_band">Identity verified out of band</option>
-                <option value="account_recovery">Account recovery</option>
-                <option value="operator_request">Operator request</option>
+                <option value="">{t("selectAReason")}</option>
+                <option value="identity_verified_out_of_band">
+                  {t("identityVerifiedOutOfBand")}
+                </option>
+                <option value="account_recovery">{t("accountRecovery")}</option>
+                <option value="operator_request">{t("operatorRequest")}</option>
               </TextField>
             )}
             <FormControlLabel
@@ -170,15 +163,15 @@ function RecoveryForm({ user }: { user: User }) {
                   disabled={mutation.isPending}
                 />
               }
-              label={`I confirm this action for ${user.email}`}
+              label={t("iConfirmThisActionFor", { email: user.email })}
             />
             {mutation.error && <Alert severity="error">{mutation.error.message}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={close}>Cancel</Button>
+          <Button onClick={close}>{t("cancel")}</Button>
           <Button disabled={!valid || mutation.isPending} onClick={() => setReauth(true)}>
-            Confirm administrator sign-in
+            {t("confirmAdministratorSignIn")}
           </Button>
         </DialogActions>
       </Dialog>

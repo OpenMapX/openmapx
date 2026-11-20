@@ -8,6 +8,8 @@ import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceLogsDrawer, ServiceLogsPanel } from "./ServiceLogsDrawer";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "http://admin.test";
 const toast = vi.fn();
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));

@@ -8,6 +8,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import {
   CartesianGrid,
@@ -44,6 +45,7 @@ function HealthTooltip({
   payload?: Array<{ payload: HealthBucket }>;
   hours: HoursWindow;
 }) {
+  const t = useTranslations("adminIntegrations");
   if (!active || !payload?.[0]) return null;
   const bucket = payload[0].payload;
   const responseTime = bucket.avgResponseTime != null ? `${bucket.avgResponseTime} ms` : "—";
@@ -64,13 +66,13 @@ function HealthTooltip({
         {formatBucketLabel(bucket.hour, hours)}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Uptime: {bucket.uptimePercent}%
+        {t("uptimeUptimepercent", { uptimePercent: bucket.uptimePercent })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Avg response: {responseTime}
+        {t("avgResponseResponsetime", { responseTime })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Checks: {bucket.healthy}/{bucket.total}
+        {t("checksHealthyTotal", { healthy: bucket.healthy, total: bucket.total })}
       </Typography>
     </Box>
   );
@@ -81,6 +83,7 @@ interface HealthHistoryChartProps {
 }
 
 export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const [hours, setHours] = useState<HoursWindow>(24);
 
@@ -94,7 +97,7 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
         sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
       >
         <Typography variant="subtitle2" sx={{ color: "text.secondary" }}>
-          Uptime over time
+          {t("uptimeOverTime")}
         </Typography>
         <ToggleButtonGroup
           size="small"
@@ -103,23 +106,23 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
           onChange={(_, value: HoursWindow | null) => {
             if (value != null) setHours(value);
           }}
-          aria-label="Health history time window"
+          aria-label={t("healthHistoryTimeWindow")}
         >
-          <ToggleButton value={24} aria-label="Last 24 hours">
-            24h
+          <ToggleButton value={24} aria-label={t("last24Hours")}>
+            {t("window24h")}
           </ToggleButton>
-          <ToggleButton value={168} aria-label="Last 7 days">
-            7d
+          <ToggleButton value={168} aria-label={t("last7Days")}>
+            {t("window7d")}
           </ToggleButton>
         </ToggleButtonGroup>
       </Stack>
       {isError ? (
-        <Alert severity="error">Failed to load health history</Alert>
+        <Alert severity="error">{t("failedToLoadHealthHistory")}</Alert>
       ) : isLoading ? (
         <Skeleton variant="rounded" height={220} />
       ) : buckets.length === 0 ? (
         <Typography variant="body2" sx={{ color: "text.secondary", py: 4, textAlign: "center" }}>
-          No health history yet
+          {t("noHealthHistoryYet")}
         </Typography>
       ) : (
         <Box sx={{ width: "100%", height: 220, minWidth: 0 }}>

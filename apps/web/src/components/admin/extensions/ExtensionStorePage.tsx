@@ -44,6 +44,7 @@ import type {
   AdminExtensionInstallRequest,
   AdminExtensionSecurityRating,
 } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import Dialog from "@/components/ui/Dialog";
@@ -73,21 +74,23 @@ import { StandaloneIntegrationsPanel } from "./StandaloneIntegrationsPanel";
 type Trust = AdminExtensionInstallPreview["sourceTrust"];
 
 function TrustChip({ trust }: { trust?: Trust }) {
+  const t = useTranslations("adminExtensions");
   if (trust === "built-in")
-    return <Chip size="small" label="Built-in" color="default" variant="outlined" />;
+    return <Chip size="small" label={t("builtIn")} color="default" variant="outlined" />;
   if (trust === "verified")
-    return <Chip size="small" icon={<VerifiedIcon />} label="Verified" color="success" />;
-  return <Chip size="small" label="Community" color="warning" variant="outlined" />;
+    return <Chip size="small" icon={<VerifiedIcon />} label={t("verified")} color="success" />;
+  return <Chip size="small" label={t("community")} color="warning" variant="outlined" />;
 }
 
 function ComponentChips({ services, integrations }: { services: number; integrations: number }) {
+  const t = useTranslations("adminExtensions");
   return (
     <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
       {services > 0 && (
         <Chip
           size="small"
           icon={<ServicesIcon />}
-          label={`${services} service${services > 1 ? "s" : ""}`}
+          label={t("servicesCount", { services })}
           variant="outlined"
         />
       )}
@@ -95,7 +98,7 @@ function ComponentChips({ services, integrations }: { services: number; integrat
         <Chip
           size="small"
           icon={<ExtensionIcon />}
-          label={`${integrations} integration${integrations > 1 ? "s" : ""}`}
+          label={t("integrationsCount", { integrations })}
           variant="outlined"
         />
       )}
@@ -110,12 +113,13 @@ function ratingColor(score: number): "success" | "warning" | "error" {
 }
 
 function SecurityChip({ rating }: { rating: AdminExtensionSecurityRating }) {
+  const t = useTranslations("adminExtensions");
   return (
-    <Tooltip title={rating.factors.join(" · ") || "No special privileges"}>
+    <Tooltip title={rating.factors.join(" · ") || t("noSpecialPrivileges")}>
       <Chip
         size="small"
         icon={<SecurityIcon />}
-        label={`Security ${rating.score}/8`}
+        label={t("securityScore8", { score: rating.score })}
         color={ratingColor(rating.score)}
         variant="outlined"
       />
@@ -143,13 +147,14 @@ function ExtensionSecurityPreviewDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const t = useTranslations("adminExtensions");
   const hostPorts = preview?.services.flatMap((service) =>
     service.hostPorts.map((port) => ({ service: service.name, port })),
   );
 
   return (
     <Dialog open={preview !== null} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Review extension security</DialogTitle>
+      <DialogTitle>{t("reviewExtensionSecurity")}</DialogTitle>
       <DialogContent>
         {preview && (
           <Stack sx={{ gap: 2, mt: 0.5 }}>
@@ -158,14 +163,13 @@ function ExtensionSecurityPreviewDialog({
                 {preview.extension.name} v{preview.extension.version}
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                This preview is bound to the resolved manifest and exact repository commits.
+                {t("thisPreviewIsBoundTo")}
               </Typography>
             </Box>
 
             {hostPorts && hostPorts.length > 0 ? (
               <Alert severity="warning">
-                This extension publishes host ports. Confirm these effective bindings before the
-                service starts:
+                {t("thisExtensionPublishesHostPorts")}
                 <Box component="ul" sx={{ mb: 0, pl: 2.5 }}>
                   {hostPorts.map(({ service, port }) => (
                     <li
@@ -177,13 +181,11 @@ function ExtensionSecurityPreviewDialog({
                 </Box>
               </Alert>
             ) : (
-              <Alert severity="success">No host ports will be published.</Alert>
+              <Alert severity="success">{t("noHostPortsWillBe")}</Alert>
             )}
 
             {preview.services.length === 0 ? (
-              <Typography variant="body2">
-                This extension contains no service containers.
-              </Typography>
+              <Typography variant="body2">{t("thisExtensionContainsNoService")}</Typography>
             ) : (
               preview.services.map((service) => (
                 <Paper key={service.id} variant="outlined" sx={{ p: 1.5 }}>
@@ -197,19 +199,22 @@ function ExtensionSecurityPreviewDialog({
                     variant="caption"
                     sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
                   >
-                    Commit {service.repositoryCommit}
+                    {t("commitRepositorycommit", { repositoryCommit: service.repositoryCommit })}
                   </Typography>
                   <Typography variant="body2">
-                    Built-in required: {service.securityRating.requiresBuiltIn ? "yes" : "no"}; host
-                    ports: {service.securityRating.hostPorts}; secrets:{" "}
-                    {service.securityRating.secretCount}
+                    {t("builtInRequired")}
+                    {service.securityRating.requiresBuiltIn ? "yes" : "no"}
+                    {t("hostPortsHostportsSecretsSecretcount", {
+                      hostPorts: service.securityRating.hostPorts,
+                      secretCount: service.securityRating.secretCount,
+                    })}
                   </Typography>
                   <Typography variant="body2">
-                    Deployment variables:{" "}
+                    {t("deploymentVariables")}
                     {service.securityRating.deploymentVariables.join(", ") || "none"}
                   </Typography>
                   <Typography variant="body2">
-                    {service.securityRating.factors.join(" · ") || "No special privileges"}
+                    {service.securityRating.factors.join(" · ") || t("noSpecialPrivileges")}
                   </Typography>
                 </Paper>
               ))
@@ -219,14 +224,14 @@ function ExtensionSecurityPreviewDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>
-          Cancel
+          {t("cancel")}
         </Button>
         <Button variant="contained" color="warning" onClick={onConfirm} disabled={busy}>
           {preview?.requiresHostPortConfirmation
-            ? `Confirm ports and ${action}`
+            ? t("confirmPortsAndAction", { action })
             : action === "update"
-              ? "Update extension"
-              : "Install extension"}
+              ? t("updateExtension")
+              : t("installExtension")}
         </Button>
       </DialogActions>
     </Dialog>
@@ -251,6 +256,7 @@ function useExtensionUiSession() {
 }
 
 function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
+  const t = useTranslations("adminExtensions");
   const ui = useExtensionUiSession();
   const preview = usePreviewExtensionInstall(ui.binding);
   const install = useInstallExtension(ui.binding);
@@ -290,11 +296,11 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
       const result = await preview.mutateAsync(request);
       if (!current()) return;
       if (request.id && result.extension.id !== request.id)
-        throw new Error("The preview does not match the selected extension");
+        throw new Error(t("thePreviewDoesNotMatch"));
       setBundle(Object.freeze({ request, preview: result, owner: ui.owner, action, current }));
     } catch (error) {
       if (current())
-        showToast(error instanceof Error ? error.message : "Extension preview failed", "error");
+        showToast(error instanceof Error ? error.message : t("extensionPreviewFailed"), "error");
     } finally {
       if (current()) setPreparing(false);
     }
@@ -307,7 +313,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
     setBusy(true);
     try {
       if (captured.action === "update") {
-        if (!captured.request.id) throw new Error("No extension selected for update");
+        if (!captured.request.id) throw new Error(t("noExtensionSelectedForUpdate"));
         await update.mutateAsync({
           id: captured.request.id,
           hostPortConfirmation: captured.preview.confirmation,
@@ -320,14 +326,17 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
       }
       if (!captured.current()) return;
       showToast(
-        `${captured.action === "update" ? "Update" : "Install"} queued for ${captured.preview.extension.name}. Check Activity for completion.`,
+        t("valueQueuedForNameCheck", {
+          value: captured.action === "update" ? "Update" : "Install",
+          name: captured.preview.extension.name,
+        }),
         "info",
       );
       retire();
       onAccepted?.();
     } catch (error) {
       if (captured.current())
-        showToast(error instanceof Error ? error.message : "Extension request failed", "error");
+        showToast(error instanceof Error ? error.message : t("extensionRequestFailed"), "error");
     } finally {
       executing.current = false;
       if (captured.current()) setBusy(false);
@@ -345,6 +354,7 @@ function useExtensionPreview(action: "install" | "update", snapshot: unknown) {
 }
 
 function BrowseTab() {
+  const t = useTranslations("adminExtensions");
   const showToast = useAdminToast();
   const [q, setQ] = useState("");
   const [trust, setTrust] = useState("");
@@ -374,36 +384,36 @@ function BrowseTab() {
               flow.retire();
               setQ(value);
             }}
-            placeholder="Search extensions…"
+            placeholder={t("searchExtensions")}
           />
           <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Trust</InputLabel>
+            <InputLabel>{t("trust")}</InputLabel>
             <Select
-              label="Trust"
+              label={t("trust")}
               value={trust}
               onChange={(e) => {
                 flow.retire();
                 setTrust(e.target.value);
               }}
             >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="verified">Verified</MenuItem>
-              <MenuItem value="community">Community</MenuItem>
+              <MenuItem value="">{t("all")}</MenuItem>
+              <MenuItem value="verified">{t("verified")}</MenuItem>
+              <MenuItem value="community">{t("community")}</MenuItem>
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel>{t("type")}</InputLabel>
             <Select
-              label="Type"
+              label={t("type")}
               value={type}
               onChange={(e) => {
                 flow.retire();
                 setType(e.target.value);
               }}
             >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="service">Services</MenuItem>
-              <MenuItem value="integration">Integrations</MenuItem>
+              <MenuItem value="">{t("all")}</MenuItem>
+              <MenuItem value="service">{t("services")}</MenuItem>
+              <MenuItem value="integration">{t("integrations")}</MenuItem>
             </Select>
           </FormControl>
           <Box sx={{ flexGrow: 1 }} />
@@ -416,9 +426,9 @@ function BrowseTab() {
             }}
             variant="outlined"
           >
-            Install from URL
+            {t("installFromUrl")}
           </Button>
-          <Tooltip title="Refresh catalog">
+          <Tooltip title={t("refreshCatalog")}>
             <IconButton
               size="small"
               onClick={() => {
@@ -426,7 +436,8 @@ function BrowseTab() {
                 const current = flow.capture();
                 void refresh.mutateAsync().then(
                   (r) => {
-                    if (current()) showToast(`Catalog refreshed (${r.entries} entries)`);
+                    if (current())
+                      showToast(t("catalogRefreshedEntriesEntries", { entries: r.entries }));
                   },
                   (error) => {
                     if (current()) showToast(error.message, "error");
@@ -450,16 +461,14 @@ function BrowseTab() {
           <CircularProgress />
         </Box>
       )}
-      {isError && <Alert severity="error">Failed to load the extension catalog.</Alert>}
+      {isError && <Alert severity="error">{t("failedToLoadTheExtension")}</Alert>}
       {data?.revocationDataStale && (
-        <Alert severity="warning">
-          Revocation data is stale. Current trust does not establish a fresh security check.
-        </Alert>
+        <Alert severity="warning">{t("revocationDataIsStaleCurrent")}</Alert>
       )}
       {!isLoading && !isError && entries.length === 0 && (
         <Alert severity="info" variant="outlined">
-          No extensions found. Add a catalog source under the Sources tab, or install directly from
-          an <code>extension.json</code> URL.
+          {t("noExtensionsFoundAddA")}
+          <code>{t("extensionJson")}</code> {t("url")}
         </Alert>
       )}
 
@@ -476,14 +485,14 @@ function BrowseTab() {
                     {e.name}
                   </Typography>
                   {e.featured && (
-                    <Tooltip title="Featured">
+                    <Tooltip title={t("featured")}>
                       <StarIcon fontSize="small" color="warning" />
                     </Tooltip>
                   )}
                   <TrustChip trust={e.trust} />
                 </Stack>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {[e.version ? `v${e.version}` : "Version unknown", e.author]
+                  {[e.version ? `v${e.version}` : t("versionUnknown"), e.author]
                     .filter(Boolean)
                     .join(" · ")}
                 </Typography>
@@ -496,24 +505,32 @@ function BrowseTab() {
                   services={e.components.services}
                   integrations={e.components.integrations}
                 />
-                {e.status === "revoked" && <Alert severity="error">Revoked</Alert>}
+                {e.status === "revoked" && <Alert severity="error">{t("revoked")}</Alert>}
                 {e.status === "stale-revocation-data" && (
-                  <Alert severity="warning">Security status: stale revocation data</Alert>
+                  <Alert severity="warning">{t("securityStatusStaleRevocationData")}</Alert>
                 )}
-                {e.removed && <Alert severity="error">Delisted: {e.removed}</Alert>}
+                {e.removed && (
+                  <Alert severity="error">{t("delistedRemoved", { removed: e.removed })}</Alert>
+                )}
                 {e.critical && (
-                  <Alert severity="error">Security advisory: {e.critical.reason}</Alert>
+                  <Alert severity="error">
+                    {t("securityAdvisoryReason", { reason: e.critical.reason })}
+                  </Alert>
                 )}
                 {!e.compatible && (
                   <Alert severity="warning">
-                    Requires platform ≥ {e.minPlatform} (this is {e.platformVersion})
+                    {t("requiresPlatformMinplatformThisIs", {
+                      minPlatform: e.minPlatform ?? "",
+                      platformVersion: e.platformVersion,
+                    })}
                   </Alert>
                 )}
                 <Box sx={{ flexGrow: 1 }} />
                 <Box>
                   {e.installed ? (
                     <Button size="small" disabled variant="outlined" fullWidth>
-                      Installed{e.hasUpdate ? " · update available" : ""}
+                      {t("installed")}
+                      {e.hasUpdate ? t("updateAvailable") : ""}
                     </Button>
                   ) : (
                     <Button
@@ -525,7 +542,7 @@ function BrowseTab() {
                       }
                       onClick={() => doInstall(e)}
                     >
-                      Install
+                      {t("install")}
                     </Button>
                   )}
                 </Box>
@@ -536,26 +553,26 @@ function BrowseTab() {
       </Grid>
 
       <Dialog open={manifestOpen && !flow.preview} onClose={closeManifest} fullWidth maxWidth="sm">
-        <DialogTitle>Install from extension.json URL</DialogTitle>
+        <DialogTitle>{t("installFromExtensionJsonUrl")}</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Direct installs are treated as <strong>community</strong> (unreviewed). Only install
-            from sources you trust.
+            {t("directInstallsAreTreatedAs")}
+            <strong>{t("community2")}</strong> {t("unreviewedOnlyInstallFromSources")}
           </Alert>
           <TextField
             autoFocus
             fullWidth
-            label="extension.json URL"
+            label={t("extensionJsonUrl")}
             value={manifestUrl}
             onChange={(e) => {
               flow.retire();
               setManifestUrl(e.target.value);
             }}
-            placeholder="https://…/extension.json"
+            placeholder={t("httpsExtensionJson")}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeManifest}>Cancel</Button>
+          <Button onClick={closeManifest}>{t("cancel")}</Button>
           <Button
             variant="contained"
             disabled={!manifestUrl.trim() || flow.preparing}
@@ -563,7 +580,7 @@ function BrowseTab() {
               void flow.start({ manifestUrl: manifestUrl.trim() });
             }}
           >
-            Review security
+            {t("reviewSecurity")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -585,6 +602,7 @@ function BrowseTab() {
 }
 
 function InstalledTab() {
+  const t = useTranslations("adminExtensions");
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useInstalledExtensions();
   const flow = useExtensionPreview("update", isError ? null : data);
@@ -598,11 +616,12 @@ function InstalledTab() {
         <CircularProgress />
       </Box>
     );
-  if (isError && !data) return <Alert severity="error">Failed to load installed extensions.</Alert>;
+  if (isError && !data)
+    return <Alert severity="error">{t("failedToLoadInstalledExtensions")}</Alert>;
   if (!isError && rows.length === 0)
     return (
       <Alert severity="info" variant="outlined">
-        No extensions installed yet. Browse the catalog to add one.
+        {t("noExtensionsInstalledYetBrowse")}
       </Alert>
     );
 
@@ -610,8 +629,7 @@ function InstalledTab() {
     <>
       {isError && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Failed to refresh installed extensions. Showing last loaded installed extensions; update
-          status is unavailable. Removal remains available.
+          {t("failedToRefreshInstalledExtensions")}
         </Alert>
       )}
       <AdminTableSurface
@@ -621,11 +639,11 @@ function InstalledTab() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Extension</TableCell>
-                <TableCell>Trust</TableCell>
-                <TableCell>Version</TableCell>
-                <TableCell>Components</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{t("extension")}</TableCell>
+                <TableCell>{t("trust")}</TableCell>
+                <TableCell>{t("version2")}</TableCell>
+                <TableCell>{t("components")}</TableCell>
+                <TableCell align="right">{t("actions")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -646,14 +664,14 @@ function InstalledTab() {
                     {ext.installedVersion}
                     {(isError || ext.hasUpdate === null) && (
                       <Typography variant="caption" component="div" color="text.secondary">
-                        Update status unavailable
+                        {t("updateStatusUnavailable")}
                       </Typography>
                     )}
                     {!isError && ext.hasUpdate === true && (
                       <Chip
                         size="small"
                         color="info"
-                        label={`→ ${ext.latestVersion}`}
+                        label={t("latestversion", { latestVersion: ext.latestVersion ?? "" })}
                         sx={{ ml: 1 }}
                       />
                     )}
@@ -687,10 +705,10 @@ function InstalledTab() {
                             void flow.start({ id: ext.id });
                           }}
                         >
-                          Update
+                          {t("update")}
                         </Button>
                       )}
-                      <Tooltip title="Uninstall">
+                      <Tooltip title={t("uninstall")}>
                         <IconButton
                           size="small"
                           color="error"
@@ -699,17 +717,13 @@ function InstalledTab() {
                             if (remove.isPendingFor(ext.id)) return;
                             flow.retire();
                             const current = flow.capture();
-                            if (
-                              !confirm(
-                                `Uninstall ${ext.name}? This removes its services and integrations.`,
-                              )
-                            )
+                            if (!confirm(t("uninstallNameThisRemovesIts", { name: ext.name })))
                               return;
                             void remove.mutateAsync(ext.id).then(
                               () => {
                                 if (current())
                                   showToast(
-                                    `Removal queued for ${ext.name}. Check Activity for completion.`,
+                                    t("removalQueuedForNameCheck", { name: ext.name }),
                                     "info",
                                   );
                               },
@@ -744,6 +758,7 @@ function InstalledTab() {
 }
 
 function SourcesTab() {
+  const t = useTranslations("adminExtensions");
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useExtensionSources();
   const ui = useExtensionUiSession();
@@ -758,8 +773,8 @@ function SourcesTab() {
   return (
     <>
       <AdminTableSurface
-        title="Catalog sources"
-        description="Catalog indexes used to discover extensions; trust is evaluated per entry"
+        title={t("catalogSources")}
+        description={t("catalogIndexesUsedToDiscover")}
         toolbar={
           <Button
             size="small"
@@ -770,7 +785,7 @@ function SourcesTab() {
               setOpen(true);
             }}
           >
-            Add source
+            {t("addSource")}
           </Button>
         }
       >
@@ -779,16 +794,16 @@ function SourcesTab() {
             <CircularProgress />
           </Box>
         ) : isError ? (
-          <Alert severity="error">Failed to load extension sources.</Alert>
+          <Alert severity="error">{t("failedToLoadExtensionSources")}</Alert>
         ) : (
           <TableContainer>
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Label</TableCell>
-                  <TableCell>URL</TableCell>
-                  <TableCell>Trust</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t("label")}</TableCell>
+                  <TableCell>{t("url2")}</TableCell>
+                  <TableCell>{t("trust")}</TableCell>
+                  <TableCell align="right">{t("actions")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -798,14 +813,19 @@ function SourcesTab() {
                     <TableCell sx={{ wordBreak: "break-all" }}>{s.url}</TableCell>
                     <TableCell>
                       {s.isDefault ? (
-                        <Chip size="small" label="Default catalog" />
+                        <Chip size="small" label={t("defaultCatalog")} />
                       ) : (
-                        <Chip size="small" color="warning" variant="outlined" label="Community" />
+                        <Chip
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          label={t("community")}
+                        />
                       )}
                     </TableCell>
                     <TableCell align="right">
                       {!s.isDefault && (
-                        <Tooltip title="Remove source">
+                        <Tooltip title={t("removeSource")}>
                           <IconButton
                             size="small"
                             color="error"
@@ -815,7 +835,7 @@ function SourcesTab() {
                               const current = ui.capture();
                               void remove.mutateAsync(s.url).then(
                                 () => {
-                                  if (current()) showToast("Source removed");
+                                  if (current()) showToast(t("sourceRemoved"));
                                 },
                                 (error) => {
                                   if (current()) showToast(error.message, "error");
@@ -845,16 +865,16 @@ function SourcesTab() {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Add catalog source</DialogTitle>
+        <DialogTitle>{t("addCatalogSource")}</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Extensions from operator-added sources are surfaced as <strong>community</strong>
-            (unreviewed). Default catalog entries retain their individual trust and revocation
-            status.
+            {t("extensionsFromOperatorAddedSources")}
+            <strong>{t("community2")}</strong>
+            {t("unreviewedDefaultCatalogEntriesRetain")}
           </Alert>
           <Stack sx={{ gap: 2, mt: 1 }}>
             <TextField
-              label="Label"
+              label={t("label")}
               value={label}
               onChange={(e) => {
                 ui.retire();
@@ -863,13 +883,13 @@ function SourcesTab() {
               fullWidth
             />
             <TextField
-              label="Catalog URL (HTTPS)"
+              label={t("catalogUrlHttps")}
               value={url}
               onChange={(e) => {
                 ui.retire();
                 setUrl(e.target.value);
               }}
-              placeholder="https://…/catalog.json"
+              placeholder={t("httpsCatalogJson")}
               fullWidth
             />
           </Stack>
@@ -881,7 +901,7 @@ function SourcesTab() {
               setOpen(false);
             }}
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -895,7 +915,7 @@ function SourcesTab() {
                 .then(
                   () => {
                     if (!current()) return;
-                    showToast("Source added");
+                    showToast(t("sourceAdded"));
                     ui.retire();
                     setOpen(false);
                     setUrl("");
@@ -910,7 +930,7 @@ function SourcesTab() {
                 });
             }}
           >
-            Add
+            {t("add")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -919,21 +939,23 @@ function SourcesTab() {
 }
 
 function ExtensionStoreContent() {
+  const t = useTranslations("adminExtensions");
   const [tab, setTab] = useAdminTab(["browse", "installed", "sources", "local"]);
   return (
     <Stack sx={{ gap: 2 }}>
-      <AdminPageHeader
-        title="Extensions"
-        subtitle="Browse, install, and manage community extensions — integrations and services."
-      />
+      <AdminPageHeader title={t("extensions")} subtitle={t("browseInstallAndManageCommunity")} />
       <Box>
         <StandaloneInstallDialog />
       </Box>
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="Extension management">
-        <Tab id="extensions-tab-0" aria-controls="extensions-panel-0" label="Browse" />
-        <Tab id="extensions-tab-1" aria-controls="extensions-panel-1" label="Installed" />
-        <Tab id="extensions-tab-2" aria-controls="extensions-panel-2" label="Sources" />
-        <Tab id="extensions-tab-3" aria-controls="extensions-panel-3" label="Local integrations" />
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label={t("extensionManagement")}>
+        <Tab id="extensions-tab-0" aria-controls="extensions-panel-0" label={t("browse")} />
+        <Tab id="extensions-tab-1" aria-controls="extensions-panel-1" label={t("installed")} />
+        <Tab id="extensions-tab-2" aria-controls="extensions-panel-2" label={t("sources")} />
+        <Tab
+          id="extensions-tab-3"
+          aria-controls="extensions-panel-3"
+          label={t("localIntegrations")}
+        />
       </Tabs>
       <div role="tabpanel" id={`extensions-panel-${tab}`} aria-labelledby={`extensions-tab-${tab}`}>
         {tab === 0 && <BrowseTab />}

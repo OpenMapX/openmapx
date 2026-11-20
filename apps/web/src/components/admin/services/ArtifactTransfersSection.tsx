@@ -16,6 +16,7 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { ArtifactImportPreview, TransferStage } from "@openmapx/core/ops";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
@@ -36,6 +37,7 @@ export function ArtifactTransfersSection({ apiUrl }: { apiUrl: string }) {
   return <ArtifactTransfersView key={apiUrl} apiUrl={apiUrl} />;
 }
 function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminServices");
   const { client } = useActivityClient(),
     qc = useQueryClient(),
     register = useAdminJobRegistration();
@@ -78,7 +80,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
     register({ client, apiUrl, jobId, onSettled: refresh });
     if (owner.active) {
       setLastAcceptedJobId(jobId);
-      setMessage(`Queued ${label}. Track its result in Activity (${jobId}).`);
+      setMessage(t("queuedLabelTrackItsResult", { label, jobId }));
       void refresh();
     }
   };
@@ -90,9 +92,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
     } catch (failure) {
       if (owner.active)
         setError(
-          failure instanceof Error
-            ? failure.message
-            : "Artifact operation failed; inspect the retained stage before retrying.",
+          failure instanceof Error ? failure.message : t("artifactOperationFailedInspectThe"),
         );
     } finally {
       if (owner.active) setBusy(false);
@@ -125,7 +125,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         if (owner.active) {
           setFile(null);
           if (fileInput.current) fileInput.current.value = "";
-          setMessage("Uploaded. Validate the retained bundle before previewing an import.");
+          setMessage(t("uploadedValidateTheRetainedBundle"));
           void refresh();
         }
       } finally {
@@ -143,18 +143,13 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         });
         if (owner.active) {
           navigateAdminDocument(target.url, "download");
-          setMessage(
-            "Download handed to your browser. Use browser controls to monitor or cancel it.",
-          );
+          setMessage(t("downloadHandedToYourBrowser"));
         }
         return;
       } catch (failure) {
         if (!(failure instanceof ApiNativeDownloadUnavailableError)) throw failure;
       }
-      if (!artifactFileSinkSupported())
-        throw Error(
-          "This connection requires a browser with a file-save sink. Reconnect through the same-origin admin panel or use the CLI.",
-        );
+      if (!artifactFileSinkSupported()) throw Error(t("thisConnectionRequiresABrowser"));
       if (!owner.active) return;
       const controller = new AbortController();
       byteRequest.current = { owner, controller };
@@ -171,7 +166,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           sink,
           signal: controller.signal,
         });
-        if (owner.active) setMessage("Download saved.");
+        if (owner.active) setMessage(t("downloadSaved"));
       } finally {
         if (byteRequest.current?.controller === controller) byteRequest.current = null;
         if (owner.active) setCanCancel(false);
@@ -181,25 +176,21 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5, minWidth: 0 }}>
       <Stack spacing={2}>
-        <Typography variant="h6">Prepared artifact transfers</Typography>
-        <Typography variant="body2">
-          Move prepared data between instances with matching runtime images. Consumers must be
-          stopped. Import never starts them.
-        </Typography>
+        <Typography variant="h6">{t("preparedArtifactTransfers")}</Typography>
+        <Typography variant="body2">{t("movePreparedDataBetweenInstances")}</Typography>
         {capabilities.data && (
           <Typography variant="body2">
-            Upload limit {formatBytes(capabilities.data.limits.maxUploadBytes)} · Expanded limit{" "}
-            {formatBytes(capabilities.data.limits.maxExpandedBytes)} · Free space{" "}
+            {t("uploadLimitMaxuploadbytesExpandedLimit", {
+              maxUploadBytes: formatBytes(capabilities.data.limits.maxUploadBytes),
+              maxExpandedBytes: formatBytes(capabilities.data.limits.maxExpandedBytes),
+            })}
             {capabilities.data.freeBytes === null
               ? "unavailable"
               : formatBytes(capabilities.data.freeBytes)}
           </Typography>
         )}
         {(capabilities.error || stages.error) && (
-          <Alert severity="warning">
-            Transfer status is unavailable. Retained work is preserved; refresh when the agent is
-            reachable.
-          </Alert>
+          <Alert severity="warning">{t("transferStatusIsUnavailableRetained")}</Alert>
         )}
         {error && (
           <Alert severity="error" sx={{ overflowWrap: "anywhere" }}>
@@ -213,7 +204,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         )}
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
           <Button variant="outlined" component="label" disabled={busy}>
-            Choose bundle
+            {t("chooseBundle")}
             <input
               ref={fileInput}
               hidden
@@ -234,11 +225,11 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
                 file.size > capabilities.data.limits.maxUploadBytes)
             }
           >
-            Upload bundle
+            {t("uploadBundle")}
           </Button>
           {busy && (
             <Button onClick={() => byteRequest.current?.controller.abort()} disabled={!canCancel}>
-              Cancel byte transfer
+              {t("cancelByteTransfer")}
             </Button>
           )}
           <Button
@@ -247,7 +238,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             }}
             disabled={busy}
           >
-            Refresh transfers
+            {t("refreshTransfers")}
           </Button>
         </Stack>
         {file && (
@@ -259,14 +250,17 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           <>
             {progress.state === "uploading" && <LinearProgress variant="indeterminate" />}
             <Typography variant="body2">
-              {formatBytes(progress.receivedBytes)} received · {progress.state}
+              {t("receivedbytesReceivedState", {
+                receivedBytes: formatBytes(progress.receivedBytes),
+                state: progress.state,
+              })}
             </Typography>
           </>
         )}
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
           <TextField
             select
-            label="Export target"
+            label={t("exportTarget")}
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
             sx={{ minWidth: 180 }}
@@ -301,7 +295,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
               })
             }
           >
-            Queue export
+            {t("queueExport")}
           </Button>
         </Stack>
         {target?.reason && <Alert severity="warning">{target.reason}</Alert>}
@@ -320,11 +314,14 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             </Typography>
             {stage.sha256 && (
               <Typography variant="caption" sx={{ display: "block", overflowWrap: "anywhere" }}>
-                SHA-256 {stage.sha256}
+                {t("sha256Sha256", { sha256: stage.sha256 })}
               </Typography>
             )}
             <Typography variant="caption">
-              Expires {new Date(stage.expiresAt).toLocaleString()} · cleanup {stage.cleanup}
+              {t("expiresExpiresatCleanupCleanup", {
+                expiresAt: new Date(stage.expiresAt).toLocaleString(),
+                cleanup: stage.cleanup,
+              })}
             </Typography>
             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
               {stage.purpose === "prepared-artifact" &&
@@ -345,7 +342,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
                       })
                     }
                   >
-                    Validate
+                    {t("validate")}
                   </Button>
                 )}
               {stage.purpose === "prepared-artifact" &&
@@ -362,7 +359,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
                       })
                     }
                   >
-                    Preview import
+                    {t("previewImport")}
                   </Button>
                 )}
               {stage.direction === "download" && stage.state === "ready" && (
@@ -372,7 +369,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
                     void download(stage);
                   }}
                 >
-                  Download bundle
+                  {t("downloadBundle")}
                 </Button>
               )}
               <Button
@@ -386,7 +383,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
                   })
                 }
               >
-                Delete stage
+                {t("deleteStage")}
               </Button>
             </Stack>
           </Paper>
@@ -400,7 +397,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           }
           sx={{ alignSelf: "start" }}
         >
-          Open Activity
+          {t("openActivity")}
         </Button>
       </Stack>
       <Dialog
@@ -411,18 +408,22 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Confirm prepared artifact import</DialogTitle>
+        <DialogTitle>{t("confirmPreparedArtifactImport")}</DialogTitle>
         <DialogContent>
           <Stack spacing={1}>
             <Typography>
-              Target: {preview?.serviceId} · region {preview?.region ?? "unspecified"}
+              {t("targetServiceidRegion", { serviceId: preview?.serviceId ?? "" })}
+              {preview?.region ?? t("regionUnspecified")}
             </Typography>
             <Typography>
-              Archive {formatBytes(preview?.bytes ?? 0)} · additional space{" "}
-              {formatBytes(preview?.requiredFreeBytes ?? 0)}
+              {t("archiveFormatbytesAdditionalSpaceFormatbytes2", {
+                formatBytes: formatBytes(preview?.bytes ?? 0),
+                formatBytes2: formatBytes(preview?.requiredFreeBytes ?? 0),
+              })}
             </Typography>
             <Typography variant="body2">
-              Credentials required: {preview?.requiredCredentials.join(", ") || "none"}
+              {t("credentialsRequired")}
+              {preview?.requiredCredentials.join(", ") || "none"}
             </Typography>
             {preview?.blockers.map((blocker) => (
               <Alert key={blocker} severity="warning">
@@ -431,18 +432,19 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             ))}
             {preview?.runtimeImageMismatches.map((item) => (
               <Alert key={item.service} severity="warning">
-                {item.service}: bundle {item.bundle}; local {item.local}
+                {t("serviceBundleBundleLocalLocal", {
+                  service: item.service,
+                  bundle: item.bundle,
+                  local: item.local,
+                })}
               </Alert>
             ))}
-            <Typography variant="body2">
-              Consumers stay stopped. A queued job is not a completed import; check Activity for the
-              publication and hardlink result.
-            </Typography>
+            <Typography variant="body2">{t("consumersStayStoppedAQueued")}</Typography>
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={() => setPreview(null)}>
-            Close
+            {t("close")}
           </Button>
           <Button
             disabled={busy || !preview || preview.blockers.length > 0}
@@ -466,7 +468,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
               })
             }
           >
-            Confirm import
+            {t("confirmImport")}
           </Button>
         </DialogActions>
       </Dialog>

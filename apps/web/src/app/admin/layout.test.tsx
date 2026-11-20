@@ -3,6 +3,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminRootLayout from "./layout";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+vi.mock("next-intl/server", () => ({ getMessages: async () => ({ adminShared: {} }) }));
+
 const request = new AsyncLocalStorage<string>();
 vi.mock("next/headers", () => ({
   cookies: async () => ({ toString: () => request.getStore() ?? "" }),
@@ -30,7 +33,9 @@ describe("admin layout deployment boundary", () => {
     const rendered = await request.run("session=admin", () =>
       AdminRootLayout({ children: "child" }),
     );
-    expect(rendered.props.selfHosted).toBeNull();
+    // The admin layout provides the full catalogue around the admin shell.
+    expect(rendered.props.messages).toEqual({ adminShared: {} });
+    expect(rendered.props.children.props.selfHosted).toBeNull();
   });
   it.each(["user", "anonymous"])("retains redirect for %s before deployment", async (role) => {
     const paths: string[] = [];

@@ -9,6 +9,8 @@ import {
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { AdminReauthenticationDialog } from "./AdminReauthenticationDialog";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({ start: vi.fn(), complete: vi.fn() }));
 vi.mock("@openmapx/core/api-admin-sdk", async () => ({
   ...(await vi.importActual<typeof import("@openmapx/core/api-admin-sdk")>(

@@ -48,6 +48,45 @@ export function mockNextIntl(overrides: Record<string, unknown> = {}) {
 }
 
 /**
+ * A next-intl module mock whose translators resolve keys against the real
+ * English catalogue, so tests keep asserting the copy a reader sees. Admin
+ * tests use it: their assertions read English text, and a key missing from
+ * the catalogue fails loudly instead of rendering as its name.
+ *
+ *   vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+ */
+export async function mockNextIntlWithCatalog(overrides: Record<string, unknown> = {}) {
+  const { vi } = await import("vitest");
+  const actual = await vi.importActual<typeof import("next-intl")>("next-intl");
+  // biome-ignore lint/style/noRestrictedImports: test helpers are never bundled.
+  const { default: messages } = await import("@openmapx/i18n/locales/en.json");
+  // One translator per namespace, stable across renders like next-intl's own.
+  const translators = new Map<string, ReturnType<typeof actual.createTranslator>>();
+  const useTranslations = (namespace = "") => {
+    let translator = translators.get(namespace);
+    if (!translator) {
+      translator = actual.createTranslator({
+        locale: "en",
+        messages,
+        namespace: (namespace || undefined) as never,
+        onError: (error) => {
+          throw error;
+        },
+      });
+      translators.set(namespace, translator);
+    }
+    return translator;
+  };
+  return mockNextIntl({
+    useTranslations,
+    createTranslator: actual.createTranslator,
+    useMessages: () => messages,
+    NextIntlClientProvider: ({ children }: { children: ReactNode }) => children,
+    ...overrides,
+  });
+}
+
+/**
  * Render with a real NextIntlClientProvider (for tests that want actual
  * formatting against a supplied `messages` catalog). Most unit tests should
  * prefer {@link mockNextIntl}; reach for this only when real ICU formatting is

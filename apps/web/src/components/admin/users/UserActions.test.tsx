@@ -9,6 +9,8 @@ import { CreateUserDialog } from "./CreateUserDialog";
 import { UserDetail } from "./UserDetail";
 import { UserList } from "./UserList";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({
   sessions: vi.fn(),
   revoke: vi.fn(),

@@ -17,6 +17,7 @@ import { FileOpenHandler } from "@/components/pwa/FileOpenHandler";
 import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequest";
 import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
 import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
+import { withoutAdminMessages } from "@/i18n/adminMessages";
 import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
 import { AttributionLabelsSync } from "@/lib/attributionLabels";
 import { loadClientEnv } from "@/lib/serverClientEnv";
@@ -59,7 +60,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const locale = await getLocale();
-  const messages = await getMessages();
+  // Admin copy reaches only admin pages, through the admin layout's own provider.
+  const messages = withoutAdminMessages(await getMessages());
   const clientEnv = await loadClientEnv();
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 

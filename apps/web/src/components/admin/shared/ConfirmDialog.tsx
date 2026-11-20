@@ -6,6 +6,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
+import { useTranslations } from "next-intl";
 import Dialog from "@/components/ui/Dialog";
 
 export interface ConfirmDialogProps {
@@ -24,13 +25,14 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   confirmColor = "primary",
   loading = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const t = useTranslations("adminShared");
   return (
     <Dialog open={open} onClose={loading ? undefined : onCancel} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -39,7 +41,7 @@ export function ConfirmDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onCancel} disabled={loading} size="small">
-          {cancelLabel}
+          {cancelLabel ?? t("cancel")}
         </Button>
         <Button
           variant="contained"
@@ -50,7 +52,7 @@ export function ConfirmDialog({
           startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
           autoFocus
         >
-          {confirmLabel}
+          {confirmLabel ?? t("confirm")}
         </Button>
       </DialogActions>
     </Dialog>

@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import { useTransitState } from "@/lib/admin/transitHooks";
 import { CurrentJobCard } from "./CurrentJobCard";
@@ -18,6 +19,7 @@ import { ProviderHealthTable } from "./ProviderHealthTable";
 import { RecentJobsTable } from "./RecentJobsTable";
 
 export function TransitPipelinePage({ showHeader = true }: { showHeader?: boolean } = {}) {
+  const t = useTranslations("adminTransit");
   const queryClient = useQueryClient();
   const { data: state, isLoading, isError, refetch, isFetching } = useTransitState();
 
@@ -26,10 +28,10 @@ export function TransitPipelinePage({ showHeader = true }: { showHeader?: boolea
       {showHeader && (
         <Box sx={{ mb: 2 }}>
           <AdminPageHeader
-            title="Transit pipeline"
-            subtitle="Transitous sync · feed state · job history · provider health"
+            title={t("transitPipeline")}
+            subtitle={t("transitousSyncFeedStateJob")}
             actions={
-              <Tooltip title="Refresh all">
+              <Tooltip title={t("refreshAll")}>
                 <IconButton
                   size="small"
                   onClick={() => {
@@ -54,7 +56,7 @@ export function TransitPipelinePage({ showHeader = true }: { showHeader?: boolea
           }}
           disabled={isFetching}
         >
-          Refresh pipeline
+          {t("refreshPipeline")}
         </Button>
       )}
       {isLoading && (
@@ -68,11 +70,7 @@ export function TransitPipelinePage({ showHeader = true }: { showHeader?: boolea
           <CircularProgress />
         </Box>
       )}
-      {isError && (
-        <Alert severity="error">
-          Failed to load transit pipeline state. Check the BFF + data-manager logs.
-        </Alert>
-      )}
+      {isError && <Alert severity="error">{t("failedToLoadTransitPipeline")}</Alert>}
       {state && (
         <Stack spacing={2}>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>

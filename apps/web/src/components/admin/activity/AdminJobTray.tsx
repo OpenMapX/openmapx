@@ -7,12 +7,14 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Popover from "@/components/ui/Popover";
 import { useAdminObservedJobs } from "@/lib/admin/adminJobEffects";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { JobStatusChip } from "../shared/JobStatusChip";
 export function AdminJobTray() {
+  const t = useTranslations("adminActivity");
   const jobs = useAdminObservedJobs();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const active = jobs.filter((job) => !job.settled).length;
@@ -24,7 +26,7 @@ export function AdminJobTray() {
     <>
       <IconButton
         size="small"
-        aria-label={`Administration jobs${active ? `, ${active} active` : ""}`}
+        aria-label={t("administrationJobsCount", { active })}
         aria-expanded={!!anchor}
         onClick={(event) => setAnchor(event.currentTarget)}
       >
@@ -40,10 +42,12 @@ export function AdminJobTray() {
         transformOrigin={{ vertical: "top", horizontal: "right" }}
       >
         <Stack sx={{ p: 2, gap: 1, width: 360, maxWidth: "calc(100vw - 24px)" }}>
-          <Typography variant="subtitle2">Administration jobs · {active} active</Typography>
+          <Typography variant="subtitle2">
+            {t("administrationJobsActiveActive", { active })}
+          </Typography>
           {recent.length === 0 && (
             <Typography variant="body2" color="text.secondary">
-              Accepted jobs appear here during this administration session.
+              {t("acceptedJobsAppearHereDuring")}
             </Typography>
           )}
           {recent.map((job) => (
@@ -64,7 +68,7 @@ export function AdminJobTray() {
               </Button>
               {job.unresolved ? (
                 <Typography variant="caption" color="warning.main">
-                  Outcome unknown
+                  {t("outcomeUnknown")}
                 </Typography>
               ) : (
                 <JobStatusChip status={job.status} />
@@ -77,10 +81,10 @@ export function AdminJobTray() {
             onClick={() => setAnchor(null)}
             size="small"
           >
-            All jobs
+            {t("allJobs")}
           </Button>
           <Typography variant="caption" color="text.secondary">
-            Refresh clears this session tray. Activity retains server history.
+            {t("refreshClearsThisSessionTray")}
           </Typography>
         </Stack>
       </Popover>

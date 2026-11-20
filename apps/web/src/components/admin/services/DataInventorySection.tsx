@@ -7,6 +7,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { formatBytes } from "@/lib/storageFormat";
 
 const targetLabels: Record<string, string> = {
@@ -15,7 +16,6 @@ const targetLabels: Record<string, string> = {
   otp: "OpenTripPlanner",
   motis: "MOTIS",
   motisFeedProxy: "MOTIS feed proxy",
-  tiles: "Tile server",
   pelias: "Pelias",
   nominatim: "Nominatim",
   photon: "Photon",
@@ -30,26 +30,25 @@ export function DataInventorySection({
   builds: AdminServiceData["builds"];
   onPageChange: (offset: number) => void;
 }) {
+  const t = useTranslations("adminServices");
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">
-          OSM extracts
+          {t("osmExtracts")}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Download and build workflows record fingerprints. Refreshing inventory never hashes
-          dataset contents.
+          {t("downloadAndBuildWorkflowsRecord")}
         </Typography>
         {osm.unavailable ? (
           <Alert severity="error" sx={{ mt: 2 }}>
-            The OSM inventory could not be inspected completely. Restore access before relying on
-            readiness.
+            {t("theOsmInventoryCouldNot")}
           </Alert>
         ) : (
           <>
             {osm.total === 0 ? (
               <Alert severity="info" sx={{ mt: 2 }}>
-                No OSM extracts are available.
+                {t("noOsmExtractsAreAvailable")}
               </Alert>
             ) : (
               osm.items.map((item) => (
@@ -69,11 +68,12 @@ export function DataInventorySection({
                     />
                   </Stack>
                   <Typography variant="body2">
-                    <span>{item.region ?? "Region not recorded"}</span> ·{" "}
+                    <span>{item.region ?? t("regionNotRecorded")}</span> ·{" "}
                     {formatBytes(item.sizeBytes)} · {new Date(item.modifiedAt).toLocaleString()}
                   </Typography>
                   <Typography variant="caption" component="p">
-                    SHA-256: {item.sourceFingerprint ?? "No current fingerprint evidence"}
+                    {t("sha256")}
+                    {item.sourceFingerprint ?? t("noCurrentFingerprintEvidence")}
                   </Typography>
                 </Box>
               ))
@@ -83,18 +83,22 @@ export function DataInventorySection({
                 disabled={osm.offset === 0}
                 onClick={() => onPageChange(Math.max(0, osm.offset - osm.limit))}
               >
-                Previous extracts
+                {t("previousExtracts")}
               </Button>
               <Typography variant="caption">
                 {osm.items.length
-                  ? `${osm.offset + 1}–${Math.min(osm.offset + osm.items.length, osm.total)} of ${osm.total}`
-                  : `0 on this page (${osm.total} total)`}
+                  ? t("valueMinOfTotal", {
+                      value: osm.offset + 1,
+                      min: Math.min(osm.offset + osm.items.length, osm.total),
+                      total: osm.total,
+                    })
+                  : t("n0OnThisPageTotal", { total: osm.total })}
               </Typography>
               <Button
                 disabled={osm.offset + osm.items.length >= osm.total}
                 onClick={() => onPageChange(osm.offset + osm.limit)}
               >
-                Next extracts
+                {t("nextExtracts")}
               </Button>
             </Stack>
           </>
@@ -102,17 +106,18 @@ export function DataInventorySection({
       </Paper>
       <Paper variant="outlined" sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">
-          Prepared service data
+          {t("preparedServiceData")}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Ready requires recorded source and output evidence. Legacy records and database-backed
-          services require their authoritative checks.
+          {t("readyRequiresRecordedSourceAnd")}
         </Typography>
         {builds.map((build) => (
           <Box key={build.target} sx={{ mt: 2, overflowWrap: "anywhere" }}>
             <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", alignItems: "center" }}>
               <Typography sx={{ fontWeight: 600 }}>
-                {targetLabels[build.target] ?? build.target}
+                {build.target === "tiles"
+                  ? t("targetTileServer")
+                  : (targetLabels[build.target] ?? build.target)}
               </Typography>
               <Chip
                 size="small"
@@ -127,14 +132,16 @@ export function DataInventorySection({
               />
             </Stack>
             <Typography variant="body2">
-              {build.reason ?? "Recorded outputs and source evidence are current."}
+              {build.reason ?? t("recordedOutputsAndSourceEvidence")}
             </Typography>
             <Typography variant="caption" component="p">
-              {build.region ?? "Region not recorded"} ·{" "}
-              {build.sizeBytes === null ? "Size unknown" : formatBytes(build.sizeBytes)} ·{" "}
+              {build.region ?? t("regionNotRecorded")} ·{" "}
+              {build.sizeBytes === null ? t("sizeUnknown") : formatBytes(build.sizeBytes)} ·{" "}
               {build.buildRecordVersion === null
-                ? "No build record"
-                : `Build record v${build.buildRecordVersion}`}
+                ? t("noBuildRecord")
+                : t("buildRecordVBuildrecordversion", {
+                    buildRecordVersion: build.buildRecordVersion,
+                  })}
             </Typography>
             {Object.entries(build.runtimeImages).map(([id, image]) => (
               <Typography key={id} variant="caption" component="p">
@@ -143,7 +150,7 @@ export function DataInventorySection({
             ))}
             {build.sourceFingerprints.map((source) => (
               <Typography key={source.id} variant="caption" component="p">
-                Source {source.id}: {source.sha256}
+                {t("sourceIdSha256", { id: source.id, sha256: source.sha256 })}
               </Typography>
             ))}
           </Box>

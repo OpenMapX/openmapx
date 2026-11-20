@@ -25,9 +25,11 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { TransitSource } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -38,19 +40,19 @@ import { TransitSyncDialog } from "./TransitSyncDialog";
 
 export type { TransitSource };
 
-export function sourceStateLabel(source: TransitSource): string {
+export function sourceStateLabel(source: TransitSource, t: AdminTranslator): string {
   if (source.desiredState === "removed")
-    return source.active ? "Removed · active pending sync" : "Removed";
-  if (source.desiredState === "disabled" && source.active) return "Disabled · active pending sync";
-  if (source.lifecycle === "removal-pending") return "Removal pending · active";
-  if (source.lifecycle === "update-pending") return "Update pending · active";
-  if (source.lifecycle === "add-pending") return "Add pending · not active";
-  if (!source.requested && source.active) return "Not requested · active";
+    return source.active ? t("sourceRemovedPendingSync") : t("sourceRemoved");
+  if (source.desiredState === "disabled" && source.active) return t("sourceDisabledPendingSync");
+  if (source.lifecycle === "removal-pending") return t("sourceRemovalPending");
+  if (source.lifecycle === "update-pending") return t("sourceUpdatePending");
+  if (source.lifecycle === "add-pending") return t("sourceAddPending");
+  if (!source.requested && source.active) return t("sourceNotRequestedActive");
   if (source.requested && !source.active && source.lifecycle === "failed") {
-    return "Requested · failed";
+    return t("sourceRequestedFailed");
   }
-  if (source.requested && source.active) return "Requested · active";
-  return "Disabled · not active";
+  if (source.requested && source.active) return t("sourceRequestedActive");
+  return t("sourceDisabled");
 }
 
 function stateColor(
@@ -77,6 +79,7 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   return <TransitSourcesView key={apiUrl} apiUrl={apiUrl} />;
 }
 function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminServices");
   const queryClient = useQueryClient();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
@@ -250,9 +253,9 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   const mutationPending = addMutation.isPending || sourceMutation.isPending || syncDialogOpen;
   const actionsDisabled = syncJob !== null || mutationPending;
   const disabledReason = syncJob
-    ? `Transit sync ${syncJob.jobId} is active. Open Activity to monitor it.`
+    ? t("transitSyncJobidIsActive2", { jobId: syncJob.jobId })
     : mutationPending
-      ? "A source change is being queued."
+      ? t("aSourceChangeIsBeing")
       : "";
   const addValid =
     url.trim() !== "" &&
@@ -271,13 +274,13 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <StorageIcon color="primary" />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Transit sources
+            {t("transitSources")}
           </Typography>
         </Stack>
         <Box sx={{ flex: 1 }} />
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <Button component={Link} href="/admin/activity" variant="outlined" size="small">
-            Activity
+            {t("activity")}
           </Button>
           <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
             <span>
@@ -287,7 +290,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                 disabled={actionsDisabled}
                 onClick={() => setSyncDialogOpen(true)}
               >
-                Sync sources
+                {t("syncSources")}
               </Button>
             </span>
           </Tooltip>
@@ -299,7 +302,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                 disabled={actionsDisabled || !sourcesQuery.data}
                 onClick={() => setDialogOpen(true)}
               >
-                Add source
+                {t("addSource")}
               </Button>
             </span>
           </Tooltip>
@@ -316,13 +319,13 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
               size="small"
               color="inherit"
             >
-              View job
+              {t("viewJob")}
             </Button>
           }
         >
           {syncJob
-            ? `Transit sync ${syncJob.jobId} is active; source actions are disabled.`
-            : `Source change queued as ${lastJobId}.`}
+            ? t("transitSyncJobidIsActive", { jobId: syncJob.jobId })
+            : t("sourceChangeQueuedAsLastjobid", { lastJobId: lastJobId ?? "" })}
         </Alert>
       )}
       {syncDialogOpen && (
@@ -341,16 +344,13 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Add transit source</DialogTitle>
+        <DialogTitle>{t("addTransitSource")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Alert severity="info">
-              The current MOTIS dataset remains active if acquisition, validation, or promotion
-              fails.
-            </Alert>
+            <Alert severity="info">{t("theCurrentMotisDatasetRemains")}</Alert>
             <TextField
-              label="Schedule URL"
-              placeholder="https://example.com/feed.gtfs.zip"
+              label={t("scheduleUrl")}
+              placeholder={t("httpsExampleComFeedGtfs")}
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               autoFocus
@@ -358,22 +358,22 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
               size="small"
             />
             <TextField
-              label="Safe display name"
+              label={t("safeDisplayName")}
               value={name}
               onChange={(event) => setName(event.target.value)}
               fullWidth
               size="small"
             />
             <TextField
-              label="Region"
-              placeholder="de-be"
+              label={t("region")}
+              placeholder={t("deBe")}
               value={region}
               onChange={(event) => setRegion(event.target.value)}
               fullWidth
               size="small"
             />
             <TextField
-              label="Attribution"
+              label={t("attribution")}
               multiline
               minRows={2}
               value={attribution}
@@ -383,15 +383,15 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             />
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
-                label="SPDX license"
-                placeholder="CC-BY-4.0"
+                label={t("spdxLicense")}
+                placeholder={t("ccBy40")}
                 value={licenseSpdx}
                 onChange={(event) => setLicenseSpdx(event.target.value)}
                 fullWidth
                 size="small"
               />
               <TextField
-                label="License URL"
+                label={t("licenseUrl")}
                 value={licenseUrl}
                 onChange={(event) => setLicenseUrl(event.target.value)}
                 fullWidth
@@ -399,11 +399,10 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
               />
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              Provide an SPDX identifier or license URL. Credentials are not accepted in source
-              URLs; configure secrets separately.
+              {t("provideAnSpdxIdentifierOr")}
             </Typography>
             <TextField
-              label="Search installed catalog (optional)"
+              label={t("searchInstalledCatalogOptional")}
               value={catalogSearch}
               onChange={(event) => {
                 setCatalogSearch(event.target.value);
@@ -453,7 +452,8 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                   }
                 }}
               >
-                {source.installedSourceId ? "Enable" : "Use"} {source.name} ({source.countryCode})
+                {source.installedSourceId ? t("enable") : t("use")} {source.name} (
+                {source.countryCode})
               </Button>
             ))}
             <AdminTablePagination
@@ -464,14 +464,14 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} disabled={addMutation.isPending}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             variant="contained"
             disabled={!addValid || !sourcesQuery.data}
             onClick={() => addMutation.mutate()}
           >
-            {addMutation.isPending ? "Queueing…" : "Add and sync"}
+            {addMutation.isPending ? t("queueing") : t("addAndSync")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -480,7 +480,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
           <TableSearchField
             value={query}
             onChange={setQuery}
-            placeholder="Search sources by name, region, ID, or URL…"
+            placeholder={t("searchSourcesByNameRegion")}
           />
         </TableToolbar>
       </Box>
@@ -488,21 +488,21 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
         <Table size="small" sx={{ minWidth: 960 }}>
           <TableHead>
             <TableRow>
-              <TableCell>Source</TableCell>
-              <TableCell>Origin</TableCell>
-              <TableCell>State</TableCell>
-              <TableCell>Format / size</TableCell>
-              <TableCell>Validation</TableCell>
-              <TableCell>Last fetched</TableCell>
-              <TableCell>Last promoted</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell>{t("source")}</TableCell>
+              <TableCell>{t("origin")}</TableCell>
+              <TableCell>{t("state")}</TableCell>
+              <TableCell>{t("formatSize")}</TableCell>
+              <TableCell>{t("validation")}</TableCell>
+              <TableCell>{t("lastFetched")}</TableCell>
+              <TableCell>{t("lastPromoted")}</TableCell>
+              <TableCell align="right">{t("actions")}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sourcesQuery.isError ? (
-              <TableEmptyState colSpan={8} message="Failed to load transit sources." />
+              <TableEmptyState colSpan={8} message={t("failedToLoadTransitSources")} />
             ) : paged.length === 0 ? (
-              <TableEmptyState colSpan={8} message="No transit sources match." />
+              <TableEmptyState colSpan={8} message={t("noTransitSourcesMatch")} />
             ) : (
               paged.map((source) => (
                 <TableRow key={source.id} hover>
@@ -536,18 +536,20 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={sourceStateLabel(source)}
+                      label={sourceStateLabel(source, t)}
                       size="small"
                       color={stateColor(source.lifecycle)}
                     />
                   </TableCell>
                   <TableCell>
                     {source.format.toUpperCase()}
-                    {source.artifact ? ` · ${formatBytes(source.artifact.sizeBytes)}` : ""}
+                    {source.artifact
+                      ? t("sizebytes", { sizeBytes: formatBytes(source.artifact.sizeBytes) })
+                      : ""}
                   </TableCell>
                   <TableCell>
                     <Tooltip title={source.validationMessage ?? ""}>
-                      <span>{source.validationStatus ?? "Not validated"}</span>
+                      <span>{source.validationStatus ?? t("notValidated")}</span>
                     </Tooltip>
                   </TableCell>
                   <TableCell>
@@ -573,7 +575,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                             })
                           }
                         >
-                          {source.requested ? "Disable" : "Enable"}
+                          {source.requested ? t("disable") : t("enable")}
                         </Button>
                       </span>
                     </Tooltip>
@@ -584,7 +586,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                         disabled={actionsDisabled}
                         onClick={() => setRemoving(source)}
                       >
-                        Remove
+                        {t("remove")}
                       </Button>
                     )}
                   </TableCell>
@@ -597,9 +599,9 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
       <AdminTablePagination {...paginationProps} />
       <ConfirmDialog
         open={!!removing}
-        title="Remove transit source"
-        message={`Remove ${removing?.name ?? ""}? Its saved URL and licence will be deleted. Disable it instead if you want to keep it for later.`}
-        confirmLabel="Remove source"
+        title={t("removeTransitSource")}
+        message={t("removeValueItsSavedUrl", { value: removing?.name ?? "" })}
+        confirmLabel={t("removeSource")}
         confirmColor="error"
         loading={sourceMutation.isPending}
         onCancel={() => setRemoving(null)}

@@ -14,6 +14,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import {
@@ -22,6 +23,7 @@ import {
   type ProvisioningSecretState,
   useDawarichProvisioning,
 } from "@/hooks/useDawarichProvisioning";
+import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 
 const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
@@ -46,33 +48,37 @@ function normalizeHostname(value: string): string | null {
   return normalized;
 }
 
-function errorMessage(error: Error | null): string | null {
+function errorMessage(error: Error | null, t: AdminTranslator): string | null {
   if (!error) return null;
   const code = (error as DawarichProvisioningApiError).code ?? error.message;
   switch (code) {
     case "DAWARICH_DATABASE_SECRET_CONFLICT":
-      return "The Dawarich database password copies conflict. Resolve them on the host before retrying.";
+      return t("dawarichDatabaseSecretConflict");
     case "DAWARICH_RAILS_SECRET_CONFLICT":
-      return "The Dawarich Rails secret copies conflict. Resolve them on the host before retrying.";
+      return t("dawarichRailsSecretConflict");
     case "DAWARICH_OAUTH_CLIENT_CONFLICT":
-      return "The persisted managed OAuth client is duplicated or has incompatible security settings.";
+      return t("dawarichOauthClientConflict");
     case "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED":
-      return "OIDC secret recovery is required. Restore vault access, then provision again to rotate safely.";
+      return t("dawarichOidcSecretRecovery");
     case "DAWARICH_BUNDLE_NOT_INSTALLED":
-      return "The exact managed Dawarich bundle is not installed.";
+      return t("dawarichBundleNotInstalled");
     case "DAWARICH_INVALID_PUBLIC_HOST":
-      return "Enter a valid public DNS hostname.";
+      return t("dawarichInvalidPublicHost");
     default:
-      return "Managed Dawarich provisioning failed. Review the service logs and retry.";
+      return t("dawarichProvisioningFailed");
   }
 }
 
-function stateLabel(value: boolean): "Ready" | "Pending" {
-  return value ? "Ready" : "Pending";
+function stateLabel(value: boolean, t: AdminTranslator): string {
+  return value ? t("checklistReady") : t("checklistPending");
 }
 
-function secretLabel(state: ProvisioningSecretState): string {
-  return state === "consistent" ? "Ready" : state === "missing" ? "Missing" : "Conflict";
+function secretLabel(state: ProvisioningSecretState, t: AdminTranslator): string {
+  return state === "consistent"
+    ? t("checklistReady")
+    : state === "missing"
+      ? t("checklistMissing")
+      : t("checklistConflict");
 }
 
 function ChecklistRow({ label, status, ready }: { label: string; status: string; ready: boolean }) {
@@ -90,19 +96,21 @@ function ChecklistRow({ label, status, ready }: { label: string; status: string;
 }
 
 function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus }) {
+  const t = useTranslations("adminServices");
   return (
     <Stack spacing={1}>
       <ChecklistRow
-        label="Bundle installed"
-        status={stateLabel(status.installed)}
+        label={t("bundleInstalled")}
+        status={stateLabel(status.installed, t)}
         ready={status.installed}
       />
       <ChecklistRow
-        label="OAuth client"
+        label={t("oauthClient")}
         status={stateLabel(
           status.oauthClient.present &&
             status.oauthClient.settingsMatch &&
             !status.oauthClient.recoveryRequired,
+          t,
         )}
         ready={
           status.oauthClient.present &&
@@ -111,34 +119,38 @@ function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus 
         }
       />
       <ChecklistRow
-        label="Database secret"
-        status={secretLabel(status.secrets.databasePassword)}
+        label={t("databaseSecret")}
+        status={secretLabel(status.secrets.databasePassword, t)}
         ready={status.secrets.databasePassword === "consistent"}
       />
       <ChecklistRow
-        label="Rails secret"
-        status={secretLabel(status.secrets.secretKeyBase)}
+        label={t("railsSecret")}
+        status={secretLabel(status.secrets.secretKeyBase, t)}
         ready={status.secrets.secretKeyBase === "consistent"}
       />
       <ChecklistRow
-        label="OIDC secret"
-        status={secretLabel(status.secrets.oidcClientSecret)}
+        label={t("oidcSecret")}
+        status={secretLabel(status.secrets.oidcClientSecret, t)}
         ready={status.secrets.oidcClientSecret === "consistent"}
       />
       <ChecklistRow
-        label="Configuration ready"
-        status={stateLabel(status.configReady)}
+        label={t("configurationReady")}
+        status={stateLabel(status.configReady, t)}
         ready={status.configReady}
       />
-      <ChecklistRow label="Selected" status={stateLabel(status.selected)} ready={status.selected} />
       <ChecklistRow
-        label="Running and healthy"
-        status={stateLabel(status.running && status.healthy)}
+        label={t("selected")}
+        status={stateLabel(status.selected, t)}
+        ready={status.selected}
+      />
+      <ChecklistRow
+        label={t("runningAndHealthy")}
+        status={stateLabel(status.running && status.healthy, t)}
         ready={status.running && status.healthy}
       />
       <ChecklistRow
-        label="Public origin"
-        status={status.publicOrigin ?? "Pending"}
+        label={t("publicOrigin")}
+        status={status.publicOrigin ?? t("pending")}
         ready={Boolean(status.publicOrigin)}
       />
     </Stack>
@@ -151,6 +163,7 @@ export function ManagedDawarichSetup() {
 }
 
 function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
+  const t = useTranslations("adminServices");
   const { statusQuery, provision, rotate } = useDawarichProvisioning();
   const [hostname, setHostname] = useState("");
   const [hostnameError, setHostnameError] = useState<string | null>(null);
@@ -159,12 +172,12 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
   const [feedback, setFeedback] = useState<Error | null>(null);
   const feedbackSequence = useRef(0);
   const owner = useAdminMutationOwner(client, JSON.stringify([apiUrl, hostname, confirmation]));
-  const mutationError = errorMessage(feedback);
+  const mutationError = errorMessage(feedback, t);
 
   async function handleProvision() {
     const normalized = normalizeHostname(hostname);
     if (normalized === null) {
-      setHostnameError("Enter a DNS hostname without a scheme, path, or port.");
+      setHostnameError(t("enterADnsHostnameWithout"));
       return;
     }
     setHostnameError(null);
@@ -200,24 +213,22 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
         <Stack spacing={2}>
           <Box>
             <Typography component="h2" variant="h6">
-              Managed Dawarich setup
+              {t("managedDawarichSetup")}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Provisioning is idempotent. It prepares one Better Auth client, file-backed secrets,
-              and service configuration; it never starts or purges the bundle.
+              {t("provisioningIsIdempotentItPrepares")}
             </Typography>
           </Box>
 
           {statusQuery.isLoading && (
-            <CircularProgress size={24} aria-label="Loading setup status" />
+            <CircularProgress size={24} aria-label={t("loadingSetupStatus")} />
           )}
-          {statusQuery.isError && <Alert severity="error">{errorMessage(statusQuery.error)}</Alert>}
+          {statusQuery.isError && (
+            <Alert severity="error">{errorMessage(statusQuery.error, t)}</Alert>
+          )}
           {status && <SetupChecklist status={status} />}
           {status?.oauthClient.recoveryRequired && (
-            <Alert severity="error">
-              OIDC recovery is incomplete. Do not apply the bundle yet. Restore vault access, then
-              use Provision/reconcile to rotate and synchronize both secret copies.
-            </Alert>
+            <Alert severity="error">{t("oidcRecoveryIsIncompleteDo")}</Alert>
           )}
           {mutationError && <Alert severity="error">{mutationError}</Alert>}
 
@@ -229,14 +240,11 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
             <TextField
               size="small"
               fullWidth
-              label="Public hostname (optional)"
-              placeholder="timeline.example.com"
+              label={t("publicHostnameOptional")}
+              placeholder={t("timelineExampleCom")}
               value={hostname}
               error={Boolean(hostnameError)}
-              helperText={
-                hostnameError ??
-                "First run defaults to timeline.<OpenMapX domain>; later runs preserve the saved host."
-              }
+              helperText={hostnameError ?? t("firstRunDefaultsToTimeline")}
               onChange={(event) => setHostname(event.target.value)}
               slotProps={{ htmlInput: { autoCapitalize: "none", spellCheck: false } }}
             />
@@ -246,36 +254,30 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
               disabled={provision.isPending}
               sx={{ whiteSpace: "nowrap" }}
             >
-              {provision.isPending ? "Provisioning…" : "Provision/reconcile"}
+              {provision.isPending ? t("provisioning") : t("provisionReconcile")}
             </Button>
           </Stack>
 
           {status?.readyToStart && (
             <Alert severity={status.needsApply ? "info" : "success"}>
-              {status.needsApply
-                ? "Provisioning is ready but not fully applied. Select the Dawarich bundle, then use Apply changes to both Dawarich Timeline and Dawarich Sidekiq. This notice stays pending until both containers run the current configuration."
-                : "Provisioning is ready and the current configuration is applied to both the app and worker. Disabling preserves its data and user connections."}
+              {status.needsApply ? t("provisioningIsReadyButNot") : t("provisioningIsReadyAndThe")}
             </Alert>
           )}
 
           <Typography variant="body2" color="text.secondary">
-            Browser SSO and timeline API access are separate: each user still creates a Dawarich API
-            key and saves it in their OpenMapX account settings.
+            {t("browserSsoAndTimelineApi")}
           </Typography>
 
           <Accordion disableGutters>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle2">OIDC secret recovery</Typography>
+              <Typography variant="subtitle2">{t("oidcSecretRecovery")}</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Stack spacing={1.5}>
-                <Alert severity="warning">
-                  The old secret becomes invalid immediately. Apply changes afterward so the app and
-                  worker restart with the new mounted secret.
-                </Alert>
+                <Alert severity="warning">{t("theOldSecretBecomesInvalid")}</Alert>
                 <TextField
                   size="small"
-                  label="Type confirmation"
+                  label={t("typeConfirmation")}
                   value={confirmation}
                   onChange={(event) => setConfirmation(event.target.value)}
                   helperText={ROTATION_CONFIRMATION}
@@ -287,7 +289,7 @@ function ManagedDawarichSetupView({ client, apiUrl }: ReturnType<typeof useActiv
                   disabled={confirmation !== ROTATION_CONFIRMATION || rotate.isPending}
                   onClick={handleRotate}
                 >
-                  {rotate.isPending ? "Rotating…" : "Rotate OIDC secret"}
+                  {rotate.isPending ? t("rotating") : t("rotateOidcSecret")}
                 </Button>
               </Stack>
             </AccordionDetails>

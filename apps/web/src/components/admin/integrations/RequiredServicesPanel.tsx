@@ -8,6 +8,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceSummary } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useRef } from "react";
 import { useServicesList } from "@/hooks/useServices";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
@@ -23,6 +24,7 @@ function ServiceRequireRow({
   req: RequireEntry & { service: string };
   services: AdminServiceSummary[];
 }) {
+  const t = useTranslations("adminIntegrations");
   const installed = services.find((s) => s.id === req.service);
 
   return (
@@ -49,22 +51,21 @@ function ServiceRequireRow({
               color: "text.secondary",
             }}
           >
-            {" "}
-            (optional)
+            {t("optional")}
           </Typography>
         )}
       </Typography>
       {installed ? (
         <Alert severity="success" sx={{ flex: 1, py: 0 }}>
-          Installed — {installed.status}
+          {t("installedStatus", { status: installed.status })}
         </Alert>
       ) : req.optional ? (
         <Alert severity="info" sx={{ flex: 1, py: 0 }}>
-          Not installed — using public fallback
+          {t("notInstalledUsingPublicFallback")}
         </Alert>
       ) : (
         <Alert severity="warning" sx={{ flex: 1, py: 0 }}>
-          Required but not installed
+          {t("requiredButNotInstalled")}
         </Alert>
       )}
     </Stack>
@@ -86,6 +87,7 @@ function CapabilityRequireRow({
   disabled: boolean;
   activeServiceId: string | null;
 }) {
+  const t = useTranslations("adminIntegrations");
   const providers = services.filter((s) => s.provides.includes(req.capability));
 
   return (
@@ -103,7 +105,7 @@ function CapabilityRequireRow({
           minWidth: 180,
         }}
       >
-        any {req.capability}
+        {t("anyCapability", { capability: req.capability })}
         {req.optional && (
           <Typography
             component="span"
@@ -112,8 +114,7 @@ function CapabilityRequireRow({
               color: "text.secondary",
             }}
           >
-            {" "}
-            (optional)
+            {t("optional")}
           </Typography>
         )}
       </Typography>
@@ -125,15 +126,21 @@ function CapabilityRequireRow({
         disabled={disabled}
       />
       <Stack>
-        <Typography variant="caption">Saved: {currentBinding ?? "automatic"}</Typography>
-        <Typography variant="caption">Active: {activeServiceId ?? "unresolved"}</Typography>
+        <Typography variant="caption">
+          {t("saved")}
+          {currentBinding ?? t("bindingAutomatic")}
+        </Typography>
+        <Typography variant="caption">
+          {t("active")}
+          {activeServiceId ?? t("bindingUnresolved")}
+        </Typography>
         <Button size="small" disabled={disabled} onClick={() => onBind(currentBinding)}>
-          Apply saved binding
+          {t("applySavedBinding")}
         </Button>
       </Stack>
       {providers.length === 0 && (
         <Alert severity="info" sx={{ flex: 1, py: 0 }}>
-          No installed services provide this capability
+          {t("noInstalledServicesProvideThis")}
         </Alert>
       )}
     </Stack>
@@ -147,6 +154,7 @@ export function RequiredServicesPanel({
   integrationId: string;
   requires: RequireEntry[];
 }) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const { data: servicesData } = useServicesList();
   const { data: bindingsData, error: bindingsError } = useQuery(
@@ -229,7 +237,7 @@ export function RequiredServicesPanel({
             color: "text.secondary",
           }}
         >
-          Required Services
+          {t("requiredServices")}
         </Typography>
         <Stack
           sx={{
@@ -252,19 +260,21 @@ export function RequiredServicesPanel({
               }
             >
               {receipt.runtime === "applied"
-                ? "Binding saved and active."
+                ? t("bindingSavedAndActive")
                 : receipt.reason === "integration_disabled"
-                  ? "Binding saved. Integration is disabled; activation is pending."
+                  ? t("bindingSavedIntegrationIsDisabled")
                   : receipt.runtime === "failed"
-                    ? "Binding saved. Reload failed; previous provider remains active."
-                    : "Binding status requires reconciliation. Review the saved and live provider before retrying."}
+                    ? t("bindingSavedReloadFailedPrevious")
+                    : t("bindingStatusRequiresReconciliationReview")}
             </Alert>
           )}
           {!bindingsData?.runtime && (
-            <Typography variant="caption">Runtime unavailable or integration disabled</Typography>
+            <Typography variant="caption">
+              {t("runtimeUnavailableOrIntegrationDisabled")}
+            </Typography>
           )}
           <Button size="small" onClick={() => void admin.refresh()}>
-            Refresh binding status
+            {t("refreshBindingStatus")}
           </Button>
           {requires.map((r, idx) => {
             const key = r.service ?? r.capability ?? `req-${idx}`;

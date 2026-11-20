@@ -82,6 +82,7 @@ export function DataWorkspace({ topic = "overview" }: { topic?: DataTopic }) {
   );
 }
 function DataDirectory() {
+  const ta = useTranslations("adminShared");
   const { client, apiUrl } = useActivityClient();
   // No domain-specific status subscriptions or polling on the directory.
   const access = useAdminNavigationAccess();
@@ -96,9 +97,9 @@ function DataDirectory() {
       {query.isError && (
         <Alert
           severity="warning"
-          action={<Button onClick={() => void query.refetch()}>Retry</Button>}
+          action={<Button onClick={() => void query.refetch()}>{ta("retry")}</Button>}
         >
-          Inventory summary is unavailable. Open a workspace to inspect its own status.
+          {ta("inventorySummaryIsUnavailableOpen")}
         </Alert>
       )}
       {adminDestinations(access)
@@ -120,7 +121,7 @@ function DataDirectory() {
               <Typography variant="caption" color="text.secondary">
                 {entry.id === "osm" && query.data
                   ? query.data.osm.unavailable
-                    ? "Inventory unavailable"
+                    ? ta("inventoryUnavailable")
                     : t("extractCount", { count: query.data.osm.total })
                   : t("openToInspect")}
               </Typography>
@@ -131,6 +132,7 @@ function DataDirectory() {
   );
 }
 function OsmWorkspace() {
+  const ta = useTranslations("adminShared");
   const { client, apiUrl } = useActivityClient();
   const { params, update } = useAdminQueryState();
   const raw = params.get("offset") ?? "0";
@@ -145,12 +147,12 @@ function OsmWorkspace() {
       {query.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void query.refetch()}>Retry</Button>}
+          action={<Button onClick={() => void query.refetch()}>{ta("retry")}</Button>}
         >
-          Failed to load data inventory.
+          {ta("failedToLoadDataInventory")}
         </Alert>
       )}
-      {query.isLoading && <Typography>Loading inventory…</Typography>}
+      {query.isLoading && <Typography>{ta("loadingInventory")}</Typography>}
       {query.data && (
         <>
           <Paper variant="outlined" sx={{ p: 2 }}>

@@ -9,6 +9,8 @@ import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor
 import { deferred } from "@/test/extensionAdmin";
 import { AdminJobEffectsProvider, useAdminJobRegistration } from "./adminJobEffects";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const caches: ReturnType<typeof createTestQueryClient>[] = [];

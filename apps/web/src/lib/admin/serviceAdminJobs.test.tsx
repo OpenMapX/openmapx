@@ -19,6 +19,8 @@ import { AdminJobEffectsProvider } from "./adminJobEffects";
 import { serviceAdminQueries, serviceOrThrow } from "./serviceAdmin";
 import { useServiceJobRegistration } from "./serviceAdminJobs";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "http://admin.test";
 const acquisition = { state: "available", reason: null };
 

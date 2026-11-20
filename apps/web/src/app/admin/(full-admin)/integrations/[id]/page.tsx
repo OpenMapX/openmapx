@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { IntegrationDetail } from "@/components/admin/integrations/IntegrationDetail";
+import { adminPageMetadata } from "@/lib/admin/adminPageMetadata";
 
-export const metadata: Metadata = { title: "Integration Detail — Admin — OpenMapX" };
+export function generateMetadata(): Promise<Metadata> {
+  return adminPageMetadata("integrationDetail");
+}
 
 export default async function AdminIntegrationDetailPage({
   params,

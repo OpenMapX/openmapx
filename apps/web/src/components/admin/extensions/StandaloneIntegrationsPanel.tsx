@@ -16,6 +16,7 @@ import {
 } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
@@ -32,6 +33,7 @@ export function StandaloneIntegrationsPanel() {
   return <LocalInstallations key={apiUrl} />;
 }
 function LocalInstallations() {
+  const t = useTranslations("adminExtensions");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client, apiUrl),
     register = useAdminJobRegistration(),
@@ -93,14 +95,14 @@ function LocalInstallations() {
         result.action !== selected.action ||
         result.outcome !== "committed"
       ) {
-        setError("The ownership response could not be verified. Inspect Activity.");
+        setError(t("theOwnershipResponseCouldNot"));
         return;
       }
       setSuccess(true);
       void qc.invalidateQueries({ queryKey: key });
       void invalidateExtensionAdministration(qc, apiUrl, "components");
-    } else setError(job.error ?? "Operation did not complete. Inspect Activity before retrying.");
-  }, [operation.data, accepted, owner, selected, qc, apiUrl, key]);
+    } else setError(job.error ?? t("operationDidNotCompleteInspect"));
+  }, [operation.data, accepted, owner, selected, qc, apiUrl, key, t]);
   const open = (entry: StandaloneInventoryEntry, action: "adopt" | "remove") => {
     setSelected({ entry, action, key: crypto.randomUUID() });
     setAccepted(null);
@@ -144,13 +146,7 @@ function LocalInstallations() {
       });
       if (owner.active) setAccepted(result);
     } catch (error) {
-      if (owner.active)
-        setError(
-          sdk.adminErrorMessage(
-            error,
-            "Submission was not confirmed. Retry uses the same operation key; inspect Activity if uncertain.",
-          ),
-        );
+      if (owner.active) setError(sdk.adminErrorMessage(error, t("submissionWasNotConfirmedRetry")));
     } finally {
       if (owner.active) setBusy(false);
     }
@@ -158,21 +154,17 @@ function LocalInstallations() {
   return (
     <Stack spacing={2}>
       <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Typography variant="h6">Local integrations</Typography>
-        <Button onClick={() => void inventory.refetch()}>Refresh local inventory</Button>
+        <Typography variant="h6">{t("localIntegrations")}</Typography>
+        <Button onClick={() => void inventory.refetch()}>{t("refreshLocalInventory")}</Button>
       </Stack>
-      <Typography variant="body2">
-        Manage standalone and CLI-installed integrations independently of catalog availability.
-        Adoption records community trust and does not download or execute code.
-      </Typography>
+      <Typography variant="body2">{t("manageStandaloneAndCliInstalled")}</Typography>
       {inventory.isPending && <CircularProgress size={24} />}
       {inventory.error && (
-        <Alert severity="error">
-          Local inventory is unavailable. Existing work may still be running; inspect Activity
-          before retrying.
-        </Alert>
+        <Alert severity="error">{t("localInventoryIsUnavailableExisting")}</Alert>
       )}
-      {inventory.data?.length === 0 && <Alert severity="info">No local integrations found.</Alert>}
+      {inventory.data?.length === 0 && (
+        <Alert severity="info">{t("noLocalIntegrationsFound")}</Alert>
+      )}
       {inventory.data?.map((entry) => (
         <Card key={entry.integrationId} variant="outlined">
           <CardContent>
@@ -181,40 +173,42 @@ function LocalInstallations() {
                 {entry.integrationId}
               </Typography>
               <Typography variant="body2">
-                Version: {entry.version ?? "unknown"} · Ownership: {entry.ownership}
+                {t("version")}
+                {entry.version ?? t("unknownVersion")}{" "}
+                {t("ownershipOwnership", { ownership: entry.ownership })}
               </Typography>
               <Typography variant="body2">
                 {entry.provenance === "legacy_unknown"
-                  ? "Source unknown; review a new source to update."
-                  : `Source: ${entry.provenance}`}
+                  ? t("sourceUnknownReviewANew")
+                  : t("sourceProvenance", { provenance: entry.provenance })}
               </Typography>
               {entry.contentDigest && (
                 <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-                  Content SHA-256: {entry.contentDigest}
+                  {t("contentSha256Contentdigest", { contentDigest: entry.contentDigest })}
                 </Typography>
               )}
               {entry.denialReason && <Alert severity="warning">{entry.denialReason}</Alert>}
               {entry.pendingTransactionId && (
                 <Button component={Link} href="/admin/activity">
-                  Inspect original Activity
+                  {t("inspectOriginalActivity")}
                 </Button>
               )}
               <Stack direction="row" spacing={1}>
                 {entry.adoptable && (
                   <Button
-                    aria-label={`Adopt ${entry.integrationId}`}
+                    aria-label={t("adoptIntegrationid", { integrationId: entry.integrationId })}
                     onClick={() => open(entry, "adopt")}
                   >
-                    Adopt
+                    {t("adopt")}
                   </Button>
                 )}
                 {entry.removable && (
                   <Button
                     color="error"
-                    aria-label={`Remove ${entry.integrationId}`}
+                    aria-label={t("removeIntegrationid", { integrationId: entry.integrationId })}
                     onClick={() => open(entry, "remove")}
                   >
-                    Remove
+                    {t("remove")}
                   </Button>
                 )}
               </Stack>
@@ -231,7 +225,7 @@ function LocalInstallations() {
         maxWidth="sm"
       >
         <DialogTitle>
-          {selected?.action === "adopt" ? "Adopt local integration" : "Remove local integration"}
+          {selected?.action === "adopt" ? t("adoptLocalIntegration") : t("removeLocalIntegration")}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2}>
@@ -240,31 +234,29 @@ function LocalInstallations() {
             </Typography>
             <Typography>
               {selected?.action === "adopt"
-                ? "Record the reviewed local bytes under a standalone community owner. Their original source remains unknown."
-                : "Quarantine the reviewed directory, reload the instance, then remove its ownership records. An uncertain result remains held for reconciliation."}
+                ? t("recordTheReviewedLocalBytes")
+                : t("quarantineTheReviewedDirectoryReload")}
             </Typography>
             <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-              Content SHA-256: {selected?.entry.contentDigest}
+              {t("contentSha256Contentdigest", {
+                contentDigest: selected?.entry.contentDigest ?? "",
+              })}
             </Typography>
             {(busy || pending) && (
               <Alert severity="info">
-                {busy
-                  ? "Submitting…"
-                  : "Operation is running or awaiting reconciliation. Follow its original job in Activity."}
+                {busy ? t("submitting") : t("operationIsRunningOrAwaiting")}
               </Alert>
             )}
             {operation.error && accepted && (
-              <Alert severity="warning">
-                Unable to observe the original operation. Check Activity; this does not cancel it.
-              </Alert>
+              <Alert severity="warning">{t("unableToObserveTheOriginal")}</Alert>
             )}
             {error && <Alert severity="error">{error}</Alert>}
-            {success && <Alert severity="success">Ownership change completed.</Alert>}
+            {success && <Alert severity="success">{t("ownershipChangeCompleted")}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSelected(null)} disabled={busy}>
-            Close
+            {t("close")}
           </Button>
           {!accepted && (
             <Button
@@ -273,7 +265,7 @@ function LocalInstallations() {
               disabled={busy}
               onClick={() => void submit()}
             >
-              {selected?.action === "adopt" ? "Confirm adoption" : "Confirm removal"}
+              {selected?.action === "adopt" ? t("confirmAdoption") : t("confirmRemoval")}
             </Button>
           )}
         </DialogActions>

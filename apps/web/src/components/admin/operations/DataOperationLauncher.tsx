@@ -5,6 +5,7 @@ import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 import { AdminJobLink } from "../activity/AdminJobLink";
@@ -16,6 +17,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { AdminOperationCard } from "./AdminOperationCard";
 
 export function DataOperationLauncher({ operationIds }: { operationIds: readonly string[] }) {
+  const t = useTranslations("adminServices");
   const { client, apiUrl } = useActivityClient();
   const toast = useAdminToast();
   const catalog = useQuery({
@@ -43,22 +45,22 @@ export function DataOperationLauncher({ operationIds }: { operationIds: readonly
           severity="info"
           action={
             <AdminJobLink id={lastJob} source="application">
-              Inspect job
+              {t("inspectJob")}
             </AdminJobLink>
           }
         >
-          Operation accepted. Inspect its outcome in Activity.
+          {t("operationAcceptedInspectItsOutcome")}
         </Alert>
       )}
       {catalog.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void catalog.refetch()}>Retry</Button>}
+          action={<Button onClick={() => void catalog.refetch()}>{t("retry")}</Button>}
         >
-          Operations are unavailable.
+          {t("operationsAreUnavailable")}
         </Alert>
       )}
-      {catalog.isLoading && <Typography>Loading operations…</Typography>}
+      {catalog.isLoading && <Typography>{t("loadingOperations")}</Typography>}
       <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: "wrap" }}>
         {operations.map((op) => (
           <Button
@@ -85,7 +87,7 @@ export function DataOperationLauncher({ operationIds }: { operationIds: readonly
             ]}
             onQueued={(id) => {
               setLastJob(id);
-              toast(`Queued ${operation.title} (${id})`);
+              toast(t("queuedTitleId", { title: operation.title, id }));
             }}
             onError={(message) => toast(message, "error")}
           />

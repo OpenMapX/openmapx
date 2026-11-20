@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DataManagerJobStages } from "../DataManagerJobStages";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 describe("DataManagerJobStages", () => {
   it("renders structured stage errors safely and formats durations", () => {

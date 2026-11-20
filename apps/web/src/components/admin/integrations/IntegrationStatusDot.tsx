@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
+import { useTranslations } from "next-intl";
 
 type StatusDotVariant = "healthy" | "unhealthy" | "unconfigured" | "disabled";
 
@@ -10,13 +11,6 @@ const STATUS_COLOR: Record<StatusDotVariant, string> = {
   unhealthy: "#ef4444",
   unconfigured: "#f59e0b",
   disabled: "#9ca3af",
-};
-
-const STATUS_LABEL: Record<StatusDotVariant, string> = {
-  healthy: "Healthy",
-  unhealthy: "Unhealthy",
-  unconfigured: "Unconfigured",
-  disabled: "Disabled",
 };
 
 interface IntegrationStatusDotProps {
@@ -49,7 +43,14 @@ export function IntegrationStatusDot({
 }: IntegrationStatusDotProps) {
   const variant = computeStatusVariant(enabled, configured, health, hasHealthCheck);
   const color = STATUS_COLOR[variant];
-  const label = STATUS_LABEL[variant];
+  const t = useTranslations("adminIntegrations");
+  const labels: Record<StatusDotVariant, string> = {
+    healthy: t("statusHealthy"),
+    unhealthy: t("statusUnhealthy"),
+    unconfigured: t("statusUnconfigured"),
+    disabled: t("statusDisabled"),
+  };
+  const label = labels[variant];
 
   return (
     <Tooltip title={label} arrow placement="top">

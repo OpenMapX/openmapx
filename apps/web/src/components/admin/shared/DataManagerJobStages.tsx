@@ -6,6 +6,8 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
+import type { AdminTranslator } from "@/lib/admin/adminTranslator";
 import { JobStatusChip } from "./JobStatusChip";
 import { formatStageError } from "./jobStatus";
 
@@ -28,7 +30,7 @@ function durationLabel(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function validationDetails(stage: DataManagerJobStage): string | null {
+function validationDetails(stage: DataManagerJobStage, t: AdminTranslator): string | null {
   if (stage.stage !== "validate" || !stage.artifacts || typeof stage.artifacts !== "object") {
     return null;
   }
@@ -43,39 +45,43 @@ function validationDetails(stage: DataManagerJobStage): string | null {
   });
   if (details.length === 0) return null;
   const hidden = details.length - 5;
-  return `Invalid archives — ${details.slice(0, 5).join("; ")}${hidden > 0 ? `; +${hidden} more` : ""}`;
+  const shown = details.slice(0, 5).join("; ");
+  return hidden > 0
+    ? t("invalidArchivesMore", { archives: shown, hidden })
+    : t("invalidArchives", { archives: shown });
 }
 
 export function DataManagerJobStages({
   stages,
-  emptyMessage = "No stages recorded",
+  emptyMessage,
 }: {
   stages: DataManagerJobStage[];
   emptyMessage?: string;
 }) {
+  const t = useTranslations("adminShared");
   return (
     <Stack sx={{ gap: 0.75 }}>
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-        Stages ({stages.length})
+        {t("stagesLength", { length: stages.length })}
       </Typography>
       {stages.length === 0 ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {emptyMessage}
+          {emptyMessage ?? t("noStagesRecorded")}
         </Typography>
       ) : (
         <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Stage</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Duration</TableCell>
+                <TableCell>{t("stage")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell align="right">{t("duration")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {stages.map((stage) => {
                 const error = formatStageError(stage.error);
-                const artifactDetails = validationDetails(stage);
+                const artifactDetails = validationDetails(stage, t);
                 return (
                   <TableRow key={stage.id} hover>
                     <TableCell>

@@ -48,6 +48,7 @@ export function AdminLayout(props: AdminLayoutProps) {
   );
 }
 function AdminLayoutContent({ children, user, selfHosted = false }: AdminLayoutProps) {
+  const ta = useTranslations("adminShared");
   const { apiUrl } = useEnv();
   const pathname = usePathname();
   const workspace = adminWorkspaceForPath(pathname);
@@ -186,7 +187,7 @@ function AdminLayoutContent({ children, user, selfHosted = false }: AdminLayoutP
                     ) : (
                       <Box
                         role="status"
-                        aria-label="Loading administration"
+                        aria-label={ta("loadingAdministration")}
                         sx={{ display: "flex", justifyContent: "center", py: 6 }}
                       >
                         <CircularProgress size={24} />

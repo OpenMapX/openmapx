@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { adminPageMetadata } from "@/lib/admin/adminPageMetadata";
 import { PrivacySetupPage } from "./PrivacySetupPage";
 
-export const metadata: Metadata = { title: "Privacy setup — Admin — OpenMapX" };
+export function generateMetadata(): Promise<Metadata> {
+  return adminPageMetadata("privacySetup");
+}
 
 export default function PrivacySetupRoute() {
   return <PrivacySetupPage />;

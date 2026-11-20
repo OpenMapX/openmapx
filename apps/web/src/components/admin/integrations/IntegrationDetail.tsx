@@ -35,6 +35,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
 import {
@@ -70,6 +71,7 @@ const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "succes
 };
 
 function OverviewTab({ data }: { data: IntegrationDetailData }) {
+  const t = useTranslations("adminIntegrations");
   return (
     <Stack
       sx={{
@@ -85,7 +87,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
               color: "text.secondary",
             }}
           >
-            Manifest
+            {t("manifest")}
           </Typography>
           <Stack
             sx={{
@@ -93,7 +95,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
             }}
           >
             <MetaRow
-              label="ID"
+              label={t("id")}
               labelWidth={110}
               value={
                 <Typography
@@ -106,9 +108,9 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 </Typography>
               }
             />
-            <MetaRow label="Version" labelWidth={110} value={data.version} />
-            <MetaRow label="Author" labelWidth={110} value={data.author} />
-            <MetaRow label="License" labelWidth={110} value={data.license} />
+            <MetaRow label={t("version")} labelWidth={110} value={data.version} />
+            <MetaRow label={t("author")} labelWidth={110} value={data.author} />
+            <MetaRow label={t("license")} labelWidth={110} value={data.license} />
             {data.documentation && (
               <Stack
                 direction="row"
@@ -125,7 +127,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                     flexShrink: 0,
                   }}
                 >
-                  Documentation
+                  {t("documentation")}
                 </Typography>
                 <Link
                   href={safeHref(data.documentation)}
@@ -134,7 +136,8 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   variant="body2"
                   sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
                 >
-                  Open docs <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
+                  {t("openDocs")}
+                  <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
                 </Link>
               </Stack>
             )}
@@ -153,7 +156,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   flexShrink: 0,
                 }}
               >
-                Domains
+                {t("domains")}
               </Typography>
               <Stack
                 direction="row"
@@ -180,7 +183,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 color: "text.secondary",
               }}
             >
-              Dependencies
+              {t("dependencies")}
             </Typography>
             <Stack
               sx={{
@@ -220,8 +223,8 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   >
                     {dep.loaded
                       ? dep.enabled
-                        ? "loaded, enabled"
-                        : "loaded, disabled"
+                        ? t("loadedEnabled")
+                        : t("loadedDisabled")
                       : "missing"}
                   </Typography>
                 </Stack>
@@ -243,7 +246,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 color: "text.secondary",
               }}
             >
-              Infrastructure Requirements
+              {t("infrastructureRequirements")}
             </Typography>
             <Stack
               sx={{
@@ -274,7 +277,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    data requirement
+                    {t("dataRequirement")}
                   </Typography>
                 </Stack>
               ))}
@@ -293,7 +296,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                       fontFamily: "monospace",
                     }}
                   >
-                    planet-scale
+                    {t("planetScale")}
                   </Typography>
                   <Typography
                     variant="caption"
@@ -301,7 +304,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    may require large resources
+                    {t("mayRequireLargeResources")}
                   </Typography>
                 </Stack>
               )}
@@ -320,6 +323,7 @@ function ConfigTab({
   data: IntegrationDetailData;
   integrationId: string;
 }) {
+  const t = useTranslations("adminIntegrations");
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
 
@@ -340,7 +344,7 @@ function ConfigTab({
                 color: "text.secondary",
               }}
             >
-              Edit Configuration
+              {t("editConfiguration")}
             </Typography>
             <ConfigSchemaForm
               integrationId={integrationId}
@@ -353,20 +357,20 @@ function ConfigTab({
       )}
       {/* Raw resolved config table */}
       <Accordion variant="outlined" disableGutters>
-        <AccordionSummary>Effective values and sources</AccordionSummary>
+        <AccordionSummary>{t("effectiveValuesAndSources")}</AccordionSummary>
         <AccordionDetails>
           {entries.length === 0 ? (
             <Alert severity="info" variant="outlined">
-              No configuration keys found.
+              {t("noConfigurationKeysFound")}
             </Alert>
           ) : (
             <TableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Key</TableCell>
-                    <TableCell>Value</TableCell>
-                    <TableCell>Source</TableCell>
+                    <TableCell>{t("key")}</TableCell>
+                    <TableCell>{t("value")}</TableCell>
+                    <TableCell>{t("source")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -436,6 +440,7 @@ function CredentialsTab({
   data: IntegrationDetailData;
   integrationId: string;
 }) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client, integrationId);
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
@@ -455,12 +460,12 @@ function CredentialsTab({
         if (owner.active)
           showToast(
             result.runtime === "applied"
-              ? `Credential "${key}" deleted and active`
-              : "Credential removal saved; provider activation is pending or failed",
+              ? t("credentialKeyDeletedAndActive", { key })
+              : t("credentialRemovalSavedProviderActivation"),
             result.runtime === "applied" ? "success" : "info",
           );
       } catch (err) {
-        if (owner.active) showToast(`Failed to delete "${key}"`, "error");
+        if (owner.active) showToast(t("failedToDeleteKey", { key }), "error");
         throw err;
       }
     },
@@ -480,7 +485,7 @@ function CredentialsTab({
   if (data.credentialStatus.length === 0) {
     return (
       <Alert severity="info" variant="outlined">
-        This integration has no external credentials or environment variables.
+        {t("thisIntegrationHasNoExternal")}
       </Alert>
     );
   }
@@ -502,16 +507,19 @@ function CredentialsTab({
           }
         >
           {application.runtime === "applied"
-            ? "The saved credential change is active."
+            ? t("theSavedCredentialChangeIs")
             : application.runtime === "failed"
-              ? "The credential change is saved, but provider reload failed. The previous provider remains active."
-              : "The credential change is saved or awaiting reconciliation. Review the operation before retrying."}
+              ? t("theCredentialChangeIsSaved")
+              : t("theCredentialChangeIsSaved2")}
         </Alert>
       )}
       {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
-          Vault not configured — secrets cannot be stored. Set <code>OPENMAPX_SECRETS_KEY</code>{" "}
-          (generate with <code>openssl rand -hex 32</code>) to enable the credential vault.
+          {t("vaultNotConfiguredSecretsCannot")}
+          <code>{t("openmapxSecretsKey")}</code>
+          {t("generateWith")}
+          <code>{t("opensslRandHex32")}</code>
+          {t("toEnableTheCredentialVault")}
         </Alert>
       )}
       {secretCredentials.length > 0 && (
@@ -524,16 +532,16 @@ function CredentialsTab({
                 color: "text.secondary",
               }}
             >
-              Secret Credentials
+              {t("secretCredentials")}
             </Typography>
             <TableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Credential</TableCell>
-                    <TableCell>Source</TableCell>
-                    <TableCell>Vault Last Updated</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell>{t("credential")}</TableCell>
+                    <TableCell>{t("source")}</TableCell>
+                    <TableCell>{t("vaultLastUpdated")}</TableCell>
+                    <TableCell align="right">{t("actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -566,7 +574,9 @@ function CredentialsTab({
                             </Typography>
                             {cred.sharedSecretName && (
                               <Chip
-                                label={`shared: ${cred.sharedSecretName}`}
+                                label={t("sharedSharedsecretname", {
+                                  sharedSecretName: cred.sharedSecretName,
+                                })}
                                 size="small"
                                 variant="outlined"
                                 sx={{ fontSize: "0.65rem" }}
@@ -596,15 +606,21 @@ function CredentialsTab({
                         {(cred.ownership?.writable === false ||
                           ["env", "config.json"].includes(cred.source)) && (
                           <Typography variant="caption" sx={{ display: "block" }}>
-                            Host controlled
-                            {cred.ownership?.envVar ? ` (${cred.ownership.envVar})` : ""}. Remove
-                            the override on the host, refresh, then rotate.
+                            {t("hostControlled")}
+                            {cred.ownership?.envVar
+                              ? t("envvar", { envVar: cred.ownership.envVar })
+                              : ""}
+                            {t("removeTheOverrideOnThe")}
                           </Typography>
                         )}
                       </TableCell>
                       <TableCell>
                         {cred.updatedAt ? (
-                          <Tooltip title={cred.updatedBy ? `by ${cred.updatedBy}` : ""}>
+                          <Tooltip
+                            title={
+                              cred.updatedBy ? t("byUpdatedby", { updatedBy: cred.updatedBy }) : ""
+                            }
+                          >
                             <Typography
                               variant="caption"
                               sx={{
@@ -644,10 +660,10 @@ function CredentialsTab({
                               ["env", "config.json"].includes(cred.source)
                             }
                           >
-                            {hasVaultCredential(cred) ? "Rotate" : "Set"}
+                            {hasVaultCredential(cred) ? t("rotate") : t("set")}
                           </Button>
                           {hasVaultCredential(cred) && (
-                            <Tooltip title="Delete from vault">
+                            <Tooltip title={t("deleteFromVault")}>
                               <IconButton
                                 size="small"
                                 color="error"
@@ -697,6 +713,7 @@ function HealthTab({
   data: IntegrationDetailData;
   integrationId: string;
 }) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
 
@@ -720,11 +737,11 @@ function HealthTab({
         const result = await healthQuery.refetch({ throwOnError: true });
         // Cancellation may resolve with a previous cached success rather than rejecting.
         if (!owner.active) return;
-        if (!result.data) throw new Error("Health check was interrupted");
+        if (!result.data) throw new Error(t("healthCheckWasInterrupted"));
         void admin.refresh();
-        showToast("Health check completed");
+        showToast(t("healthCheckCompleted"));
       } catch (error) {
-        if (owner.active) showToast("Health check failed", "error");
+        if (owner.active) showToast(t("healthCheckFailed"), "error");
         throw error;
       }
     },
@@ -740,7 +757,7 @@ function HealthTab({
     >
       {!data.hasHealthCheck ? (
         <Alert severity="info" variant="outlined">
-          This integration does not declare a health check.
+          {t("thisIntegrationDoesNotDeclare")}
         </Alert>
       ) : (
         <Card variant="outlined">
@@ -759,7 +776,7 @@ function HealthTab({
                   color: "text.secondary",
                 }}
               >
-                Latest Health Status
+                {t("latestHealthStatus")}
               </Typography>
               <Button
                 size="small"
@@ -770,7 +787,7 @@ function HealthTab({
                 onClick={() => healthMutation.mutate()}
                 disabled={healthMutation.isPending}
               >
-                Run Check
+                {t("runCheck")}
               </Button>
             </Stack>
             {health ? (
@@ -800,10 +817,10 @@ function HealthTab({
                     }}
                   >
                     {health.status === "up"
-                      ? "Healthy"
+                      ? t("healthy")
                       : health.status === "down"
-                        ? "Unhealthy"
-                        : "Unconfigured"}
+                        ? t("unhealthy")
+                        : t("unconfigured")}
                   </Typography>
                 </Stack>
                 {health.responseTime != null && (
@@ -813,7 +830,7 @@ function HealthTab({
                       color: "text.secondary",
                     }}
                   >
-                    Response time: {health.responseTime}ms
+                    {t("responseTimeResponsetimeMs", { responseTime: health.responseTime })}
                   </Typography>
                 )}
                 {health.error && (
@@ -824,7 +841,7 @@ function HealthTab({
               </Stack>
             ) : (
               <Alert severity="info" variant="outlined">
-                No health data available yet. Run a check to populate.
+                {t("noHealthDataAvailableYet")}
               </Alert>
             )}
           </CardContent>
@@ -840,7 +857,7 @@ function HealthTab({
                 color: "text.secondary",
               }}
             >
-              Health History
+              {t("healthHistory")}
             </Typography>
             <HealthHistoryChart integrationId={integrationId} />
           </CardContent>
@@ -856,9 +873,10 @@ function HealthTab({
  * exist only because MUI types the anchor (`component="a"`) chip differently.
  */
 function DpaChip({ available, url }: { available?: boolean; url?: string }) {
+  const t = useTranslations("adminIntegrations");
   const href = safeHref(url);
   const shared = {
-    label: "DPA available",
+    label: t("dpaAvailable"),
     size: "small" as const,
     color: (available ? "success" : "default") as "success" | "default",
     variant: "outlined" as const,
@@ -879,6 +897,7 @@ function DpaChip({ available, url }: { available?: boolean; url?: string }) {
 }
 
 function ProviderPrivacyLink({ url }: { url: string }) {
+  const t = useTranslations("adminIntegrations");
   const href = safeHref(url);
   return href ? (
     <Link
@@ -888,7 +907,8 @@ function ProviderPrivacyLink({ url }: { url: string }) {
       variant="body2"
       sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
     >
-      Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
+      {t("privacyPolicy")}
+      <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
     </Link>
   ) : (
     <Typography
@@ -903,11 +923,12 @@ function ProviderPrivacyLink({ url }: { url: string }) {
 }
 
 function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
+  const t = useTranslations("adminIntegrations");
   const sources = data.manifest.dataSources;
   if (!sources?.length) {
     return (
       <Alert severity="info" variant="outlined">
-        No data sources declared.
+        {t("noDataSourcesDeclared")}
       </Alert>
     );
   }
@@ -959,11 +980,11 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                 html={buildLicensingHtml(ds.licensing, { includeSoftware: true, fullNames: true })}
               />
               {ds.commercialUse && (
-                <MetaRow label="Commercial use" labelWidth={110} value={ds.commercialUse} />
+                <MetaRow label={t("commercialUse")} labelWidth={110} value={ds.commercialUse} />
               )}
-              <MetaRow label="Provider country" labelWidth={110} value={ds.providerCountry} />
+              <MetaRow label={t("providerCountry")} labelWidth={110} value={ds.providerCountry} />
               {ds.endUserExposure && (
-                <MetaRow label="End-user exposure" labelWidth={110} value={ds.endUserExposure} />
+                <MetaRow label={t("endUserExposure")} labelWidth={110} value={ds.endUserExposure} />
               )}
               <Stack
                 direction="row"
@@ -979,7 +1000,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                     minWidth: 110,
                   }}
                 >
-                  Flags
+                  {t("flags")}
                 </Typography>
                 <Stack
                   direction="row"
@@ -988,13 +1009,13 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   }}
                 >
                   <Chip
-                    label="Personal data"
+                    label={t("personalData")}
                     size="small"
                     color={ds.personalData ? "warning" : "default"}
                     variant="outlined"
                   />
                   <Chip
-                    label="Cookies"
+                    label={t("cookies")}
                     size="small"
                     color={ds.cookies ? "warning" : "default"}
                     variant="outlined"
@@ -1016,7 +1037,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                     minWidth: 110,
                   }}
                 >
-                  Privacy URL
+                  {t("privacyUrl")}
                 </Typography>
                 <ProviderPrivacyLink url={ds.providerPrivacyUrl} />
               </Stack>
@@ -1028,13 +1049,19 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
   );
 }
 
-const TABS = ["Overview", "Configuration", "Credentials", "Health", "Data Sources"];
-
 interface IntegrationDetailProps {
   id: string;
 }
 
 export function IntegrationDetail({ id }: IntegrationDetailProps) {
+  const t = useTranslations("adminIntegrations");
+  const tabs = [
+    t("tabOverview"),
+    t("tabConfiguration"),
+    t("tabCredentials"),
+    t("tabHealth"),
+    t("tabDataSources"),
+  ];
   const admin = useIntegrationAdmin();
   const [tab, setTab] = useAdminTab([
     "overview",
@@ -1055,10 +1082,11 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
       try {
         await admin.toggle(id, enable);
         void admin.refresh();
-        if (owner.active) showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+        if (owner.active)
+          showToast(t("integrationValue", { value: enable ? "enabled" : "disabled" }));
       } catch (err) {
         if (owner.active)
-          showToast(err instanceof Error ? err.message : "Operation failed", "error");
+          showToast(err instanceof Error ? err.message : t("operationFailed"), "error");
         throw err;
       }
     },
@@ -1082,7 +1110,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   }
 
   if (isError || !data) {
-    return <Alert severity="error">Failed to load integration details</Alert>;
+    return <Alert severity="error">{t("failedToLoadIntegrationDetails")}</Alert>;
   }
 
   const isBusy = toggleMutation.isPending || reloadMutation.isPending;
@@ -1153,7 +1181,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               onClick={() => toggleMutation.mutate(!data.enabled)}
               disabled={isBusy}
             >
-              {data.enabled ? "Disable" : "Enable"}
+              {data.enabled ? t("disable") : t("enable")}
             </Button>
             <Button
               size="small"
@@ -1164,16 +1192,16 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
                   onSuccess: (result) => {
                     if (!owner.active) return;
                     setReloadJobId(result.jobId);
-                    showToast("Reload job queued — check Activity for status", "info");
+                    showToast(t("reloadJobQueuedCheckActivity"), "info");
                   },
                   onError: () => {
-                    if (owner.active) showToast("Failed to queue reload job", "error");
+                    if (owner.active) showToast(t("failedToQueueReloadJob"), "error");
                   },
                 })
               }
               disabled={isBusy}
             >
-              Reload
+              {t("reload")}
             </Button>
           </Stack>
         </Stack>
@@ -1198,7 +1226,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TABS.map((label, index) => (
+          {tabs.map((label, index) => (
             <Tab
               id={`integration-tab-${index}`}
               aria-controls={`integration-panel-${index}`}

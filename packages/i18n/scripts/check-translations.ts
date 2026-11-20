@@ -55,6 +55,26 @@ const FIX_MISSING = process.argv.includes("--fix-missing");
 
 // Helpers
 
+/**
+ * Maps each translator variable in `source` to its namespace: client
+ * `useTranslations("ns")`, server `await getTranslations("ns")` or
+ * `getTranslations({ namespace: "ns" })`, and headless `createTranslator(…, "ns")`.
+ */
+export function translatorNamespaces(source: string): Map<string, string> {
+  const patterns = [
+    /const\s+(\w+)\s*=\s*useTranslations\(\s*["']([^"']+)["']\s*\)/g,
+    /const\s+(\w+)\s*=\s*await\s+getTranslations\(\s*["']([^"']+)["']\s*\)/g,
+    /const\s+(\w+)\s*=\s*await\s+getTranslations\(\s*\{[^}]*\bnamespace:\s*["']([^"']+)["'][^}]*\}\s*\)/g,
+    // Headless API/background translations share the canonical catalogues.
+    /const\s+(\w+)\s*=\s*createTranslator\(\s*[^,]+,\s*["']([^"']+)["']\s*\)/g,
+  ];
+  const varToNs = new Map<string, string>();
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) varToNs.set(match[1], match[2]);
+  }
+  return varToNs;
+}
+
 export function flattenKeys(obj: Record<string, unknown>, prefix = ""): Map<string, string> {
   const result = new Map<string, string>();
   for (const [key, value] of Object.entries(obj)) {
@@ -301,19 +321,7 @@ function main() {
   for (const file of sourceFiles) {
     const content = readFileSync(file, "utf-8");
 
-    // Map variable names to namespaces
-    const varNsPattern = /const\s+(\w+)\s*=\s*useTranslations\(\s*["']([^"']+)["']\s*\)/g;
-    const varToNs = new Map<string, string>();
-    for (const match of content.matchAll(varNsPattern)) {
-      varToNs.set(match[1], match[2]);
-    }
-
-    // Headless API/background translations share the canonical catalogues.
-    const headlessPattern =
-      /const\s+(\w+)\s*=\s*createTranslator\(\s*[^,]+,\s*["']([^"']+)["']\s*\)/g;
-    for (const match of content.matchAll(headlessPattern)) {
-      varToNs.set(match[1], match[2]);
-    }
+    const varToNs = translatorNamespaces(content);
 
     for (const [varName, ns] of varToNs) {
       // Static calls: varName("literal")

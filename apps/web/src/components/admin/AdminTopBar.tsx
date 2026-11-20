@@ -31,6 +31,7 @@ interface AdminTopBarProps {
   onToggleSidebar: () => void;
 }
 function useBreadcrumbs(access: AdminNavigationAccess): { label: string; href: string }[] {
+  const ta = useTranslations("adminShared");
   const pathname = usePathname();
   const t = useTranslations("adminNavigation");
   const workspace = adminWorkspaceForPath(pathname);
@@ -46,7 +47,7 @@ function useBreadcrumbs(access: AdminNavigationAccess): { label: string; href: s
     try {
       label = decodeURIComponent(label);
     } catch {
-      label = "Detail";
+      label = ta("detail");
     }
     crumbs.push({ label, href: pathname });
   }
@@ -54,6 +55,7 @@ function useBreadcrumbs(access: AdminNavigationAccess): { label: string; href: s
 }
 
 export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: AdminTopBarProps) {
+  const ta = useTranslations("adminShared");
   const breadcrumbs = useBreadcrumbs({ role: user.role, selfHosted });
   const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
 
@@ -79,14 +81,14 @@ export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: 
           edge="start"
           onClick={onToggleSidebar}
           size="small"
-          aria-label="Toggle navigation"
+          aria-label={ta("toggleNavigation")}
           aria-expanded={sidebarOpen}
         >
           <MenuIcon />
         </IconButton>
 
         <Breadcrumbs
-          aria-label="Breadcrumb"
+          aria-label={ta("breadcrumb")}
           maxItems={3}
           sx={{
             flex: 1,
@@ -140,19 +142,19 @@ export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: 
             <AdminJobTray />
           </>
         )}
-        <Tooltip title="Back to Map">
+        <Tooltip title={ta("backToMap")}>
           <IconButton
             component={Link}
             href="/"
             size="small"
             color="inherit"
-            aria-label="Back to map"
+            aria-label={ta("backToMap2")}
           >
             <MapIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
-        <Tooltip title={`${user.name} · ${user.email}`}>
+        <Tooltip title={ta("nameEmail", { name: user.name, email: user.email })}>
           <Avatar
             src={avatarSrc}
             alt={user.name}

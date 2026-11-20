@@ -18,6 +18,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import { type QueryKey, useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
@@ -116,6 +117,7 @@ function OperationView({
   onError,
   refreshKeys,
 }: AdminOperationCardProps) {
+  const t = useTranslations("adminServices");
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
@@ -137,7 +139,7 @@ function OperationView({
         if (execution.active) setPreview(result);
       } catch (error) {
         if (execution.active && !(error instanceof AdminOperationInputError))
-          onError(error instanceof Error ? error.message : "Preview failed");
+          onError(error instanceof Error ? error.message : t("previewFailed"));
         throw error;
       }
     },
@@ -156,7 +158,7 @@ function OperationView({
         }
       } catch (error) {
         if (execution.active) {
-          onError(error instanceof Error ? error.message : "Operation failed");
+          onError(error instanceof Error ? error.message : t("operationFailed"));
         }
         throw error;
       }
@@ -199,7 +201,7 @@ function OperationView({
             onClick={() => previewMutation.mutate()}
             disabled={busy || requiredMissing}
           >
-            Queue {operation.title}
+            {t("queueTitle", { title: operation.title })}
           </Button>
         </Stack>
       </CardContent>
@@ -209,7 +211,9 @@ function OperationView({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>{operation.confirmation?.title ?? `Queue ${operation.title}`}</DialogTitle>
+        <DialogTitle>
+          {operation.confirmation?.title ?? t("queueTitle", { title: operation.title })}
+        </DialogTitle>
         <DialogContent>
           {runMutation.isError && <Alert severity="error">{runMutation.error.message}</Alert>}
           <Stack sx={{ gap: 1.5, pt: 0.5 }}>
@@ -217,7 +221,7 @@ function OperationView({
               <Alert severity="warning">{operation.confirmation.message}</Alert>
             )}
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              This job will:
+              {t("thisJobWill")}
             </Typography>
             <List dense disablePadding>
               {(preview?.preview ?? []).map((line) => (
@@ -230,7 +234,7 @@ function OperationView({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPreview(null)} disabled={busy}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -238,7 +242,7 @@ function OperationView({
             disabled={busy}
             onClick={() => runMutation.mutate()}
           >
-            {runMutation.isPending ? "Queueing..." : "Confirm"}
+            {runMutation.isPending ? t("queueing2") : t("confirm")}
           </Button>
         </DialogActions>
       </Dialog>

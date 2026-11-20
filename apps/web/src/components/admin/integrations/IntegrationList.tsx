@@ -24,6 +24,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -43,6 +44,7 @@ type StatusFilter = "all" | "enabled" | "disabled" | "unhealthy" | "unconfigured
 type QualityFilter = "all" | "built-in" | "community";
 
 function HealthCell({ integration }: { integration: IntegrationSummary }) {
+  const t = useTranslations("adminIntegrations");
   if (!integration.hasHealthCheck) {
     return (
       <Typography
@@ -51,7 +53,7 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
           color: "text.disabled",
         }}
       >
-        N/A
+        {t("notApplicable")}
       </Typography>
     );
   }
@@ -68,12 +70,12 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
     );
   }
   if (integration.health.status === "unconfigured") {
-    return <Chip label="Unconfigured" size="small" color="warning" variant="outlined" />;
+    return <Chip label={t("unconfigured")} size="small" color="warning" variant="outlined" />;
   }
   if (integration.health.status === "down") {
     return (
-      <Tooltip title={integration.health.error ?? "Unhealthy"}>
-        <Chip label="Down" size="small" color="error" variant="outlined" />
+      <Tooltip title={integration.health.error ?? t("unhealthy")}>
+        <Chip label={t("down")} size="small" color="error" variant="outlined" />
       </Tooltip>
     );
   }
@@ -85,12 +87,15 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
         fontWeight: 500,
       }}
     >
-      {integration.health.responseTime != null ? `${integration.health.responseTime}ms` : "Up"}
+      {integration.health.responseTime != null
+        ? t("responsetimeMs", { responseTime: integration.health.responseTime })
+        : t("up")}
     </Typography>
   );
 }
 
 export function IntegrationList() {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
 
@@ -113,9 +118,10 @@ export function IntegrationList() {
     try {
       await admin.toggle(integrationId, enable);
       void admin.refresh();
-      if (owner.active) showToast(`Integration ${enable ? "enabled" : "disabled"}`);
+      if (owner.active)
+        showToast(t("integrationValue", { value: enable ? "enabled" : "disabled" }));
     } catch {
-      if (owner.active) showToast("Operation failed", "error");
+      if (owner.active) showToast(t("operationFailed"), "error");
     } finally {
       if (owner.active)
         setTogglingIds((prev) => {
@@ -135,9 +141,9 @@ export function IntegrationList() {
       try {
         const data = await admin.healthSweep();
         void admin.refresh();
-        if (owner.active) showToast(`Health checks completed: ${data.count} checked`);
+        if (owner.active) showToast(t("healthChecksCompletedCountChecked", { count: data.count }));
       } catch (err) {
-        if (owner.active) showToast("Health checks failed", "error");
+        if (owner.active) showToast(t("healthChecksFailed"), "error");
         throw err;
       }
     },
@@ -221,7 +227,7 @@ export function IntegrationList() {
   }
 
   if (isError) {
-    return <Alert severity="error">Failed to load integrations</Alert>;
+    return <Alert severity="error">{t("failedToLoadIntegrations")}</Alert>;
   }
 
   return (
@@ -231,8 +237,8 @@ export function IntegrationList() {
       }}
     >
       <AdminPageHeader
-        title="Integrations"
-        subtitle="Providers, credentials, health"
+        title={t("integrations")}
+        subtitle={t("providersCredentialsHealth")}
         actions={
           <Stack
             direction="row"
@@ -241,17 +247,25 @@ export function IntegrationList() {
               flexWrap: "wrap",
             }}
           >
-            <Chip label={`${integrations.length} total`} size="small" variant="outlined" />
             <Chip
-              label={`${counts.enabled} enabled`}
+              label={t("lengthTotal", { length: integrations.length })}
+              size="small"
+              variant="outlined"
+            />
+            <Chip
+              label={t("enabledEnabled", { enabled: counts.enabled })}
               size="small"
               color="success"
               variant="outlined"
             />
-            <Chip label={`${counts.disabled} disabled`} size="small" variant="outlined" />
+            <Chip
+              label={t("disabledDisabled", { disabled: counts.disabled })}
+              size="small"
+              variant="outlined"
+            />
             {counts.unhealthy > 0 && (
               <Chip
-                label={`${counts.unhealthy} unhealthy`}
+                label={t("unhealthyUnhealthy", { unhealthy: counts.unhealthy })}
                 size="small"
                 color="error"
                 variant="outlined"
@@ -259,7 +273,7 @@ export function IntegrationList() {
             )}
             {counts.unconfigured > 0 && (
               <Chip
-                label={`${counts.unconfigured} unconfigured`}
+                label={t("unconfiguredUnconfigured", { unconfigured: counts.unconfigured })}
                 size="small"
                 color="warning"
                 variant="outlined"
@@ -272,7 +286,7 @@ export function IntegrationList() {
         toolbar={
           <TableToolbar>
             <TableSearchField
-              placeholder="Search by name, id, domain…"
+              placeholder={t("searchByNameIdDomain")}
               value={search}
               onChange={(value) => {
                 setSearch(value);
@@ -293,7 +307,7 @@ export function IntegrationList() {
                   <FilterListIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
                 }
               >
-                <MenuItem value="all">All domains</MenuItem>
+                <MenuItem value="all">{t("allDomains")}</MenuItem>
                 {allDomains.map((d) => (
                   <MenuItem key={d} value={d}>
                     {d}
@@ -310,11 +324,11 @@ export function IntegrationList() {
                   setPage(0);
                 }}
               >
-                <MenuItem value="all">All statuses</MenuItem>
-                <MenuItem value="enabled">Enabled</MenuItem>
-                <MenuItem value="disabled">Disabled</MenuItem>
-                <MenuItem value="unhealthy">Unhealthy</MenuItem>
-                <MenuItem value="unconfigured">Unconfigured</MenuItem>
+                <MenuItem value="all">{t("allStatuses")}</MenuItem>
+                <MenuItem value="enabled">{t("enabled")}</MenuItem>
+                <MenuItem value="disabled">{t("disabled")}</MenuItem>
+                <MenuItem value="unhealthy">{t("unhealthy")}</MenuItem>
+                <MenuItem value="unconfigured">{t("unconfigured")}</MenuItem>
               </Select>
             </FormControl>
 
@@ -326,9 +340,9 @@ export function IntegrationList() {
                   setPage(0);
                 }}
               >
-                <MenuItem value="all">All types</MenuItem>
-                <MenuItem value="built-in">Built-in</MenuItem>
-                <MenuItem value="community">Community</MenuItem>
+                <MenuItem value="all">{t("allTypes")}</MenuItem>
+                <MenuItem value="built-in">{t("builtIn")}</MenuItem>
+                <MenuItem value="community">{t("community")}</MenuItem>
               </Select>
             </FormControl>
 
@@ -347,7 +361,7 @@ export function IntegrationList() {
                   setPage(0);
                 }}
               >
-                Clear
+                {t("clear")}
               </Button>
             )}
 
@@ -366,7 +380,7 @@ export function IntegrationList() {
                 size="small"
                 startIcon={<TuneIcon />}
               >
-                Bulk Configure
+                {t("bulkConfigure")}
               </Button>
               <Button
                 variant="outlined"
@@ -381,7 +395,7 @@ export function IntegrationList() {
                 onClick={() => healthMutation.mutate()}
                 disabled={healthMutation.isPending || reloadMutation.isPending}
               >
-                Run Health Checks
+                {t("runHealthChecks")}
               </Button>
               <Button
                 variant="outlined"
@@ -392,16 +406,15 @@ export function IntegrationList() {
                 onClick={() =>
                   reloadMutation.mutate(undefined, {
                     onSuccess: () =>
-                      owner.active &&
-                      showToast("Reload job queued — check Activity for status", "info"),
+                      owner.active && showToast(t("reloadJobQueuedCheckActivity"), "info"),
                     onError: () => {
-                      if (owner.active) showToast("Reload failed", "error");
+                      if (owner.active) showToast(t("reloadFailed"), "error");
                     },
                   })
                 }
                 disabled={reloadMutation.isPending || healthMutation.isPending}
               >
-                Reload All
+                {t("reloadAll")}
               </Button>
             </Stack>
           </TableToolbar>
@@ -424,17 +437,17 @@ export function IntegrationList() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 32 }} />
-                <TableCell>Name</TableCell>
-                <TableCell>Domains</TableCell>
-                <TableCell>Version</TableCell>
-                <TableCell>Quality</TableCell>
-                <TableCell>Health</TableCell>
-                <TableCell>Enabled</TableCell>
+                <TableCell>{t("name")}</TableCell>
+                <TableCell>{t("domains")}</TableCell>
+                <TableCell>{t("version")}</TableCell>
+                <TableCell>{t("quality")}</TableCell>
+                <TableCell>{t("health")}</TableCell>
+                <TableCell>{t("enabled")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filtered.length === 0 && (
-                <TableEmptyState colSpan={7} message="No integrations match your filters" />
+                <TableEmptyState colSpan={7} message={t("noIntegrationsMatchYourFilters")} />
               )}
               {paged.map((integration) => (
                 <TableRow key={integration.id} hover>
@@ -502,9 +515,9 @@ export function IntegrationList() {
                     <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
                       <StatusBadge quality={integration.quality} />
                       {integration.blockedCode ? (
-                        <Tooltip title="This community integration ships backend or frontend code. OpenMapX does not execute community code inside the API or the browser; only its declarative manifest (attribution, data sources) is active. Move runtime behavior into an isolated service component.">
+                        <Tooltip title={t("thisCommunityIntegrationShipsBackend")}>
                           <Chip
-                            label="Code not executed"
+                            label={t("codeNotExecuted")}
                             size="small"
                             color="warning"
                             variant="outlined"
@@ -518,7 +531,7 @@ export function IntegrationList() {
                   </TableCell>
                   <TableCell>
                     <Tooltip
-                      title={integration.enabled ? "Disable integration" : "Enable integration"}
+                      title={integration.enabled ? t("disableIntegration") : t("enableIntegration")}
                     >
                       <span>
                         <Switch

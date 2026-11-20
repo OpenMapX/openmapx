@@ -16,6 +16,7 @@ import Typography from "@mui/material/Typography";
 import type { IntegrationApplyReceipt } from "@openmapx/core/api-contracts";
 import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
@@ -43,6 +44,7 @@ export function SetCredentialDialog({
   setup,
   expectedRevision,
 }: SetCredentialDialogProps) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(
     admin.client,
@@ -73,7 +75,7 @@ export function SetCredentialDialog({
     retry: false,
     mutationFn: async () => {
       try {
-        if (!draft.current?.revision) throw Error("Refresh credential metadata before saving.");
+        if (!draft.current?.revision) throw Error(t("refreshCredentialMetadataBeforeSaving"));
         const revision = draft.current.revision;
         if (draft.current.value !== value)
           draft.current = { ...draft.current, value, key: crypto.randomUUID() };
@@ -94,7 +96,7 @@ export function SetCredentialDialog({
         else setReceipt(applied);
       } catch (err) {
         if (owner.active)
-          setError(err instanceof Error ? err.message : "Failed to save credential");
+          setError(err instanceof Error ? err.message : t("failedToSaveCredential"));
         throw err;
       }
     },
@@ -110,7 +112,7 @@ export function SetCredentialDialog({
 
   function handleSave() {
     if (!value.trim()) {
-      setError("Value cannot be empty");
+      setError(t("valueCannotBeEmpty"));
       return;
     }
     setError(null);
@@ -119,7 +121,7 @@ export function SetCredentialDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Set Credential — {title}</DialogTitle>
+      <DialogTitle>{t("setCredentialTitle", { title })}</DialogTitle>
       <DialogContent>
         <Stack
           sx={{
@@ -130,8 +132,8 @@ export function SetCredentialDialog({
           {receipt && (
             <Alert severity={receipt.runtime === "failed" ? "warning" : "info"}>
               {receipt.runtime === "failed"
-                ? "Credential saved. Provider reload failed; the previous provider remains active."
-                : "Credential saved. Activation is pending or requires reconciliation. Review the operation before retrying."}
+                ? t("credentialSavedProviderReloadFailed")
+                : t("credentialSavedActivationIsPending")}
             </Alert>
           )}
           {description && (
@@ -179,7 +181,7 @@ export function SetCredentialDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} disabled={mutation.isPending}>
-          {receipt ? "Done" : "Cancel"}
+          {receipt ? t("done") : t("cancel")}
         </Button>
         <Button
           variant="contained"
@@ -187,7 +189,7 @@ export function SetCredentialDialog({
           disabled={mutation.isPending || !value.trim() || !draft.current?.revision || !!receipt}
           startIcon={mutation.isPending ? <CircularProgress size={14} /> : undefined}
         >
-          Save Credential
+          {t("saveCredential")}
         </Button>
       </DialogActions>
     </Dialog>

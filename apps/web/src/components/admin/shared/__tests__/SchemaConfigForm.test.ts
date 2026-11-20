@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { catalogTranslator } from "@/test/catalogTranslator";
 import { buildConfigDiff, extractConfigFields } from "../SchemaConfigForm";
 
 const schema = {
@@ -65,7 +66,7 @@ describe("extractConfigFields", () => {
       fields.map((field) => [field.key, field.key === "region" ? "eu" : "***"]),
     );
     const changedKeys = fields.map((field) => field.key);
-    const diff = buildConfigDiff(fields, values, changedKeys);
+    const diff = buildConfigDiff(fields, values, changedKeys, catalogTranslator("adminShared"));
 
     expect(Object.keys(values)).not.toContain("CLIENT_ID");
     expect(Object.keys(diff)).not.toContain("CLIENT_ID");
@@ -85,6 +86,7 @@ describe("buildConfigDiff", () => {
           timeout: 45,
         },
         ["providers", "timeout"],
+        catalogTranslator("adminShared"),
       ),
     ).toEqual({
       providers: [{ id: "gemini", type: "google", model: "gemini-2.5-flash" }],
@@ -93,8 +95,13 @@ describe("buildConfigDiff", () => {
   });
 
   it("rejects malformed structured JSON before calling the API", () => {
-    expect(() => buildConfigDiff(fields, { providers: "not-json" }, ["providers"])).toThrow(
-      "Providers must be valid JSON",
-    );
+    expect(() =>
+      buildConfigDiff(
+        fields,
+        { providers: "not-json" },
+        ["providers"],
+        catalogTranslator("adminShared"),
+      ),
+    ).toThrow("Providers must be valid JSON");
   });
 });

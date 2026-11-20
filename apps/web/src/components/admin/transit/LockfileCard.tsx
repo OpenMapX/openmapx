@@ -15,6 +15,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitCredentialsSection } from "@/components/admin/services/TransitCredentialsSection";
@@ -37,6 +38,7 @@ export function LockfileCard(_props: { state?: TransitStateSummary } = {}) {
   return <CatalogPinView key={JSON.stringify([apiUrl, actorId])} />;
 }
 function CatalogPinView() {
+  const t = useTranslations("adminTransit");
   const [branch, setBranch] = useState(DEFAULT_CATALOG_BRANCH),
     [proposalId, setProposalId] = useState<string | undefined>(),
     [offset, setOffset] = useState(0),
@@ -86,14 +88,14 @@ function CatalogPinView() {
       result.result?.kind === "catalog.activate" &&
       result.result.outcome === "activated"
     )
-      toast("Validated catalog pair activated", "success");
+      toast(t("validatedCatalogPairActivated"), "success");
     else if (
       result.status === "ok" &&
       result.result?.kind === "catalog.validate" &&
       result.result.status === "passed"
     )
-      toast("Validation passed; review and acknowledge the diff before activation", "success");
-  }, [own.data, toast]);
+      toast(t("validationPassedReviewAndAcknowledge"), "success");
+  }, [own.data, toast, t]);
   const execution = ownedJobId ? own.data : data?.execution,
     observing = Boolean(ownedJobId && !own.data),
     busy =
@@ -138,7 +140,7 @@ function CatalogPinView() {
           sx={{ alignItems: "center", justifyContent: "space-between" }}
         >
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Catalog pins
+            {t("catalogPins")}
           </Typography>
           <Button
             size="small"
@@ -148,30 +150,33 @@ function CatalogPinView() {
               if (ownedJobId) void own.refetch();
             }}
           >
-            Refresh
+            {t("refresh")}
           </Button>
         </Stack>
-        {query.isLoading && <CircularProgress size={24} aria-label="Loading catalog review" />}
-        {query.isError && (
-          <Alert severity="error">
-            Catalog review is unavailable. Restore instance connectivity and refresh.
-          </Alert>
-        )}
+        {query.isLoading && <CircularProgress size={24} aria-label={t("loadingCatalogReview")} />}
+        {query.isError && <Alert severity="error">{t("catalogReviewIsUnavailableRestore")}</Alert>}
         {data && (
           <>
             <Box>
-              <Chip size="small" label="Active pair" color={data.active ? "success" : "warning"} />
+              <Chip
+                size="small"
+                label={t("activePair")}
+                color={data.active ? "success" : "warning"}
+              />
               <Typography variant="body2" sx={{ mt: 1, overflowWrap: "anywhere" }}>
-                Transitous: {data.active?.transitous.ref ?? "Not initialized"}
+                {t("transitous")}
+                {data.active?.transitous.ref ?? t("notInitialized")}
               </Typography>
               <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                Atlas: {data.active?.transitous.submodules["transitland-atlas"] ?? "—"}
+                {t("atlas")}
+                {data.active?.transitous.submodules["transitland-atlas"] ?? "—"}
               </Typography>
               <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                GBFS: {data.active?.gbfs.commit ?? "—"}
+                {t("gbfs")}
+                {data.active?.gbfs.commit ?? "—"}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Active pins stay selected while a proposal is validated.
+                {t("activePinsStaySelectedWhile")}
               </Typography>
             </Box>
             <Stack
@@ -180,7 +185,7 @@ function CatalogPinView() {
               sx={{ alignItems: { sm: "center" } }}
             >
               <TextField
-                label="Catalog branch"
+                label={t("catalogBranch")}
                 size="small"
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
@@ -193,24 +198,24 @@ function CatalogPinView() {
                     const result = await propose.mutateAsync({ branch: branch.trim() });
                     if (alive.current) {
                       choose(result.value.proposalId);
-                      toast("Proposal created; active pins are unchanged", "success");
+                      toast(t("proposalCreatedActivePinsAre"), "success");
                     }
                   } catch {
                     /* Render the retained request error below. */
                   }
                 }}
               >
-                Create proposal
+                {t("createProposal")}
               </Button>
             </Stack>
             <TextField
               select
-              label="Proposal"
+              label={t("proposal")}
               size="small"
               value={proposalId ?? ""}
               onChange={(event) => choose(event.target.value)}
             >
-              <MenuItem value="">Select a proposal</MenuItem>
+              <MenuItem value="">{t("selectAProposal")}</MenuItem>
               {data.proposal &&
                 !data.page.proposals.some(
                   (entry) => entry.proposalId === data.proposal?.proposalId,
@@ -232,10 +237,11 @@ function CatalogPinView() {
                   disabled={offset === 0 || query.isFetching}
                   onClick={() => setOffset(Math.max(0, offset - 100))}
                 >
-                  Previous proposals
+                  {t("previousProposals")}
                 </Button>
                 <Typography variant="caption">
-                  {offset + 1}–{offset + data.page.proposals.length} of {data.page.total}
+                  {offset + 1}–{offset + data.page.proposals.length}{" "}
+                  {t("ofTotal", { total: data.page.total })}
                 </Typography>
                 <Button
                   disabled={data.page.nextOffset === null || query.isFetching}
@@ -243,7 +249,7 @@ function CatalogPinView() {
                     if (data.page.nextOffset !== null) setOffset(data.page.nextOffset);
                   }}
                 >
-                  Next proposals
+                  {t("nextProposals")}
                 </Button>
               </Stack>
             )}
@@ -254,32 +260,33 @@ function CatalogPinView() {
                     size="small"
                     label={
                       data.catalogRevisionId === data.proposal.pins.generationId
-                        ? "Selected pair"
-                        : "Proposed pair"
+                        ? t("selectedPair")
+                        : t("proposedPair")
                     }
                     variant="outlined"
                   />
                   <Typography variant="body2" sx={{ mt: 1, overflowWrap: "anywhere" }}>
-                    Transitous: {data.proposal.pins.transitous.ref}
+                    {t("transitousRef", { ref: data.proposal.pins.transitous.ref })}
                   </Typography>
                   <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                    Atlas: {data.proposal.pins.transitous.submodules["transitland-atlas"] ?? "—"}
+                    {t("atlas")}
+                    {data.proposal.pins.transitous.submodules["transitland-atlas"] ?? "—"}
                   </Typography>
                   <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                    GBFS: {data.proposal.pins.gbfs.commit}
+                    {t("gbfsCommit", { commit: data.proposal.pins.gbfs.commit })}
                   </Typography>
                 </Box>
                 {data.diff && (
                   <Box>
                     <Typography variant="subtitle2">
-                      Source and license review · {data.diff.total} changes
+                      {t("sourceAndLicenseReviewTotal", { total: data.diff.total })}
                     </Typography>
                     <Typography
                       variant="caption"
                       color="text.secondary"
                       sx={{ overflowWrap: "anywhere" }}
                     >
-                      Exact diff: {data.diff.digest}
+                      {t("exactDiffDigest", { digest: data.diff.digest })}
                     </Typography>
                     {data.diff.rows.map((row) => (
                       <Box
@@ -291,8 +298,13 @@ function CatalogPinView() {
                           component="summary"
                           sx={{ cursor: "pointer", overflowWrap: "anywhere" }}
                         >
-                          {row.change}: {row.region} / {row.source} · {row.fields.join(", ")} ·
-                          license {row.licenseStatus === "unknown" ? "unknown" : "declared"}
+                          {t("changeRegionSourceFieldsLicense", {
+                            change: row.change,
+                            region: row.region,
+                            source: row.source,
+                            fields: row.fields.join(", "),
+                          })}
+                          {row.licenseStatus === "unknown" ? "unknown" : "declared"}
                         </Box>
                         <Typography
                           component="pre"
@@ -309,9 +321,7 @@ function CatalogPinView() {
                       </Box>
                     ))}
                     {data.diff.total === 0 && (
-                      <Typography variant="body2">
-                        No source metadata changes in this pair.
-                      </Typography>
+                      <Typography variant="body2">{t("noSourceMetadataChangesIn")}</Typography>
                     )}
                     <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: "center" }}>
                       <Button
@@ -324,13 +334,16 @@ function CatalogPinView() {
                           }
                         }}
                       >
-                        Previous changes
+                        {t("previousChanges")}
                       </Button>
                       <Typography variant="caption">
                         {data.diff.total
-                          ? `${data.diff.offset + 1}–${data.diff.offset + data.diff.rows.length}`
-                          : "0"}{" "}
-                        of {data.diff.total}
+                          ? t("valueValue2", {
+                              value: data.diff.offset + 1,
+                              value2: data.diff.offset + data.diff.rows.length,
+                            })
+                          : "0"}
+                        {t("ofTotal2", { total: data.diff.total })}
                       </Typography>
                       <Button
                         disabled={data.diff.nextOffset === null || query.isFetching}
@@ -341,7 +354,7 @@ function CatalogPinView() {
                           }
                         }}
                       >
-                        Next changes
+                        {t("nextChanges")}
                       </Button>
                     </Stack>
                   </Box>
@@ -353,11 +366,11 @@ function CatalogPinView() {
                   sx={{ alignItems: { sm: "center" } }}
                 >
                   <TextField
-                    label="Validation countries"
+                    label={t("validationCountries")}
                     size="small"
                     value={countries}
                     error={invalidCountries}
-                    helperText="Comma-separated country codes. Empty scope requires the configured planet profile."
+                    helperText={t("commaSeparatedCountryCodesEmpty")}
                     onChange={(event) => {
                       touched.current = true;
                       setCountries(event.target.value);
@@ -383,7 +396,7 @@ function CatalogPinView() {
                       }
                     }}
                   >
-                    Validate inactive slot
+                    {t("validateInactiveSlot")}
                   </Button>
                 </Stack>
                 {data.validation && (
@@ -397,14 +410,24 @@ function CatalogPinView() {
                     }
                   >
                     {data.validation.status === "passed"
-                      ? `Validation ${data.validationEligible ? "passed" : "is no longer eligible for activation"}. Countries: ${data.validation.countries.join(", ") || "planet"}. Valid until ${formatTransitAdminTimestamp(data.validation.expiresAt)}.`
+                      ? t("validationValueCountriesValue2Valid", {
+                          value: data.validationEligible
+                            ? "passed"
+                            : "is no longer eligible for activation",
+                          value2: data.validation.countries.join(", ") || "planet",
+                          expiresAt: formatTransitAdminTimestamp(data.validation.expiresAt),
+                        })
                       : data.validation.reason}
                   </Alert>
                 )}
                 {data.validation?.status === "passed" && (
                   <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-                    Tested slot {data.validation.slot} · epoch {data.validation.epoch} · image{" "}
-                    {data.validation.imageDigest} · manifest {data.validation.manifestHash}
+                    {t("testedSlotSlotEpochEpoch", {
+                      slot: data.validation.slot,
+                      epoch: data.validation.epoch,
+                      imageDigest: data.validation.imageDigest,
+                      manifestHash: data.validation.manifestHash,
+                    })}
                   </Typography>
                 )}
                 <FormControlLabel
@@ -415,14 +438,14 @@ function CatalogPinView() {
                       disabled={!data.validationEligible || busy || submitting}
                     />
                   }
-                  label="I reviewed this exact source and licensing diff, including entries with unknown licensing."
+                  label={t("iReviewedThisExactSource")}
                 />
                 <Button
                   variant="contained"
                   disabled={!data.validationEligible || !ack || busy || submitting}
                   onClick={() => setConfirm(true)}
                 >
-                  Activate validated pair
+                  {t("activateValidatedPair")}
                 </Button>
                 <TransitCredentialsSection
                   key={data.proposal.proposalId}
@@ -450,8 +473,9 @@ function CatalogPinView() {
               {(ownedJobId ?? execution?.id) && (
                 <AdminJobLink id={(ownedJobId ?? execution?.id) as string} source="data-manager" />
               )}
-              Catalog job {ownedJobId ?? execution?.id}:{" "}
-              {execution?.status ?? "connecting to retained execution"}
+              {t("catalogJob")}
+              {ownedJobId ?? execution?.id}:{" "}
+              {execution?.status ?? t("connectingToRetainedExecution")}
             </Typography>
             {execution?.progress != null && (
               <Typography variant="caption">{Math.round(execution.progress * 100)}%</Typography>
@@ -488,35 +512,26 @@ function CatalogPinView() {
                   }
                 }}
               >
-                Request cancellation
+                {t("requestCancellation")}
               </Button>
             )}
             {execution?.publication === "unknown" && (
-              <Typography variant="caption">
-                Outcome is still being reconciled. New conflicting work stays blocked.
-              </Typography>
+              <Typography variant="caption">{t("outcomeIsStillBeingReconciled")}</Typography>
             )}
           </Alert>
         )}
-        {own.isError && (
-          <Alert severity="warning">
-            The job observer disconnected. Its retained execution continues; refresh to reconnect.
-          </Alert>
-        )}
+        {own.isError && <Alert severity="warning">{t("theJobObserverDisconnectedIts")}</Alert>}
         {errors.map(([kind, error]) => (
           <Alert key={kind} severity="error">
-            {adminErrorMessage(
-              error,
-              "Catalog request failed. Inspect its retained job before retrying.",
-            )}
+            {adminErrorMessage(error, t("catalogRequestFailedInspectIts"))}
           </Alert>
         ))}
       </Stack>
       <ConfirmDialog
         open={confirm}
-        title="Activate validated catalog pair"
-        message="Promote the tested inactive slot and then select its exact Transitous and GBFS pins. The previous healthy generation remains available for recovery."
-        confirmLabel="Activate validated pair"
+        title={t("activateValidatedCatalogPair")}
+        message={t("promoteTheTestedInactiveSlot")}
+        confirmLabel={t("activateValidatedPair")}
         confirmColor="warning"
         loading={activate.isPending}
         onCancel={() => setConfirm(false)}

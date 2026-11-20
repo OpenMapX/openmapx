@@ -2,6 +2,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@/test";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock("../activity/activityQueries", () => ({
   useActivityClient: () => ({ apiUrl: "http://synthetic.invalid" }),
 }));

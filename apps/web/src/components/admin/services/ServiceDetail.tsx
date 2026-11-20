@@ -26,6 +26,7 @@ import type {
   AdminServiceDetail as ServiceDetailData,
 } from "@openmapx/core/api-contracts";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Menu from "@/components/ui/Menu";
 import {
@@ -48,13 +49,14 @@ import {
   AdminActionNotStartedError,
   SavedConfigurationApplyError,
 } from "../shared/SchemaConfigForm";
-import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
+import { statusColor, useServiceStatusLabel } from "../shared/ServiceStatusChip";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceLogsPanel } from "./ServiceLogsDrawer";
 
 function OverviewTab({ data }: { data: ServiceDetailData }) {
+  const t = useTranslations("adminServices");
   const { manifest } = data;
 
   return (
@@ -64,7 +66,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
       }}
     >
       <Accordion variant="outlined" disableGutters>
-        <AccordionSummary>Technical metadata</AccordionSummary>
+        <AccordionSummary>{t("technicalMetadata")}</AccordionSummary>
         <AccordionDetails>
           <Stack
             sx={{
@@ -72,7 +74,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
             }}
           >
             <MetaRow
-              label="ID"
+              label={t("id")}
               value={
                 <Typography
                   variant="body2"
@@ -84,10 +86,10 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 </Typography>
               }
             />
-            <MetaRow label="Version" value={manifest.version} />
-            <MetaRow label="Author" value={manifest.author} />
-            <MetaRow label="License" value={manifest.license} />
-            <MetaRow label="Platform" value={manifest.platform} />
+            <MetaRow label={t("version")} value={manifest.version} />
+            <MetaRow label={t("author")} value={manifest.author} />
+            <MetaRow label={t("license")} value={manifest.license} />
+            <MetaRow label={t("platform")} value={manifest.platform} />
             {manifest.homepage && (
               <Stack
                 direction="row"
@@ -104,7 +106,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                     flexShrink: 0,
                   }}
                 >
-                  Homepage
+                  {t("homepage")}
                 </Typography>
                 <Chip
                   label={manifest.homepage}
@@ -121,7 +123,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
               </Stack>
             )}
             <MetaRow
-              label="Directory"
+              label={t("directory")}
               value={
                 <Typography
                   variant="body2"
@@ -147,7 +149,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 color: "text.secondary",
               }}
             >
-              Provides
+              {t("provides")}
             </Typography>
             <Stack
               direction="row"
@@ -179,7 +181,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 color: "text.secondary",
               }}
             >
-              Consumes
+              {t("consumes")}
             </Typography>
             <Stack
               sx={{
@@ -207,10 +209,13 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    mounted at <code style={{ fontFamily: "monospace" }}>{c.mountAt}</code>
-                    {c.targetFilename ? ` · as ${c.targetFilename}` : ""}
-                    {c.readOnly ? " · read-only" : ""}
-                    {c.required === false ? " · optional" : ""}
+                    {t("mountedAt")}
+                    <code style={{ fontFamily: "monospace" }}>{c.mountAt}</code>
+                    {c.targetFilename
+                      ? t("asTargetfilename", { targetFilename: c.targetFilename })
+                      : ""}
+                    {c.readOnly ? t("readOnly") : ""}
+                    {c.required === false ? t("optional2") : ""}
                   </Typography>
                 </Stack>
               ))}
@@ -220,7 +225,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
       )}
       {manifest.envVars && manifest.envVars.length > 0 && (
         <Accordion variant="outlined" disableGutters>
-          <AccordionSummary>Environment variables</AccordionSummary>
+          <AccordionSummary>{t("environmentVariables")}</AccordionSummary>
           <AccordionDetails>
             <Stack
               sx={{
@@ -270,7 +275,8 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                           color: "text.disabled",
                         }}
                       >
-                        default: <code style={{ fontFamily: "monospace" }}>{v.default}</code>
+                        {t("default")}
+                        <code style={{ fontFamily: "monospace" }}>{v.default}</code>
                       </Typography>
                     )}
                   </Stack>
@@ -297,7 +303,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 color: "text.secondary",
               }}
             >
-              Exposure
+              {t("exposure")}
             </Typography>
             <Stack
               sx={{
@@ -316,7 +322,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    Host Ports
+                    {t("hostPorts")}
                   </Typography>
                   {manifest.exposure.hostPorts.map((p) => (
                     <Typography
@@ -343,7 +349,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                       color: "text.secondary",
                     }}
                   >
-                    Reverse Proxy
+                    {t("reverseProxy")}
                   </Typography>
                   {manifest.exposure.proxy.pathPrefix && (
                     <Typography
@@ -352,7 +358,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                         fontFamily: "monospace",
                       }}
                     >
-                      Path: {manifest.exposure.proxy.pathPrefix}
+                      {t("pathPathprefix", { pathPrefix: manifest.exposure.proxy.pathPrefix })}
                     </Typography>
                   )}
                 </Stack>
@@ -378,10 +384,11 @@ function ConfigTab({
   onConfigurationSaved: () => void;
   applyOwner: ReturnType<typeof useAdminMutationOwner>;
 }) {
+  const t = useTranslations("adminServices");
   const { manifest } = data;
   const startAction = data.status === "running" ? "apply" : "start";
   const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
-    serviceActionReason(data.actions?.[action]);
+    serviceActionReason(data.actions?.[action], t);
   // Persisted config from `service_config` table (separate query from the
   // manifest itself so the config tab doesn't refetch the full LoadedService).
   const configQuery = useServiceConfig(manifest.id);
@@ -391,8 +398,7 @@ function ConfigTab({
   if (!manifest.configSchema) {
     return (
       <CompactAlert severity="info" variant="outlined">
-        No configSchema declared for this service. Configuration is managed via environment
-        variables or bind-mounted config files.
+        {t("noConfigschemaDeclaredForThis")}
       </CompactAlert>
     );
   }
@@ -407,7 +413,7 @@ function ConfigTab({
             color: "text.secondary",
           }}
         >
-          Configuration
+          {t("configuration")}
         </Typography>
         <ServiceConfigForm
           key={JSON.stringify([apiUrl, manifest.id])}
@@ -422,7 +428,7 @@ function ConfigTab({
             if (execution.active) onConfigurationSaved();
           }}
           onApplySaved={reason(startAction) ? undefined : onApplySaved}
-          applySavedLabel={startAction === "start" ? "Start" : "Apply saved configuration"}
+          applySavedLabel={startAction === "start" ? t("start") : t("applySavedConfiguration")}
           applyPending={applyPending}
           onSaveAndApply={
             reason(startAction)
@@ -432,7 +438,7 @@ function ConfigTab({
                   // a new value must go through `docker compose up -d` semantics.
                   // Persist first so a failed apply doesn't lose the edit.
                   if (reason(startAction))
-                    throw new Error(reason(startAction) ?? "Action unavailable");
+                    throw new Error(reason(startAction) ?? t("actionUnavailable"));
                   const execution = applyOwner;
                   await saveConfig.mutateAsync(values);
                   if (!execution.active) return;
@@ -451,6 +457,7 @@ function ConfigTab({
 }
 
 function ManifestTab({ data }: { data: ServiceDetailData }) {
+  const t = useTranslations("adminServices");
   return (
     <Card variant="outlined">
       <CardContent>
@@ -461,7 +468,7 @@ function ManifestTab({ data }: { data: ServiceDetailData }) {
             color: "text.secondary",
           }}
         >
-          Raw Manifest (service.json)
+          {t("rawManifestServiceJson")}
         </Typography>
         <Box
           component="pre"
@@ -486,8 +493,6 @@ function ManifestTab({ data }: { data: ServiceDetailData }) {
   );
 }
 
-const TABS = ["Overview", "Configuration", "Credentials", "Logs", "Manifest"];
-
 interface ServiceDetailProps {
   id: string;
 }
@@ -498,6 +503,15 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 }
 
 function ServiceDetailView({ id }: ServiceDetailProps) {
+  const t = useTranslations("adminServices");
+  const statusLabel = useServiceStatusLabel();
+  const tabs = [
+    t("tabOverview"),
+    t("tabConfiguration"),
+    t("tabCredentials"),
+    t("tabLogs"),
+    t("tabManifest"),
+  ];
   const { client } = useActivityClient();
   const [tab, setTab] = useAdminTab([
     "overview",
@@ -531,7 +545,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   if (isError || !data) {
     return (
       <CompactAlert severity="error" variant="outlined">
-        Failed to load service details. The backend may not be running yet.
+        {t("failedToLoadServiceDetails")}
       </CompactAlert>
     );
   }
@@ -539,22 +553,22 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   const { manifest } = data;
   const startAction = data.status === "running" ? "apply" : "start";
   const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
-    serviceActionReason(data.actions?.[action]);
+    serviceActionReason(data.actions?.[action], t);
   const isBusy = actionMutation.isPending;
 
   async function runAction(action: AdminServiceAction["action"]) {
     if (reason(action))
-      throw new AdminActionNotStartedError(reason(action) ?? "Action unavailable");
+      throw new AdminActionNotStartedError(reason(action) ?? t("actionUnavailable"));
     const execution = owner;
     try {
       const result = await actionMutation.mutateAsync(action);
       if (!execution.active) return;
       setLastActionJobId(result.jobId);
       // Terminal observation refreshes the status; acceptance only queues work.
-      showToast(`Service ${action} queued (job ${result.jobId})`);
+      showToast(t("serviceActionQueuedJobJobid", { action, jobId: result.jobId }));
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : `Action "${action}" failed`, "error");
+      showToast(err instanceof Error ? err.message : t("actionActionFailed", { action }), "error");
       throw err;
     }
   }
@@ -571,11 +585,11 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
     >
       <AdminPageHeader
         title={manifest.name}
-        subtitle={`${manifest.id} · v${manifest.version}`}
+        subtitle={t("idVVersion", { id: manifest.id, version: manifest.version })}
         badges={
           <>
             <StatusBadge quality={manifest.quality} />
-            <Tooltip title={`Container status: ${statusLabel(data.status)}`}>
+            <Tooltip title={t("containerStatusStatus", { status: statusLabel(data.status) })}>
               <Chip
                 label={statusLabel(data.status)}
                 size="small"
@@ -583,7 +597,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
                 variant="outlined"
               />
             </Tooltip>
-            {!data.enabled && <Chip label="Disabled" size="small" variant="outlined" />}
+            {!data.enabled && <Chip label={t("disabled")} size="small" variant="outlined" />}
           </>
         }
         actions={
@@ -596,7 +610,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               disabled={isBusy || !!reason(startAction)}
               onClick={() => void runAction(startAction).catch(() => {})}
             >
-              {data.status === "running" ? "Apply changes" : "Start"}
+              {data.status === "running" ? t("applyChanges") : t("start")}
             </Button>
             <Button
               variant="outlined"
@@ -606,7 +620,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               aria-controls={actionMenu ? "service-actions" : undefined}
               onClick={(event) => setActionMenu(event.currentTarget)}
             >
-              More actions
+              {t("moreActions")}
             </Button>
             {lastActionJobId && <AdminJobLink id={lastActionJobId} source="application" />}
           </>
@@ -634,7 +648,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
             }}
           >
             <ListItemText
-              primary={action === "logs" ? "Logs" : action === "stop" ? "Stop" : "Restart"}
+              primary={action === "logs" ? t("logs") : action === "stop" ? t("stop") : t("restart")}
               secondary={reason(action) ?? undefined}
               slotProps={{ secondary: { sx: { maxWidth: 320, whiteSpace: "normal" } } }}
             />
@@ -658,15 +672,15 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
       )}
       {data.acquisition?.state === "unavailable" && (
         <CompactAlert severity="warning">
-          Operations agent is unavailable. Service state is unknown.{" "}
+          {t("operationsAgentIsUnavailableService")}
           <Button onClick={() => void refetch()} size="small">
-            Retry
+            {t("retry")}
           </Button>
         </CompactAlert>
       )}
       {["app-api", "traefik", "ops-agent"].includes(manifest.id) && (
         <Button component={Link} href="/admin/system/updates" size="small">
-          Updates
+          {t("updates")}
         </Button>
       )}
       {manifest.id === "dawarich-app" && <ManagedDawarichSetup />}
@@ -679,7 +693,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TABS.map((label, index) => (
+          {tabs.map((label, index) => (
             <Tab
               id={`service-tab-${index}`}
               aria-controls={`service-panel-${index}`}

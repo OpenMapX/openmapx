@@ -12,6 +12,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { streamAdminServiceLogs } from "@openmapx/core/api-admin-sdk";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
@@ -84,6 +85,7 @@ function ServiceLogsSession({
     ReturnType<typeof useActivityClient>,
     "client"
   >) {
+  const t = useTranslations("adminServices");
   const [output, setOutput] = useState({ lines: [] as string[], truncated: false });
   const [streaming, setStreaming] = useState(open),
     [error, setError] = useState<string | null>(null);
@@ -135,7 +137,7 @@ function ServiceLogsSession({
         }
       } catch (error) {
         if (!controller.signal.aborted)
-          setError(error instanceof Error ? error.message : "Service request failed");
+          setError(error instanceof Error ? error.message : t("serviceRequestFailed"));
       } finally {
         if (!controller.signal.aborted) setStreaming(false);
       }
@@ -144,7 +146,7 @@ function ServiceLogsSession({
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [open, paused, serviceId, client, request]);
+  }, [open, paused, serviceId, client, request, t]);
 
   useEffect(() => {
     if (open && lines.length > 0) {
@@ -198,11 +200,11 @@ function ServiceLogsSession({
               fontWeight: 700,
             }}
           >
-            Logs — {serviceName}
+            {t("logsServicename", { serviceName })}
           </Typography>
           {streaming && (
             <Chip
-              label={follow ? "following" : "loading snapshot"}
+              label={follow ? "following" : t("loadingSnapshot")}
               size="small"
               color="success"
               variant="outlined"
@@ -211,7 +213,7 @@ function ServiceLogsSession({
           )}
           {!streaming && lines.length > 0 && (
             <Chip
-              label={`${lines.length} lines`}
+              label={t("lengthLines", { length: lines.length })}
               size="small"
               variant="outlined"
               sx={{ fontSize: "0.65rem" }}
@@ -219,7 +221,12 @@ function ServiceLogsSession({
           )}
         </Stack>
         {onClose && (
-          <IconButton aria-label="Close service logs" size="small" onClick={handleClose} edge="end">
+          <IconButton
+            aria-label={t("closeServiceLogs")}
+            size="small"
+            onClick={handleClose}
+            edge="end"
+          >
             <CloseIcon fontSize="small" />
           </IconButton>
         )}
@@ -228,7 +235,7 @@ function ServiceLogsSession({
         <TextField
           select
           size="small"
-          label="Tail lines"
+          label={t("tailLines")}
           value={tail}
           onChange={(e) => {
             setPaused(false);
@@ -245,7 +252,7 @@ function ServiceLogsSession({
         <TextField
           select
           size="small"
-          label="Log mode"
+          label={t("logMode")}
           value={follow ? "follow" : "snapshot"}
           onChange={(e) => {
             setPaused(false);
@@ -253,13 +260,13 @@ function ServiceLogsSession({
           }}
           sx={{ minWidth: 130 }}
         >
-          <MenuItem value="follow">Follow</MenuItem>
-          <MenuItem value="snapshot">Snapshot</MenuItem>
+          <MenuItem value="follow">{t("follow")}</MenuItem>
+          <MenuItem value="snapshot">{t("snapshot")}</MenuItem>
         </TextField>
         <TextField
           select
           size="small"
-          label="Follow duration"
+          label={t("followDuration")}
           disabled={!follow}
           value={duration}
           onChange={(e) => {
@@ -270,7 +277,7 @@ function ServiceLogsSession({
         >
           {[30, 60, 300, 900].map((seconds) => (
             <MenuItem key={seconds} value={seconds}>
-              {seconds} seconds
+              {t("secondsSeconds", { seconds })}
             </MenuItem>
           ))}
         </TextField>
@@ -288,7 +295,7 @@ function ServiceLogsSession({
               }
             }}
           >
-            {paused ? "Resume" : "Pause"}
+            {paused ? t("resume") : t("pause")}
           </Button>
         )}
         <Button
@@ -297,28 +304,23 @@ function ServiceLogsSession({
             setConnection((value) => value + 1);
           }}
         >
-          {follow ? "Reconnect" : "Reload snapshot"}
+          {follow ? t("reconnect") : t("reloadSnapshot")}
         </Button>
       </Stack>
-      {output.truncated && (
-        <Alert severity="info">
-          Earlier output was discarded. Display is limited to 1000 lines and 256 KiB, including an
-          incomplete line.
-        </Alert>
-      )}
+      {output.truncated && <Alert severity="info">{t("earlierOutputWasDiscardedDisplay")}</Alert>}
       {!streaming && !error && (
         <Typography variant="caption" sx={{ px: 2, pb: 1 }}>
           {paused
-            ? "Paused. Resume starts a fresh log read."
+            ? t("pausedResumeStartsAFresh")
             : follow
-              ? "Log reader ended. Reconnect for new output; this does not indicate service failure."
-              : "Snapshot complete."}
+              ? t("logReaderEndedReconnectFor")
+              : t("snapshotComplete")}
         </Typography>
       )}
       <Box
         ref={outputRef}
         role="region"
-        aria-label="Service log output"
+        aria-label={t("serviceLogOutput")}
         tabIndex={0}
         sx={{
           flex: 1,
@@ -336,7 +338,7 @@ function ServiceLogsSession({
               mb: 1,
             }}
           >
-            Error: {error}
+            {t("errorError", { error })}
           </Typography>
         )}
 
@@ -348,7 +350,7 @@ function ServiceLogsSession({
               fontFamily: "monospace",
             }}
           >
-            No log output available.
+            {t("noLogOutputAvailable")}
           </Typography>
         )}
 
@@ -360,7 +362,7 @@ function ServiceLogsSession({
               fontFamily: "monospace",
             }}
           >
-            Waiting for log output…
+            {t("waitingForLogOutput")}
           </Typography>
         )}
 

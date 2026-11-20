@@ -5,6 +5,7 @@ import type {
   ConfigurationOwnership,
 } from "@openmapx/core/api-contracts";
 import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
+import { useTranslations } from "next-intl";
 import { useActivityClient } from "../activity/activityQueries";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
@@ -45,6 +46,7 @@ export function ServiceConfigForm({
   applySavedLabel,
   applyPending,
 }: ServiceConfigFormProps) {
+  const t = useTranslations("adminServices");
   const { apiUrl } = useActivityClient();
   const withResourceResets = (values: Record<string, unknown>) =>
     Object.fromEntries(
@@ -57,9 +59,9 @@ export function ServiceConfigForm({
     <SchemaConfigForm
       draftId={JSON.stringify([apiUrl, "service", serviceId])}
       key={JSON.stringify([apiUrl, serviceId, schema])}
-      applySuccessMessage="Configuration saved. Service apply queued."
+      applySuccessMessage={t("configurationSavedServiceApplyQueued")}
       applySavedSuccessMessage={
-        applySavedLabel === "Start" ? "Service start queued." : "Service apply queued."
+        applySavedLabel === "Start" ? t("serviceStartQueued") : t("serviceApplyQueued")
       }
       schema={schema}
       resolvedConfig={resolvedConfig}
@@ -72,8 +74,8 @@ export function ServiceConfigForm({
       onApplySaved={onApplySaved}
       applySavedLabel={applySavedLabel}
       applyPending={applyPending}
-      applyLabel="Save & apply"
-      emptyMessage="No editable configuration fields declared for this service."
+      applyLabel={t("saveApply")}
+      emptyMessage={t("noEditableConfigurationFieldsDeclared")}
     />
   );
 }

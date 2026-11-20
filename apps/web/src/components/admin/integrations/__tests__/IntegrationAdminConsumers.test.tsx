@@ -21,6 +21,8 @@ import { RequiredServicesPanel } from "../RequiredServicesPanel";
 import { SetCredentialDialog } from "../SetCredentialDialog";
 import { detail, summary } from "./fixtures";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const credentialReceipt = {
   operationId: "credential-synthetic-operation",
   integrationId: "demo",

@@ -12,6 +12,7 @@ import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
@@ -25,6 +26,7 @@ export function TransitSyncDialog(props: Props) {
   return <TransitSyncView key={props.apiUrl} {...props} />;
 }
 function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
+  const t = useTranslations("adminServices");
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -93,7 +95,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
         !preview.result.ok ||
         JSON.stringify(preview.countries) !== current.current
       )
-        throw Error("Preview the current country selection again");
+        throw Error(t("previewTheCurrentCountrySelection"));
       key.current ??= crypto.randomUUID();
       return sdk.unwrapAdminResponse(
         await sdk.postApiDataManagerTransitSync(
@@ -122,14 +124,11 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
       fullWidth
       maxWidth="sm"
     >
-      <DialogTitle>Review transit sync</DialogTitle>
+      <DialogTitle>{t("reviewTransitSync")}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography>
-            Select the countries to synchronize. Capacity and input estimates come from your
-            instance.
-          </Typography>
-          {profile.isPending && <Typography>Loading instance scope…</Typography>}
+          <Typography>{t("selectTheCountriesToSynchronize")}</Typography>
+          {profile.isPending && <Typography>{t("loadingInstanceScope")}</Typography>}
           {profile.error && (
             <Alert severity="error">
               {sdk.adminErrorMessage(profile.error, profile.error.message)}
@@ -156,7 +155,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
           </Stack>
           {profile.data?.policy.profile === "planet" && (
             <TextField
-              label="Country codes"
+              label={t("countryCodes")}
               value={manualCountries}
               disabled={busy}
               onChange={(event) => {
@@ -168,26 +167,28 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
                     .filter(Boolean),
                 );
               }}
-              helperText="Enter ISO country codes separated by commas"
+              helperText={t("enterIsoCountryCodesSeparated")}
             />
           )}
-          {error && (
-            <Alert severity="error">
-              {error} Check Activity if an earlier submission may already be running.
-            </Alert>
-          )}
+          {error && <Alert severity="error">{t("errorCheckActivityIfAn", { error })}</Alert>}
           {preview && (
             <>
               <Typography>
-                Countries: {preview.countries.map((c) => c.toUpperCase()).join(", ")}
+                {t("countriesMap", {
+                  map: preview.countries.map((c) => c.toUpperCase()).join(", "),
+                })}
               </Typography>
               <Typography>
-                {preview.result.estimate.feedCount} feeds · estimate:{" "}
-                {preview.result.estimate.basis.replaceAll("-", " ")}
+                {t("feedcountFeedsEstimateReplaceall", {
+                  feedCount: preview.result.estimate.feedCount,
+                  replaceAll: preview.result.estimate.basis.replaceAll("-", " "),
+                })}
               </Typography>
               <Typography>
-                Disk required: {Math.ceil(preview.result.estimate.requiredDiskBytes / 1024 ** 3)}{" "}
-                GiB · available: {Math.floor(preview.result.capacity.freeDiskBytes / 1024 ** 3)} GiB
+                {t("diskRequiredCeilGibAvailable", {
+                  ceil: Math.ceil(preview.result.estimate.requiredDiskBytes / 1024 ** 3),
+                  floor: Math.floor(preview.result.capacity.freeDiskBytes / 1024 ** 3),
+                })}
               </Typography>
               {preview.result.blockers.map((reason) => (
                 <Alert key={reason} severity="error">
@@ -199,29 +200,27 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
                   {reason}
                 </Alert>
               ))}
-              {expired && (
-                <Alert severity="warning">This preview expired. Refresh it before queuing.</Alert>
-              )}
+              {expired && <Alert severity="warning">{t("thisPreviewExpiredRefreshIt")}</Alert>}
             </>
           )}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button disabled={busy} onClick={onClose}>
-          Cancel
+          {t("cancel")}
         </Button>
         <Button
           disabled={busy || !selected.length || !profile.data}
           onClick={() => inspect.mutate(selected)}
         >
-          Preview sync
+          {t("previewSync")}
         </Button>
         <Button
           variant="contained"
           disabled={busy || !preview?.result.ok || expired}
           onClick={() => submit.mutate()}
         >
-          Queue sync
+          {t("queueSync")}
         </Button>
       </DialogActions>
     </Dialog>

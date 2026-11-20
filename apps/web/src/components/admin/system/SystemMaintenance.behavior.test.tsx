@@ -4,6 +4,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { job } from "../activity/__tests__/fixtures";
 import { SystemMaintenance, SystemMaintenanceProvider } from "./SystemMaintenance";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
 }));

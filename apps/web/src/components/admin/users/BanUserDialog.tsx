@@ -6,6 +6,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAction } from "@/lib/admin/accountAdmin";
@@ -17,12 +18,13 @@ interface BanUserDialogProps {
 }
 
 export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
+  const t = useTranslations("adminUsers");
   const showToast = useAdminToast();
   const [reason, setReason] = useState("");
 
   const ban = useAccountAction(user.id, {
     onSuccess: () => {
-      showToast(`${user.name} has been banned`);
+      showToast(t("nameHasBeenBanned", { name: user.name }));
       onClose();
     },
     onError: (error) => showToast(error.message, "error"),
@@ -34,18 +36,18 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
 
   return (
     <Dialog open onClose={close} maxWidth="xs" fullWidth>
-      <DialogTitle>Ban {user.name}?</DialogTitle>
+      <DialogTitle>{t("banName", { name: user.name })}</DialogTitle>
       <DialogContent>
         <DialogContentText
           sx={{
             mb: 2,
           }}
         >
-          The user will be prevented from signing in. You can unban them at any time.
+          {t("theUserWillBePrevented")}
         </DialogContentText>
         <TextField
           disabled={ban.isPending}
-          label="Reason (optional)"
+          label={t("reasonOptional")}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           size="small"
@@ -61,7 +63,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
       </DialogContent>
       <DialogActions>
         <Button onClick={close} disabled={ban.isPending}>
-          Cancel
+          {t("cancel")}
         </Button>
         <Button
           variant="contained"
@@ -69,7 +71,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
           disabled={ban.isPending}
           onClick={() => ban.mutate((client) => client.ban(user.id, reason.trim() || undefined))}
         >
-          Ban User
+          {t("banUser")}
         </Button>
       </DialogActions>
     </Dialog>

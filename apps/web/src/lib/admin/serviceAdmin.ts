@@ -12,6 +12,7 @@ import {
   queryOptions,
 } from "@tanstack/react-query";
 import { integrationRuntimeQueryKey } from "@/lib/integrationRuntimeQuery";
+import type { AdminTranslator } from "./adminTranslator";
 
 export const SERVICE_READ_TIMEOUT_MS = 30_000;
 
@@ -176,22 +177,23 @@ export async function invalidateServiceAdministration(
 /** Display the same decision used by the server, without inferring permission from status. */
 export function serviceActionReason(
   decision: import("@openmapx/core/ops").ServiceActionDecision | undefined,
+  t: AdminTranslator,
 ): string | null {
   if (decision?.available) return null;
   switch (decision?.reason) {
     case "disabled":
-      return "Enable this service before using this action.";
+      return t("actionReasonDisabled");
     case "not_owned":
-      return "No owned container is available for this action.";
+      return t("actionReasonNotOwned");
     case "not_running":
-      return "This service is not running.";
+      return t("actionReasonNotRunning");
     case "control_plane":
-      return "Use Updates for core updates. Stopping the control plane requires host access.";
+      return t("actionReasonControlPlane");
     case "host_only":
-      return "This action requires host access.";
+      return t("actionReasonHostOnly");
     case "not_buildable":
-      return "This service does not prepare build artifacts.";
+      return t("actionReasonNotBuildable");
     default:
-      return "This action is currently unavailable. Check the operations agent.";
+      return t("actionReasonUnavailable");
   }
 }

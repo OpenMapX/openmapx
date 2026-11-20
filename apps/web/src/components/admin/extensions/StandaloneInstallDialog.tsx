@@ -16,6 +16,7 @@ import {
   standaloneInstallSourceSchema,
 } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
@@ -33,6 +34,7 @@ export function StandaloneInstallDialog() {
   return <StandaloneInstallDialogContent key={apiUrl} />;
 }
 function StandaloneInstallDialogContent() {
+  const t = useTranslations("adminExtensions");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client, apiUrl),
     register = useAdminJobRegistration(),
@@ -115,9 +117,7 @@ function StandaloneInstallDialogContent() {
     )
       return;
     if (job.status !== "success") {
-      setError(
-        job.error ?? "Operation did not complete successfully. Inspect Activity before retrying.",
-      );
+      setError(job.error ?? t("operationDidNotCompleteSuccessfully"));
       return;
     }
     if (active.phase === "preview") {
@@ -135,12 +135,12 @@ function StandaloneInstallDialogContent() {
           /^[a-f0-9]{40}$/.test(expected.ref ?? "") &&
           parsed.data.commit !== expected.ref)
       ) {
-        setError("The inspection response could not be verified.");
+        setError(t("theInspectionResponseCouldNot"));
         return;
       }
       setInspection(parsed.data);
     } else setDone(true);
-  }, [query.data, active, owner]);
+  }, [query.data, active, owner, t]);
   const capture = () => {
     const current = generation.current;
     return () => owner.active && generation.current === current;
@@ -178,7 +178,7 @@ function StandaloneInstallDialogContent() {
         source = standaloneInstallSourceSchema.parse({ kind, url, sha256: sha });
       else {
         if (!file || file.size === 0 || file.size > 200 * 1024 ** 2)
-          throw Error("Select a nonempty integration archive of at most 200 MiB.");
+          throw Error(t("selectANonemptyIntegrationArchive"));
         if (uploadedSource.current?.file === file) source = uploadedSource.current.source;
         else {
           const controller = new AbortController();
@@ -198,7 +198,7 @@ function StandaloneInstallDialogContent() {
           );
           upload.current = null;
           if (!current()) return;
-          if (!uploaded.sha256) throw Error("Uploaded archive digest is unavailable.");
+          if (!uploaded.sha256) throw Error(t("uploadedArchiveDigestIsUnavailable"));
           source = { kind, stageId: stage.stageId, expectedSha256: uploaded.sha256 };
           uploadedSource.current = { file, source };
         }
@@ -212,7 +212,7 @@ function StandaloneInstallDialogContent() {
       );
       accept(result.jobId, "preview", current, source);
     } catch (error) {
-      if (current()) setError(error instanceof Error ? error.message : "Inspection failed");
+      if (current()) setError(error instanceof Error ? error.message : t("inspectionFailed"));
     } finally {
       upload.current = null;
       running.current = false;
@@ -238,7 +238,7 @@ function StandaloneInstallDialogContent() {
       );
       accept(result.jobId, "install", current);
     } catch (error) {
-      if (current()) setError(error instanceof Error ? error.message : "Installation failed");
+      if (current()) setError(error instanceof Error ? error.message : t("installationFailed"));
     } finally {
       running.current = false;
       if (owner.active) setBusy(false);
@@ -253,19 +253,16 @@ function StandaloneInstallDialogContent() {
           setOpen(true);
         }}
       >
-        Install standalone integration
+        {t("installStandaloneIntegration")}
       </Button>
       <Dialog open={open} onClose={close} maxWidth="sm" fullWidth>
-        <DialogTitle>Install standalone integration</DialogTitle>
+        <DialogTitle>{t("installStandaloneIntegration")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
-            <Alert severity="info">
-              Community integrations are declarative. Executable code and package scripts are
-              rejected.
-            </Alert>
+            <Alert severity="info">{t("communityIntegrationsAreDeclarativeExecutable")}</Alert>
             <TextField
               select
-              label="Install source"
+              label={t("installSource")}
               value={kind}
               disabled={busy || waiting}
               onChange={(event) => {
@@ -273,18 +270,18 @@ function StandaloneInstallDialogContent() {
                 setKind(event.target.value as StandaloneInstallSource["kind"]);
               }}
             >
-              <MenuItem value="source">Source repository</MenuItem>
-              <MenuItem value="artifact">Artifact URL</MenuItem>
-              <MenuItem value="uploaded-artifact">Upload archive</MenuItem>
+              <MenuItem value="source">{t("sourceRepository")}</MenuItem>
+              <MenuItem value="artifact">{t("artifactUrl")}</MenuItem>
+              <MenuItem value="uploaded-artifact">{t("uploadArchive")}</MenuItem>
             </TextField>
             {kind === "uploaded-artifact" ? (
               <Button component="label" variant="outlined" disabled={busy || waiting}>
-                {file?.name ?? "Choose integration archive"}
+                {file?.name ?? t("chooseIntegrationArchive")}
                 <input
                   hidden
                   type="file"
                   accept=".tar.gz,.tgz,.tar"
-                  aria-label="Integration archive"
+                  aria-label={t("integrationArchive")}
                   onChange={(event) => {
                     reset();
                     setFile(event.target.files?.[0] ?? null);
@@ -293,7 +290,7 @@ function StandaloneInstallDialogContent() {
               </Button>
             ) : (
               <TextField
-                label={kind === "source" ? "Repository HTTPS URL" : "Artifact HTTPS URL"}
+                label={kind === "source" ? t("repositoryHttpsUrl") : t("artifactHttpsUrl")}
                 value={url}
                 disabled={busy || waiting}
                 onChange={(event) => {
@@ -304,7 +301,7 @@ function StandaloneInstallDialogContent() {
             )}
             {kind === "source" && (
               <TextField
-                label="Branch, tag, or commit (optional)"
+                label={t("branchTagOrCommitOptional")}
                 value={ref}
                 disabled={busy || waiting}
                 onChange={(event) => {
@@ -315,7 +312,7 @@ function StandaloneInstallDialogContent() {
             )}
             {kind === "artifact" && (
               <TextField
-                label="Archive SHA-256"
+                label={t("archiveSha256")}
                 value={sha}
                 disabled={busy || waiting}
                 onChange={(event) => {
@@ -325,9 +322,7 @@ function StandaloneInstallDialogContent() {
               />
             )}
             {kind === "uploaded-artifact" && (
-              <Typography variant="body2">
-                Maximum archive and expanded content: 200 MiB each.
-              </Typography>
+              <Typography variant="body2">{t("maximumArchiveAndExpandedContent")}</Typography>
             )}
             {inspection && (
               <Stack sx={{ gap: 1 }}>
@@ -336,16 +331,13 @@ function StandaloneInstallDialogContent() {
                 </Typography>
                 {inspection.commit && (
                   <Typography sx={{ overflowWrap: "anywhere" }} variant="body2">
-                    Resolved commit: {inspection.commit}
+                    {t("resolvedCommitCommit", { commit: inspection.commit })}
                   </Typography>
                 )}
                 <Typography sx={{ overflowWrap: "anywhere" }} variant="body2">
-                  Content SHA-256: {inspection.contentDigest}
+                  {t("contentSha256Contentdigest", { contentDigest: inspection.contentDigest })}
                 </Typography>
-                <Typography variant="body2">
-                  This installs or replaces the standalone integration with this ID. Catalog
-                  ownership is preserved.
-                </Typography>
+                <Typography variant="body2">{t("thisInstallsOrReplacesThe")}</Typography>
                 {inspection.denials.map((denial) => (
                   <Alert key={denial} severity="error">
                     {denial}
@@ -353,30 +345,22 @@ function StandaloneInstallDialogContent() {
                 ))}
               </Stack>
             )}
-            {expired && (
-              <Alert severity="warning">Inspection expired. Review the source again.</Alert>
-            )}
+            {expired && <Alert severity="warning">{t("inspectionExpiredReviewTheSource")}</Alert>}
             {(busy || waiting) && (
               <Alert severity="info">
-                {busy
-                  ? "Submitting…"
-                  : "Operation is running. You can close this dialog and follow it in Activity."}
+                {busy ? t("submitting") : t("operationIsRunningYouCan")}
               </Alert>
             )}
-            {query.error && (
-              <Alert severity="warning">
-                Unable to observe the operation. Check Activity before retrying.
-              </Alert>
-            )}
+            {query.error && <Alert severity="warning">{t("unableToObserveTheOperation")}</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
-            {done && <Alert severity="success">Standalone integration installed.</Alert>}
+            {done && <Alert severity="success">{t("standaloneIntegrationInstalled")}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={close}>{done ? "Done" : "Close"}</Button>
+          <Button onClick={close}>{done ? t("done") : t("close")}</Button>
           {!done && (
             <Button variant="contained" disabled={busy || waiting} onClick={() => void review()}>
-              Review source
+              {t("reviewSource")}
             </Button>
           )}
           {inspection && !done && (
@@ -385,7 +369,7 @@ function StandaloneInstallDialogContent() {
               disabled={busy || waiting || expired || inspection.denials.length > 0}
               onClick={() => void install()}
             >
-              Install integration
+              {t("installIntegration")}
             </Button>
           )}
         </DialogActions>

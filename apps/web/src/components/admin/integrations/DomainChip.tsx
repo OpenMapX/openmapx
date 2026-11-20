@@ -2,6 +2,7 @@
 
 import type { ChipProps } from "@mui/material/Chip";
 import Chip from "@mui/material/Chip";
+import { useTranslations } from "next-intl";
 
 type ChipColor = ChipProps["color"];
 
@@ -17,16 +18,16 @@ const DOMAIN_COLOR: Record<string, ChipColor> = {
   "data-source": "info",
 };
 
-const DOMAIN_LABEL: Record<string, string> = {
-  geocoding: "Geocoding",
-  routing: "Routing",
-  transit: "Transit",
-  "street-level-imagery": "Street-level imagery",
-  "map-overlay": "Map Overlay",
-  "poi-search": "POI Search",
-  photos: "Photos",
-  knowledge: "Knowledge",
-  "data-source": "Data Source",
+const DOMAIN_LABEL_KEY: Record<string, string> = {
+  geocoding: "domainGeocoding",
+  routing: "domainRouting",
+  transit: "domainTransit",
+  "street-level-imagery": "domainStreetLevelImagery",
+  "map-overlay": "domainMapOverlay",
+  "poi-search": "domainPoiSearch",
+  photos: "domainPhotos",
+  knowledge: "domainKnowledge",
+  "data-source": "domainDataSource",
 };
 
 interface DomainChipProps {
@@ -36,7 +37,9 @@ interface DomainChipProps {
 
 export function DomainChip({ domain, size = "small" }: DomainChipProps) {
   const color = DOMAIN_COLOR[domain] ?? "default";
-  const label = DOMAIN_LABEL[domain] ?? domain;
+  const t = useTranslations("adminIntegrations");
+  const labelKey = DOMAIN_LABEL_KEY[domain];
+  const label = labelKey ? t(labelKey) : domain;
 
   return (
     <Chip

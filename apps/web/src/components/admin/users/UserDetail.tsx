@@ -33,6 +33,7 @@ import { getInitials, proxyImageUrl } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
@@ -67,6 +68,7 @@ function ProfileTab({
   isSelf: boolean;
   impersonate: { mutate: () => void; isPending: boolean; error: Error | null };
 }) {
+  const t = useTranslations("adminUsers");
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
@@ -132,31 +134,31 @@ function ProfileTab({
         }}
       >
         <TextField
-          label="Full Name"
+          label={t("fullName")}
           value={name}
           disabled={updateUser.isPending}
           onChange={(e) => setName(e.target.value)}
           size="small"
         />
         <TextField
-          label="Email"
+          label={t("email")}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           size="small"
           disabled
-          helperText="Email changes must be made by the user"
+          helperText={t("emailChangesMustBeMade")}
         />
         <FormControl size="small">
-          <InputLabel>Role</InputLabel>
+          <InputLabel>{t("role")}</InputLabel>
           <Select
-            inputProps={{ "aria-label": "Role" }}
+            inputProps={{ "aria-label": t("role") }}
             value={role}
-            label="Role"
+            label={t("role")}
             onChange={(e) => setRole(e.target.value)}
             disabled={isSelf || updateUser.isPending}
           >
-            <MenuItem value="user">User</MenuItem>
-            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="user">{t("user")}</MenuItem>
+            <MenuItem value="admin">{t("admin")}</MenuItem>
           </Select>
         </FormControl>
         {dirty && (
@@ -173,7 +175,7 @@ function ProfileTab({
             }
             disabled={updateUser.isPending}
           >
-            Save Changes
+            {t("saveChanges")}
           </Button>
         )}
       </Stack>
@@ -186,7 +188,7 @@ function ProfileTab({
             color: "text.secondary",
           }}
         >
-          Read-only
+          {t("readOnly")}
         </Typography>
         <Stack
           sx={{
@@ -194,33 +196,33 @@ function ProfileTab({
           }}
         >
           <Typography variant="body2">
-            <strong>ID:</strong> {user.id}
+            <strong>{t("id")}</strong> {user.id}
           </Typography>
           <Typography variant="body2">
-            <strong>Joined:</strong> {new Date(user.createdAt).toLocaleString()}
+            <strong>{t("joined")}</strong> {new Date(user.createdAt).toLocaleString()}
           </Typography>
           <Typography variant="body2">
-            <strong>Updated:</strong> {new Date(user.updatedAt).toLocaleString()}
+            <strong>{t("updated")}</strong> {new Date(user.updatedAt).toLocaleString()}
           </Typography>
           <Typography variant="body2" component="div">
-            <strong>Email Verified:</strong>{" "}
+            <strong>{t("emailVerified")}</strong>{" "}
             {user.emailVerified ? (
-              <Chip label="Yes" size="small" color="success" />
+              <Chip label={t("yes")} size="small" color="success" />
             ) : (
-              <Chip label="No" size="small" />
+              <Chip label={t("no")} size="small" />
             )}
           </Typography>
           <Typography variant="body2" component="div">
-            <strong>2FA:</strong>{" "}
+            <strong>{t("n2fa")}</strong>{" "}
             {user.twoFactorEnabled ? (
-              <Chip label="Enabled" size="small" color="primary" />
+              <Chip label={t("enabled")} size="small" color="primary" />
             ) : (
-              <Chip label="Disabled" size="small" />
+              <Chip label={t("disabled")} size="small" />
             )}
           </Typography>
           {user.banned && (
             <Typography variant="body2">
-              <strong>Ban Reason:</strong> {user.banReason ?? "—"}
+              <strong>{t("banReason")}</strong> {user.banReason ?? "—"}
             </Typography>
           )}
         </Stack>
@@ -243,7 +245,7 @@ function ProfileTab({
             onClick={impersonate.mutate}
             disabled={impersonate.isPending}
           >
-            Impersonate
+            {t("impersonate")}
           </Button>
         )}
         {user.banned ? (
@@ -254,7 +256,7 @@ function ProfileTab({
             onClick={() => unban.mutate((client) => client.unban(user.id))}
             disabled={unban.isPending}
           >
-            Unban
+            {t("unban")}
           </Button>
         ) : (
           !isSelf && (
@@ -265,7 +267,7 @@ function ProfileTab({
               color="warning"
               onClick={() => setBanOpen(true)}
             >
-              Ban
+              {t("ban")}
             </Button>
           )
         )}
@@ -278,16 +280,16 @@ function ProfileTab({
             onClick={() => setDeleteOpen(true)}
             disabled={deleteUser.isPending}
           >
-            Delete Account
+            {t("deleteAccount")}
           </Button>
         )}
       </Stack>
       {banOpen && <BanUserDialog user={user} onClose={() => setBanOpen(false)} />}
       <ConfirmDialog
         open={deleteOpen}
-        title="Delete User Account"
-        message={`Are you sure you want to permanently delete ${user.name}'s account? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t("deleteUserAccount")}
+        message={t("areYouSureYouWant", { name: user.name })}
+        confirmLabel={t("delete")}
         confirmColor="error"
         loading={deleteUser.isPending}
         onConfirm={() => deleteUser.mutate((client) => client.remove(user.id))}
@@ -298,6 +300,7 @@ function ProfileTab({
 }
 
 function SessionsTab({ userId }: { userId: string }) {
+  const t = useTranslations("adminUsers");
   const account = useAccountAdmin();
   const { data, isLoading, error } = useQuery({
     queryKey: account.keys.sessions(userId),
@@ -321,7 +324,7 @@ function SessionsTab({ userId }: { userId: string }) {
     >
       {(error || revoke.error || revokeAll.error) && (
         <Alert severity="error">
-          {error ? "Could not load sessions." : (revoke.error || revokeAll.error)?.message}
+          {error ? t("couldNotLoadSessions") : (revoke.error || revokeAll.error)?.message}
         </Alert>
       )}
       <Stack
@@ -337,7 +340,7 @@ function SessionsTab({ userId }: { userId: string }) {
           onClick={() => revokeAll.mutate((client) => client.revokeAll(userId))}
           disabled={revokeAll.isPending || (data?.length ?? 0) === 0}
         >
-          Revoke All Sessions
+          {t("revokeAllSessions")}
         </Button>
       </Stack>
       <Paper variant="outlined">
@@ -345,10 +348,10 @@ function SessionsTab({ userId }: { userId: string }) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>IP Address</TableCell>
-                <TableCell>User Agent</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell>Expires</TableCell>
+                <TableCell>{t("ipAddress")}</TableCell>
+                <TableCell>{t("userAgent")}</TableCell>
+                <TableCell>{t("created")}</TableCell>
+                <TableCell>{t("expires")}</TableCell>
                 <TableCell />
               </TableRow>
             </TableHead>
@@ -363,7 +366,7 @@ function SessionsTab({ userId }: { userId: string }) {
                         py: 2,
                       }}
                     >
-                      {error ? "Unable to load sessions" : "No active sessions"}
+                      {error ? t("unableToLoadSessions") : t("noActiveSessions")}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -397,7 +400,7 @@ function SessionsTab({ userId }: { userId: string }) {
                         onClick={() => revoke.mutate((client) => client.revoke(s.token))}
                         disabled={revoke.isPending}
                       >
-                        Revoke
+                        {t("revoke")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -413,6 +416,7 @@ function SessionsTab({ userId }: { userId: string }) {
 }
 
 function AccountsTab() {
+  const t = useTranslations("adminUsers");
   return (
     <Stack
       sx={{
@@ -425,17 +429,17 @@ function AccountsTab() {
           color: "text.secondary",
         }}
       >
-        Linked OAuth accounts and passkeys are managed by the user via Account Settings.
+        {t("linkedOauthAccountsAndPasskeys")}
       </Typography>
       <Alert severity="info" variant="outlined">
-        No account linking data available at this API surface. Users can manage their linked
-        accounts from their own account settings.
+        {t("noAccountLinkingDataAvailable")}
       </Alert>
     </Stack>
   );
 }
 
 export function UserDetail({ userId }: { userId: string }) {
+  const t = useTranslations("adminUsers");
   const requestExit = useAdminDraftExit();
   const [tab, setTab] = useAdminTab(["profile", "sessions", "accounts"]);
   const account = useAccountAdmin();
@@ -474,12 +478,12 @@ export function UserDetail({ userId }: { userId: string }) {
     );
   }
 
-  if (readError && !userData) return <Alert severity="error">Could not load this account.</Alert>;
+  if (readError && !userData) return <Alert severity="error">{t("couldNotLoadThisAccount")}</Alert>;
   if (!userData) {
     return (
       <Box>
         <Button component={Link} href="/admin/users" startIcon={<ArrowBackIcon />} size="small">
-          Back to Users
+          {t("backToUsers")}
         </Button>
         <Typography
           sx={{
@@ -487,7 +491,7 @@ export function UserDetail({ userId }: { userId: string }) {
             color: "text.secondary",
           }}
         >
-          User not found.
+          {t("userNotFound")}
         </Typography>
       </Box>
     );
@@ -501,22 +505,18 @@ export function UserDetail({ userId }: { userId: string }) {
         gap: 2,
       }}
     >
-      {readError && (
-        <Alert severity="error">
-          Could not load this account. Showing the last confirmed details.
-        </Alert>
-      )}
+      {readError && <Alert severity="error">{t("couldNotLoadThisAccount2")}</Alert>}
       <AdminPageHeader
-        title="User details"
-        subtitle={`${userData.name} · ${userData.email}`}
+        title={t("userDetails")}
+        subtitle={t("nameEmail", { name: userData.name, email: userData.email })}
         backHref="/admin/users"
-        backLabel="Back to users"
+        backLabel={t("backToUsers2")}
       />
       <Box>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="User detail sections">
-          <Tab id="user-tab-0" aria-controls="user-panel-0" label="Profile" />
-          <Tab id="user-tab-1" aria-controls="user-panel-1" label="Sessions" />
-          <Tab id="user-tab-2" aria-controls="user-panel-2" label="Accounts" />
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label={t("userDetailSections")}>
+          <Tab id="user-tab-0" aria-controls="user-panel-0" label={t("profile")} />
+          <Tab id="user-tab-1" aria-controls="user-panel-1" label={t("sessions")} />
+          <Tab id="user-tab-2" aria-controls="user-panel-2" label={t("accounts")} />
         </Tabs>
       </Box>
       <Box>
@@ -529,7 +529,7 @@ export function UserDetail({ userId }: { userId: string }) {
               impersonate={{
                 ...impersonate,
                 mutate: async () => {
-                  if (await requestExit("Impersonation changes the active account."))
+                  if (await requestExit(t("impersonationChangesTheActiveAccount")))
                     impersonate.mutate((client) => client.impersonate(userId));
                 },
               }}

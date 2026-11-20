@@ -25,6 +25,7 @@ import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/cor
 import { compareServiceBuildOrder } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
   useServiceHealthCheck,
@@ -52,6 +53,7 @@ type QualityFilter = "all" | AdminServiceSummary["quality"];
 const emptyServices: AdminServiceSummary[] = [];
 
 function ProvidesCell({ provides }: { provides: string[] }) {
+  const t = useTranslations("adminServices");
   if (!provides.length) {
     return (
       <Typography
@@ -84,7 +86,7 @@ function ProvidesCell({ provides }: { provides: string[] }) {
       {provides.length > 3 && (
         <Tooltip title={provides.slice(3).join(", ")}>
           <Chip
-            label={`+${provides.length - 3}`}
+            label={t("value2", { value: provides.length - 3 })}
             size="small"
             variant="outlined"
             sx={{ fontSize: "0.65rem" }}
@@ -161,6 +163,7 @@ export function ServiceCatalog() {
 }
 
 function ServiceCatalogView() {
+  const t = useTranslations("adminServices");
   const { client, apiUrl } = useActivityClient();
   const owner = useAdminMutationOwner(client);
   const showToast = useAdminToast();
@@ -229,11 +232,11 @@ function ServiceCatalogView() {
       if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active) {
         setStageIntent(null);
-        showToast(`Queued image staging (${result.jobId})`);
+        showToast(t("queuedImageStagingJobid", { jobId: result.jobId }));
       }
     } catch (error) {
       if (execution.active)
-        showToast(error instanceof Error ? error.message : "Image staging failed", "error");
+        showToast(error instanceof Error ? error.message : t("imageStagingFailed"), "error");
     }
   }
 
@@ -241,10 +244,11 @@ function ServiceCatalogView() {
     const execution = owner;
     try {
       const result = await healthCheckMutation.mutateAsync();
-      if (execution.active) showToast(`Checked ${result.statuses.length} service(s)`);
+      if (execution.active)
+        showToast(t("checkedLengthServiceS", { length: result.statuses.length }));
     } catch (error) {
       if (execution.active)
-        showToast(error instanceof Error ? error.message : "Check failed", "error");
+        showToast(error instanceof Error ? error.message : t("checkFailed"), "error");
     }
   }
   const selectPreset = (id: string) => {
@@ -253,7 +257,10 @@ function ServiceCatalogView() {
     if (!choice) return;
     if (choice.missingIds.length) {
       setPreset("");
-      showToast(`Preset is missing: ${choice.missingIds.join(", ")}`, "warning");
+      showToast(
+        t("presetIsMissingMissingids", { missingIds: choice.missingIds.join(", ") }),
+        "warning",
+      );
       return;
     }
     setSelectedIds(new Set(choice.rootIds));
@@ -263,11 +270,12 @@ function ServiceCatalogView() {
     try {
       const result = await bulkMutation.mutateAsync(payload);
       if (execution.active) setLastAcceptedJobId(result.jobId);
-      if (execution.active) showToast(`Queued ${payload.action} (${result.jobId})`);
+      if (execution.active)
+        showToast(t("queuedActionJobid", { action: payload.action, jobId: result.jobId }));
       return execution.active;
     } catch (error) {
       if (execution.active)
-        showToast(error instanceof Error ? error.message : "Bulk action failed", "error");
+        showToast(error instanceof Error ? error.message : t("bulkActionFailed"), "error");
       return false;
     }
   }
@@ -280,16 +288,22 @@ function ServiceCatalogView() {
     >
       <ConfirmDialog
         open={stageIntent !== null}
-        title="Stage selected images"
-        message={`Download immutable images for ${stageIntent?.serviceIds.join(", ") ?? ""}. Configured tags and running containers stay unchanged. Follow progress in Activity.`}
-        confirmLabel="Stage images"
+        title={t("stageSelectedImages")}
+        message={t("downloadImmutableImagesForValue", {
+          value: stageIntent?.serviceIds.join(", ") ?? "",
+        })}
+        confirmLabel={t("stageImages")}
         loading={stageMutation.isPending}
         onConfirm={() => void stageImages()}
         onCancel={() => setStageIntent(null)}
       />
       <AdminPageHeader
-        title="Services"
-        subtitle={`${summary?.total ?? "—"} total · ${summary?.running ?? "—"} running · ${summary?.stopped ?? "—"} stopped`}
+        title={t("services")}
+        subtitle={t("valueTotalValue2RunningValue3", {
+          value: summary?.total ?? "—",
+          value2: summary?.running ?? "—",
+          value3: summary?.stopped ?? "—",
+        })}
         actions={
           <>
             <Button
@@ -298,7 +312,7 @@ function ServiceCatalogView() {
               onClick={() => void checkHealth()}
               disabled={healthCheckMutation.isPending || bulkMutation.isPending}
             >
-              {healthCheckMutation.isPending ? "Checking..." : "Run Service Check"}
+              {healthCheckMutation.isPending ? t("checking") : t("runServiceCheck")}
             </Button>
             <Button
               size="small"
@@ -316,10 +330,10 @@ function ServiceCatalogView() {
                 !services.some((service) => service.enabled && service.actions?.build.available)
               }
             >
-              Build All
+              {t("buildAll")}
             </Button>
             <Button size="small" component={Link} href="/admin/system/deployment">
-              Deployment
+              {t("deployment")}
             </Button>
             {lastAcceptedJobId && (
               <Button
@@ -327,7 +341,7 @@ function ServiceCatalogView() {
                 component={Link}
                 href={adminJobHref({ id: lastAcceptedJobId, source: "application" })}
               >
-                View Jobs
+                {t("viewJobs")}
               </Button>
             )}
           </>
@@ -343,9 +357,9 @@ function ServiceCatalogView() {
       )}
       {data?.acquisition.state === "unavailable" && (
         <CompactAlert severity="warning">
-          Operations agent is unavailable. Service state is unknown.{" "}
+          {t("operationsAgentIsUnavailableService")}
           <Button onClick={() => void refetch()} size="small">
-            Retry
+            {t("retry")}
           </Button>
         </CompactAlert>
       )}
@@ -365,19 +379,17 @@ function ServiceCatalogView() {
         />
       )}
       {presets.isError && (
-        <CompactAlert severity="warning">
-          Presets are unavailable; choose action targets with the checkboxes.
-        </CompactAlert>
+        <CompactAlert severity="warning">{t("presetsAreUnavailableChooseAction")}</CompactAlert>
       )}
       {!!data?.capabilityInventory?.unrecognized.length && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <details>
             <summary>
-              Unrecognized capability vocabulary ({data.capabilityInventory.unrecognized.length})
+              {t("unrecognizedCapabilityVocabularyLength", {
+                length: data.capabilityInventory.unrecognized.length,
+              })}
             </summary>
-            <Typography variant="body2">
-              Custom vendor names are allowed. Check non-namespaced entries for spelling errors.
-            </Typography>
+            <Typography variant="body2">{t("customVendorNamesAreAllowed")}</Typography>
             {data.capabilityInventory.unrecognized.map((item) => (
               <Typography variant="body2" key={item.capability}>
                 {item.capability}: {item.serviceIds.join(", ")}
@@ -397,27 +409,27 @@ function ServiceCatalogView() {
           >
             <TextField
               select
-              label="Preset (actions only)"
+              label={t("presetActionsOnly")}
               value={preset}
               onChange={(event) => selectPreset(event.target.value)}
               size="small"
               sx={{ minWidth: 200 }}
             >
-              <MenuItem value="">Custom selection</MenuItem>
+              <MenuItem value="">{t("customSelection")}</MenuItem>
               {(presets.data?.presets ?? []).map((item) => (
                 <MenuItem key={item.id} value={item.id}>
                   {item.id} ({item.rootIds.join(", ")})
-                  {item.missingIds.length ? " — missing services" : ""}
+                  {item.missingIds.length ? t("missingServices") : ""}
                 </MenuItem>
               ))}
             </TextField>
             <TextField
               size="small"
-              placeholder="Search by name, ID, or capability…"
+              placeholder={t("searchByNameIdOr")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               slotProps={{
-                htmlInput: { "aria-label": "Search services" },
+                htmlInput: { "aria-label": t("searchServices") },
                 input: {
                   startAdornment: (
                     <InputAdornment position="start">
@@ -431,24 +443,24 @@ function ServiceCatalogView() {
             <TextField
               select
               size="small"
-              label="Enabled state"
+              label={t("enabledState")}
               value={enabledFilter}
               onChange={(e) => setEnabledFilter(e.target.value as typeof enabledFilter)}
               sx={{ minWidth: 160 }}
             >
-              <MenuItem value="all">All services</MenuItem>
-              <MenuItem value="enabled">Enabled</MenuItem>
-              <MenuItem value="disabled">Disabled</MenuItem>
+              <MenuItem value="all">{t("allServices")}</MenuItem>
+              <MenuItem value="enabled">{t("enabled")}</MenuItem>
+              <MenuItem value="disabled">{t("disabled")}</MenuItem>
             </TextField>
             <TextField
               select
               size="small"
-              label="Exact capability"
+              label={t("exactCapability")}
               value={capability}
               onChange={(e) => setCapability(e.target.value)}
               sx={{ minWidth: 200 }}
             >
-              <MenuItem value="">All capabilities</MenuItem>
+              <MenuItem value="">{t("allCapabilities")}</MenuItem>
               {[
                 ...new Set([
                   ...(data?.capabilityInventory?.recognized ?? []),
@@ -468,10 +480,10 @@ function ServiceCatalogView() {
                 onChange={(e) => setQuality(e.target.value as QualityFilter)}
                 displayEmpty
               >
-                <MenuItem value="all">All quality tiers</MenuItem>
-                <MenuItem value="built-in">Built-in</MenuItem>
-                <MenuItem value="community-verified">Community (verified)</MenuItem>
-                <MenuItem value="community">Community</MenuItem>
+                <MenuItem value="all">{t("allQualityTiers")}</MenuItem>
+                <MenuItem value="built-in">{t("builtIn")}</MenuItem>
+                <MenuItem value="community-verified">{t("communityVerified")}</MenuItem>
+                <MenuItem value="community">{t("community")}</MenuItem>
               </Select>
             </FormControl>
           </Stack>
@@ -480,7 +492,7 @@ function ServiceCatalogView() {
       >
         {summary && summary.unknown > 0 && (
           <CompactAlert severity="warning">
-            {summary.unknown} service(s) have unknown status.
+            {t("unknownServiceSHaveUnknown", { unknown: summary.unknown })}
           </CompactAlert>
         )}
         {isError && (
@@ -489,11 +501,11 @@ function ServiceCatalogView() {
             variant="outlined"
             action={
               <Button color="inherit" size="small" onClick={() => refetch()}>
-                Retry
+                {t("retry")}
               </Button>
             }
           >
-            Failed to load services. The backend may not be running yet.
+            {t("failedToLoadServicesThe")}
           </CompactAlert>
         )}
         <TableContainer>
@@ -503,17 +515,17 @@ function ServiceCatalogView() {
                 <TableCell padding="checkbox">
                   <Checkbox
                     size="small"
-                    slotProps={{ input: { "aria-label": "Select visible services" } }}
+                    slotProps={{ input: { "aria-label": t("selectVisibleServices") } }}
                     checked={allVisibleSelected}
                     indeterminate={selectedIds.size > 0 && !allVisibleSelected}
                     onChange={toggleSelectVisible}
                   />
                 </TableCell>
-                <TableCell>Service</TableCell>
-                <TableCell>Version</TableCell>
-                <TableCell>Quality</TableCell>
-                <TableCell>Provides</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>{t("service")}</TableCell>
+                <TableCell>{t("version")}</TableCell>
+                <TableCell>{t("quality")}</TableCell>
+                <TableCell>{t("provides")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -524,8 +536,8 @@ function ServiceCatalogView() {
                   colSpan={6}
                   message={
                     services.length === 0
-                      ? "No services registered yet."
-                      : "No services match the current filters."
+                      ? t("noServicesRegisteredYet")
+                      : t("noServicesMatchTheCurrent")
                   }
                 />
               ) : (
@@ -534,7 +546,7 @@ function ServiceCatalogView() {
                     <TableCell padding="checkbox">
                       <Checkbox
                         size="small"
-                        slotProps={{ input: { "aria-label": `Select ${svc.id}` } }}
+                        slotProps={{ input: { "aria-label": t("selectId", { id: svc.id }) } }}
                         checked={selectedIds.has(svc.id)}
                         onChange={() => toggleSelected(svc.id)}
                       />
@@ -587,7 +599,7 @@ function ServiceCatalogView() {
                     <TableCell>
                       <ServiceStatusChip status={svc.status} />
                       <Typography variant="caption" sx={{ display: "block" }}>
-                        {svc.enabled ? "Enabled" : "Disabled"}
+                        {svc.enabled ? t("enabled") : t("disabled")}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -604,7 +616,10 @@ function ServiceCatalogView() {
             color: "text.secondary",
           }}
         >
-          Showing {filtered.length} of {services.length} services
+          {t("showingLengthOfLength2Services", {
+            length: filtered.length,
+            length2: services.length,
+          })}
         </Typography>
       )}
     </Stack>

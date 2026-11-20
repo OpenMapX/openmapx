@@ -14,6 +14,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
@@ -35,6 +36,7 @@ function durationLabel(startedAt: string, finishedAt: string | null): string {
 }
 
 function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => void }) {
+  const t = useTranslations("adminTransit");
   const { data, isLoading, isError } = useTransitJobDetail(jobId);
 
   return (
@@ -60,7 +62,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               flex: 1,
             }}
           >
-            Job detail
+            {t("jobDetail")}
           </Typography>
           <IconButton size="small" onClick={onClose}>
             <CloseIcon fontSize="small" />
@@ -92,7 +94,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
         )}
         {isError && (
           <Typography variant="body2" color="error">
-            Failed to load job detail.
+            {t("failedToLoadJobDetail")}
           </Typography>
         )}
         {data && (
@@ -108,24 +110,28 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               <JobStatusChip status={data.status} />
               <Chip
                 size="small"
-                label={`triggered by ${data.triggeredBy ?? "—"}`}
+                label={t("triggeredByValue", { value: data.triggeredBy ?? "—" })}
                 variant="outlined"
               />
               <Chip
                 size="small"
-                label={`started ${formatTransitAdminTimestamp(data.startedAt)}`}
+                label={t("startedStartedat", {
+                  startedAt: formatTransitAdminTimestamp(data.startedAt),
+                })}
                 variant="outlined"
               />
               {data.finishedAt && (
                 <Chip
                   size="small"
-                  label={`duration ${durationLabel(data.startedAt, data.finishedAt)}`}
+                  label={t("durationStartedat", {
+                    startedAt: durationLabel(data.startedAt, data.finishedAt),
+                  })}
                   variant="outlined"
                 />
               )}
             </Stack>
 
-            <DataManagerJobStages stages={data.stages} emptyMessage="No stage records yet." />
+            <DataManagerJobStages stages={data.stages} emptyMessage={t("noStageRecordsYet")} />
           </Stack>
         )}
       </Box>
@@ -134,11 +140,12 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
 }
 
 export function RecentJobsTable() {
+  const t = useTranslations("adminTransit");
   const { data, isLoading, isError } = useTransitJobs(20);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
 
   return (
-    <AdminTableSurface title="Recent jobs" description="Showing up to 20 most recent">
+    <AdminTableSurface title={t("recentJobs")} description={t("showingUpTo20Most")}>
       {isLoading ? (
         <Box
           sx={{
@@ -151,7 +158,7 @@ export function RecentJobsTable() {
         </Box>
       ) : isError ? (
         <Typography variant="body2" color="error" sx={{ p: 2 }}>
-          Failed to load jobs.
+          {t("failedToLoadJobs")}
         </Typography>
       ) : data && data.jobs.length === 0 ? (
         <Typography
@@ -161,19 +168,19 @@ export function RecentJobsTable() {
             p: 2,
           }}
         >
-          No jobs recorded yet.
+          {t("noJobsRecordedYet")}
         </Typography>
       ) : (
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Job ID</TableCell>
-                <TableCell>Started</TableCell>
-                <TableCell>Finished</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Triggered by</TableCell>
-                <TableCell align="right">Duration</TableCell>
+                <TableCell>{t("jobId")}</TableCell>
+                <TableCell>{t("started")}</TableCell>
+                <TableCell>{t("finished")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell>{t("triggeredBy")}</TableCell>
+                <TableCell align="right">{t("duration")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

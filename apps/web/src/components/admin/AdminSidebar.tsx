@@ -51,6 +51,7 @@ export function AdminSidebar({
   selfHosted = null,
   role = "admin",
 }: AdminSidebarProps) {
+  const ta = useTranslations("adminShared");
   const pathname = usePathname();
   const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
   const t = useTranslations("adminNavigation");
@@ -73,7 +74,7 @@ export function AdminSidebar({
         <OverviewIcon color="primary" />
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>
-            OpenMapX
+            {ta("openmapx")}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {t("administration")}

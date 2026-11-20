@@ -39,3 +39,30 @@ for variable text instead of assembling translated sentences from fragments.
 Privacy export copy lives in `privacyExport`, admin interface copy in
 `privacyAdmin`, and account interface copy in `account.privacyData`. Adding a
 language does not require new privacy-specific branches or locale enums.
+
+## Admin copy
+
+The admin area has one namespace per section: `adminActivity`, `adminExtensions`,
+`adminIntegrations`, `adminOverview`, `adminServices`, `adminTransit`,
+`adminUsers`, the shell and shared controls in `adminShared`, page titles and
+headers in `adminPages`, plus the earlier `adminCoverage`, `adminNavigation`,
+`adminSearchIndex`, `privacyAdmin` and `privacySetup`. The root layout leaves
+these namespaces out of every public page's payload; the admin layout provides
+the full catalogue to admin pages. The list lives in
+`apps/web/src/i18n/adminMessages.ts`, and a test fails when code a public page
+can load reads one of them. Admin code that renders on public pages, such as
+the impersonation banner (`impersonation`) and the unsaved-draft guard
+(`adminDrafts`), uses public namespaces.
+
+Settings the API defines keep their English label and description on the
+server; `adminSettings.settings.<key>` translates them in the admin UI, and a
+setting the catalogue does not know keeps the server's text. Titles in
+integration and service `configSchema`s stay English, because community
+manifests have no catalogue.
+
+Server components use `getTranslations`; `pnpm check-translations` recognizes it
+alongside `useTranslations` and `createTranslator`. In admin directories, Biome
+rejects literal text between JSX tags (`noJsxLiterals`) and literal words in
+props that show text (`scripts/biome-plugins/noLiteralCopyProps.grit`). The
+override in `biome.json` lists the sections not yet localized: cache, settings,
+system maintenance, the application log and the audit log.
