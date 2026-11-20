@@ -525,34 +525,30 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         if (!trip) return null;
         // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
         const stopovers: any[] = trip.stopovers ?? [];
-        // A stop without coordinates cannot be drawn on the journey; it is left out.
-        const stops: VehicleJourneyStop[] = stopovers.flatMap(
+        // A stop without coordinates keeps its place in the list, unplaced.
+        const stops: VehicleJourneyStop[] = stopovers.map(
           // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
-          (s: any): VehicleJourneyStop[] => {
-            const at = fptfPosition(s.stop?.location);
-            if (!at) return [];
-            return [
-              {
-                stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
-                name: s.stop?.name ?? "",
-                lat: at.lat,
-                lng: at.lng,
-                platform: s.platform ?? s.plannedPlatform ?? undefined,
-                scheduledPlatform: s.plannedPlatform ?? undefined,
-                scheduledArrival: s.plannedArrival ?? undefined,
-                scheduledDeparture: s.plannedDeparture ?? undefined,
-                expectedArrival: s.arrival ?? undefined,
-                expectedDeparture: s.departure ?? undefined,
-                delaySeconds:
-                  typeof s.arrivalDelay === "number"
-                    ? s.arrivalDelay
-                    : typeof s.departureDelay === "number"
-                      ? s.departureDelay
-                      : undefined,
-                canceled: s.cancelled ?? false,
-                departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
-              },
-            ];
+          (s: any): VehicleJourneyStop => {
+            const at = fptfPlacePosition(s.stop);
+            return {
+              stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
+              name: s.stop?.name ?? "",
+              ...(at ? { lat: at.lat, lng: at.lng } : {}),
+              platform: s.platform ?? s.plannedPlatform ?? undefined,
+              scheduledPlatform: s.plannedPlatform ?? undefined,
+              scheduledArrival: s.plannedArrival ?? undefined,
+              scheduledDeparture: s.plannedDeparture ?? undefined,
+              expectedArrival: s.arrival ?? undefined,
+              expectedDeparture: s.departure ?? undefined,
+              delaySeconds:
+                typeof s.arrivalDelay === "number"
+                  ? s.arrivalDelay
+                  : typeof s.departureDelay === "number"
+                    ? s.departureDelay
+                    : undefined,
+              canceled: s.cancelled ?? false,
+              departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
+            };
           },
         );
         const remarks: TripRemark[] | undefined =

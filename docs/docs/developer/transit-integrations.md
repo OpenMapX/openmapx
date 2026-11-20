@@ -182,8 +182,12 @@ Validate only the fields the adapter consumes, with a zod schema, through
 `ProviderPayloadError`, which provider health records as `invalid_payload`.
 For lists of independent records (stops, departures, alerts), a record missing a
 consumed field is dropped and its valid neighbours kept; a non-empty list with no
-usable record is malformed. Reject a stop without coordinates rather than placing
-it at 0,0. An ordered structure such as a journey's stop sequence is valid only as
+usable record is malformed. Never place a record without coordinates at 0,0. Drop
+a stop record without coordinates, but keep a journey stop without them in its
+journey's stop list with `lat` and `lng` left out, so only drawing and distance
+skip it. Fill a trip leg's unplaced end from what the trip proves (its polyline,
+the neighbouring leg, the requested origin or destination) before giving up on
+the trip. An ordered structure such as a journey's stop sequence is valid only as
 a whole. Use recorded or documented example responses as fixtures, note their
 source in a `PROVENANCE.md`, and have test doubles assert the request they
 receive.

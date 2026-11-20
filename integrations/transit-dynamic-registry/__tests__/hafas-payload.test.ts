@@ -341,7 +341,7 @@ describe("HAFAS journeys and trips without coordinates", () => {
     ).toBeNull();
   });
 
-  it("leaves a stopover without coordinates out of a trip", async () => {
+  it("keeps a stopover without coordinates in a trip, unplaced", async () => {
     client.trip.mockResolvedValue({
       trip: {
         id: "trip-1",
@@ -353,6 +353,7 @@ describe("HAFAS journeys and trips without coordinates", () => {
 
     expect(trip?.stops.map((s) => [s.stopId, s.lat])).toEqual([
       ["vbb:a", 52.5],
+      ["vbb:b", undefined],
       ["vbb:c", 52.6],
     ]);
   });

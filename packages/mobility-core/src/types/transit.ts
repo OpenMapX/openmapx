@@ -630,8 +630,12 @@ export interface VehicleJourneyStop extends ContributingRecord {
   fieldContributors?: FieldContributors;
   stopId: string;
   name: string;
-  lat: number;
-  lng: number;
+  /**
+   * Absent when the provider could not place the stop. The stop stays in the
+   * journey's stop list; only drawing and distance skip it.
+   */
+  lat?: number;
+  lng?: number;
   platform?: string;
   arrivalPlatform?: TransitPlatformEvidence;
   departurePlatform?: TransitPlatformEvidence;

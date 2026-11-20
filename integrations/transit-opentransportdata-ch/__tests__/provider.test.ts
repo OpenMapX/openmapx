@@ -46,7 +46,6 @@ const SERVICE_POINTS_CSV = [
   "sloid;number;designationOfficial;designationLong;meansOfTransport;categories;businessOrganisation;businessOrganisationDescriptionDe;businessOrganisationAbbreviationDe;wgs84East;wgs84North;localityName;municipalityName;stopPointType;isoCountryCode;uicCountryCode;cantonName",
   "ch:1:sloid:7000;8507000;Bern;Bern;TRAIN,BUS;rail,bus;ch:1:sboid:100001;Swiss Federal Railways SBB;SBB;7.439136;46.948891;Bern;Bern;STATION;CH;85;Bern",
   "ch:1:sloid:7050;8507050;Münsingen;Münsingen;TRAIN;rail;ch:1:sboid:100001;Swiss Federal Railways SBB;SBB;7.561356;46.873069;Münsingen;Münsingen;STATION;CH;85;Bern",
-  "ch:1:sloid:7100;8507100;Thun;Thun;TRAIN,BUS;rail,bus;ch:1:sboid:100001;Swiss Federal Railways SBB;SBB;7.629894;46.754824;Thun;Thun;STATION;CH;85;Bern",
 ].join("\n");
 
 const TRAFFIC_POINTS_CSV = [
@@ -1046,6 +1045,9 @@ describe("transit-opentransportdata-ch provider", () => {
         ],
       }),
     );
+    // Thun has neither an OJP position nor master data: it stays in the stop list, unplaced.
+    expect(journey?.stops.at(-1)).not.toHaveProperty("lat");
+    expect(journey?.stops[1]).toMatchObject({ lat: 46.873069, lng: 7.561356 });
   });
 
   it("maps GTFS-SA alerts and matches Swiss stop alerts across DIDOK/SLOID forms", async () => {
@@ -1165,12 +1167,7 @@ describe("transit-opentransportdata-ch provider", () => {
         name: "Münsingen",
         sequence: 2,
       }),
-      expect.objectContaining({
-        id: "otdch:ch:1:sloid:7100:3:4",
-        name: "Thun",
-        platformCode: "3",
-        sequence: 3,
-      }),
+      // Route stops are placed on the map, so unplaced Thun is left out of them.
     ]);
   });
 

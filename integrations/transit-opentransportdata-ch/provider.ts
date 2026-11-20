@@ -2006,15 +2006,15 @@ function callPosition(
   return null;
 }
 
+/** A journey stop; one OJP and master data cannot place keeps its place without coordinates. */
 function mapJourneyStopFromCall(
   runtime: SwissProviderRuntime,
   call: OjpCall,
   datasets: SwissStopDatasets,
-): VehicleJourney["stops"][number] | null {
+): VehicleJourney["stops"][number] {
   const rawRef = call.stopPointRef;
   const { servicePoint, stopPoint } = rawRef ? findServicePoint(rawRef, datasets) : {};
   const position = callPosition(call, stopPoint, servicePoint);
-  if (!position) return null;
   const scheduledArrival = call.arrivalTimetabled;
   const expectedArrival = call.arrivalEstimated;
   const scheduledDeparture = call.departureTimetabled;
@@ -2030,8 +2030,7 @@ function mapJourneyStopFromCall(
       computeDelaySeconds(scheduledArrival, expectedArrival),
     expectedArrival,
     expectedDeparture,
-    lat: position.lat,
-    lng: position.lng,
+    ...(position ? { lat: position.lat, lng: position.lng } : {}),
     name: call.name || stopPoint?.designationOfficial || servicePoint?.name || rawRef || "Unknown",
     platform: call.estimatedQuay || call.plannedQuay,
     scheduledArrival,
@@ -2076,16 +2075,23 @@ function routeStopsFromJourney(
   journey: VehicleJourney,
   mode: TransportMode | undefined,
 ): SwissRouteStop[] {
-  return journey.stops.map((stop, index) => ({
-    id: stop.stopId,
-    lat: stop.lat,
-    lng: stop.lng,
-    modes: mode ? [mode] : [],
-    name: stop.name,
-    platformCode: stop.platform,
-    provider: PROVIDER,
-    sequence: index + 1,
-  }));
+  // A route stop is placed on the map, so a journey stop without coordinates is left out.
+  return journey.stops.flatMap((stop, index) =>
+    stop.lat === undefined || stop.lng === undefined
+      ? []
+      : [
+          {
+            id: stop.stopId,
+            lat: stop.lat,
+            lng: stop.lng,
+            modes: mode ? [mode] : [],
+            name: stop.name,
+            platformCode: stop.platform,
+            provider: PROVIDER,
+            sequence: index + 1,
+          },
+        ],
+  );
 }
 
 function matchesStopRef(
@@ -3491,11 +3497,7 @@ async function getVehicleJourney(
       serviceInfo,
       occupancyForecast,
     );
-    // A stop that cannot be placed is left out of the journey.
-    const stops = calls.flatMap((call) => {
-      const stop = mapJourneyStopFromCall(runtime, call, datasets);
-      return stop ? [stop] : [];
-    });
+    const stops = calls.map((call) => mapJourneyStopFromCall(runtime, call, datasets));
     return {
       contributors: snapshotContributors(
         swissContributors(runtime, "ojp"),
