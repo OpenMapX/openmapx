@@ -29,6 +29,7 @@ import { createProductionRegistryResourceClaimer } from "../../../../../apps/ops
 import { dispatchOpsOperation } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "../../control-targets";
@@ -138,8 +139,7 @@ it.skipIf(
         controlJournal: journal,
         configurationFence: fence,
       }),
-      ownRows = async () =>
-        (await store.listUnsettled()).filter((row) => row.status.admittedAt >= startedAt),
+      ownRows = () => dataJobsSince(sql, store, startedAt),
       singleFlight = getSingleFlightController(),
       operationsPolicy = resolveOperationsProfile({ countries: ["de"] });
     let releaseTransit!: () => void, transitStarted!: () => void;
@@ -385,7 +385,7 @@ it.skipIf(
       app.server.closeAllConnections();
       await app.close();
       await runtime.close();
-      for (const row of await store.listUnsettled())
+      for (const row of await dataJobsSince(sql, store, 0))
         if (
           row.status.admittedAt >= startedAt ||
           (rootOperationKey &&

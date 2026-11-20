@@ -503,12 +503,9 @@ it.skipIf(
       agent.stdin.end();
       await exited;
       resetOpsClient();
-      const fixtureRows = await store.listUnsettled();
       const ownIds = new Set([
         ...(id ? [id] : []),
-        ...fixtureRows
-          .filter((row) => row.status.admittedAt >= startedAt)
-          .map((row) => row.status.id),
+        ...(await dataJobsSince(sql, store, startedAt)).map((row) => row.status.id),
       ]);
       for (const ownId of ownIds) await sql`DELETE FROM data_manager.jobs WHERE id=${ownId}`;
       control.closeControlInstallation(dm);
@@ -524,6 +521,7 @@ import { readFileSync, renameSync } from "node:fs";
 import { startDataExecution } from "@openmapx/core/data-manager-sdk";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows.js";
 import { createCandidateManifest } from "../transitous/candidate.js";
 import { retainTransitPhaseCandidate, runTransitOwnedPhase } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";

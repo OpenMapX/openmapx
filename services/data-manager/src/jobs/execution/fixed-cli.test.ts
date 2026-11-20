@@ -32,6 +32,7 @@ import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { createUnavailableRuntime } from "../../../../../apps/ops-agent/src/runtime";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { dataJobsSince } from "../../../__tests__/helpers/job-rows";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
 import { StateStore } from "../../state";
@@ -107,8 +108,7 @@ it.skipIf(
     });
     // Job rows are shared by every fixture; this test's are those admitted since it began.
     const startedAt = Date.now(),
-      ownRows = async () =>
-        (await store.listUnsettled()).filter((row) => row.status.admittedAt >= startedAt);
+      ownRows = () => dataJobsSince(sql, store, startedAt);
     const sql = postgres(url, { max: 4 }),
       dm = control.openControlInstallation({
         infraDir: infra,
