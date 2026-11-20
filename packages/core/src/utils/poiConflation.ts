@@ -1,4 +1,5 @@
 import { haversineMeters, nameSimilarity } from "./geo-server";
+import { indexAt } from "./indexAt";
 import { numberAt } from "./numberAt";
 
 export interface ConflationPoint {
@@ -313,8 +314,9 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
     const used = new Array<boolean>(size + 1).fill(false);
     do {
       used[j0] = true;
-      const i0 = numberAt(p, j0);
-      const row = weights[i0 - 1] ?? [];
+      const i0 = indexAt(p, j0);
+      const row = weights[i0 - 1];
+      if (!row) throw new RangeError(`No weight row for assignment ${i0}`);
       let delta = Number.POSITIVE_INFINITY;
       let j1 = 0;
       for (let j = 1; j <= size; j++) {
@@ -332,7 +334,7 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
       }
       for (let j = 0; j <= size; j++) {
         if (used[j]) {
-          const assigned = numberAt(p, j);
+          const assigned = indexAt(p, j);
           u[assigned] = numberAt(u, assigned) + delta;
           v[j] = numberAt(v, j) - delta;
         } else {
@@ -340,17 +342,17 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
         }
       }
       j0 = j1;
-    } while (numberAt(p, j0) !== 0);
+    } while (indexAt(p, j0) !== 0);
     do {
-      const j1 = numberAt(way, j0);
-      p[j0] = numberAt(p, j1);
+      const j1 = indexAt(way, j0);
+      p[j0] = indexAt(p, j1);
       j0 = j1;
     } while (j0 !== 0);
   }
 
   const selected: ScoredConflationPair[] = [];
   for (let j = 1; j <= size; j++) {
-    const i = numberAt(p, j) - 1;
+    const i = indexAt(p, j) - 1;
     if (i < 0 || i >= aIds.length || j - 1 >= bIds.length) continue;
     const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j - 1]}`);
     if (edge) selected.push(edge);

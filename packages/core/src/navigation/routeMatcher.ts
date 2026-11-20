@@ -1,6 +1,7 @@
 import { degreesToRadians, earthRadius, lineString, point, radiansToLength } from "@turf/helpers";
 import nearestPointOnLine from "@turf/nearest-point-on-line";
 import type { LngLat } from "../types/geometry";
+import { indexAt } from "../utils/indexAt";
 import { numberAt } from "../utils/numberAt";
 import type { SnapResult } from "./types";
 
@@ -396,13 +397,13 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
     nodeHi[node] = hi;
     if (hi - lo <= LEAF_EDGES) {
       // Union of the member caps, grown one member at a time.
-      const first = numberAt(indexed, lo);
+      const first = indexAt(indexed, lo);
       let cx = numberAt(capX, first);
       let cy = numberAt(capY, first);
       let cz = numberAt(capZ, first);
       let r = numberAt(capR, first);
       for (let p = lo + 1; p < hi; p++) {
-        const e = numberAt(indexed, p);
+        const e = indexAt(indexed, p);
         const ex = numberAt(capX, e);
         const ey = numberAt(capY, e);
         const ez = numberAt(capZ, e);
@@ -608,11 +609,11 @@ export function snapPreparedRoute(
 
     const visit = (node: number): void => {
       if (counting) counters.visitedNodes++;
-      const left = numberAt(idx.nodeLeft, node);
+      const left = indexAt(idx.nodeLeft, node);
       if (left < 0) {
-        const hi = numberAt(idx.nodeHi, node);
-        for (let p = numberAt(idx.nodeLo, node); p < hi; p++) {
-          const e = numberAt(idx.indexed, p);
+        const hi = indexAt(idx.nodeHi, node);
+        for (let p = indexAt(idx.nodeLo, node); p < hi; p++) {
+          const e = indexAt(idx.indexed, p);
           const bound = capLowerBound(
             qx,
             qy,
@@ -627,7 +628,7 @@ export function snapPreparedRoute(
         }
         return;
       }
-      const right = numberAt(idx.nodeRight, node);
+      const right = indexAt(idx.nodeRight, node);
       const boundL = capLowerBound(
         qx,
         qy,
@@ -723,9 +724,9 @@ export function inspectRouteMatcher(prepared: PreparedRouteMatcher): RouteMatche
           z: numberAt(idx.nodeZ, node),
           r: numberAt(idx.nodeR, node),
         });
-        const left = numberAt(idx.nodeLeft, node);
+        const left = indexAt(idx.nodeLeft, node);
         if (left < 0) return chain;
-        node = position < numberAt(idx.nodeHi, left) ? left : numberAt(idx.nodeRight, node);
+        node = position < indexAt(idx.nodeHi, left) ? left : indexAt(idx.nodeRight, node);
       }
     },
   };

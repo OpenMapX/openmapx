@@ -192,9 +192,9 @@ function boundsFromPoints(points: readonly LngLat[]): {
   let south = Number.POSITIVE_INFINITY;
   let north = Number.NEGATIVE_INFINITY;
   // Unwrapping starts from the first point, so its own longitude stays as given.
-  let previousLng = points[0]?.[0] ?? 0;
+  let previousLng: number | undefined;
   for (const [lng, lat] of points) {
-    const unwrapped = unwrapLongitude(lng, previousLng);
+    const unwrapped = previousLng === undefined ? lng : unwrapLongitude(lng, previousLng);
     previousLng = unwrapped;
     if (unwrapped < west) west = unwrapped;
     if (unwrapped > east) east = unwrapped;
