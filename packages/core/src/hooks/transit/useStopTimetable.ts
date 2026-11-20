@@ -12,14 +12,14 @@ export function useStopTimetable(
 ): MobilityEnvelopeQueryResult<Departure[]> {
   const query = useQuery({
     queryKey: ["stop-timetable", stopId, date],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const url = API_ENDPOINTS.transitStopTimetable.replace(
         ":id",
         encodeURIComponent(stopId as string),
       );
       const params: Record<string, string> = {};
       if (date) params.date = date;
-      return apiClient.get<MobilityEnvelope<Departure[]>>(url, params);
+      return apiClient.get<MobilityEnvelope<Departure[]>>(url, params, { signal });
     },
     enabled: stopId !== null,
     staleTime: 5 * 60_000,

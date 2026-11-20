@@ -48,11 +48,12 @@ export function useRideQuotes({ request, providerIds, enabled }: UseRideQuotesOp
     enabled: active,
     gcTime: 0,
     staleTime: 0,
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!request) throw new Error("request required");
       return apiClient.post<QuotesResponse>(
         API_ENDPOINTS.rideQuotes,
         rideQuoteBody(request, providerIds),
+        { signal },
       );
     },
   });

@@ -44,7 +44,9 @@ describe("personal timeline hooks", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection);
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection, undefined, {
+      signal: expect.any(AbortSignal),
+    });
     expect(
       client
         .getQueryCache()
@@ -76,7 +78,7 @@ describe("personal timeline hooks", () => {
     expect(get).toHaveBeenCalledWith(
       `${API_ENDPOINTS.timelineDay}/2026-08-09`,
       undefined,
-      expect.objectContaining({ maxBytes: expect.any(Number) }),
+      expect.objectContaining({ maxBytes: expect.any(Number), signal: expect.any(AbortSignal) }),
     );
   });
 

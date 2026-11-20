@@ -6,10 +6,14 @@ import type { RestaurantLinks } from "../types/restaurantMenu";
 export function useRestaurantLinks(website?: string | null, enabled = true) {
   return useQuery<RestaurantLinks | null>({
     queryKey: ["restaurant-links", website ?? ""],
-    queryFn: () =>
-      apiClient.getOptional<RestaurantLinks>(API_ENDPOINTS.restaurantMenu, {
-        website: website as string,
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.getOptional<RestaurantLinks>(
+        API_ENDPOINTS.restaurantMenu,
+        {
+          website: website as string,
+        },
+        { signal },
+      ),
     enabled: enabled && Boolean(website),
     staleTime: 24 * 60 * 60 * 1000,
   });

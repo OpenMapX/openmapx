@@ -10,12 +10,13 @@ export function useDepartures(
 ): MobilityEnvelopeQueryResult<Departure[]> {
   const query = useQuery({
     queryKey: ["departures", stopId, minutes],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<Departure[]>>(
         `/api/integrations/transit/stops/${encodeURIComponent(stopId as string)}/departures`,
         {
           minutes: String(minutes),
         },
+        { signal },
       ),
     enabled: stopId !== null,
     staleTime: 30_000,

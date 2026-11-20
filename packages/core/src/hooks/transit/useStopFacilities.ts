@@ -7,9 +7,11 @@ import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMob
 export function useStopFacilities(stopId: string | null): MobilityEnvelopeQueryResult<Facility[]> {
   const query = useQuery({
     queryKey: ["stop-facilities", stopId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<Facility[]>>(
         `/api/integrations/transit/stops/${encodeURIComponent(stopId as string)}/facilities`,
+        undefined,
+        { signal },
       ),
     enabled: stopId !== null,
     staleTime: 300_000,

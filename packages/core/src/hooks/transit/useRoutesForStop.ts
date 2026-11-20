@@ -10,10 +10,14 @@ export function useRoutesForStop(
 ): MobilityEnvelopeQueryResult<TransitRoute[]> {
   const query = useQuery({
     queryKey: ["routes-for-stop", stopId],
-    queryFn: () =>
-      apiClient.get<MobilityEnvelope<TransitRoute[]>>(API_ENDPOINTS.transitRoutes, {
-        stop_id: stopId as string,
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<MobilityEnvelope<TransitRoute[]>>(
+        API_ENDPOINTS.transitRoutes,
+        {
+          stop_id: stopId as string,
+        },
+        { signal },
+      ),
     enabled: stopId !== null,
     staleTime: 300_000,
   });

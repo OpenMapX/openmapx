@@ -41,10 +41,11 @@ describe("useElevation", () => {
 
     await waitFor(() => expect(result.current.data).not.toBeNull());
     expect(result.current.data?.points).toHaveLength(3);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.elevation, {
-      coordinates: route.geometry,
-      routeDistance: route.distance,
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.elevation,
+      { coordinates: route.geometry, routeDistance: route.distance },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("uses inline elevation for non-driving routes without fetching", () => {

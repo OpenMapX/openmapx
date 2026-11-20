@@ -9,9 +9,11 @@ export function useRouteAlerts(
 ): MobilityEnvelopeQueryResult<ServiceAlert[]> {
   const query = useQuery({
     queryKey: ["route-alerts", routeId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<ServiceAlert[]>>(
         `/api/integrations/transit/routes/${encodeURIComponent(routeId as string)}/alerts`,
+        undefined,
+        { signal },
       ),
     enabled: routeId !== null && routeId !== "",
     staleTime: 60_000,

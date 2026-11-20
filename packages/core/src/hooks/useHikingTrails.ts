@@ -11,11 +11,12 @@ import type {
 export function useHikingSearch(query: string, limit = 20) {
   return useQuery({
     queryKey: ["hiking-search", query, limit],
-    queryFn: () =>
-      apiClient.get<HikingTrailSummary[]>(API_ENDPOINTS.hikingSearch, {
-        query,
-        limit: String(limit),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<HikingTrailSummary[]>(
+        API_ENDPOINTS.hikingSearch,
+        { query, limit: String(limit) },
+        { signal },
+      ),
     enabled: query.trim().length >= 2,
     staleTime: 300_000,
   });
@@ -30,14 +31,18 @@ export function useHikingArea(
 ) {
   return useQuery({
     queryKey: ["hiking-area", south, west, north, east, limit],
-    queryFn: () =>
-      apiClient.get<HikingTrailSummary[]>(API_ENDPOINTS.hikingArea, {
-        south: String(south),
-        west: String(west),
-        north: String(north),
-        east: String(east),
-        limit: String(limit),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<HikingTrailSummary[]>(
+        API_ENDPOINTS.hikingArea,
+        {
+          south: String(south),
+          west: String(west),
+          north: String(north),
+          east: String(east),
+          limit: String(limit),
+        },
+        { signal },
+      ),
     enabled: south !== null && west !== null && north !== null && east !== null,
     staleTime: 300_000,
   });
@@ -46,7 +51,10 @@ export function useHikingArea(
 export function useHikingDetail(id: number | null) {
   return useQuery({
     queryKey: ["hiking-detail", id],
-    queryFn: () => apiClient.get<HikingTrailDetail>(`${API_ENDPOINTS.hikingDetail}/${id}`),
+    queryFn: ({ signal }) =>
+      apiClient.get<HikingTrailDetail>(`${API_ENDPOINTS.hikingDetail}/${id}`, undefined, {
+        signal,
+      }),
     enabled: id !== null,
     staleTime: 3_600_000,
   });
@@ -55,7 +63,10 @@ export function useHikingDetail(id: number | null) {
 export function useHikingGeometry(id: number | null) {
   return useQuery({
     queryKey: ["hiking-geometry", id],
-    queryFn: () => apiClient.get<HikingFeatureCollection>(`${API_ENDPOINTS.hikingGeometry}/${id}`),
+    queryFn: ({ signal }) =>
+      apiClient.get<HikingFeatureCollection>(`${API_ENDPOINTS.hikingGeometry}/${id}`, undefined, {
+        signal,
+      }),
     enabled: id !== null,
     staleTime: 3_600_000,
   });
@@ -70,7 +81,7 @@ export function useHikingShelters(
 ) {
   return useQuery({
     queryKey: ["hiking-shelters", south, west, north, east, typeFilter],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params: Record<string, string> = {
         south: String(south),
         west: String(west),
@@ -78,7 +89,9 @@ export function useHikingShelters(
         east: String(east),
       };
       if (typeFilter) params.type = typeFilter;
-      return apiClient.get<ShelterFeatureCollection>(API_ENDPOINTS.hikingShelters, params);
+      return apiClient.get<ShelterFeatureCollection>(API_ENDPOINTS.hikingShelters, params, {
+        signal,
+      });
     },
     enabled: south !== null && west !== null && north !== null && east !== null,
     staleTime: 300_000,

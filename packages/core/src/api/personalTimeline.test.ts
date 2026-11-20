@@ -232,8 +232,9 @@ describe("personal timeline API", () => {
     const response = disconnected;
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
 
-    await expect(getTimelineConnection()).resolves.toEqual(response);
-    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection);
+    const signal = new AbortController().signal;
+    await expect(getTimelineConnection({ signal })).resolves.toEqual(response);
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection, undefined, { signal });
   });
 
   it("connects, tests and disconnects through the connection endpoint", async () => {

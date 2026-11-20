@@ -19,12 +19,16 @@ export function useLinkedTransitAlerts(
 
   const query = useQuery({
     queryKey: ["linked-transit-alerts", ...placeTransitKey(place)],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
-      return apiClient.get<MobilityEnvelope<ServiceAlert[]>>(API_ENDPOINTS.transitAlertsForPlace, {
-        ...placeTransitParams(p),
-      });
+      return apiClient.get<MobilityEnvelope<ServiceAlert[]>>(
+        API_ENDPOINTS.transitAlertsForPlace,
+        {
+          ...placeTransitParams(p),
+        },
+        { signal },
+      );
     },
     enabled,
     ...mobilityEnvelopeTiming(60_000),

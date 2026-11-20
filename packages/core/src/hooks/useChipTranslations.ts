@@ -23,10 +23,12 @@ const CHIP_TRANSLATIONS_STALE_MS = 60 * 60 * 1_000;
 export function useChipTranslations(lang?: string) {
   return useQuery({
     queryKey: ["chip-translations", lang ?? "en"],
-    queryFn: () =>
-      apiClient.get<ChipTranslationsResponse>(API_ENDPOINTS.chipTranslations, {
-        ...(lang && { lang }),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<ChipTranslationsResponse>(
+        API_ENDPOINTS.chipTranslations,
+        { ...(lang && { lang }) },
+        { signal },
+      ),
     select: (resp) => resp.translations,
     staleTime: CHIP_TRANSLATIONS_STALE_MS,
   });

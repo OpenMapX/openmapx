@@ -9,12 +9,12 @@ import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMob
 export function useRouteLive(routeId: string | null): MobilityEnvelopeQueryResult<RouteLive> {
   const query = useQuery({
     queryKey: ["route-live", routeId],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const url = API_ENDPOINTS.transitRouteLive.replace(
         ":id",
         encodeURIComponent(routeId as string),
       );
-      return apiClient.get<MobilityEnvelope<RouteLive>>(url);
+      return apiClient.get<MobilityEnvelope<RouteLive>>(url, undefined, { signal });
     },
     enabled: routeId !== null,
     staleTime: 15_000,

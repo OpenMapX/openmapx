@@ -12,10 +12,14 @@ export function useDeliveryProviderCatalog(countryCode?: string, enabled = true)
   const cc = countryCode?.toLowerCase();
   return useQuery<DeliveryProvidersResponse>({
     queryKey: ["delivery-provider-catalog", cc ?? ""],
-    queryFn: () =>
-      apiClient.get<DeliveryProvidersResponse>(API_ENDPOINTS.foodDeliveryProviders, {
-        country: cc as string,
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<DeliveryProvidersResponse>(
+        API_ENDPOINTS.foodDeliveryProviders,
+        {
+          country: cc as string,
+        },
+        { signal },
+      ),
     enabled: enabled && Boolean(cc),
     staleTime: 60 * 60 * 1000,
   });
@@ -39,16 +43,20 @@ export function useDeliveryProviders(params: DeliverySearchParams, enabled = tru
       params.postcode ?? "",
       params.address ?? "",
     ],
-    queryFn: () =>
-      apiClient.get<DeliveryProvidersResponse>(API_ENDPOINTS.foodDeliveryResolve, {
-        name: params.name,
-        ...(cc ? { country: cc } : {}),
-        ...(params.city ? { city: params.city } : {}),
-        ...(typeof params.lat === "number" ? { lat: String(params.lat) } : {}),
-        ...(typeof params.lng === "number" ? { lng: String(params.lng) } : {}),
-        ...(params.postcode ? { postcode: params.postcode } : {}),
-        ...(params.address ? { address: params.address } : {}),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<DeliveryProvidersResponse>(
+        API_ENDPOINTS.foodDeliveryResolve,
+        {
+          name: params.name,
+          ...(cc ? { country: cc } : {}),
+          ...(params.city ? { city: params.city } : {}),
+          ...(typeof params.lat === "number" ? { lat: String(params.lat) } : {}),
+          ...(typeof params.lng === "number" ? { lng: String(params.lng) } : {}),
+          ...(params.postcode ? { postcode: params.postcode } : {}),
+          ...(params.address ? { address: params.address } : {}),
+        },
+        { signal },
+      ),
     enabled: enabled && Boolean(cc),
     staleTime: (query) => (query.state.data?.degraded ? 0 : 60 * 60 * 1000),
   });

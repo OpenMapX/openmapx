@@ -162,9 +162,11 @@ it("resolves one credited file per distinct catalogue brand and clears image-onl
     expect(screen.queryByText("Logo artist")).toBeNull();
     await waitFor(() => expect(screen.getAllByRole("img", { name: "Aral" })).toHaveLength(2));
     expect(get).toHaveBeenCalledTimes(1);
-    expect(get).toHaveBeenCalledWith(expect.stringContaining("/Q1/logo-attribution"), {
-      fileMetadata: "3",
-    });
+    expect(get).toHaveBeenCalledWith(
+      expect.stringContaining("/Q1/logo-attribution"),
+      { fileMetadata: "3" },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(screen.getAllByText("Logo artist")).toHaveLength(2);
     for (const link of screen.getAllByRole("link", { name: "CC-BY-4.0" }))
       expect(link.closest("button")).toBeNull();

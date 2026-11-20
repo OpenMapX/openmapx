@@ -26,7 +26,7 @@ export interface MangroveTransport<TReview = unknown, TAggregate = unknown> {
    * Return `null` when the user has none yet (i.e. needs setup) — typically
    * mapped from a 204 No Content response.
    */
-  getKeypairEnvelope(): Promise<EnvelopeState | null>;
+  getKeypairEnvelope(options?: { signal?: AbortSignal }): Promise<EnvelopeState | null>;
 
   /** Create the envelope (first-time setup). */
   createKeypairEnvelope(payload: CreateKeypairEnvelopePayload): Promise<{ revision: string }>;
@@ -47,10 +47,16 @@ export interface MangroveTransport<TReview = unknown, TAggregate = unknown> {
   uploadReviewImage(payload: UploadReviewImagePayload): Promise<{ src: string }>;
 
   /** Fetch the full list of reviews for a place. */
-  fetchPlaceReviews(query: PlaceReviewsQuery): Promise<TReview[]>;
+  fetchPlaceReviews(
+    query: PlaceReviewsQuery,
+    options?: { signal?: AbortSignal },
+  ): Promise<TReview[]>;
 
   /** Fetch aggregate stars + count for a place. */
-  fetchPlaceReviewAggregate(query: PlaceReviewsQuery): Promise<TAggregate>;
+  fetchPlaceReviewAggregate(
+    query: PlaceReviewsQuery,
+    options?: { signal?: AbortSignal },
+  ): Promise<TAggregate>;
 }
 
 /**

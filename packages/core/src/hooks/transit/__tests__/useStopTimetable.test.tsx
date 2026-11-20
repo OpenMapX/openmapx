@@ -24,9 +24,11 @@ describe("useStopTimetable", () => {
       envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
     );
     expect(result.current.attributions).toEqual(envelope.attributions);
-    expect(spy).toHaveBeenCalledWith("/api/integrations/transit/stops/ms%3Astop%201/timetable", {
-      date: "2026-06-14",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      "/api/integrations/transit/stops/ms%3Astop%201/timetable",
+      { date: "2026-06-14" },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("omits the date param when none is supplied", async () => {
@@ -39,7 +41,11 @@ describe("useStopTimetable", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy).toHaveBeenCalledWith("/api/integrations/transit/stops/s1/timetable", {});
+    expect(spy).toHaveBeenCalledWith(
+      "/api/integrations/transit/stops/s1/timetable",
+      {},
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("does not fire when the stop id is null", () => {

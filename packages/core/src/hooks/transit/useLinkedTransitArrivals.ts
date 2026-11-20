@@ -18,13 +18,14 @@ export function useLinkedTransitArrivals(
 
   const query = useQuery({
     queryKey: ["linked-transit-arrivals", ...placeTransitKey(place), minutes],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
       // The arrivals endpoint returns the same shape as departures.
       return apiClient.get<MobilityEnvelope<MergedDeparture[]>>(
         API_ENDPOINTS.transitArrivalsForPlace,
         { ...placeTransitParams(p), minutes: String(minutes) },
+        { signal },
       );
     },
     enabled,

@@ -25,7 +25,7 @@ export function useHotelOffers(p: HotelSearchParams, enabled = true) {
       p.currency,
       p.guestNationality,
     ],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params: Record<string, string> = { name: p.name };
       if (typeof p.lat === "number") params.lat = String(p.lat);
       if (typeof p.lng === "number") params.lng = String(p.lng);
@@ -36,7 +36,9 @@ export function useHotelOffers(p: HotelSearchParams, enabled = true) {
       if (typeof p.rooms === "number") params.rooms = String(p.rooms);
       if (p.currency) params.currency = p.currency;
       if (p.guestNationality) params.nationality = p.guestNationality;
-      return apiClient.getOptional<HotelOffersResponse>(API_ENDPOINTS.hotelOffers, params);
+      return apiClient.getOptional<HotelOffersResponse>(API_ENDPOINTS.hotelOffers, params, {
+        signal,
+      });
     },
     enabled: enabled && ready,
     staleTime: 15 * 60 * 1000, // 15 minutes — prices are short-lived

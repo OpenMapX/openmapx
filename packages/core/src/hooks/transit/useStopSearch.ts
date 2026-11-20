@@ -11,13 +11,17 @@ export function useStopSearch(query: string): MobilityEnvelopeQueryResult<Transi
     "stop-search",
     query,
   );
-  const result = useQuery({
+  const result = useQuery<MobilityEnvelope<TransitStop[]>>({
     queryKey: ["stop-search", query],
-    queryFn: () =>
-      apiClient.get<MobilityEnvelope<TransitStop[]>>(API_ENDPOINTS.transitStopSearch, {
-        q: query,
-        limit: "3",
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<MobilityEnvelope<TransitStop[]>>(
+        API_ENDPOINTS.transitStopSearch,
+        {
+          q: query,
+          limit: "3",
+        },
+        { signal },
+      ),
     enabled: query.trim().length >= 2,
     staleTime: 5 * 60_000,
     placeholderData,

@@ -74,35 +74,39 @@ export function createAccountAdminClient(apiUrl: string) {
   const admin = authClient.admin,
     baseURL = browserAdminApiBase(apiUrl),
     client = createApiClient({ baseUrl: baseURL, credentials: "include" });
-  const fetchOptions = (headers?: Record<string, string>) => ({
+  const fetchOptions = (headers?: Record<string, string>, signal?: AbortSignal) => ({
     baseURL: `${baseURL}/api/auth`,
     credentials: "include" as const,
     ...(headers ? { headers } : {}),
+    ...(signal ? { signal } : {}),
   });
   const writes = (extra?: Record<string, string>) =>
     fetchOptions({ "Idempotency-Key": crypto.randomUUID(), ...extra });
-  const list = async (query: NonNullable<Parameters<typeof admin.listUsers>[0]>["query"]) =>
-    unwrapAuthResult(await admin.listUsers({ query, fetchOptions: fetchOptions() }));
+  const list = async (
+    query: NonNullable<Parameters<typeof admin.listUsers>[0]>["query"],
+    signal?: AbortSignal,
+  ) =>
+    unwrapAuthResult(
+      await admin.listUsers({ query, fetchOptions: fetchOptions(undefined, signal) }),
+    );
   return {
     list,
-    async get(id: string) {
+    async get(id: string, signal?: AbortSignal) {
       return (
-        (await list({ filterField: "id", filterValue: id, filterOperator: "eq", limit: 1 }))
+        (await list({ filterField: "id", filterValue: id, filterOperator: "eq", limit: 1 }, signal))
           .users[0] ?? null
       );
     },
-    async count() {
-      const data = await list({
-        filterField: "role",
-        filterValue: "admin",
-        filterOperator: "eq",
-        limit: 1,
-      });
+    async count(signal?: AbortSignal) {
+      const data = await list(
+        { filterField: "role", filterValue: "admin", filterOperator: "eq", limit: 1 },
+        signal,
+      );
       return data.total ?? data.users.length;
     },
-    async sessions(userId: string) {
+    async sessions(userId: string, signal?: AbortSignal) {
       return unwrapAuthResult(
-        await admin.listUserSessions({ userId, fetchOptions: fetchOptions() }),
+        await admin.listUserSessions({ userId, fetchOptions: fetchOptions(undefined, signal) }),
       ).sessions;
     },
     async create(
@@ -115,14 +119,14 @@ export function createAccountAdminClient(apiUrl: string) {
         ),
       );
     },
-    async delivery(userId: string) {
+    async delivery(userId: string, signal?: AbortSignal) {
       return accountDeliverySchema.parse(
-        accountResponse(await accountSdk.getAdminAccountDelivery(userId, { client })),
+        accountResponse(await accountSdk.getAdminAccountDelivery(userId, { client, signal })),
       );
     },
-    async policy() {
+    async policy(signal?: AbortSignal) {
       return authPolicyViewSchema.parse(
-        accountResponse(await accountSdk.getAdminAuthPolicy({ client })),
+        accountResponse(await accountSdk.getAdminAuthPolicy({ client, signal })),
       );
     },
     async applyPolicy(settings: AuthPolicySettings, expectedRevision: string, key: string) {

@@ -303,7 +303,7 @@ function SessionsTab({ userId }: { userId: string }) {
     queryKey: account.keys.sessions(userId),
     enabled: Boolean(account.actorId),
     retry: false,
-    queryFn: () => account.client.sessions(userId),
+    queryFn: ({ signal }) => account.client.sessions(userId, signal),
   });
   const revoke = useAccountAction(userId),
     revokeAll = useAccountAction(userId);
@@ -457,7 +457,7 @@ export function UserDetail({ userId }: { userId: string }) {
     queryKey: account.keys.detail(userId),
     enabled: Boolean(account.actorId),
     retry: false,
-    queryFn: () => account.client.get(userId),
+    queryFn: ({ signal }) => account.client.get(userId, signal),
   });
 
   if (isLoading) {

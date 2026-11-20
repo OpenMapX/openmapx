@@ -19,11 +19,12 @@ export interface SunTimesResponse extends ContributingRecord {
 export function useSunTimes(lat: number | null, lng: number | null, enabled = true) {
   return useQuery({
     queryKey: ["sun-times", lat, lng],
-    queryFn: () =>
-      apiClient.get<SunTimesResponse>("/api/integrations/knowledge-sun-time/times", {
-        lat: String(lat),
-        lng: String(lng),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<SunTimesResponse>(
+        "/api/integrations/knowledge-sun-time/times",
+        { lat: String(lat), lng: String(lng) },
+        { signal },
+      ),
     enabled: enabled && lat != null && lng != null,
     staleTime: 60 * 60 * 1000,
     refetchInterval: 6 * 60 * 60 * 1000,

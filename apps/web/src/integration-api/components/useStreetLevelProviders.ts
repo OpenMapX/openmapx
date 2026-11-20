@@ -19,8 +19,8 @@ export function useStreetLevelProviders(): {
 
   const { data, isLoading } = useQuery({
     queryKey: ["street-level-imagery-providers", apiUrl],
-    queryFn: async (): Promise<StreetLevelCapabilities[]> => {
-      const response = await fetch(`${apiUrl}/api/street-level-imagery/providers`);
+    queryFn: async ({ signal }): Promise<StreetLevelCapabilities[]> => {
+      const response = await fetch(`${apiUrl}/api/street-level-imagery/providers`, { signal });
       if (!response.ok) return [];
       return (await response.json()) as StreetLevelCapabilities[];
     },

@@ -30,13 +30,13 @@ export function useResolvedHotelProviders(params: ResolveHotelParams, enabled = 
   const cc = countryCode?.toLowerCase();
   return useQuery<HotelProvidersResponse>({
     queryKey: ["hotel-resolve", name, lat ?? "", lng ?? "", cc ?? "", wikidata ?? ""],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const q: Record<string, string> = { name };
       if (typeof lat === "number") q.lat = String(lat);
       if (typeof lng === "number") q.lng = String(lng);
       if (cc) q.country = cc;
       if (wikidata) q.wikidata = wikidata;
-      return apiClient.get<HotelProvidersResponse>(API_ENDPOINTS.hotelResolve, q);
+      return apiClient.get<HotelProvidersResponse>(API_ENDPOINTS.hotelResolve, q, { signal });
     },
     enabled: enabled && Boolean(name),
     staleTime: 60 * 60 * 1000, // 1 hour — resolvable set is stable per hotel

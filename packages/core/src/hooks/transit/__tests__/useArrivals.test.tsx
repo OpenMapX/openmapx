@@ -32,9 +32,11 @@ describe.each([
     expect(spy).not.toHaveBeenCalled();
     rerender({ stop: "ms:stop 1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy).toHaveBeenLastCalledWith(`/api/integrations/transit/stops/ms%3Astop%201/${board}`, {
-      minutes: "60",
-    });
+    expect(spy).toHaveBeenLastCalledWith(
+      `/api/integrations/transit/stops/ms%3Astop%201/${board}`,
+      { minutes: "60" },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(result.current.data).toEqual([
       { tripId: "t1", line: "S7", contributors: envelope.attributions },
     ]);
@@ -44,6 +46,7 @@ describe.each([
       expect(spy).toHaveBeenLastCalledWith(
         `/api/integrations/transit/stops/ms%3Astop%201/${board}`,
         { minutes: "30" },
+        { signal: expect.any(AbortSignal) },
       ),
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

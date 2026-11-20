@@ -24,12 +24,16 @@ export function useLinkedTransitStops(
 
   const query = useQuery({
     queryKey: ["linked-transit-stops", ...placeTransitKey(place)],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
-      return apiClient.get<MobilityEnvelope<TransitStop[]>>(API_ENDPOINTS.transitStopsNearPlace, {
-        ...placeTransitParams(p),
-      });
+      return apiClient.get<MobilityEnvelope<TransitStop[]>>(
+        API_ENDPOINTS.transitStopsNearPlace,
+        {
+          ...placeTransitParams(p),
+        },
+        { signal },
+      );
     },
     enabled,
     ...mobilityEnvelopeTiming(24 * 60 * 60 * 1000),
