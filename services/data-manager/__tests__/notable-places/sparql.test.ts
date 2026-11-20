@@ -128,6 +128,22 @@ describe("notable-places SPARQL", () => {
     ).rejects.toThrow(/429/);
   });
 
+  it("waits a fractional Retry-After rounded up instead of its own longer delay", async () => {
+    const statuses = [429, 200];
+    const fetchImpl: typeof fetch = async () => {
+      const status = statuses.shift() ?? 200;
+      return status === 200
+        ? new Response("?item\n<http://www.wikidata.org/entity/Q1>\n")
+        : new Response("busy", { status, headers: { "Retry-After": "0.2" } });
+    };
+    const started = Date.now();
+    const rows = await collect(
+      sparqlRows("SELECT", { endpoint: "x", fetchImpl, retryDelaysMs: [60_000] }),
+    );
+    expect(rows).toEqual([["<http://www.wikidata.org/entity/Q1>"]]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(990);
+  });
+
   it("fails on an error status or an error body sent as 200", async () => {
     await expect(
       collect(sparqlRows("SELECT", { endpoint: "x", fetchImpl: tsvResponse("broken", 500) })),
