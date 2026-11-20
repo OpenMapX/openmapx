@@ -44,8 +44,8 @@ import {
  * .env without UID or GID, through to a committed trusted-configuration
  * request: in the host update's order (the host's render, then the agent)
  * and in the panel self-update's (the new agent first). Only the host's render writes UID and GID; the agent and its fixed
- * CLI read .env and never change it. The fixture publishes with the UID/GID
- * Compose gives app-api from .env and submits a truthful local bearer root.
+ * CLI read .env and never change it. The fixture sends the configuration in
+ * the request, as app-api does, under a truthful local bearer root.
  *
  * Runs only on Linux where `OPENMAPX_TEST_DEPLOYMENT_USER` names the uid the
  * test runs as, which must not be 1000 and must own the repository, e.g. in a
@@ -261,12 +261,11 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       });
     }
 
-    /** A request app-api publishes as the UID and GID Compose passes it. */
+    /** A configuration apply as app-api sends it: the payload in the request. */
     async function submit(
       target: string,
       agent: { port: number; output: () => string },
       name: string,
-      user: { uid: number; gid: number },
     ) {
       const infra = join(target, "infra", "docker");
       const tokenFile = join(infra, "secrets", "ops-agent-api-token");
@@ -296,20 +295,12 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
         }),
         payload,
       });
-      let submission: PromiseSettledResult<unknown>;
-      try {
-        submission = {
-          status: "fulfilled",
-          value: await executeLocalRoot(client, sealed.operation, identity, payload),
-        };
-      } catch (reason) {
-        submission = { status: "rejected", reason };
-      }
-      const consumed = { submission };
-      expect(consumed.submission.status, agent.output()).toBe("fulfilled");
-      const result = configurationApplyResultSchema.parse(
-        consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined,
+      const submitted = await executeLocalRoot(client, sealed.operation, identity, payload).catch(
+        (reason: unknown) => {
+          throw Error(`${String(reason)}\n${agent.output()}`);
+        },
       );
+      const result = configurationApplyResultSchema.parse(submitted);
       if (result.outcome === "committed")
         expect(result.revisionId).toBe(sealed.operation.revisionId);
       return result;
@@ -322,7 +313,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     ) {
       const infra = join(target, "infra", "docker");
       const before = services.currentConfigurationGeneration(infra);
-      const result = await submit(target, agent, name, deploymentUser(target));
+      const result = await submit(target, agent, name);
       expect(result, `${JSON.stringify(result)}\n${agent.output()}`).toMatchObject({
         outcome: "committed",
       });
@@ -353,14 +344,8 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const written = envFileState(target, true);
       const agent = await startAgent(target);
       expect(agent.output()).not.toContain("sets no UID");
-      const infra = join(target, "infra", "docker");
-      const before = services.currentConfigurationGeneration(infra);
-      await expect(
-        submit(target, agent, "wrong-deployment-user", { uid: 1000, gid: statSync(target).gid }),
-      ).rejects.toThrow("Trusted configuration snapshot publish failed");
-      expect(envFileState(target)).toEqual(written);
-      expect(services.currentConfigurationGeneration(infra)).toBe(before);
       await expectCommitted(target, agent, "host-update");
+      expect(envFileState(target)).toEqual(written);
       // The agent's fixed CLI renders with it too, and leaves .env as it was.
       await agentCli(target, "compose", "render");
       expect(envFileState(target)).toEqual(written);
@@ -382,10 +367,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       expect(agent.output()).toContain(HOST_RENDER_NEEDED);
       expect(envFileState(target)).toEqual(unset);
       // The admin panel's apply and the agent's fixed CLI render both refuse.
-      const refused = await submit(target, agent, "self-update", {
-        uid: EXPECTED_UID,
-        gid: statSync(target).gid,
-      });
+      const refused = await submit(target, agent, "self-update");
       expect(refused, agent.output()).toMatchObject({ outcome: "not_committed" });
       await expect(agentCli(target, "compose", "render")).rejects.toThrow(HOST_RENDER_NEEDED);
       expect(envFileState(target)).toEqual(unset);
