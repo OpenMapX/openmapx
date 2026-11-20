@@ -24,7 +24,8 @@ const BINDABLE_SITUATION_ID = /^oc:situation:[^/\\?#]+$/;
 /**
  * The most situations one `/events` reply carries. The OpenConditions display
  * read stops after 2,000 situations, so this cap binds only when further
- * providers add to it; the browser's reply ceiling is derived from it.
+ * providers add to it; the browser's reply ceiling is derived from it. A
+ * reply the cap shortened says so with `truncated: true`.
  */
 export const MAX_EVENTS_PER_REPLY = 3000;
 
@@ -148,7 +149,9 @@ export function setup(ctx: IntegrationContext): void {
           ...(minSeverity ? { minSeverity } : {}),
           ...(horizonDays !== undefined ? { horizonDays } : {}),
         });
-        return eventsToFeatureCollection(mostSevere(events, MAX_EVENTS_PER_REPLY));
+        const kept = mostSevere(events, MAX_EVENTS_PER_REPLY);
+        const fc = eventsToFeatureCollection(kept);
+        return kept.length < events.length ? { ...fc, truncated: true as const } : fc;
       });
       reply.header(
         "Cache-Control",

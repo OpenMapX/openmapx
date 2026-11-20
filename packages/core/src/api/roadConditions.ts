@@ -37,6 +37,8 @@ export interface FetchRoadConditionsOptions {
 export interface FetchRoadConditionsResult {
   events: RoadConditionEvent[];
   ok: boolean;
+  /** The server's reply cap left less severe situations out of `events`. */
+  truncated?: true;
 }
 
 export interface RoadConditionFeature {
@@ -46,6 +48,7 @@ export interface RoadConditionFeature {
 
 interface RoadConditionFeatureCollection {
   features?: RoadConditionFeature[];
+  truncated?: unknown;
 }
 
 function str(v: unknown): string | undefined {
@@ -193,11 +196,12 @@ export function roadConditionFeatureToEvent(
 }
 
 /**
- * Success ceiling for a road-conditions reply. The server caps a reply at
- * 3,000 situations; its OpenConditions display read takes at most three
- * situation pages and one evidence snapshot under the host's 8 MiB JSON
- * ceiling (32 MiB), and the reply restates those records with their
- * contributors, so twice that bounds it.
+ * Success ceiling for a road-conditions reply, derived from the server's cap
+ * of 3,000 situations per reply at the density OpenConditions pages them:
+ * 1,000 situations to a page under the host's 8 MiB JSON ceiling, so 3,000
+ * come to 24 MiB, plus one routing-evidence read under that ceiling (32 MiB).
+ * The reply restates each situation with its contributors, so it allows
+ * twice that. A reply above the ceiling reads as a failed refresh.
  */
 const MAX_ROAD_CONDITIONS_REPLY_BYTES = 64 * 1024 * 1024;
 
@@ -226,6 +230,7 @@ export async function fetchRoadConditionsWithStatus(
       events: (raw.features ?? [])
         .map(roadConditionFeatureToEvent)
         .filter((e): e is RoadConditionEvent => e !== null),
+      ...(raw.truncated === true ? { truncated: true as const } : {}),
     };
   } catch {
     return { ok: false, events: [] };

@@ -359,6 +359,25 @@ describe("GET /events reply cap", () => {
     ]);
     expect(ids).not.toContain(`minor:${MAX_EVENTS_PER_REPLY - 1}`);
     expect(ids).not.toContain(`minor:${MAX_EVENTS_PER_REPLY - 2}`);
+    expect((res.body as { truncated?: unknown }).truncated).toBe(true);
+  });
+
+  it("does not mark a reply at the cap as truncated", async () => {
+    const atCap = Array.from({ length: MAX_EVENTS_PER_REPLY }, (_, i) =>
+      event({
+        id: `minor:${i}`,
+        severity: { label: "minor", level: 2 },
+        geometry: { type: "Point", coordinates: [-170 + (i % 340), -80 + Math.floor(i / 340)] },
+      }),
+    );
+    const h = eventsHarness({
+      providers: [eventsProvider("road-conditions-many", async () => atCap)],
+    });
+    const res = await h.get({ bbox: "5,47,15,55" });
+    expect(res.status).toBe(200);
+    const body = res.body as { features: unknown[]; truncated?: unknown };
+    expect(body.features).toHaveLength(MAX_EVENTS_PER_REPLY);
+    expect(body).not.toHaveProperty("truncated");
   });
 });
 

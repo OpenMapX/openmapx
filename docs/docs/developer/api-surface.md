@@ -301,10 +301,15 @@ what the server can send:
   32 MiB each; a Valhalla or OSRM reply is one read under the host's 8 MiB JSON
   ceiling whose encoded shape decodes to a few times its size.
 - Road-condition situations (`/road-conditions/events`): the route sends at most
-  3,000 situations, keeping the most severe in their original order. The
-  OpenConditions display read takes at most three situation pages and one
-  evidence snapshot under the host's 8 MiB ceiling, and the reply restates those
-  records with their contributors, so the client allows 64 MiB.
+  3,000 situations, keeping the most severe in their original order, and marks a
+  reply it shortened with `truncated: true` beside `features`. The ceiling is
+  derived from that count at the density OpenConditions pages situations: 1,000
+  to a page under the host's 8 MiB ceiling, so 3,000 come to 24 MiB, plus one
+  routing-evidence read under the same ceiling. The reply restates each
+  situation with its contributors, so the client allows twice that, 64 MiB. A
+  larger reply reads as a failed refresh. The OpenConditions display read stops
+  once it holds 2,000 situations, so the cap binds only when further providers
+  add to it.
 - Personal timeline days: 128 MiB, see
   [Personal timeline response validation](#personal-timeline-response-validation).
 

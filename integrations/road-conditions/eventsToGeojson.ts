@@ -10,6 +10,8 @@ interface RoadConditionFeature {
 export interface RoadConditionFeatureCollection {
   type: "FeatureCollection";
   features: RoadConditionFeature[];
+  /** Present when the reply cap left situations out. */
+  truncated?: true;
 }
 
 /**

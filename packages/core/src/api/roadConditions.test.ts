@@ -53,6 +53,20 @@ describe("fetchRoadConditionsWithStatus", () => {
     });
   });
 
+  it("passes on that the server's reply cap left situations out", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      type: "FeatureCollection",
+      features: [{ geometry: point, properties: minimal() }],
+      truncated: true,
+    } as never);
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toMatchObject({
+      ok: true,
+      events: [{ id: "status:1" }],
+      truncated: true,
+    });
+  });
+
   it.each([null, { features: "nope" }])("rejects malformed feature collection %j", async (body) => {
     vi.spyOn(apiClient, "get").mockResolvedValue(body as never);
 
