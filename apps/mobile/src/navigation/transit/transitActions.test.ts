@@ -1,4 +1,5 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
+import { nth } from "../../testing/nth";
 import { TransitNavigationProcessor } from "./TransitNavigationProcessor";
 import { transitStartPackageFixture } from "./testing/transitFixture";
 
@@ -48,8 +49,10 @@ it("owns walking speech natively and deduplicates it after restart", () => {
   });
   if (!prepared.ok) throw Error(prepared.code);
   const session = { ...prepared.session, status: "active" } as TransitMobileSession;
-  const leg = (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] })
-    .legs[0];
+  const leg = nth(
+    (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] }).legs,
+    0,
+  );
   leg.geometry = {
     type: "LineString",
     coordinates: [

@@ -542,7 +542,9 @@ it("keeps intake out of the React task and receiver out of history", () => {
     $: Record<string, string>;
     "intent-filter"?: unknown[];
   }>;
-  activities[0].$["android:noHistory"] = "false";
+  const [receiver] = activities;
+  if (!receiver) throw new Error("missing fixture activity");
+  receiver.$["android:noHistory"] = "false";
   expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
     expect.stringContaining("nonhistorical activity"),
   );

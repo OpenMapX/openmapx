@@ -49,7 +49,14 @@ const styles = StyleSheet.create({
   buttonLabel: { color: DARK_PALETTE.onAccent, fontSize: 13, fontWeight: BUTTON_SHAPE.labelWeight },
 });
 
-const PROFILE_CYCLE: LocationProfileKind[] = ["driving", "walking", "transit-cruise"];
+type ProbedProfile = "driving" | "walking" | "transit-cruise";
+
+/** The profile the switch button moves to from each probed profile. */
+const NEXT_PROFILE: Record<ProbedProfile, ProbedProfile & LocationProfileKind> = {
+  driving: "walking",
+  walking: "transit-cruise",
+  "transit-cruise": "driving",
+};
 
 /**
  * The prominent explanation shown before any background permission request.
@@ -66,7 +73,7 @@ export function FeasibilityOverlay(): ReactElement {
   const driver = useMemo(() => new ExpoLocationDriver(locale), [locale]);
   const [permission, setPermission] = useState<LocationPermissionState>("not-determined");
   const [running, setRunning] = useState(false);
-  const [profileIndex, setProfileIndex] = useState(0);
+  const [profile, setProfile] = useState<ProbedProfile>("driving");
   const [state, setState] = useState<FeasibilityProbeState>(EMPTY_PROBE_STATE);
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
   const [lastAction, setLastAction] = useState<string>("idle");
@@ -106,14 +113,14 @@ export function FeasibilityOverlay(): ReactElement {
       }
       const background = await driver.requestBackgroundPermission();
       setLastAction(`permission: ${background}`);
-      await driver.start(profileFor(PROFILE_CYCLE[profileIndex]));
-      setLastAction(`started (${PROFILE_CYCLE[profileIndex]})`);
+      await driver.start(profileFor(profile));
+      setLastAction(`started (${profile})`);
     } catch (error) {
       setLastAction(`start failed: ${(error as Error).name}`);
     } finally {
       await refresh();
     }
-  }, [disclosureAccepted, driver, profileIndex, refresh]);
+  }, [disclosureAccepted, driver, profile, refresh]);
 
   const end = useCallback(async () => {
     try {
@@ -129,12 +136,12 @@ export function FeasibilityOverlay(): ReactElement {
   }, [driver, refresh]);
 
   const switchProfile = useCallback(async () => {
-    const next = (profileIndex + 1) % PROFILE_CYCLE.length;
-    setProfileIndex(next);
-    if (await driver.isRunning()) await driver.start(profileFor(PROFILE_CYCLE[next]));
-    setLastAction(`profile: ${PROFILE_CYCLE[next]}`);
+    const next = NEXT_PROFILE[profile];
+    setProfile(next);
+    if (await driver.isRunning()) await driver.start(profileFor(next));
+    setLastAction(`profile: ${next}`);
     await refresh();
-  }, [driver, profileIndex, refresh]);
+  }, [driver, profile, refresh]);
 
   const armAudioProbe = useCallback(async () => {
     await (await repository()).commit((current) => ({
@@ -152,7 +159,7 @@ export function FeasibilityOverlay(): ReactElement {
       <ScrollView>
         <Text style={styles.line}>permission: {permission}</Text>
         <Text style={styles.line}>stream running: {String(running)}</Text>
-        <Text style={styles.line}>profile: {PROFILE_CYCLE[profileIndex]}</Text>
+        <Text style={styles.line}>profile: {profile}</Text>
         <Text style={styles.line}>callbacks: {state.callbackCount}</Text>
         <Text style={styles.line}>
           fixes accepted/rejected: {state.acceptedFixCount}/{state.rejectedFixCount}

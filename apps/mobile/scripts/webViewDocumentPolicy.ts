@@ -3,7 +3,8 @@ export function hasWebViewDocumentStartPolicy(source: string): boolean {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
   const method = (name: string) =>
     (code.split(`public void ${name} (`)[1] ?? code.split(`public void ${name}(`)[1] ?? "")
-      .split("@Override")[0]
+      .split("@Override", 1)
+      .join("")
       .replace(/\s+/g, " ");
   const start = method("onPageStarted");
   const history = method("doUpdateVisitedHistory");

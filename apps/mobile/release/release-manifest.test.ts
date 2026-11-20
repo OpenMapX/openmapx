@@ -6,6 +6,9 @@ import {
   inputsMatch,
 } from "./release-manifest";
 
+const LOCK_PATH = "native-locks/ios/Podfile.lock";
+const ARTIFACT_PATH = "dist/mobile/1.0.0/app-release.aab";
+
 const INPUT: BuildManifestInput = {
   nowMs: 1_700_000_000_000,
   git: { commit: "abc123def456", tag: "mobile-v1.0.0", dirty: false },
@@ -18,12 +21,12 @@ const INPUT: BuildManifestInput = {
   },
   identity: { appId: "org.openmapx.app", scheme: "openmapx", origin: "https://openmapx.com" },
   toolchains: { node: "24.5.0", xcode: "26.4" },
-  locks: [{ path: "native-locks/ios/Podfile.lock", sha256: "a".repeat(64), bytes: 100 }],
+  locks: [{ path: LOCK_PATH, sha256: "a".repeat(64), bytes: 100 }],
   generatedNativeHash: "71267f0fc2bd7ddd",
   permissionsSource: "permissions",
   dataPracticesSource: "practices",
   publicSigning: { appleTeamId: "ABCDE12345", playAppSigningSha256: "AA:BB" },
-  artifacts: [{ path: "dist/mobile/1.0.0/app-release.aab", sha256: "b".repeat(64), bytes: 1000 }],
+  artifacts: [{ path: ARTIFACT_PATH, sha256: "b".repeat(64), bytes: 1000 }],
 };
 
 describe("buildReleaseManifest", () => {
@@ -91,7 +94,7 @@ describe("inputsMatch", () => {
       nowMs: INPUT.nowMs + 60_000,
       // A signed archive differs between runs; expecting otherwise would make
       // this check permanently red.
-      artifacts: [{ path: INPUT.artifacts[0].path, sha256: "d".repeat(64), bytes: 1001 }],
+      artifacts: [{ path: ARTIFACT_PATH, sha256: "d".repeat(64), bytes: 1001 }],
     });
 
     expect(inputsMatch(first, second)).toBe(true);
@@ -118,7 +121,7 @@ describe("inputsMatch", () => {
   it("notices a changed dependency lock", () => {
     const other = buildReleaseManifest({
       ...INPUT,
-      locks: [{ path: INPUT.locks[0].path, sha256: "e".repeat(64), bytes: 100 }],
+      locks: [{ path: LOCK_PATH, sha256: "e".repeat(64), bytes: 100 }],
     });
 
     expect(inputsMatch(buildReleaseManifest(INPUT), other)).toBe(false);

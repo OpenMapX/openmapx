@@ -6,8 +6,8 @@ import {
   groundStartPackage,
   type HeadlessHarness,
   rawFix,
-  STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
 } from "./testing/foregroundHarness";
 import {
   transitItineraryFixture,
@@ -34,7 +34,7 @@ const DIRECTIONS_PATH = "/api/integrations/routing/directions";
 const REFRESH_PATH = "/api/integrations/transit/plan/refresh";
 /** Well away from the followed road. */
 const OFF_ROUTE: readonly [number, number] = [8.75, 50.2];
-const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+const DESTINATION = straightRoutePoint(-1);
 
 /** A route from where the driver actually is to the destination. */
 function detour() {
@@ -100,12 +100,12 @@ describe("a process the system started for a location batch", () => {
     foreground = await startForegroundHarness();
     await foreground.start(groundStartPackage());
     headless = await foreground.relaunchHeadless();
-    await headless.deliver([rawFix(headless.phone.clock, STRAIGHT_ROUTE[1])]);
+    await headless.deliver([rawFix(headless.phone.clock, straightRoutePoint(1))]);
 
     const reopened = await startForegroundHarness({ phone: headless.phone });
     headless.phone.clock.advance(1_000);
     // The background task's own choice: the visible app's composition, now that it exists.
-    await headless.deliver([rawFix(headless.phone.clock, STRAIGHT_ROUTE[2])]);
+    await headless.deliver([rawFix(headless.phone.clock, straightRoutePoint(2))]);
 
     expect(reopened.sent.some((message) => message.type === "snapshot.update")).toBe(true);
     reopened.navigation.dispose();

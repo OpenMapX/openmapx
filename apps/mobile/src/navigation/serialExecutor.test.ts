@@ -26,9 +26,7 @@ describe("SerialExecutor", () => {
     );
 
     // Releasing out of order must not let a later task overtake an earlier one.
-    gates[2].resolve();
-    gates[1].resolve();
-    gates[0].resolve();
+    for (const gate of gates.toReversed()) gate.resolve();
     await Promise.all(runs);
 
     expect(log).toEqual(["start-0", "finish-0", "start-1", "finish-1", "start-2", "finish-2"]);

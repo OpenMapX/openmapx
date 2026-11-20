@@ -5,8 +5,8 @@ import {
   type ForegroundHarness,
   groundStartPackage,
   rawFix,
-  STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
 } from "./testing/foregroundHarness";
 
 /**
@@ -55,7 +55,7 @@ describe("one-shot requests during a trip", () => {
     expect(prompt.asked).toEqual(["location.request"]);
 
     harness.phone.clock.advance(1_000);
-    expect(await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[1])])).toBe(true);
+    expect(await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(1))])).toBe(true);
 
     const session = await harness.session();
     expect(session?.revision).toBeGreaterThan(before);

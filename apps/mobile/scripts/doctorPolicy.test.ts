@@ -47,8 +47,8 @@ describe("parseDoctorFindings", () => {
   it("captures a failure and its detail", () => {
     const findings = parseDoctorFindings(output([`✖ ${SDK_VERSION_CHECK}\n${SDK_DETAIL}`]));
     expect(findings).toHaveLength(1);
-    expect(findings[0].title).toBe(SDK_VERSION_CHECK);
-    expect(findings[0].detail).toContain("expo-location");
+    expect(findings[0]?.title).toBe(SDK_VERSION_CHECK);
+    expect(findings[0]?.detail).toContain("expo-location");
   });
 
   it("separates several failures", () => {

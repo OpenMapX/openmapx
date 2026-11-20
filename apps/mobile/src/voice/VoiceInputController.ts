@@ -44,12 +44,16 @@ const downloads = new Set<string>();
 const SETTLE_MS = 3000;
 const RESUME_MS = 2000;
 const RESUME_POLL_MS = 50;
+
+/** The lower-cased primary language subtag of a BCP 47 tag: `de` for `de-AT`. */
+function languageOf(tag: string): string {
+  return tag.replace(/-.*$/s, "").toLowerCase();
+}
+
 export function selectInstalledLocale(requested: string, installed: string[]): string | undefined {
   return (
     installed.find((tag) => tag.toLowerCase() === requested.toLowerCase()) ??
-    installed.find(
-      (tag) => tag.split("-")[0].toLowerCase() === requested.split("-")[0].toLowerCase(),
-    )
+    installed.find((tag) => languageOf(tag) === languageOf(requested))
   );
 }
 export function mapVoiceError(error: string): VoiceError {
@@ -276,9 +280,9 @@ export class VoiceInputController {
       }
       let lang: string | undefined;
       if (this.deps.platform === "ios") {
-        const primary = locale.split("-")[0].toLowerCase();
+        const primary = languageOf(locale);
         lang = [locale, "de-DE", "en-US", "en-GB"]
-          .filter((candidate) => candidate.split("-")[0].toLowerCase() === primary)
+          .filter((candidate) => languageOf(candidate) === primary)
           .find((candidate) => this.deps.module.supportsOnDeviceRecognition(candidate));
         if (!lang) {
           this.fail(s, "language-not-supported");
@@ -289,13 +293,13 @@ export class VoiceInputController {
         [
           this.deps.module.getMicrophonePermissionsAsync.bind(this.deps.module),
           this.deps.module.requestMicrophonePermissionsAsync.bind(this.deps.module),
-        ],
+        ] as const,
         ...(this.deps.platform === "ios"
           ? [
               [
                 this.deps.module.getSpeechRecognizerPermissionsAsync.bind(this.deps.module),
                 this.deps.module.requestSpeechRecognizerPermissionsAsync.bind(this.deps.module),
-              ],
+              ] as const,
             ]
           : []),
       ];

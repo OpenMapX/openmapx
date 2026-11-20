@@ -770,6 +770,13 @@ export const STRAIGHT_ROUTE: ReadonlyArray<readonly [number, number]> = Array.fr
   (_, index) => [8.68 + index * 0.001, 50.11] as const,
 );
 
+/** The `STRAIGHT_ROUTE` point at `index`, counting back from the end for a negative one. */
+export function straightRoutePoint(index: number): readonly [number, number] {
+  const point = STRAIGHT_ROUTE.at(index);
+  if (!point) throw new RangeError(`STRAIGHT_ROUTE has no point ${index}`);
+  return point;
+}
+
 export function groundStartPackage(
   settings: Partial<{
     voiceEnabled: boolean;
@@ -777,7 +784,7 @@ export function groundStartPackage(
     voiceTiming: "early" | "normal" | "late";
   }> = {},
 ) {
-  const destination = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+  const destination = straightRoutePoint(-1);
   return {
     kind: "ground" as const,
     route: {
@@ -836,7 +843,7 @@ export async function driveStraightRoute(
 ): Promise<void> {
   for (let index = from; index < to; index += 1) {
     harness.phone.clock.advance(1_000);
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[index])]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(index))]);
   }
 }
 

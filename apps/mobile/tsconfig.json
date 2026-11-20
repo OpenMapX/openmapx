@@ -6,6 +6,7 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "target": "ES2022",
     // Matches Expo's own base and `packages/core`'s compile settings. The shared

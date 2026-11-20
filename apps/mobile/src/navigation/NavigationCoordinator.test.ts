@@ -9,6 +9,7 @@ import { migrateSessionSchema } from "../storage/migrations";
 import { SessionRepository } from "../storage/SessionRepository";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
+import { nth } from "../testing/nth";
 import { EffectRunner } from "./effects";
 import {
   type CommandResponse,
@@ -48,19 +49,18 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
         expiresAtMs: context.nowMs + 60 * 60_000,
       }),
     }),
-    processFixes: (session, fixes, nowMs) => ({
-      session: {
-        ...session,
-        revision: session.revision + 1,
-        updatedAtMs: nowMs,
-        lastAcceptedFix: {
-          coords: fixes[fixes.length - 1].coords,
-          accuracy: fixes[fixes.length - 1].accuracy,
-          timestampMs: fixes[fixes.length - 1].timestampMs,
+    processFixes: (session, fixes, nowMs) => {
+      const { coords, accuracy, timestampMs } = nth(fixes, -1);
+      return {
+        session: {
+          ...session,
+          revision: session.revision + 1,
+          updatedAtMs: nowMs,
+          lastAcceptedFix: { coords, accuracy, timestampMs },
         },
-      },
-      effects: [{ kind: "publish-snapshot", immediate: false }],
-    }),
+        effects: [{ kind: "publish-snapshot", immediate: false }],
+      };
+    },
     replace: (session, _replacement, nowMs) => ({
       session: { ...session, revision: session.revision + 1, updatedAtMs: nowMs },
       effects: [{ kind: "publish-snapshot", immediate: true }],
@@ -456,7 +456,7 @@ describe("NavigationCoordinator commands", () => {
       ["session.prepared", "prep-1"],
       ["native.error", "prep-1"],
     ]);
-    expect(context.sent[1].payload).toEqual({ code: "internal-error" });
+    expect(context.sent[1]?.payload).toEqual({ code: "internal-error" });
     await context.close();
   });
 });

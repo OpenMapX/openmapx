@@ -105,6 +105,8 @@ const withNativeIntake: ConfigPlugin = (config) => {
     const list = project.pbxXCConfigurationList()[target.pbxNativeTarget.buildConfigurationList];
     for (const entry of list.buildConfigurations) {
       const extension = configs[entry.value];
+      if (!extension)
+        throw new Error(`share extension build configuration ${entry.value} is missing`);
       const host = Object.values(configs).find(
         (c) =>
           c &&

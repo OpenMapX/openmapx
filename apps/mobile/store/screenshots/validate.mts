@@ -84,8 +84,11 @@ for (const path of captured) {
     // Both stores reject an alpha channel, and the rejection arrives at upload.
     failures.push(`${relative} has an alpha channel`);
   }
-  if (platform) {
-    const spec = scenarios.devices[platform];
+  const spec = platform ? scenarios.devices[platform] : undefined;
+  if (platform && !spec) {
+    failures.push(`${relative} is for ${platform}, which scenarios.json defines no device for`);
+  }
+  if (spec) {
     if (spec.width && png.width !== spec.width) {
       failures.push(`${relative} is ${png.width}px wide, not ${spec.width}px`);
     }

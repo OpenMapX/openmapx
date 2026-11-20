@@ -1,4 +1,5 @@
 import { profileFor } from "../location/profiles";
+import { nth } from "../testing/nth";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -8,6 +9,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
   WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
@@ -39,7 +41,7 @@ async function rideTowardsTheEnd() {
     transitStartPackageFixture({
       itinerary: {
         ...itinerary,
-        endTime: itinerary.legs[1].endTime,
+        endTime: nth(itinerary.legs, 1).endTime,
         legs: itinerary.legs.slice(0, 2),
       },
     }),
@@ -128,7 +130,7 @@ describe("arriving with the app in the background", () => {
       expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
       expect(harness.phone.location.running).toBe(true);
 
-      const destination = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+      const destination = straightRoutePoint(-1);
       await harness.standStill(destination, ARRIVAL_CUE_GRACE_MS - 2_000);
       expect(harness.phone.location.running).toBe(true);
       await harness.standStill(destination, 4_000);

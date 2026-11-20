@@ -13,6 +13,7 @@ function encode(bytes: Uint8Array, alphabet: string, pad: boolean): string {
   let out = "";
   for (let index = 0; index < bytes.length; index += 3) {
     const a = bytes[index];
+    if (a === undefined) break;
     const b = bytes[index + 1];
     const c = bytes[index + 2];
     out += alphabet[a >> 2];

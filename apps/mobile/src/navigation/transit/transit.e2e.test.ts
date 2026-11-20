@@ -8,6 +8,7 @@ import type { Database } from "../../storage/database";
 import { migrateSessionSchema } from "../../storage/migrations";
 import { SessionRepository } from "../../storage/SessionRepository";
 import { openTestDatabase } from "../../storage/testing/nodeSqliteDatabase";
+import { nth } from "../../testing/nth";
 import { EffectRunner } from "../effects";
 import { type CoordinatorDeps, NavigationCoordinator } from "../NavigationCoordinator";
 import { ProcessorRegistry } from "../processor";
@@ -167,20 +168,21 @@ function locationAt(timestampMs: number, longitude = 8.68): RawLocation {
 
 function journeyPackage() {
   const result = transitStartPackageFixture();
-  const endpoints = [
+  const endpoints: ReadonlyArray<readonly [number, number]> = [
     [8.69, 8.68],
     [8.68, 8.64],
     [8.64, 8.63],
   ];
   result.itinerary.legs.forEach((leg, index) => {
-    leg.from.lng = endpoints[index][0];
-    leg.to.lng = endpoints[index][1];
+    const [fromLng, toLng] = nth(endpoints, index);
+    leg.from.lng = fromLng;
+    leg.to.lng = toLng;
     Object.assign(leg, {
       geometry: {
         type: "LineString",
         coordinates: [
-          [endpoints[index][0], 50.11],
-          [endpoints[index][1], 50.11],
+          [fromLng, 50.11],
+          [toLng, 50.11],
         ],
       },
     });
@@ -248,8 +250,10 @@ describe("transit navigation end to end", () => {
     expect(states.map((session) => session.payload.tickState.currentLegIndex)).toEqual([
       0, 1, 1, 1, 1, 1,
     ]);
-    for (let index = 1; index < states.length; index++)
-      expect(states[index].revision).toBeGreaterThan(states[index - 1].revision);
+    for (const [index, state] of states.entries()) {
+      const previous = states[index - 1];
+      if (previous) expect(state.revision).toBeGreaterThan(previous.revision);
+    }
     expect(context.spoken.length).toBeGreaterThan(0);
     expect(new Set(context.spoken).size).toBe(context.spoken.length);
     const beforeReplay = [...context.spoken];
@@ -261,7 +265,7 @@ describe("transit navigation end to end", () => {
     )) as TransitMobileSession;
     expect(final.payload.tickState.currentLegIndex).toBe(2);
     expect(final.payload.tickState.phase).toBe("walking");
-    expect(final.payload.startPackage.captures[0].stops).toHaveLength(4);
+    expect(final.payload.startPackage.captures[0]?.stops).toHaveLength(4);
     // The stubbed refresh never replies; the expired handle may be retired while the captured trip survives.
     expect(final.payload.startPackage.itineraryFingerprint).toBe(
       initial.payload.startPackage.itineraryFingerprint,

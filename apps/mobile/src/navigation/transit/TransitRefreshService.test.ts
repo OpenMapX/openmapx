@@ -109,10 +109,10 @@ describe("TransitRefreshService.request", () => {
       sessionId: "session-t1",
       itinerary: refreshedItinerary().data.itinerary,
     });
-    expect((calls[0].body as { token: string }).token).toBe(FIXTURE_TOKEN);
-    expect(calls[0].options.timeoutMs).toBe(15_000);
+    expect(calls[0]?.body).toMatchObject({ token: FIXTURE_TOKEN });
+    expect(calls[0]?.options.timeoutMs).toBe(15_000);
     // Never abandoned by this side: only the answer carries the rotated token.
-    expect(calls[0].options.signal).toBeUndefined();
+    expect(calls[0]?.options.signal).toBeUndefined();
   });
 
   it("retains captures when a hosted journey lookup fails", async () => {

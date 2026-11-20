@@ -47,15 +47,17 @@ function sortedUnique(values: Iterable<string>): string[] {
 }
 
 function matchAll(source: string, pattern: RegExp): string[] {
-  return [...source.matchAll(pattern)].map((match) => match[1].trim().replace(/^"|"$/g, ""));
+  return [...source.matchAll(pattern)].flatMap(
+    ([, value]) => value?.trim().replace(/^"|"$/g, "") ?? [],
+  );
 }
 
 function gradleProperties(source: string): Record<string, string> {
   const wanted = ["android.minSdkVersion", "android.compileSdkVersion", "android.targetSdkVersion"];
   const result: Record<string, string> = {};
   for (const key of wanted) {
-    const match = source.match(new RegExp(`^${key.replace(/\./g, "\\.")}=(.*)$`, "m"));
-    if (match) result[key] = match[1].trim();
+    const value = source.match(new RegExp(`^${key.replace(/\./g, "\\.")}=(.*)$`, "m"))?.[1];
+    if (value !== undefined) result[key] = value.trim();
   }
   return result;
 }
@@ -113,12 +115,12 @@ export function normalizeGeneratedNativeSurface(
       permissions: sortedUnique(
         permissionNodes
           .filter((node) => node.$["tools:node"] !== "remove")
-          .map((node) => node.$["android:name"]),
+          .flatMap((node) => node.$["android:name"] ?? []),
       ),
       removedPermissions: sortedUnique(
         permissionNodes
           .filter((node) => node.$["tools:node"] === "remove")
-          .map((node) => node.$["android:name"]),
+          .flatMap((node) => node.$["android:name"] ?? []),
       ),
       applicationFlags: Object.fromEntries(
         Object.entries(application?.$ ?? {})
@@ -136,14 +138,18 @@ export function normalizeGeneratedNativeSurface(
       ),
       metaData: Object.fromEntries(
         metaDataNodes
-          .map((node) => [node.$["android:name"], node.$["android:value"] ?? ""] as const)
-          .filter(([name]) => name.startsWith("expo.modules.updates"))
+          .flatMap((node) => {
+            const name = node.$["android:name"];
+            return name?.startsWith("expo.modules.updates")
+              ? [[name, node.$["android:value"] ?? ""] as const]
+              : [];
+          })
           .sort(([a], [b]) => a.localeCompare(b)),
       ),
       locationServiceForegroundType: generated.locationServiceForegroundType ?? null,
       cleartextPermittedDomains: sortedUnique(
-        [...generated.networkSecurityConfig.matchAll(/<domain[^>]*>([^<]+)<\/domain>/g)].map(
-          (match) => match[1].trim(),
+        [...generated.networkSecurityConfig.matchAll(/<domain[^>]*>([^<]+)<\/domain>/g)].flatMap(
+          ([, domain]) => domain?.trim() ?? [],
         ),
       ),
       baseCleartextPermitted: /<base-config cleartextTrafficPermitted="true"/.test(

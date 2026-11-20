@@ -191,9 +191,9 @@ describe("App bridge channel", () => {
 
   const bootstrap = () => String(mockWebViewProps.injectedJavaScriptBeforeContentLoaded);
   const nonceIn = (script: string) => {
-    const match = script.match(/nonce:"([^"]+)"/);
-    if (!match) throw new Error("bootstrap script publishes no nonce");
-    return match[1];
+    const nonce = script.match(/nonce:"([^"]+)"/)?.[1];
+    if (!nonce) throw new Error("bootstrap script publishes no nonce");
+    return nonce;
   };
 
   const decodedMessages = (): Array<{
@@ -251,7 +251,7 @@ describe("App bridge channel", () => {
     await act(async () => receiveUrl({ url: "geo:52.52,13.405" }));
     const warm = decodedMessages().filter((m) => m.type === "deep-link.open");
     expect(warm).toHaveLength(2);
-    expect(new URLSearchParams(warm[1].payload?.query as string).get("at")).toBe("52.52,13.405");
+    expect(new URLSearchParams(warm[1]?.payload?.query as string).get("at")).toBe("52.52,13.405");
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com/" });
   });
 

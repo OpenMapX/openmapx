@@ -10,6 +10,7 @@ import {
   setRouteMatcherCounting,
 } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { nth } from "../../testing/nth";
 import { GroundNavigationProcessor } from "./GroundNavigationProcessor";
 import { GroundRouteCache, processGroundBatch } from "./groundBatch";
 import { GROUND_MODES, type GroundMode } from "./groundSession";
@@ -135,7 +136,7 @@ describe("processGroundBatch equivalence under restart and batching", () => {
       const outcome = processGroundBatch({
         session: current,
         fixes: group,
-        nowMs: group[group.length - 1].timestampMs,
+        nowMs: nth(group, -1).timestampMs,
         cache,
       });
       current = outcome.session as GroundMobileSession;
@@ -374,7 +375,7 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
     const edited = withGeometry(first, structuredClone(first.payload.startPackage.route.geometry));
     // A sub-metre edit (about 0.4 m) within the fingerprint's rounding: a
     // fingerprint-keyed reuse would treat this as the same road.
-    edited.payload.startPackage.route.geometry[30][1] += 4e-6;
+    nth(edited.payload.startPackage.route.geometry, 30)[1] += 4e-6;
     expect(routeFingerprint(edited.payload.startPackage.route.geometry)).toBe(
       routeFingerprint(first.payload.startPackage.route.geometry),
     );
@@ -461,7 +462,7 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
     expect(owned).not.toBe(first.payload.startPackage.route.geometry);
 
     // The caller edits the array it handed in; the retained copy is unaffected.
-    (first.payload.startPackage.route.geometry as Array<[number, number]>)[10][1] += 0.5;
+    nth(first.payload.startPackage.route.geometry as Array<[number, number]>, 10)[1] += 0.5;
     expect(cache.matcherFor(reloaded(session())).geometry).toEqual(snapshot);
     expect(preparations()).toBe(1);
 
@@ -474,7 +475,7 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
       cache,
     });
     expect(preparations()).toBe(2);
-    expect(cache.matcherFor(first).geometry[10][1]).toBeCloseTo(50.61);
+    expect(cache.matcherFor(first).geometry[10]?.[1]).toBeCloseTo(50.61);
   });
 
   it("does not mutate the session or route it was given", () => {
@@ -516,10 +517,8 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
     };
     route.distance = 5_300;
     route.duration = 480;
-    route.steps[0].distance = 1_300;
-    route.steps[0].duration = 100;
-    route.steps[1].distance = 4_000;
-    route.steps[1].duration = 380;
+    Object.assign(nth(route.steps, 0), { distance: 1_300, duration: 100 });
+    Object.assign(nth(route.steps, 1), { distance: 4_000, duration: 380 });
     route.segmentSpeedLimits = Array.from({ length: 59 }, () => 30);
 
     const fixes = Array.from({ length: 25 }, (_, index) =>

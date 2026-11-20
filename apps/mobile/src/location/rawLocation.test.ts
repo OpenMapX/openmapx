@@ -159,7 +159,7 @@ describe.each(ADAPTERS)("%s raw-location adapter", (_name, sanitise) => {
   it("keeps zero speed but drops a heading above its range", () => {
     const [fix] = sanitise([raw(NOW - 1_000, { speed: 0, heading: 361 })], NOW, null).accepted;
 
-    expect(fix.speed ?? fix.speedMps).toBe(0);
+    expect(fix?.speed ?? fix?.speedMps).toBe(0);
     expect(fix).not.toHaveProperty("heading");
     expect(fix).not.toHaveProperty("headingDegrees");
   });

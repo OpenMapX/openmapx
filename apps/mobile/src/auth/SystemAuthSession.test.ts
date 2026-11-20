@@ -44,12 +44,14 @@ describe("SystemAuthSession.open", () => {
 
     // No caller and no bridge message can contribute a host, a path, or a
     // redirect.
-    const url = new URL(opened[0].url);
+    const [first] = opened;
+    if (!first) throw new Error("the session opened nothing");
+    const url = new URL(first.url);
     expect(url.origin).toBe("https://openmapx.com");
     expect(url.pathname).toBe("/mobile-auth");
     // A verified link on the compiled origin, which the OS routes to the app
     // bound to that origin rather than to any app registering a scheme.
-    expect(opened[0].redirect).toBe("https://openmapx.com/mobile-auth/callback");
+    expect(first.redirect).toBe("https://openmapx.com/mobile-auth/callback");
   });
 
   it("sends the challenge, state and purpose — and nothing else", async () => {
@@ -57,13 +59,15 @@ describe("SystemAuthSession.open", () => {
 
     await session.open("add-passkey");
 
-    const params = new URL(opened[0].url).searchParams;
+    const [first] = opened;
+    if (!first) throw new Error("the session opened nothing");
+    const params = new URL(first.url).searchParams;
     expect(params.get("purpose")).toBe("add-passkey");
     expect(params.get("state")).toBe(STATE);
     expect(params.get("code_challenge")).toBe(CHALLENGE);
     expect(params.get("code_challenge_method")).toBe("S256");
     // The verifier is the one thing that must never leave the device.
-    expect(opened[0].url).not.toContain(VERIFIER);
+    expect(first.url).not.toContain(VERIFIER);
   });
 
   it("returns the code, state and verifier on success", async () => {

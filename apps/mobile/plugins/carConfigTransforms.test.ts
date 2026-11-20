@@ -11,6 +11,8 @@ describe("car host configuration", () => {
     expect(once.manifest["uses-permission"]?.map((p) => p.$["android:name"])).toEqual(
       CAR_PERMISSIONS,
     );
-    expect(once.manifest.application?.[0].service).toEqual(source.manifest.application[0].service);
+    expect(once.manifest.application?.[0]?.service).toEqual(
+      source.manifest.application[0]?.service,
+    );
   });
 });

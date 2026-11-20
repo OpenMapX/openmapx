@@ -1,11 +1,12 @@
 import type { GroundMobileSession } from "@openmapx/core/navigation";
+import { nth } from "../testing/nth";
 import {
   driveStraightRoute,
   type ForegroundHarness,
   groundStartPackage,
   rawFix,
-  STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
 } from "./testing/foregroundHarness";
 
 /**
@@ -22,7 +23,7 @@ afterEach(async () => {
 const DIRECTIONS_PATH = "/api/integrations/routing/directions";
 /** Well away from the followed road. */
 const OFF_ROUTE: readonly [number, number] = [8.75, 50.2];
-const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+const DESTINATION = straightRoutePoint(-1);
 
 /** A route between two points, with one step. */
 function routeBetween(from: readonly [number, number], to: readonly [number, number]) {
@@ -90,7 +91,7 @@ describe("reroute guards on the native session", () => {
     expect(directionsRequests()).toBe(1);
     expect((await ground()).payload.reroute.status).toBe("in-flight");
 
-    held[0](Response.json({ routes: [routeBetween(OFF_ROUTE, DESTINATION)] }));
+    nth(held, 0)(Response.json({ routes: [routeBetween(OFF_ROUTE, DESTINATION)] }));
     await harness.settle();
     const rerouted = await ground();
     expect(rerouted.payload.reroute.status).toBe("idle");
@@ -152,7 +153,7 @@ describe("reroute guards on the native session", () => {
     // After the third failure the delay is 12 s plus up to 1 s of jitter, and
     // fixes arrive once a second. The engine asks inside that delay; spending
     // its request there would add its own growing backoff, about 15 s more.
-    expect(askedAt[3] - askedAt[2]).toBeLessThanOrEqual(14_000);
+    expect(nth(askedAt, 3) - nth(askedAt, 2)).toBeLessThanOrEqual(14_000);
     expect((await ground()).payload.startPackage.route.geometry[0]).toEqual([...OFF_ROUTE]);
   });
 
