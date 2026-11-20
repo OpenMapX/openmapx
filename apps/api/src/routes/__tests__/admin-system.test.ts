@@ -175,6 +175,19 @@ describe("admin system routes", () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update.apply" }));
   });
 
+  it.each([
+    ["/admin/system/updates/check", { image: "attacker/image:latest" }],
+    ["/admin/system/diagnostics", { argv: ["--host", "/"] }],
+    ["/admin/system/updates/apply", {}],
+  ])("answers an unauthenticated %s with 401 before validating its body", async (url, payload) => {
+    requireAdmin.mockRejectedValueOnce(
+      Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+    );
+    const response = await app.inject({ method: "POST", url, payload });
+    expect(response.statusCode).toBe(401);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it.each(["loopback", "impersonated"])(
     "refuses %s release application before enqueue",
     async (kind) => {

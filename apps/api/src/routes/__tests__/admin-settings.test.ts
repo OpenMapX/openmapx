@@ -397,6 +397,26 @@ describe("GET /admin/logs", () => {
   });
 });
 
+describe("admin settings authentication", () => {
+  it.each([
+    ["PATCH", "/admin/settings", null],
+    ["PATCH", "/admin/settings", { hostedBasemapProvider: "unknown" }],
+    ["GET", "/admin/logs?limit=all", undefined],
+  ] as const)(
+    "answers %s %s with 401 before validating its input",
+    async (method, url, payload) => {
+      const valid = await app.inject({ method, url, payload: payload as never });
+      expect(valid.statusCode).toBe(400);
+
+      mockRequireAdmin.mockRejectedValueOnce(
+        Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+      );
+      const res = await app.inject({ method, url, payload: payload as never });
+      expect(res.statusCode).toBe(401);
+    },
+  );
+});
+
 describe("hosted basemap admin selection", () => {
   it("accepts a valid hosted preference and rejects unknown choices", async () => {
     const valid = await app.inject({

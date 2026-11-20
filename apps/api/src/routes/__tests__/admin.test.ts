@@ -635,6 +635,21 @@ describe("GET /admin/audit", () => {
     expect(res.statusCode).toBe(400);
     expect(mockDbSelect).not.toHaveBeenCalled();
   });
+
+  it.each(["/admin/audit?limit=all", "/admin/audit/export?format=xml"])(
+    "answers an unauthenticated %s with 401 before validating its query",
+    async (url) => {
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(400);
+      mockRequireAdmin.mockRejectedValueOnce(
+        Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+      );
+
+      const res = await app.inject({ method: "GET", url });
+
+      expect(res.statusCode).toBe(401);
+      expect(mockDbSelect).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("GET /admin/audit/export", () => {
