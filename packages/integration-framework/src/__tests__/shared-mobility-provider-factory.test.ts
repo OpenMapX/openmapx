@@ -106,7 +106,15 @@ function definition(
     hostMatchesAllowlist: () => false,
     privateFeedHostAllowlist: () => [],
   };
-  const runtime = createSharedMobilityRuntime({ cache, transport });
+  const runtime = createSharedMobilityRuntime({
+    cache,
+    transport,
+    http: {
+      async getText() {
+        throw new Error("no MOTIS rentals in this test");
+      },
+    },
+  });
   return createSharedMobilityProvider({
     id: "car-sharing",
     meta: META,

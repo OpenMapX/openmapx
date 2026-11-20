@@ -80,6 +80,11 @@ export function createSharedMobilityTestRuntime() {
   };
   return createSharedMobilityRuntime({
     cache,
+    http: {
+      async getText() {
+        throw new Error("MOTIS rentals are mocked");
+      },
+    },
     transport: {
       userAgent: "OpenMapX/test",
       async fetchJson<T>() {

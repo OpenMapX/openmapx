@@ -21,6 +21,7 @@ export function setup(ctx: IntegrationContext): void {
     resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
+    http: ctx.http,
     // The instances the deployment uses, as their health checks probe them.
     motisUrl: ctx.resolvePlatformEndpoint("motis")?.url,
     nominatimUrl: ctx.resolvePlatformEndpoint("nominatim")?.url,

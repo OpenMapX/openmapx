@@ -76,11 +76,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
       reason:
         "Asks the local Ollama service to pull a model; the pull deliberately has no duration bound.",
     },
-    "packages/mobility-core/src/motis-rentals.ts": {
-      count: 1,
-      reason:
-        "The generated MOTIS SDK needs a fetch implementation for the deployment's MOTIS and Transitous instances; no HttpClient adapter for it exists yet.",
-    },
     "integrations/overlay-nautical/stations.ts": {
       count: 1,
       reason:

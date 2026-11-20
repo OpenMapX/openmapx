@@ -1,7 +1,8 @@
 import type { RentalsResponse } from "@motis-project/motis-client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { CacheClient } from "../src/cache.js";
 import type { MobilityHttpRequestOptions, MobilityHttpTransport } from "../src/json-transport.js";
+import type { MotisRentalsHttp } from "../src/motis-rentals.js";
 import { createSharedMobilityRuntime } from "../src/shared-mobility-runtime.js";
 
 const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
@@ -85,16 +86,27 @@ function rentals(providerId: string): RentalsResponse {
   };
 }
 
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+function jsonResponse(value: unknown, status = 200) {
+  return { status, body: JSON.stringify(value) };
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+/** A rental client answering each request URL (with its query) from `answer`. */
+function rentalsHttp(
+  answer: (
+    url: string,
+  ) => { status: number; body: string } | Promise<{ status: number; body: string }>,
+): MotisRentalsHttp {
+  return {
+    async getText(url, options) {
+      const requestUrl = new URL(url);
+      for (const [name, value] of Object.entries(options.params)) {
+        requestUrl.searchParams.set(name, String(value));
+      }
+      const response = await answer(requestUrl.toString());
+      return response.status >= 200 && response.status < 300 ? response : { ...response, body: "" };
+    },
+  };
+}
 
 describe("createSharedMobilityRuntime", () => {
   it("keeps concurrent caches, endpoints, clients, source maps, and decisions isolated", async () => {
@@ -106,20 +118,17 @@ describe("createSharedMobilityRuntime", () => {
     const firstDecisions: string[] = [];
     const secondDecisions: string[] = [];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = input instanceof Request ? input.url : String(input);
-        motisRequests.push(url);
-        return jsonResponse(
-          rentals(url.includes("first-motis") ? "first-provider" : "second-provider"),
-        );
-      }),
-    );
+    const http = rentalsHttp((url) => {
+      motisRequests.push(url);
+      return jsonResponse(
+        rentals(url.includes("first-motis") ? "first-provider" : "second-provider"),
+      );
+    });
 
     const first = createSharedMobilityRuntime({
       cache: firstCache.cache,
       transport: transport("first", firstRequests),
+      http,
       motisUrl: "https://first-motis.example",
       transitousUrl: "https://first-transitous.example",
       nominatimUrl: "https://first-nominatim.example",
@@ -129,6 +138,7 @@ describe("createSharedMobilityRuntime", () => {
     const second = createSharedMobilityRuntime({
       cache: secondCache.cache,
       transport: transport("second", secondRequests),
+      http,
       motisUrl: "https://second-motis.example",
       transitousUrl: "https://second-transitous.example",
       nominatimUrl: "https://second-nominatim.example",
@@ -179,24 +189,22 @@ describe("createSharedMobilityRuntime", () => {
 
   it("keeps the local MOTIS circuit breaker inside its owning runtime", async () => {
     const requests: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = input instanceof Request ? input.url : String(input);
-        requests.push(url);
-        if (url.includes("broken-local")) return jsonResponse({ message: "down" }, 503);
-        return jsonResponse(rentals(url.includes("healthy-local") ? "healthy" : "hosted"));
-      }),
-    );
+    const http = rentalsHttp((url) => {
+      requests.push(url);
+      if (url.includes("broken-local")) return jsonResponse({ message: "down" }, 503);
+      return jsonResponse(rentals(url.includes("healthy-local") ? "healthy" : "hosted"));
+    });
     const broken = createSharedMobilityRuntime({
       cache: cacheClient().cache,
       transport: transport("broken", []),
+      http,
       motisUrl: "https://broken-local.example",
       transitousUrl: "https://broken-hosted.example",
     });
     const healthy = createSharedMobilityRuntime({
       cache: cacheClient().cache,
       transport: transport("healthy", []),
+      http,
       motisUrl: "https://healthy-local.example",
       transitousUrl: "https://healthy-hosted.example",
     });

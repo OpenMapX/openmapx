@@ -1,9 +1,10 @@
 import type { RentalsResponse } from "@motis-project/motis-client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createMotisRentalId,
   createMotisRentalsClient,
   decodeMotisRentalId,
+  type MotisRentalsHttp,
   mapMotisRentalSnapshot,
 } from "../src/motis-rentals.js";
 import { encodePolyline } from "../src/polyline.js";
@@ -161,10 +162,6 @@ function fixture(): RentalsResponse {
   };
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 describe("complete MOTIS rental mapping", () => {
   it("maps collision-safe identities, providers, rules, holes, URIs, and filtered counts", () => {
     const snapshot = mapMotisRentalSnapshot(
@@ -278,31 +275,35 @@ describe("complete MOTIS rental mapping", () => {
 });
 
 describe("MOTIS rental request fallback", () => {
-  function jsonResponse(value: unknown, status = 200): Response {
-    return new Response(JSON.stringify(value), {
-      status,
-      headers: { "content-type": "application/json" },
-    });
+  function jsonResponse(value: unknown, status = 200) {
+    return { status, body: JSON.stringify(value) };
   }
 
-  function requestUrl(input: string | URL | Request): string {
-    return input instanceof Request ? input.url : String(input);
-  }
-
-  function requestMethod(input: string | URL | Request, init?: RequestInit): string {
-    return input instanceof Request ? input.method : (init?.method ?? "GET");
+  /** A rental client answering each request URL (with its query) from `answer`. */
+  function rentalsHttp(
+    answer: (
+      url: string,
+    ) => { status: number; body: string } | Promise<{ status: number; body: string }>,
+  ): MotisRentalsHttp {
+    return {
+      async getText(url, options) {
+        const requestUrl = new URL(url);
+        for (const [name, value] of Object.entries(options.params)) {
+          requestUrl.searchParams.set(name, String(value));
+        }
+        const response = await answer(requestUrl.toString());
+        return response.status >= 200 && response.status < 300
+          ? response
+          : { ...response, body: "" };
+      },
+    };
   }
 
   it("does no HEAD preflight and treats a healthy empty local snapshot as authoritative", async () => {
+    const calls: string[] = [];
     const client = createMotisRentalsClient({
-      motisUrl: "https://local.test",
-      transitousUrl: "https://hosted.test",
-    });
-    const calls: Array<{ url: string; method: string }> = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        calls.push({ url: requestUrl(input), method: requestMethod(input, init) });
+      http: rentalsHttp((url) => {
+        calls.push(url);
         return jsonResponse({
           providerGroups: [],
           providers: [],
@@ -311,24 +312,28 @@ describe("MOTIS rental request fallback", () => {
           zones: [],
         });
       }),
-    );
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("motis-local");
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).not.toBe("HEAD");
-    expect(calls[0]?.url).toContain("local.test");
+    const url = new URL(calls[0] ?? "");
+    expect(url.origin + url.pathname).toBe("https://local.test/api/v1/rentals");
+    expect(url.searchParams.get("min")).toBe("52.4,13.3");
+    expect(url.searchParams.get("max")).toBe("52.6,13.5");
+    expect(url.searchParams.get("withZones")).toBe("true");
   });
 
   it("asks Transitous directly when the deployment has no local MOTIS", async () => {
-    const client = createMotisRentalsClient({ transitousUrl: "https://hosted.test" });
     const calls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        calls.push(requestUrl(input));
+    const client = createMotisRentalsClient({
+      http: rentalsHttp((url) => {
+        calls.push(url);
         return jsonResponse(fixture());
       }),
-    );
+      transitousUrl: "https://hosted.test",
+    });
     const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("transitous");
     expect(calls).toHaveLength(1);
@@ -336,39 +341,44 @@ describe("MOTIS rental request fallback", () => {
   });
 
   it("falls back to hosted only for a local transport/5xx failure", async () => {
-    const client = createMotisRentalsClient({
-      motisUrl: "https://local.test",
-      transitousUrl: "https://hosted.test",
-    });
     const calls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const url = requestUrl(input);
+    const client = createMotisRentalsClient({
+      http: rentalsHttp((url) => {
         calls.push(url);
         return url.includes("local.test")
           ? jsonResponse({ message: "down" }, 503)
           : jsonResponse(fixture());
       }),
-    );
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("transitous");
     expect(calls.some((url) => url.includes("hosted.test"))).toBe(true);
   });
 
-  it("does not hide a local 4xx contract failure behind hosted fallback", async () => {
+  it("falls back to hosted when the local request fails outright", async () => {
     const client = createMotisRentalsClient({
+      http: rentalsHttp((url) => {
+        if (url.includes("local.test")) throw new Error("connect ECONNREFUSED");
+        return jsonResponse(fixture());
+      }),
       motisUrl: "https://local.test",
       transitousUrl: "https://hosted.test",
     });
+    expect((await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6])).origin).toBe("transitous");
+  });
+
+  it("does not hide a local 4xx contract failure behind hosted fallback", async () => {
     const calls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        calls.push(requestUrl(input));
+    const client = createMotisRentalsClient({
+      http: rentalsHttp((url) => {
+        calls.push(url);
         return jsonResponse({ message: "bad request" }, 400);
       }),
-    );
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("motis-local");
     expect(snapshot.completeness.warnings).toContain("HTTP 400");
