@@ -5,9 +5,21 @@ function freshness(location: OpenAQLocation): number {
   return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
-function cell(location: OpenAQLocation, zoom: number): string {
-  const latitude = location.coordinates.latitude ?? 0;
-  const longitude = location.coordinates.longitude ?? 0;
+/** A location's coordinates, or null when OpenAQ gave none: such a station cannot be placed. */
+function position(location: OpenAQLocation): { latitude: number; longitude: number } | null {
+  const { latitude, longitude } = location.coordinates;
+  return typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
+    ? { latitude, longitude }
+    : null;
+}
+
+function cell(
+  { latitude, longitude }: { latitude: number; longitude: number },
+  zoom: number,
+): string {
   const cells = 2 ** Math.max(0, Math.min(22, Math.floor(zoom) + 4));
   const x = Math.floor(((longitude + 180) / 360) * cells);
   const bounded = Math.max(-85.051129, Math.min(85.051129, latitude));
@@ -25,8 +37,12 @@ export function rankStationDemand(
   selected: OpenAQLocation[];
   diagnostics: { candidateCount: number; servedCount: number; skippedCount: number };
 } {
-  const ranked = [...locations].sort(
-    (left, right) =>
+  const placed = locations.flatMap((location) => {
+    const at = position(location);
+    return at ? [{ location, at }] : [];
+  });
+  const ranked = placed.sort(
+    ({ location: left }, { location: right }) =>
       Number(right.isMonitor) - Number(left.isMonitor) ||
       freshness(right) - freshness(left) ||
       left.id - right.id,
@@ -34,8 +50,8 @@ export function rankStationDemand(
   const selected: OpenAQLocation[] = [];
   const deferred: OpenAQLocation[] = [];
   const occupied = new Set<string>();
-  for (const location of ranked) {
-    const key = cell(location, options.zoom);
+  for (const { location, at } of ranked) {
+    const key = cell(at, options.zoom);
     if (occupied.has(key)) deferred.push(location);
     else {
       occupied.add(key);

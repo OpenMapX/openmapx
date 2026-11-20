@@ -76,7 +76,6 @@ export const EXCEPTIONS: ProviderHttpExceptions = {
   },
   "credentialed-fetch-json": {},
   "null-island": {
-    "integrations/overlay-air-quality/station-demand.ts": { count: 2, reason: NULL_ISLAND_PENDING },
     "integrations/routing-valhalla/provider.ts": { count: 2, reason: NULL_ISLAND_PENDING },
     "integrations/transit-dynamic-registry/hafas-mgate.ts": {
       count: 6,
