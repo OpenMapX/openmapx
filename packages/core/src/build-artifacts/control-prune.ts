@@ -278,10 +278,22 @@ export async function pruneControlRecords(
   }
   // Records without a row go by the same retention, and only once their key
   // expired: no key stays valid more than seven days after its admission.
-  await local.rows.removeRowless?.({
-    finishedBefore: now - CONTROL_PRUNE_AFTER_MS,
-    admittedBefore: now - MAX_KEY_LIFETIME_MS - CONTROL_PRUNE_AFTER_MS,
-  });
+  // Their files named by key (a transit run's runner journal, which holds a
+  // runner capability) go first; a later pass finds the keys again otherwise.
+  await local.rows.removeRowless?.(
+    {
+      finishedBefore: now - CONTROL_PRUNE_AFTER_MS,
+      admittedBefore: now - MAX_KEY_LIFETIME_MS - CONTROL_PRUNE_AFTER_MS,
+    },
+    (rowless) => {
+      for (const namespace of NAMESPACES)
+        withNamespace(local, namespace, (dir) => {
+          for (const entry of entries(dir, onFull))
+            if (rowless.some((key) => entry.includes(key))) dir.removeFile(entry);
+        });
+      return !reported;
+    },
+  );
   // Source witnesses no maintenance owner references any more, once old enough.
   if (complete) {
     const referenced = new Set<string>();

@@ -8,7 +8,10 @@ import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { dataJobExecutionRows } from "../../../../../packages/core/src/build-artifacts/execution-rows";
-import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
+import {
+  installationState,
+  writePrivateRecord,
+} from "../../../../../packages/core/src/build-artifacts/private-records";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore, dataControlAdmission } from "./store.js";
 
@@ -380,9 +383,13 @@ describe.skipIf(
       recent: closed(11 * 24 * HOUR, HOUR),
     };
     try {
-      for (const row of Object.values(rows))
+      // Each run left its runner journal, which holds a runner capability.
+      const local = installationState(dm.installation);
+      for (const row of Object.values(rows)) {
         await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
           VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,2,${row.key},${"a".repeat(64)},${"b".repeat(64)},${row.admittedAt},${row.admittedAt + HOUR},'{}','{}')`;
+        writePrivateRecord(local, "observations", `runners-${row.key}.json`, { attempts: [] });
+      }
       await control.pruneControlRecords(dm.installation, { now });
       const left = (
         await sql`SELECT id FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`
@@ -390,6 +397,10 @@ describe.skipIf(
         .map((row) => row.id)
         .sort();
       expect(left).toEqual([rows.keyLive.id, rows.recent.id].sort());
+      // The pruned job's files went with it; the others keep theirs.
+      expect(observationFiles(root).sort()).toEqual(
+        [`runners-${rows.keyLive.key}.json`, `runners-${rows.recent.key}.json`].sort(),
+      );
     } finally {
       await dm.runtime.close();
       await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`;

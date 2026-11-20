@@ -141,9 +141,16 @@ export interface ExecutionRows {
   /** Up to `limit` keys the prune may consider; `complete` when none were left out. */
   keys(limit: number): Promise<{ keys: string[]; complete: boolean }>;
   remove(operationKeys: readonly string[]): Promise<void>;
-  /** Removes the records a store holds for executions whose row is gone,
-   * once they finished before `finishedBefore` and were admitted before `admittedBefore`. */
-  removeRowless?(bounds: { finishedBefore: number; admittedBefore: number }): Promise<void>;
+  /**
+   * Removes the records a store holds for executions whose row is gone, once
+   * they finished before `finishedBefore` and were admitted before
+   * `admittedBefore`. `release` first removes what else those keys named and
+   * answers whether that is complete; the records go only then.
+   */
+  removeRowless?(
+    bounds: { finishedBefore: number; admittedBefore: number },
+    release: (operationKeys: readonly string[]) => boolean,
+  ): Promise<void>;
 }
 /** A store that keeps only some keys, in front of another one. */
 export interface OwningExecutionRows extends ExecutionRows {
@@ -536,10 +543,19 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
     },
     // A backup restore closes the jobs it found open and drops their execution
     // rows; their job rows go by the same retention as the others.
-    async removeRowless({ finishedBefore, admittedBefore }) {
+    async removeRowless({ finishedBefore, admittedBefore }, release) {
+      const closed =
+        "execution_version=2 AND execution_admission IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint";
+      const keys = (
+        await database.unsafe(
+          `SELECT operation_key FROM data_manager.jobs WHERE ${closed} AND operation_key IS NOT NULL ORDER BY operation_key LIMIT 256`,
+          [finishedBefore, admittedBefore],
+        )
+      ).map((row) => z.string().parse(row.operation_key));
+      if (!keys.length || !release(keys)) return;
       await database.unsafe(
-        "DELETE FROM data_manager.jobs WHERE execution_version=2 AND execution_admission IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint",
-        [finishedBefore, admittedBefore],
+        `DELETE FROM data_manager.jobs WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
+        [finishedBefore, admittedBefore, JSON.stringify(keys)],
       );
     },
   };

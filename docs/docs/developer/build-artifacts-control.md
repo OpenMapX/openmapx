@@ -732,7 +732,8 @@ removes the operation's journal row, and on data-manager its finished job row. A
 that a later pass removes once they are 72 hours old. A backup restore closes the
 data jobs it found open and drops their execution rows; data-manager's prune
 deletes such a job row once it finished 72 hours ago and was admitted more than
-ten days ago, by which time its key has expired. A pass examines at most 256
+ten days ago, by which time its key has expired, after removing the files named
+by its key (a transit run's runner journal among them). A pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
 stay regardless of age, and the agent also keeps those of a preparation a
