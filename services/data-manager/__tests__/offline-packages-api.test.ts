@@ -156,9 +156,38 @@ describe("data-manager offline package API", () => {
 
     expect(response.statusCode).toBe(429);
     expect(response.json()).toEqual({
-      ok: false,
+      error: "offline package capacity: preparation queue is full (64 waiting jobs)",
+      code: "capacity",
+    });
+    await app.close();
+  });
+
+  it("answers a failed preparation with its reason in the error envelope", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-failed-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    // The route reads only the status and the reason of a failed preparation.
+    const failed = {
+      jobId: "failed-job",
+      status: "failed",
       errorCode: "capacity",
-      errorMessage: "offline package capacity: preparation queue is full (64 waiting jobs)",
+      errorMessage: "offline package needs more disk than is free",
+    } as Awaited<ReturnType<typeof generator.prepare>>;
+    vi.spyOn(generator, "prepare").mockResolvedValue(failed);
+    const app = Fastify();
+    registerApi(app, { dataDir: root, offlinePackages: generator });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/offline/packages/prepare",
+      headers: { "x-offline-package-principal": principal },
+      payload: request,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "offline package needs more disk than is free",
+      code: "capacity",
     });
     await app.close();
   });
@@ -525,7 +554,10 @@ describe("data-manager offline package API", () => {
         payload: request,
       });
       expect(response.statusCode).toBe(400);
-      expect(response.json().errorCode).toBe("invalid-principal");
+      expect(response.json()).toEqual({
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
+      });
     }
     expect(prepare).not.toHaveBeenCalled();
     await app.close();

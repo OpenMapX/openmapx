@@ -289,7 +289,11 @@ describe("data-manager API", () => {
       },
     });
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ ok: false, reason: "in-flight", existingJobId: null });
+    expect(res.json()).toEqual({
+      error: "Another data job is running. Try again when it finishes.",
+      code: "in-flight",
+      existingJobId: null,
+    });
     expect(existsSync(overlayPath)).toBe(false);
   });
 

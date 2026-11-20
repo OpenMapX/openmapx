@@ -19,14 +19,15 @@ export type GetOfflineGlyph400 =
       code?: string;
     }
   | {
-      ok: false;
-      errorCode:
+      error: string;
+      code:
         | "invalid-principal"
         | "invalid-request"
         | "capacity"
         | "principal-quota"
-        | "source-unavailable";
-      errorMessage: string;
+        | "source-unavailable"
+        | "generation-failed"
+        | "expired";
       /** @minimum 0 */
       retryAfterSeconds?: number;
     };

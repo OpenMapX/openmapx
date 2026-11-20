@@ -154,8 +154,8 @@ describe("application data-manager administration contracts", () => {
     ).toMatchObject({ ok: false });
     expect(
       dataManagerAdminOperations.postApiDataManagerTransitSync.responses[409].schema.parse({
-        ok: false,
-        reason: "in-flight",
+        error: "Another data job is running. Try again when it finishes.",
+        code: "in-flight",
         existingJobId: null,
       }),
     ).toMatchObject({ existingJobId: null });

@@ -52,8 +52,11 @@ archive, including attribution.
 The browser adapter validates capability and preparation/job replies with the
 shared data-manager wire schemas before exposing them to offline settings. A
 malformed reply raises `OfflinePackageApiError` with code `invalid-response`;
-validation errors omit response contents. A valid unavailable capability remains
-usable when the public proxy returns HTTP 502. Archive bodies stay streamed by
+validation errors omit response contents. When data-manager is down the public
+proxy answers HTTP 502 with `{ error, code: "source-unavailable" }`, and the
+adapter reports that as an unavailable capability rather than a failure. Other
+failed replies use the API error envelope: the adapter takes the error's code
+from `code` and its text from `error`. Archive bodies stay streamed by
 the download transport, with Range/If-Range and cancellation preserved.
 
 ## Download and storage guarantees

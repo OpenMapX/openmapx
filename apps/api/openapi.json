@@ -121332,13 +121332,10 @@
                     {
                       "type": "object",
                       "properties": {
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                        "error": {
+                          "type": "string"
                         },
-                        "reason": {
+                        "code": {
                           "type": "string",
                           "enum": [
                             "in-flight",
@@ -121353,8 +121350,8 @@
                         }
                       },
                       "required": [
-                        "ok",
-                        "reason",
+                        "error",
+                        "code",
                         "existingJobId"
                       ],
                       "additionalProperties": false
@@ -121981,13 +121978,10 @@
                     {
                       "type": "object",
                       "properties": {
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                        "error": {
+                          "type": "string"
                         },
-                        "reason": {
+                        "code": {
                           "type": "string",
                           "enum": [
                             "in-flight",
@@ -122002,8 +121996,8 @@
                         }
                       },
                       "required": [
-                        "ok",
-                        "reason",
+                        "error",
+                        "code",
                         "existingJobId"
                       ],
                       "additionalProperties": false
@@ -122630,13 +122624,10 @@
                     {
                       "type": "object",
                       "properties": {
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                        "error": {
+                          "type": "string"
                         },
-                        "reason": {
+                        "code": {
                           "type": "string",
                           "enum": [
                             "in-flight",
@@ -122651,8 +122642,8 @@
                         }
                       },
                       "required": [
-                        "ok",
-                        "reason",
+                        "error",
+                        "code",
                         "existingJobId"
                       ],
                       "additionalProperties": false
@@ -123279,13 +123270,10 @@
                     {
                       "type": "object",
                       "properties": {
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                        "error": {
+                          "type": "string"
                         },
-                        "reason": {
+                        "code": {
                           "type": "string",
                           "enum": [
                             "in-flight",
@@ -123300,8 +123288,8 @@
                         }
                       },
                       "required": [
-                        "ok",
-                        "reason",
+                        "error",
+                        "code",
                         "existingJobId"
                       ],
                       "additionalProperties": false
@@ -124401,13 +124389,10 @@
                     {
                       "type": "object",
                       "properties": {
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                        "error": {
+                          "type": "string"
                         },
-                        "reason": {
+                        "code": {
                           "type": "string",
                           "enum": [
                             "in-flight",
@@ -124422,8 +124407,8 @@
                         }
                       },
                       "required": [
-                        "ok",
-                        "reason",
+                        "error",
+                        "code",
                         "existingJobId"
                       ],
                       "additionalProperties": false
@@ -124577,23 +124562,57 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
                     },
-                    "reason": {
-                      "type": "string"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "ok",
-                    "reason"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }

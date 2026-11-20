@@ -16,10 +16,17 @@ administration and privacy request errors and the wildfire layers' unavailable
 reply add `error` beside their `code`. Integration and service configuration
 validation adds `error` beside its `errors` list.
 
+Offline package preparation errors replace `ok`, `errorCode` and `errorMessage`
+with `error` and `code`, and keep `retryAfterSeconds`. The offline capability's
+HTTP 502 answers `{ error, code: "source-unavailable" }` instead of an
+unavailable capability. A refused transit source change or sync replaces `ok`
+and `reason` with `error` and `code` and keeps `existingJobId`. Better Auth
+replies under `/api/auth/*` keep their own `{ code, message }` shape.
+
 ## Who is affected
 
-Scripts or separately deployed clients that read `message` or rely on a bare
-`code` in an API error body. The OpenMapX web and mobile apps change together
+Scripts or separately deployed clients that read `message`, `errorMessage` or
+`reason`, or rely on a bare `code`, in an API error body. The OpenMapX web and mobile apps change together
 with the API.
 
 ## Required action

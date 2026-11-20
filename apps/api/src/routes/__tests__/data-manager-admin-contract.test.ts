@@ -131,11 +131,16 @@ describe("application administration contract registration", () => {
     }
   });
   it("validates before database work and accepts a real typed conflict", async () => {
+    const CONFLICT = {
+      error: "Another data job is running. Try again when it finishes.",
+      code: "in-flight",
+      existingJobId: null,
+    };
     const app = Fastify();
     let calls = 0;
     registerDataManagerAdminRoute(app, "postApiDataManagerTransitSync", async (_req, reply) => {
       calls++;
-      return reply.code(409).send({ ok: false, reason: "in-flight", existingJobId: null });
+      return reply.code(409).send(CONFLICT);
     });
     try {
       expect(
@@ -154,7 +159,7 @@ describe("application administration contract registration", () => {
         payload: reviewed,
       });
       expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({ ok: false, reason: "in-flight", existingJobId: null });
+      expect(response.json()).toEqual(CONFLICT);
     } finally {
       await app.close();
     }

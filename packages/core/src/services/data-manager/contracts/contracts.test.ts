@@ -116,8 +116,47 @@ describe("data-manager wire contracts", () => {
     expect(dataManagerOperations.getTransitCatalog.responses[200].schema.parse(body)).toEqual(body);
   });
   it("retains the reservation conflict before the job ID exists", () => {
-    const body = { ok: false, reason: "in-flight", existingJobId: null };
+    const body = {
+      error: "Another data job is running. Try again when it finishes.",
+      code: "in-flight",
+      existingJobId: null,
+    };
     expect(dataManagerOperations.syncTransit.responses[409].schema.parse(body)).toEqual(body);
+    expect(
+      dataManagerOperations.syncTransit.responses[409].schema.safeParse({
+        ok: false,
+        reason: "in-flight",
+        existingJobId: null,
+      }).success,
+    ).toBe(false);
+  });
+  it("accepts the framework error for a transit scope outside the operations profile", () => {
+    const body = {
+      statusCode: 422,
+      error: "Unprocessable Entity",
+      message: "Countries outside configured operations profile",
+    };
+    expect(dataManagerOperations.syncTransit.responses[422].schema.parse(body)).toEqual(body);
+  });
+  it("answers offline preparation refusals in the error envelope", () => {
+    const refusal = {
+      error: "Offline package preparation quota exceeded",
+      code: "principal-quota",
+      retryAfterSeconds: 30,
+    };
+    const responses = dataManagerOperations.prepareOfflinePackage.responses;
+    expect(responses[429].schema.parse(refusal)).toEqual(refusal);
+    expect(responses[409].schema.parse({ error: "busy", code: "capacity" })).toEqual({
+      error: "busy",
+      code: "capacity",
+    });
+    expect(
+      responses[400].schema.safeParse({
+        ok: false,
+        errorCode: "invalid-request",
+        errorMessage: "minZoom must be non-negative",
+      }).success,
+    ).toBe(false);
   });
   it("keeps an invalid offline request in its failed job without inventing a valid request", () => {
     const request = {

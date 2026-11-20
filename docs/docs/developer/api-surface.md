@@ -41,8 +41,8 @@ classification.
 
 ## Error responses
 
-Every API error reply, from a core route or an integration route, has one
-shape:
+Every API error reply OpenMapX owns, from a core route, an integration route or
+a data-manager route the API passes through, has one shape:
 
 ```json
 { "error": "Invalid coordinates", "code": "INVALID_QUERY" }
@@ -64,11 +64,18 @@ for any status of 500 or above. The schema is `apiErrorSchema` in
 `@openmapx/core/api-contracts`; contract families extend it.
 
 `apps/api/src/__tests__/error-envelope.test.ts` scans the API, the built-in
-integrations and the integration framework and refuses an error reply whose
-literal body has no `error`. Its only exception is offline package preparation,
-which answers data-manager's typed `{ ok, errorCode, errorMessage }` result.
-Error bodies of internal data-manager routes that the API passes through
-unchanged keep their own documented shapes.
+integrations, the integration framework and data-manager and refuses an error
+reply whose literal body has no `error`, including a body wrapped in `satisfies`
+or `as`.
+Data-manager error replies that the API passes through use the same envelope:
+offline package preparation names its reason in `code` (with
+`retryAfterSeconds` when it limits the caller), and a refused transit source
+change names `in-flight` or `duplicate-idempotency-key` in `code` beside
+`existingJobId`.
+
+The only exception is Better Auth's handler under `/api/auth/*`. Its errors are
+`{ code, message }`, because that is the shape the Better Auth client library
+reads; OpenMapX does not own or rewrite them.
 
 ## What gets collected, and how
 

@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { type OfflinePackageCapability, parseOfflinePackageRequest } from "@openmapx/core";
+import { parseOfflinePackageRequest } from "@openmapx/core";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { RollingStreamBudget, type RollingStreamBudgetLease } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
@@ -33,6 +33,11 @@ const DEFAULT_DELIVERY_MAX_BYTES = 4_000_000_000;
 const DEFAULT_DELIVERY_WINDOW_MS = 600_000;
 const DEFAULT_DELIVERY_MAX_CONCURRENT_PER_NETWORK = 4;
 const DEFAULT_DELIVERY_MAX_CONCURRENT_GLOBAL = 16;
+/** Readers treat this code as "offline packages are unavailable right now". */
+const CAPABILITY_UNAVAILABLE = {
+  error: "Offline package service unavailable",
+  code: "source-unavailable",
+} as const;
 
 interface PrepareLimiter {
   consume(principal: string): Promise<{ allowed: boolean; retryAfterSeconds: number }>;
@@ -146,21 +151,11 @@ export function createOfflinePackagesRoute(
     fastify.get("/offline/packages/capability", async (_request, reply) => {
       try {
         const response = await dm.getOfflinePackageCapability(dataManagerOptions());
-        if (response.status !== 200) {
-          return reply.code(502).send({
-            available: false,
-            provider: "openmapx",
-            reason: "source-unavailable",
-          } satisfies OfflinePackageCapability);
-        }
+        if (response.status !== 200) return reply.code(502).send(CAPABILITY_UNAVAILABLE);
         return reply.send(response.data);
       } catch (error) {
         fastify.log.warn({ err: error }, "offline package capability unavailable");
-        return reply.code(502).send({
-          available: false,
-          provider: "openmapx",
-          reason: "source-unavailable",
-        } satisfies OfflinePackageCapability);
+        return reply.code(502).send(CAPABILITY_UNAVAILABLE);
       }
     });
 
@@ -203,9 +198,8 @@ export function createOfflinePackagesRoute(
           ({ principalKey, prepareLimiter } = await loadDependencies());
         } catch {
           return reply.code(503).send({
-            ok: false,
-            errorCode: "prepare-quota-unavailable",
-            errorMessage: "Offline package preparation quota is temporarily unavailable",
+            error: "Offline package preparation quota is temporarily unavailable",
+            code: "prepare-quota-unavailable",
           });
         }
         const principal = deriveOfflinePackagePrincipal(getUserId(request), principalKey);
@@ -214,17 +208,15 @@ export function createOfflinePackagesRoute(
           limit = await prepareLimiter.consume(principal);
         } catch {
           return reply.code(503).send({
-            ok: false,
-            errorCode: "prepare-quota-unavailable",
-            errorMessage: "Offline package preparation quota is temporarily unavailable",
+            error: "Offline package preparation quota is temporarily unavailable",
+            code: "prepare-quota-unavailable",
           });
         }
         if (!limit.allowed) {
           reply.header("Retry-After", String(limit.retryAfterSeconds));
           return reply.code(429).send({
-            ok: false,
-            errorCode: "prepare-rate-limit",
-            errorMessage: "Offline package preparation quota exceeded",
+            error: "Offline package preparation quota exceeded",
+            code: "prepare-rate-limit",
             retryAfterSeconds: limit.retryAfterSeconds,
           });
         }
@@ -234,8 +226,8 @@ export function createOfflinePackagesRoute(
           body = parseOfflinePackageRequest(request.body);
         } catch (error) {
           return reply.code(400).send({
-            errorCode: "invalid-request",
-            errorMessage: error instanceof Error ? error.message : String(error),
+            error: error instanceof Error ? error.message : String(error),
+            code: "invalid-request",
           });
         }
         try {

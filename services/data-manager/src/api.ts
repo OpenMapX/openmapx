@@ -219,9 +219,8 @@ function registerOfflinePackageRoutes(
     const owner = principal(request);
     if (!owner) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-principal",
-        errorMessage: "Exactly one valid offline package principal is required",
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
       });
     }
     let body: OfflinePackageRequest;
@@ -229,9 +228,8 @@ function registerOfflinePackageRoutes(
       body = parseOfflinePackageRequest(request.body);
     } catch (error) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-request",
-        errorMessage: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error),
+        code: "invalid-request",
       });
     }
     try {
@@ -239,29 +237,23 @@ function registerOfflinePackageRoutes(
       if (result.status === "ready-to-download") return reply.code(200).send(result);
       if (result.status === "preparing") return reply.code(202).send(result);
       const status = result.errorCode === "capacity" ? 409 : 400;
-      return reply.code(status).send(result);
+      return reply.code(status).send({ error: result.errorMessage, code: result.errorCode });
     } catch (error) {
       if (error instanceof OfflinePackageCapacityError) {
         reply.header("Retry-After", "30");
-        return reply.code(429).send({
-          ok: false,
-          errorCode: error.errorCode,
-          errorMessage: error.message,
-        });
+        return reply.code(429).send({ error: error.message, code: error.errorCode });
       }
       if (error instanceof OfflinePackagePrincipalQuotaError) {
         reply.header("Retry-After", "30");
         return reply.code(429).send({
-          ok: false,
-          errorCode: error.errorCode,
-          errorMessage: error.message,
+          error: error.message,
+          code: error.errorCode,
           retryAfterSeconds: 30,
         });
       }
       return reply.code(503).send({
-        ok: false,
-        errorCode: "source-unavailable",
-        errorMessage: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error),
+        code: "source-unavailable",
       });
     }
   });
@@ -270,9 +262,8 @@ function registerOfflinePackageRoutes(
     const owner = principal(request);
     if (!owner) {
       return reply.code(400).send({
-        ok: false,
-        errorCode: "invalid-principal",
-        errorMessage: "Exactly one valid offline package principal is required",
+        error: "Exactly one valid offline package principal is required",
+        code: "invalid-principal",
       });
     }
     const result = await generator.getJob(owner, request.params.jobId);
@@ -549,12 +540,18 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         return {
           ok: false,
           status: 409,
-          body: {
-            ok: false,
-            reason:
-              error instanceof DataExecutionConflict ? "duplicate-idempotency-key" : "in-flight",
-            existingJobId: null,
-          },
+          body:
+            error instanceof DataExecutionConflict
+              ? {
+                  error: "This idempotency key was already used for a different change.",
+                  code: "duplicate-idempotency-key",
+                  existingJobId: null,
+                }
+              : {
+                  error: "Another data job is running. Try again when it finishes.",
+                  code: "in-flight",
+                  existingJobId: null,
+                },
         };
       throw error;
     }

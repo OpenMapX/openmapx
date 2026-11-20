@@ -140,9 +140,10 @@ export const transitSourceActionErrorSchema = z.strictObject({
   error: z.string(),
   code: z.literal("source_action_not_allowed"),
 });
+/** A refused source change in the error envelope; `code` names why it was refused. */
 export const transitConflictSchema = z.strictObject({
-  ok: z.literal(false),
-  reason: z.enum(["in-flight", "duplicate-idempotency-key"]),
+  error: z.string(),
+  code: z.enum(["in-flight", "duplicate-idempotency-key"]),
   existingJobId: z.string().nullable(),
 });
 export const transitPreflightBindingSchema = z.strictObject({
@@ -179,10 +180,6 @@ export const transitSyncAcceptedSchema = z.strictObject({
   ok: z.literal(true),
   jobId: z.string(),
   status: z.literal("started"),
-});
-export const transitScopeRejectedSchema = z.strictObject({
-  ok: z.literal(false),
-  reason: z.string(),
 });
 const capacityShape = {
   freeDiskBytes: countSchema,

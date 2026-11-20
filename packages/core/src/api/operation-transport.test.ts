@@ -103,7 +103,10 @@ describe("JSON acquisition", () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ error: "absent" }, { status: 404 }))
       .mockResolvedValueOnce(
-        Response.json({ ok: false, reason: "in-flight", existingJobId: "job" }, { status: 409 }),
+        Response.json(
+          { error: "Another data job is running.", code: "in-flight", existingJobId: "job" },
+          { status: 409 },
+        ),
       );
     vi.stubGlobal("fetch", fetch);
     const absent = await bind()("state")<{

@@ -109,6 +109,10 @@ describe("offline package public API", () => {
     await app.register(createOfflinePackagesRoute(routeOptions()));
     const response = await app.inject({ method: "GET", url: "/offline/packages/capability" });
     expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      error: "Offline package service unavailable",
+      code: "source-unavailable",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     await app.close();
   });
@@ -317,9 +321,8 @@ describe("offline package public API", () => {
     expect(limited.statusCode).toBe(429);
     expect(limited.headers["retry-after"]).toBe("599");
     expect(limited.json()).toEqual({
-      ok: false,
-      errorCode: "prepare-rate-limit",
-      errorMessage: "Offline package preparation quota exceeded",
+      error: "Offline package preparation quota exceeded",
+      code: "prepare-rate-limit",
       retryAfterSeconds: 599,
     });
     expect(options.prepareLimiter.consume).toHaveBeenCalledTimes(3);
@@ -355,6 +358,7 @@ describe("offline package public API", () => {
       payload: { ...request, provider: "caller-selected-provider" },
     });
     expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ error: expect.any(String), code: "invalid-request" });
 
     const next = await app.inject({
       method: "POST",
@@ -374,9 +378,8 @@ describe("offline package public API", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-          ok: false,
-          errorCode: "principal-quota",
-          errorMessage: "Offline package preparation quota exceeded",
+          error: "Offline package preparation quota exceeded",
+          code: "principal-quota",
           retryAfterSeconds: 30,
         }),
         {
@@ -396,6 +399,11 @@ describe("offline package public API", () => {
 
     expect(response.statusCode).toBe(429);
     expect(response.headers["retry-after"]).toBe("30");
+    expect(response.json()).toEqual({
+      error: "Offline package preparation quota exceeded",
+      code: "principal-quota",
+      retryAfterSeconds: 30,
+    });
     expect(response.headers["cache-control"]).toBe("private, no-store");
     expect(response.body).not.toContain("user-a");
     expect(response.body).not.toContain(Buffer.alloc(32, 7).toString("base64url"));

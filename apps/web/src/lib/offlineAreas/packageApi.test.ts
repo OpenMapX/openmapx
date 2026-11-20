@@ -260,8 +260,8 @@ describe("offline package API client", () => {
       vi.fn(async () =>
         Response.json(
           {
-            errorCode: "prepare-rate-limit",
-            errorMessage: "Offline package preparation quota exceeded",
+            error: "Offline package preparation quota exceeded",
+            code: "prepare-rate-limit",
             retryAfterSeconds: 599,
           },
           { status: 429, headers: { "Retry-After": "599" } },
@@ -279,6 +279,7 @@ describe("offline package API client", () => {
     expect(error).toMatchObject({
       code: "prepare-rate-limit",
       status: 429,
+      message: "Offline package preparation quota exceeded",
       retryAfterSeconds: 599,
     });
   });
@@ -301,12 +302,12 @@ describe("offline package API client", () => {
     });
   });
 
-  it("accepts a typed unavailable capability from a failed public proxy", async () => {
+  it("reads an unavailable capability from the public proxy's error envelope", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Response.json(
-          { available: false, provider: "openmapx", reason: "source-unavailable" },
+          { error: "Offline package service unavailable", code: "source-unavailable" },
           { status: 502 },
         ),
       ),
@@ -316,6 +317,19 @@ describe("offline package API client", () => {
       available: false,
       provider: "openmapx",
       reason: "source-unavailable",
+    });
+  });
+
+  it("reports any other capability failure as an error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: "Too many requests" }, { status: 429 })),
+    );
+
+    await expect(defaultOfflinePackageApi.capability()).rejects.toMatchObject({
+      code: "http-429",
+      status: 429,
+      message: "Too many requests",
     });
   });
 });

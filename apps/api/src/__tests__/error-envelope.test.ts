@@ -8,24 +8,18 @@ import { describe, expect, it } from "vitest";
  * refuses an error reply whose literal body has no `error` field: a
  * `.status(n).send({...})` or `.code(n).send({...})` chain, and a handler that
  * sets the status and then returns or sends the body. A status literal below
- * 400 is a success; any other status expression counts as an error. Bodies
- * built elsewhere or spread from another object are not judged.
+ * 400 is a success; any other status expression counts as an error. A body
+ * wrapped in `satisfies`, `as` or parentheses is judged by the literal inside.
+ * Bodies built elsewhere or spread from another object are not judged.
  */
 
 const REPO = resolve(import.meta.dirname, "../../../..");
-const SCANNED = ["apps/api/src", "integrations", "packages/integration-framework/src"];
-
-/**
- * Error replies that keep another family's shape, with the reason.
- * Each entry is the exact number of refused bodies in that file.
- */
-const EXCEPTIONS: Record<string, { count: number; reason: string }> = {
-  "apps/api/src/routes/offline-packages.ts": {
-    count: 4,
-    reason:
-      "Offline package preparation answers data-manager's typed result ({ ok, errorCode, errorMessage }), which the route also passes through unchanged",
-  },
-};
+const SCANNED = [
+  "apps/api/src",
+  "integrations",
+  "packages/integration-framework/src",
+  "services/data-manager/src",
+];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -72,8 +66,22 @@ function isSend(node: ts.Node): node is ts.CallExpression {
   );
 }
 
+/** The expression inside any `satisfies`, `as` and parentheses around it. */
+function unwrapped(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isSatisfiesExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isParenthesizedExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
 /** A literal body without `error` and without a spread that could supply it. */
-function lacksEnvelope(body: ts.Expression | undefined): body is ts.ObjectLiteralExpression {
+function lacksEnvelope(expression: ts.Expression | undefined): boolean {
+  const body = expression && unwrapped(expression);
   if (!body || !ts.isObjectLiteralExpression(body)) return false;
   return !body.properties.some(
     (property) =>
@@ -109,7 +117,7 @@ function findNonEnvelopeErrors(fileName: string, source: string): number[] {
           if (status) errorStatus = isErrorStatus(status);
         }
         if (errorStatus && ts.isReturnStatement(statement) && statement.expression) {
-          const returned = statement.expression;
+          const returned = unwrapped(statement.expression);
           const body = isSend(returned) ? returned.arguments[0] : returned;
           if (lacksEnvelope(body)) report(statement);
         }
@@ -136,6 +144,20 @@ describe("error envelope detection", () => {
     ).toEqual([3]);
   });
 
+  it("sees a literal body through satisfies, as and parentheses", () => {
+    expect(offenders(`reply.code(502).send({ available: false } satisfies Capability);`)).toEqual([
+      1,
+    ]);
+    expect(offenders(`reply.status(400).send({ message: "bad" } as Body);`)).toEqual([1]);
+    expect(offenders(`reply.status(400).send(({ message: "bad" }));`)).toEqual([1]);
+    expect(
+      offenders(
+        `function h() {\n  reply.code(503);\n  return ({ code: "DOWN" }) satisfies Body;\n}`,
+      ),
+    ).toEqual([3]);
+    expect(offenders(`reply.status(400).send({ error: "bad" } satisfies Body);`)).toEqual([]);
+  });
+
   it("accepts the envelope, success bodies and bodies it cannot see", () => {
     expect(offenders(`reply.status(400).send({ error: "bad" });`)).toEqual([]);
     expect(offenders(`reply.status(409).send({ error: "taken", code: "TAKEN" });`)).toEqual([]);
@@ -152,11 +174,11 @@ describe("error envelope detection", () => {
 describe("API error replies use the { error, code? } envelope", () => {
   const files = SCANNED.flatMap((dir) => sourceFiles(join(REPO, dir)));
 
-  it("scans the API, the integrations and the integration framework", () => {
+  it("scans the API, the integrations, the integration framework and data-manager", () => {
     expect(files.length).toBeGreaterThan(500);
   });
 
-  it("has no error reply without the envelope beyond the listed exceptions", () => {
+  it("has no error reply without the envelope", () => {
     const found = new Map<string, number[]>();
     for (const file of files) {
       const source = readFileSync(file, "utf8");
@@ -165,14 +187,10 @@ describe("API error replies use the { error, code? } envelope", () => {
       const lines = findNonEnvelopeErrors(file, source);
       if (lines.length) found.set(relative(REPO, file), lines);
     }
-    const unexpected = [...found].flatMap(([file, lines]) =>
-      EXCEPTIONS[file]?.count === lines.length ? [] : lines.map((line) => `${file}:${line}`),
-    );
+    const offending = [...found].flatMap(([file, lines]) => lines.map((line) => `${file}:${line}`));
     expect(
-      unexpected,
-      `Error replies must send { error, code? }; put the human-readable text in "error":\n${unexpected.join("\n")}`,
+      offending,
+      `Error replies must send { error, code? }; put the human-readable text in "error":\n${offending.join("\n")}`,
     ).toEqual([]);
-    const stale = Object.keys(EXCEPTIONS).filter((file) => !found.has(file));
-    expect(stale, "Listed exceptions that no longer occur").toEqual([]);
   });
 });

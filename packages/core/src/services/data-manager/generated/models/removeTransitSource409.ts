@@ -19,8 +19,8 @@ export type RemoveTransitSource409 =
       code?: string;
     }
   | {
-      ok: false;
-      reason: "in-flight" | "duplicate-idempotency-key";
+      error: string;
+      code: "in-flight" | "duplicate-idempotency-key";
       /** @nullable */
       existingJobId: string | null;
     }

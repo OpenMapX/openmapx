@@ -27,7 +27,6 @@ import {
   transitPreflightSelectionSchema,
   transitPreflightStaleSchema,
   transitProfileSchema,
-  transitScopeRejectedSchema,
   transitSourceActionErrorSchema,
   transitSourceListSchema,
   transitSourceMutationResultSchema,
@@ -212,7 +211,7 @@ export const dataManagerAdminOperations = {
       ...common,
       202: json(transitSyncAcceptedSchema),
       409: json(z.union([httpErrorSchema, transitConflictSchema, transitPreflightStaleSchema])),
-      422: json(transitScopeRejectedSchema),
+      422: json(httpErrorSchema),
     },
   },
   postApiDataManagerTransitRestartMotis: {

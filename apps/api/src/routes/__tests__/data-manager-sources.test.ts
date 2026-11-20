@@ -145,7 +145,11 @@ describe("transit source proxy", () => {
   it("propagates a conflict without writing a successful-mutation audit", async () => {
     fetchMock.mockResolvedValue(
       new Response(
-        JSON.stringify({ ok: false, reason: "in-flight", existingJobId: "running-job" }),
+        JSON.stringify({
+          error: "Another data job is running. Try again when it finishes.",
+          code: "in-flight",
+          existingJobId: "running-job",
+        }),
         {
           status: 409,
           headers: { "content-type": "application/json" },

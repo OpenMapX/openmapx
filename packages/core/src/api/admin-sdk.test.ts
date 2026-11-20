@@ -17,9 +17,21 @@ describe("complete generated administration operations", () => {
         Response.json({ ok: true, jobId: "job", status: "started" }, { status: 202 }),
       )
       .mockResolvedValueOnce(
-        Response.json({ ok: false, reason: "in-flight", existingJobId: "job" }, { status: 409 }),
+        Response.json(
+          { error: "Another data job is running.", code: "in-flight", existingJobId: "job" },
+          { status: 409 },
+        ),
       )
-      .mockResolvedValueOnce(Response.json({ ok: false, reason: "out-of-scope" }, { status: 422 }));
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            statusCode: 422,
+            error: "Unprocessable Entity",
+            message: "Countries outside configured operations profile",
+          },
+          { status: 422 },
+        ),
+      );
     vi.stubGlobal("fetch", fetch);
     const accepted = await sdk.postApiDataManagerTransitSync(
       {
