@@ -36,6 +36,7 @@
     "check-migration-order": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-migration-order.ts",
     "check-ops-authority": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-ops-authority.ts",
     "check-integration-cache-writes": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-integration-cache-writes.ts",
+    "check-provider-http": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-provider-http.ts",
     "check-service-files": "node scripts/service-files.mjs --check",
     "generate:service-files": "node scripts/service-files.mjs",
     "check-feed-ids": "pnpm -C scripts exec tsx check-feed-ids.ts",

@@ -882,6 +882,13 @@ per-client observed cooldown fallback. The
 [Entur runtime guide](https://github.com/OpenMapX/openmapx/blob/main/packages/entur-client/README.md)
 documents those limits and the separate national-situations cache contract.
 
+`http.get()` and `http.post()` return bounded JSON and reject a non-2xx answer
+with `FetchJsonHttpError` from `@openmapx/core`. It carries `status` and the
+`Retry-After` delay as `retryAfterMs`, so provider failure classification can tell
+authorization, quota and upstream failures apart. Its message never contains the
+URL, because provider keys often sit in the query string. Both methods append
+`params` to the query string.
+
 Use `http.getResponse()` or `http.postResponse()` for JSON when status or
 allowlisted rate-limit headers matter, `http.getBytes()` for buffered binary
 payloads, and `http.getText()` / `http.postText()` for XML or other text.
@@ -922,8 +929,33 @@ checked, and the original timeout covers the whole chain and body. Standard
 authorization, cookie and proxy-authorization headers are removed permanently
 after a cross-origin hop; same-origin redirects retain them. Trusted redirects
 reject HTTPS-to-HTTP downgrades and URL credentials before contacting the target.
-Omitting `redirect` retains native fetch redirect behavior.
-Integration-local raw `fetch` is not an escape hatch for provider work.
+Omitting `redirect` follows redirects, unless a caller header falls outside the
+representation headers (`Accept`, `Accept-Language`, `Content-Type`,
+`If-None-Match`, `If-Modified-Since`). Such a header may carry a credential, for
+example `x-api-key`, so the request then refuses every redirect. `get()` and
+`post()` apply the same rule.
+
+#### Choosing the HTTP path
+
+Server-side integration code and the shared provider packages use one of three
+paths:
+
+- **`ctx.http`**, or an `HttpClient` injected from it, for credentialed requests,
+  quota-bound acquisition, binary, streamed or tile responses, and whenever the
+  status or response headers matter.
+- **`fetchJson`** from `@openmapx/core` is accepted for simple, public, unkeyed
+  JSON from a fixed provider host.
+- **`safeFetch*`** or `mobilityHttpTransport` is required when the URL comes from
+  data, users or operator configuration. It is the SSRF boundary: it pins DNS and
+  refuses private hosts unless the operator allowlists them. `ctx.http` does not
+  provide that boundary.
+
+Never use raw `fetch` in server-side integration code or the shared provider
+packages, apart from listed local-service probes. `pnpm check-provider-http`
+enforces this rule. Its exception lists in `scripts/check-provider-http.ts` name
+each remaining site with its reason. The same check refuses a coordinate that
+falls back to zero (`lat ?? 0`), which would place a record at 0° N 0° E; reject
+or omit the record instead.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an
 array for a repeated key, or undefined. Use `scalarQuery`/`scalarQueries` and

@@ -170,8 +170,7 @@ function statusFromError(err: unknown): CatalogStatus {
 
 export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetchJson) {
   // Named `doFetch`, not `fetch`: shadowing the global would both confuse
-  // readers and defeat the repo guard that looks for bare fetch() in
-  // integrations.
+  // readers and hide the module's raw fetch calls from `pnpm check-provider-http`.
   // Redirects are pinned to the target host whenever the request carries a
   // credential header: `safeFetchJson` forwards headers across hops, so a 302
   // from an otherwise-trusted feed would hand its API key to whatever host the

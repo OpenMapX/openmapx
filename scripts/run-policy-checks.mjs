@@ -19,6 +19,7 @@ export const POLICY_CHECKS = [
   "check-ops-authority",
   "check-declared-imports",
   "check-integration-cache-writes",
+  "check-provider-http",
   "check-entur-graphql",
   "check-entur-geocoder",
   "check-mbta",
