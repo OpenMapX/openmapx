@@ -11,19 +11,6 @@ const {
   writeAuditLog: mockWriteAuditLog,
 } = installAdminRouteMocks();
 
-// Rate limiters — no-op
-vi.mock("../../utils/rate-limit.js", async (importActual) => ({
-  ...(await importActual<typeof import("../../utils/rate-limit.js")>()),
-  healthCheckSweepLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  serviceActionLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  storeInstallLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  emailTestLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  publicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  authLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  expensivePublicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-  tilePublicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-}));
-
 // Job runner
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
@@ -107,31 +94,6 @@ vi.mock("../../db/index.js", () => ({
   },
 }));
 
-vi.mock("../../db/schema.js", () => ({
-  user: { id: "id", banned: "banned" },
-  session: { id: "id", userId: "userId", updatedAt: "updatedAt" },
-  adminAuditLog: {
-    id: "id",
-    action: "action",
-    actorId: "actorId",
-    targetType: "targetType",
-    targetId: "targetId",
-    createdAt: "createdAt",
-  },
-  adminJob: {
-    id: "id",
-    type: "type",
-    status: "status",
-    createdAt: "createdAt",
-    finishedAt: "finishedAt",
-    createdBy: "createdBy",
-    error: "error",
-    result: "result",
-  },
-  adminJobLog: { jobId: "jobId", seq: "seq" },
-  integrationConfig: { id: "id", integrationId: "integrationId", config: "config" },
-}));
-
 // Integration host
 const MOCK_INTEGRATION = {
   id: "geocoding-maptiler",
@@ -182,11 +144,6 @@ vi.mock("../../services/integration-health.js", () => ({
   executeIntegrationHealthCheck: (...args: unknown[]) => mockExecuteIntegrationHealthCheck(...args),
   executeAllIntegrationHealthChecks: (...args: unknown[]) =>
     mockExecuteAllIntegrationHealthChecks(...args),
-}));
-
-// Health history
-vi.mock("../../services/health-history.js", () => ({
-  getTimeline: vi.fn().mockResolvedValue([]),
 }));
 
 // Secrets
@@ -256,27 +213,11 @@ vi.mock("../../services/service-inventory", () => ({
   }),
 }));
 
-// Docker compose
-const mockDockerComposePs = vi.fn().mockResolvedValue([]);
-vi.mock("../../utils/docker-compose.js", () => ({
-  dockerComposePs: (...args: unknown[]) => mockDockerComposePs(...args),
-}));
-
-// Admin ops
-vi.mock("../../services/admin-ops.js", () => ({
-  isDockerAvailable: vi.fn().mockResolvedValue(false),
-}));
-
 // validate-config-body
 const mockGetSecretFields = vi.fn().mockReturnValue([]);
 vi.mock("../../utils/validate-config-body.js", () => ({
   validateConfigBody: vi.fn().mockReturnValue({ updates: {}, errors: [] }),
   getSecretFields: (...args: unknown[]) => mockGetSecretFields(...args),
-}));
-
-// resolve-actor
-vi.mock("../../utils/resolve-actor.js", () => ({
-  resolveActors: vi.fn().mockResolvedValue(new Map()),
 }));
 
 let app: FastifyInstance;
@@ -653,21 +594,62 @@ describe("POST /admin/jobs/:id/cancel", () => {
 });
 
 describe("GET /admin/audit", () => {
-  it("returns audit log entries with total", async () => {
-    // Same two-query pattern as /admin/jobs
-    let callCount = 0;
-    mockDbSelect.mockImplementation(() => {
-      callCount++;
-      return callCount === 1 ? makeSelectChain([]) : makeSelectChain([{ total: 7 }]);
-    });
+  it("serializes every audit field the log view reads, with the resolved actor", async () => {
+    const row = {
+      id: "evt-1",
+      actorId: "user-1",
+      targetId: "user-99",
+      targetType: "user",
+      action: "user.ban",
+      details: { reason: "spam" },
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent",
+      createdAt: new Date("2026-06-17T12:00:00.000Z"),
+    };
+    // Entries, their count, then the actor lookup.
+    mockDbSelect
+      .mockImplementationOnce(() => makeSelectChain([row]))
+      .mockImplementationOnce(() => makeSelectChain([{ total: 7 }]))
+      .mockImplementationOnce(() =>
+        makeSelectChain([{ id: "user-1", name: "Ada", email: "ada@example.test" }]),
+      );
 
-    const res = await app.inject({ method: "GET", url: "/admin/audit" });
+    const res = await app.inject({ method: "GET", url: "/admin/audit?limit=10&offset=0" });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.entries).toBeDefined();
-    expect(body.total).toBe(7);
+    expect(res.json()).toEqual({
+      entries: [
+        {
+          ...row,
+          createdAt: "2026-06-17T12:00:00.000Z",
+          actor: { id: "user-1", name: "Ada", email: "ada@example.test" },
+        },
+      ],
+      total: 7,
+    });
   });
+
+  it("rejects a non-numeric page size before querying", async () => {
+    const res = await app.inject({ method: "GET", url: "/admin/audit?limit=all" });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDbSelect).not.toHaveBeenCalled();
+  });
+
+  it.each(["/admin/audit?limit=all", "/admin/audit/export?format=xml"])(
+    "answers an unauthenticated %s with 401 before validating its query",
+    async (url) => {
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(400);
+      mockRequireAdmin.mockRejectedValueOnce(
+        Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+      );
+
+      const res = await app.inject({ method: "GET", url });
+
+      expect(res.statusCode).toBe(401);
+      expect(mockDbSelect).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("GET /admin/audit/export", () => {

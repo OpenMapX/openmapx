@@ -31,6 +31,27 @@ describe("generated SDK transport", () => {
     );
   });
 
+  it("refuses a success body above the 8 MiB ceiling as a contract violation", async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`{"value":"${"x".repeat(8 * 1024 * 1024)}"}`));
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { headers: { "content-type": "application/json" } })),
+    );
+    await expect(sdkRequest("/api/example", { client, schema })).rejects.toBeInstanceOf(
+      ApiContractError,
+    );
+    expect(canceled).toBe(true);
+    expect(body.locked).toBe(false);
+  });
+
   it("returns an empty 304 without attempting JSON validation", async () => {
     vi.stubGlobal(
       "fetch",

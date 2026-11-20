@@ -19,7 +19,7 @@ export function evDirectionsQueryKey(req: EvDirectionsRequest | null) {
 export function useEvDirections(req: EvDirectionsRequest | null) {
   const query = useQuery({
     queryKey: evDirectionsQueryKey(req),
-    queryFn: () => postEvDirections(req as EvDirectionsRequest),
+    queryFn: ({ signal }) => postEvDirections(req as EvDirectionsRequest, undefined, { signal }),
     enabled: req != null && req.waypoints.length >= 2,
   });
   const data = useRoadConditionLease(query.data);

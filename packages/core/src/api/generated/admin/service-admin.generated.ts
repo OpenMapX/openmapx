@@ -11,7 +11,9 @@ import type {
 import { bindAdminDownloadTarget } from "../../admin-sdk-transport";
 import {
   applyAdminPlatformConfigurationRequest,
+  applyAdminSystemUpdateRequest,
   checkAdminServicesRequest,
+  checkAdminSystemUpdatesRequest,
   clearAdminCacheRequest,
   clearAdminReleaseSelectionRequest,
   createAdminArtifactTransferRequest,
@@ -21,9 +23,12 @@ import {
   deleteAdminServiceCredentialRequest,
   downloadAdminArtifactTransferContentRequest,
   exportAdminArtifactTransferRequest,
+  exportAdminAuditLogRequest,
   getAdminArtifactTransferCapabilitiesRequest,
   getAdminArtifactTransferRequest,
   getAdminComposePreviewRequest,
+  getAdminCoverageReportRequest,
+  getAdminCoverageSourceRequest,
   getAdminDawarichRequest,
   getAdminDeploymentRequest,
   getAdminPlatformConfigurationRequest,
@@ -32,10 +37,15 @@ import {
   getAdminServiceDataRequest,
   getAdminServiceRequest,
   getAdminServiceSelectionRequest,
+  getAdminSettingsRequest,
   getAdminSharedMobilityRequest,
+  getAdminSystemStatusRequest,
   importAdminArtifactTransferRequest,
   listAdminArtifactTransfersRequest,
+  listAdminAuditLogRequest,
   listAdminCacheNamespacesRequest,
+  listAdminCoverageRegionsRequest,
+  listAdminLogsRequest,
   listAdminOperationsRequest,
   listAdminServiceBackupsRequest,
   listAdminServicePresetsRequest,
@@ -53,12 +63,15 @@ import {
   runAdminOperationRequest,
   runAdminServiceActionRequest,
   runAdminServicesBulkActionRequest,
+  runAdminSystemDiagnosticsRequest,
+  sendAdminTestEmailRequest,
   setAdminServiceCredentialRequest,
   setAdminServiceSelectionRequest,
   startAdminComposeRequest,
   stopAdminComposeRequest,
   streamAdminServiceLogsRequest,
   updateAdminServiceConfigRequest,
+  updateAdminSettingsRequest,
   uploadAdminArtifactTransferContentRequest,
   validateAdminArtifactTransferRequest,
 } from "./operation-bindings.generated";
@@ -75,6 +88,16 @@ import type {
   ApplyAdminPlatformConfiguration503,
   ApplyAdminPlatformConfigurationBody,
   ApplyAdminPlatformConfigurationHeaders,
+  ApplyAdminSystemUpdate200,
+  ApplyAdminSystemUpdate400,
+  ApplyAdminSystemUpdate401,
+  ApplyAdminSystemUpdate403,
+  ApplyAdminSystemUpdate409,
+  ApplyAdminSystemUpdate413,
+  ApplyAdminSystemUpdate415,
+  ApplyAdminSystemUpdate429,
+  ApplyAdminSystemUpdate500,
+  ApplyAdminSystemUpdateBody,
   CheckAdminServices200,
   CheckAdminServices400,
   CheckAdminServices401,
@@ -84,6 +107,16 @@ import type {
   CheckAdminServices429,
   CheckAdminServices500,
   CheckAdminServicesBody,
+  CheckAdminSystemUpdates200,
+  CheckAdminSystemUpdates400,
+  CheckAdminSystemUpdates401,
+  CheckAdminSystemUpdates403,
+  CheckAdminSystemUpdates409,
+  CheckAdminSystemUpdates413,
+  CheckAdminSystemUpdates415,
+  CheckAdminSystemUpdates429,
+  CheckAdminSystemUpdates500,
+  CheckAdminSystemUpdatesBody,
   ClearAdminCache200,
   ClearAdminCache400,
   ClearAdminCache401,
@@ -199,6 +232,14 @@ import type {
   ExportAdminArtifactTransfer507,
   ExportAdminArtifactTransferBody,
   ExportAdminArtifactTransferHeaders,
+  ExportAdminAuditLog400,
+  ExportAdminAuditLog401,
+  ExportAdminAuditLog403,
+  ExportAdminAuditLog413,
+  ExportAdminAuditLog415,
+  ExportAdminAuditLog429,
+  ExportAdminAuditLog500,
+  ExportAdminAuditLogParams,
   GetAdminArtifactTransfer200,
   GetAdminArtifactTransfer400,
   GetAdminArtifactTransfer401,
@@ -235,6 +276,30 @@ import type {
   GetAdminComposePreview429,
   GetAdminComposePreview500,
   GetAdminComposePreview503,
+  GetAdminCoverageReport200,
+  GetAdminCoverageReport400,
+  GetAdminCoverageReport401,
+  GetAdminCoverageReport403,
+  GetAdminCoverageReport404,
+  GetAdminCoverageReport409,
+  GetAdminCoverageReport413,
+  GetAdminCoverageReport415,
+  GetAdminCoverageReport429,
+  GetAdminCoverageReport500,
+  GetAdminCoverageReport503,
+  GetAdminCoverageReportParams,
+  GetAdminCoverageSource200,
+  GetAdminCoverageSource400,
+  GetAdminCoverageSource401,
+  GetAdminCoverageSource403,
+  GetAdminCoverageSource404,
+  GetAdminCoverageSource409,
+  GetAdminCoverageSource413,
+  GetAdminCoverageSource415,
+  GetAdminCoverageSource429,
+  GetAdminCoverageSource500,
+  GetAdminCoverageSource503,
+  GetAdminCoverageSourceParams,
   GetAdminDawarich200,
   GetAdminDawarich400,
   GetAdminDawarich401,
@@ -309,6 +374,14 @@ import type {
   GetAdminServiceSelection429,
   GetAdminServiceSelection500,
   GetAdminServiceSelection503,
+  GetAdminSettings200,
+  GetAdminSettings400,
+  GetAdminSettings401,
+  GetAdminSettings403,
+  GetAdminSettings413,
+  GetAdminSettings415,
+  GetAdminSettings429,
+  GetAdminSettings500,
   GetAdminSharedMobility200,
   GetAdminSharedMobility400,
   GetAdminSharedMobility401,
@@ -317,6 +390,14 @@ import type {
   GetAdminSharedMobility415,
   GetAdminSharedMobility429,
   GetAdminSharedMobility500,
+  GetAdminSystemStatus200,
+  GetAdminSystemStatus400,
+  GetAdminSystemStatus401,
+  GetAdminSystemStatus403,
+  GetAdminSystemStatus413,
+  GetAdminSystemStatus415,
+  GetAdminSystemStatus429,
+  GetAdminSystemStatus500,
   ImportAdminArtifactTransfer202,
   ImportAdminArtifactTransfer400,
   ImportAdminArtifactTransfer401,
@@ -348,6 +429,15 @@ import type {
   ListAdminArtifactTransfers503,
   ListAdminArtifactTransfers507,
   ListAdminArtifactTransfersParams,
+  ListAdminAuditLog200,
+  ListAdminAuditLog400,
+  ListAdminAuditLog401,
+  ListAdminAuditLog403,
+  ListAdminAuditLog413,
+  ListAdminAuditLog415,
+  ListAdminAuditLog429,
+  ListAdminAuditLog500,
+  ListAdminAuditLogParams,
   ListAdminCacheNamespaces200,
   ListAdminCacheNamespaces400,
   ListAdminCacheNamespaces401,
@@ -356,6 +446,27 @@ import type {
   ListAdminCacheNamespaces415,
   ListAdminCacheNamespaces429,
   ListAdminCacheNamespaces500,
+  ListAdminCoverageRegions200,
+  ListAdminCoverageRegions400,
+  ListAdminCoverageRegions401,
+  ListAdminCoverageRegions403,
+  ListAdminCoverageRegions404,
+  ListAdminCoverageRegions409,
+  ListAdminCoverageRegions413,
+  ListAdminCoverageRegions415,
+  ListAdminCoverageRegions429,
+  ListAdminCoverageRegions500,
+  ListAdminCoverageRegions503,
+  ListAdminCoverageRegionsParams,
+  ListAdminLogs200,
+  ListAdminLogs400,
+  ListAdminLogs401,
+  ListAdminLogs403,
+  ListAdminLogs413,
+  ListAdminLogs415,
+  ListAdminLogs429,
+  ListAdminLogs500,
+  ListAdminLogsParams,
   ListAdminOperations200,
   ListAdminOperations400,
   ListAdminOperations401,
@@ -540,6 +651,24 @@ import type {
   RunAdminServicesBulkAction500,
   RunAdminServicesBulkActionBody,
   RunAdminServicesBulkActionHeaders,
+  RunAdminSystemDiagnostics200,
+  RunAdminSystemDiagnostics400,
+  RunAdminSystemDiagnostics401,
+  RunAdminSystemDiagnostics403,
+  RunAdminSystemDiagnostics409,
+  RunAdminSystemDiagnostics413,
+  RunAdminSystemDiagnostics415,
+  RunAdminSystemDiagnostics429,
+  RunAdminSystemDiagnostics500,
+  RunAdminSystemDiagnosticsBody,
+  SendAdminTestEmail200,
+  SendAdminTestEmail400,
+  SendAdminTestEmail401,
+  SendAdminTestEmail403,
+  SendAdminTestEmail413,
+  SendAdminTestEmail415,
+  SendAdminTestEmail429,
+  SendAdminTestEmail500,
   SetAdminServiceCredential200,
   SetAdminServiceCredential400,
   SetAdminServiceCredential401,
@@ -608,6 +737,15 @@ import type {
   UpdateAdminServiceConfig500,
   UpdateAdminServiceConfigBody,
   UpdateAdminServiceConfigHeaders,
+  UpdateAdminSettings200,
+  UpdateAdminSettings400,
+  UpdateAdminSettings401,
+  UpdateAdminSettings403,
+  UpdateAdminSettings413,
+  UpdateAdminSettings415,
+  UpdateAdminSettings429,
+  UpdateAdminSettings500,
+  UpdateAdminSettingsBody,
   UploadAdminArtifactTransferContent200,
   UploadAdminArtifactTransferContent400,
   UploadAdminArtifactTransferContent401,
@@ -2034,6 +2172,187 @@ export const validateAdminArtifactTransfer = async (
   );
 };
 
+export type listAdminAuditLogResponse200 = {
+  data: ListAdminAuditLog200;
+  status: 200;
+};
+
+export type listAdminAuditLogResponse400 = {
+  data: ListAdminAuditLog400;
+  status: 400;
+};
+
+export type listAdminAuditLogResponse401 = {
+  data: ListAdminAuditLog401;
+  status: 401;
+};
+
+export type listAdminAuditLogResponse403 = {
+  data: ListAdminAuditLog403;
+  status: 403;
+};
+
+export type listAdminAuditLogResponse413 = {
+  data: ListAdminAuditLog413;
+  status: 413;
+};
+
+export type listAdminAuditLogResponse415 = {
+  data: ListAdminAuditLog415;
+  status: 415;
+};
+
+export type listAdminAuditLogResponse429 = {
+  data: ListAdminAuditLog429;
+  status: 429;
+};
+
+export type listAdminAuditLogResponse500 = {
+  data: ListAdminAuditLog500;
+  status: 500;
+};
+
+export type listAdminAuditLogResponseSuccess = listAdminAuditLogResponse200 & {
+  headers: Headers;
+};
+export type listAdminAuditLogResponseError = (
+  | listAdminAuditLogResponse400
+  | listAdminAuditLogResponse401
+  | listAdminAuditLogResponse403
+  | listAdminAuditLogResponse413
+  | listAdminAuditLogResponse415
+  | listAdminAuditLogResponse429
+  | listAdminAuditLogResponse500
+) & {
+  headers: Headers;
+};
+
+export type listAdminAuditLogResponse =
+  | listAdminAuditLogResponseSuccess
+  | listAdminAuditLogResponseError;
+
+export const getListAdminAuditLogUrl = (params?: ListAdminAuditLogParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/audit?${stringifiedParams}`
+    : `/api/admin/audit`;
+};
+
+export const listAdminAuditLog = async (
+  params?: ListAdminAuditLogParams,
+  options?: Parameters<typeof listAdminAuditLogRequest>[1],
+): Promise<listAdminAuditLogResponse> => {
+  return listAdminAuditLogRequest<listAdminAuditLogResponse>(getListAdminAuditLogUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type exportAdminAuditLogResponse200TextCsv = {
+  data: Blob;
+  status: 200;
+};
+
+export type exportAdminAuditLogResponse200ApplicationJson = {
+  data: Blob;
+  status: 200;
+};
+
+export type exportAdminAuditLogResponse400 = {
+  data: ExportAdminAuditLog400;
+  status: 400;
+};
+
+export type exportAdminAuditLogResponse401 = {
+  data: ExportAdminAuditLog401;
+  status: 401;
+};
+
+export type exportAdminAuditLogResponse403 = {
+  data: ExportAdminAuditLog403;
+  status: 403;
+};
+
+export type exportAdminAuditLogResponse413 = {
+  data: ExportAdminAuditLog413;
+  status: 413;
+};
+
+export type exportAdminAuditLogResponse415 = {
+  data: ExportAdminAuditLog415;
+  status: 415;
+};
+
+export type exportAdminAuditLogResponse429 = {
+  data: ExportAdminAuditLog429;
+  status: 429;
+};
+
+export type exportAdminAuditLogResponse500 = {
+  data: ExportAdminAuditLog500;
+  status: 500;
+};
+
+export type exportAdminAuditLogResponseSuccess = (
+  | exportAdminAuditLogResponse200TextCsv
+  | exportAdminAuditLogResponse200ApplicationJson
+) & {
+  headers: Headers;
+};
+export type exportAdminAuditLogResponseError = (
+  | exportAdminAuditLogResponse400
+  | exportAdminAuditLogResponse401
+  | exportAdminAuditLogResponse403
+  | exportAdminAuditLogResponse413
+  | exportAdminAuditLogResponse415
+  | exportAdminAuditLogResponse429
+  | exportAdminAuditLogResponse500
+) & {
+  headers: Headers;
+};
+
+export type exportAdminAuditLogResponse =
+  | exportAdminAuditLogResponseSuccess
+  | exportAdminAuditLogResponseError;
+
+export const getExportAdminAuditLogUrl = (params?: ExportAdminAuditLogParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/audit/export?${stringifiedParams}`
+    : `/api/admin/audit/export`;
+};
+
+export const exportAdminAuditLog = async (
+  params?: ExportAdminAuditLogParams,
+  options?: Parameters<typeof exportAdminAuditLogRequest>[1],
+): Promise<exportAdminAuditLogResponse> => {
+  return exportAdminAuditLogRequest<exportAdminAuditLogResponse>(
+    getExportAdminAuditLogUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
 export type listAdminCacheNamespacesResponse200 = {
   data: ListAdminCacheNamespaces200;
   status: 200;
@@ -2583,6 +2902,324 @@ export const startAdminCompose = async (
   });
 };
 
+export type getAdminCoverageReportResponse200 = {
+  data: GetAdminCoverageReport200;
+  status: 200;
+};
+
+export type getAdminCoverageReportResponse400 = {
+  data: GetAdminCoverageReport400;
+  status: 400;
+};
+
+export type getAdminCoverageReportResponse401 = {
+  data: GetAdminCoverageReport401;
+  status: 401;
+};
+
+export type getAdminCoverageReportResponse403 = {
+  data: GetAdminCoverageReport403;
+  status: 403;
+};
+
+export type getAdminCoverageReportResponse404 = {
+  data: GetAdminCoverageReport404;
+  status: 404;
+};
+
+export type getAdminCoverageReportResponse409 = {
+  data: GetAdminCoverageReport409;
+  status: 409;
+};
+
+export type getAdminCoverageReportResponse413 = {
+  data: GetAdminCoverageReport413;
+  status: 413;
+};
+
+export type getAdminCoverageReportResponse415 = {
+  data: GetAdminCoverageReport415;
+  status: 415;
+};
+
+export type getAdminCoverageReportResponse429 = {
+  data: GetAdminCoverageReport429;
+  status: 429;
+};
+
+export type getAdminCoverageReportResponse500 = {
+  data: GetAdminCoverageReport500;
+  status: 500;
+};
+
+export type getAdminCoverageReportResponse503 = {
+  data: GetAdminCoverageReport503;
+  status: 503;
+};
+
+export type getAdminCoverageReportResponseSuccess = getAdminCoverageReportResponse200 & {
+  headers: Headers;
+};
+export type getAdminCoverageReportResponseError = (
+  | getAdminCoverageReportResponse400
+  | getAdminCoverageReportResponse401
+  | getAdminCoverageReportResponse403
+  | getAdminCoverageReportResponse404
+  | getAdminCoverageReportResponse409
+  | getAdminCoverageReportResponse413
+  | getAdminCoverageReportResponse415
+  | getAdminCoverageReportResponse429
+  | getAdminCoverageReportResponse500
+  | getAdminCoverageReportResponse503
+) & {
+  headers: Headers;
+};
+
+export type getAdminCoverageReportResponse =
+  | getAdminCoverageReportResponseSuccess
+  | getAdminCoverageReportResponseError;
+
+export const getGetAdminCoverageReportUrl = (params: GetAdminCoverageReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/coverage?${stringifiedParams}`
+    : `/api/admin/coverage`;
+};
+
+export const getAdminCoverageReport = async (
+  params: GetAdminCoverageReportParams,
+  options?: Parameters<typeof getAdminCoverageReportRequest>[1],
+): Promise<getAdminCoverageReportResponse> => {
+  return getAdminCoverageReportRequest<getAdminCoverageReportResponse>(
+    getGetAdminCoverageReportUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type listAdminCoverageRegionsResponse200 = {
+  data: ListAdminCoverageRegions200;
+  status: 200;
+};
+
+export type listAdminCoverageRegionsResponse400 = {
+  data: ListAdminCoverageRegions400;
+  status: 400;
+};
+
+export type listAdminCoverageRegionsResponse401 = {
+  data: ListAdminCoverageRegions401;
+  status: 401;
+};
+
+export type listAdminCoverageRegionsResponse403 = {
+  data: ListAdminCoverageRegions403;
+  status: 403;
+};
+
+export type listAdminCoverageRegionsResponse404 = {
+  data: ListAdminCoverageRegions404;
+  status: 404;
+};
+
+export type listAdminCoverageRegionsResponse409 = {
+  data: ListAdminCoverageRegions409;
+  status: 409;
+};
+
+export type listAdminCoverageRegionsResponse413 = {
+  data: ListAdminCoverageRegions413;
+  status: 413;
+};
+
+export type listAdminCoverageRegionsResponse415 = {
+  data: ListAdminCoverageRegions415;
+  status: 415;
+};
+
+export type listAdminCoverageRegionsResponse429 = {
+  data: ListAdminCoverageRegions429;
+  status: 429;
+};
+
+export type listAdminCoverageRegionsResponse500 = {
+  data: ListAdminCoverageRegions500;
+  status: 500;
+};
+
+export type listAdminCoverageRegionsResponse503 = {
+  data: ListAdminCoverageRegions503;
+  status: 503;
+};
+
+export type listAdminCoverageRegionsResponseSuccess = listAdminCoverageRegionsResponse200 & {
+  headers: Headers;
+};
+export type listAdminCoverageRegionsResponseError = (
+  | listAdminCoverageRegionsResponse400
+  | listAdminCoverageRegionsResponse401
+  | listAdminCoverageRegionsResponse403
+  | listAdminCoverageRegionsResponse404
+  | listAdminCoverageRegionsResponse409
+  | listAdminCoverageRegionsResponse413
+  | listAdminCoverageRegionsResponse415
+  | listAdminCoverageRegionsResponse429
+  | listAdminCoverageRegionsResponse500
+  | listAdminCoverageRegionsResponse503
+) & {
+  headers: Headers;
+};
+
+export type listAdminCoverageRegionsResponse =
+  | listAdminCoverageRegionsResponseSuccess
+  | listAdminCoverageRegionsResponseError;
+
+export const getListAdminCoverageRegionsUrl = (params?: ListAdminCoverageRegionsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/coverage/regions?${stringifiedParams}`
+    : `/api/admin/coverage/regions`;
+};
+
+export const listAdminCoverageRegions = async (
+  params?: ListAdminCoverageRegionsParams,
+  options?: Parameters<typeof listAdminCoverageRegionsRequest>[1],
+): Promise<listAdminCoverageRegionsResponse> => {
+  return listAdminCoverageRegionsRequest<listAdminCoverageRegionsResponse>(
+    getListAdminCoverageRegionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getAdminCoverageSourceResponse200 = {
+  data: GetAdminCoverageSource200;
+  status: 200;
+};
+
+export type getAdminCoverageSourceResponse400 = {
+  data: GetAdminCoverageSource400;
+  status: 400;
+};
+
+export type getAdminCoverageSourceResponse401 = {
+  data: GetAdminCoverageSource401;
+  status: 401;
+};
+
+export type getAdminCoverageSourceResponse403 = {
+  data: GetAdminCoverageSource403;
+  status: 403;
+};
+
+export type getAdminCoverageSourceResponse404 = {
+  data: GetAdminCoverageSource404;
+  status: 404;
+};
+
+export type getAdminCoverageSourceResponse409 = {
+  data: GetAdminCoverageSource409;
+  status: 409;
+};
+
+export type getAdminCoverageSourceResponse413 = {
+  data: GetAdminCoverageSource413;
+  status: 413;
+};
+
+export type getAdminCoverageSourceResponse415 = {
+  data: GetAdminCoverageSource415;
+  status: 415;
+};
+
+export type getAdminCoverageSourceResponse429 = {
+  data: GetAdminCoverageSource429;
+  status: 429;
+};
+
+export type getAdminCoverageSourceResponse500 = {
+  data: GetAdminCoverageSource500;
+  status: 500;
+};
+
+export type getAdminCoverageSourceResponse503 = {
+  data: GetAdminCoverageSource503;
+  status: 503;
+};
+
+export type getAdminCoverageSourceResponseSuccess = getAdminCoverageSourceResponse200 & {
+  headers: Headers;
+};
+export type getAdminCoverageSourceResponseError = (
+  | getAdminCoverageSourceResponse400
+  | getAdminCoverageSourceResponse401
+  | getAdminCoverageSourceResponse403
+  | getAdminCoverageSourceResponse404
+  | getAdminCoverageSourceResponse409
+  | getAdminCoverageSourceResponse413
+  | getAdminCoverageSourceResponse415
+  | getAdminCoverageSourceResponse429
+  | getAdminCoverageSourceResponse500
+  | getAdminCoverageSourceResponse503
+) & {
+  headers: Headers;
+};
+
+export type getAdminCoverageSourceResponse =
+  | getAdminCoverageSourceResponseSuccess
+  | getAdminCoverageSourceResponseError;
+
+export const getGetAdminCoverageSourceUrl = (params: GetAdminCoverageSourceParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/coverage/source?${stringifiedParams}`
+    : `/api/admin/coverage/source`;
+};
+
+export const getAdminCoverageSource = async (
+  params: GetAdminCoverageSourceParams,
+  options?: Parameters<typeof getAdminCoverageSourceRequest>[1],
+): Promise<getAdminCoverageSourceResponse> => {
+  return getAdminCoverageSourceRequest<getAdminCoverageSourceResponse>(
+    getGetAdminCoverageSourceUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
 export type getAdminDawarichResponse200 = {
   data: GetAdminDawarich200;
   status: 200;
@@ -2971,6 +3608,87 @@ export const getAdminDeployment = async (
   options?: Parameters<typeof getAdminDeploymentRequest>[1],
 ): Promise<getAdminDeploymentResponse> => {
   return getAdminDeploymentRequest<getAdminDeploymentResponse>(getGetAdminDeploymentUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type listAdminLogsResponse200 = {
+  data: ListAdminLogs200;
+  status: 200;
+};
+
+export type listAdminLogsResponse400 = {
+  data: ListAdminLogs400;
+  status: 400;
+};
+
+export type listAdminLogsResponse401 = {
+  data: ListAdminLogs401;
+  status: 401;
+};
+
+export type listAdminLogsResponse403 = {
+  data: ListAdminLogs403;
+  status: 403;
+};
+
+export type listAdminLogsResponse413 = {
+  data: ListAdminLogs413;
+  status: 413;
+};
+
+export type listAdminLogsResponse415 = {
+  data: ListAdminLogs415;
+  status: 415;
+};
+
+export type listAdminLogsResponse429 = {
+  data: ListAdminLogs429;
+  status: 429;
+};
+
+export type listAdminLogsResponse500 = {
+  data: ListAdminLogs500;
+  status: 500;
+};
+
+export type listAdminLogsResponseSuccess = listAdminLogsResponse200 & {
+  headers: Headers;
+};
+export type listAdminLogsResponseError = (
+  | listAdminLogsResponse400
+  | listAdminLogsResponse401
+  | listAdminLogsResponse403
+  | listAdminLogsResponse413
+  | listAdminLogsResponse415
+  | listAdminLogsResponse429
+  | listAdminLogsResponse500
+) & {
+  headers: Headers;
+};
+
+export type listAdminLogsResponse = listAdminLogsResponseSuccess | listAdminLogsResponseError;
+
+export const getListAdminLogsUrl = (params?: ListAdminLogsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/logs?${stringifiedParams}` : `/api/admin/logs`;
+};
+
+export const listAdminLogs = async (
+  params?: ListAdminLogsParams,
+  options?: Parameters<typeof listAdminLogsRequest>[1],
+): Promise<listAdminLogsResponse> => {
+  return listAdminLogsRequest<listAdminLogsResponse>(getListAdminLogsUrl(params), {
     ...options,
     method: "GET",
   });
@@ -5733,6 +6451,244 @@ export const streamAdminServiceLogs: (
 ) => ReturnType<typeof streamAdminServiceLogsClient.streamAdminServiceLogs> =
   streamAdminServiceLogsClient.streamAdminServiceLogs;
 
+export type getAdminSettingsResponse200 = {
+  data: GetAdminSettings200;
+  status: 200;
+};
+
+export type getAdminSettingsResponse400 = {
+  data: GetAdminSettings400;
+  status: 400;
+};
+
+export type getAdminSettingsResponse401 = {
+  data: GetAdminSettings401;
+  status: 401;
+};
+
+export type getAdminSettingsResponse403 = {
+  data: GetAdminSettings403;
+  status: 403;
+};
+
+export type getAdminSettingsResponse413 = {
+  data: GetAdminSettings413;
+  status: 413;
+};
+
+export type getAdminSettingsResponse415 = {
+  data: GetAdminSettings415;
+  status: 415;
+};
+
+export type getAdminSettingsResponse429 = {
+  data: GetAdminSettings429;
+  status: 429;
+};
+
+export type getAdminSettingsResponse500 = {
+  data: GetAdminSettings500;
+  status: 500;
+};
+
+export type getAdminSettingsResponseSuccess = getAdminSettingsResponse200 & {
+  headers: Headers;
+};
+export type getAdminSettingsResponseError = (
+  | getAdminSettingsResponse400
+  | getAdminSettingsResponse401
+  | getAdminSettingsResponse403
+  | getAdminSettingsResponse413
+  | getAdminSettingsResponse415
+  | getAdminSettingsResponse429
+  | getAdminSettingsResponse500
+) & {
+  headers: Headers;
+};
+
+export type getAdminSettingsResponse =
+  | getAdminSettingsResponseSuccess
+  | getAdminSettingsResponseError;
+
+export const getGetAdminSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const getAdminSettings = async (
+  options?: Parameters<typeof getAdminSettingsRequest>[1],
+): Promise<getAdminSettingsResponse> => {
+  return getAdminSettingsRequest<getAdminSettingsResponse>(getGetAdminSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type updateAdminSettingsResponse200 = {
+  data: UpdateAdminSettings200;
+  status: 200;
+};
+
+export type updateAdminSettingsResponse400 = {
+  data: UpdateAdminSettings400;
+  status: 400;
+};
+
+export type updateAdminSettingsResponse401 = {
+  data: UpdateAdminSettings401;
+  status: 401;
+};
+
+export type updateAdminSettingsResponse403 = {
+  data: UpdateAdminSettings403;
+  status: 403;
+};
+
+export type updateAdminSettingsResponse413 = {
+  data: UpdateAdminSettings413;
+  status: 413;
+};
+
+export type updateAdminSettingsResponse415 = {
+  data: UpdateAdminSettings415;
+  status: 415;
+};
+
+export type updateAdminSettingsResponse429 = {
+  data: UpdateAdminSettings429;
+  status: 429;
+};
+
+export type updateAdminSettingsResponse500 = {
+  data: UpdateAdminSettings500;
+  status: 500;
+};
+
+export type updateAdminSettingsResponseSuccess = updateAdminSettingsResponse200 & {
+  headers: Headers;
+};
+export type updateAdminSettingsResponseError = (
+  | updateAdminSettingsResponse400
+  | updateAdminSettingsResponse401
+  | updateAdminSettingsResponse403
+  | updateAdminSettingsResponse413
+  | updateAdminSettingsResponse415
+  | updateAdminSettingsResponse429
+  | updateAdminSettingsResponse500
+) & {
+  headers: Headers;
+};
+
+export type updateAdminSettingsResponse =
+  | updateAdminSettingsResponseSuccess
+  | updateAdminSettingsResponseError;
+
+export const getUpdateAdminSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const updateAdminSettings = async (
+  updateAdminSettingsBody: UpdateAdminSettingsBody,
+  options?: Parameters<typeof updateAdminSettingsRequest>[1],
+): Promise<updateAdminSettingsResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return updateAdminSettingsRequest<updateAdminSettingsResponse>(getUpdateAdminSettingsUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateAdminSettingsBody),
+  });
+};
+
+export type sendAdminTestEmailResponse200 = {
+  data: SendAdminTestEmail200;
+  status: 200;
+};
+
+export type sendAdminTestEmailResponse400 = {
+  data: SendAdminTestEmail400;
+  status: 400;
+};
+
+export type sendAdminTestEmailResponse401 = {
+  data: SendAdminTestEmail401;
+  status: 401;
+};
+
+export type sendAdminTestEmailResponse403 = {
+  data: SendAdminTestEmail403;
+  status: 403;
+};
+
+export type sendAdminTestEmailResponse413 = {
+  data: SendAdminTestEmail413;
+  status: 413;
+};
+
+export type sendAdminTestEmailResponse415 = {
+  data: SendAdminTestEmail415;
+  status: 415;
+};
+
+export type sendAdminTestEmailResponse429 = {
+  data: SendAdminTestEmail429;
+  status: 429;
+};
+
+export type sendAdminTestEmailResponse500 = {
+  data: SendAdminTestEmail500;
+  status: 500;
+};
+
+export type sendAdminTestEmailResponseSuccess = sendAdminTestEmailResponse200 & {
+  headers: Headers;
+};
+export type sendAdminTestEmailResponseError = (
+  | sendAdminTestEmailResponse400
+  | sendAdminTestEmailResponse401
+  | sendAdminTestEmailResponse403
+  | sendAdminTestEmailResponse413
+  | sendAdminTestEmailResponse415
+  | sendAdminTestEmailResponse429
+  | sendAdminTestEmailResponse500
+) & {
+  headers: Headers;
+};
+
+export type sendAdminTestEmailResponse =
+  | sendAdminTestEmailResponseSuccess
+  | sendAdminTestEmailResponseError;
+
+export const getSendAdminTestEmailUrl = () => {
+  return `/api/admin/settings/test-email`;
+};
+
+export const sendAdminTestEmail = async (
+  options?: Parameters<typeof sendAdminTestEmailRequest>[1],
+): Promise<sendAdminTestEmailResponse> => {
+  return sendAdminTestEmailRequest<sendAdminTestEmailResponse>(getSendAdminTestEmailUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
 export type getAdminSharedMobilityResponse200 = {
   data: GetAdminSharedMobility200;
   status: 200;
@@ -5804,6 +6760,181 @@ export const getAdminSharedMobility = async (
     {
       ...options,
       method: "GET",
+    },
+  );
+};
+
+export type getAdminSystemStatusResponse200 = {
+  data: GetAdminSystemStatus200;
+  status: 200;
+};
+
+export type getAdminSystemStatusResponse400 = {
+  data: GetAdminSystemStatus400;
+  status: 400;
+};
+
+export type getAdminSystemStatusResponse401 = {
+  data: GetAdminSystemStatus401;
+  status: 401;
+};
+
+export type getAdminSystemStatusResponse403 = {
+  data: GetAdminSystemStatus403;
+  status: 403;
+};
+
+export type getAdminSystemStatusResponse413 = {
+  data: GetAdminSystemStatus413;
+  status: 413;
+};
+
+export type getAdminSystemStatusResponse415 = {
+  data: GetAdminSystemStatus415;
+  status: 415;
+};
+
+export type getAdminSystemStatusResponse429 = {
+  data: GetAdminSystemStatus429;
+  status: 429;
+};
+
+export type getAdminSystemStatusResponse500 = {
+  data: GetAdminSystemStatus500;
+  status: 500;
+};
+
+export type getAdminSystemStatusResponseSuccess = getAdminSystemStatusResponse200 & {
+  headers: Headers;
+};
+export type getAdminSystemStatusResponseError = (
+  | getAdminSystemStatusResponse400
+  | getAdminSystemStatusResponse401
+  | getAdminSystemStatusResponse403
+  | getAdminSystemStatusResponse413
+  | getAdminSystemStatusResponse415
+  | getAdminSystemStatusResponse429
+  | getAdminSystemStatusResponse500
+) & {
+  headers: Headers;
+};
+
+export type getAdminSystemStatusResponse =
+  | getAdminSystemStatusResponseSuccess
+  | getAdminSystemStatusResponseError;
+
+export const getGetAdminSystemStatusUrl = () => {
+  return `/api/admin/system`;
+};
+
+export const getAdminSystemStatus = async (
+  options?: Parameters<typeof getAdminSystemStatusRequest>[1],
+): Promise<getAdminSystemStatusResponse> => {
+  return getAdminSystemStatusRequest<getAdminSystemStatusResponse>(getGetAdminSystemStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type runAdminSystemDiagnosticsResponse200 = {
+  data: RunAdminSystemDiagnostics200;
+  status: 200;
+};
+
+export type runAdminSystemDiagnosticsResponse400 = {
+  data: RunAdminSystemDiagnostics400;
+  status: 400;
+};
+
+export type runAdminSystemDiagnosticsResponse401 = {
+  data: RunAdminSystemDiagnostics401;
+  status: 401;
+};
+
+export type runAdminSystemDiagnosticsResponse403 = {
+  data: RunAdminSystemDiagnostics403;
+  status: 403;
+};
+
+export type runAdminSystemDiagnosticsResponse409 = {
+  data: RunAdminSystemDiagnostics409;
+  status: 409;
+};
+
+export type runAdminSystemDiagnosticsResponse413 = {
+  data: RunAdminSystemDiagnostics413;
+  status: 413;
+};
+
+export type runAdminSystemDiagnosticsResponse415 = {
+  data: RunAdminSystemDiagnostics415;
+  status: 415;
+};
+
+export type runAdminSystemDiagnosticsResponse429 = {
+  data: RunAdminSystemDiagnostics429;
+  status: 429;
+};
+
+export type runAdminSystemDiagnosticsResponse500 = {
+  data: RunAdminSystemDiagnostics500;
+  status: 500;
+};
+
+export type runAdminSystemDiagnosticsResponseSuccess = runAdminSystemDiagnosticsResponse200 & {
+  headers: Headers;
+};
+export type runAdminSystemDiagnosticsResponseError = (
+  | runAdminSystemDiagnosticsResponse400
+  | runAdminSystemDiagnosticsResponse401
+  | runAdminSystemDiagnosticsResponse403
+  | runAdminSystemDiagnosticsResponse409
+  | runAdminSystemDiagnosticsResponse413
+  | runAdminSystemDiagnosticsResponse415
+  | runAdminSystemDiagnosticsResponse429
+  | runAdminSystemDiagnosticsResponse500
+) & {
+  headers: Headers;
+};
+
+export type runAdminSystemDiagnosticsResponse =
+  | runAdminSystemDiagnosticsResponseSuccess
+  | runAdminSystemDiagnosticsResponseError;
+
+export const getRunAdminSystemDiagnosticsUrl = () => {
+  return `/api/admin/system/diagnostics`;
+};
+
+export const runAdminSystemDiagnostics = async (
+  runAdminSystemDiagnosticsBody?: RunAdminSystemDiagnosticsBody,
+  options?: Parameters<typeof runAdminSystemDiagnosticsRequest>[1],
+): Promise<runAdminSystemDiagnosticsResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return runAdminSystemDiagnosticsRequest<runAdminSystemDiagnosticsResponse>(
+    getRunAdminSystemDiagnosticsUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(runAdminSystemDiagnosticsBody),
     },
   );
 };
@@ -5914,6 +7045,212 @@ export const clearAdminReleaseSelection = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(clearAdminReleaseSelectionBody),
+    },
+  );
+};
+
+export type applyAdminSystemUpdateResponse200 = {
+  data: ApplyAdminSystemUpdate200;
+  status: 200;
+};
+
+export type applyAdminSystemUpdateResponse400 = {
+  data: ApplyAdminSystemUpdate400;
+  status: 400;
+};
+
+export type applyAdminSystemUpdateResponse401 = {
+  data: ApplyAdminSystemUpdate401;
+  status: 401;
+};
+
+export type applyAdminSystemUpdateResponse403 = {
+  data: ApplyAdminSystemUpdate403;
+  status: 403;
+};
+
+export type applyAdminSystemUpdateResponse409 = {
+  data: ApplyAdminSystemUpdate409;
+  status: 409;
+};
+
+export type applyAdminSystemUpdateResponse413 = {
+  data: ApplyAdminSystemUpdate413;
+  status: 413;
+};
+
+export type applyAdminSystemUpdateResponse415 = {
+  data: ApplyAdminSystemUpdate415;
+  status: 415;
+};
+
+export type applyAdminSystemUpdateResponse429 = {
+  data: ApplyAdminSystemUpdate429;
+  status: 429;
+};
+
+export type applyAdminSystemUpdateResponse500 = {
+  data: ApplyAdminSystemUpdate500;
+  status: 500;
+};
+
+export type applyAdminSystemUpdateResponseSuccess = applyAdminSystemUpdateResponse200 & {
+  headers: Headers;
+};
+export type applyAdminSystemUpdateResponseError = (
+  | applyAdminSystemUpdateResponse400
+  | applyAdminSystemUpdateResponse401
+  | applyAdminSystemUpdateResponse403
+  | applyAdminSystemUpdateResponse409
+  | applyAdminSystemUpdateResponse413
+  | applyAdminSystemUpdateResponse415
+  | applyAdminSystemUpdateResponse429
+  | applyAdminSystemUpdateResponse500
+) & {
+  headers: Headers;
+};
+
+export type applyAdminSystemUpdateResponse =
+  | applyAdminSystemUpdateResponseSuccess
+  | applyAdminSystemUpdateResponseError;
+
+export const getApplyAdminSystemUpdateUrl = () => {
+  return `/api/admin/system/updates/apply`;
+};
+
+export const applyAdminSystemUpdate = async (
+  applyAdminSystemUpdateBody: ApplyAdminSystemUpdateBody,
+  options?: Parameters<typeof applyAdminSystemUpdateRequest>[1],
+): Promise<applyAdminSystemUpdateResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return applyAdminSystemUpdateRequest<applyAdminSystemUpdateResponse>(
+    getApplyAdminSystemUpdateUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(applyAdminSystemUpdateBody),
+    },
+  );
+};
+
+export type checkAdminSystemUpdatesResponse200 = {
+  data: CheckAdminSystemUpdates200;
+  status: 200;
+};
+
+export type checkAdminSystemUpdatesResponse400 = {
+  data: CheckAdminSystemUpdates400;
+  status: 400;
+};
+
+export type checkAdminSystemUpdatesResponse401 = {
+  data: CheckAdminSystemUpdates401;
+  status: 401;
+};
+
+export type checkAdminSystemUpdatesResponse403 = {
+  data: CheckAdminSystemUpdates403;
+  status: 403;
+};
+
+export type checkAdminSystemUpdatesResponse409 = {
+  data: CheckAdminSystemUpdates409;
+  status: 409;
+};
+
+export type checkAdminSystemUpdatesResponse413 = {
+  data: CheckAdminSystemUpdates413;
+  status: 413;
+};
+
+export type checkAdminSystemUpdatesResponse415 = {
+  data: CheckAdminSystemUpdates415;
+  status: 415;
+};
+
+export type checkAdminSystemUpdatesResponse429 = {
+  data: CheckAdminSystemUpdates429;
+  status: 429;
+};
+
+export type checkAdminSystemUpdatesResponse500 = {
+  data: CheckAdminSystemUpdates500;
+  status: 500;
+};
+
+export type checkAdminSystemUpdatesResponseSuccess = checkAdminSystemUpdatesResponse200 & {
+  headers: Headers;
+};
+export type checkAdminSystemUpdatesResponseError = (
+  | checkAdminSystemUpdatesResponse400
+  | checkAdminSystemUpdatesResponse401
+  | checkAdminSystemUpdatesResponse403
+  | checkAdminSystemUpdatesResponse409
+  | checkAdminSystemUpdatesResponse413
+  | checkAdminSystemUpdatesResponse415
+  | checkAdminSystemUpdatesResponse429
+  | checkAdminSystemUpdatesResponse500
+) & {
+  headers: Headers;
+};
+
+export type checkAdminSystemUpdatesResponse =
+  | checkAdminSystemUpdatesResponseSuccess
+  | checkAdminSystemUpdatesResponseError;
+
+export const getCheckAdminSystemUpdatesUrl = () => {
+  return `/api/admin/system/updates/check`;
+};
+
+export const checkAdminSystemUpdates = async (
+  checkAdminSystemUpdatesBody?: CheckAdminSystemUpdatesBody,
+  options?: Parameters<typeof checkAdminSystemUpdatesRequest>[1],
+): Promise<checkAdminSystemUpdatesResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return checkAdminSystemUpdatesRequest<checkAdminSystemUpdatesResponse>(
+    getCheckAdminSystemUpdatesUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(checkAdminSystemUpdatesBody),
     },
   );
 };

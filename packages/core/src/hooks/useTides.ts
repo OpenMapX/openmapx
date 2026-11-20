@@ -45,13 +45,10 @@ const TIDE_PROVIDERS: ReadonlyArray<{ endpoint: string; provider: TideProvider }
 export function useTides(lat: number | null, lng: number | null, enabled = true) {
   return useQuery<TidesResponse | null>({
     queryKey: ["tides", lat, lng],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       for (const { endpoint, provider } of TIDE_PROVIDERS) {
         const result = await apiClient
-          .getOptional<TidesPayload>(endpoint, {
-            lat: String(lat),
-            lng: String(lng),
-          })
+          .getOptional<TidesPayload>(endpoint, { lat: String(lat), lng: String(lng) }, { signal })
           .catch(() => null);
         if (result) return { ...result, provider };
       }

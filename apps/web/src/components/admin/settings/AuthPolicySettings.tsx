@@ -17,7 +17,7 @@ export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   const scope = useAccountAdmin(),
     query = useQuery({
       queryKey: scope.keys.policy,
-      queryFn: () => scope.client.policy(),
+      queryFn: ({ signal }) => scope.client.policy(signal),
       enabled: !!scope.actorId,
       retry: false,
     });

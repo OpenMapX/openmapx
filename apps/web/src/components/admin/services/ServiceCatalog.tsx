@@ -180,7 +180,8 @@ function ServiceCatalogView() {
   } | null>(null);
   const presets = useQuery({
     queryKey: ["admin", "service-presets", apiUrl],
-    queryFn: async () => unwrapAdminResponse(await listAdminServicePresets({ client })),
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(await listAdminServicePresets({ client, signal })),
     retry: false,
   });
 

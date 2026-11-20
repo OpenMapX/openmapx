@@ -141,6 +141,11 @@ export interface EvidenceAttempt {
   message?: string;
 }
 
+/** One recent attempt on the evidence stream named by `key`. */
+export interface KeyedEvidenceAttempt extends EvidenceAttempt {
+  key: string;
+}
+
 export interface FreshnessPolicy {
   basis: string;
   expectedIntervalSeconds?: number | null;
@@ -408,12 +413,14 @@ export interface CoverageSourceDetail {
   generatedAt: string;
   evaluatedAt: string;
   collectionStatus: CollectionStatus;
+  collectionAgeSeconds: number;
+  authorities: AuthorityObservation[];
   source: CoverageSourceRow;
   evidence: StreamEvidence;
   runtime?: RuntimeEvidence;
   rights: RightsEvidence[];
   lineage: Array<{ fromKey: string; toKey: string; relation: string }>;
-  recentAttempts: Array<EvidenceAttempt & { key: string }>;
+  recentAttempts: KeyedEvidenceAttempt[];
   warnings: CoverageReasonCode[];
 }
 

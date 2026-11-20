@@ -25,10 +25,11 @@ describe("useStopSearch", () => {
       envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
     );
     expect(result.current.attributions).toEqual(envelope.attributions);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.transitStopSearch, {
-      q: "Haupt",
-      limit: "3",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.transitStopSearch,
+      { q: "Haupt", limit: "3" },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("does not fire for queries shorter than 2 characters", () => {

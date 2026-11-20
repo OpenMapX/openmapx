@@ -20,14 +20,20 @@ export function useOfficialBookingUrl(
 ) {
   return useQuery<string | null>({
     queryKey: ["official-booking", p.website ?? "", p.checkIn, p.checkOut, p.adults, p.rooms],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!p.website) return null;
       const params: Record<string, string> = { name: p.name, website: p.website };
       if (p.checkIn) params.checkIn = p.checkIn;
       if (p.checkOut) params.checkOut = p.checkOut;
       if (typeof p.adults === "number") params.adults = String(p.adults);
       if (typeof p.rooms === "number") params.rooms = String(p.rooms);
-      const res = await apiClient.getOptional<{ url: string }>(API_ENDPOINTS.hotelOfficial, params);
+      const res = await apiClient.getOptional<{ url: string }>(
+        API_ENDPOINTS.hotelOfficial,
+        params,
+        {
+          signal,
+        },
+      );
       return res?.url ?? null;
     },
     enabled: enabled && Boolean(p.website),

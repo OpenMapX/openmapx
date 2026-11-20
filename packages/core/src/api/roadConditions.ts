@@ -15,7 +15,7 @@ import {
   readRoadConditionEffects,
   roadConditionValiditySchema,
 } from "../utils/roadConditionEffects";
-import { apiClient } from "./client";
+import { type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export interface FetchRoadConditionsOptions {
@@ -37,6 +37,8 @@ export interface FetchRoadConditionsOptions {
 export interface FetchRoadConditionsResult {
   events: RoadConditionEvent[];
   ok: boolean;
+  /** The server's reply cap left less severe situations out of `events`. */
+  truncated?: true;
 }
 
 export interface RoadConditionFeature {
@@ -46,6 +48,7 @@ export interface RoadConditionFeature {
 
 interface RoadConditionFeatureCollection {
   features?: RoadConditionFeature[];
+  truncated?: unknown;
 }
 
 function str(v: unknown): string | undefined {
@@ -193,6 +196,16 @@ export function roadConditionFeatureToEvent(
 }
 
 /**
+ * Success ceiling for a road-conditions reply, derived from the server's cap
+ * of 3,000 situations per reply at the density OpenConditions pages them:
+ * 1,000 situations to a page under the host's 8 MiB JSON ceiling, so 3,000
+ * come to 24 MiB, plus one routing-evidence read under that ceiling (32 MiB).
+ * The reply restates each situation with its contributors, so it allows
+ * twice that. A reply above the ceiling reads as a failed refresh.
+ */
+const MAX_ROAD_CONDITIONS_REPLY_BYTES = 64 * 1024 * 1024;
+
+/**
  * Fetch road-condition events with an explicit transport status. This lets
  * interactive overlays retain their last good data when a refresh fails.
  */
@@ -207,15 +220,17 @@ export async function fetchRoadConditionsWithStatus(
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
     // `0` is a meaningful horizon ("active now"), so test for presence.
     if (opts?.horizonDays != null) params.horizonDays = String(opts.horizonDays);
-    const raw = opts?.signal
-      ? await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params, { signal: opts.signal })
-      : await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params);
+    const raw = await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params, {
+      maxBytes: MAX_ROAD_CONDITIONS_REPLY_BYTES,
+      ...(opts?.signal ? { signal: opts.signal } : {}),
+    });
     if (!isWellFormedFeatureCollection(raw)) return { ok: false, events: [] };
     return {
       ok: true,
       events: (raw.features ?? [])
         .map(roadConditionFeatureToEvent)
         .filter((e): e is RoadConditionEvent => e !== null),
+      ...(raw.truncated === true ? { truncated: true as const } : {}),
     };
   } catch {
     return { ok: false, events: [] };
@@ -229,12 +244,15 @@ export async function fetchRoadConditionsWithStatus(
  */
 export async function fetchRouteFlow(
   routes: RouteFlowInput[],
+  options: ApiRequestOptions = {},
 ): Promise<Record<string, RouteFlowSpan[]>> {
   if (routes.length === 0) return {};
   try {
-    const result = await apiClient.post<RouteFlowResponse>(API_ENDPOINTS.roadConditionsFlowRoute, {
-      routes,
-    });
+    const result = await apiClient.post<RouteFlowResponse>(
+      API_ENDPOINTS.roadConditionsFlowRoute,
+      { routes },
+      options,
+    );
     const out: Record<string, RouteFlowSpan[]> = {};
     for (const entry of result.routes ?? []) out[entry.id] = entry.spans ?? [];
     return out;

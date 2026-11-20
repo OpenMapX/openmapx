@@ -19,12 +19,16 @@ export function useLinkedTransitFacilities(
 
   const query = useQuery({
     queryKey: ["linked-transit-facilities", ...placeTransitKey(place)],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
-      return apiClient.get<MobilityEnvelope<Facility[]>>(API_ENDPOINTS.transitFacilitiesForPlace, {
-        ...placeTransitParams(p),
-      });
+      return apiClient.get<MobilityEnvelope<Facility[]>>(
+        API_ENDPOINTS.transitFacilitiesForPlace,
+        {
+          ...placeTransitParams(p),
+        },
+        { signal },
+      );
     },
     enabled,
     ...mobilityEnvelopeTiming(24 * 60 * 60 * 1000),

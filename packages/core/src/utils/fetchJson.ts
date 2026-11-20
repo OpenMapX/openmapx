@@ -79,7 +79,11 @@ async function awaitWithSignal<T>(
   signal: AbortSignal | undefined,
 ): Promise<T> {
   if (!signal) return operation;
-  signal.throwIfAborted();
+  if (signal.aborted) {
+    // The read already started; keep its rejection owned when cancellation wins.
+    void operation.catch(() => {});
+    signal.throwIfAborted();
+  }
   let removeAbortListener: (() => void) | undefined;
   const aborted = new Promise<never>((_resolve, reject) => {
     const abort = (): void => reject(signal.reason ?? new Error("response read aborted"));

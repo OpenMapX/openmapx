@@ -31,7 +31,8 @@ export function scheduledDirectionsQueryKey(request: ScheduleDirectionsRequest):
 export function useScheduledDirections(request: ScheduleDirectionsRequest | null) {
   const query = useQuery({
     queryKey: request ? scheduledDirectionsQueryKey(request) : ["directions-schedule", "disabled"],
-    queryFn: () => postScheduledDirections(request as ScheduleDirectionsRequest),
+    queryFn: ({ signal }) =>
+      postScheduledDirections(request as ScheduleDirectionsRequest, undefined, { signal }),
     enabled: request !== null,
     staleTime:
       request?.mode === "driving" || request?.mode === "motorcycle" || request?.avoidClosures

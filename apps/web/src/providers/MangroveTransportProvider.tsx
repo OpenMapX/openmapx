@@ -45,8 +45,8 @@ async function rawFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
-  async getKeypairEnvelope() {
-    const res = await rawFetch(API_ENDPOINTS.reviewKeypair);
+  async getKeypairEnvelope(options) {
+    const res = await rawFetch(API_ENDPOINTS.reviewKeypair, { signal: options?.signal });
     if (res.status === 204) return { state: "uninitialized" };
     if (!res.ok) throw new Error(`Keypair fetch failed: ${res.status}`);
     const data = await res.json();
@@ -94,17 +94,19 @@ const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
   uploadReviewImage(payload) {
     return apiClient.post<{ src: string }>(API_ENDPOINTS.reviewImage, payload);
   },
-  async fetchPlaceReviews(query) {
+  async fetchPlaceReviews(query, options) {
     const params: Record<string, string> = {
       lat: String(query.lat),
       lng: String(query.lng),
       name: query.name,
     };
     if (query.osmId) params.osmId = query.osmId;
-    const data = await apiClient.get<{ reviews: Review[] }>(API_ENDPOINTS.reviews, params);
+    const data = await apiClient.get<{ reviews: Review[] }>(API_ENDPOINTS.reviews, params, {
+      signal: options?.signal,
+    });
     return data.reviews;
   },
-  async fetchPlaceReviewAggregate(query) {
+  async fetchPlaceReviewAggregate(query, options) {
     const params: Record<string, string> = {
       lat: String(query.lat),
       lng: String(query.lng),
@@ -114,6 +116,7 @@ const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
     const data = await apiClient.get<{ aggregate: ReviewAggregate }>(
       API_ENDPOINTS.reviewAggregate,
       params,
+      { signal: options?.signal },
     );
     return data.aggregate;
   },

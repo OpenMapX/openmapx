@@ -7,9 +7,11 @@ import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMob
 export function useTransitRoute(routeId: string | null): MobilityEnvelopeQueryResult<TransitRoute> {
   const query = useQuery({
     queryKey: ["transit-route", routeId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<TransitRoute>>(
         `/api/integrations/transit/routes/${encodeURIComponent(routeId as string)}`,
+        undefined,
+        { signal },
       ),
     enabled: routeId !== null,
     staleTime: 300_000,

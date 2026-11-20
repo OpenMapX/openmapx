@@ -69,6 +69,8 @@ const detail = {
   lineage: [],
   recentAttempts: [],
   warnings: [],
+  collectionAgeSeconds: 0,
+  authorities: [],
 } satisfies CoverageSourceDetail;
 
 describe("SourceEvidenceDrawer", () => {

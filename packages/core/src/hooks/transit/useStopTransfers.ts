@@ -14,12 +14,12 @@ export function useStopTransfers(
 ): MobilityEnvelopeQueryResult<StopTransfer[]> {
   const query = useQuery({
     queryKey: ["stop-transfers", stopId],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const url = API_ENDPOINTS.transitStopTransfers.replace(
         ":id",
         encodeURIComponent(stopId as string),
       );
-      return apiClient.get<MobilityEnvelope<StopTransfer[]>>(url);
+      return apiClient.get<MobilityEnvelope<StopTransfer[]>>(url, undefined, { signal });
     },
     enabled: stopId !== null,
     staleTime: 60 * 60 * 1000,

@@ -289,6 +289,30 @@ Public integration health metadata contains `type`, optional `name` and
 optional `category`; operational URLs, headers and configuration keys stay
 inside the host. Source licensing uses the portable structured output schema.
 
+## Success-body ceilings of plain client reads
+
+The plain `ApiClient` methods (`get`, `getOptional`, `post`, `put`, `patch`,
+`delete`) read a success body whole and refuse one above 8 MiB. A read whose
+reply can legitimately be larger passes `maxBytes` with a ceiling derived from
+what the server can send:
+
+- Route plans (`/directions`, `/directions/optimize`, `/directions/ev` and
+  `/directions/schedule`): 64 MiB. BRouter answers with two reads of at most
+  32 MiB each; a Valhalla or OSRM reply is one read under the host's 8 MiB JSON
+  ceiling whose encoded shape decodes to a few times its size.
+- Road-condition situations (`/road-conditions/events`): the route sends at most
+  3,000 situations, keeping the most severe in their original order, and marks a
+  reply it shortened with `truncated: true` beside `features`. The ceiling is
+  derived from that count at the density OpenConditions pages situations: 1,000
+  to a page under the host's 8 MiB ceiling, so 3,000 come to 24 MiB, plus one
+  routing-evidence read under the same ceiling. The reply restates each
+  situation with its contributors, so the client allows twice that, 64 MiB. A
+  larger reply reads as a failed refresh. The OpenConditions display read stops
+  once it holds 2,000 situations, so the cap binds only when further providers
+  add to it.
+- Personal timeline days: 128 MiB, see
+  [Personal timeline response validation](#personal-timeline-response-validation).
+
 ## Generic weather forecasts
 
 `GET /api/integrations/weather/forecast` returns independent `hourly` and `daily`
@@ -542,6 +566,21 @@ without proving terminal completion. Handle expected status variants before
 unwrapping a response. Do not convert an unknown host outcome into a successful
 retry or rollback.
 
+The family also owns system settings and the test email, the application log
+buffer, the audit log and its export, system maintenance status and admission,
+and the coverage report: `getAdminSettings`, `updateAdminSettings`,
+`sendAdminTestEmail`, `listAdminLogs`, `listAdminAuditLog`, `exportAdminAuditLog`,
+`getAdminSystemStatus`, `checkAdminSystemUpdates`, `applyAdminSystemUpdate`,
+`runAdminSystemDiagnostics`, `listAdminCoverageRegions`, `getAdminCoverageReport`
+and `getAdminCoverageSource`. Their reply schemas are strict: a field the
+producer adds must be declared in the contract before it reaches the browser.
+Configured secret settings always read as `***`. The audit export is a
+`text-download` whose `format` query selects CSV or JSON; the browser downloads
+it by navigating to the generated URL. Coverage failures carry their stable code,
+such as `snapshot_expired`, in `error`. Maintenance admission answers 409 either
+with the active job's ID or with the deployment state when host maintenance is
+unavailable.
+
 `streamAdminServiceLogs` uses a bounded text-stream transport rather than JSON
 validation. The caller owns cancellation, consumption and release. The separate
 Activity observer owns accepted-job terminal effects; log closure alone cannot
@@ -793,8 +832,9 @@ before data enters timeline query/UI state. Invalid successful replies raise a
 payload-free `PersonalTimelineApiError` with `TIMELINE_RESPONSE_INVALID`. No raw
 response, schema issues or private history are attached to errors or persisted.
 Existing HTTP failure sanitization, owner isolation and partial-track warnings
-are preserved. Valid track positions can include elevation dimensions; no
-8 MiB generated-client limit is imposed on these larger normalized day replies.
+are preserved. Valid track positions can include elevation dimensions. Day
+replies may exceed the client's 8 MiB success-body default, so they declare a
+128 MiB ceiling derived from the 20 upstream track pages of 5 MiB each.
 
 ## Retrying service and backup mutations
 

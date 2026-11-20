@@ -28,7 +28,7 @@ export const personalTimelineDayQueryKey = (ownerId: string, date: string) =>
 export function useTimelineConnection(ownerId: string) {
   return useQuery<TimelineConnectionView, PersonalTimelineApiError>({
     queryKey: personalTimelineConnectionQueryKey(ownerId),
-    queryFn: getTimelineConnection,
+    queryFn: ({ signal }) => getTimelineConnection({ signal }),
   });
 }
 
@@ -91,7 +91,7 @@ export function useDisconnectTimeline(ownerId: string, options: MutationHookOpti
 export function usePersonalTimelineDay(ownerId: string, date: string, enabled: boolean) {
   return useQuery<PersonalTimelineDayV1, PersonalTimelineApiError>({
     queryKey: personalTimelineDayQueryKey(ownerId, date),
-    queryFn: () => getPersonalTimelineDay(date),
+    queryFn: ({ signal }) => getPersonalTimelineDay(date, { signal }),
     enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,

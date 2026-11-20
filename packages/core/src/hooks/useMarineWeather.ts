@@ -63,13 +63,11 @@ export interface MarineWeatherResponse extends ContributingRecord {
 export function useMarineWeather(lat: number | null, lng: number | null, enabled = true) {
   return useQuery<MarineWeatherResponse | null>({
     queryKey: ["marine-weather", lat, lng],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.getOptional<MarineWeatherResponse>(
         "/api/integrations/knowledge-marine-weather/marine",
-        {
-          lat: String(lat),
-          lng: String(lng),
-        },
+        { lat: String(lat), lng: String(lng) },
+        { signal },
       ),
     enabled: enabled && lat != null && lng != null,
     staleTime: 30 * 60 * 1000,

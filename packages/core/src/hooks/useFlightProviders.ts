@@ -16,7 +16,8 @@ interface FlightProvidersResponse {
 export function useFlightProviders() {
   return useQuery<FlightProvidersResponse>({
     queryKey: ["flight-providers"],
-    queryFn: () => apiClient.get<FlightProvidersResponse>(API_ENDPOINTS.flightProviders),
+    queryFn: ({ signal }) =>
+      apiClient.get<FlightProvidersResponse>(API_ENDPOINTS.flightProviders, undefined, { signal }),
     staleTime: 60 * 60 * 1000,
   });
 }

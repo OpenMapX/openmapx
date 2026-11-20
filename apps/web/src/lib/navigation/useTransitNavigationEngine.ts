@@ -61,7 +61,8 @@ export function useTransitNavigationEngine(): void {
   const journeys = useQueries({
     queries: trips.map((tripId) => ({
       queryKey: ["vehicle-journey", tripId, undefined],
-      queryFn: () => fetchVehicleJourney({ tripId }, undefined, { timeoutMs: 8000 }),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchVehicleJourney({ tripId }, undefined, { signal, timeoutMs: 8000 }),
       enabled: active,
       staleTime: 30000,
       refetchOnReconnect: "always" as const,

@@ -18,7 +18,7 @@ export function useRideProviders(pickup: LngLat | null, dropoff: LngLat | null) 
     queryKey: ["ride-providers", key],
     enabled: pickup !== null,
     staleTime: 5 * 60 * 1000,
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!pickup) throw new Error("pickup required");
       const params: Record<string, string> = {
         pickupLat: String(pickup[1]),
@@ -28,7 +28,7 @@ export function useRideProviders(pickup: LngLat | null, dropoff: LngLat | null) 
         params.dropoffLat = String(dropoff[1]);
         params.dropoffLng = String(dropoff[0]);
       }
-      return apiClient.get<RideProvidersResponse>(API_ENDPOINTS.rideProviders, params);
+      return apiClient.get<RideProvidersResponse>(API_ENDPOINTS.rideProviders, params, { signal });
     },
   });
 }

@@ -19,8 +19,12 @@ export interface BrandLogoAttribution extends PlacePhoto {
 function brandDetailQueryOptions(qid: string | null) {
   return {
     queryKey: ["brand-detail-v2", qid] as const,
-    queryFn: () =>
-      apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`, { catalogue: "2" }),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      apiClient.get<BrandDetail>(
+        `${API_ENDPOINTS.brandDetail}/${qid}`,
+        { catalogue: "2" },
+        { signal },
+      ),
     staleTime: 24 * 60 * 60 * 1000,
   };
 }
@@ -79,10 +83,11 @@ export function useBrandLogos(qids: string[]): Map<string, BrandDetail | undefin
 export function useBrandLogoAttribution(qid: string | null, logoFile: string | undefined) {
   return useQuery<BrandLogoAttribution, Error, BrandLogoAttribution | undefined>({
     queryKey: ["brand-logo-attribution-v4", qid, logoFile] as const,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<BrandLogoAttribution>(
         `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
         { fileMetadata: "3" },
+        { signal },
       ),
     enabled: Boolean(qid && /^Q\d{1,12}$/.test(qid) && logoFile),
     staleTime: 24 * 60 * 60 * 1000,

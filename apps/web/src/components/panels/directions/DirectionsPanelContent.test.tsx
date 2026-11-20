@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@/test";
+import { captureConsoleErrors } from "@/test/consoleErrors";
 import { enterDateTime } from "@/test/dateTimeField";
 import { providerPlanSelection } from "../../../../../../packages/core/src/travel-plans/__fixtures__/providerPlan";
 
@@ -165,6 +166,7 @@ import {
   useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { useQuery } from "@tanstack/react-query";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { useStopSearchStore } from "@/stores/stopSearchStore";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
@@ -1382,6 +1384,91 @@ it("credits the exact duration fields on inactive cached mode buttons", () => {
   fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("Captured walking duration");
   expect(screen.queryByText("Hidden walking geometry")).toBeNull();
+});
+
+it("shows another mode's duration as soon as its plan lands in the cache", () => {
+  seedOriginDestination();
+  const queryClient = createTestQueryClient();
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
+  expect(screen.queryByText(formatDuration(900, "de"))).toBeNull();
+
+  act(() => {
+    queryClient.setQueryData(
+      directionsQueryKey({
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        mode: "walking",
+        avoidHighways: useDirectionsStore.getState().avoidHighways,
+        avoidTolls: useDirectionsStore.getState().avoidTolls,
+        avoidFerries: useDirectionsStore.getState().avoidFerries,
+        avoidClosures: useSettingsStore.getState().avoidIncidents,
+        units: useSettingsStore.getState().units,
+        lang: "de",
+      }),
+      {
+        routes: [
+          { mode: "walking", duration: 900, distance: 5000, geometry: [], legs: [], steps: [] },
+        ],
+        waypoints: [],
+        activeRouteIndex: 0,
+      } satisfies DirectionsResult,
+    );
+  });
+
+  expect(screen.getByText(formatDuration(900, "de"))).toBeTruthy();
+});
+
+it("does not update while another component creates a query during its render", () => {
+  seedOriginDestination();
+  // A walking plan for this trip, created with data while it renders.
+  function LateQuery({ id }: { id: number }) {
+    useQuery({
+      queryKey:
+        id === 1
+          ? ["late"]
+          : directionsQueryKey({
+              waypoints: [
+                [13.3, 52.5],
+                [11.5, 48.1],
+              ],
+              mode: "walking",
+              avoidHighways: useDirectionsStore.getState().avoidHighways,
+              avoidTolls: useDirectionsStore.getState().avoidTolls,
+              avoidFerries: useDirectionsStore.getState().avoidFerries,
+              avoidClosures: useSettingsStore.getState().avoidIncidents,
+              units: useSettingsStore.getState().units,
+              lang: "de",
+            }),
+      queryFn: () => new Promise<never>(() => {}),
+      initialData: { routes: [], waypoints: [], activeRouteIndex: 0 },
+    });
+    return null;
+  }
+  const errors = captureConsoleErrors();
+  try {
+    const queryClient = createTestQueryClient();
+    const wrapper = createQueryWrapper(queryClient);
+    const { rerender } = render(
+      <>
+        <DirectionsPanelContent />
+        <LateQuery id={1} />
+      </>,
+      { wrapper },
+    );
+    rerender(
+      <>
+        <DirectionsPanelContent />
+        <LateQuery id={2} />
+      </>,
+    );
+    expect(
+      errors.calls.filter((call) => String(call[0]).includes("while rendering a different")),
+    ).toEqual([]);
+  } finally {
+    errors.restore();
+  }
 });
 
 it("keeps cached empty duration receipts authoritative and hides spinner-only duration credits", () => {

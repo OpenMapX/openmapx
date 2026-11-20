@@ -16,10 +16,19 @@ afterEach(() => {
 
 it("keeps a queued update blocking Diagnostics across topic remounts", async () => {
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
-    if (init?.method === "POST") return Response.json({ jobId: "check-job" });
+    if (init?.method === "POST") return Response.json({ ok: true, jobId: "check-job" });
     if (input.includes("/check-job?source=application"))
       return Response.json({ ...job({ id: "check-job" }), status: "running" });
-    return Response.json({ deployment: { maintenanceReady: true }, images: [] });
+    return Response.json({
+      deployment: {
+        dockerAvailable: true,
+        composeRendered: true,
+        hostControlConfigured: true,
+        maintenanceReady: true,
+      },
+      release: {},
+      images: [],
+    });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = (section: "updates" | "diagnostics") => (
@@ -51,7 +60,7 @@ it("continues maintenance polling through cancel_pending until terminal completi
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       posts += 1;
-      return Response.json({ jobId: "check-job" });
+      return Response.json({ ok: true, jobId: "check-job" });
     }
     if (input.includes("/check-job?source=application")) {
       reads += 1;
@@ -132,6 +141,7 @@ it("keeps host instructions after a raced apply failure and clears them after a 
         runningImageId: "agent",
         localImageId: "agent",
         updateAvailable: false,
+        releaseMember: true,
         status: "up-to-date",
       },
     ],
@@ -142,7 +152,10 @@ it("keeps host instructions after a raced apply failure and clears them after a 
       const url = String(args[0]);
       const init = args[1] as RequestInit | undefined;
       if (init?.method === "POST")
-        return Response.json({ jobId: url.endsWith("/check") ? "check-job" : "apply-job" });
+        return Response.json({
+          ok: true,
+          jobId: url.endsWith("/check") ? "check-job" : "apply-job",
+        });
       if (url.includes("/apply-job?source=application"))
         return Response.json(
           job({
@@ -215,6 +228,7 @@ const agentImage = {
   runningImageId: "agent",
   localImageId: "agent",
   updateAvailable: false,
+  releaseMember: true,
   status: "up-to-date",
 };
 const checkedRelease = {
@@ -223,8 +237,11 @@ const checkedRelease = {
   availableDigest: "a".repeat(64),
 };
 
-function tooManyRequests(headers: Record<string, string>, body: unknown = {}) {
-  return new Response(JSON.stringify(body), { status: 429, headers });
+function tooManyRequests(headers: Record<string, string>, body: object = {}) {
+  return new Response(JSON.stringify({ error: "Too many requests", retryAfter: 0, ...body }), {
+    status: 429,
+    headers: { "content-type": "application/json", ...headers },
+  });
 }
 
 function installAdmissionFetch(options: { checked?: boolean; applyResponses: Response[] }) {
@@ -237,11 +254,11 @@ function installAdmissionFetch(options: { checked?: boolean; applyResponses: Res
     if (init?.method === "POST") {
       if (url.endsWith("/updates/check")) {
         calls.checkPosts += 1;
-        return Response.json({ jobId: "check-job" });
+        return Response.json({ ok: true, jobId: "check-job" });
       }
       calls.applyPosts += 1;
       applyBodies.push(JSON.parse(String(init.body)));
-      return applyResponses.shift() ?? Response.json({ jobId: "apply-job" });
+      return applyResponses.shift() ?? Response.json({ ok: true, jobId: "apply-job" });
     }
     if (url.includes("/check-job?source=application")) {
       calls.checkJobReads += 1;
@@ -386,7 +403,7 @@ it("keeps a busy rejection recoverable without disabling the retry", async () =>
   }
 });
 
-const unusableRetryMetadata: [string, Record<string, string>, unknown][] = [
+const unusableRetryMetadata: [string, Record<string, string>, object][] = [
   [
     "a non-numeric Retry-After and negative body value",
     { "Retry-After": "soon" },
@@ -394,6 +411,12 @@ const unusableRetryMetadata: [string, Record<string, string>, unknown][] = [
   ],
   ["no retry metadata", {}, { error: "Too many requests" }],
   ["an implausibly long Retry-After", { "Retry-After": "999999999" }, {}],
+  ["only a body retryAfter", {}, { error: "Too many requests", retryAfter: 5 }],
+  [
+    "an HTTP-date Retry-After",
+    { "Retry-After": "Fri, 23 Oct 2026 08:00:20 GMT" },
+    { error: "Too many requests", retryAfter: 20 },
+  ],
 ];
 
 it.each(unusableRetryMetadata)(
@@ -411,74 +434,6 @@ it.each(unusableRetryMetadata)(
       fireEvent.click(screen.getByRole("button", { name: "Update application" }));
       await settle();
       expect(screen.getByRole("dialog")).toHaveTextContent("Too many requests");
-      expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
-      expect(calls.applyPosts).toBe(1);
-    } finally {
-      cleanup();
-      client.clear();
-    }
-  },
-);
-
-it("uses a valid body retryAfter when the header is missing, and an HTTP-date header", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-10-23T08:00:00.000Z"));
-  const { calls } = installAdmissionFetch({
-    checked: true,
-    applyResponses: [
-      tooManyRequests({}, { retryAfter: 5 }),
-      tooManyRequests({ "Retry-After": "Fri, 23 Oct 2026 08:00:20 GMT" }),
-    ],
-  });
-  const client = renderMaintenance();
-  try {
-    await settle();
-    await openConfirmedDialog();
-    fireEvent.click(screen.getByRole("button", { name: "Update application" }));
-    await settle();
-    expect(screen.getByRole("dialog")).toHaveTextContent("5 seconds");
-    expect(screen.getByRole("button", { name: "Update application" })).toBeDisabled();
-    await settle(5_100);
-    expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Update application" }));
-    await settle();
-    expect(calls.applyPosts).toBe(2);
-    expect(screen.getByRole("dialog")).toHaveTextContent("seconds");
-    expect(screen.getByRole("button", { name: "Update application" })).toBeDisabled();
-  } finally {
-    cleanup();
-    client.clear();
-  }
-});
-
-const unusableRetryAfterHeaders: [string, Record<string, string>][] = [
-  ["a negative Retry-After", { "Retry-After": "-1" }],
-  ["an out-of-range Retry-After", { "Retry-After": "999999999" }],
-  ["a non-date Retry-After", { "Retry-After": "soon" }],
-  ["an impossible HTTP date", { "Retry-After": "Fri, 99 Oct 2026 08:00:20 GMT" }],
-  ["a nonexistent calendar date", { "Retry-After": "Fri, 31 Sep 2026 08:00:20 GMT" }],
-  ["an unknown weekday", { "Retry-After": "Foo, 23 Oct 2026 08:00:20 GMT" }],
-];
-
-it.each(unusableRetryAfterHeaders)(
-  "falls back to a valid body retryAfter when the header is %s",
-  async (_name, headers) => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-23T08:00:00.000Z"));
-    const { calls } = installAdmissionFetch({
-      checked: true,
-      applyResponses: [tooManyRequests(headers, { retryAfter: 7 })],
-    });
-    const client = renderMaintenance();
-    try {
-      await settle();
-      await openConfirmedDialog();
-      fireEvent.click(screen.getByRole("button", { name: "Update application" }));
-      await settle();
-      expect(screen.getByRole("dialog")).toHaveTextContent("7 seconds");
-      expect(screen.getByRole("button", { name: "Update application" })).toBeDisabled();
-      await settle(7_100);
       expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
       expect(calls.applyPosts).toBe(1);
     } finally {
@@ -527,7 +482,7 @@ it("keeps each action's wait and feedback independent when another action is rej
   const posts: string[] = [];
   const diagnosticsResponses = [
     tooManyRequests({ "Retry-After": "5" }, { retryAfter: 5 }),
-    Response.json({ jobId: "diagnostics-job" }),
+    Response.json({ ok: true, jobId: "diagnostics-job" }),
   ];
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = String(input);
@@ -535,7 +490,7 @@ it("keeps each action's wait and feedback independent when another action is rej
       posts.push(url.slice(url.lastIndexOf("/system/") + 8));
       return url.endsWith("/updates/check")
         ? tooManyRequests({ "Retry-After": "30" }, { retryAfter: 30 })
-        : (diagnosticsResponses.shift() ?? Response.json({ jobId: "diagnostics-job" }));
+        : (diagnosticsResponses.shift() ?? Response.json({ ok: true, jobId: "diagnostics-job" }));
     }
     if (url.includes("/diagnostics-job?source=application")) {
       return Response.json(

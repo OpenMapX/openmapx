@@ -526,11 +526,16 @@ describe("SDK artifact gate", () => {
     expect(service).toBeDefined();
     for (const [id, operation] of Object.entries(serviceAdminOperations)) {
       expect(service).toContain(`export const ${id}`);
+      // A download with several media types declares one success type per media type.
       const declared = [
-        ...(service ?? "").matchAll(new RegExp(`export type ${id}Response(\\d+) =`, "g")),
-      ]
-        .map((match) => match[1])
-        .sort();
+        ...new Set(
+          [
+            ...(service ?? "").matchAll(
+              new RegExp(`export type ${id}Response(\\d+)(?:[A-Z][A-Za-z]*)? =`, "g"),
+            ),
+          ].map((match) => match[1]),
+        ),
+      ].sort();
       expect(declared, id).toEqual(Object.keys(operation.responses).sort());
     }
     const extension = first.find(

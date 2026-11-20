@@ -103,7 +103,8 @@ export function PlatformConfiguration({ scope = "deployment" }: { scope?: Platfo
     enabled: !!actorId,
     retry: false,
     refetchInterval: 10000,
-    queryFn: async () => unwrapAdminResponse(await getAdminPlatformConfiguration({ client })),
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(await getAdminPlatformConfiguration({ client, signal })),
   });
   return (
     <Paper variant="outlined" sx={{ p: 2, maxWidth: 800 }}>

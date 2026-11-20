@@ -31,7 +31,11 @@ describe("postEvDirections", () => {
 
     // Request options are forwarded as a third argument so a native caller can
     // supply a timeout or abort signal.
-    expect(spy).toHaveBeenCalledWith("/api/integrations/routing/directions/ev", req, {});
+    expect(spy).toHaveBeenCalledWith(
+      "/api/integrations/routing/directions/ev",
+      req,
+      expect.objectContaining({ maxBytes: expect.any(Number) }),
+    );
     expect(out).toEqual(result);
     expect(out.warnings).toEqual([]);
   });

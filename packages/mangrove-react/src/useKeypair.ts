@@ -96,7 +96,7 @@ export function useKeypairState(): {
     queryKey: [...MANGROVE_KEYPAIR_QUERY_KEY, owner],
     enabled: !!owner,
     staleTime: Number.POSITIVE_INFINITY,
-    queryFn: () => transport.getKeypairEnvelope(),
+    queryFn: ({ signal }) => transport.getKeypairEnvelope({ signal }),
   });
   return { data: owner ? (q.data ?? null) : null, isLoading: q.isLoading, refetch: q.refetch };
 }

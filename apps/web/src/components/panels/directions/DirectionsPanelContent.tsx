@@ -1,1776 +1,228 @@
 "use client";
 
-import CloseIcon from "@mui/icons-material/Close";
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
-import EvStationIcon from "@mui/icons-material/EvStation";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import MenuIcon from "@mui/icons-material/Menu";
-import RouteIcon from "@mui/icons-material/Route";
-import ScheduleIcon from "@mui/icons-material/Schedule";
-import ShareIcon from "@mui/icons-material/Share";
-import TuneIcon from "@mui/icons-material/Tune";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
-import type {
-  AutocompleteResult,
-  DirectionsResult,
-  LngLat,
-  TravelMode,
-  Waypoint,
-} from "@openmapx/core";
-import {
-  CALLER_SHOWS_ERRORS,
-  directionsQueryKey,
-  formatDuration,
-  formatOverviewDistance,
-  isApiClientError,
-  timeZoneAt,
-  tzDiffMinutes,
-  tzOffsetLabel,
-  useAutocomplete,
-  useCapabilities,
-  useDebounce,
-  useDirections,
-  useDirectionsStore,
-  useEvDirections,
-  useMapStore,
-  useMenuStore,
-  useOptimizeRoute,
-  useScheduledDirections,
-  useSession,
-  useSettingsStore,
-  useSidebarStore,
-  useVehicles,
-  viewerTimeZone,
-} from "@openmapx/core";
-import { transitItineraryFingerprint } from "@openmapx/core/navigation";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import {
-  contributorsForField,
-  contributorsForNestedRecordFields,
-  snapshotContributors,
-} from "@openmapx/mobility-core/contributors";
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { useQueryClient } from "@tanstack/react-query";
+import type { TravelMode } from "@openmapx/core";
+import { useDirectionsStore } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DetailsView } from "@/components/panels/directions/DetailsView";
-import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
-import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
-import { FlightPanel } from "@/components/panels/directions/FlightPanel";
-import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
+import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { PhoneWaypointCard } from "@/components/panels/directions/PhoneWaypointCard";
-import { RidePanel } from "@/components/panels/directions/RidePanel";
-import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
-import { RouteStopSearch } from "@/components/panels/directions/RouteStopSearch";
-import type { RouteArrivalContext } from "@/components/panels/directions/routeArrival";
-import { ShareRouteDialog } from "@/components/panels/directions/ShareRouteDialog";
-import {
-  type TimeMode,
-  TimeModePicker,
-  toDateTimeLocalString,
-} from "@/components/panels/directions/TimeModePicker";
-import { TransitChainView } from "@/components/panels/directions/TransitChainView";
-import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
-import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
-import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
-import { useWaypointDrafts } from "@/components/panels/directions/useWaypointDrafts";
-import { WaypointList, waypointPlaceholder } from "@/components/panels/directions/WaypointList";
+import { TimeModePicker } from "@/components/panels/directions/TimeModePicker";
+import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointScheduleDialog";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
-import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { ClickableRow } from "@/components/ui/ClickableRow";
-import Menu from "@/components/ui/Menu";
-import { useMapOptional } from "@/integration-api/map/MapContext";
-import { BRAND } from "@/integration-api/runtime/theme";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
-import {
-  buildEvDirectionsRequest,
-  GARAGE_VEHICLE_PREFIX,
-  isGarageVehicleId,
-} from "@/lib/buildEvDirectionsRequest";
-import { shareCurrentUrl } from "@/lib/deepLink";
-import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
-import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
-import { routeAttributions } from "@/lib/routeAttributions";
-import { servedAttributions } from "@/lib/servedAttributions";
-import { useStopSearchStore } from "@/stores/stopSearchStore";
-import { findTransitItinerary } from "./transitPlanPages";
-import { useRouteImpacts } from "./useRouteImpacts";
+import { DirectionsPanelHeader } from "./DirectionsPanelHeader";
+import { DirectionsResults } from "./DirectionsResults";
+import { isTimedGroundMode } from "./directionsRequests";
+import { GroundRouteDetails } from "./GroundRouteResults";
+import { OptimizeStopsRow } from "./OptimizeStopsRow";
+import { openTransitItinerary, TransitItineraryDetails } from "./TransitItineraryResults";
+import { DrivingKindRow, TravelModeRow, travelModeButtons } from "./TravelModeRow";
+import { TripTimeChip } from "./TripTimeChip";
+import { useDirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
+import { useGroundDirectionsPlan } from "./useGroundDirectionsPlan";
+import { useOptimizeStops } from "./useOptimizeStops";
+import { useRouteRecovery } from "./useRouteRecovery";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
-
-const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
-type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
-
-/** Whether two itineraries hold the same stops, at the same places, in the same order. */
-function sameStops(a: readonly Waypoint[], b: readonly Waypoint[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every(
-      (wp, i) =>
-        wp.id === b[i]?.id &&
-        wp.coords?.[0] === b[i]?.coords?.[0] &&
-        wp.coords?.[1] === b[i]?.coords?.[1],
-    )
-  );
-}
-
-function RouteRecovery({
-  failed,
-  error,
-  onRetry,
-  onEditOrigin,
-  onEditDestination,
-  modes = [],
-  onSelectMode,
-}: {
-  failed: boolean;
-  error?: unknown;
-  onRetry?: () => void;
-  onEditOrigin: () => void;
-  onEditDestination: () => void;
-  modes?: GroundFallbackMode[];
-  onSelectMode: (mode: GroundFallbackMode) => void;
-}) {
-  const t = useTranslations("directions");
-  const tc = useTranslations("common");
-  const unavailable = isApiClientError(error) && [502, 503, 504].includes(error.status);
-  return (
-    <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-      <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
-        {t(
-          failed
-            ? unavailable
-              ? "routeServiceUnavailable"
-              : "routeRequestFailed"
-            : "noRoutesFound",
-        )}
-      </Typography>
-      {failed ? (
-        <Button size="small" onClick={onRetry} sx={{ mt: 1 }}>
-          {tc("retry")}
-        </Button>
-      ) : (
-        <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 1 }}>
-          <Button size="small" onClick={onEditOrigin}>
-            {t("changeOrigin")}
-          </Button>
-          <Button size="small" onClick={onEditDestination}>
-            {t("changeDestination")}
-          </Button>
-          {modes.map((mode) => (
-            <Button key={mode} size="small" onClick={() => onSelectMode(mode)}>
-              {t("tryMode", { mode: t(mode) })}
-            </Button>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
-}
+import { useTripTimeControl } from "./useTripTimeControl";
+import { useWaypointFields } from "./useWaypointFields";
+import { WaypointSuggestions } from "./WaypointSuggestions";
 
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
-  const tp = useTranslations("place");
-  const tShare = useTranslations("share");
   const locale = useLocale();
-  const fmt = useDateTimeFormat();
-  const { snapTo, inSheet } = useMobileSheet();
+  const { inSheet } = useMobileSheet();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
-  const {
-    isOpen,
-    transitTimeMode,
-    setTransitTimeMode,
-    waypoints,
-    mode,
-    isEvMode,
-    evSocStartPct,
-    evSocArrivalMinPct,
-    evForceNonExclusive,
-    activeRouteIndex,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
-    activeItineraryIndex,
-    transitDepartureTime,
-    transitArrivalTime,
-    transitPreferredModes,
-    transitRoutePreference,
-    transitAccessMode,
-    wheelchairRequired,
-    maxTransfers,
-    transferBuffer,
-    requireBikeTransport,
-    deutschlandticketOnly,
-    timeMode,
-    tripTime,
-    setTimeMode,
-    setTripTime,
-    setWaypointSchedule,
-    applyWaypointOrder,
-    setWaypoint,
-    addWaypoint,
-    removeWaypoint,
-    reorderWaypoints,
-    reverseWaypoints,
-    setMode,
-    setEvMode,
-    setEvForceNonExclusive,
-    setActiveRouteIndex,
-    setTransitItineraries,
-    setActiveItineraryIndex,
-    setTransitDepartureTime,
-    setTransitArrivalTime,
-  } = useDirectionsStore();
-  const origin = waypoints[0]?.coords ?? null;
-  const originLabel = waypoints[0]?.label ?? "";
-  const destination = waypoints.at(-1)?.coords ?? null;
-  const destinationLabel = waypoints.at(-1)?.label ?? "";
-  // Meaningful only when the origin and destination actually keep a
-  // different wall clock. Two zones can differ by id (Europe/Berlin vs
-  // Europe/Paris) yet share the same UTC offset, in which case the arrival
-  // time is byte-identical to before this feature and there is nothing to
-  // annotate — so this derives from a non-zero offset difference rather than
-  // an id mismatch. Same-offset trips pass null, keeping every same-offset
-  // itinerary a strict no-op.
-  const destinationTimeZone = useMemo(() => {
-    if (!origin || !destination) return null;
-    const from = timeZoneAt(origin[1], origin[0]);
-    const to = timeZoneAt(destination[1], destination[0]);
-    if (!from || !to) return null;
-    return tzDiffMinutes(new Date(), from, to) ? to : null;
-  }, [origin, destination]);
-  // Gate the caption on the resolved label rather than the zone id itself:
-  // tzOffsetLabel can still fail on a stale or unrecognised tzid even after
-  // destinationTimeZone resolved, in which case the arrival already fell
-  // back to the viewer's zone and the caption would otherwise claim a
-  // re-zoning that didn't happen.
-  const destinationOffsetLabel = useMemo(
-    () => (destinationTimeZone ? tzOffsetLabel(new Date(), destinationTimeZone) : null),
-    [destinationTimeZone],
+  const { waypoints, mode, isEvMode } = useDirectionsStore(
+    useShallow((s) => ({ waypoints: s.waypoints, mode: s.mode, isEvMode: s.isEvMode })),
   );
-  // The start renders in the origin's zone whenever that differs from the
-  // viewer's own — otherwise "startTime" would keep rendering in the
-  // viewer's zone while "endTime" renders in the destination's, producing a
-  // span the two ends disagree about. Same-offset origins pass null, a
-  // strict no-op.
-  const viewerZone = viewerTimeZone();
-  const originTimeZone = useMemo(() => {
-    if (!origin) return null;
-    const zone = timeZoneAt(origin[1], origin[0]);
-    if (!zone) return null;
-    return tzDiffMinutes(new Date(), viewerZone, zone) ? zone : null;
-  }, [origin, viewerZone]);
-  const units = useSettingsStore((s) => s.units);
-  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
-  const evVehicleId = useSettingsStore((s) => s.evVehicleId);
-  const { data: garageVehicles } = useVehicles();
-  const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
-  const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
-  const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
-  const evExclusiveNetworks = useSettingsStore((s) => s.evExclusiveNetworks);
-  const evPreferCheaper = useSettingsStore((s) => s.evPreferCheaper);
-  const evHomePricePerKwh = useSettingsStore((s) => s.evHomePricePerKwh);
-  const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
-
-  const { userLocation } = useMapStore();
-  const mapContext = useMapOptional();
-  const registry = useIntegrationRegistry();
-  const { services: caps } = useCapabilities();
-  const queryClient = useQueryClient();
-  const optimizeMutation = useOptimizeRoute(CALLER_SHOWS_ERRORS);
-
-  const [showOptions, setShowOptions] = useState(false);
-  const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
-  const [transitDetailsSelection, setTransitDetailsSelection] = useState<{
-    identity: string;
-    itinerary: TripItinerary;
-  } | null>(null);
-
-  const [timePickerOpen, setTimePickerOpen] = useState(false);
-  // Driving depart/arrive is kept independent of the transit time state so the
-  // two flows never interfere.
-  const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
-  const [focusedField, setFocusedField] = useState<number | null>(null);
-  const [snackbar, setSnackbar] = useState<string | null>(null);
-  const waypointListRef = useRef<HTMLDivElement>(null);
-
-  const { values: inputValues, setDraft, clearDraft, hasDraft } = useWaypointDrafts(waypoints);
-  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelBlur = useCallback(() => {
-    if (blurTimeoutRef.current !== null) clearTimeout(blurTimeoutRef.current);
-    blurTimeoutRef.current = null;
-  }, []);
-  useEffect(() => cancelBlur, [cancelBlur]);
-
-  const myLocationLabel = t("myLocation");
-  const requestFix = useForegroundLocation();
-  // A fix that arrived while the origin held typed text. If that text is
-  // emptied the fix still answers where the person is, so it fills the origin
-  // then.
-  const withheldFix = useRef<{ originId: string; location: LngLat } | null>(null);
-  useEffect(() => {
-    withheldFix.current = null;
-    if (!isOpen) return;
-    const requestedOrigin = useDirectionsStore.getState().waypoints[0];
-    if (!requestedOrigin || requestedOrigin.coords !== null) return;
-
-    let active = true;
-    // Through the adapter, so the installed shell answers from the one location
-    // producer it already owns rather than opening a second one.
-    void requestFix({ maxAgeMs: 0 }).then((result) => {
-      if (!active || result.status !== "ok") return;
-      const directions = useDirectionsStore.getState();
-      const origin = directions.waypoints[0];
-      if (!directions.isOpen || origin?.id !== requestedOrigin.id || origin.coords !== null) return;
-      const location: LngLat = [result.fix.lng, result.fix.lat];
-      useMapStore.getState().setUserLocation(location);
-      // Text being typed into the origin is the person's own choice of start.
-      if (hasDraft(origin.id)) {
-        withheldFix.current = { originId: origin.id, location };
-        return;
-      }
-      setWaypoint(0, location, myLocationLabel);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [isOpen, myLocationLabel, setWaypoint, requestFix, hasDraft]);
-
-  const [shareMenuAnchor, setShareMenuAnchor] = useState<HTMLElement | null>(null);
-  const [shareRouteDialogOpen, setShareRouteDialogOpen] = useState(false);
-  const { data: session } = useSession();
-
-  const handleCopyCurrentView = async () => {
-    setShareMenuAnchor(null);
-    const result = await shareCurrentUrl();
-    if (result === "copied") setSnackbar(tp("linkCopied"));
-  };
-
-  const handleShare = (event: React.MouseEvent<HTMLElement>) => {
-    if (!session?.user?.id) {
-      void handleCopyCurrentView();
-      return;
-    }
-    setShareMenuAnchor(event.currentTarget);
-  };
-
+  const transitOptions = useDirectionsStore(
+    useShallow((s) => ({
+      timeMode: s.transitTimeMode,
+      transitDepartureTime: s.transitDepartureTime,
+      transitArrivalTime: s.transitArrivalTime,
+      transitPreferredModes: s.transitPreferredModes,
+      transitRoutePreference: s.transitRoutePreference,
+      transitAccessMode: s.transitAccessMode,
+      wheelchairRequired: s.wheelchairRequired,
+      maxTransfers: s.maxTransfers,
+      transferBuffer: s.transferBuffer,
+      requireBikeTransport: s.requireBikeTransport,
+      bikeHillPreference: s.bikeHillPreference,
+      deutschlandticketOnly: s.deutschlandticketOnly,
+    })),
+  );
   const isTransitMode = mode === "transit";
-  const isFlightMode = mode === "flying";
-  // Ride mode still needs the real road route — it draws on the map and gives
-  // the panel its trip summary — so it fetches like driving rather than being
-  // excluded the way flight mode is. Only the results area differs.
-  const isRideMode = mode === "ride";
-  const routeMode: TravelMode = isRideMode ? "driving" : mode;
-  // Rows that describe driving the route yourself (time picker, avoid options,
-  // share, optimize) do not apply when someone else is doing the driving.
-  const hidesRouteControls = isFlightMode || isRideMode;
-  // Time-aware road modes — Valhalla honors depart/arrive on these; OSRM ignores it.
-  const isDrivingTimeMode = mode === "driving" || mode === "motorcycle";
-
-  // Collect all non-null coords for the route query
-  const routeWaypoints = useMemo(
-    () =>
-      waypoints.reduce<LngLat[]>((acc, wp) => {
-        if (wp.coords) acc.push(wp.coords);
-        return acc;
-      }, []),
-    [waypoints],
-  );
-  const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
-
-  // Road-mode depart/arrive → wall-clock strings for the time-aware engine
-  // (Valhalla; OSRM ignores them). Debounced so dragging the picker doesn't
-  // refetch per change. Driving + motorcycle only (transit has its own query).
-  const debouncedDrivingTime = useDebounce(tripTime, 500);
-  const drivingDepartAtStr =
-    isDrivingTimeMode && timeMode === "depart" && debouncedDrivingTime instanceof Date
-      ? toDateTimeLocalString(debouncedDrivingTime)
-      : undefined;
-  const drivingArriveByStr =
-    isDrivingTimeMode && timeMode === "arrive" && debouncedDrivingTime instanceof Date
-      ? toDateTimeLocalString(debouncedDrivingTime)
-      : undefined;
-  const arrivalContext: RouteArrivalContext | undefined =
-    isDrivingTimeMode && timeMode === "now"
-      ? {
-          kind: "now",
-          destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-        }
-      : drivingDepartAtStr
-        ? {
-            kind: "departAt",
-            wallClock: drivingDepartAtStr,
-            originTimeZone: origin ? timeZoneAt(origin[1], origin[0]) : null,
-            destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-          }
-        : drivingArriveByStr
-          ? {
-              kind: "arriveBy",
-              wallClock: drivingArriveByStr,
-              destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
-            }
-          : undefined;
-
-  // One of the two ground queries runs at a time: the scheduled endpoint takes
-  // over the moment any waypoint carries a constraint, so the two can never
-  // split the cache or draw different routes.
-  const scheduleRequest = useMemo(
-    () =>
-      isTransitMode || isFlightMode || isEvMode
-        ? null
-        : buildScheduleRequest({
-            waypoints,
-            mode: routeMode,
-            timeMode,
-            tripTime: debouncedDrivingTime,
-            avoidHighways,
-            avoidTolls,
-            avoidFerries,
-            bikeProfile,
-            bikeHillPreference,
-            bikePreferQuietRoads,
-            bikePreferSmoothSurfaces,
-            bikeSpeedKmh,
-            avoidClosures: avoidIncidents,
-            units,
-            lang: locale,
-          }),
-    [
-      isTransitMode,
-      isFlightMode,
-      isEvMode,
-      waypoints,
-      routeMode,
-      timeMode,
-      debouncedDrivingTime,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidIncidents,
-      units,
-      locale,
-    ],
-  );
-  const scheduledQuery = useScheduledDirections(scheduleRequest);
-  const { data: scheduledData } = scheduledQuery;
-
-  // The displayed route's request without its waypoints; a stop detour along
-  // it is compared with exactly these options.
-  const groundRequest = useMemo(
-    () => ({
-      mode: routeMode,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidClosures: avoidIncidents,
-      units,
-      lang: locale,
-      departAt: drivingDepartAtStr,
-      arriveBy: drivingArriveByStr,
-    }),
-    [
-      routeMode,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      bikeProfile,
-      bikeHillPreference,
-      bikePreferQuietRoads,
-      bikePreferSmoothSurfaces,
-      bikeSpeedKmh,
-      avoidIncidents,
-      units,
-      locale,
-      drivingDepartAtStr,
-      drivingArriveByStr,
-    ],
-  );
-  const directionsQuery = useDirections({
-    ...groundRequest,
-    waypoints:
-      isTransitMode || isFlightMode || isEvMode || scheduleRequest
-        ? []
-        : allWaypointsFilled
-          ? routeWaypoints
-          : [],
-  });
-  const { data, isLoading, isError } = directionsQuery;
-  const stopSearchRoute =
-    (mode === "driving" || mode === "motorcycle") && data
-      ? (data.routes[activeRouteIndex] ?? data.routes[0])
-      : undefined;
-  // Under the route cards of a plain driving or motorcycle trip, with or
-  // without stops; the EV, scheduled and ride branches never render it.
-  const stopSearch =
-    stopSearchRoute && data && (stopSearchRoute.geometry?.length ?? 0) >= 2 ? (
-      <>
-        <Divider />
-        <RouteStopSearch
-          route={stopSearchRoute}
-          provider={data.provider}
-          request={groundRequest}
-          units={units}
-        />
-      </>
-    ) : null;
-
-  const routesForImpact = (scheduleRequest ? scheduledData?.routes : data?.routes) ?? [];
-  const fastestRouteIndex = useMemo(() => {
-    if (routesForImpact.length === 0) return -1;
-    return routesForImpact.reduce(
-      (fastestIndex, route, index) =>
-        route.duration < routesForImpact[fastestIndex].duration ? index : fastestIndex,
-      0,
-    );
-  }, [routesForImpact]);
-  const {
-    impacts: routeImpacts,
-    unavailableReason: routeImpactUnavailableReason,
-    compatibleVehicles: impactVehicles,
-    updateAssumptions: handleUpdateAssumptions,
-  } = useRouteImpacts({
-    routes: routesForImpact,
-    destination,
-    vehicles: garageVehicles,
-    homeElectricityPrice: evHomePricePerKwh,
-    homeElectricityCurrency: evHomeCurrency,
-  });
-
-  // EV plan query — built identically to RouteLayer's independent request
-  // (via the shared `buildEvDirectionsRequest`) so both hit the same cache
-  // entry instead of firing two network requests.
-  const evRequest = useMemo(
-    () =>
-      buildEvDirectionsRequest({
-        isEvMode,
-        waypoints: routeWaypoints,
-        allWaypointsFilled,
-        vehicleId: evVehicleId,
-        garageVehicle:
-          evVehicleId && isGarageVehicleId(evVehicleId)
-            ? (garageVehicles?.find((v) => v.id === evVehicleId.slice(GARAGE_VEHICLE_PREFIX.length))
-                ?.ev ?? null)
-            : null,
-        socStartPct: evSocStartPct,
-        socArrivalMinPct: evSocArrivalMinPct,
-        socTargetPct: evSocTargetPct,
-        departAt: drivingDepartAtStr,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        avoidClosures: avoidIncidents,
-        preferredNetworks: evPreferredNetworks,
-        avoidedNetworks: evAvoidedNetworks,
-        exclusiveNetworks: evExclusiveNetworks,
-        forceNonExclusive: evForceNonExclusive,
-        preferCheaper: evPreferCheaper,
-        homePricePerKwh: evHomePricePerKwh,
-        homeCurrency: evHomeCurrency,
-        units,
-        lang: locale,
-      }),
-    [
-      isEvMode,
-      routeWaypoints,
-      allWaypointsFilled,
-      evVehicleId,
-      garageVehicles,
-      evSocStartPct,
-      evSocArrivalMinPct,
-      evSocTargetPct,
-      drivingDepartAtStr,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      avoidIncidents,
-      evPreferredNetworks,
-      evAvoidedNetworks,
-      evExclusiveNetworks,
-      evForceNonExclusive,
-      evPreferCheaper,
-      evHomePricePerKwh,
-      evHomeCurrency,
-      units,
-      locale,
-    ],
-  );
-  const evQuery = useEvDirections(evRequest);
-  const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
-
-  const {
-    queryIdentity: transitQueryIdentity,
-    selectAlternative: selectTransitAlternative,
-    isChained: transitIsChained,
-    planQuery: transitPlanQuery,
-    chainQuery: transitChainQuery,
-    itineraries: transitItineraries,
-    replanOptions: transitReplanOptions,
-    attributions: transitPlanAttributions,
-    paging: transitPaging,
-    selectionToOpen: transitSelectionToOpen,
-  } = useTransitDirectionsPlan({
+  const ground = useGroundDirectionsPlan();
+  const transit = useTransitDirectionsPlan({
     enabled: isTransitMode,
-    timeMode: transitTimeMode,
     waypoints,
-    transitDepartureTime,
-    transitArrivalTime,
-    transitPreferredModes,
-    transitRoutePreference,
-    transitAccessMode,
-    wheelchairRequired,
-    maxTransfers,
-    transferBuffer,
-    requireBikeTransport,
-    bikeHillPreference,
-    deutschlandticketOnly,
+    ...transitOptions,
   });
+  const details = useDirectionsDetailsNavigation();
+  const fields = useWaypointFields();
+  const time = useTripTimeControl(isTransitMode);
+  const [showOptions, setShowOptions] = useState(false);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
+  // Lives here rather than in its row, which unmounts while a details view is open.
+  const optimizeStops = useOptimizeStops(ground.routeWaypoints, setSnackbar);
+
+  const { selectionToOpen } = transit;
+  const { openTransit } = details;
   useEffect(() => {
-    if (transitSelectionToOpen)
-      setTransitDetailsSelection({
-        identity: transitSelectionToOpen.queryIdentity,
-        itinerary: transitSelectionToOpen.itinerary,
+    if (selectionToOpen)
+      openTransit({
+        identity: selectionToOpen.queryIdentity,
+        itinerary: selectionToOpen.itinerary,
       });
-  }, [transitSelectionToOpen]);
-  const { data: transitChainData } = transitChainQuery;
-  const {
-    data: transitPlanData,
-    isLoading: transitLoading,
-    isError: transitError,
-  } = transitPlanQuery;
+  }, [selectionToOpen, openTransit]);
 
-  // Autocomplete for the currently focused waypoint input
-  const activeQuery = focusedField !== null ? (inputValues[focusedField] ?? "") : "";
-  const debouncedActiveQuery = useDebounce(activeQuery, 300);
-  // Rank suggestions near the visible map. A cheap ref read each render; the
-  // hook rounds the point, so small pans keep the same query key.
-  const suggestionMap = mapContext?.mapRef.current;
-  const suggestionCenter = suggestionMap?.getCenter();
-  const suggestionBias =
-    suggestionMap && suggestionCenter
-      ? {
-          proximity: [suggestionCenter.lng, suggestionCenter.lat] as LngLat,
-          zoom: suggestionMap.getZoom(),
-        }
-      : null;
-  const { data: wsSuggestions } = useAutocomplete(debouncedActiveQuery, locale, suggestionBias);
-  const showSuggestions = focusedField !== null && (wsSuggestions?.length ?? 0) > 0;
-  const waypointAttributions = showSuggestions
-    ? servedAttributions(registry, wsSuggestions ?? [])
-    : [];
-
-  const displayedGroundResult = scheduleRequest ? scheduledData : data;
-  const detailsRoute =
-    detailsRouteIndex !== null ? (displayedGroundResult?.routes[detailsRouteIndex] ?? null) : null;
-  const routingAttributions = useMemo<Attribution[]>(() => {
-    const routes = displayedGroundResult?.routes ?? [];
-    const displayed = !scheduleRequest && waypoints.length > 2 ? routes.slice(0, 1) : routes;
-    return snapshotContributors(
-      ...displayed.map((route) =>
-        snapshotContributors(
-          routeAttributions(registry, displayedGroundResult?.provider, route, [
-            "distance",
-            "duration",
-            "mode",
-            ...(route.summary ? ["summary"] : []),
-            ...(route.usesLocalAccessRoad ? ["usesLocalAccessRoad"] : []),
-            ...((route.mode === "walking" || route.mode === "cycling") && route.elevation?.length
-              ? ["geometry", "elevation"]
-              : []),
-          ]),
-          ...(!scheduleRequest && waypoints.length > 2 && route.legs.length > 1
-            ? route.legs.map((leg, index) =>
-                contributorsForNestedRecordFields(
-                  route,
-                  [{ field: `legs.${index}`, record: leg }],
-                  ["duration", "distance"],
-                ),
-              )
-            : []),
-        ),
-      ),
-    );
-  }, [registry, displayedGroundResult, scheduleRequest, waypoints.length]);
-
-  const getCachedDuration = (m: TravelMode) => {
-    if (!allWaypointsFilled) return undefined;
-    // Build the key with the shared builder so it always matches what
-    // useDirections stored — driving carries the time pickers, other modes don't.
-    const cached = queryClient.getQueryData<DirectionsResult>(
-      directionsQueryKey({
-        waypoints: routeWaypoints,
-        mode: m,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        bikeProfile,
-        bikeHillPreference,
-        bikePreferQuietRoads,
-        bikePreferSmoothSurfaces,
-        bikeSpeedKmh,
-        avoidClosures: avoidIncidents,
-        units,
-        lang: locale,
-        departAt: m === "driving" ? drivingDepartAtStr : undefined,
-        arriveBy: m === "driving" ? drivingArriveByStr : undefined,
-      }),
-    );
-    const route = cached?.routes[0];
-    return route?.duration !== undefined
-      ? {
-          time: formatDuration(route.duration, locale),
-          contributors: contributorsForField(route, "duration"),
-        }
-      : undefined;
+  const switchMode = (nextMode: TravelMode) => {
+    useDirectionsStore.getState().setMode(nextMode);
+    details.leave();
   };
-  // Derive the visible text and its captured ownership together, once per button.
-  const modeButtons = MODES.map((button) => {
-    const isActive = mode === button.mode;
-    const isTransit = button.mode === "transit";
-    const cached = isTransit || button.disabled ? undefined : getCachedDuration(button.mode);
-    const record = isTransit
-      ? isActive
-        ? transitItineraries[0]
-        : undefined
-      : isActive
-        ? data?.routes[0]
-        : undefined;
-    const duration = button.disabled
-      ? undefined
-      : record?.duration !== undefined
-        ? {
-            time: formatDuration(record.duration, locale),
-            contributors: contributorsForField(record, "duration"),
-          }
-        : cached;
-    const loading = isActive && (isTransit ? transitLoading : isLoading && !cached);
-    return {
-      ...button,
-      isActive,
-      loading,
-      time: duration?.time,
-      contributors: !loading && duration ? duration.contributors : [],
-    };
-  });
-  const modeDurationAttributions = snapshotContributors(
-    ...modeButtons.map((button) => button.contributors),
-  );
+  const recovery = useRouteRecovery({ focusWaypoint: fields.focusWaypoint, switchMode });
 
-  const handleUseMyLocation = useCallback(() => {
-    if (userLocation) {
-      const origin = waypoints[0];
-      if (origin) clearDraft(origin.id);
-      setWaypoint(0, userLocation, t("myLocation"));
-    }
-  }, [userLocation, waypoints, clearDraft, setWaypoint, t]);
-
-  // The dropdown must outlive the blur long enough for a click on a suggestion,
-  // but a pending blur belongs to the field that fired it, not the next one.
-  const handleWaypointBlur = useCallback(() => {
-    cancelBlur();
-    blurTimeoutRef.current = setTimeout(() => {
-      blurTimeoutRef.current = null;
-      setFocusedField(null);
-    }, 150);
-  }, [cancelBlur]);
-
-  // On a phone the stop card opens a full-screen search; on desktop the
-  // suggestions open under the field.
-  const handleWaypointFocus = useCallback(
-    (index: number) => {
-      cancelBlur();
-      setFocusedField(index);
-    },
-    [cancelBlur],
-  );
-
-  const handleInputChange = useCallback(
-    (index: number, value: string) => {
-      const waypoint = waypoints[index];
-      if (!waypoint) return;
-      const withheld = withheldFix.current;
-      if (value.trim() === "" && withheld?.originId === waypoint.id && waypoint.coords === null) {
-        withheldFix.current = null;
-        clearDraft(waypoint.id);
-        setWaypoint(index, withheld.location, myLocationLabel);
-        return;
-      }
-      if (value) {
-        setDraft(waypoint, value);
-        return;
-      }
-      clearDraft(waypoint.id);
-      setWaypoint(index, null, "");
-    },
-    [waypoints, setDraft, clearDraft, setWaypoint, myLocationLabel],
-  );
-
-  const handleSuggestionSelect = (result: AutocompleteResult) => {
-    if (!result.coordinates || focusedField === null) return;
-    const { label, coordinates } = result;
-    const waypoint = waypoints[focusedField];
-    if (waypoint) clearDraft(waypoint.id);
-    setWaypoint(focusedField, coordinates, label);
-    cancelBlur();
-    setFocusedField(null);
-  };
-
-  const handleRemove = useCallback(
-    (index: number) => {
-      const waypoint = waypoints[index];
-      if (waypoint) clearDraft(waypoint.id);
-      removeWaypoint(index);
-    },
-    [waypoints, clearDraft, removeWaypoint],
-  );
-
-  const focusWaypoint = (index: number) => {
-    waypointListRef.current?.querySelectorAll("input")[index]?.focus();
-  };
-  const valhallaAvailable = caps["routing-valhalla"]?.available === true;
-  const osrmAvailable =
-    caps["routing-osrm"]?.available === true &&
-    !avoidIncidents &&
-    !waypoints.some((wp) => wp.schedule !== undefined) &&
-    !(timeMode !== "now" && tripTime);
-  const fallbackModes = GROUND_FALLBACK_MODES.filter(
-    (candidate) =>
-      candidate !== mode &&
-      (candidate === "driving" ? valhallaAvailable || osrmAvailable : valhallaAvailable),
-  );
-  const selectFallbackMode = (nextMode: GroundFallbackMode) => {
-    setMode(nextMode);
-    setDetailsRouteIndex(null);
-    setTransitDetailsSelection(null);
-  };
-  const recoveryActions = {
-    onEditOrigin: () => focusWaypoint(0),
-    onEditDestination: () => focusWaypoint(waypoints.length - 1),
-    modes: fallbackModes,
-    onSelectMode: selectFallbackMode,
-  };
-
-  const handleOptimize = useCallback(() => {
-    if (routeWaypoints.length < 3) return;
-    const requestedStops = waypoints;
-    optimizeMutation.mutate(
-      {
-        waypoints: routeWaypoints,
-        mode,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        bikeProfile,
-        bikeHillPreference,
-        bikePreferQuietRoads,
-        bikePreferSmoothSurfaces,
-        bikeSpeedKmh,
-        units,
-      },
-      {
-        onSuccess: (result) => {
-          if (!result.optimizedOrder) return;
-          // The order answers the stops as they were when asked. If the user
-          // moved, replaced or reordered a stop since, it no longer applies.
-          if (!sameStops(requestedStops, useDirectionsStore.getState().waypoints)) return;
-          // Moves each waypoint whole, so a stop's dwell travels with it.
-          setSnackbar(
-            applyWaypointOrder(result.optimizedOrder)
-              ? t("routeOptimized")
-              : t("scheduleOptimizeBlocked"),
-          );
-        },
-        onError: () => {
-          setSnackbar(t("noRoutesFound"));
-        },
-      },
-    );
-  }, [
-    waypoints,
-    routeWaypoints,
-    mode,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
-    units,
-    optimizeMutation,
-    applyWaypointOrder,
-    t,
-  ]);
-
-  const hasMultipleStops = waypoints.length > 2;
-  const showOptimize =
-    hasMultipleStops && allWaypointsFilled && !isTransitMode && !hidesRouteControls;
-  // Reordering could move a stop past its appointment, and the optimize engine
-  // has no notion of time windows, so it is refused rather than silently wrong.
-  const optimizeBlocked = waypoints.some(
-    (wp) =>
-      wp.schedule?.departAfter !== undefined ||
-      wp.schedule?.arriveBy !== undefined ||
-      wp.schedule?.fixedAt !== undefined,
-  );
-  const lowestCo2Grams = useMemo(() => {
-    const values = transitItineraries
-      .map((itinerary) => itinerary.co2Grams)
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-    if (values.length < 2) return null;
-    return Math.min(...values);
-  }, [transitItineraries]);
-
-  const transitDetailsIndex =
-    transitDetailsSelection?.identity === transitQueryIdentity
-      ? findTransitItinerary(transitItineraries, transitDetailsSelection.itinerary)
-      : -1;
-  if (transitDetailsIndex >= 0 && transitItineraries[transitDetailsIndex]) {
+  const transitDetails = openTransitItinerary(transit, details);
+  if (transitDetails) {
     return (
-      <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
-        <TransitDetailsView
-          itinerary={transitItineraries[transitDetailsIndex]}
-          isLowestCo2={
-            lowestCo2Grams !== null &&
-            transitItineraries[transitDetailsIndex]?.co2Grams === lowestCo2Grams
-          }
-          originLabel={originLabel}
-          destinationLabel={destinationLabel}
-          provider={transitPlanData?.provider}
-          attributions={snapshotContributors(
-            transitItineraries[transitDetailsIndex]?.contributors ?? [],
-          )}
-          originTimeZone={originTimeZone}
-          destinationTimeZone={destinationTimeZone}
-          onSelectItinerary={(parent, candidate) => {
-            const selected = selectTransitAlternative(parent, candidate);
-            if (selected)
-              setTransitDetailsSelection({ identity: transitQueryIdentity, itinerary: selected });
-          }}
-          onBack={() => setTransitDetailsSelection(null)}
-        />
-      </AttributionDetailsGroup>
+      <TransitItineraryDetails transit={transit} itinerary={transitDetails} details={details} />
     );
   }
-
+  const detailsRoute =
+    details.routeIndex !== null ? ground.displayed?.routes[details.routeIndex] : undefined;
   if (detailsRoute) {
     return (
-      <DetailsView
+      <GroundRouteDetails
         route={detailsRoute}
-        attributions={routeAttributions(registry, displayedGroundResult?.provider, detailsRoute)}
-        originLabel={originLabel}
-        destinationLabel={destinationLabel}
-        waypointLabels={waypoints.map((wp) => wp.label)}
-        units={units}
-        onBack={() => setDetailsRouteIndex(null)}
+        provider={ground.displayed?.provider}
+        onBack={details.closeRoute}
       />
     );
   }
 
-  // The depart/arrive picker is shared by transit and driving (driving uses
-  // local state; transit uses the store). `activeTime*` adapt the shared
-  // controlled picker to whichever flow is active.
-  const showTimePicker = isTransitMode || isDrivingTimeMode;
-  const activeTimeMode: TimeMode = isTransitMode ? transitTimeMode : timeMode;
-  const activeTimeValue: Date | null = isTransitMode
-    ? activeTimeMode === "depart"
-      ? transitDepartureTime instanceof Date
-        ? transitDepartureTime
-        : null
-      : activeTimeMode === "arrive"
-        ? transitArrivalTime instanceof Date
-          ? transitArrivalTime
-          : null
-        : null
-    : tripTime;
-  const handleTimeModeChange = (m: TimeMode) => {
-    if (isTransitMode) {
-      setTransitTimeMode(m);
-      if (m === "now") {
-        setTransitDepartureTime("now");
-        setTransitArrivalTime(null);
-      } else if (m === "depart" && !(transitDepartureTime instanceof Date)) {
-        setTransitDepartureTime(new Date());
-      } else if (m === "arrive" && !transitArrivalTime) {
-        setTransitArrivalTime(new Date());
-      }
-    } else {
-      setTimeMode(m);
-      if (m !== "now" && !tripTime) setTripTime(new Date());
-    }
-  };
-  const handleTimeValueChange = (d: Date) => {
-    if (isTransitMode) {
-      if (transitTimeMode === "depart") setTransitDepartureTime(d);
-      else setTransitArrivalTime(d);
-    } else {
-      setTripTime(d);
-    }
-  };
-
-  // A phone chooses a stop in the main full-screen search, as a search
-  // that fills the stop instead of opening the place.
-  const openStopSearch = (index: number) => {
-    const waypoint = waypoints[index];
-    if (!waypoint) return;
-    useStopSearchStore.getState().open({
-      initialQuery: inputValues[index] ?? "",
-      placeholder: waypointPlaceholder(t, index, waypoints.length),
-      onPick: ({ coordinates, label }) => {
-        clearDraft(waypoint.id);
-        setWaypoint(index, coordinates, label);
-      },
-    });
-  };
-
-  const suggestionList = (
-    <>
-      <AutocompleteDropdown
-        suggestions={wsSuggestions ?? []}
-        onSelect={handleSuggestionSelect}
-        query={activeQuery}
-        distanceReference={
-          userLocation ? { kind: "user_location", coordinates: userLocation } : undefined
-        }
-      />
-      {waypointAttributions.length > 0 && (
-        <Box sx={{ px: 2, py: 0.75 }}>
-          <AttributionStrip attributions={waypointAttributions} variant="plain" />
-        </Box>
-      )}
-    </>
+  const modeButtons = travelModeButtons({
+    mode,
+    activeRecord: isTransitMode ? transit.itineraries[0] : ground.directions.data?.routes[0],
+    activeLoading: isTransitMode ? transit.planQuery.isLoading : ground.directionsQuery.isLoading,
+    cachedDuration: ground.cachedDuration,
+    locale,
+  });
+  // Rows that describe driving the route yourself (time picker, avoid options,
+  // share, optimize) do not apply when someone else is doing the driving.
+  const hidesRouteControls = mode === "flying" || mode === "ride";
+  // The depart/arrive picker is shared by transit and timed driving.
+  const showTimePicker = isTransitMode || isTimedGroundMode(mode);
+  // In a phone's sheet the driving switch and the departure time share a row.
+  const timeInModeRow = inSheet && mode === "driving" && showTimePicker;
+  const timeChip = (
+    <TripTimeChip
+      mode={time.mode}
+      value={time.value}
+      open={time.pickerOpen}
+      onToggle={time.togglePicker}
+    />
   );
 
   const waypointList = (
-    <Box ref={waypointListRef}>
+    <Box ref={fields.listRef}>
       <WaypointList
         waypoints={waypoints}
-        inputValues={inputValues}
-        onInputChange={handleInputChange}
-        onFocus={handleWaypointFocus}
-        onBlur={handleWaypointBlur}
-        onReorder={reorderWaypoints}
-        onAdd={addWaypoint}
-        onRemove={handleRemove}
-        onReverse={reverseWaypoints}
-        onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
-        onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
+        inputValues={fields.inputValues}
+        onInputChange={fields.onInputChange}
+        onFocus={fields.onFocus}
+        onBlur={fields.onBlur}
+        onReorder={useDirectionsStore.getState().reorderWaypoints}
+        onAdd={useDirectionsStore.getState().addWaypoint}
+        onRemove={fields.onRemove}
+        onReverse={useDirectionsStore.getState().reverseWaypoints}
+        onUseMyLocation={fields.onUseMyLocation}
+        onEditSchedule={isEvMode || mode === "flying" ? undefined : fields.editSchedule}
         isEvMode={isEvMode}
-        onFieldPress={inSheet ? openStopSearch : undefined}
+        onFieldPress={inSheet ? fields.openStopSearch : undefined}
         t={t}
       />
     </Box>
   );
-
-  // In a phone's sheet the driving switch and the departure time share a row.
-  const timeInModeRow = inSheet && mode === "driving" && showTimePicker && !hidesRouteControls;
-  // Leave now / depart at / arrive by, for transit and timed driving.
-  const timeChip = (
-    <ClickableRow
-      aria-expanded={timePickerOpen}
-      onClick={() => setTimePickerOpen((v) => !v)}
-      sx={{
-        width: "auto",
-        gap: 0.75,
-        px: 1.75,
-        py: 0.75,
-        borderRadius: "12px",
-        bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
-        "&:hover": {
-          bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
-        },
-        transition: "background-color 0.15s",
-      }}
-    >
-      <ScheduleIcon
-        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-      />
-      <Typography
-        variant="body2"
-        color={activeTimeMode !== "now" ? BRAND : "text.primary"}
-        sx={{
-          fontWeight: 500,
-        }}
-      >
-        {activeTimeMode === "now"
-          ? t("departNow")
-          : activeTimeMode === "depart"
-            ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
-            : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
-      </Typography>
-      <ExpandMoreIcon
-        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-      />
-    </ClickableRow>
-  );
+  const scheduleIndex = fields.scheduleEditIndex;
+  const scheduleWaypoint = scheduleIndex !== null ? waypoints[scheduleIndex] : undefined;
 
   return (
     // Tapping the collapsed sheet's background opens it to mid. Keyboard users
     // change the sheet's height from the focusable sheet itself.
     // biome-ignore lint/plugin/noClickableLayoutElement: background tap, not an action
     <Box onClick={expandOnBackgroundTap}>
-      {/* Keep panel actions separate so every travel mode gets the full panel width. */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          px: 1,
-          pt: 0.5,
-        }}
-      >
-        <IconButton
-          size="small"
-          aria-label={t("menu")}
-          onClick={() => useMenuStore.getState().open()}
-          sx={{ width: 44, height: 44, flexShrink: 0 }}
-        >
-          <MenuIcon sx={{ fontSize: 22 }} />
-        </IconButton>
-        <Typography variant="subtitle2" sx={{ ml: 1, flex: 1, fontWeight: 600 }}>
-          {t("routes")}
-        </Typography>
-        {/* Route options and sharing live in the title row, not rows of their own. */}
-        {!hidesRouteControls && (
-          <Tooltip title={t("options")}>
-            <IconButton
-              size="small"
-              aria-label={t("options")}
-              aria-expanded={showOptions}
-              onClick={() => setShowOptions((v) => !v)}
-              sx={{
-                width: 44,
-                height: 44,
-                flexShrink: 0,
-                color: showOptions ? "primary.main" : undefined,
-              }}
-            >
-              <TuneIcon sx={{ fontSize: 22 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-        {!hidesRouteControls && allWaypointsFilled && (
-          <Tooltip title={tp("share")}>
-            <IconButton
-              size="small"
-              aria-label={tp("share")}
-              onClick={handleShare}
-              sx={{ width: 44, height: 44, flexShrink: 0 }}
-            >
-              <ShareIcon sx={{ fontSize: 22 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-        <IconButton
-          size="small"
-          onClick={() => useSidebarStore.getState().closeSidebar()}
-          sx={{ width: 44, height: 44, flexShrink: 0 }}
-          aria-label={t("close")}
-        >
-          <CloseIcon sx={{ fontSize: 22 }} />
-        </IconButton>
-      </Box>
-
-      <Box
-        role="radiogroup"
-        aria-label={t("travelMode")}
-        sx={{
-          display: "flex",
-          width: "100%",
-          boxSizing: "border-box",
-          px: "6px",
-          pb: 0.25,
-          justifyContent: "space-around",
-          flexWrap: "wrap",
-        }}
-      >
-        {modeButtons.map(({ mode: m, icon, labelKey, disabled, isActive, time, loading }) => {
-          return (
-            <ModeButton
-              key={m}
-              mode={m}
-              name="travel-mode"
-              icon={icon}
-              label={t(labelKey)}
-              time={time}
-              active={isActive}
-              disabled={disabled}
-              loading={loading}
-              onClick={() => {
-                setMode(m);
-                setDetailsRouteIndex(null);
-                setTransitDetailsSelection(null);
-              }}
-            />
-          );
-        })}
-      </Box>
-      {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
-          of driving, not its own top-level mode, so it lives here rather than in
-          the mode row. */}
+      <DirectionsPanelHeader
+        showRouteControls={!hidesRouteControls}
+        canShare={ground.allWaypointsFilled}
+        optionsOpen={showOptions}
+        onToggleOptions={() => setShowOptions((v) => !v)}
+        onNotify={setSnackbar}
+      />
+      <TravelModeRow buttons={modeButtons} onSelect={switchMode} />
       {mode === "driving" && (
-        // Beside the panel the fields follow, so it lines up with them:
-        // WaypointList's px (12px) + WaypointRow's 24px icon column + its 4px gap.
-        // In a phone's sheet the fields float above the map; it lines up with
-        // the sheet's content and keeps its distance from the divider below.
-        <Box
-          sx={[
-            inSheet ? { px: 2, pt: 1, pb: 1.5 } : { pl: 5, pr: 1.5, pt: 1 },
-            { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 },
-          ]}
-        >
-          {/* Departure first, where transit has it too. */}
-          {timeInModeRow && timeChip}
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={isEvMode ? "ev" : "route"}
-            onChange={(_, value) => {
-              if (!value) return;
-              setEvMode(value === "ev");
-              setDetailsRouteIndex(null);
-              setTransitDetailsSelection(null);
-            }}
-            aria-label={t("driving")}
-            sx={{ "& .MuiToggleButton-root": { textTransform: "none", py: 0.3, px: 1.2 } }}
-          >
-            <ToggleButton value="route">
-              <DirectionsCarIcon sx={{ fontSize: 18, mr: 0.5 }} />
-              {t("driving")}
-            </ToggleButton>
-            <ToggleButton value="ev">
-              <EvStationIcon sx={{ fontSize: 18, mr: 0.5 }} />
-              {t("evMode")}
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
+        <DrivingKindRow
+          isEvMode={isEvMode}
+          inSheet={inSheet}
+          timeChip={timeInModeRow ? timeChip : null}
+          onChange={(ev) => {
+            useDirectionsStore.getState().setEvMode(ev);
+            details.leave();
+          }}
+        />
       )}
       {/* Waypoint list with drag-and-drop: in the panel, or above the map on a phone. */}
       {inSheet ? <PhoneWaypointCard>{waypointList}</PhoneWaypointCard> : waypointList}
-      {/* Divider + content below */}
       <Box sx={{ position: "relative" }}>
         <Divider />
-
-        {/* Optimize button */}
-        {showOptimize && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 2,
-              py: 0.75,
-              borderBottom: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Typography
-              component="button"
-              type="button"
-              variant="body2"
-              onClick={handleOptimize}
-              disabled={optimizeBlocked}
-              title={optimizeBlocked ? t("scheduleOptimizeBlocked") : undefined}
-              sx={{
-                color: optimizeBlocked ? "text.disabled" : BRAND,
-                cursor: optimizeBlocked ? "not-allowed" : "pointer",
-                fontWeight: 500,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.75,
-                px: 1.5,
-                py: 0.5,
-                border: "none",
-                background: "none",
-                font: "inherit",
-                borderRadius: 99,
-                "&:hover": { bgcolor: optimizeBlocked ? "transparent" : `${BRAND}18` },
-                transition: "background-color 0.15s",
-              }}
-            >
-              {optimizeMutation.isPending ? (
-                <>
-                  <CircularProgress size={14} sx={{ color: BRAND }} />
-                  {t("optimizing")}
-                </>
-              ) : (
-                <>
-                  <RouteIcon sx={{ fontSize: 16 }} />
-                  {t("optimizeStopOrder")}
-                </>
-              )}
-            </Typography>
-          </Box>
-        )}
-
-        {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
-            Flight mode renders its own form below, so this row is hidden. */}
+        <OptimizeStopsRow
+          waypoints={waypoints}
+          mode={mode}
+          allWaypointsFilled={ground.allWaypointsFilled}
+          pending={optimizeStops.isPending}
+          onOptimize={optimizeStops.optimize}
+        />
+        {/* Flight and ride modes render their own forms below, so this row is hidden. */}
         {!hidesRouteControls && showTimePicker && !timeInModeRow && (
           <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>{timeChip}</Box>
         )}
-
-        {/* Depart-at / arrive-by picker (shared by transit + driving) */}
-        {showTimePicker && timePickerOpen && (
+        {showTimePicker && time.pickerOpen && (
           <TimeModePicker
-            timeMode={activeTimeMode}
-            value={activeTimeValue}
-            onTimeModeChange={handleTimeModeChange}
-            onValueChange={handleTimeValueChange}
+            timeMode={time.mode}
+            value={time.value}
+            onTimeModeChange={time.changeMode}
+            onValueChange={time.changeValue}
           />
         )}
-
         {showOptions && !hidesRouteControls && <RouteOptions />}
-
         <Divider />
-
-        {/* Plain-route energy/cost + vehicle chip, driving mode only (EV mode
-            gets its own vehicle inputs via EvVehiclePanel above). */}
-
-        {/* Route results */}
         <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
-          <AttributionStrip attributions={modeDurationAttributions} provenanceDisplay="details" />
-          {isFlightMode ? (
-            <FlightPanel />
-          ) : isRideMode ? (
-            <>
-              {allWaypointsFilled &&
-                (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError) ? (
-                  <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                    <CircularProgress size={28} sx={{ color: BRAND }} />
-                  </Box>
-                ) : isError ? (
-                  <RouteRecovery
-                    failed
-                    error={directionsQuery.error}
-                    onRetry={() => void directionsQuery.refetch()}
-                    {...recoveryActions}
-                  />
-                ) : data?.routes.length === 0 ? (
-                  <RouteRecovery failed={false} {...recoveryActions} />
-                ) : null)}
-              <RidePanel
-                route={
-                  !isError && data?.routes[0]
-                    ? {
-                        distanceMeters: data.routes[0].distance,
-                        durationSeconds: data.routes[0].duration,
-                      }
-                    : undefined
-                }
-              />
-            </>
-          ) : !allWaypointsFilled ? (
-            <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {t("chooseOrigin")}
-              </Typography>
-            </Box>
-          ) : isEvMode ? (
-            <>
-              <EvVehiclePanel />
-              {!evRequest ? null : evLoading ||
-                (evIsError && evQuery.isFetching) ||
-                (!evData && !evIsError) ? (
-                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                  <CircularProgress size={28} sx={{ color: BRAND }} />
-                </Box>
-              ) : evIsError ? (
-                <RouteRecovery
-                  failed
-                  error={evQuery.error}
-                  onRetry={() => void evQuery.refetch()}
-                  {...recoveryActions}
-                />
-              ) : evData?.routes.length === 0 ? (
-                <RouteRecovery failed={false} {...recoveryActions} />
-              ) : evData ? (
-                <EvPlanCard
-                  result={evData}
-                  onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
-                />
-              ) : null}
-            </>
-          ) : transitIsChained ? (
-            transitChainQuery.isLoading ||
-            (transitChainQuery.isError && transitChainQuery.isFetching) ||
-            (!transitChainData && !transitChainQuery.isError) ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} sx={{ color: BRAND }} />
-              </Box>
-            ) : transitChainQuery.isError ? (
-              <RouteRecovery
-                failed
-                error={transitChainQuery.error}
-                onRetry={() => void transitChainQuery.refetch()}
-                {...recoveryActions}
-              />
-            ) : transitChainData ? (
-              <>
-                {transitChainData.segments.length === 0 && (
-                  <RouteRecovery failed={false} {...recoveryActions} />
-                )}
-                <TransitChainView
-                  plan={transitChainData}
-                  waypointLabels={waypoints.map((wp) => wp.label)}
-                />
-              </>
-            ) : null
-          ) : isTransitMode ? (
-            transitLoading ||
-            (transitError && transitPlanQuery.isFetching) ||
-            (!transitPlanData && !transitError) ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} sx={{ color: BRAND }} />
-              </Box>
-            ) : transitError ? (
-              <RouteRecovery
-                failed
-                error={transitPlanQuery.error}
-                onRetry={() => void transitPlanQuery.refetch()}
-                {...recoveryActions}
-              />
-            ) : transitPlanData?.itineraries.length === 0 && !transitPaging.isPage ? (
-              <RouteRecovery failed={false} {...recoveryActions} />
-            ) : transitItineraries.length === 0 ? (
-              <RouteRecovery failed={false} {...recoveryActions} />
-            ) : (
-              <>
-                {transitItineraries.map((itin, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: itineraries have no stable id
-                  <Box key={i}>
-                    <TransitItineraryCard
-                      itinerary={itin}
-                      active={i === activeItineraryIndex}
-                      isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
-                      replanOptions={transitReplanOptions}
-                      originTimeZone={originTimeZone}
-                      destinationTimeZone={destinationTimeZone}
-                      onSelect={() => {
-                        setActiveItineraryIndex(i);
-                        snapTo("peek");
-                      }}
-                      onDetails={() =>
-                        setTransitDetailsSelection({
-                          identity: transitQueryIdentity,
-                          itinerary: itin,
-                        })
-                      }
-                      onRefreshed={(updated, changed, fallbackOccurred) => {
-                        const current = useDirectionsStore.getState().transitItineraries;
-                        if (!current.includes(itin)) return;
-                        const retained =
-                          !fallbackOccurred &&
-                          transitItineraryFingerprint(updated) === transitItineraryFingerprint(itin)
-                            ? { ...updated, regionalOnly: itin.regionalOnly }
-                            : updated;
-                        setTransitItineraries(
-                          current.map((candidate) => (candidate === itin ? retained : candidate)),
-                        );
-                        if (changed || fallbackOccurred) {
-                          setSnackbar(
-                            fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
-                          );
-                        }
-                      }}
-                    />
-                    {i < transitItineraries.length - 1 && <Divider />}
-                  </Box>
-                ))}
-                {destinationOffsetLabel && (
-                  <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
-                    {t("arrivalInDestinationTime")}
-                  </Typography>
-                )}
-                {(transitPaging.previousToken || transitPaging.nextToken) && (
-                  <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                      <Button
-                        size="small"
-                        disabled={!transitPaging.previousToken || transitLoading}
-                        onClick={transitPaging.loadPrevious}
-                      >
-                        {t("earlierConnections")}
-                      </Button>
-                      <Button
-                        size="small"
-                        disabled={!transitPaging.nextToken || transitLoading}
-                        onClick={transitPaging.loadNext}
-                      >
-                        {t("laterConnections")}
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-                <AttributionStrip
-                  attributions={transitPlanAttributions}
-                  variant="panel-header"
-                  label={tc("dataSources")}
-                />
-              </>
-            )
-          ) : scheduleRequest &&
-            (scheduledQuery.isLoading || (scheduledQuery.isError && scheduledQuery.isFetching)) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : scheduleRequest && scheduledQuery.isError ? (
-            <RouteRecovery
-              failed
-              error={scheduledQuery.error}
-              onRetry={() => void scheduledQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : scheduleRequest && scheduledData?.routes.length === 0 ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : scheduleRequest && !scheduledData ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : !scheduleRequest &&
-            (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError)) ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: BRAND }} />
-            </Box>
-          ) : !scheduleRequest && isError ? (
-            <RouteRecovery
-              failed
-              error={directionsQuery.error}
-              onRetry={() => void directionsQuery.refetch()}
-              {...recoveryActions}
-            />
-          ) : !scheduleRequest && hasMultipleStops && data?.routes[0] ? (
-            // Multi-stop: single route with leg summary
-            <>
-              <Box>
-                {/* Pointer shortcut for the Details button below, the keyboard path. */}
-                {/* biome-ignore lint/plugin/noClickableLayoutElement: duplicates the Details button */}
-                <Box
-                  sx={{
-                    px: 2,
-                    py: 1.5,
-                    cursor: "pointer",
-                    borderLeft: `4px solid ${BRAND}`,
-                    bgcolor: "rgba(0,123,139,0.04)",
-                    "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
-                  }}
-                  onClick={() => setDetailsRouteIndex(0)}
-                >
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                    }}
-                  >
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                        color: "text.primary",
-                      }}
-                    >
-                      {formatDuration(data.routes[0].duration, locale)}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      {formatOverviewDistance(data.routes[0].distance, units)}
-                    </Typography>
-                  </Box>
-                  {data.routes[0].legs.length > 1 && (
-                    <Box sx={{ mt: 1 }}>
-                      {data.routes[0].legs.map((leg, i) => {
-                        const fromLabel = waypoints[i]?.label || t("origin");
-                        const toLabel = waypoints[i + 1]?.label || t("destination");
-                        return (
-                          <Typography
-                            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-                            key={i}
-                            variant="caption"
-                            sx={{
-                              color: "text.secondary",
-                              display: "block",
-                              lineHeight: 1.6,
-                            }}
-                          >
-                            {fromLabel}→ {toLabel}
-                            {" · "}
-                            {formatDuration(leg.duration, locale)}
-                            {" · "}
-                            {formatOverviewDistance(leg.distance, units)}
-                          </Typography>
-                        );
-                      })}
-                    </Box>
-                  )}
-                  <Box sx={{ mt: 0.5, ml: -1.5 }}>
-                    <ClickableRow
-                      sx={{
-                        width: "auto",
-                        typography: "caption",
-                        color: BRAND,
-                        fontWeight: 500,
-                        px: 1.5,
-                        py: 0.75,
-                        borderRadius: 99,
-                        "&:hover": { bgcolor: `${BRAND}18` },
-                        transition: "background-color 0.15s",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailsRouteIndex(0);
-                      }}
-                    >
-                      {tc("details")}
-                    </ClickableRow>
-                  </Box>
-                </Box>
-              </Box>
-              {stopSearch}
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : scheduledData ? (
-            <>
-              {scheduledData.routes.map((route, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-                <Box key={i}>
-                  <RouteCard
-                    route={route}
-                    index={i}
-                    active
-                    selectionKind="peek"
-                    isFastest={i === fastestRouteIndex}
-                    onSelect={() => snapTo("peek")}
-                    onDetails={() => setDetailsRouteIndex(i)}
-                    units={units}
-                    arrivalContext={{
-                      kind: "scheduled",
-                      arrival: scheduledData.schedule.arrival,
-                      destinationTimeZone: destination
-                        ? timeZoneAt(destination[1], destination[0])
-                        : null,
-                    }}
-                    provider={scheduledData.provider}
-                    roadConditionImpact={scheduledData.roadConditionImpact}
-                    impact={routeImpacts[i]}
-                    impactUnavailableReason={routeImpactUnavailableReason}
-                    vehicles={impactVehicles}
-                    onUpdateAssumptions={handleUpdateAssumptions}
-                  />
-                </Box>
-              ))}
-              <Divider />
-              <TripScheduleCard
-                schedule={scheduledData.schedule}
-                fidelity={scheduledData.fidelity}
-                warnings={scheduledData.warnings}
-                waypointLabels={waypoints.map((wp) => wp.label)}
-              />
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : !scheduleRequest && data?.routes.length ? (
-            <>
-              <Box role="radiogroup" aria-label={t("routes")}>
-                {data.routes.map((route, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-                  <Box key={i}>
-                    <RouteCard
-                      route={route}
-                      index={i}
-                      active={i === activeRouteIndex}
-                      isFastest={i === fastestRouteIndex}
-                      onSelect={() => {
-                        setActiveRouteIndex(i);
-                        snapTo("peek");
-                      }}
-                      onDetails={() => setDetailsRouteIndex(i)}
-                      units={units}
-                      arrivalContext={arrivalContext}
-                      alternatives={data.routes.filter((_, idx) => idx !== i)}
-                      provider={data.provider}
-                      roadConditionImpact={data.roadConditionImpact}
-                      impact={routeImpacts[i]}
-                      impactUnavailableReason={routeImpactUnavailableReason}
-                      vehicles={impactVehicles}
-                      onUpdateAssumptions={handleUpdateAssumptions}
-                    />
-                    {i < data.routes.length - 1 && <Divider />}
-                  </Box>
-                ))}
-              </Box>
-              {stopSearch}
-              <AttributionStrip
-                attributions={routingAttributions}
-                variant="panel-header"
-                label={tc("dataSources")}
-              />
-            </>
-          ) : !scheduleRequest && data ? (
-            <RouteRecovery failed={false} {...recoveryActions} />
-          ) : null}
+          <AttributionStrip
+            attributions={snapshotContributors(...modeButtons.map((b) => b.contributors))}
+            provenanceDisplay="details"
+          />
+          <DirectionsResults
+            ground={ground}
+            transit={transit}
+            recovery={recovery}
+            details={details}
+            onNotify={setSnackbar}
+          />
         </AttributionDetailsGroup>
-
-        {/* Suggestions overlay */}
-        {showSuggestions && !inSheet && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bgcolor: "background.paper",
-              zIndex: 2,
-              boxShadow: "0 4px 12px var(--omx-shadow-soft)",
-            }}
-          >
-            {suggestionList}
-          </Box>
+        {fields.showSuggestions && !inSheet && (
+          <WaypointSuggestions
+            suggestions={fields.suggestions}
+            query={fields.suggestionQuery}
+            userLocation={fields.userLocation}
+            onSelect={fields.selectSuggestion}
+          />
         )}
       </Box>
       <Snackbar
@@ -1779,35 +231,16 @@ export function DirectionsPanelContent() {
         onClose={() => setSnackbar(null)}
         message={snackbar}
       />
-      <Menu
-        anchorEl={shareMenuAnchor}
-        open={Boolean(shareMenuAnchor)}
-        onClose={() => setShareMenuAnchor(null)}
-      >
-        <MenuItem onClick={() => void handleCopyCurrentView()}>
-          {tShare("copyCurrentView")}
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setShareMenuAnchor(null);
-            setShareRouteDialogOpen(true);
-          }}
-        >
-          {tShare("createShareLink")}
-        </MenuItem>
-      </Menu>
-      <ShareRouteDialog
-        open={shareRouteDialogOpen}
-        onClose={() => setShareRouteDialogOpen(false)}
-      />
-      {scheduleEditIndex !== null && waypoints[scheduleEditIndex]?.coords && (
+      {scheduleIndex !== null && scheduleWaypoint?.coords && (
         <WaypointScheduleDialog
           open
-          waypointLabel={waypoints[scheduleEditIndex].label}
-          coords={waypoints[scheduleEditIndex].coords}
-          schedule={waypoints[scheduleEditIndex].schedule}
-          onSave={(schedule) => setWaypointSchedule(scheduleEditIndex, schedule)}
-          onClose={() => setScheduleEditIndex(null)}
+          waypointLabel={scheduleWaypoint.label}
+          coords={scheduleWaypoint.coords}
+          schedule={scheduleWaypoint.schedule}
+          onSave={(schedule) =>
+            useDirectionsStore.getState().setWaypointSchedule(scheduleIndex, schedule)
+          }
+          onClose={() => fields.editSchedule(null)}
         />
       )}
     </Box>

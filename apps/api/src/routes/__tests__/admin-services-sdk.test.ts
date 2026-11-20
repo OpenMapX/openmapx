@@ -1,10 +1,14 @@
 import { createApiClient } from "@openmapx/core";
 import {
   artifactTransferAdminOperations,
+  auditAdminOperations,
   cacheAdminOperations,
+  coverageAdminOperations,
   platformAdminOperations,
   releaseControlAdminOperations,
   serviceAdminOperations,
+  settingsAdminOperations,
+  systemAdminOperations,
 } from "@openmapx/core/api-contracts";
 import {
   type OpsOperation,
@@ -546,6 +550,11 @@ describe("actual service producers through final exported SDK", () => {
         ...Object.keys(cacheAdminOperations), // Scoped route/SDK/real Valkey coverage is dedicated.
         ...Object.keys(platformAdminOperations),
         ...Object.keys(artifactTransferAdminOperations),
+        // Settings, logs, audit, system and coverage producers have their own route suites.
+        ...Object.keys(settingsAdminOperations),
+        ...Object.keys(auditAdminOperations),
+        ...Object.keys(systemAdminOperations),
+        ...Object.keys(coverageAdminOperations),
       ]);
       expect([...registered.keys()].sort()).toEqual(
         Object.keys(serviceAdminOperations)

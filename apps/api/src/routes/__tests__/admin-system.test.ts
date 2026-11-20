@@ -36,13 +36,6 @@ const executeAndWait = vi.fn(
 );
 const opsClient = {};
 
-vi.mock("@openmapx/core/server", () => ({
-  repoPaths: () => ({
-    composePath:
-      "/repo/infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml",
-  }),
-}));
-
 vi.mock("../../utils/require-admin", () => ({
   requireAdmin: (...args: unknown[]) => requireAdmin(...args),
   getAdminSession: () => session,
@@ -60,10 +53,6 @@ vi.mock("../../services/ops-client", () => ({
   executeAndWait: (client: unknown, operation: { kind: string }) =>
     executeAndWait(client, operation),
 }));
-vi.mock("../../services/system-maintenance", () => ({
-  getCoreImageStatuses: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("../../services/admin-ops", () => ({ isDockerAvailable: vi.fn().mockResolvedValue(true) }));
 vi.mock("../../services/job-runner", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => enqueue(...args),
@@ -186,6 +175,22 @@ describe("admin system routes", () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update.apply" }));
   });
 
+  it.each([
+    ["/admin/system/updates/check", { image: "attacker/image:latest" }],
+    ["/admin/system/diagnostics", { argv: ["--host", "/"] }],
+    ["/admin/system/updates/apply", {}],
+  ])("answers an unauthenticated %s with 401 before validating its body", async (url, payload) => {
+    const signedIn = await app.inject({ method: "POST", url, payload });
+    expect(signedIn.statusCode).toBe(400);
+
+    requireAdmin.mockRejectedValueOnce(
+      Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+    );
+    const response = await app.inject({ method: "POST", url, payload });
+    expect(response.statusCode).toBe(401);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it.each(["loopback", "impersonated"])(
     "refuses %s release application before enqueue",
     async (kind) => {
@@ -240,6 +245,22 @@ describe("admin system routes", () => {
         details: { createBackup: false, releaseId: "release-123", expectedDigest: "a".repeat(64) },
       }),
     );
+  });
+
+  it("names the deployment state when host maintenance is unavailable", async () => {
+    executeAndWait.mockResolvedValueOnce({ ...systemInspection, maintenanceReady: false });
+    const response = await app.inject({ method: "POST", url: "/admin/system/diagnostics" });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Host maintenance is unavailable through the operations agent.",
+      deployment: {
+        dockerAvailable: true,
+        composeRendered: true,
+        hostControlConfigured: expect.any(Boolean),
+        maintenanceReady: false,
+      },
+    });
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it("rejects concurrent update operations", async () => {

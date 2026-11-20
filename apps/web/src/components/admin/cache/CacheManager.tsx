@@ -15,10 +15,17 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
+import type { ApiClient } from "@openmapx/core";
+import {
+  adminErrorMessage,
+  clearAdminCache,
+  listAdminCacheNamespaces,
+  unwrapAdminResponse,
+} from "@openmapx/core/api-admin-sdk";
 import { isAppCachePattern } from "@openmapx/core/cache-namespaces";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
@@ -27,15 +34,6 @@ import { ErrorState } from "../shared/ErrorState";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useClientPagination } from "../shared/tableHooks";
-
-interface CacheNamespace {
-  namespace: string;
-  keyCount: number;
-}
-
-interface CacheListResponse {
-  namespaces: CacheNamespace[];
-}
 
 const CACHE_QUERY_KEY = ["admin", "cache"] as const;
 
@@ -46,10 +44,10 @@ type ClearTarget =
   | { kind: "pattern"; pattern: string; estimatedCount: number };
 
 export function CacheManager() {
-  const { apiUrl } = useEnv();
-  return <CacheManagerSession key={apiUrl} apiUrl={apiUrl} />;
+  const { apiUrl, client } = useActivityClient();
+  return <CacheManagerSession key={apiUrl} apiUrl={apiUrl} client={client} />;
 }
-function CacheManagerSession({ apiUrl }: { apiUrl: string }) {
+function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiClient }) {
   const qc = useQueryClient();
   const showToast = useAdminToast();
   const [pattern, setPattern] = useState("");
@@ -57,45 +55,40 @@ function CacheManagerSession({ apiUrl }: { apiUrl: string }) {
   const patternValid = isAppCachePattern(pattern);
   const [target, setTarget] = useState<ClearTarget | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery<CacheListResponse>({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [...CACHE_QUERY_KEY, apiUrl],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/cache`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load cache");
-      return res.json();
-    },
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(await listAdminCacheNamespaces({ client, signal })),
   });
 
   const previewMutation = useMutation({
     mutationFn: async (captured: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/cache/clear`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pattern: captured, dryRun: true }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to preview cache");
-      return { pattern: captured, estimatedCount: body.estimatedCount as number };
+      try {
+        const result = unwrapAdminResponse(
+          await clearAdminCache({ pattern: captured, dryRun: true }, { client }),
+        );
+        if (!("estimatedCount" in result)) throw new Error("Preview deleted keys");
+        return { pattern: captured, estimatedCount: result.estimatedCount };
+      } catch (error) {
+        throw new Error(adminErrorMessage(error, "Failed to preview cache"), { cause: error });
+      }
     },
     onSuccess: setPreview,
   });
   const clearMutation = useMutation({
     mutationFn: async (t: ClearTarget) => {
-      const res = await fetch(`${apiUrl}/api/admin/cache/clear`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(
+      const result = unwrapAdminResponse(
+        await clearAdminCache(
           t.kind === "all"
             ? {}
             : t.kind === "pattern"
               ? { pattern: t.pattern }
               : { namespace: t.namespace },
+          { client },
         ),
-      });
-      if (!res.ok) throw new Error("Failed to clear cache");
-      return res.json() as Promise<{ deleted: number }>;
+      );
+      if (!("deleted" in result)) throw new Error("Clear returned a preview");
+      return result;
     },
     onSuccess: (result) => {
       showToast(`Cleared ${result.deleted} cache ${result.deleted === 1 ? "key" : "keys"}`);

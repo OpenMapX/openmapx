@@ -24,7 +24,7 @@ export function AccountMailStatus({
   const scope = useAccountAdmin(),
     query = useQuery({
       queryKey: scope.keys.delivery(userId),
-      queryFn: () => scope.client.delivery(userId),
+      queryFn: ({ signal }) => scope.client.delivery(userId, signal),
       enabled: !!scope.actorId,
       retry: false,
       refetchInterval: (query) => {

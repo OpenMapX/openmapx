@@ -83,7 +83,7 @@ describe("cycling preferences across client sessions", () => {
         bikePreferSmoothSurfaces: "true",
         bikeSpeedKmh: "19.5",
       }),
-      {},
+      expect.objectContaining({ maxBytes: expect.any(Number) }),
     );
     await fetchDirections({
       waypoints: [

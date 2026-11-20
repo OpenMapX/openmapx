@@ -10,10 +10,14 @@ export function useVehiclePositions(
 ): MobilityEnvelopeQueryResult<VehiclePosition[]> {
   const query = useQuery({
     queryKey: ["vehicle-positions", routeId],
-    queryFn: () =>
-      apiClient.get<MobilityEnvelope<VehiclePosition[]>>(API_ENDPOINTS.transitVehicles, {
-        route_id: routeId as string,
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<MobilityEnvelope<VehiclePosition[]>>(
+        API_ENDPOINTS.transitVehicles,
+        {
+          route_id: routeId as string,
+        },
+        { signal },
+      ),
     enabled: routeId !== null,
     staleTime: 15_000,
     refetchInterval: 15_000,

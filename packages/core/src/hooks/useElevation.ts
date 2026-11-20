@@ -50,13 +50,14 @@ export function useElevation({ route, enabled = true }: UseElevationParams) {
       route?.distance,
       profileInputContributors,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!route) throw new Error("No route");
       const geometry = route.geometry.map(([lng, lat]) => [lng, lat] as [number, number]);
-      const data = await apiClient.post<ElevationApiResponse>(API_ENDPOINTS.elevation, {
-        coordinates: geometry,
-        routeDistance: route.distance,
-      });
+      const data = await apiClient.post<ElevationApiResponse>(
+        API_ENDPOINTS.elevation,
+        { coordinates: geometry, routeDistance: route.distance },
+        { signal },
+      );
       return buildElevationProfileFromApi(geometry, data.points, {
         contributors: snapshotContributors(
           profileInputContributors,

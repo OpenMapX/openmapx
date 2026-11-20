@@ -26,7 +26,20 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { clearAdminReleaseSelection } from "@openmapx/core/api-admin-sdk";
+import { isApiClientError } from "@openmapx/core";
+import {
+  ApiContractError,
+  applyAdminSystemUpdate,
+  checkAdminSystemUpdates,
+  clearAdminReleaseSelection,
+  getAdminSystemStatus,
+  runAdminSystemDiagnostics,
+  unwrapAdminResponse,
+} from "@openmapx/core/api-admin-sdk";
+import {
+  ADMIN_SYSTEM_UPDATE_CONFIRMATION,
+  type AdminSystemImage,
+} from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
@@ -46,44 +59,13 @@ import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { ErrorState } from "../shared/ErrorState";
 
-const CONFIRMATION = "UPDATE OPENMAPX";
+const CONFIRMATION = ADMIN_SYSTEM_UPDATE_CONFIRMATION;
 const HOST_UPDATE_COMMANDS = [
   "pnpm openmapx compose release --check",
   "pnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
 ].join("\n");
 
-interface ImageStatus {
-  id: string;
-  name: string;
-  image: string | null;
-  containerState: string;
-  runningImageId: string | null;
-  localImageId: string | null;
-  updateAvailable: boolean;
-  status: "up-to-date" | "update-available" | "not-running" | "unknown";
-  error?: string;
-}
-
-interface ReleaseStatus {
-  configuredSelector?: string;
-  /** The release the applied configuration pins, which the services run. */
-  currentReleaseId?: string;
-  availableReleaseId?: string;
-  currentVersion?: string;
-  availableVersion?: string;
-  availableDigest?: string;
-}
-
-interface SystemStatus {
-  release?: ReleaseStatus;
-  deployment: {
-    dockerAvailable: boolean;
-    composeRendered: boolean;
-    hostControlConfigured: boolean;
-    maintenanceReady: boolean;
-  };
-  images: ImageStatus[];
-}
+type ImageStatus = AdminSystemImage;
 
 interface TrackedJob {
   path: string;
@@ -129,39 +111,30 @@ function boundedSeconds(seconds: number): number | null {
     : null;
 }
 
-const HTTP_DATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+type SystemUpdateInput = Parameters<typeof applyAdminSystemUpdate>[0];
 
-/** Seconds from a Retry-After header: delta-seconds or an HTTP date (IMF-fixdate); else null. */
-function headerRetrySeconds(header: string | null): number | null {
-  const value = header?.trim();
-  if (!value) return null;
-  if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
-  if (!HTTP_DATE.test(value)) return null;
-  const at = Date.parse(value);
-  // Round-tripping rejects normalized calendar dates (31 Sep) and wrong weekday/month tokens.
-  if (!Number.isFinite(at) || new Date(at).toUTCString() !== value) return null;
-  return boundedSeconds(Math.max(0, (at - Date.now()) / 1000));
+function requiredUpdateInput(body: SystemUpdateInput | undefined): SystemUpdateInput {
+  if (!body) throw new Error("Check a release before updating");
+  return body;
 }
 
-/** Server-declared wait: a usable Retry-After first, else a valid bounded body `retryAfter`. */
-function declaredRetrySeconds(header: string | null, body: unknown): number | null {
-  const fromHeader = headerRetrySeconds(header);
-  if (fromHeader !== null) return fromHeader;
-  const fallback = (body as { retryAfter?: unknown } | null)?.retryAfter;
-  return typeof fallback === "number" ? boundedSeconds(fallback) : null;
-}
-
-export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
-  return {
-    method: "POST",
-    credentials: "include",
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-  };
+/** A refused admission keeps the server's reason, its declared wait and whether a job is active. */
+function submissionError(error: unknown, label: string): unknown {
+  if (!isApiClientError(error) && !(error instanceof ApiContractError)) return error;
+  const payload = isApiClientError(error)
+    ? (error.payload as { error?: unknown; jobId?: unknown } | null)
+    : null;
+  const retryAfter = isApiClientError(error) ? error.retryAfterSeconds : null;
+  return new SubmissionError(
+    typeof payload?.error === "string"
+      ? payload.error
+      : error.status === 429
+        ? "Too many requests"
+        : `Failed to queue ${label}`,
+    error.status,
+    error.status === 429 && retryAfter !== null ? boundedSeconds(retryAfter) : null,
+    error.status === 409 && typeof payload?.jobId === "string",
+  );
 }
 
 function digest(value: string | null): string {
@@ -275,13 +248,10 @@ export function SystemMaintenance({
     };
   }, [rejections, setRejections]);
 
-  const statusQuery = useQuery<SystemStatus>({
+  const statusQuery = useQuery({
     queryKey: ["admin", "system", apiUrl],
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/admin/system`, { credentials: "include" });
-      if (!response.ok) throw new Error("Failed to load system maintenance status");
-      return response.json();
-    },
+    queryFn: async ({ signal }) =>
+      unwrapAdminResponse(await getAdminSystemStatus({ client, signal })),
     refetchInterval: trackedJob ? 5_000 : false,
   });
 
@@ -334,28 +304,20 @@ export function SystemMaintenance({
       label,
     }: {
       path: SubmissionPath;
-      body?: Record<string, unknown>;
+      body?: SystemUpdateInput;
       label: string;
     }) => {
-      const response = await fetch(
-        `${apiUrl}/api/admin/system/${path}`,
-        buildSystemJobRequestInit(body),
-      );
-      const result = (await response.json().catch(() => ({}))) as {
-        jobId?: string;
-        error?: string;
-        retryAfter?: unknown;
-      };
-      if (!response.ok || !result.jobId) {
-        throw new SubmissionError(
-          result.error ??
-            (response.status === 429 ? "Too many requests" : `Failed to queue ${label}`),
-          response.status,
-          response.status === 429
-            ? declaredRetrySeconds(response.headers.get("Retry-After"), result)
-            : null,
-          response.status === 409 && typeof result.jobId === "string",
+      let result: { jobId: string };
+      try {
+        result = unwrapAdminResponse(
+          path === "updates/check"
+            ? await checkAdminSystemUpdates(undefined, { client })
+            : path === "diagnostics"
+              ? await runAdminSystemDiagnostics(undefined, { client })
+              : await applyAdminSystemUpdate(requiredUpdateInput(body), { client }),
         );
+      } catch (error) {
+        throw submissionError(error, label);
       }
       register?.({
         client,
@@ -366,12 +328,7 @@ export function SystemMaintenance({
         returnTo: path === "diagnostics" ? "/admin/system/diagnostics" : "/admin/system/updates",
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "system", apiUrl] }),
       });
-      const job = {
-        id: result.jobId,
-        label,
-        path,
-        expectedDigest: typeof body?.expectedDigest === "string" ? body.expectedDigest : undefined,
-      };
+      const job = { id: result.jobId, label, path, expectedDigest: body?.expectedDigest };
       setTrackedJob(job);
       return job;
     },
@@ -925,7 +882,9 @@ export function SystemMaintenance({
               // The dialog closes only once the update is accepted (see onSuccess).
               queueJob.mutate({
                 path: "updates/apply",
-                body: { confirmation, createBackup, ...candidateToApply },
+                body: candidateToApply
+                  ? { confirmation: CONFIRMATION, createBackup, ...candidateToApply }
+                  : undefined,
                 label: "OpenMapX update",
               })
             }

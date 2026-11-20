@@ -4,6 +4,8 @@
  * to Pelias / OSRM / Valhalla.
  */
 
+import { readBoundedResponseText } from "../utils/fetchJson";
+
 export interface ApiClientConfig {
   baseUrl: string;
   credentials?: RequestCredentials;
@@ -40,6 +42,8 @@ function getConfig(): ApiClientConfig {
 
 /** Never read more than this from a non-2xx body; the rest is cancelled. */
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
+/** Success bodies share the SDK's ordinary JSON ceiling unless a caller declares more. */
+const DEFAULT_SUCCESS_BODY_BYTES = 8 * 1024 * 1024;
 /** Upper bound for an advertised `Retry-After`, so a hostile value cannot stall the UI for days. */
 const MAX_RETRY_AFTER_SECONDS = 86_400;
 
@@ -171,6 +175,23 @@ async function toApiClientError(res: Response): Promise<ApiClientError> {
   }
 }
 
+async function readSuccessText(
+  res: Response,
+  signal: AbortSignal,
+  maxBytes = DEFAULT_SUCCESS_BODY_BYTES,
+): Promise<string> {
+  if (!res.body) return "";
+  return readBoundedResponseText(res, maxBytes, { label: "API response", signal });
+}
+
+async function readSuccessJson<T>(
+  res: Response,
+  signal: AbortSignal,
+  maxBytes?: number,
+): Promise<T> {
+  return JSON.parse(await readSuccessText(res, signal, maxBytes)) as T;
+}
+
 async function assertOk(res: Response): Promise<void> {
   if (res.ok) return;
   throw await toApiClientError(res);
@@ -185,6 +206,12 @@ export interface ApiRequestOptions {
   headers?: HeadersInit;
   /** Explicit fetch cache policy, including uncached server metadata reads. */
   cache?: RequestCache;
+}
+
+/** Controls for the plain JSON methods, which read a success body whole. */
+export interface ApiReadOptions extends ApiRequestOptions {
+  /** Success body ceiling in bytes; defaults to 8 MiB. A larger body is refused. */
+  maxBytes?: number;
 }
 
 export interface ApiResponseOptions extends ApiRequestOptions {
@@ -394,10 +421,10 @@ export class ApiClient {
     });
   }
 
-  async get<T>(path: string, params?: ApiQueryParams, options: ApiRequestOptions = {}): Promise<T> {
-    return this.send(this.buildUrl(path, params), {}, options, async (res) => {
+  async get<T>(path: string, params?: ApiQueryParams, options: ApiReadOptions = {}): Promise<T> {
+    return this.send(this.buildUrl(path, params), {}, options, async (res, signal) => {
       await assertOk(res);
-      return res.json() as Promise<T>;
+      return readSuccessJson<T>(res, signal, options.maxBytes);
     });
   }
 
@@ -410,32 +437,32 @@ export class ApiClient {
   async getOptional<T>(
     path: string,
     params?: ApiQueryParams,
-    options: ApiRequestOptions = {},
+    options: ApiReadOptions = {},
   ): Promise<T | null> {
-    return this.send(this.buildUrl(path, params), {}, options, async (res) => {
+    return this.send(this.buildUrl(path, params), {}, options, async (res, signal) => {
       if (res.status === 204) return null;
       await assertOk(res);
-      return res.json() as Promise<T>;
+      return readSuccessJson<T>(res, signal, options.maxBytes);
     });
   }
 
-  async post<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+  async post<T>(path: string, body: unknown, options: ApiReadOptions = {}): Promise<T> {
     return this.mutate<T>("POST", path, body, options);
   }
 
-  async patch<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+  async patch<T>(path: string, body: unknown, options: ApiReadOptions = {}): Promise<T> {
     return this.mutate<T>("PATCH", path, body, options);
   }
 
-  async put<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+  async put<T>(path: string, body: unknown, options: ApiReadOptions = {}): Promise<T> {
     return this.mutate<T>("PUT", path, body, options);
   }
 
-  async delete<T = void>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    return this.send(this.buildUrl(path), { method: "DELETE" }, options, async (res) => {
+  async delete<T = void>(path: string, options: ApiReadOptions = {}): Promise<T> {
+    return this.send(this.buildUrl(path), { method: "DELETE" }, options, async (res, signal) => {
       await assertOk(res);
       if (res.status === 204) return undefined as T;
-      const text = await res.text();
+      const text = await readSuccessText(res, signal, options.maxBytes);
       return text ? (JSON.parse(text) as T) : (undefined as T);
     });
   }
@@ -444,7 +471,7 @@ export class ApiClient {
     method: string,
     path: string,
     body: unknown,
-    options: ApiRequestOptions,
+    options: ApiReadOptions,
   ): Promise<T> {
     return this.send(
       this.buildUrl(path),
@@ -454,9 +481,9 @@ export class ApiClient {
         body: JSON.stringify(body),
       },
       options,
-      async (res) => {
+      async (res, signal) => {
         await assertOk(res);
-        return res.json() as Promise<T>;
+        return readSuccessJson<T>(res, signal, options.maxBytes);
       },
     );
   }

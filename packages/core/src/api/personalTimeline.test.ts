@@ -181,7 +181,7 @@ describe("personal timeline API", () => {
     expect(error).not.toHaveProperty("issues");
   });
 
-  it("accepts valid normalized geometry above the generated SDK's 8 MiB default", async () => {
+  it("accepts valid normalized geometry above the client's 8 MiB default through the transport", async () => {
     // Four tracks of ~2.4 MiB each can arrive across four <=5 MiB source pages.
     const payload = {
       ...day,
@@ -201,7 +201,10 @@ describe("personal timeline API", () => {
       },
     };
     expect(JSON.stringify(payload).length).toBeGreaterThan(8 * 1024 * 1024);
-    vi.spyOn(apiClient, "get").mockResolvedValue(payload as never);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(payload)),
+    );
     const result = await getPersonalTimelineDay("2026-01-02");
     expect(result.map.tracks.features).toHaveLength(4);
     expect(result.map.tracks.features[3].geometry.coordinates).toHaveLength(80_000);
@@ -229,8 +232,9 @@ describe("personal timeline API", () => {
     const response = disconnected;
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
 
-    await expect(getTimelineConnection()).resolves.toEqual(response);
-    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection);
+    const signal = new AbortController().signal;
+    await expect(getTimelineConnection({ signal })).resolves.toEqual(response);
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection, undefined, { signal });
   });
 
   it("connects, tests and disconnects through the connection endpoint", async () => {
@@ -257,7 +261,11 @@ describe("personal timeline API", () => {
 
     await getPersonalTimelineDay("2026/08/09 unsafe");
 
-    expect(get).toHaveBeenCalledWith(`${API_ENDPOINTS.timelineDay}/2026%2F08%2F09%20unsafe`);
+    expect(get).toHaveBeenCalledWith(
+      `${API_ENDPOINTS.timelineDay}/2026%2F08%2F09%20unsafe`,
+      undefined,
+      expect.objectContaining({ maxBytes: expect.any(Number) }),
+    );
   });
 
   it("translates a known transport code without retaining private payload fields", async () => {

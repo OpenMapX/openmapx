@@ -9,7 +9,7 @@ import {
   useSaveParkedLocation,
   useUpdateParkedLocation,
 } from "@openmapx/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "next-intl";
 import { useCallback } from "react";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
@@ -46,18 +46,26 @@ export function useParkingAddressBackfill() {
   const updateAsync = update.mutateAsync;
   return useCallback(
     async (id: string, [lng, lat]: LngLat): Promise<void> => {
+      // Shares the map's reverse-geocode cache (useReverseGeocoding's key).
+      const lookup = {
+        queryKey: ["reverse-geocode", lng, lat, locale],
+        queryFn: () =>
+          apiClient.get<ReverseGeocodingResult | null>(API_ENDPOINTS.geocodeReverse, {
+            lat: String(lat),
+            lng: String(lng),
+            lang: locale,
+          }),
+        staleTime: 60_000,
+      };
       try {
-        // Shares the map's reverse-geocode cache (useReverseGeocoding's key).
-        const result = await queryClient.fetchQuery({
-          queryKey: ["reverse-geocode", lng, lat, locale],
-          queryFn: () =>
-            apiClient.get<ReverseGeocodingResult | null>(API_ENDPOINTS.geocodeReverse, {
-              lat: String(lat),
-              lng: String(lng),
-              lang: locale,
-            }),
-          staleTime: 60_000,
-        });
+        // A lookup the map already has in flight is joined, and it is cancelled
+        // when the place panel closes. Asking again then runs this lookup,
+        // which takes no abort signal and so finishes without an observer.
+        const result = await queryClient
+          .fetchQuery(lookup)
+          .catch((error: unknown) =>
+            isCancelledError(error) ? queryClient.fetchQuery(lookup) : Promise.reject(error),
+          );
         if (result?.address) await updateAsync({ id, address: result.address });
       } catch {
         // The spot stays saved without an address.

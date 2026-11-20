@@ -17,10 +17,11 @@ describe("useCurrentWeather", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(weather);
-    expect(spy).toHaveBeenCalledWith("/api/integrations/weather/current", {
-      lat: "52.5",
-      lng: "13.4",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      "/api/integrations/weather/current",
+      { lat: "52.5", lng: "13.4" },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("does not fire when lat or lng is null", () => {

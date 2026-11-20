@@ -18,12 +18,13 @@ export function useRouteStops(
     !routeId.startsWith("ms:rp:");
   const query = useQuery({
     queryKey: ["route-stops", routeId, hintStopId ?? null],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params: Record<string, string> = {};
       if (hintStopId) params.hint_stop_id = hintStopId;
       return apiClient.get<MobilityEnvelope<RouteStop[]>>(
         `/api/integrations/transit/routes/${encodeURIComponent(routeId as string)}/stops`,
         Object.keys(params).length ? params : undefined,
+        { signal },
       );
     },
     enabled: routeId !== null && (!needsHint || !!hintStopId),

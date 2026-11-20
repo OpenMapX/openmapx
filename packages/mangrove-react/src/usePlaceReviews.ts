@@ -21,13 +21,11 @@ export function usePlaceReviews<TReview = unknown>(
     queryKey: ["placeReviews", lat, lng, name, opts?.osmId ?? null],
     enabled: (opts?.enabled ?? true) && lat !== undefined && lng !== undefined && !!name,
     staleTime: 300_000,
-    queryFn: () =>
-      transport.fetchPlaceReviews({
-        lat: lat as number,
-        lng: lng as number,
-        name: name as string,
-        osmId: opts?.osmId,
-      }),
+    queryFn: ({ signal }) =>
+      transport.fetchPlaceReviews(
+        { lat: lat as number, lng: lng as number, name: name as string, osmId: opts?.osmId },
+        { signal },
+      ),
   });
 }
 
@@ -45,12 +43,10 @@ export function useReviewAggregate<TAggregate = unknown>(
     queryKey: ["placeReviewAggregate", lat, lng, name, opts?.osmId ?? null],
     enabled: (opts?.enabled ?? true) && lat !== undefined && lng !== undefined && !!name,
     staleTime: 300_000,
-    queryFn: () =>
-      transport.fetchPlaceReviewAggregate({
-        lat: lat as number,
-        lng: lng as number,
-        name: name as string,
-        osmId: opts?.osmId,
-      }),
+    queryFn: ({ signal }) =>
+      transport.fetchPlaceReviewAggregate(
+        { lat: lat as number, lng: lng as number, name: name as string, osmId: opts?.osmId },
+        { signal },
+      ),
   });
 }

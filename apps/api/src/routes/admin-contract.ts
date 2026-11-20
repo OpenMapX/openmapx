@@ -1,4 +1,4 @@
-import { type AdminOperation, assertAdminOperationContract } from "@openmapx/core/api-contracts";
+import { type AdminOperation, assertOperationContract } from "@openmapx/core/api-contracts";
 import { createContractRouteRegistrar } from "./contract-route";
 
 export type { RegistrationOptions } from "./contract-route";
@@ -7,6 +7,6 @@ export function createAdminRouteRegistrar<const R extends Record<string, AdminOp
   registry: R,
   family: Parameters<typeof createContractRouteRegistrar>[1],
 ) {
-  for (const operation of Object.values(registry)) assertAdminOperationContract(operation);
+  for (const operation of Object.values(registry)) assertOperationContract(operation);
   return createContractRouteRegistrar(registry, family);
 }

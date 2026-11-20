@@ -13,7 +13,8 @@ import type { HotelConfig } from "../types/hotel";
 export function useHotelConfig(enabled = true) {
   return useQuery<HotelConfig>({
     queryKey: ["hotel-config"],
-    queryFn: () => apiClient.get<HotelConfig>(API_ENDPOINTS.hotelConfig),
+    queryFn: ({ signal }) =>
+      apiClient.get<HotelConfig>(API_ENDPOINTS.hotelConfig, undefined, { signal }),
     enabled,
     staleTime: 60 * 60 * 1000,
   });

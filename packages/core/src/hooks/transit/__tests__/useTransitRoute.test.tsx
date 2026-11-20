@@ -23,7 +23,9 @@ describe("useTransitRoute", () => {
     expect(result.current.data).toEqual({ ...envelope.data, contributors: envelope.attributions });
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(result.current.freshness).toEqual(envelope.freshness);
-    expect(spy).toHaveBeenCalledWith("/api/integrations/transit/routes/ms%3Aroute%201");
+    expect(spy).toHaveBeenCalledWith("/api/integrations/transit/routes/ms%3Aroute%201", undefined, {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("exposes empty attributions and undefined data before fetch", () => {

@@ -145,18 +145,21 @@ describe("SystemMaintenance", () => {
   });
 
   it("does not send a JSON content type for bodyless maintenance actions", async () => {
-    const { buildSystemJobRequestInit } = await import("./SystemMaintenance");
-
-    expect(buildSystemJobRequestInit()).toEqual({
-      method: "POST",
-      credentials: "include",
-    });
-    expect(buildSystemJobRequestInit({ confirmation: "UPDATE OPENMAPX" })).toEqual({
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmation: "UPDATE OPENMAPX" }),
-    });
+    const fetch = vi.fn(async (..._args: unknown[]) => Response.json({ ok: true, jobId: "job" }));
+    vi.stubGlobal("fetch", fetch);
+    const { createApiClient } = await import("@openmapx/core");
+    const { checkAdminSystemUpdates } = await import("@openmapx/core/api-admin-sdk");
+    try {
+      await checkAdminSystemUpdates(undefined, {
+        client: createApiClient({ baseUrl: "http://api.test", credentials: "include" }),
+      });
+      const init = fetch.mock.calls[0]?.[1] as RequestInit;
+      expect(init.method).toBe("POST");
+      expect(init.body).toBeUndefined();
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("disables application updates when every core image is current", async () => {

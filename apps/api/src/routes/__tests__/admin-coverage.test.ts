@@ -155,6 +155,18 @@ describe("admin coverage routes", () => {
     expect(overLimit.statusCode).toBe(400);
   });
 
+  it.each([
+    "/admin/coverage?regionId=../secret",
+    "/admin/coverage/regions?limit=all",
+    "/admin/coverage/source?regionId=country:XX",
+  ])("answers an unauthenticated %s with 401 before validating its query", async (url) => {
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(400);
+    requireAdmin.mockRejectedValueOnce(
+      Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+    );
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+  });
+
   it("returns 409 when a pinned revision has expired", async () => {
     const expired = await app.inject({
       method: "GET",

@@ -53,6 +53,20 @@ describe("fetchRoadConditionsWithStatus", () => {
     });
   });
 
+  it("passes on that the server's reply cap left situations out", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      type: "FeatureCollection",
+      features: [{ geometry: point, properties: minimal() }],
+      truncated: true,
+    } as never);
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toMatchObject({
+      ok: true,
+      events: [{ id: "status:1" }],
+      truncated: true,
+    });
+  });
+
   it.each([null, { features: "nope" }])("rejects malformed feature collection %j", async (body) => {
     vi.spyOn(apiClient, "get").mockResolvedValue(body as never);
 
@@ -71,8 +85,34 @@ describe("fetchRoadConditionsWithStatus", () => {
     expect(spy).toHaveBeenCalledWith(
       "/api/integrations/road-conditions/events",
       { bbox: "13,52,14,53" },
-      { signal: controller.signal },
+      expect.objectContaining({ signal: controller.signal }),
     );
+  });
+
+  it("accepts a reply above the client's 8 MiB default through the transport", async () => {
+    // 3,000 situations of about 4 KiB each: the server's cap at a size the
+    // OpenConditions display read can return for a long route's box.
+    const features = Array.from({ length: 3000 }, (_, i) => ({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: Array.from({ length: 160 }, (_, j) => [9.1234567 + j / 1000, 50.1234567]),
+      },
+      properties: minimal({ id: `status:${i}` }),
+    }));
+    const body = { type: "FeatureCollection", features };
+    expect(JSON.stringify(body).length).toBeGreaterThan(8 * 1024 * 1024);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(body)),
+    );
+    try {
+      const result = await fetchRoadConditionsWithStatus([5, 47, 15, 55]);
+      expect(result.ok).toBe(true);
+      expect(result.events).toHaveLength(3000);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("serializes the bbox + filters and parses the FeatureCollection to events", async () => {
@@ -124,6 +164,7 @@ describe("fetchRoadConditionsWithStatus", () => {
         types: "accident",
         minSeverity: "moderate",
       }),
+      expect.anything(),
     );
     expect(out).toEqual([
       {
@@ -161,6 +202,7 @@ describe("fetchRoadConditionsWithStatus", () => {
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.objectContaining({ horizonDays: "7" }),
+      expect.anything(),
     );
 
     // `0` means "active now" — a falsy value that must still be sent.
@@ -168,12 +210,14 @@ describe("fetchRoadConditionsWithStatus", () => {
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.objectContaining({ horizonDays: "0" }),
+      expect.anything(),
     );
 
     await fetchRoadConditionsWithStatus([0, 0, 1, 1]);
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.not.objectContaining({ horizonDays: expect.anything() }),
+      expect.anything(),
     );
   });
 
@@ -350,15 +394,19 @@ describe("fetchRouteFlow", () => {
         },
       ],
     });
-    const result = await fetchRouteFlow([
-      {
-        id: "r0",
-        geometry: [
-          [8, 50],
-          [8, 50.01],
-        ],
-      },
-    ]);
+    const signal = new AbortController().signal;
+    const result = await fetchRouteFlow(
+      [
+        {
+          id: "r0",
+          geometry: [
+            [8, 50],
+            [8, 50.01],
+          ],
+        },
+      ],
+      { signal },
+    );
     expect(result).toEqual({
       r0: [{ startMeters: 10, endMeters: 90, los: "queuing", confidence: "measured" }],
     });
@@ -375,6 +423,7 @@ describe("fetchRouteFlow", () => {
           },
         ],
       },
+      { signal },
     );
     post.mockRestore();
   });

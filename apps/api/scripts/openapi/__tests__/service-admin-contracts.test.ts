@@ -26,6 +26,19 @@ const inventory = [
   ["getAdminPlatformConfiguration", "GET", "/platform/configuration"],
   ["previewAdminPlatformConfiguration", "POST", "/platform/configuration/preview"],
   ["applyAdminPlatformConfiguration", "POST", "/platform/configuration/apply"],
+  ["getAdminSettings", "GET", "/settings"],
+  ["updateAdminSettings", "PATCH", "/settings"],
+  ["sendAdminTestEmail", "POST", "/settings/test-email"],
+  ["listAdminLogs", "GET", "/logs"],
+  ["listAdminAuditLog", "GET", "/audit"],
+  ["exportAdminAuditLog", "GET", "/audit/export"],
+  ["getAdminSystemStatus", "GET", "/system"],
+  ["checkAdminSystemUpdates", "POST", "/system/updates/check"],
+  ["applyAdminSystemUpdate", "POST", "/system/updates/apply"],
+  ["runAdminSystemDiagnostics", "POST", "/system/diagnostics"],
+  ["listAdminCoverageRegions", "GET", "/coverage/regions"],
+  ["getAdminCoverageReport", "GET", "/coverage"],
+  ["getAdminCoverageSource", "GET", "/coverage/source"],
 
   ["listAdminServices", "GET", "/services"],
   ["getAdminService", "GET", "/services/{id}"],
@@ -58,14 +71,14 @@ const inventory = [
   ["rotateAdminDawarichOidcSecret", "POST", "/dawarich/rotate-oidc-secret"],
 ] as const;
 
-it("collects exactly 51 actual service producers with complete statuses, media, headers and auth", async () => {
+it("collects exactly 64 actual service producers with complete statuses, media, headers and auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Network denied"));
   try {
     const document = JSON.parse(await generateDocument());
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("service-admin"));
-    expect(tagged).toHaveLength(51);
+    expect(tagged).toHaveLength(64);
     expect(Object.keys(serviceAdminOperations).sort()).toEqual(inventory.map(([id]) => id).sort());
     for (const [id, method, path] of inventory) {
       const contract = serviceAdminOperations[id];
@@ -77,11 +90,13 @@ it("collects exactly 51 actual service producers with complete statuses, media, 
       for (const [status, response] of Object.entries(contract.responses)) {
         const media =
           response.kind === "json"
-            ? "application/json"
-            : "mediaType" in response
-              ? response.mediaType
-              : undefined;
-        expect(Object.keys(actual.responses[status].content ?? {})).toEqual(media ? [media] : []);
+            ? ["application/json"]
+            : response.kind === "text-download"
+              ? response.mediaTypes
+              : "mediaType" in response
+                ? [response.mediaType]
+                : [];
+        expect(Object.keys(actual.responses[status].content ?? {})).toEqual(media);
       }
       if (path.startsWith("/artifact-transfers")) {
         // Retained quota/attempt/concurrency denials have no truthful retry timer.

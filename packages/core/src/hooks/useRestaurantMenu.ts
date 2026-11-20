@@ -14,10 +14,12 @@ type MenuResponse = RestaurantLinks;
 export function useRestaurantMenu(website?: string | null, enabled = true) {
   return useQuery<RestaurantMenu | null>({
     queryKey: ["restaurant-menu", website ?? ""],
-    queryFn: async () => {
-      const res = await apiClient.getOptional<MenuResponse>(API_ENDPOINTS.restaurantMenu, {
-        website: website as string,
-      });
+    queryFn: async ({ signal }) => {
+      const res = await apiClient.getOptional<MenuResponse>(
+        API_ENDPOINTS.restaurantMenu,
+        { website: website as string },
+        { signal },
+      );
       if (!res?.menuUrl || !res.source || !res.format) return null;
       return {
         menuUrl: res.menuUrl,

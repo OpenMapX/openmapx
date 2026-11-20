@@ -16,9 +16,9 @@ export function transitChainQueryKey(request: TransitChainPlanRequest): string[]
 export function useTransitChainPlan(request: TransitChainPlanRequest | null) {
   return useQuery({
     queryKey: request ? transitChainQueryKey(request) : ["transit-chain", "disabled"],
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       captureTransitContributors(
-        await postTransitChainPlan(request as TransitChainPlanRequest),
+        await postTransitChainPlan(request as TransitChainPlanRequest, undefined, { signal }),
         [],
       ),
     enabled: request !== null,

@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
+import { MAX_ROUTE_REPLY_BYTES } from "../api/directions";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { type BikeRoutingOptions, bicycleQueryParameters } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
@@ -38,23 +39,27 @@ export function useOptimizeRoute(options: MutationHookOptions = {}) {
       bikeSpeedKmh,
     }: OptimizeRouteParams) => {
       const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
-      return apiClient.get<DirectionsResult>(API_ENDPOINTS.directionsOptimize, {
-        waypoints: waypointsStr,
-        mode,
-        ...bicycleQueryParameters(mode, {
-          bikeProfile,
-          bikeHillPreference,
-          bikePreferQuietRoads,
-          bikePreferSmoothSurfaces,
-          bikeSpeedKmh,
-        }),
-        avoidHighways: String(avoidHighways),
-        avoidTolls: String(avoidTolls),
-        avoidFerries: String(avoidFerries),
-        units,
-        ...(departAt && { departAt }),
-        ...(arriveBy && { arriveBy }),
-      });
+      return apiClient.get<DirectionsResult>(
+        API_ENDPOINTS.directionsOptimize,
+        {
+          waypoints: waypointsStr,
+          mode,
+          ...bicycleQueryParameters(mode, {
+            bikeProfile,
+            bikeHillPreference,
+            bikePreferQuietRoads,
+            bikePreferSmoothSurfaces,
+            bikeSpeedKmh,
+          }),
+          avoidHighways: String(avoidHighways),
+          avoidTolls: String(avoidTolls),
+          avoidFerries: String(avoidFerries),
+          units,
+          ...(departAt && { departAt }),
+          ...(arriveBy && { arriveBy }),
+        },
+        { maxBytes: MAX_ROUTE_REPLY_BYTES },
+      );
     },
   });
 }

@@ -10,12 +10,12 @@ export function useStopInfrastructure(
 ): MobilityEnvelopeQueryResult<TransitStopInfrastructure> {
   const query = useQuery({
     queryKey: ["stop-infrastructure", stopId],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const url = API_ENDPOINTS.transitStopInfrastructure.replace(
         ":id",
         encodeURIComponent(stopId as string),
       );
-      return apiClient.get<MobilityEnvelope<TransitStopInfrastructure>>(url);
+      return apiClient.get<MobilityEnvelope<TransitStopInfrastructure>>(url, undefined, { signal });
     },
     enabled: stopId !== null,
     staleTime: 24 * 60 * 60 * 1000,

@@ -1,27 +1,21 @@
 "use client";
 
-import type { BoundingBox, LngLat, NlpCloudAccess } from "@openmapx/core";
+import type { BoundingBox, LngLat } from "@openmapx/core";
 import {
   PANEL,
   useCategorySearchStore,
   useDirectionsStore,
-  useNlpSearch,
   useNlpSearchStore,
   usePlaceStore,
   useSearchStore,
-  useSession,
   useSettingsStore,
   useSidebarStore,
   useStreetLevelStore,
 } from "@openmapx/core";
 import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
-import {
-  useAiSearchDisclosure,
-  useIntegrationDisclosures,
-} from "@/lib/integrationDisclosuresContext";
 import type { NlpSubmissionContext, SearchBarSurface } from "./searchSubmission";
+import { useNlpCloudConsent } from "./useNlpCloudConsent";
 
 const SUBMIT_SETTLE_TIMEOUT_MS = 2_500;
 const NLP_MIN_QUERY_LENGTH = 4;
@@ -60,16 +54,6 @@ export function useSearchSubmission({
     submitTimeoutRef.current = null;
     setPendingSubmit(null);
   }, []);
-  // Cloud consent gating is fail-closed: until consent is already stored, the
-  // first parse is local-only. The server response then tells us whether cloud
-  // is available and whether this deployment requires an explicit opt-in.
-  const [nlpCloudAccess, setNlpCloudAccess] = useState<NlpCloudAccess>(() =>
-    hasNlpConsent() ? "consented" : "deny",
-  );
-  // consentGranted tracks local acceptance within this session so the card
-  // renders immediately after the user clicks "Enable" without a re-fetch.
-  const [consentGranted, setConsentGranted] = useState(false);
-  const [consentDeclined, setConsentDeclined] = useState(false);
   // The natural-language parse is expensive on this deployment (~10-20s CPU
   // inference), so it fires only when the user submits (Enter / search button),
   // never per keystroke. A query edit synchronously invalidates its owner.
@@ -124,6 +108,10 @@ export function useSearchSubmission({
     cancelNlpSubmission,
     cancelPendingSubmit,
   ]);
+  // A place still being enriched belongs to the search that opened it.
+  useEffect(() => {
+    if (directionsOpen) cancelEnrichment();
+  }, [directionsOpen, cancelEnrichment]);
   // A superseding store transition must stay cancelled even if it changes back
   // before React renders (for example Settings off/on while Enter is settling).
   useEffect(() => {
@@ -156,77 +144,24 @@ export function useSearchSubmission({
       stopViewer();
     };
   }, [cancelPendingSubmit, cancelNlpSubmission, surface]);
-  const disclosures = useIntegrationDisclosures();
-  const aiSearchDisclosure = useAiSearchDisclosure();
-  const { data: session, isPending: sessionPending } = useSession();
-  // Where the server offers cloud parsing only to signed-in users, an
-  // anonymous visitor's consent could never be used, so it is not asked for.
-  // Until the session is known the usual prompt stands; the server decides
-  // cloud use either way.
-  const cloudOutOfReach =
-    aiSearchDisclosure?.cloudRequiresSignIn === true && !sessionPending && !session?.user;
-  const storedConsent = hasNlpConsent();
-  const cloudDeclined = consentDeclined || isNlpCloudDeclined();
-  const waitingForConsent =
-    nlpOwned &&
-    nlpCloudAccess === "deny" &&
-    !cloudOutOfReach &&
-    aiSearchDisclosure?.cloudAvailable === true &&
-    aiSearchDisclosure.cloudConsentRequired &&
-    !consentGranted &&
-    !storedConsent &&
-    !cloudDeclined;
-  const integrationsLoading = disclosures === undefined;
-  const effectiveCloudAccess: NlpCloudAccess =
-    nlpCloudAccess === "deny" &&
-    aiSearchDisclosure?.cloudAvailable === true &&
-    !aiSearchDisclosure.cloudConsentRequired &&
-    !cloudDeclined
-      ? "defer-to-server"
-      : nlpCloudAccess;
-
-  const {
-    data: nlpData,
-    isFetching: nlpFetching,
-    isError: nlpFailed,
-  } = useNlpSearch(
-    nlpSubmission?.query ?? "",
-    nlpSubmission?.mapCenter ?? null,
-    nlpSubmission?.mapBbox ?? null,
-    nlpOwned && !waitingForConsent && !integrationsLoading,
+  const parse = useNlpCloudConsent({
+    submission: nlpSubmission,
+    owned: nlpOwned,
+    ownsSubmission: ownsNlpSubmission,
     locale,
-    effectiveCloudAccess,
-  );
-
-  // Fallback for a server that reveals an open cloud policy on the parse
-  // response rather than in its integration metadata. Current servers normally
-  // select defer-to-server before the first request via effectiveCloudAccess.
-  useEffect(() => {
-    if (
-      ownsNlpSubmission() &&
-      nlpCloudAccess === "deny" &&
-      nlpData?.cloudAvailable &&
-      !nlpData.cloudConsentRequired &&
-      !isNlpCloudDeclined()
-    ) {
-      setNlpCloudAccess("defer-to-server");
-    }
-  }, [nlpCloudAccess, nlpData, ownsNlpSubmission]);
+  });
+  const nlpData = parse.data;
 
   // Once a natural-language parse finishes without anything to offer, fall
   // back to the plain search of the visible area rather than doing nothing.
   // Not while the answer can still change: a cloud consent prompt or the
-  // automatic retry with cloud access (see the effect above) comes first.
-  const nlpAwaitingCloud =
-    nlpData?.cloudAvailable === true &&
-    !cloudDeclined &&
-    (nlpData.cloudConsentRequired ? !consentGranted && !storedConsent : nlpCloudAccess === "deny");
+  // automatic retry with cloud access comes first.
   const nlpSettledEmpty =
     nlpOwned &&
-    !nlpFetching &&
-    !waitingForConsent &&
-    !nlpAwaitingCloud &&
-    (nlpFailed || (nlpData !== undefined && !isPlausibleNlSearch(nlpData.intent)));
+    !parse.fetching &&
+    !parse.waitingForConsent &&
+    !parse.awaitingCloud &&
+    (parse.failed || (nlpData !== undefined && !isPlausibleNlSearch(nlpData.intent)));
   useEffect(() => {
     if (!nlpSettledEmpty || !ownsNlpSubmission() || !nlpSubmission) return;
     const submittedQuery = nlpSubmission.query;
@@ -341,33 +276,13 @@ export function useSearchSubmission({
     pending: pendingSubmit !== null,
     nlp: {
       data: nlpData,
-      pending: nlpOwned && nlpFetching && !nlpData,
+      pending: nlpOwned && parse.fetching && !nlpData,
       showCard: nlpOwned && nlpData !== undefined && isPlausibleNlSearch(nlpData.intent),
-      showConsent:
-        waitingForConsent ||
-        (nlpOwned &&
-          !cloudOutOfReach &&
-          nlpData?.cloudAvailable === true &&
-          nlpData.cloudConsentRequired &&
-          !consentGranted &&
-          !storedConsent &&
-          !cloudDeclined),
-      consentProviders:
-        aiSearchDisclosure?.cloudProviderLabels ?? nlpData?.cloudProviderLabels ?? [],
+      showConsent: parse.showConsent,
+      consentProviders: parse.consentProviders,
       activate: handleActivateNlp,
-      acceptConsent: () => {
-        if (!ownsNlpSubmission()) return;
-        setNlpConsent(true);
-        setConsentGranted(true);
-        setConsentDeclined(false);
-        setNlpCloudAccess("consented");
-      },
-      declineConsent: () => {
-        if (!ownsNlpSubmission()) return;
-        setNlpConsent(false);
-        setConsentDeclined(true);
-        setNlpCloudAccess("deny");
-      },
+      acceptConsent: parse.acceptConsent,
+      declineConsent: parse.declineConsent,
     },
   };
 }

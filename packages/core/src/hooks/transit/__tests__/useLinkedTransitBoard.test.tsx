@@ -32,6 +32,7 @@ describe.each([
     expect(spy).toHaveBeenCalledWith(
       `/api/integrations/transit/${kind}/for-place`,
       expect.objectContaining({ name: "Breslauer Platz", stop_name: "Köln Breslauer Platz/Hbf" }),
+      { signal: expect.any(AbortSignal) },
     );
   });
 

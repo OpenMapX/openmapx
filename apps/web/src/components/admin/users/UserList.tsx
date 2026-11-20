@@ -255,7 +255,7 @@ export function UserList() {
     queryKey: account.keys.list({ search, filter, page, rowsPerPage, sortField, sortDir }),
     enabled: Boolean(account.actorId),
     retry: false,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const filterMap: Record<FilterTab, Record<string, string>> = {
         all: {},
         active: { filterField: "banned", filterValue: "false", filterOperator: "eq" },
@@ -263,16 +263,19 @@ export function UserList() {
         admins: { filterField: "role", filterValue: "admin", filterOperator: "eq" },
       };
 
-      const result = await account.client.list({
-        ...(search
-          ? { searchValue: search, searchField: "email", searchOperator: "contains" }
-          : {}),
-        ...filterMap[filter],
-        limit: rowsPerPage,
-        offset,
-        sortBy: sortField,
-        sortDirection: sortDir,
-      });
+      const result = await account.client.list(
+        {
+          ...(search
+            ? { searchValue: search, searchField: "email", searchOperator: "contains" }
+            : {}),
+          ...filterMap[filter],
+          limit: rowsPerPage,
+          offset,
+          sortBy: sortField,
+          sortDirection: sortDir,
+        },
+        signal,
+      );
 
       return result;
     },
@@ -286,7 +289,7 @@ export function UserList() {
     queryKey: account.keys.count,
     enabled: Boolean(account.actorId),
     retry: false,
-    queryFn: () => account.client.count(),
+    queryFn: ({ signal }) => account.client.count(signal),
     staleTime: 30000,
   });
   const adminCount = adminData;
