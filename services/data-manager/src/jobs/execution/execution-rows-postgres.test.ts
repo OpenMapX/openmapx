@@ -345,4 +345,61 @@ describe.skipIf(
       rmSync(root, { recursive: true, force: true });
     }
   }, 60000);
+
+  it("lists for startup recovery only unfinished jobs and finished ones that may still hold their lease", async () => {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 }),
+      root = mkdtempSync(join(tmpdir(), "omx-dm-rows-startup-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlDirectories(root);
+    const dm = dataManagerProcess(sql, root, async () => ({
+      kind: "download-fonts",
+      completed: true,
+    }));
+    const ids: string[] = [],
+      fresh = () => {
+        const deadline = Date.now() + 60000;
+        return {
+          operationKey: createControlRootOperationKey({
+            notAfter: deadline,
+            nonce: randomBytes(16),
+          }),
+          requestedDeadlineAt: deadline,
+        };
+      },
+      listed = async () =>
+        (await dm.store.listUnsettled())
+          .map((record) => record.status.id)
+          .filter((id) => ids.includes(id));
+    try {
+      const finished = (await dm.runtime.admit({ kind: "download-fonts" }, fresh())).id;
+      ids.push(finished);
+      await dm.runtime.settled(finished);
+      const [row] = await sql`SELECT released_at FROM data_manager.jobs WHERE id=${finished}`;
+      expect(row?.released_at).toBeInstanceOf(Date);
+      expect(await listed()).toEqual([]);
+
+      // A crash after the release and before its record leaves the row listed;
+      // the next startup finds the lease gone and records that.
+      await sql`UPDATE data_manager.jobs SET released_at=NULL WHERE id=${finished}`;
+      expect(await listed()).toEqual([finished]);
+      await dm.runtime.reconcile();
+      expect(await listed()).toEqual([]);
+
+      // A job a backup restore closed has no execution row; the prune removes it.
+      await sql`UPDATE data_manager.jobs SET execution_admission=NULL,execution_progress=NULL,execution_completion=NULL,released_at=NULL WHERE id=${finished}`;
+      expect(await listed()).toEqual([]);
+
+      const { record } = await dm.store.admit({ kind: "download-fonts" }, fresh());
+      ids.push(record.status.id);
+      expect(await listed()).toEqual([record.status.id]);
+    } finally {
+      await dm.runtime.close();
+      await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${ids}::uuid[])`;
+      control.closeControlInstallation(dm.installation);
+      await sql.end();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60000);
 });

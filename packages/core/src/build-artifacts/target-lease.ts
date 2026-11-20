@@ -365,6 +365,11 @@ export async function settleArtifactTargetLeaseChild(
   s.seen = await s.backend.settle({ leaseId: s.leaseId, key: s.node, settlement });
 }
 
+/** Whether the lease is still in the store; releasing it removes it. */
+export async function artifactTargetLeaseHeld(lease: TargetLeaseAuthority): Promise<boolean> {
+  const s = stateOf(lease);
+  return (await s.backend.read(s.leaseId)) !== undefined;
+}
 export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Promise<void> {
   const s = stateOf(lease);
   if (s.node !== null) throw Error("Borrower cannot release root");

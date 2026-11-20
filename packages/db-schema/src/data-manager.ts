@@ -71,6 +71,9 @@ export const jobs = dataManager.table(
     /** How the worker ended, recorded once after its work returned or failed,
      * or by recovery for a worker that died with its process. */
     executionCompletion: jsonb("execution_completion"),
+    /** When a finished job released what it held (its own lease, if any);
+     * startup recovery leaves the row alone from then on. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
@@ -83,7 +86,7 @@ export const jobs = dataManager.table(
     ),
     check(
       "data_manager_jobs_execution_row",
-      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL)`,
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR (${table.finishedAt} IS NOT NULL AND ${table.executionAdmission} IS NOT NULL))`,
     ),
     check(
       "data_manager_jobs_execution_shape",

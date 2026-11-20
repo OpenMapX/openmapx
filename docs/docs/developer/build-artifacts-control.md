@@ -520,7 +520,12 @@ died with its process. The settlement on `execution_progress` then records the
 terminal status with the finish time the job row will carry; a repeat after a
 crash before the job row commits reuses that time. Last, the job row commits the
 terminal. Before the job's own lease is released, data-manager checks that the
-committed row matches its settlement and that every child is terminal. A proxy
+committed row matches its settlement and that every child is terminal; once the
+lease is released (or the job held none, or the lease is already gone from the
+store) the row records `released_at`. Startup recovery looks only at unfinished
+jobs and at finished ones that kept their execution row and have not recorded
+`released_at`, so a crash between the terminal and the release is finished at the
+next start, and a job a backup restore closed is left to the prune. A proxy
 restore's obligation is the restore child reserved on the row, which names the
 backup it restores. The only per-job file data-manager keeps is the Transitous
 runner attempt journal in its private state: it holds each runner request's

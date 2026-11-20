@@ -45,7 +45,8 @@ SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN sta
     execution_agent_operations = '[]'::jsonb,
     execution_admission = NULL,
     execution_progress = NULL,
-    execution_completion = NULL
+    execution_completion = NULL,
+    released_at = NULL
 WHERE status IN ('queued', 'running', 'cancel_pending')
    OR (status = 'interrupted' AND finished_at IS NULL)
    OR execution_state->>'publication' = 'unknown'

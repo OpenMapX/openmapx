@@ -177,6 +177,14 @@ export interface DataExecutionStore {
     continuation: FreshDataChildReservation | null;
   } | null>;
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionRecord | null>;
+  /** Records that a finished job released what it held. */
+  recordReleased(id: string): Promise<void>;
+  /**
+   * The rows startup recovery looks at: every unfinished job, and every
+   * finished one whose execution row is kept and that has not released what it
+   * held. A job a backup restore closed has no execution row and is left to
+   * the prune.
+   */
   listUnsettled(): Promise<DataExecutionRecord[]>;
   finalize(
     id: string,
@@ -744,10 +752,14 @@ export function createPostgresDataExecutionStore(
         });
       });
     },
+    async recordReleased(id) {
+      await sql`UPDATE data_manager.jobs SET released_at=now()
+        WHERE id=${id} AND execution_version=2 AND finished_at IS NOT NULL AND released_at IS NULL`;
+    },
     async listUnsettled() {
-      const rows = await sql<
-        Row[]
-      >`SELECT * FROM data_manager.jobs WHERE execution_version=2 ORDER BY admitted_at,id`;
+      const rows = await sql<Row[]>`SELECT * FROM data_manager.jobs WHERE execution_version=2
+        AND (finished_at IS NULL OR (execution_admission IS NOT NULL AND released_at IS NULL))
+        ORDER BY admitted_at,id`;
       return rows.map(decode);
     },
     async finalize(id, version, patch, completion) {

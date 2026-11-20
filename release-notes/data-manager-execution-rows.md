@@ -31,7 +31,10 @@ were settled or refused more than 72 hours earlier.
 Restoring a backup closes the Data Manager jobs that were still open when it was
 taken, as before, and now also drops their execution records and work
 completions. Data Manager deletes such a closed job row three days after it
-finished, once its request key has expired.
+finished, once its request key has expired. The migration also adds
+`released_at`, set once a finished job has released its own lease; Data
+Manager's startup recovery looks only at unfinished jobs and at finished jobs
+that have not released yet, and never at a job a restore closed.
 
 ## Who is affected
 

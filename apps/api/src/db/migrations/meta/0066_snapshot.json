@@ -1,5 +1,5 @@
 {
-  "id": "6a35748c-b27d-4f0c-b557-d02775062ae0",
+  "id": "559e7f16-af31-4df6-b953-cb30df751010",
   "prevId": "639ebc86-b820-431f-bc9d-2e96a698ed89",
   "version": "7",
   "dialect": "postgresql",
@@ -2063,6 +2063,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "ownership_version": {
           "name": "ownership_version",
           "type": "integer",
@@ -2100,7 +2106,7 @@
         },
         "data_manager_jobs_execution_row": {
           "name": "data_manager_jobs_execution_row",
-          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2) AND (\"data_manager\".\"jobs\".\"execution_version\" IS DISTINCT FROM 2 OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL)"
+          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2) AND (\"data_manager\".\"jobs\".\"execution_version\" IS DISTINCT FROM 2 OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"released_at\" IS NULL OR (\"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL AND \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL))"
         },
         "data_manager_jobs_execution_shape": {
           "name": "data_manager_jobs_execution_shape",

@@ -2,6 +2,7 @@ import { setTimeout as settleDelay } from "node:timers/promises";
 import {
   type ArtifactTargetLease,
   acquireArtifactTargetLease,
+  artifactTargetLeaseHeld,
   assertArtifactTargetLeaseForward,
   assertControlExecutionForward,
   ControlExecutionFencedError,
@@ -113,24 +114,29 @@ export interface DataExecutionRuntime {
  * terminal while the lease still shows how its children settled, then releases
  * the lease. An execution without a lease of its own only checks its terminal:
  * its sender settles the lease it ran under from the answer it got. */
+/**
+ * Releases a finished job's own lease, if it still holds one, and records on
+ * its row that it holds nothing any more. A lease already gone from the store
+ * was released before a crash that kept the record from being written.
+ */
 async function releaseOwnLease(
   journal: {
     installation: ControlInstallation;
     verifyContainedTerminal(e: ExecutionRef): Promise<void>;
   },
+  store: DataExecutionStore,
   execution: ExecutionRef,
   lease: ArtifactTargetLease | undefined,
 ) {
-  if (!lease) {
-    await journal.verifyContainedTerminal(execution);
-    return;
-  }
-  await settleArtifactTargetLeaseChild(
-    lease,
-    await verifyControlEffectSettlement(journal.installation, execution),
-  );
+  const held = lease && (await artifactTargetLeaseHeld(lease)) ? lease : undefined;
+  if (held)
+    await settleArtifactTargetLeaseChild(
+      held,
+      await verifyControlEffectSettlement(journal.installation, execution),
+    );
   await journal.verifyContainedTerminal(execution);
-  await releaseArtifactTargetLease(lease);
+  if (held) await releaseArtifactTargetLease(held);
+  await store.recordReleased(execution.executionId);
 }
 /** Agent answers that refuse a lease acquisition before it records anything. */
 const PRE_EFFECT_REFUSALS = new Set(["authorization", "validation", "busy", "conflict"]);
@@ -317,7 +323,7 @@ export function createDataExecutionRuntime(deps: {
             completion,
           );
           if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
-          await releaseOwnLease(owner, record.execution, lease);
+          await releaseOwnLease(owner, store, record.execution, lease);
           return;
         } catch (error) {
           if (closed) return;
@@ -587,7 +593,7 @@ export function createDataExecutionRuntime(deps: {
         });
         if (isDataExecutionTerminal(entry.record.status)) {
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          if (!refusal) await releaseOwnLease(owner, record.execution, lease);
+          if (!refusal) await releaseOwnLease(owner, store, record.execution, lease);
         }
       } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to
@@ -698,7 +704,7 @@ export function createDataExecutionRuntime(deps: {
                 ? restoreArtifactTargetLeaseForSettlement(authority)
                 : undefined;
             try {
-              await releaseOwnLease(owner, record.execution, lease);
+              await releaseOwnLease(owner, store, record.execution, lease);
             } finally {
               if (lease) closeArtifactTargetLeaseHandle(lease);
             }
@@ -768,7 +774,7 @@ export function createDataExecutionRuntime(deps: {
           );
           if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          await releaseOwnLease(owner, record.execution, recovered.lease);
+          await releaseOwnLease(owner, store, record.execution, recovered.lease);
         } catch (error) {
           jobChildLogger({ job: "data-execution-recovery", jobId: record.status.id }).warn(
             {
