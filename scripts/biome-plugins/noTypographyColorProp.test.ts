@@ -57,6 +57,7 @@ describe("noTypographyColorProp", () => {
     <Typography color="textSecondary">a</Typography>
     <Typography color="error">b</Typography>
     <Typography color="inherit">c</Typography>
+    <Typography color={"textDisabled"}>c</Typography>
     <Typography sx={{ color: "text.secondary" }}>d</Typography>
     <Link color="text.secondary">e</Link>
     <Typography title={<Box color="text.secondary" />}>f</Typography>

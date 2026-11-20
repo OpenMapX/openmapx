@@ -9,6 +9,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { zonedWallClockToInstant } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
 import { REQUEST_TRANSITIONS } from "@openmapx/core/privacy";
@@ -42,9 +43,12 @@ export function PrivacyCaseDecisionForms({
     REQUEST_TRANSITIONS[detail.request.state].includes(value) &&
     (value !== "in_progress" || detail.request.identityMethod !== null) &&
     (value !== "completed" || detail.tasks.every((task) => task.status === "resolved"));
-  // Statutory deadlines are read in the request's own zone, which the line names.
+  // Statutory deadlines are read and entered in the request's own zone, which
+  // the lines and field labels name.
   const { timeZone } = detail.request;
   const deadline = (value: string) => format.dateTime(value, { timeZone });
+  const extendedAt = extended ? zonedWallClockToInstant(timeZone, extended) : null;
+  const notifiedAt = notified ? zonedWallClockToInstant(timeZone, notified) : null;
   const decide = async () => {
     setConfirm(false);
     await client.execute("case-decision", (c, h) =>
@@ -71,7 +75,7 @@ export function PrivacyCaseDecisionForms({
         {w("currentDueAt", { date: deadline(detail.request.dueAt), timeZone })}
       </Typography>
       <TextField
-        label={w("extendedUntil")}
+        label={w("extendedUntil", { timeZone })}
         type="datetime-local"
         slotProps={{ inputLabel: { shrink: true } }}
         value={extended}
@@ -79,7 +83,7 @@ export function PrivacyCaseDecisionForms({
         onChange={(e) => setExtended(e.target.value)}
       />
       <TextField
-        label={w("extensionNotifiedAt")}
+        label={w("extensionNotifiedAt", { timeZone })}
         type="datetime-local"
         slotProps={{ inputLabel: { shrink: true } }}
         value={notified}
@@ -96,27 +100,28 @@ export function PrivacyCaseDecisionForms({
         disabled={
           client.pending ||
           !detail.capabilities.extendDeadline ||
-          !extended ||
-          !notified ||
+          !extendedAt ||
+          !notifiedAt ||
           !extensionReason
         }
-        onClick={() =>
+        onClick={() => {
+          if (!extendedAt || !notifiedAt) return;
           void client.execute("case-extension", (c, h) =>
             privacyResult(
               sdk.extendPrivacyAdminCase(
                 detail.request.id,
                 {
                   version: detail.request.version,
-                  extendedUntil: new Date(extended).toISOString(),
-                  extensionNotifiedAt: new Date(notified).toISOString(),
+                  extendedUntil: extendedAt.toISOString(),
+                  extensionNotifiedAt: notifiedAt.toISOString(),
                   reasonCode: extensionReason,
                 },
                 h,
                 { client: c },
               ),
             ),
-          )
-        }
+          );
+        }}
       >
         {w("recordExtension")}
       </Button>

@@ -3,15 +3,22 @@ language js
 // MUI 9's Typography maps its `color` prop only to its own variants (`primary`,
 // `secondary`, `success`, `error`, `info`, `warning`, `textPrimary`,
 // `textSecondary`, `textDisabled`). Any other value, such as the palette path
-// `text.secondary`, a hex colour or an expression, matches no variant and is
-// dropped silently, and the prop's type accepts any string. Put the colour in
-// `sx={{ color: … }}`, where palette paths resolve.
+// `text.secondary` or a hex colour, matches no variant and is dropped
+// silently, and the prop's type accepts any string. `inherit` is accepted too:
+// it matches no variant either, so the element keeps its inherited colour,
+// which is what it asks for. A computed value is rejected even when every
+// branch is a variant, because the rule cannot read its branches; put it in
+// `sx={{ color: … }}`, where palette paths resolve as well.
+//
+// The rule matches the element name `Typography` only. Colour passed through a
+// spread, an aliased import, `styled(Typography)` or another component's slot
+// props is outside its reach.
 or {
   jsx_opening_element(name=`Typography`, attributes=$attrs),
   jsx_self_closing_element(name=`Typography`, attributes=$attrs)
 } where {
   $attrs <: some JsxAttribute(name=`color`, initializer=$init) as $attr where {
-    not $init <: r"=\"(?:primary|secondary|success|error|info|warning|textPrimary|textSecondary|textDisabled|inherit)\""
+    not $init <: r"=\{?\"(?:primary|secondary|success|error|info|warning|textPrimary|textSecondary|textDisabled|inherit)\"\}?"
   },
-  register_diagnostic(span=$attr, message="Typography ignores this color. Use sx={{ color: … }}, where palette paths such as text.secondary resolve.")
+  register_diagnostic(span=$attr, message="Typography's color prop takes only its own variant names, such as textSecondary or error; MUI drops any other value silently. Use sx={{ color: … }} for palette paths and computed colours.")
 }

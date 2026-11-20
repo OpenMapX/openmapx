@@ -245,13 +245,13 @@ export function RegionCoverageMatrix({
               </Box>
               <Stack direction="row" spacing={2} sx={{ mt: 0.75, px: 0.5 }}>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {t("matrix.sources")}: {row.sourceCount}
+                  {t("matrix.sourceTotal", { count: row.sourceCount })}
                 </Typography>
                 <Typography
                   variant="caption"
                   sx={{ color: row.attentionCount > 0 ? "warning.main" : "text.secondary" }}
                 >
-                  {t("matrix.attention")}: {row.attentionCount}
+                  {t("matrix.attentionTotal", { count: row.attentionCount })}
                 </Typography>
               </Stack>
             </Paper>

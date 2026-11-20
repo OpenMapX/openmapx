@@ -4108,8 +4108,10 @@
       "selectDomain": "Open {domain} for {region}: {statusLabel}",
       "operationCount": "{count, number} of {total, plural, one {# operation} other {# operations}} operational",
       "attentionCount": "{count, plural, one {# source needs} other {# sources need}} attention",
+      "sourceTotal": "Sources: {count, number}",
+      "attentionTotal": "Attention: {count, number}",
       "empty": "No configured or published regions were found.",
-      "unassigned": "{count, plural, one {# source} other {# sources}} have no verified region association."
+      "unassigned": "{count, plural, one {# source has} other {# sources have}} no verified region association."
     },
     "domain": {
       "addresses": "Addresses",
@@ -4601,8 +4603,8 @@
       "caseDecisions": "Deadlines and case decisions",
       "originalDueAt": "Original deadline: {date} · {timeZone}",
       "currentDueAt": "Current deadline: {date} · {timeZone}",
-      "extendedUntil": "Extend response until (local time)",
-      "extensionNotifiedAt": "Actually notified at (local time)",
+      "extendedUntil": "Extend response until ({timeZone})",
+      "extensionNotifiedAt": "Actually notified at ({timeZone})",
       "extensionReason": "Extension reason code",
       "recordExtension": "Record notified extension",
       "caseDecision": "Case decision",
