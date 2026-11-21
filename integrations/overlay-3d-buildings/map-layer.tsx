@@ -15,6 +15,8 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   buildingExtrusionColor,
+  CONTACT_LAYER_ID,
+  contactShadowPaint,
   EXTRUSION_BASE,
   EXTRUSION_COLOR,
   EXTRUSION_HEIGHT,
@@ -65,12 +67,7 @@ function addExtrusionLayer(
     "source-layer": sourceLayer,
     minzoom: MIN_ZOOM,
     filter: ["!=", ["get", "hide_3d"], true],
-    layout: {
-      visibility:
-        useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
-          ? "visible"
-          : "none",
-    },
+    layout: { visibility: extrusionVisibility(map) },
     paint: {
       "fill-extrusion-color": buildingExtrusionColor(
         findBuildingRoofColor(map, basemap) ?? EXTRUSION_COLOR,
@@ -90,6 +87,27 @@ function addExtrusionLayer(
     },
   } as maplibregl.FillExtrusionLayerSpecification;
   addLayerInSlot(map, layer, "area-overlays", 5);
+}
+
+/** The soft ground rim under the extrusions, always on the basemap's own buildings. */
+function addContactLayer(map: maplibregl.Map, basemap: BuildingSourceReference): void {
+  const layer: maplibregl.LineLayerSpecification = {
+    id: CONTACT_LAYER_ID,
+    type: "line",
+    source: basemap.source,
+    "source-layer": basemap.sourceLayer,
+    minzoom: MIN_ZOOM,
+    filter: ["!=", ["get", "hide_3d"], true],
+    layout: { visibility: extrusionVisibility(map) },
+    paint: contactShadowPaint(findBuildingRoofColor(map, basemap), MIN_ZOOM),
+  };
+  addLayerInSlot(map, layer, "area-overlays", 4.5);
+}
+
+function extrusionVisibility(map: maplibregl.Map): "visible" | "none" {
+  return useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
+    ? "visible"
+    : "none";
 }
 
 const replacementKey = (replacement: BuildingReplacement) =>
@@ -121,13 +139,11 @@ export function BuildingExtrusionLayer() {
     // An active selection needs a tilted camera to show geometry. The
     // selection itself remains authoritative when a user turns 3D off.
     const syncVisibility = () => {
-      if (!map.getLayer(LAYER_ID)) return;
-      const visibility =
-        useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
-          ? "visible"
-          : "none";
-      if (map.getLayoutProperty(LAYER_ID, "visibility") !== visibility) {
-        map.setLayoutProperty(LAYER_ID, "visibility", visibility);
+      const visibility = extrusionVisibility(map);
+      for (const id of [LAYER_ID, CONTACT_LAYER_ID]) {
+        if (map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== visibility) {
+          map.setLayoutProperty(id, "visibility", visibility);
+        }
       }
     };
 
@@ -135,11 +151,11 @@ export function BuildingExtrusionLayer() {
       const buildingSource = findBuildingSourceReference(map);
       if (!buildingSource) return;
 
+      if (!map.getLayer(CONTACT_LAYER_ID)) addContactLayer(map, buildingSource);
       if (!map.getLayer(LAYER_ID)) {
         addExtrusionLayer(map, buildingSource, buildingSource.source, buildingSource.sourceLayer);
-      } else {
-        syncVisibility();
       }
+      syncVisibility();
     };
 
     // Hiding an existing layer must not wait for unrelated tiles to finish.

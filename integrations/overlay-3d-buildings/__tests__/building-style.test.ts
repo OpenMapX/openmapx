@@ -3,6 +3,7 @@ import type * as maplibregl from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import {
   buildingExtrusionColor,
+  contactShadowPaint,
   EXTRUSION_BASE,
   EXTRUSION_COLOR,
   EXTRUSION_HEIGHT,
@@ -213,11 +214,33 @@ describe("3D building colour", () => {
   const lightRoof = "#e8e9ed";
   const darkRoof = "#242b35";
 
-  it("keeps untagged and unparseable buildings on the basemap roof colour", () => {
-    const color = buildingExtrusionColor(lightRoof);
+  it("lifts an untagged roof without tinting it", () => {
+    const [red, green, blue] = evaluateColor(buildingExtrusionColor("#e0e0e0"), {});
+    // Luminance 0.878 lifts 26.4% of the way to white.
+    for (const channel of [red, green, blue])
+      expect(Math.abs(channel - 232.17)).toBeLessThanOrEqual(1);
+  });
 
-    expect(evaluateColor(color, {})).toEqual([232, 233, 237, 1]);
-    expect(evaluateColor(color, { colour: "mocassin" })).toEqual([232, 233, 237, 1]);
+  it("treats an unparseable tag like an untagged building", () => {
+    const color = buildingExtrusionColor(lightRoof);
+    expect(evaluateColor(color, { colour: "mocassin" })).toEqual(evaluateColor(color, {}));
+  });
+
+  it("lifts a light roof towards white and tints it more softly", () => {
+    const [red, green, blue] = evaluateColor(buildingExtrusionColor("#e0e0e0"), {
+      colour: "#ff0000",
+    });
+    // Lifted roof 232.17, tag weight 0.08 + 0.17 × 0.878 = 0.229.
+    expect(Math.abs(red - (0.2293 * 255 + 0.7707 * 232.17))).toBeLessThanOrEqual(1);
+    expect(Math.abs(green - 0.7707 * 232.17)).toBeLessThanOrEqual(1);
+    expect(Math.abs(blue - 0.7707 * 232.17)).toBeLessThanOrEqual(1);
+  });
+
+  it("barely lifts a dark roof", () => {
+    const [red, green] = evaluateColor(buildingExtrusionColor("#202020"), { colour: "#ff0000" });
+    // Luminance 0.1255: lift 0.0376 gives 40.4, tag weight 0.1013.
+    expect(Math.abs(red - (0.1013 * 255 + 0.8987 * 40.39))).toBeLessThanOrEqual(1);
+    expect(Math.abs(green - 0.8987 * 40.39)).toBeLessThanOrEqual(1);
   });
 
   it("mixes a tagged colour into a light roof without replacing it", () => {
@@ -240,11 +263,45 @@ describe("3D building colour", () => {
   });
 
   it("accepts hex values and the height-graded fallback roof", () => {
-    expect(evaluateColor(buildingExtrusionColor(lightRoof), { colour: "#d48741" })).not.toEqual([
-      232, 233, 237, 1,
+    const untagged = evaluateColor(buildingExtrusionColor(lightRoof), {});
+    expect(evaluateColor(buildingExtrusionColor(lightRoof), { colour: "#d48741" })).not.toEqual(
+      untagged,
+    );
+    // The fallback roof #d4d0cc is lifted like any light roof.
+    const [red, green, blue] = evaluateColor(buildingExtrusionColor(EXTRUSION_COLOR), {
+      render_height: 0,
+    });
+    expect(red).toBeGreaterThan(212);
+    expect(green).toBeGreaterThan(208);
+    expect(blue).toBeGreaterThan(204);
+  });
+});
+
+describe("3D building contact shadow", () => {
+  const opacityPeak = (paint: ReturnType<typeof contactShadowPaint>) =>
+    (paint?.["line-opacity"] as unknown[]).at(-1);
+
+  it("gives the contact shadow a stronger rim on a dark style", () => {
+    expect(opacityPeak(contactShadowPaint("#202020", 16.5))).toBe(0.2);
+    expect(opacityPeak(contactShadowPaint("#e0e0e0", 16.5))).toBe(0.12);
+    expect(opacityPeak(contactShadowPaint(null, 16.5))).toBe(0.12);
+    expect(opacityPeak(contactShadowPaint("hsl(0, 0%, 10%)", 16.5))).toBe(0.12);
+  });
+
+  it("fades in with the extrusions and blurs as it widens", () => {
+    const paint = contactShadowPaint("#e0e0e0", 16.5);
+    expect(paint?.["line-opacity"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      16.5,
+      0,
+      17,
+      0.12,
     ]);
-    expect(evaluateColor(buildingExtrusionColor(EXTRUSION_COLOR), { render_height: 0 })).toEqual([
-      212, 208, 204, 1,
-    ]);
+    const ramp = ["interpolate", ["exponential", 2], ["zoom"], 17, 3, 20, 24];
+    expect(paint?.["line-width"]).toEqual(ramp);
+    expect(paint?.["line-blur"]).toEqual(ramp);
+    expect(paint?.["line-color"]).toBe("#000000");
   });
 });
