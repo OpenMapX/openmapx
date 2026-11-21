@@ -230,7 +230,7 @@ settings override admin values within config; they do **not** supersede the
 selected-service lookup in these adapters.
 
 To use an external endpoint, stop and remove the corresponding local service
-from the selection, configure the integration endpoint, and recreate `app-api`
+from the selection, configure the integration endpoint, and recreate `api`
 so its applied service selection is current. Valhalla's hosted Stadia fallback
 requires its provider API key; self-hosted Valhalla does not. The OSRM public demo
 is an external dependency with its own [usage policy](https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy),
@@ -274,7 +274,7 @@ pnpm openmapx services enable valhalla osrm
 pnpm openmapx data download osm europe/germany
 pnpm openmapx services build osrm --region europe/germany
 pnpm openmapx services start --preset routing
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 ```
 
 For an existing deployment, stop OSRM before rebuilding. Valhalla prepares its

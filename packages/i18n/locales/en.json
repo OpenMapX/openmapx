@@ -5544,7 +5544,7 @@
   "adminServices": {
     "failedToLoadCredentials": "Failed to load credentials.",
     "thisServiceDeclaresNoCredentials": "This service declares no credentials.",
-    "secretVaultNotConfigured": "The secret vault is not configured. Set <code>{variable}</code> (a 64-char hex string) on app-api before storing credentials.",
+    "secretVaultNotConfigured": "The secret vault is not configured. Set <code>{variable}</code> (a 64-char hex string) on the <code>api</code> service before storing credentials.",
     "hostEnvironment": "Host environment",
     "hostFile": "Host file",
     "managed": "Managed",

@@ -5544,7 +5544,7 @@
   "adminServices": {
     "failedToLoadCredentials": "Zugangsdaten konnten nicht geladen werden.",
     "thisServiceDeclaresNoCredentials": "Dieser Dienst deklariert keine Zugangsdaten.",
-    "secretVaultNotConfigured": "Der Tresor für Geheimnisse ist nicht eingerichtet. Setzen Sie <code>{variable}</code> (eine Hex-Zeichenfolge mit 64 Zeichen) auf app-api, bevor Sie Zugangsdaten speichern.",
+    "secretVaultNotConfigured": "Der Tresor für Geheimnisse ist nicht eingerichtet. Setzen Sie <code>{variable}</code> (eine Hex-Zeichenfolge mit 64 Zeichen) für den Dienst <code>api</code>, bevor Sie Zugangsdaten speichern.",
     "hostEnvironment": "Host-Umgebung",
     "hostFile": "Host-Datei",
     "managed": "Verwaltet",

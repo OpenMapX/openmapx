@@ -69,7 +69,7 @@ memory, depending on its density and the enabled features.
 
 ### Baseline: the core app
 
-The default roots are `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
+The default roots are `traefik`, `well-known`, `api`, `web`, `postgis`,
 `redis`, and `data-manager`. Their dependencies also select `ops-agent` and
 `transitous-runner`. The current memory limits add up to about 18 GiB, principally
 because data-manager has an 8 GiB limit and transitous-runner has a 4 GiB limit.

@@ -57,7 +57,7 @@ not use the superuser: the render generates their own database passwords in
 together with each data-manager caller's token.
 
 `UID` and `GID` name the deployment's user: the stack's own containers
-(`app-api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)
+(`api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)
 run as `UID:GID` and own the files they write. Leave them unset: the first
 render writes them into `infra/docker/.env` from the checkout's owner. Only a
 render on the host writes them; the operations agent and the admin panel read
@@ -124,7 +124,7 @@ changes.
 ## 5. Bring up the infrastructure first
 
 ```bash
-pnpm openmapx services start postgis redis traefik app-api data-manager
+pnpm openmapx services start postgis redis traefik api data-manager
 pnpm openmapx services status
 curl --fail --silent --show-error http://localhost:4000/status
 ```
@@ -138,7 +138,7 @@ If startup fails, inspect the affected service:
 
 ```bash
 pnpm openmapx services logs ops-agent --tail 100
-pnpm openmapx services logs app-api --tail 100
+pnpm openmapx services logs api --tail 100
 pnpm openmapx services logs data-manager --tail 100
 ```
 

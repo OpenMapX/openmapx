@@ -6,9 +6,9 @@ impacts: [security]
 
 The operations agent keeps its own state in `infra/docker/state/ops-agent/`,
 outside `infra/docker/data/`: its job journal and the configuration
-candidates app-api hands it. data-manager mounts the data directory read-write
+candidates the API hands it. data-manager mounts the data directory read-write
 as the same user, so state there could be rewritten by it: the journal and
-prepared configuration candidates, including secrets. Only app-api (the
+prepared configuration candidates, including secrets. Only the API (the
 integration store, read-only) and Traefik (its own files, read-only) mount
 parts of it.
 

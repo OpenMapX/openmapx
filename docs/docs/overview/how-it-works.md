@@ -72,7 +72,7 @@ are covered in [Architecture](../developer/architecture.md#runtime-topology).
 The core containers communicate over the private `openmapx` Docker network.
 The reverse proxy's listeners and explicitly published service ports are the
 host entry points. Ports bound to loopback are reachable only from the host.
-The API server (`app-api`) is itself a
+The API server (`api`) is itself a
 container: it hosts the integration framework, gates the admin endpoints, and
 resolves integration requirements against the service registry.
 
@@ -85,7 +85,7 @@ appropriate so services can share files without copying them. It also builds
 the PostGIS place and search indexes (Overture places, the OSM search index,
 notable and ambient places), feeds live and predicted traffic to Valhalla,
 prepares offline map packages and reports data coverage. Map styles and sprites are statically
-bundled directly into the `app-web` frontend. The private **ops-agent** broker
+bundled directly into the `web` frontend. The private **ops-agent** broker
 keeps Docker socket and host lifecycle authority out of application containers. Some integrations call external APIs for traffic, street-level imagery,
 or regional transit. Provider requests normally pass through the API. Browser
 capabilities and explicit external links have separate privacy boundaries; check

@@ -340,7 +340,8 @@ The retained configuration helper replaces the selected application services
 without restarting unrelated dependencies. A failure can require reconciliation;
 inspect the original Activity job and preserve its recovery records. Do not infer
 a rollback from a disconnected API or an unchanged release-status field.
-System status includes all five application services.
+System status lists the five services whose images the release pins: `api`,
+`web`, `data-manager`, `ops-agent` and `transitous-runner`.
 
 The applied configuration generation holds the release's image pins, so
 restarting or re-rendering the stack keeps the digest-pinned release. Clear the
@@ -402,7 +403,7 @@ which is outside the self-hosting flow.
 :::
 
 :::caution[Stricter `DATA_MANAGER_URL` validation]
-`app-api` now refuses a `DATA_MANAGER_URL` that is plain `http://` on any host
+`api` now refuses a `DATA_MANAGER_URL` that is plain `http://` on any host
 other than `localhost`, `127.0.0.1`, `::1` or the Compose service name
 `data-manager`, and rejects URLs with credentials, a path prefix or a query
 string. If you reach the data-manager over HTTP on a LAN address or a custom
@@ -432,18 +433,18 @@ option. Do not delete locks, clear database flags or edit the agent's records.
 ## 5. Database migrations apply automatically
 
 OpenMapX does not have a separate "run migrations" command for a self-host
-upgrade. When `services update` replaces `app-api` (step 4), it first stops the
-old `app-api` and applies the new image's pending Drizzle migrations in a one-off
+upgrade. When `services update` replaces `api` (step 4), it first stops the
+old `api` and applies the new image's pending Drizzle migrations in a one-off
 container. Their output is part of the update's output. Only then does it start
 the new containers. The migrator is **idempotent**; it skips migrations that are
 already applied and only runs the new ones.
 
-`app-api` also applies pending migrations whenever it starts, so a container
+`api` also applies pending migrations whenever it starts, so a container
 started any other way catches up too. After the update's migration step there
 are none left. You can confirm it ran cleanly in the API logs:
 
 ```bash
-pnpm openmapx services logs app-api --tail 100
+pnpm openmapx services logs api --tail 100
 ```
 
 A successful upgrade logs `Database migrations applied`. If a migration fails,
@@ -452,7 +453,7 @@ the error is logged there. If you created an optional
 
 :::caution[Migrations move forward only]
 Drizzle migrations are forward-only. There is no automatic down-migration. Once a
-new `app-api` has migrated the database, `openmapx control rollback` refuses to
+new `api` has migrated the database, `openmapx control rollback` refuses to
 return to the older release (see [Rolling back](#rolling-back)); restore the
 matching database backup instead. For upgrades
 that cross a schema change, consider taking the optional backup in step 1 when
@@ -478,7 +479,7 @@ started. A migration that changes many rows can take a while. To follow it:
 
 Let a migration that is making progress finish. All pending migrations run in
 one transaction, so stopping the update rolls every one of them back. The
-previous `app-api` then starts again, nothing is replaced, and the next update
+previous `api` then starts again, nothing is replaced, and the next update
 repeats the migrations from the beginning. A migration that fails does the same.
 
 An update from the admin panel stops after 30 minutes, including its backup and
@@ -579,7 +580,7 @@ Community extensions have their own versions and update workflow. Use
 `ext list`, `ext preview`, and `ext update`, including explicit confirmation of
 reviewed host ports. Those commands need an authenticated admin API endpoint;
 their default `http://localhost:3001` is not host-published by the managed
-`app-api` manifest. A public HTTPS URL alone does not grant loopback admin
+`api` manifest. A public HTTPS URL alone does not grant loopback admin
 access. Follow [Community extensions](../administration/community-extensions.md)
 for the supported access and confirmation workflow instead of assuming host CLI
 invocation authenticates through the public proxy.
@@ -590,9 +591,9 @@ retrying an interrupted request.
 ### After an interrupted extension update
 
 The operations agent installs each service repository as a transaction: it
-keeps the previous checkout, and what `app-api` needs to undo the change, until
+keeps the previous checkout, and what `api` needs to undo the change, until
 the change is settled. The extension's database record is the commit point. If
-`app-api` or the agent stops mid-update, the next `app-api` start, and every
+`api` or the agent stops mid-update, the next `api` start, and every
 later extension install or removal, settles what was left: a change the
 database recorded is kept, and any other is rolled back, restoring the previous
 checkout, service selection and running containers. The agent keeps its note
@@ -600,7 +601,7 @@ about a rolled-back change until the selection is restored, so a failure part
 way through is finished by the next attempt. Integration installs are
 transactions in the agent too, settled the same way.
 
-If the agent is unreachable when `app-api` starts, `app-api` logs
+If the agent is unreachable when `api` starts, `api` logs
 `Interrupted extension changes could not be recovered yet` and serves normally;
 the next extension job retries the recovery and fails, without changing
 anything, until it succeeds. Do not delete `.repository-*`, `.backup-*` or

@@ -13,7 +13,7 @@ extension. Previously only the first of each was sent. Migration
 
 ## Who is affected
 
-Every installation applies the migration at app-api startup. Requests that
+Every installation applies the migration at API startup. Requests that
 are already due soon and were already reminded get one more reminder per
 administrator after the update.
 

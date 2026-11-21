@@ -110,7 +110,7 @@ to `services build motis` when preparing an export on a larger machine; see
 ```bash
 pnpm openmapx data link
 pnpm openmapx services start motis motis-staging
-pnpm openmapx services start app-api data-manager
+pnpm openmapx services start api data-manager
 pnpm openmapx services logs motis --follow
 ```
 
@@ -296,7 +296,7 @@ incomplete transit preparation even when street data is available.
 
 ```bash
 pnpm openmapx services start otp
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 pnpm openmapx services logs otp --follow
 ```
 

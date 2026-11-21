@@ -41,11 +41,12 @@ openmapx/
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
 ├── services/                 built-in service plugins (service.json each)
-│   ├── app-api/              manifest for the api image
-│   ├── app-web/              manifest for the web image
+│   ├── api/                  manifest for the api image
+│   ├── web/                  manifest for the web image
 │   ├── data-manager/         data pipeline: source code and manifest
 │   ├── transitous-runner/    manifest for the Transitous runner
-│   └── ops-agent/            private deployment manifest for the operations broker
+│   ├── ops-agent/            private deployment manifest for the operations broker
+│   └── …                     the optional engines, databases and Traefik
 ├── infra/docker/             generated output + operator configuration/state
 └── docs/                     this documentation site
 ```
@@ -59,7 +60,7 @@ throwaway build directory. Do not hand-edit generated Compose output.
 Installed declarative integration artifacts and community service repositories
 live in the operations agent's state, in
 `infra/docker/state/ops-agent/custom-integrations/` and
-`infra/docker/state/ops-agent/community/`; `app-api` mounts the first read-only
+`infra/docker/state/ops-agent/community/`; `api` mounts the first read-only
 at `/app/custom_integrations`. Built-in integrations run trusted host code; installed
 community integrations cannot load arbitrary JavaScript into the API or web
 process. Their executable behavior belongs in separate service containers.
@@ -131,14 +132,14 @@ graph TD
     accDescr: Traefik routes requests to application services. The API uses integration registries, domain orchestrators, local engines and infrastructure; typed operations isolate host authority in the ops-agent.
     Internet((Internet)) -->|443| Traefik["traefik · TLS termination"]
 
-    Traefik -->|/| Web["app-web · Next.js"]
-    Traefik -->|/api| API["app-api · Fastify"]
+    Traefik -->|/| Web["web · Next.js"]
+    Traefik -->|/api| API["api · Fastify"]
     Traefik -->|/tiles · /martin| Tiles["tileserver · martin"]
     Traefik -->|/.well-known| WK["well-known"]
 
     Web -->|REST| API
 
-    subgraph Host["app-api: the integration host"]
+    subgraph Host["api: the integration host"]
       direction LR
       IH["Integration registry<br/>+ service registry<br/>+ capability bindings"]
       Orc["Domain orchestrators<br/>geocoding · routing · transit · …"]
@@ -177,11 +178,11 @@ configure an external proxy instead. Containers address bound services by
 service ID, for example `http://valhalla:8002`. A manifest can expose a proxy
 route through `exposure.proxy` or bind a host port through `exposure.hostPorts`
 (loopback by default). Inspect those declarations when reviewing network access.
-`app-web` claims `/` at the lowest proxy priority; more specific routes such as
+`web` claims `/` at the lowest proxy priority; more specific routes such as
 `/api`, `/tiles`, `/martin`, and `/.well-known` take precedence.
 
 **The always-on core.** A handful of services are selected by default:
-`traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, `data-manager`,
+`traefik`, `well-known`, `api`, `web`, `postgis`, `redis`, `data-manager`,
 and `ops-agent`. Everything heavy (routing engines, geocoders, transit engines,
 the Overpass server, tile servers) is opt-in: you add it to the _selection_ and
 re-render. PostGIS is the system of record for application data and operational
@@ -189,7 +190,7 @@ pipeline metadata; it does not store GTFS schedules. Redis (Valkey) is the
 cache.
 
 **The private operations boundary.** `ops-agent` accepts only versioned,
-short-lived requests from `app-api` or `data-manager`, authenticated with
+short-lived requests from `api` or `data-manager`, authenticated with
 distinct file-mounted bearer credentials. Its contract is a strict
 discriminated union: callers cannot supply a command, arbitrary arguments,
 Compose/YAML, environment maps, caller paths, or container names. The agent
@@ -199,14 +200,14 @@ bounded structured audit fields. It is reachable solely on the private
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
 mounts, including its stores of community service checkouts and installed
-integrations. `app-api` and `data-manager` submit typed operations instead of receiving
+integrations. `api` and `data-manager` submit typed operations instead of receiving
 that host authority themselves. The agent's own state (job journal and the
 prepared configuration candidates the API hands it) lives
 in `infra/docker/state/ops-agent/`, outside the data directory data-manager
-mounts; `app-api` mounts only the integration store, read-only, and
+mounts; `api` mounts only the integration store, read-only, and
 `pnpm check-ops-authority` keeps it that way. A configuration apply carries its
 payload in the authenticated request, named in the operation by its digest; the
-agent's journal keeps the digest, never the payload. `app-api` reads the release and active Transitous pins through the
+agent's journal keeps the digest, never the payload. `api` reads the release and active Transitous pins through the
 read-only `transitousPin.inspect` operation. The proposal and every change stay
 `data-manager`'s operations, which the admin panel's bump goes through. The built-in service manifests the agent and its
 fixed CLI render come from the agent's own image, not from the host checkout.
@@ -228,7 +229,7 @@ checkout's root. Traefik consumes generated configuration rather than
 discovering containers through the Docker socket, so there is no duplicate
 host-control path outside the broker.
 
-`app-api` runs the integration host alongside core routes, service discovery,
+`api` runs the integration host alongside core routes, service discovery,
 and asynchronous jobs:
 
 - Static routes registered directly on Fastify: `/health`, `/api/places`,
@@ -414,7 +415,7 @@ production administration uses the authenticated integration lifecycle operation
 The host adds the backend entry file's mtime and size to its import URL in both
 development and production. A changed entry can reload; unchanged entries reuse
 Node's cached module. This does not invalidate unchanged URLs for transitive
-imports. Restart `app-api` after changing already-loaded built-in code when a
+imports. Restart `api` after changing already-loaded built-in code when a
 reload cannot replace the complete module graph. Installed declarative artifacts
 have their own reload lifecycle and do not execute a `setup()` module in the host.
 :::

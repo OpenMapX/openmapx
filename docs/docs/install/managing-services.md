@@ -65,7 +65,7 @@ pnpm openmapx services capabilities --unrecognised      # flag non-standard capa
 ## Enabling and disabling services
 
 The set of services that participate in your deployment is the **selection**.
-The default roots are `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
+The default roots are `traefik`, `well-known`, `api`, `web`, `postgis`,
 `redis`, and `data-manager`. Dependencies add `ops-agent` and `transitous-runner`.
 Routing, geocoding, transit, OSM queries, and tiles are opt-in. Custom selections
 replace the defaults; the core is not unconditionally added to every selection.
@@ -83,8 +83,8 @@ deployment file. For example, a selection retaining the default app roots is:
   "selected": [
     "traefik",
     "well-known",
-    "app-api",
-    "app-web",
+    "api",
+    "web",
     "postgis",
     "redis",
     "data-manager",
@@ -136,7 +136,7 @@ routing stack" instead of listing every id. Presets work on `services start`,
 
 | Preset      | Services                                                      |
 | ----------- | ------------------------------------------------------------- |
-| `app`       | `app-api`, `app-web`, `well-known`                            |
+| `app`       | `api`, `web`, `well-known`                                    |
 | `proxy`     | `traefik`                                                     |
 | `dev`       | `postgis`, `redis`                                            |
 | `routing`   | `osrm`, `valhalla`                                            |
@@ -198,7 +198,7 @@ override the selection or domain for a single render without touching the
 persisted selection:
 
 ```bash
-pnpm openmapx compose render --services app-api,app-web,well-known,data-manager,valhalla,photon
+pnpm openmapx compose render --services api,web,well-known,data-manager,valhalla,photon
 # --preset routing alone renders only that preset and its dependencies.
 pnpm openmapx compose render --domain maps.example.com
 ```
@@ -247,7 +247,7 @@ expect a rendered compose file to already exist:
 
 ```bash
 pnpm openmapx services stop motis otp                  # docker compose stop
-pnpm openmapx services restart app-api                 # in-place reboot (does NOT re-render)
+pnpm openmapx services restart api                     # in-place reboot (does NOT re-render)
 pnpm openmapx services update valhalla                 # pull images + replace container
 pnpm openmapx services status                          # container table (all services)
 pnpm openmapx services status valhalla                 # one service
@@ -275,7 +275,7 @@ describes how to resolve one whose outcome is unknown.
   Use `--no-deps` to replace only the named containers when dependencies are already
   healthy.
 - **`compose rotate-redis-password`** rotates Redis credentials after clients
-  (`app-api`, `data-manager`, and any extension clients) are stopped. Follow the
+  (`api`, `data-manager`, and any extension clients) are stopped. Follow the
   [Redis rotation procedure](../guides/supporting-infrastructure.md#valkey--the-cache)
   for application and partial-failure recovery.
 
@@ -404,7 +404,7 @@ not yet applied are therefore unavailable to a fresh CLI render.
 Apply newly saved admin settings before using the CLI to recreate their services.
 After that apply, CLI renders preserve them. The API receives schema-backed
 `SERVICE_*` overrides as environment references; after editing `.env`, use a host
-CLI render/start to apply them and recreate `app-api` when its environment needs
+CLI render/start to apply them and recreate `api` when its environment needs
 updating. A container restart does not reload changed environment variables.
 
 For example:
@@ -412,7 +412,7 @@ For example:
 ```bash
 pnpm openmapx services start valhalla
 # When API or data-manager environment changed:
-pnpm openmapx services start app-api data-manager
+pnpm openmapx services start api data-manager
 ```
 
 :::note[Data-manager credentials are separate]
@@ -555,9 +555,13 @@ OPENMAPX_PROXY_CERT_RESOLVER=myresolver
 ```
 
 The bundled `traefik` service is then never selected. Every routed service
-(`app-web`, `app-api`, `well-known`, `tileserver`, …) joins the external
-network, and its labels carry the entrypoint, resolver and network. Re-render
-and start the stack as usual.
+(`web`, `api`, `well-known`, `tileserver`, …) joins the external
+network, and its labels carry the entrypoint, resolver and network. The label
+router, service and middleware names start with `openmapx-` (`openmapx-api`,
+`openmapx-web`, …), so they do not clash with other projects on the same
+Traefik. Internal callers reach the API by its alias `openmapx-api` on the
+stack's own network, never by the bare name `api` that another project on the
+shared network could also use. Re-render and start the stack as usual.
 
 Copy `services/traefik/config/dynamic/middlewares.yml` into the external
 Traefik's file-provider directory. The routes reference its middlewares with

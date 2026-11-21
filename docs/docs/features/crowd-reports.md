@@ -40,14 +40,14 @@ processing request metadata.
 The built-in `crowd-reports` integration supplies the UI and relay routes and is
 enabled by default, but submitting reports requires a compatible self-hosted
 OpenConditions contributions service. Install the OpenConditions extension (or
-another compatible service) and set its endpoint for `app-api`:
+another compatible service) and set its endpoint for `api`:
 
 ```bash
 OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
 ```
 
 This example uses the contributions service's container hostname. Ensure
-`app-api` can resolve and reach it on the deployment network. A host-run API
+`api` can resolve and reach it on the deployment network. A host-run API
 needs an endpoint reachable from that host.
 
 The development fallback is `http://localhost:4200`, the contributions

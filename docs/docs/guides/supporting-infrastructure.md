@@ -43,7 +43,7 @@ an image or rely on emulation without reviewing volume compatibility.
 ### The password
 
 `POSTGRES_PASSWORD` is the PostgreSQL superuser's password. Only PostGIS
-administration and the CLI's backups and restores use it; `app-api` and
+administration and the CLI's backups and restores use it; `api` and
 `data-manager` connect as their own roles, whose passwords the render generates
 (see [Database roles](../install/configuration.md#database-roles)). No other
 service receives it: Nominatim's bundled database has its own
@@ -144,10 +144,10 @@ To rotate the generated password, stop its clients, rotate, recreate Redis, and
 restart the clients:
 
 ```bash
-pnpm openmapx services stop app-api data-manager
+pnpm openmapx services stop api data-manager
 pnpm openmapx compose rotate-redis-password --confirm-clients-stopped
 pnpm openmapx services update redis --no-deps
-pnpm openmapx services start app-api data-manager
+pnpm openmapx services start api data-manager
 ```
 
 Also stop any extension using the shared Redis credential. If rotation reports a
@@ -210,12 +210,12 @@ capabilities Docker grants by default.
 
 | Public path         | Target                       |
 | ------------------- | ---------------------------- |
-| `/api/*`, `/health` | `app-api`                    |
+| `/api/*`, `/health` | `api`                        |
 | `/api/internal/*`   | Explicit deny middleware     |
 | `/.well-known/*`    | `well-known`                 |
 | `/tiles/*`          | TileServer GL, when selected |
 | `/martin/*`         | Martin, when selected        |
-| Other paths         | `app-web`                    |
+| Other paths         | `web`                        |
 
 Managed Dawarich has a separate `timeline.<DOMAIN>` hostname. Community services
 do not automatically receive a platform route.

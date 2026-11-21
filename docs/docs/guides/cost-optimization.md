@@ -25,7 +25,7 @@ To retire an unused engine, stop it before removing it from the rendered stack:
 pnpm openmapx services stop osrm
 pnpm openmapx services disable osrm
 pnpm openmapx compose render
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 pnpm openmapx services selected
 ```
 

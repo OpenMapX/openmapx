@@ -82,7 +82,7 @@ Then link and start:
 ```bash
 pnpm openmapx data link
 pnpm openmapx services start overpass
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 pnpm openmapx services logs overpass --follow
 ```
 

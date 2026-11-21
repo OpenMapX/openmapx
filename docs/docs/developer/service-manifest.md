@@ -42,6 +42,15 @@ Adding a built-in service means adding its directory, its ID to
 until all three agree. Built-in integration manifests (`integrations/<id>/manifest.json`)
 are embedded the same way, for their configuration schemas.
 
+A first-party service is named after the component it runs: its ID equals its
+directory, its image name (`ghcr.io/openmapx/<id>`) and, for a service the
+release pins, its key in the release manifest. The API is `api`, the web app
+`web`. Code that names one of the platform's own services, or decides
+something because of which one it is, uses `CORE_SERVICE_ID` and the lists in
+`packages/core/src/services/core-service-ids.ts` rather than a string literal.
+A community service may not use the ID of a built-in service: the community
+manifest rules refuse it when a repository is inspected, installed or read.
+
 Community services are trusted by digest: the agent records the SHA-256 of
 every manifest it validated when it installed a repository, and the agent and
 its fixed CLI load only recorded manifests whose bytes still match
@@ -185,7 +194,7 @@ Bridge-mode built-ins join the shared `openmapx` network and keep service-id
 discovery there. Each community service instead receives exactly one dedicated
 network named `openmapx-community-<normalized-service-id>` and never joins
 `openmapx`. Different community services therefore cannot connect directly to
-each other or to Redis, Postgres, app-api, data-manager, or other platform
+each other or to Redis, Postgres, the API, data-manager, or other platform
 peers. They retain ordinary outbound internet access through their own bridge.
 
 An audited built-in may declare top-level `communityNetworkAccess` with exact
@@ -200,7 +209,7 @@ render boundary.
 
 Four shipped built-ins opt in, all for OpenConditions, whose services own the
 shared database's `conditions` schema: `postgis` (both OpenConditions services
-connect to the database), `app-api` (its `openconditions` integration reads the
+connect to the database), `api` (its `openconditions` integration reads the
 ingest service, and its crowd-reports relay forwards to the contributions API),
 `data-manager` (its traffic cycle reads the ingest service) and `overpass` (the
 ingest service queries a self-hosted Overpass). Two properties of this audited
@@ -212,7 +221,7 @@ exception are accepted, not accidental:
   to these built-ins. Postgres still needs credentials the operator only gives
   OpenConditions, so the reach is to the port, not the data.
 - The bridge is bidirectional. A network carries traffic both ways, so the
-  OpenConditions containers can also open connections to `app-api` and
+  OpenConditions containers can also open connections to `api` and
   `data-manager`, including their unauthenticated internal endpoints
   (`/internal/metrics`, the data-manager's `/live` and `/status`), which the
   proxy denies publicly.
@@ -233,7 +242,7 @@ access through those bridges. Each private network is dual-stack like
 `fd4d:5058::/48`.
 
 A built-in that stays on `openmapx` and lists the same private network is a
-bridge: Traefik routes to a bundle's web container this way, and app-api calls
+bridge: Traefik routes to a bundle's web container this way, and the API calls
 it. A bridge joins the network only while an enabled member that left
 `openmapx` declares it. A default install without the bundle therefore renders
 no extra network. As with community bridges, the network carries traffic both
@@ -246,13 +255,13 @@ The managed Dawarich bundle is the shipped example:
 | Network                             | Members                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------ |
 | `openmapx-private-dawarich`         | `dawarich-app`, `dawarich-sidekiq`, `dawarich-postgis`, `dawarich-redis` |
-| `openmapx-private-dawarich-ingress` | `dawarich-app`, plus the bridges `traefik` and `app-api`                 |
+| `openmapx-private-dawarich-ingress` | `dawarich-app`, plus the bridges `traefik` and `api`                     |
 
 The worker, which delivers geofencing webhooks and runs photo imports, can
 reach only its own database, Redis, the web app and the internet. The web app,
 whose photo-thumbnail proxy fetches a user-configured URL and returns the
-response body, can additionally reach Traefik's entrypoints and app-api. On
-app-api that includes the unauthenticated `/api/internal/metrics` counters,
+response body, can additionally reach Traefik's entrypoints and the API. On
+the API that includes the unauthenticated `/api/internal/metrics` counters,
 which Traefik otherwise denies publicly.
 
 ### `container.healthcheck`
@@ -558,11 +567,11 @@ Redis authentication is a platform-owned special case rather than a manifest
 author capability. Compose rendering bootstraps a canonical 32-byte random
 password under the host-only `0700` `infra/docker/secrets/` boundary, keeps the
 source file readable for non-root containers, and mounts it only into Redis,
-app-api, and data-manager. Those clients must read the exact bytes from
+`api`, and data-manager. Those clients must read the exact bytes from
 `REDIS_PASSWORD_FILE`; whitespace, malformed base64url, symlinks, non-regular
 files, empty files, and oversized files fail closed. Rotation is performed only
 through `pnpm openmapx compose rotate-redis-password --confirm-clients-stopped`,
-after stopping app-api and data-manager. Password and derived ACL candidates are
+after stopping `api` and data-manager. Password and derived ACL candidates are
 both durable before the password commit, but their individual atomic renames are
 sequential rather than a two-file transaction. Successful render/rotation paths
 reread and reconcile the pair after concurrent changes. If a crash or target
