@@ -1,3 +1,4 @@
+import { indexAt } from "./indexAt";
 import { numberAt } from "./numberAt";
 
 const DEFAULT_BUCKET_SIZE_DEGREES = 0.002;
@@ -20,8 +21,8 @@ class UnionFind {
   }
 
   find(index: number): number {
-    const parent = this.parent[index];
-    if (parent === undefined || parent === index) return index;
+    const parent = indexAt(this.parent, index);
+    if (parent === index) return index;
     const root = this.find(parent);
     this.parent[index] = root;
     return root;
