@@ -25,13 +25,14 @@ import {
   useSceneLightStore,
 } from "@/integration-api/map/sceneLight";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { mapTerrainProbe } from "@/integration-api/map/terrainProbe";
 import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { areaOfInterest } from "./web/area";
 import { acceptableHull, derivedHull, toReplacement } from "./web/footprint";
-import { groundHeight, mapTerrainProbe } from "./web/grounding";
+import { groundHeight } from "./web/grounding";
 import { type Candidate, LandmarkCatalogue } from "./web/loader";
 import type { LandmarkScene, ModelLighting, PlacedModel } from "./web/scene";
 

@@ -52,6 +52,8 @@ export interface FakeMapState {
   bearing: number;
   /** Backing value for `getCenter()`; `jumpTo`/`easeTo` write it when they carry a centre. */
   center: { lng: number; lat: number };
+  /** Backing value for `getBounds()`; mutate then emit("moveend") to simulate a pan. */
+  bounds: { west: number; south: number; east: number; north: number };
   /** Backing value for `getPadding()`; null until a transition carries padding. */
   padding: { top: number; bottom: number; left: number; right: number } | null;
   cameraTransitions: Array<{
@@ -169,6 +171,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     maxPitch: options.maxPitch ?? 60,
     bearing: options.bearing ?? 0,
     center: options.center ?? { lng: 0, lat: 0 },
+    bounds: options.bounds ?? { west: -180, south: -90, east: 180, north: 90 },
     padding: null,
     cameraTransitions: [],
     cameraForBoundsCalls: [],
@@ -504,7 +507,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     triggerRepaint: () => api.map,
     getContainer: () => container,
     getBounds: () => {
-      const bounds = options.bounds ?? { west: -180, south: -90, east: 180, north: 90 };
+      const bounds = state.bounds;
       return {
         getWest: () => bounds.west,
         getSouth: () => bounds.south,

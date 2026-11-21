@@ -1,7 +1,8 @@
+import type { TerrainProbe } from "@openmapx/core";
 import { nth } from "@openmapx/integration-framework/testing";
 import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
-import { groundHeight, type TerrainProbe } from "../web/grounding";
+import { groundHeight } from "../web/grounding";
 
 const ANCHOR: [number, number] = [-122.4058, 37.8024];
 const FOOTPRINT: Polygon = {

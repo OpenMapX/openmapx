@@ -17,7 +17,7 @@
     "tag": "v5.7.0",
     "digest": "sha256:24d0364e1d40da0ae3fb3269f617c26e36a883ad4b7454e5c4064a8795bfc807",
     "expose": [8080],
-    "command": ["--public_url", "https://${DOMAIN:-localhost}/tiles/"],
+    "command": ["--public_url", "https://${DOMAIN:-localhost}/tiles/", "--ignore-missing-files"],
     "memory": "2g",
     "restart": "unless-stopped"
   },

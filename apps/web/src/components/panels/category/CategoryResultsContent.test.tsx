@@ -210,14 +210,13 @@ describe("category activation search area", () => {
 
   it("allows an intentional later auto-refresh to replace the resolved NLP area", async () => {
     activateNlp();
-    const mapOptions = { bounds: viewport };
-    const fake = createFakeMap(mapOptions);
+    const fake = createFakeMap({ bounds: viewport });
     act(() => useCategorySearchStore.getState().setAutoRefresh(true));
     renderReadyPanel(fake);
     await waitFor(() => expect(useCategorySearchStore.getState().mapMoved).toBe(false));
     expect(useCategorySearchStore.getState().searchBbox).toEqual(resolved);
 
-    mapOptions.bounds = later;
+    fake.state.bounds = later;
     act(() => fake.emit("moveend", {}));
     expect(useCategorySearchStore.getState().searchBbox).toEqual(later);
   });
@@ -225,13 +224,12 @@ describe("category activation search area", () => {
   it("allows Search this area after a pan to replace the resolved NLP area", async () => {
     activateNlp();
     vi.spyOn(apiClient, "get").mockResolvedValue({ sources: [] });
-    const mapOptions = { bounds: viewport };
-    const fake = createFakeMap(mapOptions);
+    const fake = createFakeMap({ bounds: viewport });
     renderReadyPanel(fake, false, true);
     await waitFor(() => expect(useCategorySearchStore.getState().mapMoved).toBe(false));
     expect(useCategorySearchStore.getState().searchBbox).toEqual(resolved);
 
-    mapOptions.bounds = later;
+    fake.state.bounds = later;
     act(() => fake.emit("moveend", {}));
     expect(useCategorySearchStore.getState().mapMoved).toBe(true);
     fireEvent.click(screen.getByText("search.searchInArea"));

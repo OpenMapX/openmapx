@@ -8,6 +8,7 @@ const config: MapConfig = {
   maptilerConfigured: true,
   selfHostedTilesUrl: "",
   selfHostedGlyphsUrl: "",
+  streetDetailTilesUrl: "",
 };
 const originalEnv = { ...process.env };
 afterEach(() => {

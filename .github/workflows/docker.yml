@@ -305,14 +305,17 @@ jobs:
         with:
           pattern: docker-digest-*-${{ github.run_id }}
           path: digests
-      # Rollback compares the database with the release's newest migration.
-      - name: Check out the release's migration journal
+      # Rollback compares the database with the release's newest migration;
+      # tag verification waits out registry read-after-write lag.
+      - name: Check out the release's migration journal and registry wait script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.gate.outputs.sha }}
           path: source
           persist-credentials: false
-          sparse-checkout: apps/api/src/db/migrations/meta/_journal.json
+          sparse-checkout: |
+            apps/api/src/db/migrations/meta/_journal.json
+            scripts/ci/await-registry-digest.sh
           sparse-checkout-cone-mode: false
 
       - name: Set up Docker Buildx
@@ -356,8 +359,7 @@ jobs:
               --tag "${IMAGE}:${RELEASE_SHA}" \
               --tag "${IMAGE}:${RELEASE_ID}" \
               "${IMAGE}@${DIGEST}"
-            published_digest=$(docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}" --format '{{.Manifest.Digest}}')
-            if [ "$published_digest" != "$DIGEST" ]; then echo "Published digest mismatch for ${IMAGE}:${RELEASE_SHA}" >&2; exit 1; fi
+            source/scripts/ci/await-registry-digest.sh "${IMAGE}:${RELEASE_SHA}" "$DIGEST"
 
             if [ "$first" = true ]; then
               first=false
@@ -456,11 +458,7 @@ jobs:
               --prefer-index=false \
               --tag "${IMAGE}:main" \
               "${IMAGE}@${DIGEST}"
-            published_digest=$(docker buildx imagetools inspect "${IMAGE}:main" --format '{{.Manifest.Digest}}')
-            if [ "$published_digest" != "$DIGEST" ]; then
-              echo "Published digest mismatch for ${IMAGE}:main: expected ${DIGEST}, got ${published_digest}" >&2
-              exit 1
-            fi
+            source/scripts/ci/await-registry-digest.sh "${IMAGE}:main" "$DIGEST"
           done
 
       # This one registry tag is the atomic release-selection switch. If building,
@@ -477,5 +475,4 @@ jobs:
             --prefer-index=false \
             --tag "${RELEASE_MANIFEST_IMAGE}:main" \
             "${RELEASE_MANIFEST_IMAGE}@${manifest_digest}"
-          published_digest=$(docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:main" --format '{{.Manifest.Digest}}')
-          if [ "$published_digest" != "$manifest_digest" ]; then echo "Published main manifest digest mismatch" >&2; exit 1; fi
+          source/scripts/ci/await-registry-digest.sh "${RELEASE_MANIFEST_IMAGE}:main" "$manifest_digest"

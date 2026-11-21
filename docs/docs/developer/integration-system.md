@@ -1215,6 +1215,18 @@ between providers: the best review tier wins, then the provider id. It serves:
 | `GET /api/integrations/landmark-models/cells/:x/:y`                  | The merged assets of one z12 cell; pass the coverage `revision` as `r` to make the answer cacheable for a day. |
 | `GET /api/integrations/landmark-models/models/:provider/:sha256.glb` | A model of a shown asset, verified and immutable. Browsers never contact a provider's host.                    |
 
+### Map details
+
+The built-in `map-details` integration fills the 3D view close up: forests
+planted from the base map's land cover, street objects, and real-width street
+paint. It is web-only and draws in two layers: one `fill` layer of street
+paint, served through a custom protocol whose tiles a module Web Worker derives
+from the tile server's `street_detail` tileset, and one three.js custom layer
+of instanced procedural models lit by the shared scene light. Map
+configuration advertises `streetDetailTilesUrl` only while the tile server
+serves that tileset. The worker fetches and caches tiles itself and derives
+everything in pure TypeScript under `integrations/map-details/web/derive/`.
+
 Continue with [Data-source integrations](./data-source-integrations.md),
 [Transit integrations](./transit-integrations.md) or
 [Ride integrations](./ride-integrations.md) for the domain-specific rules.
@@ -1309,6 +1321,15 @@ call. Choose the narrowest lifecycle primitive:
   The callback runs often and must be cheap and idempotent: adding a source,
   layer or image emits another `styledata`. Return its unsubscribe from the
   effect, and remove what it added with `removeSlottedLayers`.
+- `mapTerrainProbe` from `@/integration-api/map/terrainProbe` reads 3D terrain
+  heights for custom layers: a sample counts only once its DEM data is loaded
+  and the drawn tile has its own height. The probe types, `sampleTerrainGrid`
+  and `bilinear`, and the custom-layer frame maths (`mercatorOrigin`,
+  `cameraMatrix`, `objectMatrix`, `instanceMatrix`) come from `@openmapx/core`;
+  the landmark models and the map details share them.
+- `useOfflinePackageActive` from `@/integration-api/map/offlinePackage` tells
+  whether an offline package supplies the base map, for layers that add
+  runtime tile sources only online.
 - `useSceneLight` from `@/integration-api/map/sceneLight` reads the shared
   scene light: the sun's direction, colours and intensities for 3D content,
   whether it is night, and the globe's sky colours. Custom 3D layers light

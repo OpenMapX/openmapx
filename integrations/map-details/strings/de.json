@@ -1,0 +1,11 @@
+{
+  "name": "Kartendetails",
+  "description": "Wälder, Straßenbäume, Laternen, Ampeln und Straßenmarkierungen in der 3D-Ansicht",
+  "dataSources": {
+    "osm-street-detail": {
+      "purpose": "Straßenaufteilung, Übergänge, Bäume, Laternen, Ampeln und Sportplätze für die 3D-Ansicht",
+      "dataSent": "Keine; Kacheln vom Kachelserver dieser Installation",
+      "dataReceived": "Straßen, Fahrstreifen, Übergänge, Gleise, Bäume, Straßenmöbel und Sportplätze"
+    }
+  }
+}

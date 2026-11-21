@@ -171,7 +171,9 @@ pnpm openmapx services start osrm
 ```
 
 OSRM, OTP, Pelias, and TileServer builds stage into sibling `.next` directories
-and swap only after success. Budget space for old and new artifacts together,
+and swap only after success. The TileServer build writes the base map and the 3D
+view's street detail; with `TILESERVER_BASEMAP=hosted` it writes only street
+detail (see [Self-hosting map tiles](../guides/map-tiles.md#street-detail)). Budget space for old and new artifacts together,
 including both Pelias Elasticsearch indexes. OSRM skips an unchanged input/image/
 profile/traffic build. Other build targets do not all share that cache behavior.
 

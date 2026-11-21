@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -262,6 +270,11 @@ esac
           `#!/bin/sh\nprintf '%s\\n' "$*" >> "$CALLS"\ncase "$*" in *inspect*) echo "$EXPECTED";; esac\n`,
         );
         chmodSync(docker, 0o755);
+        mkdirSync(join(temp, "scripts/ci"), { recursive: true });
+        copyFileSync(
+          resolve(import.meta.dirname, "ci/await-registry-digest.sh"),
+          join(temp, "scripts/ci/await-registry-digest.sh"),
+        );
         const result = spawnSync("bash", ["-euo", "pipefail", "-c", script], {
           cwd: temp,
           encoding: "utf8",
@@ -269,6 +282,7 @@ esac
             ...process.env,
             PATH: `${temp}:${process.env.PATH}`,
             CALLS: join(temp, "calls"),
+            AWAIT_REGISTRY_DIGEST_DELAY_SECONDS: "0",
             EXPECTED: mismatch ? `sha256:${"c".repeat(64)}` : digest,
             IMAGE: "ghcr.io/openmapx/docs",
             RELEASE_SHA: sha,

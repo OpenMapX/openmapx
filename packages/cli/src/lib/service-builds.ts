@@ -222,7 +222,7 @@ const BUILT_IN_SERVICE_BUILD_HANDLERS: Record<string, ServiceBuildHandler> = {
     const result = await buildTileMbtiles({ rootDir, region, image });
     log.dim(`Planetiler heap ${result.javaToolOptions}, work dir ${result.workDir}`);
     return {
-      summary: `Built TileServer MBTiles → ${result.mbtilesPath}`,
+      summary: `Built TileServer MBTiles → ${result.files.join(", ")}`,
       artifact: {
         sourcePbf: result.sourcePbf,
         runtimeImages: { tileserver: serviceImage(service) },

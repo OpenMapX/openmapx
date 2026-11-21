@@ -202,6 +202,15 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
     expect(result.composeYaml).toContain("./data/tileserver/tile-mbtiles:/data/mbtiles:ro");
     expect(result.composeYaml).toContain("./data/tileserver/tile-fonts:/data/fonts:ro");
     expect(result.composeYaml).not.toContain("tile-styles");
+    // Hosted-basemap builds have no tiles.mbtiles: TileServer serves whichever archive exists.
+    expect(result.composeYaml).toContain("--ignore-missing-files");
+    const config = JSON.parse(
+      readFileSync(join(repoRoot, "services/tileserver/config/config.json"), "utf8"),
+    ) as { data: Record<string, { mbtiles: string }> };
+    expect(config.data).toEqual({
+      openmapx: { mbtiles: "tiles.mbtiles" },
+      street_detail: { mbtiles: "street_detail.mbtiles" },
+    });
   });
 
   it("renders OTP against a prepared otp-graph product, not raw OSM or GTFS inputs", async () => {

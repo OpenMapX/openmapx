@@ -29,6 +29,7 @@ describe("terrain defaults", () => {
       maptilerConfigured: true,
       selfHostedTilesUrl: "" as const,
       selfHostedGlyphsUrl: "" as const,
+      streetDetailTilesUrl: "" as const,
     });
     expect(env.terrainDemEncoding).toBe("mapbox");
     expect(env.terrainContourMode).toBe("vector");
@@ -73,6 +74,17 @@ describe("vector basemap selection", () => {
     maptilerConfigured: key,
     selfHostedTilesUrl: "" as const,
     selfHostedGlyphsUrl: "" as const,
+    streetDetailTilesUrl: "" as const,
+  });
+
+  it("passes the street detail TileJSON through and never derives it from the tiles URL", () => {
+    process.env.NEXT_PUBLIC_TILES_URL = "https://local.test/tiles.json";
+    expect(buildClientEnv(hosted("auto")).streetDetailTilesUrl).toBe("");
+    expect(
+      buildClientEnv({ ...hosted("auto"), streetDetailTilesUrl: "/tiles/data/street_detail.json" })
+        .streetDetailTilesUrl,
+    ).toBe("/tiles/data/street_detail.json");
+    expect(buildClientEnv(undefined, {}).streetDetailTilesUrl).toBe("");
   });
 
   it("defaults to OpenFreeMap with keyless terrain when no key is configured", () => {

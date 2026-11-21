@@ -26,6 +26,7 @@ const env: ClientEnv = {
   terrainAttributionName: "© MapTiler",
   terrainAttributionUrl: "https://www.maptiler.com/copyright/",
   martinBaseUrl: "",
+  streetDetailTilesUrl: "",
 };
 
 function getPreview(preview: string | null | undefined): ReactNode {

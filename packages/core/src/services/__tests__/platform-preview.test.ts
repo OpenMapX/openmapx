@@ -227,5 +227,9 @@ it("materializes the adopted origin in every actual built-in origin consumer", (
     PASSKEY_ORIGIN: "https://new.example.test,openmapx://",
   });
   expect(byId("app-web").environment?.NEXT_PUBLIC_API_URL).toBe("https://new.example.test");
-  expect(byId("tileserver").command).toEqual(["--public_url", "https://new.example.test/tiles/"]);
+  expect(byId("tileserver").command).toEqual([
+    "--public_url",
+    "https://new.example.test/tiles/",
+    "--ignore-missing-files",
+  ]);
 });

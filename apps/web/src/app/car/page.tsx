@@ -160,6 +160,7 @@ export default function CarPage() {
           tilesUrl: "https://openmapx.com/tiles/data/openmapx.json",
           mapStyleUrl: "https://openmapx.com/tiles",
           martinBaseUrl: "https://openmapx.com/martin",
+          streetDetailTilesUrl: "",
         }
       : env;
   return (

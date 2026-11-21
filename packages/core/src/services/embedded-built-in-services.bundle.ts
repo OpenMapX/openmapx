@@ -196,6 +196,7 @@ export function embeddedBuiltInIntegrationManifests(): BuiltInManifestSource | n
       "../../../../integrations/live-transit-siri-sx-ch/manifest.json",
       import.meta.url,
     ),
+    "map-details": new URL("../../../../integrations/map-details/manifest.json", import.meta.url),
     "message-signs": new URL(
       "../../../../integrations/message-signs/manifest.json",
       import.meta.url,
