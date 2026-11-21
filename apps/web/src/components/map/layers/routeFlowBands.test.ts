@@ -1,10 +1,11 @@
 import { createRequire } from "node:module";
-import type { LngLat, RouteFlowSpan } from "@openmapx/core";
+import { type LngLat, numberAt, type RouteFlowSpan } from "@openmapx/core";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import lineSliceAlong from "@turf/line-slice-along";
 import type * as maplibregl from "maplibre-gl";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import {
   activeSpanFilter,
   type BandRoute,
@@ -258,7 +259,7 @@ describe("buildStaticSpanFeatures", () => {
     const fc = buildStaticSpanFeatures([{ id: "r0", geometry: ROUTE, variant: "active" }], {
       r0: [span(400, 800)],
     });
-    expect(fc.features[0].properties).toMatchObject({
+    expect(nth(fc.features, 0).properties).toMatchObject({
       routeId: "r0",
       startMeters: 400,
       endMeters: 800,
@@ -303,14 +304,17 @@ describe("buildCurrentSpanFeatures", () => {
   });
 
   it("trims the span the driver is inside to start at alongMeters", () => {
-    const [feature] = buildCurrentSpanFeatures(
-      { id: "r0", geometry: ROUTE, variant: "active" },
-      [span(400, 800)],
-      600,
+    const feature = nth(
+      buildCurrentSpanFeatures(
+        { id: "r0", geometry: ROUTE, variant: "active" },
+        [span(400, 800)],
+        600,
+      ),
+      0,
     );
     const coords = (feature.geometry as GeoJSON.LineString).coordinates;
-    expect(coords[0][1]).toBeGreaterThan(50 + 550 * M);
-    expect(coords[coords.length - 1][1]).toBeLessThan(50 + 850 * M);
+    expect(numberAt(nth(coords, 0), 1)).toBeGreaterThan(50 + 550 * M);
+    expect(numberAt(nth(coords, -1), 1)).toBeLessThan(50 + 850 * M);
   });
 
   it("returns every overlapping span the driver is inside, not just one", () => {
@@ -368,8 +372,9 @@ describe("indexed route work", () => {
         [9, 41],
       ] as LngLat[],
     };
-    const feature = buildCurrentSpanFeatures(reroute, spans, 55_200)[0];
-    expect((feature.geometry as GeoJSON.LineString).coordinates[0][0]).toBeCloseTo(9, 9);
+    const feature = nth(buildCurrentSpanFeatures(reroute, spans, 55_200), 0);
+    const start = nth((feature.geometry as GeoJSON.LineString).coordinates, 0);
+    expect(numberAt(start, 0)).toBeCloseTo(9, 9);
   });
 
   it("preserves Turf slices across repeats, exact vertices and the dateline", () => {
@@ -407,8 +412,12 @@ describe("rendered band contributor snapshots", () => {
       ),
     ).toEqual([[a], [a], [a]]);
     expect(
-      buildStaticSpanFeatures([active], { active: [{ ...bands[0], speedRatio: undefined }] })
-        .features[0].properties?._mapAttributions,
+      nth(
+        buildStaticSpanFeatures([active], {
+          active: [{ ...nth(bands, 0), speedRatio: undefined }],
+        }).features,
+        0,
+      ).properties?._mapAttributions,
     ).toBe(JSON.stringify([b]));
     expect(buildCurrentSpanFeatures(active, bands, 600)).toEqual([]);
   });

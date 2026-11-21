@@ -80,7 +80,7 @@ function providerPriority(
   priorities: Readonly<Record<string, number>>,
 ): number {
   const value = priorities[evidence.providerId];
-  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+  return value !== undefined && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
 }
 
 function classifyIndex(index: AirQualityIndex): IndexClass | null {

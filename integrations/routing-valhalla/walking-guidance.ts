@@ -20,7 +20,14 @@
  * Valhalla's own text.
  */
 
-import { bearingBetween, haversineDistance, type LngLat, type RouteStep } from "@openmapx/core";
+import {
+  bearingBetween,
+  haversineDistance,
+  itemAt,
+  type LngLat,
+  numberAt,
+  type RouteStep,
+} from "@openmapx/core";
 // biome-ignore lint/style/noRestrictedImports: backend routing provider; never bundled for the browser
 import { createTranslator } from "@openmapx/i18n";
 
@@ -134,8 +141,14 @@ function draftKind(type: number): Pick<Draft, "kind" | "modifier"> {
 /** Metres along the leg at each of its shape points. */
 function alongDistances(coordinates: LngLat[]): number[] {
   const along = [0];
-  for (let i = 1; i < coordinates.length; i++) {
-    along.push(along[i - 1] + haversineDistance(coordinates[i - 1], coordinates[i]));
+  let total = 0;
+  let previous: LngLat | undefined;
+  for (const point of coordinates) {
+    if (previous) {
+      total += haversineDistance(previous, point);
+      along.push(total);
+    }
+    previous = point;
   }
   return along;
 }
@@ -155,16 +168,19 @@ function crossingRuns(edges: readonly WalkEdge[], along: number[]): Array<[numbe
     .sort((a, b) => a[0] - b[0]);
   for (const [begin, end] of crossings) {
     const last = runs.at(-1);
-    if (last && along[begin] - along[last[1]] < ISLAND_M) last[1] = Math.max(last[1], end);
+    if (last && numberAt(along, begin) - numberAt(along, last[1]) < ISLAND_M)
+      last[1] = Math.max(last[1], end);
     else runs.push([begin, end]);
   }
-  return runs.filter(([begin, end]) => along[end] - along[begin] >= MIN_CROSSING_M);
+  return runs.filter(
+    ([begin, end]) => numberAt(along, end) - numberAt(along, begin) >= MIN_CROSSING_M,
+  );
 }
 
 /** Splits `draft` at shape index `at`; the second part becomes the crossing. */
 function splitAt(draft: Draft, at: number, along: number[]): [Draft, Draft] {
-  const span = along[draft.end] - along[draft.begin];
-  const share = span > 0 ? (along[at] - along[draft.begin]) / span : 0;
+  const span = numberAt(along, draft.end) - numberAt(along, draft.begin);
+  const share = span > 0 ? (numberAt(along, at) - numberAt(along, draft.begin)) / span : 0;
   return [
     {
       ...draft,
@@ -195,7 +211,7 @@ function withCrossings(drafts: Draft[], runs: Array<[number, number]>, along: nu
     let current = draft;
     for (const [begin, end] of runs) {
       if (begin < current.begin || begin >= current.end) continue;
-      const offset = along[begin] - along[current.begin];
+      const offset = numberAt(along, begin) - numberAt(along, current.begin);
       if (current.kind !== "depart" && offset < CROSS_AT_START_M) {
         current = { ...current, kind: "cross", modifier: undefined, crossing: [begin, end] };
       } else if (offset >= 1) {
@@ -213,8 +229,8 @@ function withCrossings(drafts: Draft[], runs: Array<[number, number]>, along: nu
 function pointAway(plan: Pick<WalkingLegPlan, "along">, index: number, span: number): number {
   const { along } = plan;
   let j = index;
-  if (span < 0) while (j > 0 && along[index] - along[j] < -span) j--;
-  else while (j < along.length - 1 && along[j] - along[index] < span) j++;
+  if (span < 0) while (j > 0 && numberAt(along, index) - numberAt(along, j) < -span) j--;
+  else while (j < along.length - 1 && numberAt(along, j) - numberAt(along, index) < span) j++;
   return j;
 }
 
@@ -252,6 +268,7 @@ function foldJogs(plan: WalkingLegPlan): void {
   for (let i = 1; i < drafts.length; ) {
     const jog = drafts[i];
     const previous = drafts[i - 1];
+    if (!jog || !previous) break;
     const isJog =
       (jog.kind === "turn" || jog.kind === "continue") &&
       jog.distance < JOG_M &&
@@ -291,7 +308,8 @@ export function planWalkingLeg(
   const along = alongDistances(coordinates);
   const last = coordinates.length - 1;
   const initial: Draft[] = maneuvers.map((maneuver, i) => {
-    const step = steps[i];
+    // Callers pass a leg only when it has one step per maneuver.
+    const step = itemAt(steps, i, "walking step");
     return {
       ...draftKind(maneuver.type),
       name: maneuver.street_names?.[0],
@@ -314,11 +332,12 @@ export function planWalkingLeg(
 function pointAt(plan: WalkingLegPlan, metres: number): LngLat {
   const { along, coordinates } = plan;
   let i = 1;
-  while (i < along.length - 1 && along[i] < metres) i++;
+  while (i < along.length - 1 && numberAt(along, i) < metres) i++;
   const a = coordinates[i - 1];
+  if (!a) throw new RangeError("A walking leg has no shape");
   const b = coordinates[i] ?? a;
-  const span = along[i] - along[i - 1];
-  const t = span > 0 ? Math.min(Math.max((metres - along[i - 1]) / span, 0), 1) : 0;
+  const span = numberAt(along, i) - numberAt(along, i - 1);
+  const t = span > 0 ? Math.min(Math.max((metres - numberAt(along, i - 1)) / span, 0), 1) : 0;
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
@@ -338,7 +357,7 @@ export interface NameLookup {
 export function nameLookups(plan: WalkingLegPlan): NameLookup[] {
   const lookups: NameLookup[] = [];
   const middle = (begin: number, end: number) =>
-    pointAt(plan, (plan.along[begin] + plan.along[end]) / 2);
+    pointAt(plan, (numberAt(plan.along, begin) + numberAt(plan.along, end)) / 2);
   plan.drafts.forEach((draft, index) => {
     if (draft.kind === "cross") {
       // A crossing's middle lies on the street it crosses, so the street
@@ -377,12 +396,15 @@ export function nameStretches(
   const { drafts } = plan;
   // Across a crossing the walker keeps to the street they were following, so
   // walking on along it afterwards is not a new street.
-  for (let i = 1; i < drafts.length; i++) {
-    if (drafts[i].kind === "cross" && !drafts[i].name) drafts[i].name = drafts[i - 1].name;
+  let before: Draft | undefined;
+  for (const draft of drafts) {
+    if (before && draft.kind === "cross" && !draft.name) draft.name = before.name;
+    before = draft;
   }
   for (let i = 1; i < drafts.length; ) {
     const draft = drafts[i];
     const previous = drafts[i - 1];
+    if (!draft || !previous) break;
     if (
       draft.kind === "continue" &&
       previous.kind !== "fixed" &&
@@ -423,7 +445,7 @@ export function nearestStreetName(
   return best?.name;
 }
 
-function compass(bearing: number): (typeof COMPASS)[number] {
+function compass(bearing: number): (typeof COMPASS)[number] | undefined {
   return COMPASS[Math.round((((bearing % 360) + 360) % 360) / 45) % 8];
 }
 

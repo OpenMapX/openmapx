@@ -6,6 +6,7 @@ import { installationState } from "../build-artifacts/private-records";
 import { canonicalJson } from "../ops/canonical-json";
 import { withConfigurationGenerationWriter } from "../services/configuration-generation";
 import { parseCatalogPinSet } from "./generation";
+import { pinnedAtlasCommit } from "./pinned-commits";
 import {
   type CatalogProposal,
   type CatalogProposalInput,
@@ -76,8 +77,7 @@ export async function retainCatalogProposal(input: {
     throw Error("Catalog proposal requires the original operations agent");
   const proposal = catalogProposalInputSchema.parse(input.proposal);
   parseCatalogPinSet(proposal.pins);
-  if (!proposal.pins.transitous.submodules["transitland-atlas"])
-    throw Error("Catalog proposal atlas pin missing");
+  pinnedAtlasCommit(proposal.pins.transitous);
   return withConfigurationGenerationWriter(
     join(input.rootDir, "infra/docker"),
     async () =>
@@ -137,8 +137,7 @@ export function listCatalogProposals(input: {
         );
         if (proposal.proposalId !== id) throw Error("Catalog proposal filename mismatch");
         const { pins, ...metadata } = proposal;
-        const atlasCommit = pins.transitous.submodules["transitland-atlas"];
-        if (!atlasCommit) throw Error("Catalog proposal atlas pin missing");
+        const atlasCommit = pinnedAtlasCommit(pins.transitous);
         return {
           ...metadata,
           catalogRevisionId: pins.generationId,

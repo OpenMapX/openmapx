@@ -1,10 +1,10 @@
 import { useMemo } from "react";
+import type { TagPredicate } from "../places/overpassFilter";
+import { resolveDistanceReference } from "../search/resultReference";
+import { sortResultsByIntent } from "../search/sortResults";
 import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../stores/categorySearchStore";
 import { useMapStore } from "../stores/mapStore";
 import { useNlpSearchStore } from "../stores/nlpSearchStore";
-import type { TagPredicate } from "../utils/overpassFilter";
-import { resolveDistanceReference } from "../utils/resultReference";
-import { sortResultsByIntent } from "../utils/sortResults";
 import { useFilteredCategoryResults } from "./useFilteredCategoryResults";
 import { useTextSearchResults } from "./useTextSearch";
 

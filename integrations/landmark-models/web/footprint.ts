@@ -1,4 +1,4 @@
-import type { BuildingReplacement } from "@openmapx/core";
+import { type BuildingReplacement, itemAt, numberAt } from "@openmapx/core";
 import type { MultiPolygon, Polygon, Position } from "geojson";
 import { MercatorCoordinate } from "maplibre-gl";
 
@@ -21,17 +21,21 @@ function convexHull(points: Pair[]): Pair[] {
   if (sorted.length < 3) return sorted;
   const lower: Pair[] = [];
   for (const p of sorted) {
-    while (lower.length >= 2 && cross(lower.at(-2) as Pair, lower.at(-1) as Pair, p) <= 0)
-      lower.pop();
+    while (turnsClockwise(lower, p)) lower.pop();
     lower.push(p);
   }
   const upper: Pair[] = [];
   for (const p of sorted.reverse()) {
-    while (upper.length >= 2 && cross(upper.at(-2) as Pair, upper.at(-1) as Pair, p) <= 0)
-      upper.pop();
+    while (turnsClockwise(upper, p)) upper.pop();
     upper.push(p);
   }
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/** Whether the chain's last two points and `p` make no counter-clockwise turn. */
+function turnsClockwise(chain: Pair[], p: Pair): boolean {
+  const n = chain.length;
+  return n >= 2 && cross(itemAt(chain, n - 2), itemAt(chain, n - 1), p) <= 0;
 }
 
 /**
@@ -44,11 +48,11 @@ export function derivedHull(
   anchor: readonly [number, number],
 ): Polygon | null {
   let minY = Infinity;
-  for (let i = 1; i < positions.length; i += 3) minY = Math.min(minY, positions[i] as number);
+  for (let i = 1; i < positions.length; i += 3) minY = Math.min(minY, numberAt(positions, i));
   const ground: Pair[] = [];
   for (let i = 0; i + 2 < positions.length; i += 3) {
-    if ((positions[i + 1] as number) <= minY + GROUND_BAND_M)
-      ground.push([positions[i] as number, positions[i + 2] as number]);
+    if (numberAt(positions, i + 1) <= minY + GROUND_BAND_M)
+      ground.push([numberAt(positions, i), numberAt(positions, i + 2)]);
   }
   const hull = convexHull(ground);
   if (hull.length < 3) return null;
@@ -58,17 +62,20 @@ export function derivedHull(
     const point = new MercatorCoordinate(origin.x + east * s, origin.y + south * s, 0).toLngLat();
     return [point.lng, point.lat];
   });
-  ring.push(ring[0] as Position);
+  ring.push(itemAt(ring, 0));
   return { type: "Polygon", coordinates: [ring] };
 }
 
+/** The ring's area; a position without two coordinates makes it NaN, which no hull accepts. */
 function ringAreaM2(ring: Position[], lat0: number): number {
   const scaleX = METRES_PER_DEGREE_LAT * Math.cos((lat0 * Math.PI) / 180);
   let sum = 0;
   for (let i = 0; i < ring.length - 1; i++) {
-    const [ax, ay] = ring[i] as Pair;
-    const [bx, by] = ring[i + 1] as Pair;
-    sum += ax * scaleX * by * METRES_PER_DEGREE_LAT - bx * scaleX * ay * METRES_PER_DEGREE_LAT;
+    const a = itemAt(ring, i);
+    const b = itemAt(ring, i + 1);
+    sum +=
+      numberAt(a, 0) * scaleX * numberAt(b, 1) * METRES_PER_DEGREE_LAT -
+      numberAt(b, 0) * scaleX * numberAt(a, 1) * METRES_PER_DEGREE_LAT;
   }
   return Math.abs(sum / 2);
 }
@@ -90,24 +97,31 @@ export function acceptableHull(
   return hullArea >= MIN_HULL_AREA_M2 && hullArea <= boundsArea * MAX_HULL_TO_BOUNDS;
 }
 
-const KIND = { node: 1, way: 2, relation: 3 } as const;
+const KIND = new Map([
+  ["node", 1],
+  ["way", 2],
+  ["relation", 3],
+]);
 
 /** Planetiler OpenMapTiles vector-tile feature ids (`osmId * 10 + kind`) for OSM refs. */
 export function featureIdsFor(replaces: readonly string[]): number[] {
   return replaces.flatMap((ref) => {
-    const match = /^(node|way|relation)\/(\d+)$/.exec(ref);
-    if (!match) return [];
-    return [Number(match[2]) * 10 + KIND[match[1] as keyof typeof KIND]];
+    const [, kind, osmId] = /^(node|way|relation)\/(\d+)$/.exec(ref) ?? [];
+    const code = kind === undefined ? undefined : KIND.get(kind);
+    if (code === undefined || osmId === undefined) return [];
+    return [Number(osmId) * 10 + code];
   });
 }
 
+/** The footprint's bounding box; a position without two coordinates is left out. */
 function bboxOf(geometry: MultiPolygon): [number, number, number, number] {
   const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const point of geometry.coordinates.flat(2)) {
-    box[0] = Math.min(box[0], point[0] as number);
-    box[1] = Math.min(box[1], point[1] as number);
-    box[2] = Math.max(box[2], point[0] as number);
-    box[3] = Math.max(box[3], point[1] as number);
+  for (const [lng, lat] of geometry.coordinates.flat(2)) {
+    if (lng === undefined || lat === undefined) continue;
+    box[0] = Math.min(box[0], lng);
+    box[1] = Math.min(box[1], lat);
+    box[2] = Math.max(box[2], lng);
+    box[3] = Math.max(box[3], lat);
   }
   return box;
 }

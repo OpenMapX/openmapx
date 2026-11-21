@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/utils/safe-download";
+import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/http/safe-download";
 import {
   type CompiledGbfsAddition,
   compileGbfsCatalog,

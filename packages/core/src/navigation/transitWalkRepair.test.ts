@@ -1,5 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import type { Route } from "../types/routing";
 import { walkStepInfo } from "./transitWalk";
 import { repairTransitWalk } from "./transitWalkRepair";
@@ -50,16 +50,19 @@ const route = {
 } as Route;
 it("repairs only the walking path while preserving the selected service and target", () => {
   const next = repairTransitWalk(trip, 0, route);
-  expect(next?.legs[1]).toBe(trip.legs[1]);
-  expect(next?.legs[0].to).toBe(trip.legs[0].to);
-  expect(next?.legs[0].geometry.coordinates).toEqual(route.geometry);
-  const repairedStep = next?.legs[0].steps?.[0];
+  const [walk, ride] = trip.legs;
+  assert.isDefined(walk);
+  assert.isDefined(ride);
+  expect(next?.legs[1]).toBe(ride);
+  expect(next?.legs[0]?.to).toBe(walk.to);
+  expect(next?.legs[0]?.geometry.coordinates).toEqual(route.geometry);
+  const repairedStep = next?.legs[0]?.steps?.[0];
   if (!repairedStep) throw Error("Expected repaired walking step");
   expect(walkStepInfo(repairedStep).maneuver).toEqual({
     type: "turn",
     modifier: "left",
   });
-  expect(next?.legs[0].steps?.[0].instructionText).toBe("Turn left onto Main Street");
+  expect(repairedStep.instructionText).toBe("Turn left onto Main Street");
 });
 it("rejects a walking route ending at a different stop or a nonwalking update", () => {
   expect(

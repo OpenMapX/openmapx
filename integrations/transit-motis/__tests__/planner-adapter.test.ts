@@ -1,5 +1,6 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { planMock } = vi.hoisted(() => ({ planMock: vi.fn() }));
 vi.mock("@motis-project/motis-client", async (importOriginal) => ({
@@ -77,7 +78,7 @@ describe("MOTIS planner request mapping", () => {
       },
     });
 
-    const query = planMock.mock.calls[0][0].query;
+    const query = nth(planMock.mock.calls, 0)[0].query;
     expect(query).toMatchObject({
       maxTransfers: 2,
       minTransferTime: 3,
@@ -113,7 +114,7 @@ describe("MOTIS planner request mapping", () => {
     await planTrip(instance, 1, 2, 3, 4, "2026-07-15", "10:00:00", false, 3, {
       transferBuffer: preset,
     });
-    const query = planMock.mock.calls[0][0].query;
+    const query = nth(planMock.mock.calls, 0)[0].query;
     expect(query.minTransferTime).toBe(min);
     expect(query.additionalTransferTime).toBe(additional);
   });
@@ -331,26 +332,30 @@ it("shows RE1 26839 without a ticket filter and preserves a selectable Eurostar 
     3,
     { regionalAlternatives: true },
   );
-  const re1 = result!.itineraries.find((it) => it.legs.some((l) => l.tripShortName === "026839"))!;
+  assert.exists(result);
+  const re1 = result.itineraries.find((it) => it.legs.some((l) => l.tripShortName === "026839"));
+  assert.isDefined(re1);
   expect(re1).toMatchObject({
     startTime: "2026-11-06T20:50:00Z",
     endTime: "2026-11-06T21:45:00Z",
     regionalOnly: true,
   });
   expect(
-    result!.itineraries.filter((it) => it.legs.some((l) => l.route?.shortName === "RE9")),
+    result.itineraries.filter((it) => it.legs.some((l) => l.route?.shortName === "RE9")),
   ).toHaveLength(1);
-  const eurostar = result!.itineraries.find((it) =>
+  const eurostar = result.itineraries.find((it) =>
     it.legs.some((l) => l.tripShortName === "9477" || l.route?.shortName.includes("9477")),
-  )!;
-  const replacement = composeTransitAlternative(eurostar, 1, 1)!;
+  );
+  assert.isDefined(eurostar);
+  const replacement = composeTransitAlternative(eurostar, 1, 1);
+  assert.exists(replacement);
   expect(replacement).toMatchObject({
     startTime: re1.startTime,
     endTime: re1.endTime,
     transfers: 0,
     regionalOnly: true,
   });
-  expect(replacement.legs[1].tripId).toContain("3469151921");
-  expect(replacement.legs[1].geometry.coordinates.length).toBeGreaterThan(2);
+  expect(nth(replacement.legs, 1).tripId).toContain("3469151921");
+  expect(nth(replacement.legs, 1).geometry.coordinates.length).toBeGreaterThan(2);
   expect(replacement).not.toHaveProperty("id");
 });

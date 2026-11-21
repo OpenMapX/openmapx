@@ -32,8 +32,8 @@ describe("findTideExtrema", () => {
     expect(extrema.length).toBeGreaterThanOrEqual(2);
     expect(extrema.length).toBeLessThanOrEqual(6);
     // strictly alternating
-    for (let i = 1; i < extrema.length; i++) {
-      expect(extrema[i].type).not.toBe(extrema[i - 1].type);
+    for (const [i, extreme] of extrema.entries()) {
+      if (i > 0) expect(extreme.type).not.toBe(extrema[i - 1]?.type);
     }
   });
 
@@ -42,8 +42,8 @@ describe("findTideExtrema", () => {
     const noisy = series(24, 1, 1, 12.42, 0.02);
     const extrema = findTideExtrema(noisy, { minDelta: 0.03, relativeDelta: 0.1 });
     expect(extrema.length).toBeLessThanOrEqual(5);
-    for (let i = 1; i < extrema.length; i++) {
-      expect(extrema[i].type).not.toBe(extrema[i - 1].type);
+    for (const [i, extreme] of extrema.entries()) {
+      if (i > 0) expect(extreme.type).not.toBe(extrema[i - 1]?.type);
     }
   });
 

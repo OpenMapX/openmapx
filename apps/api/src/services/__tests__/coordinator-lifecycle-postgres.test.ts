@@ -29,6 +29,7 @@ import {
   settleArtifactTargetLeaseChild,
   verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -40,7 +41,7 @@ import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyRequest } from "fastify";
 import type postgres from "postgres";
-import { afterEach, it as base, describe, expect, vi } from "vitest";
+import { afterEach, assert, it as base, describe, expect, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -247,14 +248,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((s) => s.manifest.id),
       });
+      const dataManager = host.loaded.find((s) => s.manifest.id === "data-manager");
+      assert.isDefined(dataManager, "the data-manager service is not loaded");
       const old = {
         ...host.row,
         Id: "c".repeat(64),
         ConfigImage:
           services.readServiceReleaseImageSelection(host.infraDir, "data-manager").imageReference ??
-          services.serviceContainerImageReference(
-            host.loaded.find((s) => s.manifest.id === "data-manager")!.manifest.container,
-          ),
+          services.serviceContainerImageReference(dataManager.manifest.container),
         Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
       };
       if (scenario.coordinatorStopped) {
@@ -266,12 +267,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const candidates = readdirSync(host.candidates);
         expect(candidates).toHaveLength(1);
         const candidate = inspectPreparedConfigurationRecord(
-            JSON.parse(readFileSync(join(host.candidates, candidates[0]!), "utf8")),
+            JSON.parse(readFileSync(join(host.candidates, itemAt(candidates, 0)), "utf8")),
           ).record,
           fixed = candidate.privateCoordinatorLifecycle;
         if (fixed?.action !== "update") throw Error("Actual original sealed Update source missing");
         if (scenario.coordinatorStopped) {
-          const helper = candidate.coordinatorPrerequisite!;
+          const helper = candidate.coordinatorPrerequisite;
+          assert.exists(helper, "the stopped coordinator has no prerequisite helper");
           const actual = JSON.parse(agentAdmission(host.infraDir, helper.root.operationKey));
           console.info(
             "actual coordinator helper clamp",
@@ -286,9 +288,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
         }
         expect(reference).toBe(
-          services.serviceContainerImageReference(
-            host.loaded.find((s) => s.manifest.id === "data-manager")!.manifest.container,
-          ),
+          services.serviceContainerImageReference(dataManager.manifest.container),
         );
         pulledImageId = `sha256:${"e".repeat(64)}`;
         host.setImageIdentity(reference, pulledImageId);
@@ -315,8 +315,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await host.execFile("docker", [...prefix, "config", "--hash", "data-manager"], io)
           ).stdout
             .trim()
-            .split(/\s+/)
-            .at(-1)!,
+            .replace(/^.*\s/s, ""),
           row = {
             ...old,
             Image: pulledImageId ?? old.Image,
@@ -624,13 +623,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, id));
+        assert.isDefined(retained, "the canceled job row is missing");
         const pull = Object.values(
           (
-            retained!.protocol as {
+            retained.protocol as {
               operations: { operations: Record<string, { kind: string; operationKey: string }> };
             }
           ).operations.operations,
-        ).find((value) => value.kind === "service.pull")!;
+        ).find((value) => value.kind === "service.pull");
+        assert.isDefined(pull, "the canceled job recorded no pull");
         return { id, pullKey: pull.operationKey };
       } finally {
         pullTerminalReplyGate = undefined;
@@ -681,7 +682,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       child.stdout.on("data", (chunk) => {
         output += chunk.toString();
         const lines = output.split("\n");
-        output = lines.pop()!;
+        // The last piece is the incomplete line the next chunk continues.
+        output = itemAt(lines.splice(-1, 1), 0);
         for (const line of lines) {
           const event = JSON.parse(line);
           if (event.event === "ready") ready.resolve(event);
@@ -797,7 +799,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 };
               }
             ).operations,
-            pull = Object.values(projection.operations).find((op) => op.kind === "service.pull")!;
+            pull = Object.values(projection.operations).find((op) => op.kind === "service.pull");
+          assert.isDefined(pull, "the expired job recorded no pull");
           expect(row.status, row.error ?? "No public error").toBe("failed");
           console.info(
             "actual repeated expiry original",
@@ -902,17 +905,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(dm.settlementResponseStatuses).toEqual([200]);
         expect(agentAdmission(host.infraDir, pullKey)).toBe(original);
         const jobs = await fixture.db.select().from(schema.adminJob),
-          ownerJob = jobs.find((job) => maintenanceIdOf(job)),
-          owner = JSON.parse(
-            readFileSync(
-              join(
-                host.infraDir,
-                "state/ops-agent/control/maintenance",
-                `${maintenanceIdOf(ownerJob!)}.json`,
-              ),
-              "utf8",
+          ownerJob = jobs.find((job) => maintenanceIdOf(job));
+        assert.isDefined(ownerJob, "no job owns the maintenance");
+        const owner = JSON.parse(
+          readFileSync(
+            join(
+              host.infraDir,
+              "state/ops-agent/control/maintenance",
+              `${maintenanceIdOf(ownerJob)}.json`,
             ),
-          );
+            "utf8",
+          ),
+        );
         // The credential change recreates data-manager with the image its
         // reference names now, the one the canceled update pulled, and its
         // generation records it.
@@ -954,23 +958,24 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         startId = started.json().jobId;
       try {
         await reached.promise;
-        const [live] = await fixture.db
-            .select()
-            .from(schema.adminJob)
-            .where(eq(schema.adminJob.id, startId)),
-          root = Object.values(
-            (
-              live!.protocol as {
-                operations: {
-                  operations: Record<string, { kind: string; operationKey: string }>;
-                };
-              }
-            ).operations.operations,
-          ).find((operation) => operation.kind === "service.start")!,
-          owner = openLeaseStore({
-            directory: leaseStoreDirectory(host.infraDir),
-            purpose: "test",
-          }).get(rootLeaseId(root));
+        const live = itemAt(
+          await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, startId)),
+          0,
+        );
+        const root = Object.values(
+          (
+            live.protocol as {
+              operations: {
+                operations: Record<string, { kind: string; operationKey: string }>;
+              };
+            }
+          ).operations.operations,
+        ).find((operation) => operation.kind === "service.start");
+        assert.isDefined(root, "the start job recorded no start operation");
+        const owner = openLeaseStore({
+          directory: leaseStoreDirectory(host.infraDir),
+          purpose: "test",
+        }).get(rootLeaseId(root));
         expect(owner?.targets).toContain("data-manager");
         const request = await api.inject({
             method: "POST",
@@ -1172,7 +1177,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(actualPulls).toHaveLength(1);
         const observer = await restoreAdmittedControlExecution(
           installation,
-          actualPulls[0]!.execution,
+          itemAt(actualPulls, 0).execution,
         );
         pullObserver = observer;
         const before = snapshot(),
@@ -1534,14 +1539,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect((await fixture.db.select().from(schema.serviceConfig))[0]?.config).toEqual({
           MODE: "new",
         });
-        expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(before);
+        const current = services.currentConfigurationGeneration(host.infraDir);
+        assert.exists(current, "no configuration generation is applied");
+        expect(current).not.toBe(before);
         // The new generation records the image its coordinator reference names now.
-        expect(
-          services.readGenerationImageIds(
-            host.infraDir,
-            services.currentConfigurationGeneration(host.infraDir)!,
-          )["data-manager"],
-        ).toBe(pulledImageId);
+        expect(services.readGenerationImageIds(host.infraDir, current)["data-manager"]).toBe(
+          pulledImageId,
+        );
         // A later update recreates the coordinator with the image it pulls.
         const next = await api.inject({
             method: "POST",
@@ -1732,7 +1736,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         if (!pullBoundary && point !== "candidate unlink")
           decisionReplyGate = { reached, release: reply };
         else if (pullBoundary) pullTerminalReplyGate = { reached, release: reply };
-        const database = new URL(process.env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL!);
+        const databaseUrl = process.env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL;
+        assert.isDefined(databaseUrl, "the admin job test database is not configured");
+        const database = new URL(databaseUrl);
         database.searchParams.set("search_path", fixture.schema);
         const loader = createRequire(new URL("../../../package.json", import.meta.url)).resolve(
             "tsx/esm",
@@ -1752,16 +1758,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const jobId = new Promise<string>((r) => {
             queued = r;
           });
-          child.stdout!.on("data", (chunk) => {
+          child.stdout.on("data", (chunk) => {
             output += chunk.toString();
             const lines = output.split("\n");
-            output = lines.pop()!;
+            // The last piece is the incomplete line the next chunk continues.
+            output = itemAt(lines.splice(-1, 1), 0);
             for (const line of lines) {
               const event = JSON.parse(line);
               if (event.event === "queued") queued(event.jobId);
             }
           });
-          child.stderr!.on("data", () => {});
+          child.stderr.on("data", () => {});
           const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
             (resolve, reject) => {
               child.once("error", reject);
@@ -1778,7 +1785,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               });
             },
           );
-          child.stdin!.end(JSON.stringify(input));
+          child.stdin.end(JSON.stringify(input));
           return { child, jobId, exited };
         };
         const first = start({
@@ -1802,11 +1809,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               throw Error("Native API exited before original source boundary");
             }),
           ]);
-          const [before] = await fixture.db
-              .select()
-              .from(schema.adminJob)
-              .where(eq(schema.adminJob.id, id)),
-            candidate = (before!.protocol as { candidate: Record<string, unknown> }).candidate,
+          const before = itemAt(
+              await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id)),
+              0,
+            ),
+            candidate = (before.protocol as { candidate: Record<string, unknown> }).candidate,
             path = join(host.candidates, `${candidate.sealedOperationKey}.json`),
             // The native unlink hook publishes these exact bytes only after unlink succeeds.
             bytes =
@@ -1817,7 +1824,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             inspected = inspectPreparedConfigurationRecord(
               JSON.parse(bytes.toString("utf8")),
             ).record,
-            pullKey = pullOperationKeyOf(before!),
+            pullKey = pullOperationKeyOf(before),
             originalNormal =
               inspected.privateCoordinatorLifecycle?.action === "update" && pullKey
                 ? agentAdmission(host.infraDir, pullKey)
@@ -1846,12 +1853,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const { jobRunner } = await import("../job-runner");
             await jobRunner.cancel(id);
           }
-          const [retained] = await fixture.db
-              .select()
-              .from(schema.adminJob)
-              .where(eq(schema.adminJob.id, id)),
+          const retained = itemAt(
+              await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id)),
+              0,
+            ),
             lease = Date.parse(
-              (retained!.protocol as Record<string, unknown>).observationLeaseUntil as string,
+              (retained.protocol as Record<string, unknown>).observationLeaseUntil as string,
             );
           expect(Number.isFinite(lease)).toBe(true);
           while (Date.now() <= lease + 100) await delay(Math.min(1000, lease + 101 - Date.now()));
@@ -1864,7 +1871,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, id));
-            expect(row!.status).toBe("canceled");
+            expect(row?.status).toBe("canceled");
             expect(existsSync(path)).toBe(false);
             expect(posts.get("service.pull")).toBe(1);
             expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
@@ -2021,14 +2028,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         if (Date.now() > until) throw Error("Actual refused candidate did not become observable");
         await delay(10);
       }
-      expect(row!.status).toBe("failed");
-      expect(pullOperationKeyOf(row!)).toBeUndefined();
+      assert.isDefined(row, "the refused job row is missing");
+      expect(row.status).toBe("failed");
+      expect(pullOperationKeyOf(row)).toBeUndefined();
       expect(posts.get("service.pull") ?? 0).toBe(0);
       expect(posts.get("service.start") ?? 0).toBe(0);
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
       expect(readdirSync(host.candidates)).toHaveLength(0);
       expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
-      const original = JSON.stringify(row!.result);
+      const original = JSON.stringify(row.result);
       services.writeServiceSelectionFile(host.infraDir, ["data-manager", "motis"]);
       const next = await api.inject({
         method: "POST",
@@ -2045,7 +2053,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, id));
-      expect(JSON.stringify(unchanged!.result)).toBe(original);
+      assert.isDefined(unchanged, "the first job row disappeared");
+      expect(JSON.stringify(unchanged.result)).toBe(original);
       expect(posts.get("service.pull") ?? 0).toBe(0);
     }, 180000);
     describe("with the API's decision write refused", () => {
@@ -2146,9 +2155,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             if (performance.now() > until) throw Error("Expired candidate did not settle");
             await delay(10);
           }
+          assert.isDefined(row, "the expired job row is missing");
           const operations = Object.values(
             (
-              row!.protocol as {
+              row.protocol as {
                 operations: {
                   operations: Record<
                     string,
@@ -2167,7 +2177,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           console.info(
             "actual TTL boundary",
             JSON.stringify({
-              state: row!.status,
+              state: row.status,
               operations: operations.map((op) => ({
                 kind: op.kind,
                 phase: op.phase,
@@ -2184,7 +2194,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).toBe("succeeded");
           expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
           expect(posts.get("service.start") ?? 0).toBe(0);
-          expect(row!.status).toBe("failed");
+          expect(row.status).toBe("failed");
           expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             host.initial.revisionId,
@@ -2301,18 +2311,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             throw Error("Actual mixed failure did not become observable");
           await delay(25);
         }
+        assert.isDefined(row, "the mixed update job row is missing");
         console.info(
           "actual three-target contained prefix",
           JSON.stringify({
-            state: row!.status,
-            error: row!.error,
-            completed: (row!.result as Record<string, unknown>)?.completedServiceIds,
-            observation: (row!.result as Record<string, unknown>)?.observation,
+            state: row.status,
+            error: row.error,
+            completed: (row.result as Record<string, unknown>)?.completedServiceIds,
+            observation: (row.result as Record<string, unknown>)?.observation,
             posts: [...posts],
           }),
         );
-        expect(row!.status).toBe("failed");
-        expect((row!.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
+        expect(row.status).toBe("failed");
+        expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual([
           "motis",
         ]);
         expect(readdirSync(host.candidates)).toHaveLength(0);
@@ -2424,8 +2435,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             if (Date.now() > until) throw Error("Actual mixed Update did not settle");
             await delay(20);
           }
-          expect(row!.status).toBe("success");
-          const result = row!.result as { completedServiceIds: string[] };
+          assert.isDefined(row, "the mixed update job row is missing");
+          expect(row.status).toBe("success");
+          const result = row.result as { completedServiceIds: string[] };
           expect(result.completedServiceIds).toEqual(serviceIds);
           expect(posts.get("configurationMaintenance.prepare")).toBe(1);
           expect(posts.get("configurationMaintenance.apply")).toBe(1);

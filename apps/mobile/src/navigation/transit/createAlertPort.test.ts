@@ -7,6 +7,7 @@ import { migrateSessionSchema } from "../../storage/migrations";
 import { SessionRepository } from "../../storage/SessionRepository";
 import { openTestDatabase } from "../../storage/testing/nodeSqliteDatabase";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { nth } from "../../testing/nth";
 import type { AlightAlertCopy } from "./AlightAlertPolicy";
 import { cancelOrphanedAlerts, createAlertPort } from "./createAlertPort";
 import { transitSessionFixture } from "./testing/transitFixture";
@@ -21,7 +22,7 @@ const COPY: AlightAlertCopy = {
 
 function riding(): TransitMobileSession {
   const base = transitSessionFixture();
-  const capture = base.payload.startPackage.captures[0];
+  const capture = nth(base.payload.startPackage.captures, 0);
   return {
     ...base,
     startedAtMs: NOW - 10 * 60_000,
@@ -110,7 +111,7 @@ describe("createAlertPort.reconcile", () => {
     expect(context.calls.filter((call) => call.startsWith("cancel:"))).toEqual([]);
 
     expect(first).toHaveLength(1);
-    expect(context.held()).toEqual([first[0].alertId]);
+    expect(context.held()).toEqual([first[0]?.alertId]);
     expect(context.calls.filter((call) => call.startsWith("reconcile:"))).toHaveLength(2);
   });
 
@@ -118,17 +119,17 @@ describe("createAlertPort.reconcile", () => {
     const context = await harness();
     await context.repository.createPreparing(riding());
     await context.port.reconcile("session-t1");
-    const before = (await context.repository.listScheduledAlerts("session-t1"))[0];
+    const before = nth(await context.repository.listScheduledAlerts("session-t1"), 0);
 
     const shifted = riding();
-    shifted.payload.startPackage.captures[0].stops[2].expectedDeparture = new Date(
+    nth(nth(shifted.payload.startPackage.captures, 0).stops, 2).expectedDeparture = new Date(
       ARRIVAL_MS - 1 * 60_000,
     ).toISOString();
     await context.repository.terminate("session-t1", "stopped", NOW);
     await context.repository.createPreparing(shifted);
     await context.port.reconcile("session-t1");
 
-    const after = (await context.repository.listScheduledAlerts("session-t1"))[0];
+    const after = nth(await context.repository.listScheduledAlerts("session-t1"), 0);
     expect(after.alertId).toBe(before.alertId);
     expect(after.triggerAtMs).not.toBe(before.triggerAtMs);
   });
@@ -206,7 +207,7 @@ describe("createAlertPort.cancelSession", () => {
       release();
       await pending;
     }
-    expect(context.calls).toContain(`cancel:${recorded[0].alertId}`);
+    expect(context.calls).toContain(`cancel:${nth(recorded, 0).alertId}`);
     expect(await context.repository.listScheduledAlerts("session-t1")).toEqual([]);
     expect(context.held()).toEqual([]);
   });

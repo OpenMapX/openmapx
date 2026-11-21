@@ -6,13 +6,14 @@ import {
 } from "./artifact-transfer-capability";
 import { ArtifactStageTransportError, withArtifactStream } from "./artifact-transfer-client";
 
+const STAGE_SHA256 = "a".repeat(64);
 const stage: TransferStage = {
   stageId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
   purpose: "prepared-artifact",
   direction: "download",
   state: "ready",
   bytes: 2,
-  sha256: "a".repeat(64),
+  sha256: STAGE_SHA256,
   expiresAt: "2099-01-01T00:00:00.000Z",
   cleanup: "pending",
 };
@@ -45,7 +46,7 @@ it.each(["abort", "deadline"])("raw ops download owns sink cleanup through %s", 
           headers: {
             "content-type": "application/octet-stream",
             "content-length": "2",
-            "x-artifact-sha256": stage.sha256!,
+            "x-artifact-sha256": STAGE_SHA256,
           },
         }),
       ),
@@ -117,7 +118,7 @@ it("refuses early callback completion and bounds error JSON", async () => {
             headers: {
               "content-type": "application/octet-stream",
               "content-length": "2",
-              "x-artifact-sha256": stage.sha256!,
+              "x-artifact-sha256": STAGE_SHA256,
             },
           }),
         ),

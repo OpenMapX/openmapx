@@ -36,6 +36,12 @@ const { load } = createRequire(resolve(root, "packages/transitous-core/package.j
   "js-yaml",
 ) as { load: (source: string) => Workflow };
 
+function jobOf(workflow: Workflow, name: string) {
+  const job = workflow.jobs[name];
+  if (!job) throw new Error(`The workflow has no ${name} job`);
+  return job;
+}
+
 // Execute the actual github-script gate, replacing only the Actions/GitHub APIs.
 async function verifyCandidate({
   eventName = "push",
@@ -46,8 +52,9 @@ async function verifyCandidate({
   const workflow = read(".github/workflows/docker.yml");
   const block = workflow.slice(workflow.indexOf("  gate:\n"), workflow.indexOf("  plan:\n"));
   const match = block.match(/^ {10}script: \|\n((?:^ {12}.*\n|^\n)*)/m);
-  if (!match) throw new Error("Missing trusted-main gate script");
-  const script = match[1]
+  const body = match?.[1];
+  if (body === undefined) throw new Error("Missing trusted-main gate script");
+  const script = body
     .split("\n")
     .map((line) => line.slice(12))
     .join("\n");
@@ -120,7 +127,7 @@ describe("Docker release trust gate", () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions output expression.
     expect(release).toContain("eligible: ${{ steps.verify.outputs.eligible }}");
     for (const job of ["plan", "build", "promote"]) {
-      const block = release.split(`  ${job}:\n`)[1].split(/^ {2}[\w-]+:\n/m)[0];
+      const block = release.split(`  ${job}:\n`)[1]?.split(/^ {2}[\w-]+:\n/m)[0];
       expect(block).toContain("    if: needs.gate.outputs.eligible == 'true'");
     }
   });
@@ -170,7 +177,7 @@ describe("Docker release trust gate", () => {
 
   it("blocks affected PR images on the same actionable findings before the required aggregate", () => {
     const workflow = load(ci);
-    const job = workflow.jobs["docker-build"];
+    const job = jobOf(workflow, "docker-build");
     const buildIndex = job.steps.findIndex((step) =>
       step.uses?.startsWith("docker/build-push-action@"),
     );
@@ -178,10 +185,12 @@ describe("Docker release trust gate", () => {
       step.uses?.startsWith("aquasecurity/trivy-action@"),
     );
     const build = job.steps[buildIndex];
+    if (!build) throw new Error("The docker-build job has no build step");
     expect(build.with).toMatchObject({ push: false, load: true });
     expect(scanIndex).toBeGreaterThan(buildIndex);
     const scan = job.steps[scanIndex];
-    const mainScan = load(release).jobs.build.steps.find(
+    if (!scan) throw new Error("The docker-build job has no Trivy step");
+    const mainScan = jobOf(load(release), "build").steps.find(
       (step) =>
         step.uses?.startsWith("aquasecurity/trivy-action@") && step.with?.["exit-code"] === "1",
     );
@@ -205,19 +214,22 @@ describe("Docker release trust gate", () => {
     expect(job["continue-on-error"]).not.toBe(true);
     expect(job.permissions).toEqual({ contents: "read" });
     expect(job.steps.some((step) => step.uses?.startsWith("docker/login-action@"))).toBe(false);
-    expect(workflow.jobs.ci.needs).toContain("docker-build");
+    expect(jobOf(workflow, "ci").needs).toContain("docker-build");
   });
 
   it("boots the API image the pull request already built, on a private network", () => {
-    const job = load(ci).jobs["docker-build"];
+    const job = jobOf(load(ci), "docker-build");
     const builds = job.steps.filter((step) => step.uses?.startsWith("docker/build-push-action@"));
     const boots = job.steps.filter((step) => step.run?.includes("api-image-boot-check.sh"));
     expect(builds).toHaveLength(1);
     expect(boots).toHaveLength(1);
-    expect(boots[0].if).toBe("matrix.app == 'api'");
-    expect(boots[0].run).toContain("openmapx-ci:api");
-    expect(boots[0]["continue-on-error"]).not.toBe(true);
-    expect(job.steps.indexOf(boots[0])).toBeGreaterThan(job.steps.indexOf(builds[0]));
+    const [build] = builds;
+    const [boot] = boots;
+    if (!build || !boot) throw new Error("The docker-build job lacks its build or boot step");
+    expect(boot.if).toBe("matrix.app == 'api'");
+    expect(boot.run).toContain("openmapx-ci:api");
+    expect(boot["continue-on-error"]).not.toBe(true);
+    expect(job.steps.indexOf(boot)).toBeGreaterThan(job.steps.indexOf(build));
 
     const script = readFileSync(resolve(root, "scripts/ci/api-image-boot-check.sh"), "utf8");
     expect(script).toContain("docker network create --internal");
@@ -229,7 +241,7 @@ describe("Docker release trust gate", () => {
   });
 
   it("keeps the release layer cache in the registry, outside the evicting Actions cache", () => {
-    const build = load(release).jobs.build.steps.find((step) =>
+    const build = jobOf(load(release), "build").steps.find((step) =>
       step.uses?.startsWith("docker/build-push-action@"),
     );
     const expression = (value: string) => `\${{ ${value} }}`;

@@ -6,15 +6,8 @@ import {
 
 export { buildConflationComponents } from "./components.js";
 
-import {
-  haversineMeters,
-  nameSimilarity,
-  osmAddressKey,
-  overtureAddressKey,
-  parsePhones,
-  websiteDomain,
-} from "@openmapx/core/utils/geo-server";
-import { overtureTaxonomyToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
+import { itemAt } from "@openmapx/core/item-at";
+import { overtureTaxonomyToOpenMapX } from "@openmapx/core/places/overtureCategoryMap";
 import {
   assignConflationPairs,
   type ConflationMethod,
@@ -23,7 +16,15 @@ import {
   DEFAULT_CONFLATION_THRESHOLDS,
   type ScoredConflationPair,
   scoreConflationPair,
-} from "@openmapx/core/utils/poiConflation";
+} from "@openmapx/core/places/poiConflation";
+import {
+  haversineMeters,
+  nameSimilarity,
+  osmAddressKey,
+  overtureAddressKey,
+  parsePhones,
+  websiteDomain,
+} from "@openmapx/core/utils/geo-server";
 import { gridDisk, latLngToCell } from "h3-js";
 import type postgres from "postgres";
 import { buildConflationComponents } from "./components.js";
@@ -528,9 +529,13 @@ export async function scoreOvertureCandidates(opts: {
   }
 
   await sql.unsafe(`ANALYZE "${schema}".poi_conflation_candidate`);
-  const [{ count }] = await sql.unsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::TEXT AS count FROM "${schema}".poi_conflation_candidate`,
-    [],
+  const { count } = itemAt(
+    await sql.unsafe<{ count: string }[]>(
+      `SELECT COUNT(*)::TEXT AS count FROM "${schema}".poi_conflation_candidate`,
+      [],
+    ),
+    0,
+    "row from the conflation candidate count query",
   );
   candidateCount = Number(count ?? 0);
   return {
@@ -568,9 +573,13 @@ export async function assignOvertureCandidates(opts: {
   let assignmentCursor = opts.assignmentCursor ?? 0;
   let stagedLinks = opts.stagedLinks ?? 0;
 
-  const [{ mappings }] = await sql.unsafe<{ mappings: string }[]>(
-    `SELECT COUNT(*)::TEXT AS mappings FROM "${schema}".poi_conflation_component`,
-    [],
+  const { mappings } = itemAt(
+    await sql.unsafe<{ mappings: string }[]>(
+      `SELECT COUNT(*)::TEXT AS mappings FROM "${schema}".poi_conflation_component`,
+      [],
+    ),
+    0,
+    "row from the conflation component count query",
   );
   if (components === null || (components > 0 && Number(mappings ?? 0) === 0)) {
     components = await buildConflationComponents(sql, schema, opts.onProgress);
@@ -646,9 +655,13 @@ export async function assignOvertureCandidates(opts: {
     );
   }
 
-  const [{ linked }] = await sql.unsafe<{ linked: string }[]>(
-    `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link_next`,
-    [],
+  const { linked } = itemAt(
+    await sql.unsafe<{ linked: string }[]>(
+      `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link_next`,
+      [],
+    ),
+    0,
+    "row from the staged conflation link count query",
   );
   return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
 }
@@ -675,9 +688,13 @@ export async function publishOvertureLinks(
     }),
   );
 
-  const [{ linked }] = await sql.unsafe<{ linked: string }[]>(
-    `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
-    [],
+  const { linked } = itemAt(
+    await sql.unsafe<{ linked: string }[]>(
+      `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
+      [],
+    ),
+    0,
+    "row from the conflation link count query",
   );
   const linkedCount = Number(linked ?? 0);
   return { linked: linkedCount };

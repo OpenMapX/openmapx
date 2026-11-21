@@ -73,10 +73,11 @@ export const wikipediaSource: KnowledgeProvider = {
     const imgSource = data.originalimage?.source ?? data.thumbnail?.source;
     if (imgSource) {
       // URL pattern: .../thumb/a/ab/Filename.jpg/800px-Filename.jpg → extract Filename.jpg
-      const fnMatch = imgSource.match(
-        /upload\.wikimedia\.org\/wikipedia\/\w+\/(?:thumb\/)?[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/,
-      );
-      const filename = fnMatch ? decodeURIComponent(fnMatch[1]) : undefined;
+      const [, encodedName] =
+        imgSource.match(
+          /upload\.wikimedia\.org\/wikipedia\/\w+\/(?:thumb\/)?[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/,
+        ) ?? [];
+      const filename = encodedName === undefined ? undefined : decodeURIComponent(encodedName);
 
       if (filename) {
         const metadata = context?.cardPhoto

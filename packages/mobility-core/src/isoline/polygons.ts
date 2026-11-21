@@ -5,8 +5,10 @@ type Point = [number, number];
 
 function signedArea(ring: readonly Point[]): number {
   let sum = 0;
-  for (let i = 0; i < ring.length - 1; i += 1) {
-    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  let previous: Point | undefined;
+  for (const point of ring) {
+    if (previous) sum += previous[0] * point[1] - point[0] * previous[1];
+    previous = point;
   }
   return sum / 2;
 }
@@ -14,8 +16,11 @@ function signedArea(ring: readonly Point[]): number {
 function pointInRing(point: Point, ring: readonly Point[]): boolean {
   let contained = false;
   for (let i = 0, j = ring.length - 2; i < ring.length - 1; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+    const current = ring[i];
+    const previous = ring[j];
+    if (!current || !previous) continue;
+    const [xi, yi] = current;
+    const [xj, yj] = previous;
     const straddles = yi > point[1] !== yj > point[1];
     if (straddles && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) {
       contained = !contained;
@@ -35,27 +40,32 @@ function selfIntersects(ring: readonly Point[]): boolean {
     for (let j = i + 2; j < ring.length - 1; j += 1) {
       // The first and last segments legitimately share the closing vertex.
       if (i === 0 && j === ring.length - 2) continue;
-      if (segmentsIntersect(ring[i], ring[i + 1], ring[j], ring[j + 1])) return true;
+      const a = ring[i];
+      const b = ring[i + 1];
+      const c = ring[j];
+      const d = ring[j + 1];
+      if (a && b && c && d && segmentsIntersect(a, b, c, d)) return true;
     }
   }
   return false;
 }
 
 function douglasPeucker(points: readonly Point[], tolerance: number): Point[] {
-  if (points.length < 3) return [...points];
   const start = points[0];
-  const end = points[points.length - 1];
+  const end = points.at(-1);
+  if (points.length < 3 || !start || !end) return [...points];
   let maxDistance = -1;
   let index = 0;
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const span = Math.hypot(dx, dy);
   for (let i = 1; i < points.length - 1; i += 1) {
+    const point = points[i];
+    if (!point) continue;
     const distance =
       span === 0
-        ? Math.hypot(points[i][0] - start[0], points[i][1] - start[1])
-        : Math.abs(dy * points[i][0] - dx * points[i][1] + end[0] * start[1] - end[1] * start[0]) /
-          span;
+        ? Math.hypot(point[0] - start[0], point[1] - start[1])
+        : Math.abs(dy * point[0] - dx * point[1] + end[0] * start[1] - end[1] * start[0]) / span;
     if (distance > maxDistance) {
       maxDistance = distance;
       index = i;
@@ -80,7 +90,8 @@ export function simplifyRing(ring: readonly Point[], tolerance: number): Point[]
   const simplified = douglasPeucker(ring, tolerance);
   if (simplified.length < 4) return [...ring];
   const first = simplified[0];
-  const last = simplified[simplified.length - 1];
+  const last = simplified.at(-1);
+  if (!first || !last) return [...ring];
   if (first[0] !== last[0] || first[1] !== last[1]) simplified.push([first[0], first[1]]);
   if (simplified.length < 4) return [...ring];
   if (selfIntersects(simplified)) return [...ring];
@@ -115,9 +126,12 @@ export function ringsToGeometry(
   const ordered = [...simplified].sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)));
 
   const parentOf = new Map<number, number>();
-  for (let child = 0; child < ordered.length; child += 1) {
-    for (let parent = 0; parent < child; parent += 1) {
-      if (pointInRing(ordered[child][0], ordered[parent])) parentOf.set(child, parent);
+  for (const [child, childRing] of ordered.entries()) {
+    const [start] = childRing;
+    if (!start) continue;
+    for (const [parent, parentRing] of ordered.entries()) {
+      if (parent >= child) break;
+      if (pointInRing(start, parentRing)) parentOf.set(child, parent);
     }
   }
 
@@ -133,18 +147,18 @@ export function ringsToGeometry(
 
   const polygons: Point[][][] = [];
   const exteriorSlot = new Map<number, number>();
-  for (let index = 0; index < ordered.length; index += 1) {
+  for (const [index, ring] of ordered.entries()) {
     if (depthOf(index) % 2 === 0) {
       exteriorSlot.set(index, polygons.length);
-      polygons.push([orient(ordered[index], true)]);
+      polygons.push([orient(ring, true)]);
     }
   }
-  for (let index = 0; index < ordered.length; index += 1) {
+  for (const [index, ring] of ordered.entries()) {
     if (depthOf(index) % 2 === 0) continue;
     const parent = parentOf.get(index);
     const slot = parent === undefined ? undefined : exteriorSlot.get(parent);
     if (slot === undefined) continue;
-    polygons[slot].push(orient(ordered[index], false));
+    polygons[slot]?.push(orient(ring, false));
   }
 
   const unproject = (ring: Point[]): number[][] =>
@@ -154,6 +168,7 @@ export function ringsToGeometry(
     });
 
   const projected = polygons.map((polygon) => polygon.map(unproject));
-  if (projected.length === 1) return { type: "Polygon", coordinates: projected[0] };
+  const [only] = projected;
+  if (projected.length === 1 && only) return { type: "Polygon", coordinates: only };
   return { type: "MultiPolygon", coordinates: projected };
 }

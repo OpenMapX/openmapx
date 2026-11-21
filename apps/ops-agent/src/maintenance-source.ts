@@ -395,16 +395,16 @@ export async function planConfigurationMaintenance(
       .map((entry) => entry.manifest.id)
       .filter((id) => Object.hasOwn(release.serviceImages, id))
       .sort();
-    if (canonicalJson(targets) !== canonicalJson(platform!.affectedServiceIds))
+    if (!platform || canonicalJson(targets) !== canonicalJson(platform.affectedServiceIds))
       throw Error("Exact enabled checked release targets required");
   }
-  const protectedIds = release
-    ? platform!.affectedServiceIds
-    : platform
-      ? platform.affectedServiceIds.filter(
+  const protectedIds = !platform
+    ? []
+    : release
+      ? platform.affectedServiceIds
+      : platform.affectedServiceIds.filter(
           (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
-        )
-      : [];
+        );
   const handoff =
     platform && protectedIds.length
       ? {

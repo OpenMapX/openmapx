@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { cleanup, createTestQueryClient, fireEvent, nth, render, screen, waitFor } from "@/test";
 import { LockfileCard } from "../LockfileCard";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
@@ -181,7 +181,7 @@ it("requires the exact diff acknowledgement and final confirmation before activa
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.click(button);
   expect(mocks.activate).not.toHaveBeenCalled();
-  fireEvent.click(screen.getAllByRole("button", { name: "Activate validated pair" }).at(-1)!);
+  fireEvent.click(nth(screen.getAllByRole("button", { name: "Activate validated pair" }), -1));
   await waitFor(() => expect(mocks.activate).toHaveBeenCalledTimes(1));
   expect(mocks.activate.mock.calls[0]?.slice(0, 2)).toEqual([
     proposalId,

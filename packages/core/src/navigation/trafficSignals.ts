@@ -1,6 +1,6 @@
 import type { LngLat } from "../types/geometry";
 import type { MatchResult } from "../types/routing";
-import { cumulativeDistances } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex } from "./deadReckon";
 
 /**
  * Dedup key for a traffic-signal coordinate, rounded to ~1m (5 decimal places).
@@ -67,13 +67,14 @@ export function windowGeometry(
   }
   const distances = cum ?? cumulativeDistances(geometry);
   let end = Math.min(startIndex + maxPoints, geometry.length);
-  while (end > startIndex + 2 && distances[end - 1] - distances[startIndex] > maxMeters) {
+  const startMeters = distanceAtVertex(distances, startIndex);
+  while (end > startIndex + 2 && distanceAtVertex(distances, end - 1) - startMeters > maxMeters) {
     end--;
   }
   const trace = geometry.slice(startIndex, end);
   const done = end >= geometry.length;
   // Overlap by one point unless we've reached the end.
   const nextStart = done ? geometry.length : end - 1;
-  const endMeters = distances[end - 1];
+  const endMeters = distanceAtVertex(distances, end - 1);
   return { trace, nextStart, done, endMeters };
 }

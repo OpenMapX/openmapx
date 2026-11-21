@@ -2,7 +2,17 @@ import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/garage-sdk";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  assert,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { administrationSdkFetch } from "../../routes/__tests__/helpers/administration-sdk-fetch";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 import { parkedLocation, personalVehicle, user } from "../schema";
@@ -134,6 +144,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(parkedLocation)
         .where(eq(parkedLocation.id, "p-a"));
+      assert.isDefined(own);
       expect(own.lat).toBeCloseTo(48.123456, 6);
       expect(own.note).toBe("Level 3");
       expect((await request("DELETE", "/parking/p-a")).statusCode).toBe(200);
@@ -242,7 +253,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(personalVehicle)
         .where(eq(personalVehicle.id, "v-a"));
-      expect(vehicle.isDefault).toBe(true);
+      expect(vehicle?.isDefault).toBe(true);
       const other = await request("POST", "/vehicles", {
         name: "Second car",
         kind: "car",

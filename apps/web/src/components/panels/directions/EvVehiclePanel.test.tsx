@@ -2,7 +2,7 @@ import { useSettingsStore } from "@openmapx/core";
 import { listVehicles } from "@openmapx/ev-charge-planner";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test";
+import { nth, render, screen } from "@/test";
 
 const garage = vi.hoisted(() => ({ vehicles: [] as unknown[] }));
 
@@ -95,7 +95,7 @@ describe("EvVehiclePanel", () => {
     expect(mounted.length).toBeLessThan(40);
 
     // The garage heads the list under its own heading, then the makes.
-    expect(mounted[0].textContent).toBe("Blue Leaf");
+    expect(nth(mounted, 0).textContent).toBe("Blue Leaf");
     expect(screen.getByText("Audi").textContent).toBe("Audi");
   });
 
@@ -117,6 +117,6 @@ describe("EvVehiclePanel", () => {
     // With an empty garage the list is the dataset alone, so twenty steps down
     // from an unhighlighted list lands on the twentieth dataset entry.
     await user.keyboard("{Enter}");
-    expect(useSettingsStore.getState().evVehicleId).toBe(listVehicles()[19].id);
+    expect(useSettingsStore.getState().evVehicleId).toBe(nth(listVehicles(), 19).id);
   });
 });

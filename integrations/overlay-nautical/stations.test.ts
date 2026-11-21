@@ -88,7 +88,7 @@ describe("dedupTideStations", () => {
       station({ network: "noaa", id: "n1", lat: 44.6501, lng: -63.5701 }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].network).toBe("noaa");
+    expect(out[0]?.network).toBe("noaa");
   });
 
   it("keeps both when they are farther apart than the dedup radius", () => {

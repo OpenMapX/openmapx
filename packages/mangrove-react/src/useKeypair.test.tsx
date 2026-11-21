@@ -7,7 +7,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { keypairOwner, useKeypairStore } from "./keypairStore";
 import { MangroveProvider } from "./provider";
 import type { MangroveCurrentUser, MangroveTransport } from "./transport";
@@ -95,7 +95,8 @@ describe("encrypted lifecycle", () => {
     const h = harness();
     const { result } = renderHook(useSetupKeypair, { wrapper: h.wrapper });
     await act(() => result.current.mutateAsync({ mode: "passphrase", passphrase: "pass" }));
-    const payload = vi.mocked(h.transport.createKeypairEnvelope).mock.calls[0][0];
+    const payload = vi.mocked(h.transport.createKeypairEnvelope).mock.calls[0]?.[0];
+    assert.isDefined(payload);
     expect(payload).not.toHaveProperty("mode");
     expect(payload).not.toHaveProperty("privateJwk");
     expect(useKeypairStore.getState().getSigningSnapshot(keypairOwner(USER))?.revision).toBe(

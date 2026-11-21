@@ -39,19 +39,19 @@ export function createFallbackChain<TProvider>(
   const isEmpty = options?.isEmpty ?? defaultIsEmpty;
   return async (execution = {}) => {
     const providers = getProviders();
-    for (let i = 0; i < providers.length; i++) {
+    for (const [i, provider] of providers.entries()) {
       try {
-        const result = await runWithProviderDeadline((context) => call(providers[i], context), {
+        const result = await runWithProviderDeadline((context) => call(provider, context), {
           signal: execution.signal,
           timeoutMs: options?.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         });
         if (!isEmpty(result)) {
-          options?.onSuccess?.(providers[i]);
+          options?.onSuccess?.(provider);
           return result;
         }
       } catch (err) {
         if (err instanceof ProviderCancelledError) throw err;
-        options?.onError?.(providers[i], err);
+        options?.onError?.(provider, err);
         if (i === providers.length - 1) throw err;
       }
     }

@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
 import {
@@ -284,8 +285,8 @@ const unseen = "/nonexistent-openmapx-host/root/.docker";
 
 it("compares a bind source outside the checkout that it cannot see by its path", async () => {
   const { inspect, spec, observed } = fixture(1, 0, 0);
-  (spec.volumes[0] as { source: string }).source = unseen;
-  (observed.Mounts[0] as { Source: string }).Source = unseen;
+  itemAt(spec.volumes, 0).source = unseen;
+  itemAt(observed.Mounts, 0).Source = unseen;
   const first = await inspect();
   expect(first.checks.some((check) => check.check === "mount")).toBe(true);
   // The evidence is stable, so the same mount verifies the same way again.
@@ -294,18 +295,18 @@ it("compares a bind source outside the checkout that it cannot see by its path",
 
 it("still refuses a changed bind source outside the checkout that it cannot see", async () => {
   const { inspect, spec, observed } = fixture(1, 0, 0);
-  (spec.volumes[0] as { source: string }).source = unseen;
-  (observed.Mounts[0] as { Source: string }).Source = "/nonexistent-openmapx-host/elsewhere";
+  itemAt(spec.volumes, 0).source = unseen;
+  itemAt(observed.Mounts, 0).Source = "/nonexistent-openmapx-host/elsewhere";
   await expect(inspect()).rejects.toThrow("Original applied mount source differs");
 });
 
 it("still resolves a bind source it can see and refuses a missing one inside the checkout", async () => {
   const { inspect, spec, observed, other } = fixture(1, 0, 0);
-  (observed.Mounts[0] as { Source: string }).Source = other;
+  itemAt(observed.Mounts, 0).Source = other;
   await expect(inspect()).rejects.toThrow("Original applied mount source differs");
   const missing = fixture(1, 0, 0);
   const inside = join(missing.other, "missing");
-  (missing.spec.volumes[0] as { source: string }).source = inside;
-  (missing.observed.Mounts[0] as { Source: string }).Source = inside;
+  itemAt(missing.spec.volumes, 0).source = inside;
+  itemAt(missing.observed.Mounts, 0).Source = inside;
   await expect(missing.inspect()).rejects.toThrow("ENOENT");
 });

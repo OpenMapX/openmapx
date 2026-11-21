@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockFetch: ReturnType<typeof vi.fn>;
@@ -45,11 +46,11 @@ describe("overpass provider", () => {
       const stops = await getStops([11.5, 48.1, 11.6, 48.2]);
 
       expect(stops).toHaveLength(1);
-      expect(stops[0].id).toBe("osm:node/12345");
-      expect(stops[0].name).toBe("Hauptbahnhof");
-      expect(stops[0].lat).toBe(48.14);
-      expect(stops[0].lng).toBe(11.56);
-      expect(stops[0].provider).toBe("overpass");
+      expect(nth(stops, 0).id).toBe("osm:node/12345");
+      expect(nth(stops, 0).name).toBe("Hauptbahnhof");
+      expect(nth(stops, 0).lat).toBe(48.14);
+      expect(nth(stops, 0).lng).toBe(11.56);
+      expect(nth(stops, 0).provider).toBe("overpass");
     });
 
     it.each([
@@ -70,7 +71,7 @@ describe("overpass provider", () => {
       );
       const { getStops } = await loadModule();
       const stops = await getStops([0, 0, 1, 1]);
-      expect(stops[0].modes).toEqual([mode]);
+      expect(nth(stops, 0).modes).toEqual([mode]);
     });
 
     it("maps multiple modes from combined tags", async () => {
@@ -90,9 +91,9 @@ describe("overpass provider", () => {
       const { getStops } = await loadModule();
       const stops = await getStops([0, 0, 1, 1]);
 
-      expect(stops[0].modes).toContain("rail");
-      expect(stops[0].modes).toContain("bus");
-      expect(stops[0].modes).toContain("tram");
+      expect(nth(stops, 0).modes).toContain("rail");
+      expect(nth(stops, 0).modes).toContain("bus");
+      expect(nth(stops, 0).modes).toContain("tram");
     });
 
     it("uses POST to overpass-api.de", async () => {
@@ -140,7 +141,7 @@ describe("overpass provider", () => {
       const { getStops } = await loadModule();
       const stops = await getStops([0, 0, 1, 1]);
 
-      expect(stops[0].name).toBe("English Name");
+      expect(nth(stops, 0).name).toBe("English Name");
     });
 
     it("uses ref tag as platformCode", async () => {
@@ -153,7 +154,7 @@ describe("overpass provider", () => {
       const { getStops } = await loadModule();
       const stops = await getStops([0, 0, 1, 1]);
 
-      expect(stops[0].platformCode).toBe("3A");
+      expect(nth(stops, 0).platformCode).toBe("3A");
     });
   });
 });
@@ -164,5 +165,5 @@ it("preserves the actual Overpass response supplier on converted transit stops",
   );
   const { getStops } = await loadModule();
   const stops = await getStops([7, 49, 9, 51]);
-  expect(stops[0].contributors?.map((receipt) => receipt.sourceId)).toContain("openstreetmap");
+  expect(nth(stops, 0).contributors?.map((receipt) => receipt.sourceId)).toContain("openstreetmap");
 });

@@ -2,6 +2,7 @@ import { setup } from "@integrations/road-conditions";
 import { situation } from "@integrations/road-conditions/__tests__/fixtures";
 import { roadConditionAttributions } from "@integrations/road-conditions/attributions";
 import { roadConditionFeatureToEvent } from "@openmapx/core";
+import { itemAt } from "@openmapx/core/item-at";
 import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
 import Fastify from "fastify";
 import { expect, it, vi } from "vitest";
@@ -39,8 +40,12 @@ it("retains full and empty receipts through the actual events HTTP serializer an
     ) => registerIntegrationRoute("road-conditions", method, path, handler, options),
     cache: {
       withCache: async (key: string, _ttl: number, fn: () => Promise<unknown>) => {
-        if (!cached.has(key)) cached.set(key, JSON.stringify(await fn()));
-        return JSON.parse(cached.get(key)!);
+        let value = cached.get(key);
+        if (value === undefined) {
+          value = JSON.stringify(await fn());
+          cached.set(key, value);
+        }
+        return JSON.parse(value);
       },
     },
     getIntegrationsByDomain: () => [
@@ -78,7 +83,7 @@ it("retains full and empty receipts through the actual events HTTP serializer an
     expect(parsed.map((e: (typeof events)[number]) => e.contributors)).toEqual([credits, []]);
     expect(roadConditionAttributions(parsed)).toEqual(credits);
     const expected = structuredClone(credits);
-    events[0]!.contributors = [{ sourceId: "new", name: "Changed provider configuration" }];
+    itemAt(events, 0).contributors = [{ sourceId: "new", name: "Changed provider configuration" }];
     const retained = await app.inject({
       method: "GET",
       url: "/api/integrations/road-conditions/events?bbox=4,51,6,53",

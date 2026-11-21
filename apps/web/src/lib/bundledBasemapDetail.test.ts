@@ -16,6 +16,13 @@ import {
   transitStopRankLimitExpression,
 } from "../../scripts/poi-visibility-policy.mjs";
 
+/** The policy's rank limit for a class with one at `zoom`; a class without one fails the test. */
+function rankLimit(poiClass: string, zoom: number): number {
+  const limit = poiRankLimit(poiClass, zoom);
+  if (limit === undefined) throw new Error(`No rank limit for ${poiClass} at z${zoom}`);
+  return limit;
+}
+
 type Layer = {
   id: string;
   type: string;
@@ -224,8 +231,8 @@ describe("bundled basemap detail", () => {
       expect(styleLayers.find((layer) => layer.id === "poi-street-fixtures")?.filter).toEqual(
         streetFixtureFilter(),
       );
-      expect(poiRankLimit("museum", 14)).toBeGreaterThan(poiRankLimit("restaurant", 14));
-      expect(poiRankLimit("restaurant", 18)).toBeGreaterThan(poiRankLimit("restaurant", 16));
+      expect(poiRankLimit("museum", 14)).toBeGreaterThan(rankLimit("restaurant", 14));
+      expect(poiRankLimit("restaurant", 18)).toBeGreaterThan(rankLimit("restaurant", 16));
       expect(poiRankLimit("waste_basket", 18)).toBe(0);
       expect(poiRankLimit("motorcycle_parking", 18)).toBe(0);
       expect(poiRankLimit("cycle_barrier", 19)).toBe(0);

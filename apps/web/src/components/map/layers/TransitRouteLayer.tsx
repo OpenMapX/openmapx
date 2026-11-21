@@ -13,6 +13,7 @@ import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+import { positionBounds } from "@/lib/positionBounds";
 
 const SOURCE_ID = "transit-route-detail-source";
 const LINE_LAYER_ID = "transit-route-detail-line";
@@ -165,12 +166,12 @@ export function TransitRouteLayer() {
     const lineCoords =
       geometry.type === "MultiLineString" ? geometry.coordinates.flat() : geometry.coordinates;
     if (lineCoords.length < 2) return;
-    const lngs = lineCoords.map((c) => c[0]);
-    const lats = lineCoords.map((c) => c[1]);
+    const bounds = positionBounds(lineCoords);
+    if (!bounds) return;
     fitBounds(
       [
-        [Math.min(...lngs), Math.min(...lats)],
-        [Math.max(...lngs), Math.max(...lats)],
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
       ],
       60,
     );

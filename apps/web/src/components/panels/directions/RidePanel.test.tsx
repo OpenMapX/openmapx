@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { enterDateTime } from "@/test/dateTimeField";
 
 let providers: import("@openmapx/core").RideProvidersResponse = {
@@ -215,10 +216,10 @@ describe("RidePanel", () => {
       ...baseProviders,
       providers: [
         {
-          ...baseProviders.providers[0],
+          ...nth(baseProviders.providers, 0),
           capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
         },
-        baseProviders.providers[1],
+        nth(baseProviders.providers, 1),
       ],
     };
     quoteResults = [
@@ -296,7 +297,7 @@ it("sets and clears a pre-booked pickup time", async () => {
     ...providers,
     providers: [
       {
-        ...providers.providers[0],
+        ...nth(providers.providers, 0),
         capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
         availability: {
           available: true,
@@ -321,7 +322,7 @@ it("credits displayed availability rules when quote acquisition returned no quot
     ...providers,
     providers: [
       {
-        ...providers.providers[0],
+        ...nth(providers.providers, 0),
         capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
         availability: {
           available: true,

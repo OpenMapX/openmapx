@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { expect, it, vi } from "vitest";
 
@@ -32,18 +32,18 @@ it("captures exact API receipts without mistaking an NSR entity id for its suppl
     } as never,
   });
   setup(ctx);
-  const provider = ctx.registered.transit[0];
+  const provider = nth(ctx.registered.transit, 0);
   const infra = await provider.getStopInfrastructure?.("entur:337");
   expect(infra?.data?.contributors?.map((receipt) => receipt.sourceId)).toEqual(["entur-nsr"]);
-  expect(infra?.data?.platforms[0].contributors?.map((receipt) => receipt.sourceId)).toEqual([
+  expect(infra?.data?.platforms[0]?.contributors?.map((receipt) => receipt.sourceId)).toEqual([
     "entur-nsr",
   ]);
   const departures = await provider.getDepartures?.("entur:337", 60);
-  expect(departures?.data[0].contributors?.map((receipt) => receipt.sourceId)).toEqual([
+  expect(departures?.data[0]?.contributors?.map((receipt) => receipt.sourceId)).toEqual([
     "entur-journey-planner",
   ]);
   const vehicles = await provider.getVehiclePositions?.("entur:line");
-  expect(vehicles?.data[0].contributors?.map((receipt) => receipt.sourceId)).toEqual([
+  expect(vehicles?.data[0]?.contributors?.map((receipt) => receipt.sourceId)).toEqual([
     "entur-vehicles",
   ]);
 });

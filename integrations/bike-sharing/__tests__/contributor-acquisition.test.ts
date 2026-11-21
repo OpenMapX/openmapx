@@ -52,12 +52,12 @@ it("captures explicit CityBikes parent credit before caching native network reco
   );
   vi.stubGlobal("fetch", http);
   const first = await searchCityBikes(bbox, cache, [receipt]);
-  expect(first[0].sources).toEqual(["citybikes/berlin"]);
-  expect(first[0].contributors).toEqual([receipt]);
+  expect(first[0]?.sources).toEqual(["citybikes/berlin"]);
+  expect(first[0]?.contributors).toEqual([receipt]);
   const retained = await searchCityBikes({ ...bbox, east: 13.45 }, cache, [
     { ...receipt, attributionText: "Changed registry" },
   ]);
-  expect(retained[0].contributors).toEqual([receipt]);
+  expect(retained[0]?.contributors).toEqual([receipt]);
   expect(http).toHaveBeenCalledTimes(2);
 });
 it("captures explicit Nextbike parent credit with the cached acquisition before bbox mapping", async () => {
@@ -102,10 +102,10 @@ it("captures explicit Nextbike parent credit with the cached acquisition before 
   );
   vi.stubGlobal("fetch", http);
   const first = await searchNextbike(bbox, cache, [receipt]);
-  expect(first[0].contributors).toEqual([receipt]);
+  expect(first[0]?.contributors).toEqual([receipt]);
   const retained = await searchNextbike({ ...bbox, east: 13.45 }, cache, [
     { ...receipt, attributionText: "Changed registry" },
   ]);
-  expect(retained[0].contributors).toEqual([receipt]);
+  expect(retained[0]?.contributors).toEqual([receipt]);
   expect(http).toHaveBeenCalledTimes(1);
 });

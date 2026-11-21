@@ -53,6 +53,7 @@ export function mergeStandaloneInventory(input: Input): StandaloneInventoryEntry
     if (ownership === "extension")
       denialReason ??= "Managed by an extension; use that extension's controls.";
     const usable = !!file?.valid && file.contentDigest !== null;
+    const recordedProvenance = parent?.provenance?.kind;
     return {
       ...(file?.pendingTransactionId ? { pendingTransactionId: file.pendingTransactionId } : {}),
       integrationId,
@@ -60,10 +61,9 @@ export function mergeStandaloneInventory(input: Input): StandaloneInventoryEntry
       ownership,
       extensionId: owner,
       contentDigest: file?.contentDigest ?? null,
-      provenance: (["artifact", "source", "uploaded-artifact"].includes(
-        parent?.provenance?.kind ?? "",
-      )
-        ? parent!.provenance!.kind
+      provenance: (recordedProvenance &&
+      ["artifact", "source", "uploaded-artifact"].includes(recordedProvenance)
+        ? recordedProvenance
         : "legacy_unknown") as StandaloneInventoryEntry["provenance"],
       adoptable: usable && ownership === "unmanaged",
       removable:

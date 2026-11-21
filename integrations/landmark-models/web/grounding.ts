@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core";
 import type { MultiPolygon, Polygon, Position } from "geojson";
 import { LngLat, type Map as MaplibreMap } from "maplibre-gl";
 
@@ -46,16 +47,16 @@ function footprintPoints(footprint: Polygon | MultiPolygon | undefined): Positio
   const points = rings.flatMap((ring) => ring.slice(0, -1));
   if (points.length <= MAX_FOOTPRINT_SAMPLES) return points;
   const step = points.length / MAX_FOOTPRINT_SAMPLES;
-  return Array.from(
-    { length: MAX_FOOTPRINT_SAMPLES },
-    (_, i) => points[Math.floor(i * step)] as Position,
+  return Array.from({ length: MAX_FOOTPRINT_SAMPLES }, (_, i) =>
+    itemAt(points, Math.floor(i * step)),
   );
 }
 
 /**
  * The ground height a model stands on, or "pending" until every needed sample
  * is exact. Open Landmarks models stand at the anchor's height; Barrelman
- * models at the lowest ground under their footprint.
+ * models at the lowest ground under their footprint. A footprint position
+ * without two coordinates is not sampled.
  */
 export function groundHeight(
   asset: { anchor: readonly [number, number]; grounding: "anchor" | "footprint-minimum" },
@@ -68,8 +69,9 @@ export function groundHeight(
     ...(asset.grounding === "footprint-minimum" ? footprintPoints(footprint) : []),
   ];
   let lowest = Infinity;
-  for (const point of points) {
-    const sample = probe.sample([point[0] as number, point[1] as number]);
+  for (const [lng, lat] of points) {
+    if (lng === undefined || lat === undefined) continue;
+    const sample = probe.sample([lng, lat]);
     if (sample.state !== "loaded" || sample.drawn === undefined) return "pending";
     lowest = Math.min(lowest, sample.drawn);
   }

@@ -2,6 +2,7 @@ import {
   createMockIntegrationContext,
   fakeAttributionIndex,
   installHostCapabilities,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import type { AirportRecord, AirportSearchMatch } from "@openmapx/ourairports-data";
 import { describe, expect, it, vi } from "vitest";
@@ -71,9 +72,10 @@ it("snapshots the supplier before asynchronous dataset search", async () => {
   credit.publisher.name = "Changed publisher";
   pending.resolve([{ record: airport, kind: "name", matchedValue: "Frankfurt" }]);
   const result = await resultPromise;
-  expect(result.suggestions[0].contributors?.[0]).toMatchObject({
+  const { contributors } = nth(result.suggestions, 0);
+  expect(contributors?.[0]).toMatchObject({
     name: "Original",
     publisher: { name: "Original publisher" },
   });
-  expect(result.attributions).toEqual(result.suggestions[0].contributors);
+  expect(result.attributions).toEqual(contributors);
 });

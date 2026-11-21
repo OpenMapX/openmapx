@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
 import { expect, it } from "vitest";
+import { nth } from "@/test";
 import { InstalledNativeBasemap } from "./nativeBasemap";
 
 const receipt = (sourceId: string) => [{ sourceId, name: sourceId }];
@@ -29,19 +30,19 @@ it("retains installed receipts through pending/rejected requests and binds new s
     styleContributors: receipt("design"),
   };
   controller.adopt(candidate);
-  candidate.sourceContributors.data[0].name = "mutated";
-  candidate.styleContributors[0].name = "mutated-design";
-  expect(controller.layers()[0].contributors.map((x) => x.name)).toEqual(["A", "design"]);
+  nth(candidate.sourceContributors.data, 0).name = "mutated";
+  nth(candidate.styleContributors, 0).name = "mutated-design";
+  expect(nth(controller.layers(), 0).contributors.map((x) => x.name)).toEqual(["A", "design"]);
   // Same source object is retained by a style diff; new metadata is not new content.
   controller.adopt({ ...candidate, sourceContributors: { data: receipt("B") } });
-  expect(controller.layers()[0].contributors[0].sourceId).toBe("A");
+  expect(nth(nth(controller.layers(), 0).contributors, 0).sourceId).toBe("A");
   map.getSource = (() => ({})) as MapLibreMap["getSource"];
   controller.adopt({ ...candidate, sourceContributors: { data: receipt("B") } });
   expect(controller.layers()).toEqual([]); // identity changed again: cannot bind unrelated source
   const replacement = {};
   map.getSource = (() => replacement) as MapLibreMap["getSource"];
   controller.adopt({ ...candidate, sourceContributors: { data: receipt("B") } });
-  expect(controller.layers()[0].contributors[0].sourceId).toBe("B");
+  expect(nth(nth(controller.layers(), 0).contributors, 0).sourceId).toBe("B");
 });
 it("background-only style does not manufacture data receipts", () => {
   const { map, spec } = harness();
@@ -54,7 +55,7 @@ it("background-only style does not manufacture data receipts", () => {
     sourceContributors: { data: receipt("OSM") },
     styleContributors: receipt("design"),
   });
-  expect(controller.layers()[0].contributors.map((x) => x.sourceId)).toEqual(["design"]);
+  expect(nth(controller.layers(), 0).contributors.map((x) => x.sourceId)).toEqual(["design"]);
 });
 
 it("promotes only the matching installation, handling synchronous events and no-op diffs", () => {
@@ -81,16 +82,16 @@ it("promotes only the matching installation, handling synchronous events and no-
   }) as MapLibreMap["setStyle"];
   controller.install(candidate(1, false), (value) => changes.push(value));
   expect(changes).toEqual([false]);
-  expect(controller.layers()[0].contributors[0].sourceId).toBe("1");
+  expect(nth(nth(controller.layers(), 0).contributors, 0).sourceId).toBe("1");
   map.setStyle = (() => map) as MapLibreMap["setStyle"];
   controller.install(candidate(2, true), (value) => changes.push(value));
   callbacks.get("style.load")?.(); // old event cannot relabel the retained map
   expect(changes).toEqual([false]);
-  expect(controller.layers()[0].contributors[0].sourceId).toBe("1");
+  expect(nth(nth(controller.layers(), 0).contributors, 0).sourceId).toBe("1");
   actual = candidate(2, true).style;
   callbacks.get("style.load")?.();
   expect(changes).toEqual([false, true]); // unchanged source object still owns generation 1
-  expect(controller.layers()[0].contributors[0].sourceId).toBe("1");
+  expect(nth(nth(controller.layers(), 0).contributors, 0).sourceId).toBe("1");
 });
 
 it("retains installed credits through full-style replacement events until matching adoption", () => {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { SafeFetchStatusOptions } from "@openmapx/core/server";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 
 const coreServerMocks = vi.hoisted(() => ({
   resolvePublicConnectionAddresses: vi.fn(),
@@ -1033,10 +1034,10 @@ describe("metered DB API Marketplace health checks", () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.status).toBe("up");
     expect(fetchSpy).toHaveBeenCalledOnce();
-    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined;
-    expect(init?.headers).not.toHaveProperty("DB-Client-ID");
-    expect(init?.headers).not.toHaveProperty("DB-Client-Id");
-    expect(init?.headers).not.toHaveProperty("DB-Api-Key");
+    const init = callArg(fetchSpy, 0, 1) as RequestInit;
+    expect(init.headers).not.toHaveProperty("DB-Client-ID");
+    expect(init.headers).not.toHaveProperty("DB-Client-Id");
+    expect(init.headers).not.toHaveProperty("DB-Api-Key");
   });
 });
 
@@ -1134,7 +1135,7 @@ describe("Entur composite health dispatch", () => {
       };
       const statuses = await executeIntegrationHealthCheck(integration);
       expect(statuses).toHaveLength(1);
-      expect(statuses[0].status).toBe("up");
+      expect(statuses[0]?.status).toBe("up");
       expect(http.calls.map((call) => new URL(call.url).pathname).sort()).toEqual(
         id === "transit-entur"
           ? [
@@ -1192,7 +1193,7 @@ describe("Entur composite health dispatch", () => {
       customHealthCheck: ctx.registered.healthChecks[0],
     });
     expect(statuses).toHaveLength(1);
-    expect(statuses[0].status).toBe("down");
+    expect(statuses[0]?.status).toBe("down");
     expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
   });
 });

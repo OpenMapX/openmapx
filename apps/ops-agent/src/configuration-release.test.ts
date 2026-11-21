@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { inspectConfigurationReleaseDownloads } from "./configuration-release-downloads";
 
@@ -116,7 +116,8 @@ it.each(["single", "indexed"])(
       let stdout: string;
       if (args[0] === "info") stdout = "linux/x86_64";
       else if (args[0] === "manifest" && args[1] === "inspect") {
-        const reference = args[2]!;
+        const reference = args[2];
+        assert.isDefined(reference);
         stdout = JSON.stringify(
           kind === "indexed" && reference.endsWith(`@sha256:${"a".repeat(64)}`)
             ? {
@@ -153,7 +154,7 @@ it.each(["single", "indexed"])(
     });
     expect(
       execFile.mock.calls.every(
-        ([file, args]) => file === "docker" && ["info", "manifest"].includes(args[0]!),
+        ([file, args]) => file === "docker" && ["info", "manifest"].includes(String(args[0])),
       ),
     ).toBe(true);
   },
@@ -199,7 +200,9 @@ function heldMetadata() {
     expect(args.slice(0, 2)).toEqual(["manifest", "inspect"]);
     if (draining) return { stdout: platformManifest, stderr: "" };
     const pending = Promise.withResolvers<string>();
-    calls.push({ reference: args[2]!, signal: options.signal, resolve: pending.resolve });
+    const [, , reference] = args;
+    assert.isDefined(reference);
+    calls.push({ reference, signal: options.signal, resolve: pending.resolve });
     peak = Math.max(peak, ++active);
     try {
       return { stdout: await pending.promise, stderr: "" };
@@ -293,8 +296,11 @@ it.each(["sibling failure", "caller abort"])(
     );
     try {
       await vi.waitFor(() => expect(held.calls).toHaveLength(6), { timeout: 2000, interval: 5 });
-      if (failure === "sibling failure") held.calls[0]!.resolve(platformIndex("arm64"));
-      else {
+      if (failure === "sibling failure") {
+        const [first] = held.calls;
+        assert.isDefined(first);
+        first.resolve(platformIndex("arm64"));
+      } else {
         for (const call of [...held.calls]) call.resolve(platformIndex());
         await vi.waitFor(() => expect(held.calls).toHaveLength(12), { timeout: 2000, interval: 5 });
         controller.abort(Error("Caller canceled metadata"));
@@ -371,9 +377,9 @@ it.each([
   await expect(
     inspectConfigurationReleaseDownloads({ release, execFile, signal: controller.signal }),
   ).rejects.toThrow();
-  expect(execFile.mock.calls.every(([, args]) => ["info", "manifest"].includes(args[0]!))).toBe(
-    true,
-  );
+  expect(
+    execFile.mock.calls.every(([, args]) => ["info", "manifest"].includes(String(args[0]))),
+  ).toBe(true);
   if (kind === "aborted") expect(execFile).not.toHaveBeenCalled();
 });
 

@@ -1,7 +1,7 @@
 import { createApiClient } from "@openmapx/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 import { act, cleanup, createTestQueryClient, renderHook, waitFor } from "@/test";
@@ -158,7 +158,9 @@ it.each(["action", "bulk"] as const)(
     const fetch = vi.fn(async (...args: unknown[]) => {
       const init = args[1] as RequestInit | undefined;
       if (init?.method === "POST") {
-        keys.push(new Headers(init.headers).get("idempotency-key")!);
+        const key = new Headers(init.headers).get("idempotency-key");
+        assert.exists(key);
+        keys.push(key);
         if (keys.length === 1) throw new TypeError("response lost");
         return Response.json({ ok: true, jobId: "accepted-job" });
       }

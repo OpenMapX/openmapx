@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { annotateLegsWithAttribution, wrapMotisWithFeedAttribution } from "./motis-contributors.js";
 import { composeTransitAlternative } from "./transit-alternative.js";
 import { captureTransitContributors } from "./transit-contributors.js";
@@ -54,10 +54,11 @@ describe("alternative contributor boundaries", () => {
   it("captures the selected local feed without charging its credits to the unused parent", () => {
     const mapped = annotateLegsWithAttribution([journey()], index);
     const parent = wrapMotisWithFeedAttribution(mapped, index).data[0];
-    expect(parent.legs[0].contributors?.map((c) => c.sourceId)).toEqual(["feed_a"]);
-    expect(parent.legs[0].alternatives?.[0].legs?.[0].contributors?.map((c) => c.sourceId)).toEqual(
-      ["feed_b"],
-    );
+    assert.isDefined(parent);
+    expect(parent.legs[0]?.contributors?.map((c) => c.sourceId)).toEqual(["feed_a"]);
+    expect(
+      parent.legs[0]?.alternatives?.[0]?.legs?.[0]?.contributors?.map((c) => c.sourceId),
+    ).toEqual(["feed_b"]);
     expect(composeTransitAlternative(parent, 0, 0)?.contributors?.map((c) => c.sourceId)).toEqual([
       "feed_b",
     ]);

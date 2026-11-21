@@ -26,9 +26,10 @@ import {
   openControlInstallation,
   writeBuildBundle,
 } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import { eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { configurationCandidateSource } from "../../../../ops-agent/src/configuration-candidate-source";
@@ -306,7 +307,8 @@ dbDescribe("retained finite maintenance requests", () => {
           );
           const original = journal
             .records()
-            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+            .find((row) => row.operation.kind === "artifactTransfer.import");
+          assert.isDefined(original, "the import was not journaled");
           historicalTerminal = JSON.stringify({
             state: original.state,
             errorClass: original.errorClass,
@@ -393,7 +395,8 @@ dbDescribe("retained finite maintenance requests", () => {
         if (historicalTerminal) {
           const original = journal
             .records()
-            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+            .find((row) => row.operation.kind === "artifactTransfer.import");
+          assert.isDefined(original, "the import is no longer journaled");
           expect(
             JSON.stringify({
               state: original.state,
@@ -715,17 +718,17 @@ dbDescribe("retained finite maintenance requests", () => {
         .select()
         .from(adminJob)
         .where(eq(adminJob.type, "service.apply"));
-      expect(original).toBeDefined();
+      assert.isDefined(original, "the apply job was not retained");
       (await import("../../utils/rate-limit")).serviceActionLimit.reset();
       const duplicate = await api.inject(request);
       expect(duplicate.statusCode).toBe(200);
-      expect(duplicate.json().jobId).toBe(original!.id);
+      expect(duplicate.json().jobId).toBe(original.id);
       expect(
         await state.fixture.db.select().from(adminJob).where(eq(adminJob.type, "service.apply")),
       ).toHaveLength(1);
       state.services = [];
       (await import("../../utils/rate-limit")).serviceActionLimit.reset();
-      expect((await api.inject(request)).json().jobId).toBe(original!.id);
+      expect((await api.inject(request)).json().jobId).toBe(original.id);
       (await import("../../utils/rate-limit")).serviceActionLimit.reset();
       expect((await api.inject({ ...request, payload: { action: "restart" } })).statusCode).toBe(
         409,
@@ -757,7 +760,7 @@ dbDescribe("retained finite maintenance requests", () => {
         Array.from({ length: 3 }, () => retainMaintenanceJob(type, body, actor, key)),
       );
     expect(new Set(ids).size).toBe(1);
-    const id = ids[0]!;
+    const id = itemAt(ids, 0);
     acceptedIds.push(id);
     await state.fixture.db
       .update(adminJob)
@@ -856,6 +859,7 @@ dbDescribe("retained finite maintenance requests", () => {
       options = { client: createApiClient({ baseUrl: url }) };
     const pointer = services.currentConfigurationGeneration(host.infraDir),
       key = { "idempotency-key": "actual-clear-request-003" };
+    assert.exists(pointer, "no configuration generation is applied");
     try {
       const accepted = await clearAdminReleaseSelection(
         { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" },
@@ -875,7 +879,7 @@ dbDescribe("retained finite maintenance requests", () => {
       // Clearing renders the applied configuration again without the pin.
       expect(services.readAppliedRelease(host.infraDir)).toBeNull();
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(pointer);
-      expect(services.readGenerationRelease(host.infraDir, pointer!)?.manifest.release).toBe(
+      expect(services.readGenerationRelease(host.infraDir, pointer)?.manifest.release).toBe(
         "checked-pin",
       );
       expect(
@@ -962,34 +966,36 @@ dbDescribe("retained finite maintenance requests", () => {
             }),
           ),
         });
-      const applied = services.currentConfigurationGeneration(host.infraDir)!;
+      const applied = services.currentConfigurationGeneration(host.infraDir);
+      assert.exists(applied, "no configuration generation is applied");
       const compose = services.configurationGenerationComposeFile(host.infraDir, applied),
         args = services.stackComposeArgs({
           infraDir: host.infraDir,
           composePath: compose,
         });
       const rows = await Promise.all(
-        ids.map(async (id, index) => ({
-          ...host.row,
-          Id: String(index + 1).repeat(64),
-          ConfigImage: services.serviceContainerImageReference(
-            host.loaded.find((service) => service.manifest.id === id)!.manifest.container,
-          ),
-          Labels: {
-            ...host.row.Labels,
-            "com.docker.compose.service": id,
-            "com.docker.compose.config-hash": (
-              await host.execFile("docker", [...args, "config", "--hash", id], {
-                signal: new AbortController().signal,
-                timeout: 15000,
-                maxBuffer: 1024 * 1024,
-              })
-            ).stdout
-              .trim()
-              .split(/\s+/)
-              .at(-1)!,
-          },
-        })),
+        ids.map(async (id, index) => {
+          const loaded = host.loaded.find((service) => service.manifest.id === id);
+          assert.isDefined(loaded, `service ${id} is not loaded`);
+          return {
+            ...host.row,
+            Id: String(index + 1).repeat(64),
+            ConfigImage: services.serviceContainerImageReference(loaded.manifest.container),
+            Labels: {
+              ...host.row.Labels,
+              "com.docker.compose.service": id,
+              "com.docker.compose.config-hash": (
+                await host.execFile("docker", [...args, "config", "--hash", id], {
+                  signal: new AbortController().signal,
+                  timeout: 15000,
+                  maxBuffer: 1024 * 1024,
+                })
+              ).stdout
+                .trim()
+                .replace(/^.*\s/s, ""),
+            },
+          };
+        }),
       );
       host.setRows(rows);
       const execFile: typeof host.execFile = async (file, argv, io) => {

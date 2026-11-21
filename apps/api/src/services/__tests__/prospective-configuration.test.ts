@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ failService: false, vaultRows: [] as unknown[] }));
 vi.mock("../../db", () => ({
@@ -90,7 +90,8 @@ it("rejects an expired administrative read context", async () => {
   await withAdministrativeConfigurationRead({}, async (context) => {
     saved = context;
   });
-  await expect(resolveAllServiceConfigsStrict([], saved!)).rejects.toThrow(
+  assert.isDefined(saved, "the read context was not handed to the callback");
+  await expect(resolveAllServiceConfigsStrict([], saved)).rejects.toThrow(
     "Configuration acquisition unavailable",
   );
 });

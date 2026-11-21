@@ -102,23 +102,23 @@ function ensureKey(text: string, key: string, value: string | boolean, anchors: 
   const literal = JSON.stringify(value);
   const lines = text.split("\n");
   const keyRe = new RegExp(`^(\\s*)"${key}"\\s*:\\s*[^,]*?(,?)\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const m = keyRe.exec(lines[i]);
+  for (const [i, line] of lines.entries()) {
+    const m = keyRe.exec(line);
     if (m) {
       lines[i] = `${m[1]}"${key}": ${literal}${m[2] ? "," : ""}`;
       return lines.join("\n");
     }
   }
   const anchorRe = new RegExp(`^(\\s*)"(?:${anchors.join("|")})"\\s*:\\s*.*?(,?)\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const m = anchorRe.exec(lines[i]);
+  for (const [i, line] of lines.entries()) {
+    const m = anchorRe.exec(line);
     if (m) {
       if (m[2]) {
         // Anchor already has a trailing comma → more properties follow.
         lines.splice(i + 1, 0, `${m[1]}"${key}": ${literal},`);
       } else {
         // Anchor is the last property → give it a comma, append without one.
-        lines[i] = `${lines[i].replace(/\s*$/, "")},`;
+        lines[i] = `${line.replace(/\s*$/, "")},`;
         lines.splice(i + 1, 0, `${m[1]}"${key}": ${literal}`);
       }
       return lines.join("\n");

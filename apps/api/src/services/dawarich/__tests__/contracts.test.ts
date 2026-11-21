@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   currentUserFixture,
+  journeyEntryFixture,
   settingsFixture,
+  timelineDayFixture,
   timelineResponseFixture,
+  visitEntryFixture,
 } from "../__fixtures__/timeline-day";
-import { tracksPageFixture } from "../__fixtures__/tracks-page";
+import { trackFeatureFixture, tracksPageFixture } from "../__fixtures__/tracks-page";
 import {
   currentUserSchema,
   settingsSchema,
@@ -25,17 +28,14 @@ describe("Dawarich runtime contracts", () => {
   });
 
   it("accepts absent upstream numeric measurements without coercing them", () => {
-    const journey = timelineResponseFixture.days[0].entries.find(
-      (entry) => entry.type === "journey",
-    );
-    if (!journey) throw new Error("fixture needs a journey");
+    const journey = journeyEntryFixture;
     const parsed = timelineResponseSchema.parse({
       ...timelineResponseFixture,
       days: [
         {
-          ...timelineResponseFixture.days[0],
+          ...timelineDayFixture,
           entries: [
-            timelineResponseFixture.days[0].entries[0],
+            visitEntryFixture,
             {
               ...journey,
               distance: null,
@@ -50,8 +50,8 @@ describe("Dawarich runtime contracts", () => {
         },
       ],
     });
-    expect(parsed.days[0].entries).toHaveLength(2);
-    expect(parsed.days[0].entries[1]).toMatchObject({
+    expect(parsed.days[0]?.entries).toHaveLength(2);
+    expect(parsed.days[0]?.entries[1]).toMatchObject({
       distance: null,
       avg_speed: null,
       elevation_gain: null,
@@ -67,13 +67,13 @@ describe("Dawarich runtime contracts", () => {
       ...timelineResponseFixture,
       days: [
         {
-          ...timelineResponseFixture.days[0],
-          entries: [{ ...timelineResponseFixture.days[0].entries[0], point_count: null }],
+          ...timelineDayFixture,
+          entries: [{ ...visitEntryFixture, point_count: null }],
         },
       ],
     });
-    expect(parsed.days[0].entries).toHaveLength(1);
-    expect(parsed.days[0].entries[0]).toMatchObject({ point_count: null });
+    expect(parsed.days[0]?.entries).toHaveLength(1);
+    expect(parsed.days[0]?.entries[0]).toMatchObject({ point_count: null });
   });
 
   it.each([
@@ -81,7 +81,7 @@ describe("Dawarich runtime contracts", () => {
       "a missing entry discriminant",
       () => ({
         ...timelineResponseFixture,
-        days: [{ ...timelineResponseFixture.days[0], entries: [{ duration: 4 }] }],
+        days: [{ ...timelineDayFixture, entries: [{ duration: 4 }] }],
       }),
     ],
     [
@@ -90,10 +90,8 @@ describe("Dawarich runtime contracts", () => {
         ...timelineResponseFixture,
         days: [
           {
-            ...timelineResponseFixture.days[0],
-            entries: [
-              { ...timelineResponseFixture.days[0].entries[0], started_at: "not-a-timestamp" },
-            ],
+            ...timelineDayFixture,
+            entries: [{ ...visitEntryFixture, started_at: "not-a-timestamp" }],
           },
         ],
       }),
@@ -104,9 +102,9 @@ describe("Dawarich runtime contracts", () => {
         ...tracksPageFixture,
         features: [
           {
-            ...tracksPageFixture.features[0],
+            ...trackFeatureFixture,
             geometry: {
-              ...tracksPageFixture.features[0].geometry,
+              ...trackFeatureFixture.geometry,
               coordinates: [
                 [Number.NaN, 45.7],
                 [12.5, 45.8],
@@ -120,14 +118,14 @@ describe("Dawarich runtime contracts", () => {
       "a track without a usable identifier",
       () => ({
         ...tracksPageFixture,
-        features: [{ ...tracksPageFixture.features[0], properties: { device_id: "private" } }],
+        features: [{ ...trackFeatureFixture, properties: { device_id: "private" } }],
       }),
     ],
     [
       "malformed bounds",
       () => ({
         ...timelineResponseFixture,
-        days: [{ ...timelineResponseFixture.days[0], bounds: { sw_lng: 12.3 } }],
+        days: [{ ...timelineDayFixture, bounds: { sw_lng: 12.3 } }],
       }),
     ],
     [
@@ -136,7 +134,7 @@ describe("Dawarich runtime contracts", () => {
         ...tracksPageFixture,
         features: [
           {
-            ...tracksPageFixture.features[0],
+            ...trackFeatureFixture,
             geometry: {
               type: "Polygon",
               coordinates: [
@@ -157,8 +155,8 @@ describe("Dawarich runtime contracts", () => {
         ...timelineResponseFixture,
         days: [
           {
-            ...timelineResponseFixture.days[0],
-            entries: [{ ...timelineResponseFixture.days[0].entries[0], duration: -1 }],
+            ...timelineDayFixture,
+            entries: [{ ...visitEntryFixture, duration: -1 }],
           },
         ],
       }),
@@ -169,8 +167,8 @@ describe("Dawarich runtime contracts", () => {
         ...timelineResponseFixture,
         days: [
           {
-            ...timelineResponseFixture.days[0],
-            entries: [{ ...timelineResponseFixture.days[0].entries[1], duration: -1 }],
+            ...timelineDayFixture,
+            entries: [{ ...journeyEntryFixture, duration: -1 }],
           },
         ],
       }),

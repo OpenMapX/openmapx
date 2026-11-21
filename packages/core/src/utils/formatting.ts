@@ -7,7 +7,7 @@ export function getInitials(name: string | null | undefined, email: string): str
       .toUpperCase()
       .slice(0, 2);
   }
-  return email[0].toUpperCase();
+  return email.charAt(0).toUpperCase();
 }
 
 import type { UnitSystem } from "../types/geometry.js";

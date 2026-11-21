@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const overpassQuery = vi.fn();
 const getPlaceKnowledge = vi.fn();
@@ -137,9 +137,10 @@ it("retains exact base and chosen enrichment fields on capped neighborhood cards
   });
   const result = await fetchNeighborhoods(51, 6, 52, 7);
   const card = result.neighborhoods[0];
+  assert.isDefined(card);
   expect(card.fieldContributors?.name).toEqual([a]);
   expect(card.fieldContributors?.description).toEqual([b]);
   expect(card.contributors).toEqual([a, b]);
   a.name = "Changed";
-  expect(card.fieldContributors?.name?.[0].name).toBe("OSM original");
+  expect(card.fieldContributors?.name?.[0]?.name).toBe("OSM original");
 });

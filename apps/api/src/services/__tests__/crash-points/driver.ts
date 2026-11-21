@@ -86,6 +86,12 @@ const ROLE_OF_SERVICE: Record<string, Role> = {
   "ops-agent": "agent",
   "data-manager": "dm",
 };
+/** The role a fake container runs; the engine only starts the three role services. */
+function roleOf(service: string): Role {
+  const role = ROLE_OF_SERVICE[service];
+  if (!role) throw new Error(`No role runs service ${service}`);
+  return role;
+}
 const READINESS: Record<Role, string> = {
   api: "/health",
   agent: "/health",
@@ -333,10 +339,9 @@ export class CrashHost {
     if (!docker) throw new Error("The Docker CLI with Compose is required");
     this.engine = new FakeDockerEngine({
       realDocker: docker,
-      startRole: (service, container) =>
-        this.startRoleProcess(ROLE_OF_SERVICE[service] as Role, container),
-      stopRole: async (service) => this.stopRoleProcess(ROLE_OF_SERVICE[service] as Role),
-      roleState: (service) => this.roleState(ROLE_OF_SERVICE[service] as Role),
+      startRole: (service, container) => this.startRoleProcess(roleOf(service), container),
+      stopRole: async (service) => this.stopRoleProcess(roleOf(service)),
+      roleState: (service) => this.roleState(roleOf(service)),
       runContainer: (container, request) => this.runContainer(container, request.env),
     });
     this.proxies = {
@@ -480,7 +485,7 @@ export class CrashHost {
     ])
       cpSync(join(REPO, entry), join(this.hostDir, entry), {
         recursive: true,
-        filter: (source) => !skipped.has(source.split("/").at(-1) as string),
+        filter: (source) => !skipped.has(source.replace(/^.*\//s, "")),
       });
     const infraSource = join(REPO, "infra", "docker");
     for (const file of [
@@ -883,9 +888,9 @@ export class CrashHost {
     const env: Record<string, string> = { HOME: "/tmp" };
     for (const entry of container.Config.Env) {
       const eq = entry.indexOf("=");
-      if (eq > 0) env[entry.slice(0, eq)] = entry.slice(eq + 1);
       // As Docker does: a bare name takes the client's value, or is unset.
-      else if (callerEnv[entry] !== undefined) env[entry] = callerEnv[entry] as string;
+      const value = eq > 0 ? entry.slice(eq + 1) : callerEnv[entry];
+      if (value !== undefined) env[eq > 0 ? entry.slice(0, eq) : entry] = value;
     }
     const helper = container.Config.Cmd.some((value) => value.includes("configuration-handoff"));
     Object.assign(env, {

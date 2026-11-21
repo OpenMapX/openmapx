@@ -113,10 +113,22 @@ function lockfile(change: (model: LockModel) => void = () => {}) {
 /** Move one resolved package to a new version, keeping the lockfile internally consistent. */
 function bump(model: LockModel, from: string, to: string) {
   const { packages, snapshots } = model.project;
+  const snapshot = snapshots[from];
+  if (!snapshot) throw new Error(`The fixture lockfile has no snapshot ${from}`);
   packages[to] = { resolution: { integrity: `sha512-${to}` } };
   delete packages[from];
-  snapshots[to] = snapshots[from];
+  snapshots[to] = snapshot;
   delete snapshots[from];
+}
+/** One dependency group of a lockfile importer the fixture declares. */
+function dependenciesOf(
+  model: LockModel,
+  importer: string,
+  group: "dependencies" | "devDependencies",
+) {
+  const dependencies = model.project.importers[importer]?.[group];
+  if (!dependencies) throw new Error(`The fixture lockfile has no ${group} for ${importer}`);
+  return dependencies;
 }
 const workspaces: string[] = [];
 const noRelease =
@@ -359,9 +371,9 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "react@19.0.0", "react@19.1.0");
-        model.project.importers["packages/app"].dependencies.react = dep("19.1.0");
+        dependenciesOf(model, "packages/app", "dependencies").react = dep("19.1.0");
         bump(model, "rootonly@1.0.0", "rootonly@2.0.0");
-        model.project.importers["."].devDependencies.rootonly = dep("2.0.0");
+        dependenciesOf(model, ".", "devDependencies").rootonly = dep("2.0.0");
       }),
     });
     expect(result.status, result.output).toBe(0);
@@ -373,7 +385,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "zod@4.0.0", "zod@4.1.0");
-        model.project.importers["packages/lib"].dependencies.zod = dep("4.1.0");
+        dependenciesOf(model, "packages/lib", "dependencies").zod = dep("4.1.0");
       }),
     });
     expect(result.status).toBe(1);
@@ -383,11 +395,14 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
   it("flags a package whose build devDependency resolves a different peer", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
-        const { importers, snapshots } = model.project;
+        const { snapshots } = model.project;
         bump(model, "typescript@6.0.3", "typescript@6.0.4");
         delete snapshots["tsup@9.0.0(typescript@6.0.3)"];
         snapshots["tsup@9.0.0(typescript@6.0.4)"] = { dependencies: { typescript: "6.0.4" } };
-        importers["packages/lib"].devDependencies.tsup = dep("9.0.0(typescript@6.0.4)", "9.0.0");
+        dependenciesOf(model, "packages/lib", "devDependencies").tsup = dep(
+          "9.0.0(typescript@6.0.4)",
+          "9.0.0",
+        );
       }),
     });
     expect(result.status).toBe(1);
@@ -407,7 +422,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "wrap@7.0.0", "wrap@7.1.0");
-        model.project.importers["packages/helper"].dependencies["wrap-cjs"] = dep(
+        dependenciesOf(model, "packages/helper", "dependencies")["wrap-cjs"] = dep(
           "wrap@7.1.0",
           "npm:wrap@7.1.0",
         );
@@ -420,7 +435,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "peerlib@1.0.0", "peerlib@1.1.0");
-        model.project.importers["packages/helper"].devDependencies.peerlib = dep("1.1.0");
+        dependenciesOf(model, "packages/helper", "devDependencies").peerlib = dep("1.1.0");
       }),
     });
     expect(result.status).toBe(1);
@@ -431,7 +446,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
       "packages/fetch/package.json": null,
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "react@19.0.0", "react@19.1.0");
-        model.project.importers["packages/app"].dependencies.react = dep("19.1.0");
+        dependenciesOf(model, "packages/app", "dependencies").react = dep("19.1.0");
       }),
     });
     expect(result.status).toBe(1);
@@ -444,7 +459,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "vitest@5.0.0", "vitest@5.1.0");
-        model.project.importers["packages/helper"].devDependencies.vitest = dep("5.1.0");
+        dependenciesOf(model, "packages/helper", "devDependencies").vitest = dep("5.1.0");
       }),
     });
     expect(result.status, result.output).toBe(0);
@@ -489,8 +504,9 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     [
       "a link outside the workspace",
       lockfile((model) => {
-        model.project.importers["packages/lib"].dependencies.zod = dep("link:../../outside");
-        model.project.importers["packages/tool"].dependencies.commander = dep("link:../../outside");
+        dependenciesOf(model, "packages/lib", "dependencies").zod = dep("link:../../outside");
+        dependenciesOf(model, "packages/tool", "dependencies").commander =
+          dep("link:../../outside");
       }),
     ],
     [
@@ -539,7 +555,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const result = fixture().run({
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "fetchdep@1.0.0", "fetchdep@1.1.0");
-        model.project.importers["packages/fetch"].dependencies.fetchdep = dep("1.1.0");
+        dependenciesOf(model, "packages/fetch", "dependencies").fetchdep = dep("1.1.0");
       }),
     });
     expect(result.status).toBe(1);
@@ -597,7 +613,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
         '{"name":"fixture","private":true,"packageManager":"pnpm@12.11.2","devDependencies":{"rootonly":"2.0.0"}}',
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "rootonly@1.0.0", "rootonly@2.0.0");
-        model.project.importers["."].devDependencies.rootonly = dep("2.0.0");
+        dependenciesOf(model, ".", "devDependencies").rootonly = dep("2.0.0");
       }),
     });
     expect(result.status, result.output).toBe(0);
@@ -617,7 +633,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
       }),
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "vitest@5.0.0", "vitest@5.1.0");
-        model.project.importers["packages/helper"].devDependencies.vitest = dep("5.1.0");
+        dependenciesOf(model, "packages/helper", "devDependencies").vitest = dep("5.1.0");
       }),
     });
     expect(quiet.status, quiet.output).toBe(0);
@@ -625,7 +641,7 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
       "packages/helper/package.json": manifest("helper", { dependencies: { undici: "8.1.0" } }),
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "undici@8.0.0", "undici@8.1.0");
-        model.project.importers["packages/helper"].dependencies.undici = dep("8.1.0");
+        dependenciesOf(model, "packages/helper", "dependencies").undici = dep("8.1.0");
       }),
     });
     expect(reached.status).toBe(1);

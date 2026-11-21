@@ -1,4 +1,5 @@
 import {
+  compassPoint,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -21,8 +22,6 @@ export type VehicleWork = "plowing" | "spreading" | "other" | "unknown";
 
 /** Every task code the strings label; any other is shown as the publisher writes it. */
 const LABELLED_TASKS = new Set(Object.keys(strings.task));
-
-const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
 
 /** The publisher's own code for a task it does not know. */
 const UNKNOWN_TASK = "UNKNOWN";
@@ -73,8 +72,10 @@ function summaryOf(vehicle: ServiceVehicle): I18nToken {
   return token("summary.tasks", { task: taskLabel(first), count: rest.length });
 }
 
-function headingOf(degrees: number): I18nToken {
-  const direction = COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8]!;
+/** A heading row's value; a non-finite bearing has no direction and no row. */
+function headingOf(degrees: number): I18nToken | undefined {
+  const direction = compassPoint(degrees);
+  if (!direction) return undefined;
   return token("value.heading", {
     direction: token(`compass.${direction}`),
     degrees: Math.round(degrees),
@@ -87,7 +88,9 @@ function workSection(vehicle: ServiceVehicle): DataSourceDetailSection {
     rows.push([token("row.activity"), token(`activity.${vehicle.activity}`)]);
   }
   const tasks = statedTasks(vehicle);
-  if (tasks.length === 1) rows.push([token("row.task"), taskLabel(tasks[0]!)]);
+  const [onlyTask] = tasks;
+  if (tasks.length === 1 && onlyTask !== undefined)
+    rows.push([token("row.task"), taskLabel(onlyTask)]);
   if (tasks.length > 1) rows.push([token("row.tasks"), tasks.map(taskLabel)]);
   if (tasks.length === 0) rows.push([token("row.task"), token("value.noTask")]);
   if (vehicle.plowDown !== undefined) {
@@ -96,8 +99,8 @@ function workSection(vehicle: ServiceVehicle): DataSourceDetailSection {
   if (vehicle.spreaderOn !== undefined) {
     rows.push([token("row.spreader"), token(vehicle.spreaderOn ? "value.on" : "value.off")]);
   }
-  if (vehicle.bearingDeg !== undefined)
-    rows.push([token("row.heading"), headingOf(vehicle.bearingDeg)]);
+  const heading = vehicle.bearingDeg === undefined ? undefined : headingOf(vehicle.bearingDeg);
+  if (heading) rows.push([token("row.heading"), heading]);
   const observedAt = validObservedAt(vehicle.observedAt);
   return {
     title: token("section.work"),

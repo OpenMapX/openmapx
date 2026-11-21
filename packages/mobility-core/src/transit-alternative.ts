@@ -51,9 +51,17 @@ export function composeTransitAlternative(
     range.toLegIndex >= parent.legs.length
   )
     return null;
+  const replacedFirst = parent.legs[range.fromLegIndex];
+  const replacedLast = parent.legs[range.toLegIndex];
+  const chainFirst = chain[0];
+  const chainLast = chain.at(-1);
   if (
-    !sameTransitPlace(parent.legs[range.fromLegIndex].from, chain[0].from) ||
-    !sameTransitPlace(parent.legs[range.toLegIndex].to, chain[chain.length - 1].to)
+    !replacedFirst ||
+    !replacedLast ||
+    !chainFirst ||
+    !chainLast ||
+    !sameTransitPlace(replacedFirst.from, chainFirst.from) ||
+    !sameTransitPlace(replacedLast.to, chainLast.to)
   )
     return null;
   const legs = [
@@ -69,9 +77,12 @@ export function composeTransitAlternative(
     } = leg as TripLeg;
     return retained;
   });
-  if (!coherentTransitLegs(legs) || legs.some((l) => l.cancelled)) return null;
-  const startTime = legs[0].startTime,
-    endTime = legs[legs.length - 1].endTime;
+  const firstLeg = legs[0];
+  const lastLeg = legs.at(-1);
+  if (!firstLeg || !lastLeg || !coherentTransitLegs(legs) || legs.some((l) => l.cancelled))
+    return null;
+  const startTime = firstLeg.startTime,
+    endTime = lastLeg.endTime;
   const sum = (fn: (leg: TripLeg) => number) => legs.reduce((s, l) => s + fn(l), 0);
   return {
     source: parent.source,

@@ -1,8 +1,9 @@
-import type { LngLat } from "@openmapx/core";
+import { type LngLat, numberAt } from "@openmapx/core";
 import along from "@turf/along";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
+import { nth } from "@/test";
 
 import {
   buildNavRouteLine,
@@ -60,12 +61,15 @@ function fullRouteProgressFraction(prepared: NavRouteLine, alongMeters: number):
   if (alongKm >= lengthKm) return 1;
 
   let segment = 0;
-  while (cumulativeKm[segment + 1] < alongKm) segment++;
-  const [lng, lat] = along(line, alongKm, { units: "kilometers" }).geometry.coordinates;
-  const start = line.geometry.coordinates[segment];
+  while (nth(cumulativeKm, segment + 1) < alongKm) segment++;
+  const cut = along(line, alongKm, { units: "kilometers" }).geometry.coordinates;
+  const start = nth(line.geometry.coordinates, segment);
   const fraction =
-    (mercatorCumulative[segment] +
-      Math.hypot(projectX(lng) - projectX(start[0]), projectY(lat) - projectY(start[1]))) /
+    (nth(mercatorCumulative, segment) +
+      Math.hypot(
+        projectX(numberAt(cut, 0)) - projectX(numberAt(start, 0)),
+        projectY(numberAt(cut, 1)) - projectY(numberAt(start, 1)),
+      )) /
     mercatorTotal;
   return Number.isFinite(fraction) ? Math.min(Math.max(fraction, 0), 1) : 0;
 }
@@ -87,17 +91,19 @@ function reconstructPositionFromFraction(
   const { mercatorCumulative } = prepared;
   let segIdx = mercatorCumulative.length - 2;
   for (let i = 0; i < mercatorCumulative.length - 1; i++) {
-    if (target <= mercatorCumulative[i + 1]) {
+    if (target <= nth(mercatorCumulative, i + 1)) {
       segIdx = i;
       break;
     }
   }
-  const segStart = coords[segIdx];
-  const segEnd = coords[segIdx + 1];
-  const segMercLen = mercatorCumulative[segIdx + 1] - mercatorCumulative[segIdx];
-  const ratio = segMercLen > 1e-12 ? (target - mercatorCumulative[segIdx]) / segMercLen : 0;
-  const mx = projectX(segStart[0]) + ratio * (projectX(segEnd[0]) - projectX(segStart[0]));
-  const my = projectY(segStart[1]) + ratio * (projectY(segEnd[1]) - projectY(segStart[1]));
+  const segStart = nth(coords, segIdx);
+  const segEnd = nth(coords, segIdx + 1);
+  const startX = projectX(numberAt(segStart, 0));
+  const startY = projectY(numberAt(segStart, 1));
+  const segMercLen = nth(mercatorCumulative, segIdx + 1) - nth(mercatorCumulative, segIdx);
+  const ratio = segMercLen > 1e-12 ? (target - nth(mercatorCumulative, segIdx)) / segMercLen : 0;
+  const mx = startX + ratio * (projectX(numberAt(segEnd, 0)) - startX);
+  const my = startY + ratio * (projectY(numberAt(segEnd, 1)) - startY);
   return [unprojectX(mx), unprojectY(my)];
 }
 
@@ -121,7 +127,7 @@ describe("splitNavRoute", () => {
   it("returns only the remaining segment when no distance has been traveled", () => {
     const features = splitNavRoute(ROUTE, 0);
     expect(features.length).toBe(1);
-    expect(features[0].properties).toEqual({ kind: "remaining" });
+    expect(nth(features, 0).properties).toEqual({ kind: "remaining" });
   });
 
   it("splits into traveled + remaining mid-route", () => {
@@ -137,8 +143,8 @@ describe("splitNavRoute", () => {
         "traveled",
         "remaining",
       ]);
-      const traveled = features[0].geometry as GeoJSON.LineString;
-      const remaining = features[1].geometry as GeoJSON.LineString;
+      const traveled = nth(features, 0).geometry as GeoJSON.LineString;
+      const remaining = nth(features, 1).geometry as GeoJSON.LineString;
       expect(traveled.coordinates).toEqual(ROUTE);
       expect(remaining.coordinates.length).toBeGreaterThanOrEqual(2);
       for (const coordinate of remaining.coordinates) expect(coordinate).toEqual(ROUTE.at(-1));
@@ -162,9 +168,9 @@ describe("navRouteProgressFraction", () => {
       const traveled = features.find((f) => f.properties?.kind === "traveled") as
         | GeoJSON.Feature<GeoJSON.LineString>
         | undefined;
-      expect(traveled).toBeDefined();
-      const coords = traveled?.geometry.coordinates ?? [];
-      const cutPoint = coords[coords.length - 1] as [number, number];
+      assert.isDefined(traveled, "the split has no traveled part");
+      const last = nth(traveled.geometry.coordinates, -1);
+      const cutPoint: [number, number] = [nth(last, 0), nth(last, 1)];
 
       const fraction = navRouteProgressFraction(prepared, alongMeters);
       const reconstructed = reconstructPositionFromFraction(prepared, fraction);

@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   loadPreviousRelease,
   pullRequestTargets,
@@ -104,8 +104,10 @@ describe("previous published release acquisition", () => {
           if (args[0] === "image") return { status: 0, stdout: digest };
           if (args[0] === "create") return { status: 0, stdout: container };
           if (args[0] === "cp") {
-            copiedTo = args[2];
-            writeFileSync(copiedTo, malformed ? "invalid" : JSON.stringify({ release }));
+            const destination = args[2];
+            assert.isDefined(destination, "docker cp names no destination");
+            copiedTo = destination;
+            writeFileSync(destination, malformed ? "invalid" : JSON.stringify({ release }));
           }
           return { status: 0, stdout: "" };
         });
@@ -197,8 +199,9 @@ describe("build selection and mandatory scanning", () => {
         workflow.indexOf("      - name: Select the exact digest to scan"),
         workflow.indexOf("      # Keep the complete finding set"),
       );
-      const script = block
-        .split("        run: |\n")[1]
+      const [, runBlock] = block.split("        run: |\n");
+      assert.isDefined(runBlock, "the digest selection step has no run script");
+      const script = runBlock
         .split("\n")
         .map((line) => line.slice(10))
         .join("\n");

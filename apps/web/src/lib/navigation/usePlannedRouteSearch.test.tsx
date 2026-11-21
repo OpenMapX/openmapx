@@ -10,7 +10,7 @@ import type {
 } from "@openmapx/core";
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHookWithQuery } from "@/test";
+import { nth, renderHookWithQuery } from "@/test";
 
 interface Pending {
   key: string;
@@ -79,7 +79,7 @@ const place = (id: string, km: number, offMeters = 100): CategoryPlace => ({
 });
 const settle = async (index: number, results: CategoryPlace[], extra: object = {}) => {
   await act(async () => {
-    search.pending[index].resolve({ results, partial: false, ...extra });
+    nth(search.pending, index).resolve({ results, partial: false, ...extra });
   });
 };
 
@@ -110,7 +110,7 @@ describe("usePlannedRouteSearch", () => {
     expect(search.pending.map((p) => p.bbox.west < 1 * KM)).toEqual([true, false]);
     await settle(0, []);
     await waitFor(() => expect(search.calls).toHaveLength(3));
-    expect(search.pending[2].bbox.east).toBeGreaterThan(59 * KM);
+    expect(nth(search.pending, 2).bbox.east).toBeGreaterThan(59 * KM);
   });
 
   it("merges overlapping areas once each, in route order, within the corridor", async () => {
@@ -123,7 +123,7 @@ describe("usePlannedRouteSearch", () => {
     await settle(0, [place("shared", 25), place("early", 5), place("far-off", 10, 2000)]);
     await waitFor(() => expect(result.current.isSearching).toBe(false));
     expect(result.current.results.map((r) => r.place.id)).toEqual(["early", "shared", "late"]);
-    expect(result.current.results[0].alongMeters).toBeCloseTo(5000, -2);
+    expect(nth(result.current.results, 0).alongMeters).toBeCloseTo(5000, -2);
     expect(result.current).toMatchObject({
       settledChunks: 2,
       failedChunks: 0,
@@ -152,7 +152,7 @@ describe("usePlannedRouteSearch", () => {
       usePlannedRouteSearch(geometry, { category: "parking" }, "en"),
     );
     await waitFor(() => expect(search.calls).toHaveLength(2));
-    await act(async () => search.pending[0].reject(new Error("overpass_unavailable")));
+    await act(async () => nth(search.pending, 0).reject(new Error("overpass_unavailable")));
     await waitFor(() => expect(search.calls).toHaveLength(3));
     await settle(1, [place("p", 30)]);
     await settle(2, [], { truncated: true });
@@ -192,10 +192,10 @@ describe("usePlannedRouteSearch", () => {
       usePlannedRouteSearch(geometry, { category: "parking" }, "en"),
     );
     await waitFor(() => expect(search.calls).toHaveLength(2));
-    await act(async () => search.pending[0].reject(new Error("down")));
-    await act(async () => search.pending[1].reject(new Error("down")));
+    await act(async () => nth(search.pending, 0).reject(new Error("down")));
+    await act(async () => nth(search.pending, 1).reject(new Error("down")));
     await waitFor(() => expect(search.calls).toHaveLength(3));
-    await act(async () => search.pending[2].reject(new Error("down")));
+    await act(async () => nth(search.pending, 2).reject(new Error("down")));
     await waitFor(() => expect(result.current.failedChunks).toBe(3));
     act(() => result.current.retry());
     await waitFor(() => expect(search.calls).toHaveLength(5));
@@ -241,7 +241,7 @@ describe("usePlannedRouteSearch", () => {
     expect(result.current.results.map((r) => r.place.id)).toEqual(["aral", "jet"]);
     expect(result.current.fuelPrices?.get("aral")).toEqual({ status: "loading" });
     await act(async () =>
-      search.fuel[0].resolve({
+      nth(search.fuel, 0).resolve({
         data: [
           {
             id: "tk-aral",
@@ -271,7 +271,9 @@ describe("usePlannedRouteSearch", () => {
     };
     renderHookWithQuery(() => usePlannedRouteSearch(geometry, { filter }, "en"));
     await waitFor(() => expect(search.filterCalls).toHaveLength(1));
-    await act(async () => search.pending[1].resolve({ results: [place("q", 5)], partial: false }));
+    await act(async () =>
+      nth(search.pending, 1).resolve({ results: [place("q", 5)], partial: false }),
+    );
     await act(async () => {});
     expect(search.fuel).toEqual([]);
     expect(result.current.fuelPrices).toBeNull();
@@ -285,7 +287,7 @@ describe("usePlannedRouteSearch", () => {
     await waitFor(() => expect(search.calls).toHaveLength(1));
     await settle(0, [place("aral", 5)]);
     await waitFor(() => expect(search.fuel).toHaveLength(1));
-    await act(async () => search.fuel[0].reject(new Error("fuel_unavailable")));
+    await act(async () => nth(search.fuel, 0).reject(new Error("fuel_unavailable")));
     // No answer carried a price, so the failed stop gets no marker rather than "unknown".
     await waitFor(() => expect(result.current.fuelPrices?.has("aral")).toBe(false));
     expect(result.current.results.map((r) => r.place.id)).toEqual(["aral"]);

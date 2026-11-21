@@ -35,6 +35,7 @@ export type {
   IntegrationContext,
   Logger,
   MetricsRecorder,
+  ParamlessRouteRequest,
   ProviderCallOutcome,
   ProviderHealthCountedOutcome,
   ProviderHealthFailureOutcome,
@@ -44,6 +45,8 @@ export type {
   ResponseOptions,
   RouteHandler,
   RouteOptions,
+  RouteParams,
+  RouteRequest,
   SecretsClient,
   StreamHttpResponse,
   TransferSafeguard,
@@ -395,6 +398,7 @@ export {
 } from "./query";
 export { IntegrationRegistry } from "./registry";
 export { captureReviewProviderContributors } from "./review-attribution";
+export { storedRouteHandler } from "./route-handler";
 export { withRoutingContributors } from "./routing-contributors";
 export {
   createSiteOrchestrator,

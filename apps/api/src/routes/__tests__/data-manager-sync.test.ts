@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
+import { callArg } from "../../test/mock-calls";
 
 vi.mock("../../auth", () => ({
   auth: {
@@ -101,7 +102,7 @@ describe("POST /data-manager/transit/sync", () => {
         signal: expect.any(AbortSignal),
       }),
     );
-    const args = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const args = callArg(fetchMock, 0, 1) as RequestInit;
     expect(new Headers(args.headers).get("authorization")).toBe("Bearer service-token");
     expect(new Headers(args.headers).get("content-type")).toBe("application/json");
     expect(JSON.parse(args.body as string)).toMatchObject({

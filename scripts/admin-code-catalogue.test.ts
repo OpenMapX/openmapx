@@ -53,13 +53,22 @@ function apiSource(path: string): string {
 }
 
 const DOTTED_CODE = /^[a-z][a-z0-9-]*(\.[a-z0-9_-]+)+$/;
-const literals = (text: string) => [...text.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]);
-const matchAll = (text: string, pattern: RegExp) => [...text.matchAll(pattern)];
+/** The first capture group of every match of a global `pattern`. */
+function captures(text: string, pattern: RegExp): string[] {
+  return [...text.matchAll(pattern)].map(([whole, group]) => {
+    if (group === undefined) throw new Error(`${pattern} matched ${whole} without a capture`);
+    return group;
+  });
+}
 
-function required(text: string, pattern: RegExp, what: string): RegExpMatchArray {
-  const match = text.match(pattern);
-  if (!match) throw new Error(`${what} not found; update the code collector in this test`);
-  return match;
+const literals = (text: string) => captures(text, /"([^"\n]+)"/g);
+
+/** The first capture group of `pattern` in `text`; throws when it does not match. */
+function required(text: string, pattern: RegExp, what: string): string {
+  const group = text.match(pattern)?.[1];
+  if (group === undefined)
+    throw new Error(`${what} not found; update the code collector in this test`);
+  return group;
 }
 
 /** Literal values of a zod schema's discriminator, through unions and objects. */
@@ -82,20 +91,20 @@ function zodLiterals(schema: unknown, property: string): string[] {
 function applicationJobTypes(): string[] {
   const types = new Set<string>();
   for (const { text } of apiSources)
-    for (const match of matchAll(
+    for (const type of captures(
       text,
       /\b(?:register|enqueue|enqueueMaintenance|enqueueStandalone)\(\s*"([^"]+)"/g,
     ))
-      types.add(match[1]);
+      types.add(type);
   const runner = apiSource("apps/api/src/services/job-runner.ts");
   for (const name of ["IMMEDIATE_CONFIGURATION_JOB_TYPES", "AGENT_RECOVERABLE_ADMIN_JOB_TYPES"])
-    for (const type of literals(required(runner, new RegExp(`${name} = \\[([^\\]]*)\\]`), name)[1]))
+    for (const type of literals(required(runner, new RegExp(`${name} = \\[([^\\]]*)\\]`), name)))
       types.add(type);
-  for (const match of matchAll(runner, /\btype:\s*((?:\|\s*)?"[^"]+"(?:\s*\|\s*"[^"]+")*)/g))
-    for (const type of literals(match[1])) types.add(type);
+  for (const union of captures(runner, /\btype:\s*((?:\|\s*)?"[^"]+"(?:\s*\|\s*"[^"]+")*)/g))
+    for (const type of literals(union)) types.add(type);
   const retained = apiSource("apps/api/src/services/retained-maintenance-job.ts");
   for (const type of literals(
-    required(retained, /export type RetainedMaintenanceJobType =([^;]+);/, "maintenance types")[1],
+    required(retained, /export type RetainedMaintenanceJobType =([^;]+);/, "maintenance types"),
   ))
     types.add(type);
   return [...types].filter((type) => DOTTED_CODE.test(type)).sort();
@@ -418,8 +427,9 @@ function resolveBinding(identifier: ts.Identifier): Binding | undefined {
       const index = scope.parameters.findIndex((parameter) =>
         declarationNames(parameter.name).has(identifier.text),
       );
-      if (index >= 0)
-        return ts.isIdentifier(scope.parameters[index].name)
+      const parameter = scope.parameters[index];
+      if (parameter)
+        return ts.isIdentifier(parameter.name)
           ? { kind: "parameter", fn: scope, index }
           : undefined;
     }
@@ -515,19 +525,18 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
   "apps/api/src/routes/admin-services.ts `service.bulk.${action}`": () =>
     zodLiterals(adminServicesBulkActionSchema, "action").map((action) => `service.bulk.${action}`),
   "apps/api/src/routes/admin-standalone-integrations.ts `standalone.${action}`": (file) =>
-    literals(required(file, /for \(const action of \[([^\]]+)\] as const\)/, "actions")[1]).map(
+    literals(required(file, /for \(const action of \[([^\]]+)\] as const\)/, "actions")).map(
       (action) => `standalone.${action}`,
     ),
   "apps/api/src/routes/ambient-places.ts `ambient-places.${action}`": (file) =>
-    matchAll(
-      required(file, /const operations = \{([^}]+)\}/, "ambient operations")[1],
+    captures(
+      required(file, /const operations = \{([^}]+)\}/, "ambient operations"),
       /^\s*([a-z]+):/gm,
     )
-      .map((match) => match[1])
       .filter((action) => action !== "status")
       .map((action) => `ambient-places.${action}`),
   "apps/api/src/utils/auth-audit-hook.ts route.action": (file) =>
-    matchAll(file, /\baction: "([^"]+)"/g).map((match) => match[1]),
+    captures(file, /\baction: "([^"]+)"/g),
   'apps/api/src/account/account-provisioning.ts input.action === "password" ? "user.password.set" : `user.${input.action}`':
     (file) =>
       literals(
@@ -535,7 +544,7 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
           file,
           /assistedAccountAction\(\s*input: \{\s*action: ([^;]+);/,
           "assisted account actions",
-        )[1],
+        ),
       ).map((action) => (action === "password" ? "user.password.set" : `user.${action}`)),
   // The writer itself stores whatever its callers pass.
   "apps/api/src/utils/audit-log.ts entry.action": () => [],
@@ -543,7 +552,7 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
 
 const DERIVED_TARGET_TYPES: Record<string, (file: string) => string[]> = {
   "apps/api/src/utils/auth-audit-hook.ts route.targetType": (file) =>
-    matchAll(file, /\btargetType: "([^"]+)"/g).map((match) => match[1]),
+    captures(file, /\btargetType: "([^"]+)"/g),
   "apps/api/src/utils/audit-log.ts entry.targetType ?? null": () => [],
 };
 
@@ -565,7 +574,7 @@ const catalogueKey = (code: string) => code.replace(/[.:-]/g, "_");
 const sorted = (values: Iterable<string>) => [...new Set(values)].sort();
 
 function selectBranches(message: string): string[] {
-  const body = required(message, /^\{\w+, select,(.*)\}$/s, "select message")[1];
+  const body = required(message, /^\{\w+, select,(.*)\}$/s, "select message");
   let depth = 0;
   const keys: string[] = [];
   let token = "";
@@ -601,7 +610,7 @@ describe("admin job type catalogue", () => {
       join(root, "services/data-manager/src/jobs/transitous/types.ts"),
       "utf8",
     );
-    const stages = literals(required(types, /export type StageName =([^;]+);/, "stage names")[1]);
+    const stages = literals(required(types, /export type StageName =([^;]+);/, "stage names"));
     expect(stages).toEqual(expect.arrayContaining(["motis-import", "promote"]));
     const expected = sorted(stages.map(catalogueKey));
     expect(sorted(Object.keys(en.adminShared.jobStages))).toEqual(expected);
@@ -610,7 +619,7 @@ describe("admin job type catalogue", () => {
 
   it("words every data-manager actor label the activity API sends", () => {
     const source = apiSource("apps/api/src/services/activity-jobs.ts");
-    const labels = matchAll(source, /\blabel: "([^"]+)"/g).map((match) => match[1]);
+    const labels = captures(source, /\blabel: "([^"]+)"/g);
     expect(labels.length).toBeGreaterThan(0);
     expect(sorted(labels)).toEqual(sorted(JOB_ACTOR_LABELS));
     const keys = sorted(JOB_ACTOR_LABELS.map(jobActorKey));

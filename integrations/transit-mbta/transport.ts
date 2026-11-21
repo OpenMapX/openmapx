@@ -16,7 +16,7 @@ const bindings = new Map<string, ZodType>([
   ["/facilities", Facilities],
 ]);
 export async function mbtaRequest<T>(url: string, options?: MbtaRequestOptions): Promise<T> {
-  const path = url.split("?", 1)[0];
+  const path = url.replace(/\?.*/s, "");
   const schema = bindings.get(path) ?? (/^\/stops\/[^/]+$/.test(path) ? Stop : undefined);
   if (!options?.client || options.method !== "GET" || !schema || options.schema !== schema)
     throw new MbtaError("input");

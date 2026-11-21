@@ -4,7 +4,7 @@ import { render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { OfflinePackageRecord } from "@/lib/offlineAreas";
 
-import { act, createFakeMap } from "@/test";
+import { act, createFakeMap, nth } from "@/test";
 
 const pendingMaps: ReturnType<typeof createFakeMap>[] = [];
 
@@ -114,7 +114,7 @@ it("installs and restores offline coverage without waiting for archive tiles", a
   expect(fakeMapClass.workerUrlsAtConstruction).toEqual([
     "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
   ]);
-  const pending = pendingMaps[0];
+  const pending = nth(pendingMaps, 0);
   expect(pending.map.getLayer("offline-packages-line")).toBeDefined();
   const source = pending.state.sources.get("offline-packages-source")?.data;
   act(() => pending.map.setStyle({} as never));

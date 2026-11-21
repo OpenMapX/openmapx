@@ -86,7 +86,7 @@ describe("EnvironmentLayer zoom gate", () => {
     render(<EnvironmentLayer />, { wrapper });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toContain(
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/integrations/overlay-environment/stations",
     );
   });
@@ -166,7 +166,7 @@ it("credits only the rendered captured station receipt and keeps it during a fai
     await Promise.resolve();
   });
   const collection = fake.state.sources.get("opensensemap-env")?.data as GeoJSON.FeatureCollection;
-  expect(collection.features[0].properties?._mapAttributions).toContain("sensor-community");
+  expect(collection.features[0]?.properties?._mapAttributions).toContain("sensor-community");
   fake.setRenderedFeatures("env-circle-layer", collection.features as never);
   act(() => fake.emit("click", { point: { x: 0, y: 0 } }));
   expect(popupHtml).toContain("Data © custom station publisher");

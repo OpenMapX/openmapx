@@ -5,9 +5,10 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../../../ops-agent/src/__fixtures__/owned-service-host";
 import {
   IntegrationStore,
@@ -24,10 +25,12 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../db", () => ({
   get db() {
-    return state.fixture!.db;
+    if (!state.fixture) throw Error("The Postgres fixture is not started");
+    return state.fixture.db;
   },
   get sql() {
-    return state.fixture!.sql;
+    if (!state.fixture) throw Error("The Postgres fixture is not started");
+    return state.fixture.sql;
   },
 }));
 vi.mock("./extension-store", () => ({
@@ -186,8 +189,9 @@ it.skipIf(!enabled)(
             .set(replaceJobCheckpoint(value))
             .where(eq(schema.adminJob.id, id))
             .returning();
-          ctx.checkpointResult = jobCheckpoint(rows[0]!.result, rows[0]!.protocol);
-          ctx.protocol = rows[0]!.protocol;
+          const saved = itemAt(rows, 0);
+          ctx.checkpointResult = jobCheckpoint(saved.result, saved.protocol);
+          ctx.protocol = saved.protocol;
         }
         baseline = structuredClone(ctx.checkpointResult ?? {});
       },
@@ -251,7 +255,9 @@ it.skipIf(!enabled)(
           },
         );
         let errors = "";
-        child.stderr!.on("data", (data) => {
+        const { stderr } = child;
+        assert.exists(stderr, "the native process has no stderr pipe");
+        stderr.on("data", (data) => {
           errors += String(data).slice(0, 4000);
         });
         const exited = new Promise<number | null>((resolve, reject) => {
@@ -282,7 +288,8 @@ it.skipIf(!enabled)(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, id));
-      const reclaimed = await claimAdminJob(row!);
+      assert.isDefined(row, "the job row is missing");
+      const reclaimed = await claimAdminJob(row);
       expect(reclaimed).toBeTruthy();
       const replacement = start("none");
       expect(await replacement.exited, replacement.errors()).toBe(0);
@@ -290,7 +297,7 @@ it.skipIf(!enabled)(
       const after =
         await fixture.sql`select xmin::text as xmin from installed_extension where id=${bundle}`;
       expect(after).toHaveLength(1);
-      if (stopAt === "bookkept") expect(after[0]!.xmin).toBe(before[0]!.xmin);
+      if (stopAt === "bookkept") expect(itemAt(after, 0).xmin).toBe(itemAt(before, 0).xmin);
       const { readInstalledIntegrations } = await import("./agent-integrations");
       expect(
         (await readInstalledIntegrations()).integrations.find(
@@ -315,10 +322,9 @@ it.skipIf(!enabled)(
     host.setCreatingProcess(async (args) => {
       if (!args.includes("community-live")) return;
       const { services } = await import("@openmapx/core/server");
-      const compose = services.configurationGenerationComposeFile(
-        host.infraDir,
-        services.currentConfigurationGeneration(host.infraDir)!,
-      );
+      const revision = services.currentConfigurationGeneration(host.infraDir);
+      if (!revision) throw Error("Actual committed configuration generation unavailable");
+      const compose = services.configurationGenerationComposeFile(host.infraDir, revision);
       host.setRows([
         host.row,
         {
@@ -372,13 +378,16 @@ it.skipIf(!enabled)(
             ctx.protocol = saved.protocol;
           } else {
             const { jobCheckpoint, replaceJobCheckpoint } = await import("./admin-job-state");
-            const [saved] = await fixture.db
-              .update(schema.adminJob)
-              .set(replaceJobCheckpoint(value))
-              .where(eq(schema.adminJob.id, id))
-              .returning();
-            ctx.checkpointResult = jobCheckpoint(saved!.result, saved!.protocol);
-            ctx.protocol = saved!.protocol;
+            const saved = itemAt(
+              await fixture.db
+                .update(schema.adminJob)
+                .set(replaceJobCheckpoint(value))
+                .where(eq(schema.adminJob.id, id))
+                .returning(),
+              0,
+            );
+            ctx.checkpointResult = jobCheckpoint(saved.result, saved.protocol);
+            ctx.protocol = saved.protocol;
           }
           baseline = structuredClone(ctx.checkpointResult ?? {});
         },
@@ -409,7 +418,8 @@ it.skipIf(!enabled)(
             .select()
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, owner.jobId));
-          const claimed = await claimAdminJob(row!);
+          assert.isDefined(row, "the owner job row is missing");
+          const claimed = await claimAdminJob(row);
           if (!claimed) throw error;
           owner.execution = readJobExecution(claimed.result);
           owner.checkpointResult = claimed.result as Record<string, unknown>;
@@ -433,8 +443,9 @@ it.skipIf(!enabled)(
       );
       throw error;
     }
+    assert.isDefined(ctx.protocol, "the job has no protocol");
     const operations = (
-      ctx.protocol!.operations as {
+      ctx.protocol.operations as {
         operations: Record<
           string,
           {

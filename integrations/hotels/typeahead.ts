@@ -27,7 +27,6 @@ export function pickKeywordMatch(
 ): KeywordCandidate | null {
   if (!normalizeName(q.name)) return null;
   const named = cands.filter((c) => nameMatches(q.name, c.name));
-  if (named.length === 0) return null;
   const dist = (c: KeywordCandidate) =>
     typeof q.lat === "number" &&
     typeof q.lng === "number" &&
@@ -41,6 +40,7 @@ export function pickKeywordMatch(
   // the original-order first match when all are Infinity, mirroring
   // resolveUberEatsStoreUrl.
   let best = named[0];
+  if (!best) return null;
   let bestKm = dist(best);
   for (const c of named.slice(1)) {
     const km = dist(c);

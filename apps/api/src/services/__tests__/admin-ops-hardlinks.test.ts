@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CoordinatorMode } from "@openmapx/core/ops";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 import { JobObservationPending } from "../admin-job-failure";
 import type { JobContext } from "../job-runner";
 
@@ -90,7 +91,7 @@ describe("retained generation hardlinks", () => {
         coordinatorMode: "ensure-running",
       }),
     ).toEqual(summary);
-    expect(inspect.mock.calls[0]![1]).toEqual({
+    expect(callArg(inspect, 0, 1)).toEqual({
       kind: "configuration.hardlinks.inspect",
       revisionId: REVISION,
     });
@@ -176,7 +177,7 @@ describe("retained generation hardlinks", () => {
     const ctx = context();
     await serviceStart("valhalla", ctx);
     expect(publish).toHaveBeenCalledTimes(1);
-    expect(publish.mock.calls[0]![0]).toMatchObject({
+    expect(callArg(publish, 0, 0)).toMatchObject({
       kind: "stack.render",
       coordinatorMode: "ensure-running",
     });

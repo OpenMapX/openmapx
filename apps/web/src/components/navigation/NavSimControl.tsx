@@ -52,8 +52,10 @@ export function NavSimControl() {
   // Wall-clock length of the loaded recording, from its own fix timestamps —
   // how long a replay run will take, without touching any position.
   const fixes = loaded?.fixes ?? [];
+  const firstFix = fixes[0];
+  const lastFix = fixes.at(-1);
   const loadedSeconds =
-    fixes.length > 1 ? (fixes[fixes.length - 1].timestampMs - fixes[0].timestampMs) / 1000 : 0;
+    firstFix && lastFix ? (lastFix.timestampMs - firstFix.timestampMs) / 1000 : 0;
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

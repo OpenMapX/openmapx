@@ -162,10 +162,14 @@ function inBbox(stations: Station[], s: number, w: number, n: number, e: number)
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/stations", async (req, reply) => {
-    const { south, west, north, east, sensor, exposure } = scalarQueries(req.query) as Record<
-      string,
-      string
-    >;
+    const {
+      south = "",
+      west = "",
+      north = "",
+      east = "",
+      sensor,
+      exposure,
+    } = scalarQueries(req.query) as Record<string, string>;
 
     const s = Number.parseFloat(south);
     const w = Number.parseFloat(west);
@@ -366,7 +370,9 @@ async function fetchSensorCommunity(
   }
 
   for (const [locId, entries] of byLocation) {
-    const loc = entries[0].location;
+    const [first] = entries;
+    if (!first) continue;
+    const loc = first.location;
     const lat = Number.parseFloat(loc.latitude);
     const lng = Number.parseFloat(loc.longitude);
     if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
@@ -409,7 +415,7 @@ async function fetchSensorCommunity(
     stations.push({
       contributors: supplierReceipt("sensor-community"),
       id: `sc-${locId}`,
-      name: `Sensor.Community #${entries[0].sensor.id}`,
+      name: `Sensor.Community #${first.sensor.id}`,
       lat,
       lng,
       value: primaryValue,

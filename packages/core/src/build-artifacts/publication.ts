@@ -652,9 +652,10 @@ export async function publishValidatedBuild(
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       input.signal?.throwIfAborted();
       await assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      const sourceDir = source.dir;
       if (
         manifest.dirs.some(
-          (path) => directoryMetadata(source!.dir, path) !== sourceMetadata.get(path),
+          (path) => directoryMetadata(sourceDir, path) !== sourceMetadata.get(path),
         )
       )
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
@@ -683,15 +684,22 @@ export async function publishValidatedBuild(
         backupIdentity: identity(backups.stat),
         recordsIdentity: identity(records.stat),
         phase: "prepared",
-        directories: initial.directories.map((dir, index) => ({
-          path: dir.path,
-          ...(dir.targetPath ? { targetPath: dir.targetPath } : {}),
-          old: dir.id,
-          oldMetadata: dir.metadata,
-          nextMetadata: sourceMetadata.get(dir.path)!,
-          next: dirIdentity(source!.dir, dir.path)!,
-          backup: `directory-${index}`,
-        })),
+        directories: initial.directories.map((dir, index) => {
+          // Every published directory was measured in the staged source above.
+          const nextMetadata = sourceMetadata.get(dir.path);
+          const next = dirIdentity(sourceDir, dir.path);
+          if (nextMetadata === undefined || !next)
+            throw Error(`Staged publication directory missing: ${dir.path}`);
+          return {
+            path: dir.path,
+            ...(dir.targetPath ? { targetPath: dir.targetPath } : {}),
+            old: dir.id,
+            oldMetadata: dir.metadata,
+            nextMetadata,
+            next,
+            backup: `directory-${index}`,
+          };
+        }),
         records: initial.records.map((record, index) => ({
           name: record.name,
           ...(record.scope ? { scope: record.scope } : {}),
@@ -715,18 +723,21 @@ export async function publishValidatedBuild(
           moveDirectory(source.dir, entry.path, root, targetPath(entry), entry.next);
         }
         const originalRecords = backups;
-        for (const entry of journal.records)
-          if (entry.old)
+        for (const entry of journal.records) {
+          const old = entry.old;
+          if (old)
             withRecord(root, records, entry, (home) =>
-              moved(home, entry.name, originalRecords, entry.backup, entry.old!, false),
+              moved(home, entry.name, originalRecords, entry.backup, old, false),
             );
+        }
         const { dirs: _dirs, directories: _directories, files: _files, ...record } = manifest;
+        const activeJournal = journal;
         const pin = (name: string, inode: FileIdentity, bytes: string) => {
-          const entry = journal!.records.find((entry) => entry.name === name);
+          const entry = activeJournal.records.find((entry) => entry.name === name);
           if (!entry) throw Error("Artifact record not admitted");
           entry.next = inode;
           entry.digest = hash(bytes);
-          writeJournal(owner, journal!);
+          writeJournal(owner, activeJournal);
         };
         const next = await capturePreparedBuildEvidence({
           dataRoot: input.dataRoot,

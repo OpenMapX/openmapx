@@ -119,9 +119,8 @@ export interface IfoptId {
  * `mo:de-DELFI_de:05334:1008:91:2`, or null when the id is not one.
  */
 export function ifoptOf(stopId: string): IfoptId | null {
-  const match = /([a-z]{2}:\d+:[^:_\s]+(?::[^:_\s]+){0,2})$/i.exec(stopId);
-  if (!match) return null;
-  const id = match[1];
+  const [, id] = /([a-z]{2}:\d+:[^:_\s]+(?::[^:_\s]+){0,2})$/i.exec(stopId) ?? [];
+  if (id === undefined) return null;
   const parts = id.split(":");
   return {
     id,
@@ -173,8 +172,9 @@ interface Feature {
 const lngLat = (p: GeometryPoint): LngLat => [p.lon, p.lat];
 
 function closed(coords: LngLat[]): boolean {
-  if (coords.length < 4) return false;
-  const [a, b] = [coords[0], coords[coords.length - 1]];
+  const a = coords[0];
+  const b = coords.at(-1);
+  if (coords.length < 4 || !a || !b) return false;
   return a[0] === b[0] && a[1] === b[1];
 }
 
@@ -310,23 +310,24 @@ function featureDistance(feature: Feature, point: LngLat): number {
 
 function platformShapes(feature: Feature, mode: string): TransitStopAreaShape[] {
   const nodeBuffer = isRail(mode) ? BUFFER.platformNode.rail : BUFFER.platformNode.local;
-  return feature.pieces.map((piece) =>
-    piece.type === "point"
-      ? { type: "point", coordinates: piece.coordinates[0], bufferMeters: nodeBuffer }
-      : piece.type === "line"
-        ? { type: "line", coordinates: piece.coordinates, bufferMeters: BUFFER.line }
-        : { type: "polygon", coordinates: piece.coordinates, bufferMeters: BUFFER.polygon },
-  );
+  return feature.pieces.flatMap((piece): TransitStopAreaShape[] => {
+    if (piece.type === "point") {
+      const [point] = piece.coordinates;
+      return point ? [{ type: "point", coordinates: point, bufferMeters: nodeBuffer }] : [];
+    }
+    return piece.type === "line"
+      ? [{ type: "line", coordinates: piece.coordinates, bufferMeters: BUFFER.line }]
+      : [{ type: "polygon", coordinates: piece.coordinates, bufferMeters: BUFFER.polygon }];
+  });
 }
 
 function stopPositionShapes(feature: Feature): TransitStopAreaShape[] {
-  return feature.pieces
-    .filter((piece) => piece.type === "point")
-    .map((piece) => ({
-      type: "point" as const,
-      coordinates: piece.coordinates[0],
-      bufferMeters: BUFFER.stopPosition,
-    }));
+  return feature.pieces.flatMap((piece): TransitStopAreaShape[] => {
+    const [point] = piece.coordinates;
+    return piece.type === "point" && point
+      ? [{ type: "point", coordinates: point, bufferMeters: BUFFER.stopPosition }]
+      : [];
+  });
 }
 
 /** Most shapes and points a stop area may carry, as the mobile package accepts. */
@@ -350,7 +351,8 @@ function hullShape(points: LngLat[], bufferMeters: number): TransitStopAreaShape
   if (points.length === 0) return null;
   if (spanMeters(convexHull(points)) > MAX_STATION_SPAN_METERS) return null;
   const hull = convexHull(points);
-  if (hull.length === 1) return { type: "point", coordinates: hull[0], bufferMeters };
+  const [only] = hull;
+  if (hull.length === 1 && only) return { type: "point", coordinates: only, bufferMeters };
   if (hull.length === 2) return { type: "line", coordinates: hull, bufferMeters };
   return { type: "polygon", coordinates: hull, bufferMeters };
 }

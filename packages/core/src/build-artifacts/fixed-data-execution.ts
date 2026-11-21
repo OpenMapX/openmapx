@@ -266,14 +266,16 @@ export function cliDataReservation(
     slots = s.reservations.filter(
       (slot) => slot.recipient === "data-manager" && slot.phase === phase,
     );
+  const [slot] = slots;
   if (
     !(isFixedSingleDataCommand(s.kind) || (s.kind === "data.update" && phase !== "data-step")) ||
-    slots.length !== 1
+    slots.length !== 1 ||
+    !slot
   )
     throw Error("Matching data command reservation required");
   return {
-    ...slots[0]!,
-    serviceIds: [...slots[0]!.serviceIds],
-    execution: { ...slots[0]!.execution },
+    ...slot,
+    serviceIds: [...slot.serviceIds],
+    execution: { ...slot.execution },
   };
 }

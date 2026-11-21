@@ -29,6 +29,10 @@ if (!existsSync(workspace)) {
 
 const schemeIndex = process.argv.indexOf("--scheme");
 const scheme = schemeIndex >= 0 ? process.argv[schemeIndex + 1] : "OpenMapX";
+if (!scheme) {
+  console.error("[release:ios] --scheme needs a scheme name");
+  process.exit(1);
+}
 const archivePath = resolve(output, `${scheme}.xcarchive`);
 
 function run(command: string, args: string[]): void {

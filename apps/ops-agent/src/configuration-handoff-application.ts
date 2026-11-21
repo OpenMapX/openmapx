@@ -91,14 +91,15 @@ export async function createConfigurationHandoffHost(input: {
     if (Buffer.byteLength(result.stdout) > 1024 * 1024)
       throw Error("Original container observation capacity");
     const observed = maintenanceDockerContainerSchema.parse(JSON.parse(result.stdout)),
-      labels = observed.Config.Labels;
+      labels = observed.Config.Labels,
+      workingDirectory = labels["com.docker.compose.project.working_dir"];
     if (
+      !workingDirectory ||
       observed.Id !== original.containerId ||
       observed.Image !== original.provenance.imageId ||
       labels["com.docker.compose.project"] !== original.provenance.project ||
       labels["com.docker.compose.service"] !== id ||
-      realpathSync(labels["com.docker.compose.project.working_dir"]!) !==
-        original.provenance.composeWorkingDirectory ||
+      realpathSync(workingDirectory) !== original.provenance.composeWorkingDirectory ||
       canonicalJson(
         labels["com.docker.compose.project.config_files"]
           ?.split(",")

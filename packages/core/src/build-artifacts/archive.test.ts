@@ -304,11 +304,11 @@ it("rejects effective PAX escape/size and sparse metadata before payload", async
     ["path", "../escape"],
     ["size", "-1"],
     ["GNU.sparse.size", "5"],
-  ])
+  ] as const)
     await expect(
       validate(
         archiveFixture([
-          tarMember("PaxHeader", paxRecord(key!, value!), "x"),
+          tarMember("PaxHeader", paxRecord(key, value), "x"),
           tarMember("osrm-graph/region.osrm", payload),
         ]),
       ),
@@ -320,7 +320,7 @@ it("rejects expansion-ratio overflow and corrupt compression", async () => {
     validate(gzipSync(archiveFixture()), { maxExpansionRatio: 1, expansionRatioThresholdBytes: 1 }),
   ).rejects.toThrow(/ratio/);
   const corrupt = gzipSync(archiveFixture());
-  corrupt[corrupt.length - 8] ^= 0xff;
+  corrupt.writeUInt8(corrupt.readUInt8(corrupt.length - 8) ^ 0xff, corrupt.length - 8);
   await expect(validate(corrupt)).rejects.toThrow(/gzip|checksum/);
 });
 

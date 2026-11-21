@@ -173,7 +173,8 @@ export function setup(ctx: IntegrationContext): void {
     const minMagnitude = Number.parseFloat(query.minMagnitude ?? "2.5");
     const lang = parseLang(query.lang);
 
-    if (!Object.hasOwn(RANGE_MS, timeRange)) {
+    const rangeMs = Object.hasOwn(RANGE_MS, timeRange) ? RANGE_MS[timeRange] : undefined;
+    if (rangeMs === undefined) {
       return reply.status(400).send({ error: "Invalid timeRange" });
     }
     if (!Number.isFinite(minMagnitude) || minMagnitude < 0 || minMagnitude > 10) {
@@ -190,7 +191,7 @@ export function setup(ctx: IntegrationContext): void {
       const fc = await ctx.cache.withCache(key, ttl, async () => {
         const { hazards: found, partial } = await hazards.naturalHazards(WORLD, {
           types: ["earthquake"],
-          since: new Date(Date.now() - RANGE_MS[timeRange]).toISOString(),
+          since: new Date(Date.now() - rangeMs).toISOString(),
           lang,
         });
         // Nothing back from a failed read is not "no earthquakes": caching it would hide them.

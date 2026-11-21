@@ -273,7 +273,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   // gated set from the eagerly-warmed cache keeps every branch synchronous; the
   // set is kept fresh by startDataUsePolicyRefresh() + invalidation.
   server.addHook("preSerialization", (request, _reply, payload, done) => {
-    const path = request.url.split("?")[0];
+    const path = request.url.replace(/\?.*/s, "");
     if (
       path.startsWith("/api/admin") ||
       path.startsWith("/admin") ||

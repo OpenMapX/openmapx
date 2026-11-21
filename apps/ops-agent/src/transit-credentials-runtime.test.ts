@@ -22,7 +22,7 @@ import {
   provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins, readCatalogPinSet } from "@openmapx/core/catalog-pins";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, assert, expect, it } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { installTransitCredentialsRuntime } from "./transit-credentials-runtime";
@@ -110,9 +110,11 @@ async function fixture() {
   } finally {
     closeControlInstallation(installation);
   }
+  const pins = readCatalogPinSet(root);
+  assert.exists(pins);
   const operation = {
     kind: "transitCredentials.inspect" as const,
-    catalogRevisionId: readCatalogPinSet(root)!.generationId,
+    catalogRevisionId: pins.generationId,
   };
   let environment: Record<string, string> = {};
   let running = false;

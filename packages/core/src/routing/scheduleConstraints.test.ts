@@ -9,9 +9,9 @@ const NOW = Date.UTC(2026, 8, 1, 6, 0);
 
 /** Resolve a wall clock in a zone independently of the implementation. */
 function at(wall: string, zone: string): number {
-  const [date, time] = wall.split("T");
-  const [y, mo, d] = date.split("-").map(Number);
-  const [h, mi] = time.split(":").map(Number);
+  const [date = "", time = ""] = wall.split("T");
+  const [y = Number.NaN, mo = Number.NaN, d = Number.NaN] = date.split("-").map(Number);
+  const [h = Number.NaN, mi = Number.NaN] = time.split(":").map(Number);
   const naive = Date.UTC(y, mo - 1, d, h, mi);
   const label = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
     .formatToParts(new Date(naive))
@@ -48,8 +48,8 @@ describe("resolveScheduleConstraints", () => {
       anchor: { kind: "now" },
       nowMs: NOW,
     });
-    expect(result.stops[0].timeZone).toBe("Asia/Tokyo");
-    expect(result.stops[0].earliestDepartureMs).toBe(at("2026-09-01T09:00", "Asia/Tokyo"));
+    expect(result.stops[0]?.timeZone).toBe("Asia/Tokyo");
+    expect(result.stops[0]?.earliestDepartureMs).toBe(at("2026-09-01T09:00", "Asia/Tokyo"));
   });
 
   it("falls back to the coordinate when the explicit zone is not a real zone", () => {
@@ -58,7 +58,7 @@ describe("resolveScheduleConstraints", () => {
       anchor: { kind: "now" },
       nowMs: NOW,
     });
-    expect(result.stops[0].timeZone).toBe("Europe/Berlin");
+    expect(result.stops[0]?.timeZone).toBe("Europe/Berlin");
   });
 
   it("anchors departAt in the origin zone and arriveBy in the destination zone", () => {
@@ -87,7 +87,7 @@ describe("resolveScheduleConstraints", () => {
     });
     // Folding it in would make an ordinary timed trip look like it carried a
     // per-waypoint window, and demand emulated semantics for nothing.
-    expect(result.stops[0].earliestDepartureMs).toBeNull();
+    expect(result.stops[0]?.earliestDepartureMs).toBeNull();
     expect(result.anchor).toEqual({ kind: "departAt", wallClock: "2026-09-01T09:00" });
   });
 
@@ -102,9 +102,9 @@ describe("resolveScheduleConstraints", () => {
       nowMs: NOW,
     });
     const appointment = at("2026-09-01T14:00", "Europe/Paris");
-    expect(result.stops[1].latestArrivalMs).toBe(appointment);
-    expect(result.stops[1].earliestDepartureMs).toBe(appointment + 1_800_000);
-    expect(result.stops[1].dwellSeconds).toBe(0);
+    expect(result.stops[1]?.latestArrivalMs).toBe(appointment);
+    expect(result.stops[1]?.earliestDepartureMs).toBe(appointment + 1_800_000);
+    expect(result.stops[1]?.dwellSeconds).toBe(0);
   });
 
   it("accepts arriveBy together with departAfter at one stop", () => {
@@ -121,8 +121,8 @@ describe("resolveScheduleConstraints", () => {
       nowMs: NOW,
     });
     expect(result.violations).toEqual([]);
-    expect(result.stops[1].latestArrivalMs).toBe(at("2026-09-01T14:00", "Europe/Paris"));
-    expect(result.stops[1].earliestDepartureMs).toBe(at("2026-09-01T15:00", "Europe/Paris"));
+    expect(result.stops[1]?.latestArrivalMs).toBe(at("2026-09-01T14:00", "Europe/Paris"));
+    expect(result.stops[1]?.earliestDepartureMs).toBe(at("2026-09-01T15:00", "Europe/Paris"));
   });
 
   it("rejects fixedAt combined with another window field", () => {
@@ -195,7 +195,7 @@ describe("resolveScheduleConstraints", () => {
     expect(
       result.violations.filter((violation) => violation.kind === "invalid-dwell"),
     ).toHaveLength(3);
-    expect(result.stops[1].dwellSeconds).toBe(0);
+    expect(result.stops[1]?.dwellSeconds).toBe(0);
   });
 
   it("keeps zero dwell and drops dwell at the endpoints", () => {
@@ -267,7 +267,7 @@ describe("resolveScheduleConstraints", () => {
       anchor: { kind: "now" },
       nowMs: NOW,
     });
-    expect(result.stops[0].earliestDepartureMs).toBe(Date.UTC(2027, 2, 28, 1, 0));
+    expect(result.stops[0]?.earliestDepartureMs).toBe(Date.UTC(2027, 2, 28, 1, 0));
     expect(result.violations).toEqual([]);
   });
 
@@ -280,6 +280,6 @@ describe("resolveScheduleConstraints", () => {
       anchor: { kind: "now" },
       nowMs: NOW,
     });
-    expect(result.stops[0].earliestDepartureMs).toBe(Date.UTC(2026, 9, 25, 0, 30));
+    expect(result.stops[0]?.earliestDepartureMs).toBe(Date.UTC(2026, 9, 25, 0, 30));
   });
 });

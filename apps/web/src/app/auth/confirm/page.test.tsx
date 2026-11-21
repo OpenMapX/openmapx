@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test";
+import { nth, render, screen } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -28,7 +28,7 @@ async function renderWithReturn(value: string | null) {
   vi.stubGlobal("location", { ...window.location, assign, search });
   const { default: Page } = await import("./page");
   render(<Page />);
-  return dialogProps[dialogProps.length - 1];
+  return nth(dialogProps, -1);
 }
 
 describe("confirm sign-in page", () => {

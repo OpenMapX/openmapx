@@ -8,7 +8,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook, waitFor } from "@/test";
+import { act, nth, renderHook, waitFor } from "@/test";
 import { getPendingArrivalHandoff, setPendingArrivalHandoff } from "./arrivalHandoffState";
 
 const state = vi.hoisted(() => ({
@@ -298,8 +298,8 @@ describe("useArrivalHandoff", () => {
     const walks: Record<string, number> = { "10.011": 60, "10.012": 120, "10.013": 200 };
     fetchDirections.mockImplementation(async (...args: unknown[]) => {
       const { waypoints, mode } = args[0] as { waypoints: LngLat[]; mode: string };
-      if (mode === "walking") return route(walks[waypoints[0][0].toFixed(3)] ?? 0, 150);
-      return route(drives[waypoints[1][0].toFixed(3)] ?? 0, 500);
+      if (mode === "walking") return route(walks[nth(waypoints, 0)[0].toFixed(3)] ?? 0, 150);
+      return route(drives[nth(waypoints, 1)[0].toFixed(3)] ?? 0, 500);
     });
     useNavigationStore.setState({
       routeOptions: {

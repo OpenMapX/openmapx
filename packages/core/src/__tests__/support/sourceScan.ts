@@ -31,7 +31,8 @@ export function codeOnly(source: string, fileName = "source.tsx"): string {
       for (const child of children) keep(child);
       return;
     }
-    for (let index = node.getStart(file); index < node.end; index++) out[index] = source[index];
+    const start = node.getStart(file);
+    out.splice(start, node.end - start, ...source.slice(start, node.end).split(""));
   };
   keep(file);
   return out.join("");

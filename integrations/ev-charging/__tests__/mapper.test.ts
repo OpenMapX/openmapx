@@ -850,7 +850,7 @@ describe("mapChargingSiteToDetail", () => {
       "Special Opening Hours",
     );
     expect(exceptions?.rows).toHaveLength(10);
-    expect(rowsOf(exceptions, "de").at(-1)![0]).toBe("10.01.2027, 10:00 – 12:00");
+    expect(rowsOf(exceptions, "de").at(-1)?.[0]).toBe("10.01.2027, 10:00 – 12:00");
   });
 
   it("shows the energy mix: green, supplier, product, sources largest first and impacts", () => {

@@ -1,7 +1,7 @@
-// Pure-type module — kept separate from `../utils/openingHours.ts` so the
+// Pure-type module — kept separate from `../opening-hours/openingHours.ts` so the
 // LGPL-3 `opening_hours` runtime never enters the dependency graph of any
 // browser bundle. Server code that needs the builder imports from
-// `../utils/openingHours`; client/shared code only references the types here.
+// `../opening-hours/openingHours`; client/shared code only references the types here.
 
 /**
  * A span the place is open, as local wall-clock "HH:MM". `to` may be "24:00"
@@ -78,7 +78,7 @@ export interface LocationContext {
  * Server-precomputed opening-hours data attached to API responses so the web
  * client can render and filter without bundling the LGPL `opening_hours`
  * library. Always built on the server — see `buildOpeningHoursInfo` in
- * `../utils/openingHours.ts`.
+ * `../opening-hours/openingHours.ts`.
  */
 export interface OpeningHoursInfo {
   /** Calculation expiry only; never an upstream observation or check date. */

@@ -9,7 +9,11 @@ import {
   openControlInstallation,
   provisionControlDirectories,
 } from "@openmapx/core/build-artifacts";
-import { initializeManagedCatalogPins, readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import {
+  initializeManagedCatalogPins,
+  pinnedTransitousCommit,
+  readCatalogPinSet,
+} from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
 import {
   feedState,
@@ -22,7 +26,7 @@ import {
 import { inspectPinnedFeedCredentialKeys } from "@openmapx/transitous-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import Fastify from "fastify";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, expect, it, vi } from "vitest";
 import { createMigratedPostgresFixture } from "../../../../apps/api/src/test/postgres-fixture";
 import {
   createRegistryResourcePolicy,
@@ -61,8 +65,8 @@ vi.mock("../../src/db/index", () => ({
 const oldCsv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Bike,Berlin,bike,https://operator.test,https://old.test/gbfs.json,2.3,\n";
 const newCsv = oldCsv.replace("https://old.test/gbfs.json", "https://new.test/gbfs.json");
-vi.mock("@openmapx/core/utils/safe-download", async (original) => ({
-  ...(await original<typeof import("@openmapx/core/utils/safe-download")>()),
+vi.mock("@openmapx/core/http/safe-download", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/http/safe-download")>()),
   safeFetchTextResponse: async (url: string) => {
     state.requests.push(url);
     const text = url.includes("api.github.com")
@@ -181,6 +185,7 @@ it.skipIf(!enabled)(
       token = "t".repeat(43),
       tokenFile = join(root, "dm-token");
     writeFileSync(tokenFile, token, { mode: 0o600 });
+    assert.exists(originalPins);
     agent = buildOpsAgentServer({
       tokens: { api: "a".repeat(43), "data-manager": token },
       runtime: createTransitousLockRuntime(createUnavailableRuntime(), { rootDir: root }),
@@ -232,7 +237,7 @@ it.skipIf(!enabled)(
       proposal = await reviewer.resolveCatalogProposal({ branch: "main", proposalId });
     expect(proposal.pins.transitous.ref).toBe(`main@${sha}`);
     expect(proposal.pins.gbfs.commit).toBe("c".repeat(40));
-    expect(proposal.baseGenerationId).toBe(originalPins!.generationId);
+    expect(proposal.baseGenerationId).toBe(originalPins.generationId);
     expect(readCatalogPinSet(root)).toEqual(originalPins);
     expect(git(catalog, ["rev-parse", "HEAD"])).toBe(sha);
     const page = reviewer.reviewPage(proposalId);
@@ -287,7 +292,7 @@ it.skipIf(!enabled)(
     expect(
       await inspectPinnedFeedCredentialKeys({
         catalogDir: catalog,
-        transitousCommit: nextProposal.pins.transitous.ref.split("@").at(-1)!,
+        transitousCommit: pinnedTransitousCommit(nextProposal.pins.transitous),
         atlasCommit: nextAtlas,
         git: async (args, cwd) => git(cwd, [...args]),
       }),
@@ -351,7 +356,7 @@ it.skipIf(!enabled)(
       });
       expect(read.statusCode).toBe(200);
       expect(read.json()).toMatchObject({
-        catalogRevisionId: originalPins!.generationId,
+        catalogRevisionId: originalPins.generationId,
         proposal: { proposalId },
         diff: { total: 2 },
         validationEligible: false,

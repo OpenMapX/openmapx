@@ -274,7 +274,7 @@ export function TransitLegTimeline({
                 <LiveStopTime
                   time={legTransitTime(leg)}
                   event={isWalk && i > 0 ? "arrival" : "departure"}
-                  tripId={liveTrip(!isWalk ? leg.tripId : i > 0 ? legs[i - 1].tripId : undefined)}
+                  tripId={liveTrip(!isWalk ? leg.tripId : legs[i - 1]?.tripId)}
                   stopId={leg.from.stopId}
                   emphasis
                 />

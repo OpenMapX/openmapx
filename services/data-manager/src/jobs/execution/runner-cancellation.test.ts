@@ -19,6 +19,7 @@ import { build } from "esbuild";
 import postgres from "postgres";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { buildTransitousRunnerServer } from "../../../../../apps/transitous-runner/src/server";
+import { present } from "../../../__tests__/helpers/present";
 import { createTransitousScriptRunner } from "../transitous/script-runner";
 import { createDataExecutionRuntime } from "./runtime";
 import { createPostgresDataExecutionStore } from "./store";
@@ -54,16 +55,16 @@ beforeAll(async () => {
       agentBundle,
       "apps/ops-agent/package.json",
     ],
-  ])
+  ] as const)
     await build({
-      entryPoints: [resolve(entry!)],
+      entryPoints: [resolve(entry)],
       outfile,
       bundle: true,
       platform: "node",
       format: "esm",
       target: "node24",
       banner: {
-        js: `import {createRequire as fixtureCreateRequire} from "node:module"; const require=fixtureCreateRequire(${JSON.stringify(resolve(manifest!))});`,
+        js: `import {createRequire as fixtureCreateRequire} from "node:module"; const require=fixtureCreateRequire(${JSON.stringify(resolve(manifest))});`,
       },
     });
 });
@@ -71,6 +72,7 @@ afterAll(() => {
   if (recoveryBundleRoot) rmSync(recoveryBundleRoot, { recursive: true, force: true });
 });
 
+type Peer = ReturnType<typeof processPeer>;
 function processPeer(file: string, initial: unknown, env: NodeJS.ProcessEnv = process.env) {
   const child: ChildProcessWithoutNullStreams = spawn(process.execPath, [file], {
     env,
@@ -226,14 +228,14 @@ it.skipIf(
       id = (await admitted.json()).jobId;
       if (!id) throw Error("Original admission missing");
       await expect.poll(() => existsSync(ready), { timeout: 15000 }).toBe(true);
-      dm!.send({ type: "probe", id });
-      expect((await dm!.next("probe")).pendingRunners).toBe(2);
+      present(dm).send({ type: "probe", id });
+      expect((await present(dm).next("probe")).pendingRunners).toBe(2);
       expect(posts).toBe(2);
       const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
       if (!original) throw Error("Original row missing");
       const lease = motisLease(root);
       expect(lease).toBeDefined();
-      await dm!.kill();
+      await present(dm).kill();
       dm = undefined;
       // The killed worker never recorded how it ended.
       expect(original.execution_completion).toBeNull();
@@ -288,8 +290,8 @@ it.skipIf(
       await new Promise((resolve) =>
         setTimeout(resolve, Math.max(0, canceledAt + 31000 - Date.now())),
       );
-      dm!.send({ type: "probe", id });
-      const probe = await dm!.next("probe");
+      present<Peer>(dm).send({ type: "probe", id });
+      const probe = await present<Peer>(dm).next("probe");
       expect(probe).toMatchObject({ dispatches: 0, pendingRunners: 1 });
       const [current] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
       expect(current?.status).toBe("cancel_pending");
@@ -418,13 +420,13 @@ it
           headers: { authorization: headers.authorization },
           signal: controller.signal,
         }).catch((error) => error);
-        id = String((await dm!.next("dispatch")).id);
-        await agent!.next("effect");
+        id = String((await present(dm).next("dispatch")).id);
+        await present(agent).next("effect");
         // The actual maintenance observer may disconnect while its child lives.
         controller.abort();
         await observation;
-        agent!.send({ type: "probe" });
-        expect((await agent!.next("probe")).state).toBe("running");
+        present(agent).send({ type: "probe" });
+        expect((await present(agent).next("probe")).state).toBe("running");
       } else {
         const admitted = await fetch(base + "/transit/sync", {
           method: "POST",
@@ -441,7 +443,7 @@ it
       const operationKey = String(original.operation_key),
         lease = motisLease(root);
       expect(lease).toBeDefined();
-      await dm!.kill();
+      await present(dm).kill();
       dm = undefined;
       // SIGKILL occurred while dispatcher awaited the independent child.
       const jobId = id;
@@ -466,8 +468,8 @@ it
         expect(cancels).toBe(0);
         process.kill(-Number(readFileSync(ready, "utf8")), 0);
       } else {
-        agent!.send({ type: "probe" });
-        expect((await agent!.next("probe")).state).toBe("running");
+        present(agent).send({ type: "probe" });
+        expect((await present(agent).next("probe")).state).toBe("running");
       }
       const canceled = await fetch(base + `/executions/${id}/cancel`, {
         method: "POST",
@@ -476,8 +478,8 @@ it
       });
       expect(canceled.status, await canceled.text()).toBe(200);
       if (mode === "agent") {
-        await agent!.next("aborted");
-        expect((await agent!.next("cancel-response")).cancels).toBeGreaterThan(0);
+        await present(agent).next("aborted");
+        expect((await present(agent).next("cancel-response")).cancels).toBeGreaterThan(0);
       } else {
         await expect.poll(() => cancels, { timeout: 8000 }).toBeGreaterThan(0);
         const pid = Number(readFileSync(ready, "utf8"));
@@ -516,8 +518,8 @@ it
         expect(current?.[key]).toEqual(original[key]);
       expect(motisLease(root)).toBe(lease);
       expect(await completion()).toBeNull();
-      dm!.send({ type: "probe" });
-      expect((await dm!.next("probe")).dispatches).toBe(0);
+      present<Peer>(dm).send({ type: "probe" });
+      expect((await present<Peer>(dm).next("probe")).dispatches).toBe(0);
       if (agent) {
         agent.send({ type: "probe" });
         const probe = await agent.next("probe");
@@ -655,7 +657,7 @@ it.skipIf(
         )
         .toBe(false);
       await expect
-        .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+        .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
         .toBe("canceled");
       await expect.poll(() => terminalPublished, { timeout: 15000 }).toBe(true);
       const terminal = await store.inspect(id);

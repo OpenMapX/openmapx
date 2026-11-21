@@ -6,6 +6,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
   WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 
@@ -60,7 +61,7 @@ describe("coasting through a gap in location delivery", () => {
     expect(coastedSnapshots()).toBeGreaterThan(0);
 
     harness.phone.clock.advance(1_000);
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[20])]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(20))]);
 
     const after = await ground();
     expect(after.payload.coasting).toBe(false);
@@ -75,7 +76,7 @@ describe("coasting through a gap in location delivery", () => {
     expect((await ground()).payload.coasting).toBe(true);
 
     harness.phone.clock.advance(1_000);
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[18])]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(18))]);
     const resumed = await ground();
     expect(resumed.payload.coasting).toBe(false);
     expect(resumed.payload.coastingAnchor?.acceptedAtMs).toBe(harness.phone.clock.now());

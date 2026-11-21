@@ -128,6 +128,7 @@ export async function resolveImportPlaces(
     while (next < work.length) {
       options.signal?.throwIfAborted();
       const entry = work[next++];
+      if (!entry) break;
       const results = await geocodeEntry(
         { q: entry.query, ...(options.lang ? { lang: options.lang } : {}), ...entry.hint },
         options.signal,

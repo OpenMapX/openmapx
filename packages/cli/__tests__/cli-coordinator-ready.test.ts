@@ -51,10 +51,11 @@ it("starts an unavailable coordinator without recreation under actual existing o
       requestedDeadlineAt: deadlineAt,
       serviceIds: ["data-manager", "motis"],
     });
-    lease = await control.acquireArtifactTargetLease({
+    const acquired = await control.acquireArtifactTargetLease({
       owner: authority,
       serviceIds: ["data-manager", "motis"],
     });
+    lease = acquired;
     let reads = 0;
     const transport = createDataManagerTransport({
       baseUrl: "http://127.0.0.1:1",
@@ -81,7 +82,7 @@ it("starts an unavailable coordinator without recreation under actual existing o
       },
     });
     await services.withConfigurationGenerationWriter(host.infraDir, (writer) =>
-      services.withVerifiedLifecycleOwnership({ writer, lease: lease!, authority }, (ownership) =>
+      services.withVerifiedLifecycleOwnership({ writer, lease: acquired, authority }, (ownership) =>
         ensureCliCoordinatorReady({ ownership, transport, mode: "ensure-running" }),
       ),
     );

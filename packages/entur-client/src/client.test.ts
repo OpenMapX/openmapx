@@ -8,7 +8,7 @@ import {
   HealthCheckDocument,
   PlanTripDocument,
 } from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createEnturClient } from "./client";
 import { isEnturRequestError } from "./errors";
 
@@ -103,7 +103,9 @@ describe("Entur host adapter", () => {
       },
     });
     expect(same.identity).toBe(client.identity);
-    f.options.contributors.jp[0].publisher.name = "changed";
+    const [receipt] = f.options.contributors.jp;
+    assert.isDefined(receipt);
+    receipt.publisher.name = "changed";
     f.options.sourceIds.journeyPlanner = "changed";
     expect(client.contributors.jp?.[0]?.publisher?.name).toBe("original");
     expect(Object.isFrozen(client.contributors.jp?.[0]?.publisher)).toBe(true);

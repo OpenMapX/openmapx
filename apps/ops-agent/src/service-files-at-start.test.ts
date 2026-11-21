@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentLogLine, describeServiceFilesAtStart } from "./service-files-at-start";
@@ -104,6 +105,6 @@ describe("the agent's start", () => {
         ),
       },
     ]);
-    expect(agentLogLine(lines[0] as services.ServiceFileReportLine)).toMatch(/^⚠ /);
+    expect(agentLogLine(itemAt(lines, 0))).toMatch(/^⚠ /);
   });
 });

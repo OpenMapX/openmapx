@@ -78,8 +78,8 @@ export async function resolveCatalogBumpCandidate(
   const submoduleEntry = (
     await runner("git", ["-C", catalogDir, "ls-tree", `origin/${branch}`, "transitland-atlas"])
   ).stdout;
-  const match = submoduleEntry.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i);
-  if (!match) {
+  const [, transitlandAtlasSha] = submoduleEntry.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i) ?? [];
+  if (!transitlandAtlasSha) {
     throw new CatalogBumpError(
       "submodule-resolution-failed",
       "Could not resolve transitland-atlas submodule SHA",
@@ -90,7 +90,7 @@ export async function resolveCatalogBumpCandidate(
     branch,
     ref: `${branch}@${transitousSha}`,
     transitousSha,
-    transitlandAtlasSha: match[1],
+    transitlandAtlasSha,
   };
 }
 

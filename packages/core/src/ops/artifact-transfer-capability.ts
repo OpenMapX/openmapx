@@ -43,16 +43,15 @@ export function verifyArtifactStreamCapability(
   now = Date.now(),
 ): ArtifactStreamCapability {
   if (input.length > 8192) throw Error("Invalid artifact stream capability");
-  const match = /^atcap1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(input);
-  if (!match) throw Error("Invalid artifact stream capability");
-  const actual = createHmac("sha256", key(token))
-    .update(`artifact-transfer-v1.${match[1]}`)
-    .digest();
-  const supplied = Buffer.from(match[2], "base64url");
+  const [, body, signature] = /^atcap1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(input) ?? [];
+  if (body === undefined || signature === undefined)
+    throw Error("Invalid artifact stream capability");
+  const actual = createHmac("sha256", key(token)).update(`artifact-transfer-v1.${body}`).digest();
+  const supplied = Buffer.from(signature, "base64url");
   if (supplied.length !== actual.length || !timingSafeEqual(supplied, actual))
     throw Error("Invalid artifact stream capability");
   const value = artifactStreamCapabilitySchema.parse(
-    JSON.parse(Buffer.from(match[1], "base64url").toString("utf8")),
+    JSON.parse(Buffer.from(body, "base64url").toString("utf8")),
   );
   if (
     now < value.issuedAt - 5000 ||

@@ -7,6 +7,7 @@ import type {
   IntegrationContext,
 } from "@openmapx/integration-framework";
 import { money, token } from "@openmapx/integration-framework/strings";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, test, vi } from "vitest";
 import { createFuelDataSource } from "../data-source.js";
 
@@ -116,7 +117,7 @@ describe("fuel orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.data.map((r) => r.id)).toEqual(["a:ok"]);
-    const query = vi.mocked(a.searchStations).mock.calls[0][1] as FuelStationQuery;
+    const query = nth(vi.mocked(a.searchStations).mock.calls, 0)[1] as FuelStationQuery;
     expect(query.excludedSourceIds).toEqual(["src-blocked"]);
   });
 
@@ -131,7 +132,7 @@ describe("fuel orchestrator", () => {
     });
     const source = createFuelDataSource(ctxWith([provider("a", [s])]));
 
-    const [result] = (await source.search(BBOX)).data;
+    const result = nth((await source.search(BBOX)).data, 0);
     expect(result.observedAt).toBe("2026-10-01T06:30:00.000Z");
     expect(result.sortValues).toEqual({ e5: 1.799, diesel: 1.659 });
     expect(result.currency).toBe("EUR");
@@ -186,7 +187,7 @@ describe("fuel orchestrator", () => {
     const result = await source.search(BBOX, { pricesOnly: true });
 
     expect(result.data.map((r) => r.id)).toEqual(["a:priced"]);
-    const query = vi.mocked(a.searchStations).mock.calls[0][1] as FuelStationQuery;
+    const query = nth(vi.mocked(a.searchStations).mock.calls, 0)[1] as FuelStationQuery;
     expect(query.pricesOnly).toBe(true);
   });
 
@@ -273,7 +274,7 @@ describe("fuel orchestrator", () => {
     expect(detail?.branding?.logoUrl).toBeUndefined();
     expect(detail?.branding?.name).toBe("Aral AG");
 
-    const [result] = (await source.search(BBOX)).data;
+    const result = nth((await source.search(BBOX)).data, 0);
     expect(result.branding?.logoUrl).toBe(detail?.branding?.logoUrl);
     expect(result.branding?.catalogueLogo).toEqual(detail?.branding?.catalogueLogo);
     expect(result.branding?.catalogueLogo).toMatchObject({
@@ -303,7 +304,7 @@ describe("fuel orchestrator", () => {
       { sourceId: "src-a", name: "Source A" },
       { sourceId: "src-c", name: "Source C" },
     ]);
-    expect(result.data[2].sources).toEqual(["src-c"]);
+    expect(nth(result.data, 2).sources).toEqual(["src-c"]);
   });
 
   test("an upstream publisher's credit under its feed reaches the search's attributions", async () => {
@@ -392,7 +393,7 @@ describe("fuel orchestrator", () => {
       { sourceId: "osm", name: "OpenStreetMap contributors" },
     ];
 
-    const [result] = (await source.search(BBOX)).data;
+    const result = nth((await source.search(BBOX)).data, 0);
     expect(result.contributors).toEqual(expected);
     expect((await source.getDetail("a:1")).data?.contributors).toEqual(expected);
   });
@@ -444,7 +445,7 @@ describe("fuel orchestrator", () => {
     const nameless = station({ id: "a:1", name: "" });
     const source = createFuelDataSource(ctxWith([provider("a", [nameless])]));
 
-    const [result] = (await source.search(BBOX)).data;
+    const result = nth((await source.search(BBOX)).data, 0);
     expect(result.name).toBe("");
     expect(result.fallbackName).toEqual({ $t: "stationFallbackName" });
     expect((await source.getDetail("a:1")).data?.fallbackName).toEqual({

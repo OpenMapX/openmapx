@@ -133,7 +133,9 @@ export function onRefreshFailed(
  */
 export function onRefreshUnreachable(runtime: RefreshRuntime, nowMs: number): RefreshRuntime {
   const attempts = Math.min(64, runtime.attempts + 1);
-  const index = Math.min(attempts, RETRY_DELAYS_MS.length) - 1;
+  // A count outside the table waits the longest delay.
+  const retryDelayMs =
+    RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length) - 1] ?? Math.max(...RETRY_DELAYS_MS);
   return {
     status: attempts >= MAX_CONSECUTIVE_FAILURES ? "stale" : "ready",
     generation: runtime.generation,
@@ -142,7 +144,7 @@ export function onRefreshUnreachable(runtime: RefreshRuntime, nowMs: number): Re
       ? { firstAttemptAtMs: runtime.firstAttemptAtMs, ambiguousAttempts: runtime.ambiguousAttempts }
       : {}),
     nextAttemptAtMs:
-      nowMs + ((runtime.ambiguousAttempts ?? 0) > 0 ? REFRESH_INTERVAL_MS : RETRY_DELAYS_MS[index]),
+      nowMs + ((runtime.ambiguousAttempts ?? 0) > 0 ? REFRESH_INTERVAL_MS : retryDelayMs),
   };
 }
 

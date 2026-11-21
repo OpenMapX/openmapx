@@ -162,12 +162,12 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     }
 
     const results = await executeIntegrationHealthCheck(integration);
-    if (results.length === 0) {
+    const [primary] = results;
+    if (primary === undefined) {
       return reply.status(500).send({ error: "Health check returned no result" });
     }
 
     const passed = results.every((r) => r.status === "up");
-    const primary = results[0];
     return {
       ok: passed,
       integrationId,

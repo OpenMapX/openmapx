@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 
 let fake = createFakeMap({
   styleLoaded: true,
@@ -9,6 +9,8 @@ let fake = createFakeMap({
 
 const receipt = { sourceId: "acquired-boundary", name: "Acquired boundary supplier" };
 let hasBoundary = true;
+const fitBounds = vi.fn();
+let boundingBox: number[] | undefined = [6.6, 51.1, 6.8, 51.3];
 const selectedPlace = {
   id: "area:1",
   name: "Neuss",
@@ -18,7 +20,8 @@ const selectedPlace = {
   address: "Neuss",
 };
 
-const boundary = {
+let boundary: { type: "Polygon"; coordinates: number[][][] };
+const squareBoundary = {
   type: "Polygon" as const,
   coordinates: [
     [
@@ -36,7 +39,7 @@ vi.mock("@/integration-api/map/MapContext", () => ({
     mapRef: { current: fake.map },
     mapReady: true,
     styleVersion: 0,
-    fitBounds: vi.fn(),
+    fitBounds,
     flyTo: vi.fn(),
   }),
 }));
@@ -47,7 +50,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   usePlaceDetails: () => ({
     data: {
       boundary: hasBoundary ? boundary : undefined,
-      boundingBox: [6.6, 51.1, 6.8, 51.3],
+      boundingBox,
       fieldContributors: {
         boundary: [receipt],
         name: [{ sourceId: "other", name: "Name supplier" }],
@@ -63,14 +66,36 @@ import { PlaceBoundaryLayer } from "./PlaceBoundaryLayer";
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, baseLayers: [{ id: "place-labels", type: "symbol" }] });
   hasBoundary = true;
+  boundary = squareBoundary;
+  boundingBox = [6.6, 51.1, 6.8, 51.3];
+  fitBounds.mockReset();
   useMapAttributionStore.setState({ byLayer: {} });
 });
 afterEach(() => vi.useRealTimers());
+
+it("fits the boundary's own extent when the place carries no bounding box", () => {
+  boundingBox = undefined;
+  render(<PlaceBoundaryLayer />).unmount();
+  expect(fitBounds).toHaveBeenCalledExactlyOnceWith(
+    [
+      [6.6, 51.1],
+      [6.8, 51.3],
+    ],
+    60,
+  );
+});
+
+it("leaves the camera alone for a boundary without a single position", () => {
+  boundingBox = undefined;
+  boundary = { type: "Polygon", coordinates: [[]] };
+  render(<PlaceBoundaryLayer />).unmount();
+  expect(fitBounds).not.toHaveBeenCalled();
+});
 it("owns captured boundary receipts only while fill or outline is actually rendered", () => {
   vi.useFakeTimers();
   const view = render(<PlaceBoundaryLayer />);
   const data = fake.state.sources.get("place-boundary-source")?.data as GeoJSON.FeatureCollection;
-  expect(JSON.parse(data.features[0].properties?._mapAttributions)).toEqual([receipt]);
+  expect(JSON.parse(nth(data.features, 0).properties?._mapAttributions)).toEqual([receipt]);
   const html = () =>
     Object.values(useMapAttributionStore.getState().byLayer)
       .flat()

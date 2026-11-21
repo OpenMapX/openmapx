@@ -125,36 +125,41 @@ export function annotateLegsWithAttribution(
   if (tagsByLength.length === 0) return itineraries;
   return itineraries.map((itin) => ({
     ...itin,
-    legs: itin.legs.map((originalLeg) => {
-      const leg = originalLeg.alternatives?.length
-        ? {
-            ...originalLeg,
-            alternatives: originalLeg.alternatives.map((alt) => ({
-              ...alt,
-              ...(alt.legs
-                ? {
-                    legs: annotateLegsWithAttribution([{ ...itin, legs: alt.legs }], index)[0].legs,
-                  }
-                : {}),
-            })),
-          }
-        : originalLeg;
-      const legTags = extractFeedTags(leg, tagsByLength);
-      if (legTags.length === 0) return leg;
-      const attributions: Attribution[] = [];
-      for (const tag of legTags) {
-        const attr = index.getById(tag);
-        if (attr) attributions.push(attr);
-      }
-      if (attributions.length === 0) return leg;
-      const next: TripLeg = {
-        ...leg,
-        attributions,
-        contributors: snapshotContributors(attributions),
-      };
-      return next;
-    }),
+    legs: annotateLegs(itin.legs, index, tagsByLength),
   }));
+}
+
+/** Annotate each leg, and the legs of each of its alternatives, from its feed tags. */
+function annotateLegs(
+  legs: TripLeg[],
+  index: MotisContributorIndex,
+  tagsByLength: string[],
+): TripLeg[] {
+  return legs.map((originalLeg) => {
+    const leg = originalLeg.alternatives?.length
+      ? {
+          ...originalLeg,
+          alternatives: originalLeg.alternatives.map((alt) => ({
+            ...alt,
+            ...(alt.legs ? { legs: annotateLegs(alt.legs, index, tagsByLength) } : {}),
+          })),
+        }
+      : originalLeg;
+    const legTags = extractFeedTags(leg, tagsByLength);
+    if (legTags.length === 0) return leg;
+    const attributions: Attribution[] = [];
+    for (const tag of legTags) {
+      const attr = index.getById(tag);
+      if (attr) attributions.push(attr);
+    }
+    if (attributions.length === 0) return leg;
+    const next: TripLeg = {
+      ...leg,
+      attributions,
+      contributors: snapshotContributors(attributions),
+    };
+    return next;
+  });
 }
 
 /**

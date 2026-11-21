@@ -172,10 +172,9 @@ function elevationProfile(route: Route): ElevationProfile | null {
   if (!samples || samples.length < 2) return null;
   let ascentMeters = 0;
   let descentMeters = 0;
-  for (let index = 1; index < samples.length; index++) {
+  for (const [index, current] of samples.entries()) {
     const previous = samples[index - 1];
-    const current = samples[index];
-    if (!Number.isFinite(previous) || !Number.isFinite(current)) continue;
+    if (previous === undefined || !Number.isFinite(previous) || !Number.isFinite(current)) continue;
     const delta = current - previous;
     if (Math.abs(delta) < 1) continue;
     if (delta > 0) ascentMeters += delta;
@@ -608,11 +607,12 @@ export function compareRouteAlternatives(
   const impacts = routes.map((route, routeIndex) =>
     calculateRouteImpact(route, vehicle, { ...options, calculatedAt, routeIndex }),
   );
-  const fastestIndex = routes.reduce(
-    (best, route, index) => (route.duration < routes[best].duration ? index : best),
-    0,
+  const fastestRoute = routes.reduce((best, route) =>
+    route.duration < best.duration ? route : best,
   );
+  const fastestIndex = routes.indexOf(fastestRoute);
   const fastest = impacts[fastestIndex];
+  if (!fastest) return impacts;
   const minEmissions = Math.min(...impacts.map((impact) => impact.emissions.totalGrams));
   const knownCosts = impacts.flatMap((impact) =>
     impact.cost.knownCost === null ? [] : [impact.cost.knownCost],
@@ -634,11 +634,12 @@ export function compareRouteAlternatives(
       closeEnough(impact.emissions.totalGrams, minEmissions) &&
       emissionsDeltaPct <= -5;
     let reason: NonNullable<RouteImpact["comparison"]>["reason"] = null;
-    if (isLowestEmissions) {
-      const distanceMeters = routes[fastestIndex].distance - routes[index].distance;
+    const route = routes[index];
+    if (isLowestEmissions && route) {
+      const distanceMeters = fastestRoute.distance - route.distance;
       const climbMeters =
-        (elevationProfile(routes[fastestIndex])?.ascentMeters ?? 0) -
-        (elevationProfile(routes[index])?.ascentMeters ?? 0);
+        (elevationProfile(fastestRoute)?.ascentMeters ?? 0) -
+        (elevationProfile(route)?.ascentMeters ?? 0);
       if (distanceMeters > 0) reason = { kind: "shorter", distanceMeters };
       else if (vehicle?.powertrain === "electric" && climbMeters >= 50)
         reason = { kind: "less_climbing", climbMeters };

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { featureCollectionToRoadFlowSegments } from "../road-conditions/flow";
 
 const a = { sourceId: "parent-a", name: "Captured A", publisher: { name: "Original publisher" } };
@@ -39,7 +39,7 @@ describe("OpenConditions captured flow contributors", () => {
       body({ ratio: [a, crowd], geometry: [graph] }),
       "openconditions",
     );
-    expect(segment.fieldContributors).toEqual({ ratio: [derived(a), crowd], geometry: [graph] });
+    expect(segment?.fieldContributors).toEqual({ ratio: [derived(a), crowd], geometry: [graph] });
   });
   it("keeps selected field receipts separately and copies them before caching", () => {
     const input = structuredClone(a);
@@ -48,7 +48,7 @@ describe("OpenConditions captured flow contributors", () => {
       "openconditions",
     );
     input.name = "Catalogue changed";
-    expect(segment.fieldContributors).toEqual({
+    expect(segment?.fieldContributors).toEqual({
       ratio: [derived(a)],
       los: [derived(b)],
       geometry: [],
@@ -59,8 +59,9 @@ describe("OpenConditions captured flow contributors", () => {
       body(JSON.stringify({ ratio: [a], los: [] })),
       "openconditions",
     );
-    expect(segment.fieldContributors).toEqual({ ratio: [derived(a)], los: [] });
+    expect(segment?.fieldContributors).toEqual({ ratio: [derived(a)], los: [] });
     const [legacy] = featureCollectionToRoadFlowSegments(body(undefined), "openconditions");
+    assert.isDefined(legacy);
     expect(legacy.fieldContributors).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import type { LocationDriver, LocationPermissionState } from "../location/LocationDriver";
+import { nth } from "../testing/nth";
 import { PermissionController, type PermissionUi } from "./permissionController";
 import type { PermissionPlatform, PermissionSnapshot } from "./permissionMachine";
 
@@ -56,7 +57,7 @@ function harness(options: {
     ui,
     isAppActive: () => options.isAppActive !== false,
     snapshot: async () => {
-      const snapshot = options.snapshots[Math.min(index, options.snapshots.length - 1)];
+      const snapshot = nth(options.snapshots, Math.min(index, options.snapshots.length - 1));
       index += 1;
       return snapshot;
     },

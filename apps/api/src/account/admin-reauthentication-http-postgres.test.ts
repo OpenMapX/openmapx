@@ -3,7 +3,8 @@ import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
+import { resolveBetterAuthSecret } from "../auth-secret";
 import { adminActionReauthentication, sessionAuthAssurance, twoFactor, user } from "../db/schema";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
 
@@ -106,10 +107,11 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
     const actualSession = await auth.api.getSession({
       headers: new Headers({ cookie: fresh.cookies }),
     });
+    assert.exists(actualSession, "the fresh cookie has no session");
     const [assurance] = await fixture.db
       .select()
       .from(sessionAuthAssurance)
-      .where(eq(sessionAuthAssurance.sessionId, actualSession!.session.id));
+      .where(eq(sessionAuthAssurance.sessionId, actualSession.session.id));
     expect(assurance?.originIndependentPasswordLogin).toBe(true);
   });
   it("records factor-sign-in provenance only from an actual pending login, not enrollment", async () => {
@@ -127,7 +129,7 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
     if (!factor || enrolled.method !== "totp") throw Error("Missing actual factor");
     const { symmetricDecrypt } = await import("better-auth/crypto"),
       secret = await symmetricDecrypt({
-        key: process.env.BETTER_AUTH_SECRET!,
+        key: resolveBetterAuthSecret(),
         data: factor.secret,
       });
     const before = await fixture.db

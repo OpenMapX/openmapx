@@ -115,7 +115,7 @@ describe.each(all)("%s metadata", (_locale, metadata) => {
 
   it("points at the fixed origin for the legal pages", () => {
     for (const key of ["support", "privacy", "terms", "deleteAccount"]) {
-      expect(metadata.urls[key].startsWith("https://openmapx.com/")).toBe(true);
+      expect(metadata.urls[key]).toMatch(/^https:\/\/openmapx\.com\//);
     }
   });
 });

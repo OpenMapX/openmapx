@@ -1,4 +1,5 @@
 /** Unit-only Next navigation adapter. Browser history acceptance is verified separately. */
+import { nth } from "@openmapx/integration-framework/testing/nth";
 import { useSyncExternalStore } from "react";
 import { afterEach } from "vitest";
 
@@ -9,7 +10,7 @@ const emit = () =>
   listeners.forEach((fn) => {
     fn();
   });
-const read = () => entries[index];
+const read = () => nth(entries, index);
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => {
@@ -42,5 +43,5 @@ export const adminNavigationMock = {
   useRouter: () => adminTestHistory,
   usePathname: () => new URL(useSyncExternalStore(subscribe, read, read), "http://test").pathname,
   useSearchParams: () =>
-    new URLSearchParams(useSyncExternalStore(subscribe, read, read).split("?")[1]),
+    new URLSearchParams(useSyncExternalStore(subscribe, read, read).replace(/^[^?]*\??/, "")),
 };

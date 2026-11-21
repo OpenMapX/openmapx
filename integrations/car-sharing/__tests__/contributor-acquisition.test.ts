@@ -42,7 +42,7 @@ it("captures each explicit regional client owner before its parsed cache and mer
     resolveContributors: (ids) => (ids.includes("de-cambio") ? [receipt] : []),
   });
   const result = await search({ west: 13.3, south: 52.4, east: 13.5, north: 52.6 });
-  expect(result[0].contributors).toEqual([receipt]);
+  expect(result[0]?.contributors).toEqual([receipt]);
   expect(write.mock.calls[0]?.[1]).toEqual([expect.objectContaining({ contributors: [receipt] })]);
   expect(http.calls[0]).toMatchObject({ method: "getText", url: "https://example.com" });
   expect(http.calls[0]?.options).toMatchObject({

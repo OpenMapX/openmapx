@@ -4,7 +4,7 @@ import type { Route } from "@integrations/routing/types";
 import { type DataSourceResult, type OverpassFilter, useNavigationStore } from "@openmapx/core";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHookWithQuery } from "@/test";
+import { nth, renderHookWithQuery } from "@/test";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
@@ -87,7 +87,9 @@ describe("useRouteSearch fuel prices", () => {
     );
     await waitFor(() => expect(fixture.fuel).toHaveLength(1));
     expect(result.current.fuelPrices?.get("a")).toEqual({ status: "loading" });
-    await act(async () => fixture.fuel[0].resolve({ data: [station("tk-a", [0.001, 0.0002])] }));
+    await act(async () =>
+      nth(fixture.fuel, 0).resolve({ data: [station("tk-a", [0.001, 0.0002])] }),
+    );
     await waitFor(() => expect(result.current.fuelPrices?.get("a")?.status).toBe("priced"));
     expect(result.current.fuelPrices?.get("b")).toEqual({ status: "unknown" });
   });
@@ -111,7 +113,7 @@ describe("useRouteSearch fuel prices", () => {
       useRouteSearch({ category: "preset:amenity/fuel" }),
     );
     await waitFor(() => expect(fixture.fuel).toHaveLength(1));
-    await act(async () => fixture.fuel[0].reject(new Error("fuel_unavailable")));
+    await act(async () => nth(fixture.fuel, 0).reject(new Error("fuel_unavailable")));
     // No answer carried a price, so the failed stops get no marker rather than "unknown".
     await waitFor(() => expect(result.current.fuelPrices?.has("a")).toBe(false));
     expect(result.current.results.map((r) => r.place.id)).toEqual(["a", "b"]);
@@ -121,7 +123,7 @@ describe("useRouteSearch fuel prices", () => {
   it("does not ask again as the position moves", async () => {
     renderHookWithQuery(() => useRouteSearch({ category: "preset:amenity/fuel" }));
     await waitFor(() => expect(fixture.fuel).toHaveLength(1));
-    await act(async () => fixture.fuel[0].resolve({ data: [] }));
+    await act(async () => nth(fixture.fuel, 0).resolve({ data: [] }));
     for (const along of [10, 20, 30]) {
       act(() =>
         useNavigationStore.getState().applyProgress({

@@ -3,7 +3,7 @@ import {
   type OpsResourcePolicy,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import {
   buildControlTestServer as buildOpsAgentServer,
   controlTestKey,
@@ -897,7 +897,9 @@ describe("one admission path for target effects", () => {
         async () => leaseStore.list(),
         (leases) => leases.some((lease) => lease.targets.includes("redis")),
       );
-      const holder = leaseStore.list()[0]!.owner.operationKey;
+      const [heldLease] = leaseStore.list();
+      assert.isDefined(heldLease);
+      const holder = heldLease.owner.operationKey;
       for (const [operation, name] of [
         [{ kind: "service.restart", serviceId: "redis" }, "leasedRestart00"],
         [{ kind: "service.remove", serviceId: "redis" }, "leasedRemove000"],

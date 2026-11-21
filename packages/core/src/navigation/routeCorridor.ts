@@ -1,5 +1,6 @@
 import type { Geometry, Position } from "geojson";
 import type { LngLat } from "../types/geometry";
+import { itemAt } from "../utils/itemAt";
 import { type PreparedRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
 /**
@@ -58,27 +59,33 @@ function collect(geometry: Geometry, parts: Parts): Parts {
   return parts;
 }
 
-/** A usable WGS84 position; feed data outside these ranges is ignored, not sampled. */
-const valid = (p: Position | undefined): p is Position =>
-  !!p &&
-  Number.isFinite(p[0]) &&
-  Number.isFinite(p[1]) &&
-  Math.abs(p[0] as number) <= 180 &&
-  Math.abs(p[1] as number) <= 90;
+/** The usable WGS84 positions as pairs; feed data outside these ranges is ignored, not sampled. */
+function validPairs(positions: Position[]): LngLat[] {
+  const pairs: LngLat[] = [];
+  for (const [lng, lat] of positions) {
+    if (
+      lng !== undefined &&
+      lat !== undefined &&
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      Math.abs(lng) <= 180 &&
+      Math.abs(lat) <= 90
+    )
+      pairs.push([lng, lat]);
+  }
+  return pairs;
+}
 
 function thin<T>(items: T[], max: number): T[] {
   if (items.length <= max) return items;
   const step = items.length / max;
-  return Array.from({ length: max }, (_, i) => items[Math.floor(i * step)] as T);
+  return Array.from({ length: max }, (_, i) => itemAt(items, Math.floor(i * step)));
 }
 
 /** Planar metres between two positions; enough to space samples along a segment. */
-function metres(a: Position, b: Position): number {
-  const kx = Math.cos((((a[1] as number) + (b[1] as number)) / 2) * (Math.PI / 180));
-  return (
-    Math.hypot(((b[0] as number) - (a[0] as number)) * kx, (b[1] as number) - (a[1] as number)) *
-    METERS_PER_DEGREE
-  );
+function metres(a: LngLat, b: LngLat): number {
+  const kx = Math.cos(((a[1] + b[1]) / 2) * (Math.PI / 180));
+  return Math.hypot((b[0] - a[0]) * kx, b[1] - a[1]) * METERS_PER_DEGREE;
 }
 
 /**
@@ -86,44 +93,39 @@ function metres(a: Position, b: Position): number {
  * one corridor apart so a line crossing the route has a sample within it. The spacing
  * widens for very long geometry so the total stays bounded before any is generated.
  */
-function samples(parts: Parts, corridorMeters: number): Position[] {
+function samples(parts: Parts, corridorMeters: number): LngLat[] {
   // Each line keeps its share of the vertex budget (at least its two ends); a geometry
   // of countless short lines is thinned to as many lines as that budget allows.
   const kept = thin(parts.lines, MAX_VERTICES / 2);
   const total = kept.reduce((n, line) => n + line.length, 0);
   const lines = kept.map((line) =>
-    thin(line.filter(valid), Math.max(2, Math.floor((MAX_VERTICES * line.length) / total))),
+    thin(validPairs(line), Math.max(2, Math.floor((MAX_VERTICES * line.length) / total))),
   );
-  const out: Position[] = thin(parts.points.filter(valid), MAX_VERTICES);
+  const out: LngLat[] = thin(validPairs(parts.points), MAX_VERTICES);
   let length = 0;
   for (const line of lines)
-    for (let i = 1; i < line.length; i++)
-      length += metres(line[i - 1] as Position, line[i] as Position);
+    for (let i = 1; i < line.length; i++) length += metres(itemAt(line, i - 1), itemAt(line, i));
   const spacing = Math.max(corridorMeters, length / MAX_INTERIOR);
   for (const line of lines) {
-    for (let i = 0; i < line.length; i++) {
-      const a = line[i] as Position;
+    for (const [i, a] of line.entries()) {
       out.push(a);
       const b = line[i + 1];
       if (!b) continue;
       const steps = Math.min(MAX_INTERIOR, Math.floor(metres(a, b) / spacing));
       for (let k = 1; k <= steps; k++) {
         const t = k / (steps + 1);
-        out.push([
-          (a[0] as number) + ((b[0] as number) - (a[0] as number)) * t,
-          (a[1] as number) + ((b[1] as number) - (a[1] as number)) * t,
-        ]);
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
       }
     }
   }
   return out;
 }
 
-function inRing(point: LngLat, ring: Position[]): boolean {
+function inRing(point: LngLat, ring: LngLat[]): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i] as [number, number];
-    const [xj, yj] = ring[j] as [number, number];
+    const [xi, yi] = itemAt(ring, i);
+    const [xj, yj] = itemAt(ring, j);
     if (
       yi > point[1] !== yj > point[1] &&
       point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi
@@ -147,12 +149,16 @@ export function isNearRoute(
   if (!geometry) return false;
   const parts = collect(geometry, { points: [], lines: [], rings: [] });
   for (const p of samples(parts, corridorMeters)) {
-    const snap = snapPreparedRoute(route, [p[0], p[1]] as LngLat);
+    const snap = snapPreparedRoute(route, p);
     if (snap.segmentIndex >= 0 && snap.deviationMeters <= corridorMeters) return true;
   }
   // An area the route runs through, with every edge far from it.
   const outer = parts.rings
-    .filter((ring) => ring.length >= 4 && ring.length <= MAX_RING_VERTICES && ring.every(valid))
+    .flatMap((ring) => {
+      if (ring.length < 4 || ring.length > MAX_RING_VERTICES) return [];
+      const pairs = validPairs(ring);
+      return pairs.length === ring.length ? [pairs] : [];
+    })
     .slice(0, MAX_RINGS);
   if (outer.length === 0) return false;
   const step = Math.max(1, Math.ceil(route.geometry.length / MAX_ROUTE_PROBES));

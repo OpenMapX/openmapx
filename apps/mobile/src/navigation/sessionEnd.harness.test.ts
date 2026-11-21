@@ -5,6 +5,7 @@ import {
 } from "@openmapx/core/navigation";
 import { CONNECTIVITY_DEBOUNCE_MS } from "../connectivity/ConnectivityDriver";
 import { PREPARING_GRACE_MS } from "../lifecycle/NavigationRecoveryController";
+import { nth } from "../testing/nth";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -14,6 +15,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
   WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
@@ -82,11 +84,11 @@ describe("one notice per end", () => {
     const { sessionId } = await harness.start(groundStartPackage());
 
     harness.phone.clock.advance(MOBILE_NAVIGATION_SESSION_MAX_AGE_MS);
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[1])]);
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[2])]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(1))]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(2))]);
 
     expect(stoppedMessages()).toHaveLength(1);
-    expect(stoppedMessages()[0].payload).toMatchObject({ sessionId, finalStatus: "expired" });
+    expect(stoppedMessages()[0]?.payload).toMatchObject({ sessionId, finalStatus: "expired" });
     expect(harness.sessionEnds).toEqual([expect.objectContaining({ finalStatus: "expired" })]);
     expect(harness.phone.location.running).toBe(false);
   });
@@ -123,7 +125,7 @@ describe("opening the app inside an arrival's release window", () => {
     return transitStartPackageFixture({
       itinerary: {
         ...itinerary,
-        endTime: itinerary.legs[1].endTime,
+        endTime: nth(itinerary.legs, 1).endTime,
         legs: itinerary.legs.slice(0, 2),
       },
     });

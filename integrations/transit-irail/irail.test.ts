@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@openmapx/integration-framework/testing";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -14,6 +15,13 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+/** The URL the first fetch call requested. */
+function firstFetchUrl(): string {
+  const [url] = nth(mockFetch.mock.calls, 0);
+  assert(typeof url === "string", "fetch was not called with a URL string");
+  return url;
+}
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -78,7 +86,7 @@ describe("irail provider", () => {
         "ir:BE.NMBS.008821006",
         "ir:BE.NMBS.008891009",
       ]);
-      expect(mockFetch.mock.calls[0][0]).toContain("/stations/");
+      expect(nth(mockFetch.mock.calls, 0)[0]).toContain("/stations/");
 
       // Should only fetch once — cache is used for second call
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -115,7 +123,7 @@ describe("irail provider", () => {
       const results = await searchByName("Brussels");
 
       expect(results).toHaveLength(1);
-      expect(results[0].name).toBe("Brussels-South");
+      expect(nth(results, 0).name).toBe("Brussels-South");
     });
 
     it("is case-insensitive", async () => {
@@ -125,7 +133,7 @@ describe("irail provider", () => {
       const results = await searchByName("LEUVEN");
 
       expect(results).toHaveLength(1);
-      expect(results[0].name).toBe("Leuven");
+      expect(nth(results, 0).name).toBe("Leuven");
     });
   });
 
@@ -170,17 +178,17 @@ describe("irail provider", () => {
       expect(deps).toHaveLength(2);
 
       // First departure: 120s delay
-      expect(deps[0].delaySeconds).toBe(120);
-      expect(deps[0].expectedAt).toBe(new Date((epochSeconds + 120) * 1000).toISOString());
-      expect(deps[0].platform).toBe("3");
-      expect(deps[0].canceled).toBe(false);
-      expect(deps[0].occupancy).toBe("low");
-      expect(deps[0].route.mode).toBe("rail");
-      expect(deps[0].route.id).toBe("ir:BE.NMBS.IC1234");
+      expect(nth(deps, 0).delaySeconds).toBe(120);
+      expect(nth(deps, 0).expectedAt).toBe(new Date((epochSeconds + 120) * 1000).toISOString());
+      expect(nth(deps, 0).platform).toBe("3");
+      expect(nth(deps, 0).canceled).toBe(false);
+      expect(nth(deps, 0).occupancy).toBe("low");
+      expect(nth(deps, 0).route.mode).toBe("rail");
+      expect(nth(deps, 0).route.id).toBe("ir:BE.NMBS.IC1234");
 
       // Second departure: canceled
-      expect(deps[1].canceled).toBe(true);
-      expect(deps[1].delaySeconds).toBeUndefined();
+      expect(nth(deps, 1).canceled).toBe(true);
+      expect(nth(deps, 1).delaySeconds).toBeUndefined();
     });
 
     it("strips ir: prefix before API call", async () => {
@@ -189,7 +197,7 @@ describe("irail provider", () => {
       const { getDepartures } = await loadModule();
       await getDepartures("ir:BE.NMBS.008814001", 30);
 
-      const fetchUrl = mockFetch.mock.calls[0][0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("id=BE.NMBS.008814001");
       expect(fetchUrl).not.toContain("ir%3A");
     });
@@ -230,7 +238,7 @@ describe("irail provider", () => {
       expect(arrivals).toHaveLength(1);
 
       // Verify arrdep=arrival was sent
-      const fetchUrl = mockFetch.mock.calls[0][0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("arrdep=arrival");
     });
   });
@@ -270,7 +278,7 @@ describe("irail provider", () => {
       const journey = await getVehicleJourney("ir:BE.NMBS.IC1234");
 
       // Verify ir: prefix stripped from API call
-      const fetchUrl = mockFetch.mock.calls[0][0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("id=BE.NMBS.IC1234");
       expect(fetchUrl).not.toContain("ir%3A");
 
@@ -355,7 +363,7 @@ describe("irail provider", () => {
       expect(itin.duration).toBe(3420);
       expect(itin.transfers).toBe(0);
       expect(itin.legs).toHaveLength(1);
-      expect(itin.legs[0].mode).toBe("rail");
+      expect(nth(itin.legs, 0).mode).toBe("rail");
     });
 
     it("builds multi-leg itinerary when vias are present", async () => {
@@ -415,11 +423,11 @@ describe("irail provider", () => {
       expect(itin.legs).toHaveLength(2); // Brussels -> Leuven, Leuven -> Antwerpen
 
       // First leg: origin -> via
-      expect(itin.legs[0].from.name).toBe("Brussels-South");
-      expect(itin.legs[0].to.name).toBe("Leuven");
+      expect(nth(itin.legs, 0).from.name).toBe("Brussels-South");
+      expect(nth(itin.legs, 0).to.name).toBe("Leuven");
 
       // Second leg: via -> destination
-      expect(itin.legs[1].from.name).toBe("Leuven");
+      expect(nth(itin.legs, 1).from.name).toBe("Leuven");
     });
 
     it("builds legs through multiple vias", async () => {

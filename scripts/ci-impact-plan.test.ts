@@ -161,10 +161,12 @@ describe("CI applicability and required result enforcement", () => {
   it("never lets a scope skip lint, the portable node tests or an unknown job", () => {
     expect(selectiveScopes).toEqual(["docs", "web", "mobile", "client"]);
     for (const scope of selectiveScopes) {
-      expect(scopeSkippedJobs[scope].length, scope).toBeGreaterThan(0);
-      expect(scopeSkippedJobs[scope], scope).not.toContain("lint");
-      expect(scopeSkippedJobs[scope], scope).not.toContain("test-node");
-      for (const id of scopeSkippedJobs[scope]) expect(validationJobs, scope).toContain(id);
+      const skipped = scopeSkippedJobs[scope];
+      if (!skipped) throw new Error(`${scope} names no skipped jobs`);
+      expect(skipped.length, scope).toBeGreaterThan(0);
+      expect(skipped, scope).not.toContain("lint");
+      expect(skipped, scope).not.toContain("test-node");
+      for (const id of skipped) expect(validationJobs, scope).toContain(id);
     }
     for (const scope of ["web", "mobile", "client"])
       for (const id of ["types", "build"]) expect(scopeSkippedJobs[scope]).not.toContain(id);

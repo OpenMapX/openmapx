@@ -1,6 +1,6 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
-import type { OpeningHoursSource } from "../utils/openingHoursSource";
+import type { OpeningHoursSource } from "../opening-hours/openingHoursSource";
 import type { AddressEvidence, DirectOsmReference } from "./address";
 import type { DataSourceDetail } from "./dataSource";
 import type { AreaGeometry, BBox, LngLat } from "./geometry";

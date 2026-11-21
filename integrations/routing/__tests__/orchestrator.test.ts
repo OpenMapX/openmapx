@@ -1,4 +1,5 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { captureRoutingResult, createRoutingOrchestrator } from "../orchestrator";
 import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from "../types.js";
@@ -47,7 +48,7 @@ function makeProvider(
           geometry: [],
           edges: [],
           points: [],
-          mode: modes[0],
+          mode: nth(modes, 0),
         }) satisfies MatchResult,
     );
   }

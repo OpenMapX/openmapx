@@ -3,6 +3,7 @@ import { apiClient } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import {
   brandImageId,
   buildGeoJson,
@@ -83,7 +84,7 @@ describe("buildGeoJson", () => {
 
   it("uses the fallback image for a place with no brand identity", () => {
     const geojson = buildGeoJson([place("a")], () => FALLBACK, new Set(["brand-marker-Q1"]));
-    expect(geojson.features[0].properties.imageId).toBe(FALLBACK);
+    expect(nth(geojson.features, 0).properties.imageId).toBe(FALLBACK);
   });
 
   it("uses the fallback image when the place's QID has not resolved to an image", () => {
@@ -96,7 +97,7 @@ describe("buildGeoJson", () => {
       () => FALLBACK,
       new Set(["brand-marker-Q2"]),
     );
-    expect(geojson.features[0].properties.imageId).toBe(FALLBACK);
+    expect(nth(geojson.features, 0).properties.imageId).toBe(FALLBACK);
   });
 
   it("uses the resolved brand image for a place whose QID is in brandImageIds", () => {
@@ -105,7 +106,7 @@ describe("buildGeoJson", () => {
       () => FALLBACK,
       new Set([brandImageId("Q1")]),
     );
-    expect(geojson.features[0].properties.imageId).toBe(brandImageId("Q1"));
+    expect(nth(geojson.features, 0).properties.imageId).toBe(brandImageId("Q1"));
   });
 });
 
@@ -272,6 +273,6 @@ describe("loadBrandMarkerImage", () => {
 
     expect(ok).toBe(true);
     expect(addImage).toHaveBeenCalledTimes(1);
-    expect(addImage.mock.calls[0][0]).toBe(brandImageId("Q1"));
+    expect(nth(addImage.mock.calls, 0)[0]).toBe(brandImageId("Q1"));
   });
 });

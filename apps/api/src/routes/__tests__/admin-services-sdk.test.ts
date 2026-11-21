@@ -18,7 +18,7 @@ import {
   SERVICE_ACTIONS,
 } from "@openmapx/core/ops";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRateLimitTierHook } from "../../server-wiring";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
@@ -340,7 +340,8 @@ vi.mock("../../services/ops-client", async (actual) => ({
 }));
 
 const sdk = await import("@openmapx/core/api-admin-sdk");
-const executeDefault = execute.getMockImplementation()!;
+const executeDefault = execute.getMockImplementation();
+assert.isDefined(executeDefault, "the execute mock has no default implementation");
 const { adminServicesRoute } = await import("../admin-services");
 const { adminOperationsRoute } = await import("../admin-operations");
 const { adminDawarichRoute } = await import("../admin-dawarich");

@@ -1,5 +1,5 @@
 import { classifyProviderFailure, ProviderPayloadError } from "@openmapx/integration-framework";
-import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { fakeHttpClient, httpStatus, nth } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import departuresFixture from "./__fixtures__/departures.json";
 import stopsFixture from "./__fixtures__/stops.json";
@@ -156,7 +156,7 @@ describe("Transitland transit provider", () => {
   });
 
   it("marks a canceled trip and omits realtime when no estimate exists", async () => {
-    const [first] = departuresFixture.stops[0].departures;
+    const first = nth(nth(departuresFixture.stops, 0).departures, 0);
     mockFetch.mockResolvedValueOnce(
       mockOk({
         stops: [
@@ -181,7 +181,9 @@ describe("Transitland transit provider", () => {
   });
 
   it("keeps valid departures when a neighbour lacks its scheduled instant", async () => {
-    const [first, second] = departuresFixture.stops[0].departures;
+    const recorded = nth(departuresFixture.stops, 0).departures;
+    const first = nth(recorded, 0);
+    const second = nth(recorded, 1);
     mockFetch.mockResolvedValueOnce(
       mockOk({
         stops: [{ departures: [{ ...first, departure: { scheduled: "08:24:00" } }, second] }],

@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { present } from "../../../__tests__/helpers/present.js";
 import { DataManagerReadiness } from "../../readiness.js";
 import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
@@ -88,7 +89,7 @@ describe.skipIf(
         await ready;
         const running = await store.inspect(id);
         await expect(
-          store.checkpoint(id, running!.version, {
+          store.checkpoint(id, present(running).version, {
             status: "ok",
             publication: "committed",
             result: { kind: "download-fonts", completed: true },
@@ -111,7 +112,7 @@ describe.skipIf(
         expect((await store.inspect(id))?.finishedAt).toBeNull();
         release();
         await expect
-          .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+          .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
           .toBe(outcome === "committed" ? "ok" : "canceled");
         const terminal = await store.inspect(id);
         expect(terminal?.finishedAt).not.toBeNull();
@@ -127,7 +128,7 @@ describe.skipIf(
             })
           ).status,
         ).toBe(terminal?.status.status);
-        await journal.verifyContainedTerminal(terminal!.execution);
+        await journal.verifyContainedTerminal(present(terminal).execution);
         await expect(
           runtime.admit(
             { kind: "download-fonts" },
@@ -191,7 +192,7 @@ describe.skipIf(
         )
       ).id;
       await expect
-        .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+        .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
         .toBe("ok");
       expect(effects).toBe(1);
       expect(lostReplies).toBe(-1);
@@ -257,7 +258,9 @@ describe.skipIf(
       );
       id = admitted.id;
       await expect
-        .poll(async () => (await store.inspect(id!))?.status.publication, { timeout: 15000 })
+        .poll(async () => (await store.inspect(present(id)))?.status.publication, {
+          timeout: 15000,
+        })
         .toBe("unknown");
       await runtime.close();
       control.closeControlInstallation(installation);
@@ -398,7 +401,7 @@ describe.skipIf(
         if (mode === "before-commit") {
           unblock();
           await expect
-            .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+            .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
             .toBe("canceled");
           expect((await store.inspect(id))?.status.publication).toBe("not_started");
         } else {
@@ -485,7 +488,9 @@ describe.skipIf(
           { operationKey: key, requestedDeadlineAt: deadline, triggeredBy: "cron" },
         );
       id = admitted.id;
-      await expect.poll(async () => (await store.inspect(id!))?.status.publication).toBe("unknown");
+      await expect
+        .poll(async () => (await store.inspect(present(id)))?.status.publication)
+        .toBe("unknown");
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       await runtime.close();
       control.closeControlInstallation(installation);
@@ -580,8 +585,9 @@ describe.skipIf(
       await expect
         .poll(
           async () =>
-            (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id!}`)[0]
-              ?.execution_completion != null,
+            (
+              await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${present(id)}`
+            )[0]?.execution_completion != null,
           { timeout: 15000 },
         )
         .toBe(true);
@@ -638,7 +644,7 @@ describe.skipIf(
           );
         id = admitted.id;
         await expect
-          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+          .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
           .toBe("ok");
         await expect
           .poll(async () => !heldTargets(dirname(data)).includes("data-manager"), {

@@ -58,8 +58,8 @@ describe("parseDegapp — CoopStroom shape", () => {
 
   it("reports 0 available cars when isAvailable is false", () => {
     const stations = parseDegapp(body, COOPSTROOM);
-    expect(stations[1].availableVehicles).toBe(0);
-    expect(stations[1].isRenting).toBe(false);
+    expect(stations[1]?.availableVehicles).toBe(0);
+    expect(stations[1]?.isRenting).toBe(false);
   });
 });
 
@@ -102,7 +102,7 @@ describe("parseDegapp — resilience", () => {
     ]);
     const stations = parseDegapp(body, DEGAGE);
     expect(stations).toHaveLength(1);
-    expect(stations[0].id).toBe("be-degage/9");
+    expect(stations[0]?.id).toBe("be-degage/9");
   });
 
   it("returns an empty array for a non-array body", () => {
@@ -127,7 +127,7 @@ describe("parseDegapp — resilience", () => {
         },
       ]);
       const [station] = parseDegapp(body, DEGAGE);
-      expect(station.vehicleTypeDetails?.[0]?.propulsion).toBe(expected);
+      expect(station?.vehicleTypeDetails?.[0]?.propulsion).toBe(expected);
     }
   });
 });

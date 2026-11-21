@@ -23,11 +23,12 @@ describe("discovery input inventory", () => {
   });
 
   it("includes external JSON imports from every selected suite", () => {
-    for (const entry of CATALOG.filter((entry) => entry.suite)) {
-      const suite = entry.suite!;
+    for (const { suite } of CATALOG) {
+      if (!suite) continue;
       const source = readFileSync(suite, "utf8");
-      for (const match of source.matchAll(/from\s+["'](\.[^"']+\.json)["']/g)) {
-        const path = resolve(suite, "..", match[1]).slice(`${process.cwd()}/`.length);
+      for (const [, file] of source.matchAll(/from\s+["'](\.[^"']+\.json)["']/g)) {
+        if (!file) continue;
+        const path = resolve(suite, "..", file).slice(`${process.cwd()}/`.length);
         expect(INPUT_FILES, `${suite} reads ${path}`).toContain(path);
       }
     }

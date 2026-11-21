@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrandKind } from "@openmapx/core";
-import { BRAND_QID_KEYS } from "@openmapx/core/utils/brandFilter";
+import { BRAND_QID_KEYS } from "@openmapx/core/places/brandFilter";
 import { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 import { normalize } from "./normalize.ts";
 import type { BrandArtifact, BrandEntry } from "./types.ts";
@@ -43,7 +43,7 @@ const nsiRoot = resolvePackageRoot("name-suggestion-index");
  */
 const QID_KEYS: { key: string; kind: BrandKind }[] = BRAND_QID_KEYS.map((key) => ({
   key,
-  kind: key.split(":")[0] as BrandKind,
+  kind: key.slice(0, key.indexOf(":")) as BrandKind,
 }));
 
 /** OSM keys that identify what kind of place this is, used for icon selection. */
@@ -148,6 +148,7 @@ export function buildArtifact(inputs?: BrandArtifactInputs): BrandArtifact {
       const hit = QID_KEYS.find(({ key }) => item.tags[key]);
       if (!hit) continue;
       const qid = item.tags[hit.key];
+      if (!qid) continue;
 
       let entry = acc.get(qid);
       if (!entry) {

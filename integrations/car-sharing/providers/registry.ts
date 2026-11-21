@@ -30,8 +30,7 @@ export function createRegionalCarSharingRegistry(options: {
       ),
     );
     const stations: SharedMobilityStation[] = [];
-    for (let index = 0; index < results.length; index++) {
-      const result = results[index];
+    for (const [index, result] of results.entries()) {
       if (result.status === "fulfilled") {
         stations.push(...result.value);
       } else {

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { Route, RouteStep } from "../../types/routing";
 import fixture from "../__fixtures__/junction/a57-neuss-exit20.json";
-import { cumulativeDistances } from "../deadReckon";
+import { cumulativeDistances, distanceAtVertex } from "../deadReckon";
 import {
   findJunctionCandidates,
   findJunctionDecisionPoints,
@@ -11,6 +11,37 @@ import {
 import { junctionLookupPoints } from "../junctionLookup";
 
 const a57Route = fixture.route as unknown as Route;
+
+const driftSteps: [RouteStep, RouteStep, RouteStep] = [
+  {
+    instruction: "Drive east",
+    distance: 1400,
+    duration: 80,
+    coordinates: [
+      [0, 0],
+      [0.01, 0],
+    ],
+  },
+  {
+    instruction: "Drive north",
+    distance: 300,
+    duration: 20,
+    coordinates: [
+      [0.01, 0],
+      [0.01, 0.002],
+    ],
+  },
+  {
+    instruction: "Exit right",
+    distance: 220,
+    duration: 20,
+    coordinates: [
+      [0.01, 0.002],
+      [0.012, 0.002],
+    ],
+    maneuver: { type: "fork", modifier: "right" },
+  },
+];
 
 const driftRoute: Route = {
   mode: "driving",
@@ -23,36 +54,7 @@ const driftRoute: Route = {
     [0.01, 0.002],
     [0.012, 0.002],
   ],
-  steps: [
-    {
-      instruction: "Drive east",
-      distance: 1400,
-      duration: 80,
-      coordinates: [
-        [0, 0],
-        [0.01, 0],
-      ],
-    },
-    {
-      instruction: "Drive north",
-      distance: 300,
-      duration: 20,
-      coordinates: [
-        [0.01, 0],
-        [0.01, 0.002],
-      ],
-    },
-    {
-      instruction: "Exit right",
-      distance: 220,
-      duration: 20,
-      coordinates: [
-        [0.01, 0.002],
-        [0.012, 0.002],
-      ],
-      maneuver: { type: "fork", modifier: "right" },
-    },
-  ],
+  steps: driftSteps,
 };
 
 describe("junction geometry positions", () => {
@@ -65,15 +67,16 @@ describe("junction geometry positions", () => {
       };
       const points = motorway ? findJunctionDecisionPoints(route) : findJunctionCandidates(route);
       expect(points).toHaveLength(1);
-      expect(points[0].point).toEqual([0.01, 0.002]);
-      expect(points[0].alongMeters).toBeCloseTo(1334.339, 2);
-      expect(points[0].approachBearing).toBeCloseTo(0, 4);
-      expect(points[0].divergenceDeg).toBeCloseTo(90, 2);
-      const lookup = junctionLookupPoints(route, points)[0].lookup;
+      expect(points[0]?.point).toEqual([0.01, 0.002]);
+      expect(points[0]?.alongMeters).toBeCloseTo(1334.339, 2);
+      expect(points[0]?.approachBearing).toBeCloseTo(0, 4);
+      expect(points[0]?.divergenceDeg).toBeCloseTo(90, 2);
+      const lookup = junctionLookupPoints(route, points)[0]?.lookup;
+      assert.isDefined(lookup);
       expect([lookup.lng, lookup.lat]).toEqual([0.01, 0.002]);
       expect(lookup.trace[4]).toEqual([0.01, 0.002]);
-      expect(lookup.trace[3][0]).toBeCloseTo(0.01, 6);
-      expect(lookup.trace[3][1]).toBeLessThan(0.002);
+      expect(lookup.trace[3]?.[0]).toBeCloseTo(0.01, 6);
+      expect(lookup.trace[3]?.[1]).toBeLessThan(0.002);
     },
   );
 
@@ -114,7 +117,8 @@ describe("junction geometry positions", () => {
         },
       ],
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.point).toEqual([0, 0]);
     expect(point.alongMeters).toBeCloseTo(4447.797, 2);
     expect(point.approachBearing).toBeCloseTo(180, 4);
@@ -125,7 +129,8 @@ describe("junction geometry positions", () => {
       ...driftRoute,
       steps: driftRoute.steps.map((step) => ({ ...step, coordinates: [], motorway: true })),
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.alongMeters).toBe(1700);
     expect(point.point).toEqual([0.012, 0.002]);
   });
@@ -134,9 +139,9 @@ describe("junction geometry positions", () => {
     const route: Route = {
       ...driftRoute,
       steps: [
-        { ...driftRoute.steps[0], motorway: true },
+        { ...driftSteps[0], motorway: true },
         {
-          ...driftRoute.steps[2],
+          ...driftSteps[2],
           coordinates: [
             [0.01, 0.001],
             [0.01, 0.002],
@@ -144,7 +149,8 @@ describe("junction geometry positions", () => {
         },
       ],
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.point[0]).toBeCloseTo(0.01, 6);
     expect(point.point[1]).toBeCloseTo(0.001, 6);
     expect(point.alongMeters).toBeCloseTo(1223.144, 2);
@@ -203,12 +209,15 @@ describe("junction geometry positions", () => {
       };
       const points = findJunctionDecisionPoints(route);
       expect(points).toHaveLength(2);
-      expect(points[0].point).toEqual([0.005, deviation]);
-      expect(points[1].point).toEqual([0.005, deviation]);
-      expect(points[0].alongMeters).toBeCloseTo(555.975, 2);
-      expect(points[0].approachBearing).toBeCloseTo(90, 4);
-      expect(points[1].alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[4], 2);
-      expect(points[1].approachBearing).toBeCloseTo(180, 4);
+      expect(points[0]?.point).toEqual([0.005, deviation]);
+      expect(points[1]?.point).toEqual([0.005, deviation]);
+      expect(points[0]?.alongMeters).toBeCloseTo(555.975, 2);
+      expect(points[0]?.approachBearing).toBeCloseTo(90, 4);
+      expect(points[1]?.alongMeters).toBeCloseTo(
+        distanceAtVertex(cumulativeDistances(route.geometry), 4),
+        2,
+      );
+      expect(points[1]?.approachBearing).toBeCloseTo(180, 4);
     },
   );
 
@@ -225,17 +234,20 @@ describe("junction geometry positions", () => {
       ...driftRoute,
       geometry: [t, b, start, c, d, e, a, end],
       steps: [
-        { ...driftRoute.steps[0], motorway: true, coordinates: [t, b, start, a] },
-        { ...driftRoute.steps[2], motorway: true, coordinates: [a, b, c, d, e, a] },
-        { ...driftRoute.steps[2], coordinates: [a, end] },
+        { ...driftSteps[0], motorway: true, coordinates: [t, b, start, a] },
+        { ...driftSteps[2], motorway: true, coordinates: [a, b, c, d, e, a] },
+        { ...driftSteps[2], coordinates: [a, end] },
       ],
     };
     const points = findJunctionDecisionPoints(route);
     expect(points).toHaveLength(2);
-    expect(points[0].alongMeters).toBeCloseTo(1945.911, 2);
-    expect(points[0].approachBearing).toBeCloseTo(90, 4);
-    expect(points[1].alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[6], 2);
-    expect(points[1].approachBearing).toBeCloseTo(180, 4);
+    expect(points[0]?.alongMeters).toBeCloseTo(1945.911, 2);
+    expect(points[0]?.approachBearing).toBeCloseTo(90, 4);
+    expect(points[1]?.alongMeters).toBeCloseTo(
+      distanceAtVertex(cumulativeDistances(route.geometry), 6),
+      2,
+    );
+    expect(points[1]?.approachBearing).toBeCloseTo(180, 4);
   });
 
   it("anchors a fork on the return along a retraced segment", () => {
@@ -247,12 +259,13 @@ describe("junction geometry positions", () => {
       ...driftRoute,
       geometry: [a, b, c, a],
       steps: [
-        { ...driftRoute.steps[0], motorway: true, coordinates: [a, middle, b, c] },
-        { ...driftRoute.steps[1], motorway: true, coordinates: [c, b], maneuver: { type: "turn" } },
-        { ...driftRoute.steps[2], coordinates: [b, middle, a] },
+        { ...driftSteps[0], motorway: true, coordinates: [a, middle, b, c] },
+        { ...driftSteps[1], motorway: true, coordinates: [c, b], maneuver: { type: "turn" } },
+        { ...driftSteps[2], coordinates: [b, middle, a] },
       ],
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.point).toEqual(b);
     expect(point.alongMeters).toBeCloseTo(444.78, 2);
     expect(point.approachBearing).toBeCloseTo(270, 4);
@@ -267,12 +280,18 @@ describe("junction geometry positions", () => {
       const route: Route = {
         ...driftRoute,
         geometry: raw.filter((_, index) => retained.has(index)),
-        steps: raw.slice(0, -1).map((coordinate, index) => ({
-          ...driftRoute.steps[0],
-          motorway: true,
-          coordinates: [coordinate, raw[index + 1]],
-          maneuver: { type: index === 0 ? "depart" : index === 3 || index === 6 ? "turn" : "fork" },
-        })),
+        steps: raw.slice(0, -1).map((coordinate, index) => {
+          const next = raw[index + 1];
+          assert.isDefined(next);
+          return {
+            ...driftSteps[0],
+            motorway: true,
+            coordinates: [coordinate, next],
+            maneuver: {
+              type: index === 0 ? "depart" : index === 3 || index === 6 ? "turn" : "fork",
+            },
+          };
+        }),
       };
       const points = findJunctionDecisionPoints(route);
       expect(points.map((point) => point.stepIndex)).toEqual([1, 2, 4, 5, 7, 8]);
@@ -293,14 +312,18 @@ describe("junction geometry positions", () => {
       ...driftRoute,
       geometry: [a, b, c, d, a, b, end],
       steps: [
-        { ...driftRoute.steps[0], distance: 4447.797048846394, coordinates: [], motorway: true },
-        { ...driftRoute.steps[1], coordinates: [a, b], motorway: true },
-        { ...driftRoute.steps[2], coordinates: [b, end] },
+        { ...driftSteps[0], distance: 4447.797048846394, coordinates: [], motorway: true },
+        { ...driftSteps[1], coordinates: [a, b], motorway: true },
+        { ...driftSteps[2], coordinates: [b, end] },
       ],
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.point).toEqual(b);
-    expect(point.alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[5], 4);
+    expect(point.alongMeters).toBeCloseTo(
+      distanceAtVertex(cumulativeDistances(route.geometry), 5),
+      4,
+    );
     expect(point.approachBearing).toBeCloseTo(90, 4);
   });
 
@@ -315,13 +338,17 @@ describe("junction geometry positions", () => {
         ...driftRoute,
         geometry: [a, b, c, d, a, b, a],
         steps: [
-          { ...driftRoute.steps[0], distance, coordinates: [], motorway: true },
-          { ...driftRoute.steps[2], coordinates: [b, a] },
+          { ...driftSteps[0], distance, coordinates: [], motorway: true },
+          { ...driftSteps[2], coordinates: [b, a] },
         ],
       };
-      const point = findJunctionDecisionPoints(route)[0];
+      const [point] = findJunctionDecisionPoints(route);
+      assert.isDefined(point);
       expect(point.point).toEqual(b);
-      expect(point.alongMeters).toBeCloseTo(cumulativeDistances(route.geometry)[5], 4);
+      expect(point.alongMeters).toBeCloseTo(
+        distanceAtVertex(cumulativeDistances(route.geometry), 5),
+        4,
+      );
       expect(point.divergenceDeg).toBeCloseTo(180, 4);
     },
   );
@@ -344,14 +371,15 @@ describe("junction geometry positions", () => {
         ...driftRoute,
         geometry: earlierVertex ? [a, middle, b, c, d, a, b, end] : [a, b, c, d, a, b, end],
         steps: [
-          { ...driftRoute.steps[0], distance, coordinates: [], motorway: true },
-          { ...driftRoute.steps[2], coordinates: [middle, b, end] },
+          { ...driftSteps[0], distance, coordinates: [], motorway: true },
+          { ...driftSteps[2], coordinates: [middle, b, end] },
         ],
       };
-      const point = findJunctionDecisionPoints(route)[0];
+      const [point] = findJunctionDecisionPoints(route);
+      assert.isDefined(point);
       expect(point.point).toEqual(middle);
       expect(point.alongMeters).toBeCloseTo(5003.77168196654, 4);
-      expect(junctionLookupPoints(route, [point])[0].lookup.trace[3][0]).toBeLessThan(0.005);
+      expect(junctionLookupPoints(route, [point])[0]?.lookup.trace[3]?.[0]).toBeLessThan(0.005);
     },
   );
 
@@ -386,7 +414,8 @@ describe("junction geometry positions", () => {
         },
       ],
     };
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.alongMeters).toBeCloseTo(4447.797, 2);
     expect(point.approachBearing).toBeCloseTo(180, 4);
   });
@@ -436,7 +465,8 @@ describe("findJunctionDecisionPoints on the A57 fixture", () => {
   it("finds exactly the exit step as an exit decision point", () => {
     const points = findJunctionDecisionPoints(a57Route);
     expect(points).toHaveLength(1);
-    const point = points[0];
+    const [point] = points;
+    assert.isDefined(point);
     expect(point.stepIndex).toBe(1);
     expect(point.kind).toBe("exit");
     expect(point.side).toBe("right");
@@ -464,7 +494,7 @@ describe("findJunctionCandidates", () => {
     ]);
     const candidates = findJunctionCandidates(route);
     expect(candidates.map((candidate) => candidate.stepIndex)).toEqual([1]);
-    expect(candidates[0].kind).toBe("exit");
+    expect(candidates[0]?.kind).toBe("exit");
     expect(findJunctionDecisionPoints(route)).toEqual([]);
   });
 
@@ -504,8 +534,8 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
     ]);
     const points = findJunctionDecisionPoints(route);
     expect(points).toHaveLength(1);
-    expect(points[0].kind).toBe("fork");
-    expect(points[0].side).toBe("right");
+    expect(points[0]?.kind).toBe("fork");
+    expect(points[0]?.side).toBe("right");
   });
 
   it("mirrors a left fork to side left", () => {
@@ -513,7 +543,7 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
       { step: { instruction: "Drive", motorway: true, maneuver: { type: "depart" } } },
       { step: { instruction: "Keep left", maneuver: { type: "fork", modifier: "left" } } },
     ]);
-    expect(findJunctionDecisionPoints(route)[0].side).toBe("left");
+    expect(findJunctionDecisionPoints(route)[0]?.side).toBe("left");
   });
 
   it("ignores a plain turn in town", () => {
@@ -551,7 +581,8 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
         },
       },
     ]);
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     expect(point.kind).toBe("exit");
     expect(point.sign).toEqual({ exitNumbers: ["20"] });
     expect(point.activeLanes).toEqual([]);
@@ -645,7 +676,8 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
         step: { instruction: "Exit right", maneuver: { type: "fork", modifier: "right" } },
       },
     ]);
-    const point = findJunctionDecisionPoints(route)[0];
+    const [point] = findJunctionDecisionPoints(route);
+    assert.isDefined(point);
     // Eastbound approach peeling north-east: ~45° divergence from the geometry.
     expect(Math.abs(point.divergenceDeg)).toBeGreaterThan(5);
     expect(Math.abs(point.divergenceDeg)).toBeLessThan(60);
@@ -653,7 +685,8 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
 });
 
 describe("sameJunction", () => {
-  const exit = findJunctionDecisionPoints(fixture.route as unknown as Route)[0];
+  const [exit] = findJunctionDecisionPoints(a57Route);
+  assert.isDefined(exit);
 
   it("matches the junction on a replacement route despite a new step index", () => {
     expect(

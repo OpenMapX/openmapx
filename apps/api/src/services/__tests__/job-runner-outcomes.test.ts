@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { processLogger } from "../../process-logger";
 import { AdminJobFailure } from "../admin-job-failure";
 import { claimAdminJob, jobOwnership } from "../admin-job-state";
@@ -73,6 +73,13 @@ afterEach(() => {
   runner.pumpStopped = false;
 });
 
+/** The JSON a query binds as its first parameter. */
+function firstJsonParam(query: { params: unknown[] }) {
+  const [param] = query.params;
+  assert(typeof param === "string", "the query binds no JSON first parameter");
+  return JSON.parse(param);
+}
+
 it("merges AdminJobFailure evidence into DB/SSE without publishing the runner's protocol", async () => {
   const result = {
     serviceBatch: {
@@ -93,7 +100,7 @@ it("merges AdminJobFailure evidence into DB/SSE without publishing the runner's 
     status: "failed",
   });
   const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
-  expect(JSON.parse(patch.params[0] as string)).toEqual({ phase: "build", ...result });
+  expect(firstJsonParam(patch)).toEqual({ phase: "build", ...result });
   // Only the handler's own state is merged into the protocol; the claim stays.
   const own = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.protocol as SQL);
   expect(own.sql).toContain("'handler'");
@@ -123,7 +130,7 @@ it("publishes unknown observation without a terminal event and retains the origi
   await run("test.unknown", { receipt: identity });
   stop();
   const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
-  expect(JSON.parse(patch.params[0] as string)).toMatchObject({
+  expect(firstJsonParam(patch)).toMatchObject({
     observation: { state: "unknown", reason: "transport", nextCheckAt: expect.any(String) },
   });
   expect(patch.sql).toContain("coalesce(");
@@ -143,11 +150,11 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
   stop();
   expect(events.some((event) => event.status === "success")).toBe(false);
   const patches = store.writes.map((write) =>
-    JSON.parse(new PgDialect().sqlToQuery(write.values.result as SQL).params[0] as string),
+    firstJsonParam(new PgDialect().sqlToQuery(write.values.result as SQL)),
   );
   // The late completion is kept as the handler's own state, not in the result.
   const own = store.writes.map((write) =>
-    JSON.parse(new PgDialect().sqlToQuery(write.values.protocol as SQL).params[0] as string),
+    firstJsonParam(new PgDialect().sqlToQuery(write.values.protocol as SQL)),
   );
   expect(own.find((patch) => patch._settled)).toEqual({
     _settled: { status: "success", result: { completed: true } },
@@ -195,7 +202,7 @@ it("changes owner and version together while retaining the complete result in Po
   if (!write) throw new Error("Missing claim");
   expect(write.values.result).toBeUndefined();
   const assignment = new PgDialect().sqlToQuery(write.values.protocol as SQL);
-  const next = JSON.parse(assignment.params[0] as string).execution;
+  const next = firstJsonParam(assignment).execution;
   expect(next.owner).not.toBe(execution.owner);
   expect(next.version).toBe(5);
   expect(assignment.sql).toContain("||");

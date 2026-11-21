@@ -86,7 +86,7 @@ export function TransitJourneyControls({
     p.deviationMeters < 75 &&
     haversineDistance(p.position, [ride.from.lng, ride.from.lat]) > 150;
   const alightNudge =
-    riding && p?.position && haversineDistance(p.position, [leg.to.lng, leg.to.lat]) < 75;
+    riding && leg && p?.position && haversineDistance(p.position, [leg.to.lng, leg.to.lat]) < 75;
   const undoAvailable = p?.canUndo && (!p.lastActionAtMs || now - p.lastActionAtMs <= 120000);
   const walking = leg?.mode === "walking";
   const recovering = !riding && (!!ride?.cancelled || !!p?.offPlan);

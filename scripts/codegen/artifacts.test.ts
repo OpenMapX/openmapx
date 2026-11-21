@@ -36,7 +36,7 @@ afterEach(async () => {
 
 it("batch-formats every nested ignored scratch artifact with normative bytes in one CLI invocation", async () => {
   const { source, destination } = await fixture();
-  const inputs = [
+  const inputs: ReadonlyArray<readonly [string, string]> = [
     ["models/z.ts", "import {z,a} from './types'; export const model={z,a, value:'dirty'};\n"],
     ["client.ts", "import {z} from './z';import {a} from './a';export const client={z,a};\n"],
     ["models/a.ts", `export const options={message:'${"long value ".repeat(12)}',ok:true};\n`],
@@ -186,7 +186,7 @@ function killProbe(pid: number) {
         states.every((row) => row.length === 3) &&
         !states.some(
           ([id, group, state]) =>
-            (pid < 0 ? Number(group) === -pid : Number(id) === pid) && !state.startsWith("Z"),
+            (pid < 0 ? Number(group) === -pid : Number(id) === pid) && !state?.startsWith("Z"),
         )
       )
         return;

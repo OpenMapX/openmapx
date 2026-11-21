@@ -139,8 +139,8 @@ describe("planCharges", () => {
     };
     const plan = await planCharges({ ...baseInput, socStartKwh: 30 }, cb);
     expect(plan.stops.length).toBeGreaterThanOrEqual(1);
-    expect(plan.stops[0].connector).toBe("ccs2");
-    expect(plan.stops[0].evse.key).toBe("mid-1");
+    expect(plan.stops[0]?.connector).toBe("ccs2");
+    expect(plan.stops[0]?.evse.key).toBe("mid-1");
     expect(plan.totalChargeSeconds).toBeGreaterThan(0);
   });
 
@@ -234,7 +234,7 @@ describe("planCharges", () => {
       cb,
     );
     expect(plan.stops).toHaveLength(1);
-    expect(plan.stops[0].departSocKwh).toBeGreaterThan(16); // charged past the 80% taper to finish
+    expect(plan.stops[0]?.departSocKwh).toBeGreaterThan(16); // charged past the 80% taper to finish
   });
 
   it("prefers a charger with free stalls over a full one at similar detour (near-term)", async () => {

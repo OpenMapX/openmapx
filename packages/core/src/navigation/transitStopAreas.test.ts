@@ -185,17 +185,17 @@ describe("resolveTransitLegTargets", () => {
     const targets = resolveTransitLegTargets(trip([east(LNG, -500), LAT]), {
       [`${BOARD.stopId}|`]: area(BOARD.stopId, { platform: [PLATFORM], station: [STATION] }),
     });
-    expect(targets[0].end).toContain(PLATFORM);
-    expect(targets[1].board).toBe(targets[0].end);
+    expect(targets[0]?.end).toContain(PLATFORM);
+    expect(targets[1]?.board).toBe(targets[0]?.end);
   });
 
   it("falls back from platform to station to a default circle", () => {
     const stationOnly = resolveTransitLegTargets(trip([east(LNG, -500), LAT]), {
       [`${BOARD.stopId}|`]: area(BOARD.stopId, { station: [STATION] }),
     });
-    expect(stationOnly[0].end).toContain(STATION);
+    expect(stationOnly[0]?.end).toContain(STATION);
     const nothing = resolveTransitLegTargets(trip([east(LNG, -500), LAT]));
-    expect(nothing[0].end).toEqual([defaultStopAreaShape([LNG, LAT], "bus")]);
+    expect(nothing[0]?.end).toEqual([defaultStopAreaShape([LNG, LAT], "bus")]);
   });
 
   it("skips an area the walk already starts in, as within one station", () => {
@@ -203,13 +203,13 @@ describe("resolveTransitLegTargets", () => {
     const targets = resolveTransitLegTargets(trip([east(LNG, 120), north(LAT, 60)]), {
       [`${BOARD.stopId}|`]: area(BOARD.stopId, { station: [STATION] }),
     });
-    expect(targets[0].end).toEqual([defaultStopAreaShape([LNG, LAT], "bus")]);
+    expect(targets[0]?.end).toEqual([defaultStopAreaShape([LNG, LAT], "bus")]);
   });
 
   it("ends a ride at its alight stop and the trip at a small destination circle", () => {
     const targets = resolveTransitLegTargets(trip([east(LNG, -500), LAT]));
-    expect(targets[1].end).toEqual([defaultStopAreaShape([ALIGHT.lng, ALIGHT.lat], "bus")]);
-    expect(targets[2].end).toEqual([
+    expect(targets[1]?.end).toEqual([defaultStopAreaShape([ALIGHT.lng, ALIGHT.lat], "bus")]);
+    expect(targets[2]?.end).toEqual([
       { type: "point", coordinates: [ALIGHT.lng, north(ALIGHT.lat, 300)], bufferMeters: 20 },
     ]);
   });

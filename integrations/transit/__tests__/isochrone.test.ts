@@ -76,8 +76,8 @@ describe("buildIsochroneFeatureCollection", () => {
   it("emits one nested feature per threshold, largest first", () => {
     const collection = buildIsochroneFeatureCollection(radialField(), REQUEST, META);
     expect(collection.features).toHaveLength(2);
-    expect(collection.features[0].properties?.travelTimeMinutes).toBe(30);
-    expect(collection.features[1].properties?.travelTimeMinutes).toBe(15);
+    expect(collection.features[0]?.properties?.travelTimeMinutes).toBe(30);
+    expect(collection.features[1]?.properties?.travelTimeMinutes).toBe(15);
   });
 
   it("carries render properties so the existing fill layer needs no change", () => {

@@ -265,8 +265,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
   },
 ];
 
-const CATEGORY_TARGETS: Record<
-  string,
+type ArticleTarget =
   | "account"
   | "authentication"
   | "saved-content"
@@ -276,8 +275,9 @@ const CATEGORY_TARGETS: Record<
   | "activity"
   | "disclosures"
   | "requests"
-  | "other"
-> = {
+  | "other";
+
+const CATEGORY_TARGETS: Record<string, ArticleTarget> = {
   "account-profile": "account",
   "auth-accounts": "authentication",
   "auth-sessions": "authentication",
@@ -411,7 +411,7 @@ export function buildSubjectArchiveEntries(
     });
   }
 
-  const articleParts = new Map<string, SubjectExportRecord[]>();
+  const articleParts = new Map<ArticleTarget, SubjectExportRecord[]>();
   const portableParts = new Map<string, SubjectExportRecord[]>();
   let assembledRecords = 0;
   for (const registration of SUBJECT_DATA_CATALOGUE) {
@@ -439,7 +439,7 @@ export function buildSubjectArchiveEntries(
       portableParts.set(portableTarget, portableRecords);
     }
   }
-  const articleLogical: Record<string, string> = {
+  const articleLogical: Record<ArticleTarget, string> = {
     account: "account",
     authentication: "authentication",
     "saved-content": "saved-content",

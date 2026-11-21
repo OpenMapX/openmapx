@@ -13,10 +13,11 @@ import {
   unwrapAdminResponse,
 } from "@openmapx/core/api-admin-sdk";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import type { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { ArtifactTransferStore } from "../../../../ops-agent/src/artifact-transfer/store";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -241,11 +242,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             (value) =>
               (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
           );
-          const retained = row?.result as Record<string, unknown> | undefined;
-          expect((row?.protocol as { candidate?: { phase?: string } })?.candidate?.phase).toBe(
+          assert.isDefined(row, "the migration job row is missing");
+          const retained = row.result as Record<string, unknown> | undefined;
+          expect((row.protocol as { candidate?: { phase?: string } })?.candidate?.phase).toBe(
             "generation_applied",
           );
-          expect(retained?.migration).toMatchObject({ outcome: "applied", operationId: row!.id });
+          expect(retained?.migration).toMatchObject({ outcome: "applied", operationId: row.id });
           await originalUnlink(path);
           interrupted = true;
           throw Error("API interrupted after migration packet unlink");
@@ -259,7 +261,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           row = rows.find(
             (value) =>
               (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
-          )!;
+          );
+        assert.isDefined(row, "the interrupted migration job row is missing");
         expect(row.status).toBe("running");
         const retained = row.result as Record<string, unknown>;
         await state.fixture.db
@@ -309,7 +312,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .from(integrationConfig)
         .orderBy(integrationConfig.integrationId);
       const invalid = document("not-written");
-      invalid.integrations[0]!.config.TOKEN = "synthetic-secret";
+      itemAt(invalid.integrations, 0).config.TOKEN = "synthetic-secret";
       const denied = await jobRunner.runImmediateConfigurationMigrationPreview({
         actorId: "migration-admin",
         operationKey: createDurableOpsKey("migration.test.denial", randomUUID()),
@@ -529,13 +532,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(adminJob)
           .where(eq(adminJob.type, "credential.import"));
-        expect(row?.status).toBe("running");
+        assert.isDefined(row, "the credential import job row is missing");
+        expect(row.status).toBe("running");
         await state.fixture.db
           .update(adminJob)
           .set({
-            protocol: { ...row!.protocol, observationLeaseUntil: new Date(0).toISOString() },
+            protocol: { ...row.protocol, observationLeaseUntil: new Date(0).toISOString() },
             result: {
-              ...(row!.result as Record<string, unknown>),
+              ...(row.result as Record<string, unknown>),
               observation: {
                 state: "unknown",
                 reason: "recovery_required",
@@ -543,7 +547,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             },
           })
-          .where(eq(adminJob.id, row!.id));
+          .where(eq(adminJob.id, row.id));
         const { jobRunner } = await import("../job-runner");
         await jobRunner.initialize();
         await jobRunner.reconcile();
@@ -552,7 +556,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const [recovered] = await state.fixture.db
               .select()
               .from(adminJob)
-              .where(eq(adminJob.id, row!.id));
+              .where(eq(adminJob.id, row.id));
             expect(recovered?.status).toBe("success");
           },
           { timeout: 30000 },

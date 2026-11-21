@@ -224,6 +224,7 @@ describe("setupCron", () => {
             await work();
             return {
               segments: 0,
+              malformed: 0,
               rows: 0,
               tiles: 0,
               built: false,

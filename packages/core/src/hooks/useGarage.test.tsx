@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, configureApiClient } from "../api/client";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
 import { LOCAL_VEHICLES_KEY } from "../vehicles";
@@ -74,7 +74,7 @@ describe("useVehicles", () => {
     const { result } = renderHook(() => useVehicles(), { wrapper: wrapper(client()) });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].name).toBe("Local Car");
+    expect(result.current.data?.[0]?.name).toBe("Local Car");
     expect(get).not.toHaveBeenCalled();
   });
 
@@ -86,7 +86,7 @@ describe("useVehicles", () => {
     const { result } = renderHook(() => useVehicles(), { wrapper: wrapper(client()) });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].name).toBe("Server Car");
+    expect(result.current.data?.[0]?.name).toBe("Server Car");
     expect(get).toHaveBeenCalledWith(
       "http://garage.test/api/vehicles",
       expect.objectContaining({ method: "GET", credentials: "include" }),
@@ -101,11 +101,11 @@ describe("useVehicles", () => {
     const shared = client();
 
     const anonymous = renderHook(() => useVehicles(), { wrapper: wrapper(shared) });
-    await waitFor(() => expect(anonymous.result.current.data?.[0].name).toBe("Local Car"));
+    await waitFor(() => expect(anonymous.result.current.data?.[0]?.name).toBe("Local Car"));
 
     session.value = { user: { id: "user-1" } };
     const signedIn = renderHook(() => useVehicles(), { wrapper: wrapper(shared) });
-    await waitFor(() => expect(signedIn.result.current.data?.[0].name).toBe("Server Car"));
+    await waitFor(() => expect(signedIn.result.current.data?.[0]?.name).toBe("Server Car"));
   });
 });
 
@@ -206,16 +206,17 @@ it("cancels the prior account acquisition when the identity changes", async () =
   const view = renderHook(() => useVehicles(), { wrapper: wrapper(shared) });
   try {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    const options = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const options = vi.mocked(fetch).mock.calls[0]?.[1];
+    assert.isDefined(options, "the account read was sent without options");
     session.value = { user: { id: "user-2" } };
     view.rerender();
-    await waitFor(() => expect(view.result.current.data?.[0].id).toBe("account-two"));
+    await waitFor(() => expect(view.result.current.data?.[0]?.id).toBe("account-two"));
     expect(options.signal?.aborted).toBe(true);
     release(json({ vehicles: [{ ...LOCAL_ROW, id: "retired-account" }] }));
     await waitFor(() =>
       expect(shared.getQueryData(["garage", "vehicles", "user-1"])).toBeUndefined(),
     );
-    expect(view.result.current.data?.[0].id).toBe("account-two");
+    expect(view.result.current.data?.[0]?.id).toBe("account-two");
   } finally {
     release(json({ vehicles: [] }));
     view.unmount();

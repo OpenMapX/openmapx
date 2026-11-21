@@ -9,6 +9,7 @@ import {
   integrationManifestSchema,
   resolveIntegrationContributors,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import transitManifest from "../transit-entur/manifest.json";
 import geocodingManifest from "./manifest.json";
@@ -59,7 +60,8 @@ describe.each([geocodingManifest, transitManifest])("$id service/data credit sco
         };
         const receipts = sources.contributorsFor(feature);
         expect(receipts.map((receipt) => receipt.sourceId)).toEqual(["entur-geocoder", sourceId]);
-        const [apiReceipt, supplierReceipt] = receipts;
+        const apiReceipt = nth(receipts, 0);
+        const supplierReceipt = nth(receipts, 1);
         const api = buildAttributionPresentation(apiReceipt, surface);
         expect(api.visibleHtml).toBe("");
         expect(api.fullHtml).toContain(CONDITION);

@@ -5,6 +5,7 @@ import type {
   ParkingSiteProvider,
   ParkingSiteQuery,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, test, vi } from "vitest";
 import { createParkingDataSource } from "../data-source.js";
 
@@ -121,7 +122,7 @@ describe("parking orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.data.map((r) => r.id)).toEqual(["a:ok"]);
-    const query = vi.mocked(a.searchSites).mock.calls[0][1] as ParkingSiteQuery;
+    const query = nth(vi.mocked(a.searchSites).mock.calls, 0)[1] as ParkingSiteQuery;
     expect(query.excludedSourceIds).toEqual(["src-blocked"]);
 
     expect((await source.getDetail("a:merged")).data).toBeNull();
@@ -221,7 +222,7 @@ describe("parking orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
-    expect(result.data[2].contributors).toEqual([
+    expect(result.data[2]?.contributors).toEqual([
       {
         sourceId: "src-c",
         name: "MobiData BW",

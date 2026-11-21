@@ -41,10 +41,10 @@ export function parseDoctorFindings(output: string): DoctorFinding[] {
   const findings: DoctorFinding[] = [];
   let current: DoctorFinding | null = null;
   for (const line of output.split("\n")) {
-    const failure = line.match(/^\s*[✖✗x]\s+(.*\S)\s*$/);
-    if (failure) {
+    const title = line.match(/^\s*[✖✗x]\s+(.*\S)\s*$/)?.[1];
+    if (title) {
       if (current) findings.push(current);
-      current = { title: failure[1], detail: "" };
+      current = { title, detail: "" };
       continue;
     }
     // A summary line ends the last block; anything after it is not detail.
@@ -67,9 +67,9 @@ export function parseOutOfDatePackages(detail: string): OutOfDatePackage[] {
   const packages: OutOfDatePackage[] = [];
   for (const line of detail.split("\n")) {
     const match = line.match(/^\s*(@?[a-z0-9][\w./-]*)\s+([~^]?[\d.]+\S*)\s+([~^]?[\d.]+\S*)\s*$/i);
-    if (!match) continue;
-    if (match[1] === "package") continue;
-    packages.push({ name: match[1], expected: match[2], found: match[3] });
+    const [, name, expected, found] = match ?? [];
+    if (!name || !expected || !found || name === "package") continue;
+    packages.push({ name, expected, found });
   }
   return packages;
 }

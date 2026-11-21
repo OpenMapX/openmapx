@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core";
 import type { Attribution } from "@openmapx/integration-framework";
 import {
   type CustomLayerInterface,
@@ -137,7 +138,7 @@ export class LandmarkModelLayer implements CustomLayerInterface {
   setPlaced(models: readonly PlacedModel[]): void {
     const unchanged =
       models.length === this.placed.length &&
-      models.every((model, i) => samePlacement(model, this.placed[i] as PlacedModel));
+      models.every((model, i) => samePlacement(model, itemAt(this.placed, i)));
     if (unchanged) return;
     const next = new Set(models.map((p) => p.model.scene));
     for (const previous of this.placed)

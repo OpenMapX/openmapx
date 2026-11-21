@@ -155,10 +155,10 @@ describe("GroundCoastingScheduler", () => {
     expect(new Set(origins.map((origin) => JSON.stringify(origin)))).toEqual(
       new Set([JSON.stringify({ sessionId: session().sessionId, anchorAtMs: NOW })]),
     );
-    for (let index = 1; index < dispatched.length; index++)
-      expect(dispatched[index].timestampMs - dispatched[index - 1].timestampMs).toBe(
-        COAST_DISPATCH_MS,
-      );
+    for (const [index, fix] of dispatched.entries()) {
+      const previous = dispatched[index - 1];
+      if (previous) expect(fix.timestampMs - previous.timestampMs).toBe(COAST_DISPATCH_MS);
+    }
   });
 
   it("stops itself when the coast runs out", () => {

@@ -124,8 +124,7 @@ export function assertCloneWithinBudget(root: string): void {
   let entries = 0;
   let totalBytes = 0;
   const stack: string[] = [root];
-  while (stack.length > 0) {
-    const directory = stack.pop() as string;
+  for (let directory = stack.pop(); directory !== undefined; directory = stack.pop()) {
     for (const name of readdirSync(directory)) {
       const absolute = join(directory, name);
       const relativePath = relative(root, absolute);

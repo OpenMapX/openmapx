@@ -2,6 +2,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import {
   type FeedCredentialChange,
@@ -300,7 +301,7 @@ async function proof(state: PatchState, consume: boolean, tx: AuthDatabase) {
   const input = proofInput(state),
     verifier = new AdminActionReauthentication(tx);
   if (input.proofs.length === 1) {
-    const single = { ...input.proofs[0]!, nonce: input.nonce, sessionId: input.sessionId };
+    const single = { ...itemAt(input.proofs, 0), nonce: input.nonce, sessionId: input.sessionId };
     await (consume ? verifier.consume(single, tx) : verifier.check(single, tx));
   } else await (consume ? verifier.consumeMany(input, tx) : verifier.checkMany(input, tx));
 }
@@ -508,6 +509,8 @@ export async function persistPreparedFeedCredentialRow(input: {
         .onConflictDoNothing()
         .returning({ id: serviceSecret.id });
   if (changed.length !== 1) throw new TransitCredentialConflict();
+  const { preview } = state;
+  if (!preview) throw new TransitCredentialConflict();
   const marked = await tx
     .update(transitCredentialPreview)
     .set({
@@ -517,9 +520,9 @@ export async function persistPreparedFeedCredentialRow(input: {
     })
     .where(
       and(
-        eq(transitCredentialPreview.id, state.preview!.previewId),
+        eq(transitCredentialPreview.id, preview.previewId),
         eq(transitCredentialPreview.actorId, input.writer.actorId),
-        eq(transitCredentialPreview.intentFingerprint, state.preview!.intentFingerprint),
+        eq(transitCredentialPreview.intentFingerprint, preview.intentFingerprint),
         sql`${transitCredentialPreview.consumedAt} is null`,
         sql`${transitCredentialPreview.expiresAt} > now()`,
       ),

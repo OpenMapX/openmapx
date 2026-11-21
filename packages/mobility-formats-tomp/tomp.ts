@@ -408,13 +408,13 @@ export function resolveTompRef(
 }
 
 export function bundleTompOpenApiDocuments(inputs: TompNamedDocument[]): TompOpenApiDocument {
-  if (inputs.length === 0) throw new Error("Expected at least one TOMP document to bundle.");
-
   const parsedInputs = inputs.map(parseNamedTompDocument);
+  const [firstInput] = parsedInputs;
+  if (!firstInput) throw new Error("Expected at least one TOMP document to bundle.");
+
   const includedFiles = new Set(parsedInputs.map(({ fileName }) => fileName));
   const primaryDocument =
-    parsedInputs.find(({ fileName }) => fileName.includes("CORE"))?.document ??
-    parsedInputs[0].document;
+    parsedInputs.find(({ fileName }) => fileName.includes("CORE"))?.document ?? firstInput.document;
 
   const bundled: TompOpenApiDocument = {
     info: structuredClone(primaryDocument.info ?? {}),

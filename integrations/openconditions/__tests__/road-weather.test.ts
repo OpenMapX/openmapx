@@ -5,7 +5,6 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
 import type { LatestReading } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToRoadWeatherStation } from "../road-weather/map.js";
@@ -14,6 +13,7 @@ import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-weather.json" with { type: "json" };
+import { connectedClient, found, nth } from "./support.js";
 
 /*
  * `features-weather.json` is the `GET /features?kind=weather_station&canonical=1&expand=components,latest`
@@ -33,6 +33,7 @@ const NOW = new Date("2026-10-14T23:30:00Z");
 
 type Body = { records: Rec[]; latest: Record<string, LatestReading[]> };
 const body = () => structuredClone(featuresResponse) as unknown as Body;
+const latest = (answer: Body, id: string) => found(answer.latest[id], `readings of ${id}`);
 
 const EVERY_SOURCE: LiveSources = {
   ready: true,
@@ -47,7 +48,7 @@ function providerWith(answer: unknown, sources: LiveSources = EVERY_SOURCE, now 
   const http = fakeHttpClient((req: FakeHttpRequest) =>
     req.url === `${BASE_URL}/features` ? answer : undefined,
   );
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+  const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
   return { http, provider: createRoadWeatherProvider(client, sources, { now: () => now }) };
 }
 
@@ -65,7 +66,7 @@ describe("road-weather-openconditions", () => {
     });
     expect(partial).toBeUndefined();
     expect(stations.map((s) => s.id)).toEqual([NUPURI, VUOSAARI, KOUSA, LAPINLAHTI]);
-    const nupuri = stations[0]!;
+    const nupuri = nth(stations, 0);
     expect(nupuri).toMatchObject({
       name: "Tie 1 Espoo, Nupuri",
       country: "FI",
@@ -113,7 +114,7 @@ describe("road-weather-openconditions", () => {
   test("a salted surface keeps its own state", async () => {
     const { provider } = providerWith(body());
     const { stations } = await provider.searchStations(BBOX);
-    expect(stations[3]!.surface[0]).toMatchObject({
+    expect(stations[3]?.surface[0]).toMatchObject({
       state: { value: "chemically_wet" },
       saltKgM3: { value: 7.3 },
       freezingPointC: { value: -4.2 },
@@ -123,8 +124,8 @@ describe("road-weather-openconditions", () => {
   test("a closed station stands without values; an hour-old value is no current one", () => {
     const answer = body();
     const vuosaari = recordToRoadWeatherStation(
-      answer.records[1]!,
-      answer.latest[VUOSAARI]!,
+      nth(answer.records, 1),
+      latest(answer, VUOSAARI),
       undefined,
       undefined,
       NOW,
@@ -133,8 +134,8 @@ describe("road-weather-openconditions", () => {
     expect(vuosaari?.air).toEqual({});
 
     const later = recordToRoadWeatherStation(
-      answer.records[0]!,
-      answer.latest[NUPURI]!,
+      nth(answer.records, 0),
+      latest(answer, NUPURI),
       undefined,
       undefined,
       new Date("2026-10-15T00:30:00Z"),
@@ -145,9 +146,9 @@ describe("road-weather-openconditions", () => {
 
   test("the station's device status: offline is out of service, warning and error a fault", () => {
     const answer = body();
-    const station = (id: string, readings = answer.latest[id]!) =>
+    const station = (id: string, readings = latest(answer, id)) =>
       recordToRoadWeatherStation(
-        answer.records.find((r) => r.id === id)!,
+        found(answer.records.find((r) => r.id === id)),
         readings,
         undefined,
         undefined,
@@ -163,7 +164,7 @@ describe("road-weather-openconditions", () => {
     expect(station(VUOSAARI)?.status).toBe("temporarily_closed");
 
     const withStatus = (value: string, validUntil?: string) =>
-      answer.latest[NUPURI]!.map((r) =>
+      latest(answer, NUPURI).map((r) =>
         r.property === "device.status"
           ? { ...r, result: { ...(r.result as Rec), value }, ...(validUntil ? { validUntil } : {}) }
           : r,
@@ -183,7 +184,7 @@ describe("road-weather-openconditions", () => {
   test("a change-only value is current while its validity lasts, however long ago it changed", () => {
     const answer = body();
     // The road has been dry since summer; the feed still polls, so the state stands.
-    const readings = answer.latest[NUPURI]!.map((r) =>
+    const readings = latest(answer, NUPURI).map((r) =>
       r.property === "road.surface_state" || r.property === "weather.precipitation_type"
         ? {
             ...r,
@@ -193,7 +194,7 @@ describe("road-weather-openconditions", () => {
         : r,
     );
     const station = recordToRoadWeatherStation(
-      answer.records[0]!,
+      nth(answer.records, 0),
       readings,
       undefined,
       undefined,
@@ -206,24 +207,24 @@ describe("road-weather-openconditions", () => {
     expect(station?.air.precipitation?.value).toBe("none");
 
     // Without a validity a change-only value says nothing about now.
-    const unbounded = answer.latest[NUPURI]!.map((r) => {
+    const unbounded = latest(answer, NUPURI).map((r) => {
       if (r.property !== "road.surface_state") return r;
       const { validUntil: _validUntil, ...rest } = r;
       return rest;
     });
     expect(
-      recordToRoadWeatherStation(answer.records[0]!, unbounded, undefined, undefined, NOW)
+      recordToRoadWeatherStation(nth(answer.records, 0), unbounded, undefined, undefined, NOW)
         ?.surface[0]?.state,
     ).toBeUndefined();
   });
 
   test("a change-only value past the validity OpenConditions gives it is no current one", () => {
     const answer = body();
-    const readings = answer.latest[NUPURI]!.map((r) =>
+    const readings = latest(answer, NUPURI).map((r) =>
       r.property === "road.surface_state" ? { ...r, validUntil: "2026-10-14T23:25:00Z" } : r,
     );
     const station = recordToRoadWeatherStation(
-      answer.records[0]!,
+      nth(answer.records, 0),
       readings,
       undefined,
       undefined,
@@ -238,13 +239,13 @@ describe("road-weather-openconditions", () => {
 
   test("a value in another unit than the model's is left out", () => {
     const answer = body();
-    const readings = answer.latest[NUPURI]!.map((r) =>
+    const readings = latest(answer, NUPURI).map((r) =>
       r.property === "weather.air_temperature"
         ? { ...r, result: { type: "quantity", value: 49.5, unit: "[degF]" } }
         : r,
     );
     const station = recordToRoadWeatherStation(
-      answer.records[0]!,
+      nth(answer.records, 0),
       readings,
       undefined,
       undefined,
@@ -271,7 +272,7 @@ describe("road-weather-openconditions", () => {
         id === "fi-digitraffic-weather" ? "Shown with Fintraffic's notice" : undefined,
     });
     const { stations } = await provider.searchStations(BBOX);
-    expect(stations[0]!.attributions).toContainEqual({
+    expect(stations[0]?.attributions).toContainEqual({
       sourceId: "fi-digitraffic-weather",
       name: "Shown with Fintraffic's notice",
     });

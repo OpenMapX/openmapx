@@ -77,6 +77,10 @@ export function PlaceDeparturesView({
   const items = tab === "departures" ? departures : arrivals;
   const isLoading = tab === "departures" ? depsLoading : arrivalsLoading;
   const filtered = modeFilter ? items?.filter((d) => d.route.mode === modeFilter) : items;
+  const modeLabel = (mode: TransportMode) => {
+    const key = MODE_LABEL_KEYS[mode];
+    return key ? t(key) : mode;
+  };
   const hasArrivals = arrivals && arrivals.length > 0;
   // Keep the way back once Arrivals is chosen, even if a refetch empties it.
   const showTabToggle = hasArrivals || tab === "arrivals";
@@ -136,9 +140,7 @@ export function PlaceDeparturesView({
               color: "text.secondary",
             }}
           >
-            {modeFilter
-              ? `${MODE_LABEL_KEYS[modeFilter] ? t(MODE_LABEL_KEYS[modeFilter] as string) : modeFilter} ${t(tab)}`
-              : t(tab)}
+            {modeFilter ? `${modeLabel(modeFilter)} ${t(tab)}` : t(tab)}
           </Typography>
         </Box>
       </Box>
@@ -213,12 +215,7 @@ export function PlaceDeparturesView({
               }}
             >
               {modeFilter
-                ? t("noDeparturesMode", {
-                    mode: MODE_LABEL_KEYS[modeFilter]
-                      ? t(MODE_LABEL_KEYS[modeFilter] as string)
-                      : modeFilter,
-                    tab: t(tab),
-                  })
+                ? t("noDeparturesMode", { mode: modeLabel(modeFilter), tab: t(tab) })
                 : t("noDeparturesGeneric", { tab: t(tab) })}
             </Typography>
           </Box>

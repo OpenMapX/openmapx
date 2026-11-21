@@ -19,6 +19,7 @@ export function geocoderFeatureCoordinates(
   const coordinates = feature.geometry.coordinates;
   if (coordinates.length !== 2) return undefined;
   const [lon, lat] = coordinates;
+  if (lon === undefined || lat === undefined) return undefined;
   if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90)
     return undefined;
   return [lon, lat];
@@ -57,10 +58,12 @@ const stopTypes: Readonly<Record<string, TransportMode>> = {
 export function geocoderFeatureModes(feature: EnturGeocoderFeature): TransportMode[] {
   const result = new Set<TransportMode>();
   for (const { mode } of feature.properties.transportModes ?? []) {
-    if (Object.hasOwn(modes, mode)) result.add(modes[mode]);
+    const known = Object.hasOwn(modes, mode) ? modes[mode] : undefined;
+    if (known) result.add(known);
   }
   for (const type of feature.properties.stopPlaceTypes ?? []) {
-    if (Object.hasOwn(stopTypes, type)) result.add(stopTypes[type]);
+    const known = Object.hasOwn(stopTypes, type) ? stopTypes[type] : undefined;
+    if (known) result.add(known);
   }
   return [...result];
 }

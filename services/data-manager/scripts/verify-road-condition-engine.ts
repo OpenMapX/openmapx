@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,8 +18,11 @@ for (const line of (await readFile(join(directory, "tiles/way_edges.txt"), "utf8
   .split("\n")) {
   const cells = line.split(",");
   const edges: WayEdge[] = [];
-  for (let i = 1; i + 1 < cells.length; i += 2)
-    edges.push({ forward: cells[i] === "1", ...decodeGraphId(BigInt(cells[i + 1]!)) });
+  for (let i = 1; i + 1 < cells.length; i += 2) {
+    const graphId = cells[i + 1];
+    assert.ok(graphId !== undefined);
+    edges.push({ forward: cells[i] === "1", ...decodeGraphId(BigInt(graphId)) });
+  }
   ways.set(Number(cells[0]), edges);
 }
 assert.deepEqual(
@@ -60,8 +63,9 @@ const route = async (
     trip?: { summary: { length: number; time: number } };
     error?: string;
   };
-  assert.ok(response.ok && body.trip, JSON.stringify(body));
-  return body.trip!.summary;
+  const { trip } = body;
+  assert.ok(response.ok && trip, JSON.stringify(body));
+  return trip.summary;
 };
 const waitForRoute = async (accept: (route: { length: number; time: number }) => boolean) => {
   const deadline = Date.now() + 5000;
@@ -77,7 +81,9 @@ const waitForRoute = async (accept: (route: { length: number; time: number }) =>
 };
 await writeLiveTraffic(deps);
 const baseline = await waitForRoute((r) => r.length < 2);
-const forward = ways.get(10)!.filter((e) => e.forward);
+const way10 = ways.get(10);
+assert.ok(way10, "way 10 has no edges in way_edges.txt");
+const forward = way10.filter((e) => e.forward);
 const overrides = new Map(
   forward.map((edge) => [
     edgeKey(edge),
@@ -180,7 +186,7 @@ await expireLiveTraffic({
 await waitForRoute((r) => Math.abs(r.length - baseline.length) < 0.1);
 await writeFile(join(directory, "probe-overrides.json"), JSON.stringify([...overrides]));
 for (const mode of ["kill", "hang"]) {
-  const child = spawn(
+  const child: ChildProcess = spawn(
     process.execPath,
     [
       "--import",
@@ -193,8 +199,10 @@ for (const mode of ["kill", "hang"]) {
   );
   const exited = once(child, "exit");
   const started = Date.now();
+  const { stdout } = child;
+  assert.ok(stdout);
   await Promise.race([
-    once(child.stdout!, "data"),
+    once(stdout, "data"),
     new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error("Fault worker did not reach binary write")),

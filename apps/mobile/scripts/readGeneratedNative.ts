@@ -49,23 +49,25 @@ function iosAppDirectory(mobileRoot: string): string {
       >;
       return !("NSExtension" in info);
     });
-  if (candidates.length !== 1) {
+  const [candidate] = candidates;
+  if (candidates.length !== 1 || !candidate) {
     throw new MissingGeneratedProjectError(
       `expected exactly one generated iOS app directory, found ${candidates.length}`,
     );
   }
-  return join(iosRoot, candidates[0].name);
+  return join(iosRoot, candidate.name);
 }
 
 function iosProjectFile(mobileRoot: string): string {
   const iosRoot = join(mobileRoot, "ios");
   const projects = readdirSync(iosRoot).filter((name) => name.endsWith(".xcodeproj"));
-  if (projects.length !== 1) {
+  const [project] = projects;
+  if (projects.length !== 1 || !project) {
     throw new MissingGeneratedProjectError(
       `expected exactly one .xcodeproj, found ${projects.length}`,
     );
   }
-  return join(iosRoot, projects[0], "project.pbxproj");
+  return join(iosRoot, project, "project.pbxproj");
 }
 
 /**
@@ -80,7 +82,9 @@ export async function resolveLocationServiceForegroundType(
 ): Promise<string | undefined> {
   const fromApp = (appManifest.manifest.application ?? [])
     .flatMap((application) => application.service ?? [])
-    .find((service) => EXPO_LOCATION_SERVICE_NAMES.includes(service.$["android:name"]));
+    .find((service) =>
+      EXPO_LOCATION_SERVICE_NAMES.some((name) => name === service.$["android:name"]),
+    );
   if (fromApp?.$["android:foregroundServiceType"]) {
     return fromApp.$["android:foregroundServiceType"];
   }
@@ -91,9 +95,13 @@ export async function resolveLocationServiceForegroundType(
     const service = (parsed.manifest.application ?? [])
       .flatMap((application) => application.service ?? [])
       // Library manifests use the relative `.services.LocationTaskService` form.
-      .find((candidate) =>
-        EXPO_LOCATION_SERVICE_NAMES.some((name) => name.endsWith(candidate.$["android:name"])),
-      );
+      .find((candidate) => {
+        const relative = candidate.$["android:name"];
+        return (
+          relative !== undefined &&
+          EXPO_LOCATION_SERVICE_NAMES.some((name) => name.endsWith(relative))
+        );
+      });
     if (service?.$["android:foregroundServiceType"]) {
       return service.$["android:foregroundServiceType"];
     }

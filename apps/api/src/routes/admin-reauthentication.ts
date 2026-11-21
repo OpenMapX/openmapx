@@ -52,7 +52,7 @@ export async function adminReauthenticationRoute(app: FastifyInstance) {
             actorId: actor.user.id,
             startingSessionId: actor.session.id,
             nonce: adminReauthNonce(request.headers.cookie),
-            idempotencyKey: request.headers["idempotency-key"] as string,
+            idempotencyKey: request.headers["idempotency-key"],
           });
         reply.header("Cache-Control", "no-store");
         reply.header(

@@ -128,8 +128,7 @@ export async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
   // when its value is greater than the next, else L (with the final point
   // tagged by comparing against the previous).
   const events: TideEvent[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const p = raw[i];
+  for (const [i, p] of raw.entries()) {
     const next = raw[i + 1];
     const prev = raw[i - 1];
     let type: "H" | "L";
@@ -178,8 +177,8 @@ export async function fetchLatestObservation(
   const toIso = end.toISOString().replace(/\.\d{3}Z$/, "Z");
   const url = `${IWLS_BASE}/stations/${encodeURIComponent(stationId)}/data?time-series-code=wlo&from=${fromIso}&to=${toIso}`;
   const raw = await fetchJson<IwlsDataPoint[]>(url);
-  if (!raw || raw.length === 0) return null;
-  const last = raw[raw.length - 1];
+  const last = raw?.at(-1);
+  if (!last) return null;
   return {
     time: normalizeIwlsTimestamp(last.eventDate),
     valueFt: Math.round(last.value * M_TO_FT * 100) / 100,

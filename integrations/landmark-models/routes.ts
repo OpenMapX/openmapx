@@ -2,6 +2,7 @@ import type {
   IntegrationContext,
   LandmarkModelProvider,
   RouteHandler,
+  RouteParams,
 } from "@openmapx/integration-framework";
 import {
   type MergedIndex,
@@ -77,8 +78,8 @@ function parseCell(value: string | undefined): number | null {
 }
 
 export function createRoutes(source: LandmarkIndexSource): {
-  coverage: RouteHandler;
-  cell: RouteHandler;
+  coverage: RouteHandler<RouteParams<"/coverage">>;
+  cell: RouteHandler<RouteParams<"/cells/:x/:y">>;
 } {
   return {
     async coverage(_req, reply) {

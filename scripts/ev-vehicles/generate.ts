@@ -37,12 +37,13 @@ function extractRecords(payload: unknown): RawVehicle[] {
   const arrays = Object.entries(payload as Record<string, unknown>).filter(([, value]) =>
     Array.isArray(value),
   );
-  if (arrays.length !== 1) {
+  const [only] = arrays;
+  if (arrays.length !== 1 || !only) {
     throw new Error(
       `expected exactly one array-valued property in the dataset payload, found ${arrays.length}`,
     );
   }
-  return arrays[0][1] as RawVehicle[];
+  return only[1] as RawVehicle[];
 }
 
 function renderRecord(vehicle: GeneratedVehicle): string {

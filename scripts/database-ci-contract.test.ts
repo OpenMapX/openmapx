@@ -169,8 +169,9 @@ describe("required database test gate", () => {
         selectors.filter((selector) => matchesGlob(suite, selector)).map(() => group),
       );
       expect(owners, `${suite}: missing or duplicate database group`).toHaveLength(1);
-      if (owners[0] !== "export-restore") {
-        expect(command(owners[0]).env[flag], `${suite}: opt-in must be enabled`).toBe("1");
+      const [owner] = owners;
+      if (owner !== undefined && owner !== "export-restore") {
+        expect(command(owner).env[flag], `${suite}: opt-in must be enabled`).toBe("1");
       }
       expect(source, suite).not.toContain("process.env.CI");
       expect(source, suite).not.toContain("context.skip");
@@ -220,7 +221,7 @@ describe("required database test gate", () => {
   });
 
   it.each([...groupNames, "all"])("selects only the registered Vitest files for %s", (group) => {
-    const selectors = group === "all" ? Object.values(groups).flat() : groups[group];
+    const selectors = (group === "all" ? Object.values(groups).flat() : groups[group]) ?? [];
     expect(selectors.length).toBeGreaterThan(0);
     const result = spawnSync(
       process.execPath,
@@ -378,7 +379,9 @@ describe("required database test gate", () => {
     const selected = command("export-restore", {
       DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
     });
-    expect(selected.args).toEqual(expect.arrayContaining(groups["export-restore"]));
+    const exportRestore = groups["export-restore"];
+    if (!exportRestore?.length) throw new Error("No export-restore database group");
+    expect(selected.args).toEqual(expect.arrayContaining(exportRestore));
     expect(selected.env.OPENMAPX_REAL_BACKUP_FIXTURE).toBeUndefined();
   });
 

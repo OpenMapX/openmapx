@@ -151,11 +151,9 @@ function parseFiles(value: unknown): IntegrationFileDigest[] {
     }
     return { path: entry.path, sha256: entry.sha256 };
   });
-  for (let index = 1; index < files.length; index += 1) {
-    if (
-      (files[index - 1] as IntegrationFileDigest).path >=
-      (files[index] as IntegrationFileDigest).path
-    ) {
+  for (const [index, file] of files.entries()) {
+    const previous = files[index - 1];
+    if (previous && previous.path >= file.path) {
       throw new Error();
     }
   }
@@ -274,10 +272,13 @@ export function readIntegrationRecords(
     throw error;
   }
   assertOwnDirectory(directory, uid);
-  const names = readdirSync(directory).filter((name) => RECORD_FILE.test(name));
-  if (names.length > MAX_RECORDS) throw new Error("Too many integration records");
-  for (const name of names.sort()) {
-    const integrationId = (RECORD_FILE.exec(name) as RegExpExecArray)[1] as string;
+  const files = readdirSync(directory).flatMap((name) => {
+    const [, integrationId] = RECORD_FILE.exec(name) ?? [];
+    return integrationId === undefined ? [] : [{ name, integrationId }];
+  });
+  if (files.length > MAX_RECORDS) throw new Error("Too many integration records");
+  files.sort((a, b) => (a.name < b.name ? -1 : 1));
+  for (const { name, integrationId } of files) {
     try {
       const bytes = readRecordBytes(join(directory, name), uid);
       const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));

@@ -114,14 +114,14 @@ export async function aggregateRoadConditions(
   );
 
   const merged: RoadConditionEvent[] = [];
-  settled.forEach((res, i) => {
-    const providerId = providers[i].id;
-    if (res.status === "fulfilled") {
+  for (const [i, { id: providerId }] of providers.entries()) {
+    const res = settled[i];
+    if (res?.status === "fulfilled") {
       for (const e of res.value) merged.push({ ...e, provider: e.provider || providerId });
     } else {
-      ctx.log.warn(`[road-conditions] provider ${providerId} failed`, res.reason);
+      ctx.log.warn(`[road-conditions] provider ${providerId} failed`, res?.reason);
     }
-  });
+  }
 
   const allowed =
     disallowed.size > 0
@@ -177,14 +177,14 @@ export async function aggregateRoadFlow(
   const settled = await Promise.allSettled(providers.map((p) => p.getFlow(bbox, opts)));
 
   const merged: RoadFlowSegmentWithProvider[] = [];
-  settled.forEach((res, i) => {
-    const providerId = providers[i].id;
-    if (res.status === "fulfilled") {
+  for (const [i, { id: providerId }] of providers.entries()) {
+    const res = settled[i];
+    if (res?.status === "fulfilled") {
       for (const s of res.value) merged.push({ ...s, provider: providerId });
     } else {
-      ctx.log.warn(`[road-conditions] provider ${providerId} failed getFlow`, res.reason);
+      ctx.log.warn(`[road-conditions] provider ${providerId} failed getFlow`, res?.reason);
     }
-  });
+  }
 
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
   return disallowed.size > 0

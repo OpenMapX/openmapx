@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import type * as maplibregl from "maplibre-gl";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   buildingExtrusionColor,
   contactShadowPaint,
@@ -278,8 +278,11 @@ describe("3D building colour", () => {
 });
 
 describe("3D building contact shadow", () => {
-  const opacityPeak = (paint: ReturnType<typeof contactShadowPaint>) =>
-    (paint?.["line-opacity"] as unknown[]).at(-1);
+  const opacityPeak = (paint: ReturnType<typeof contactShadowPaint>) => {
+    const opacity = paint?.["line-opacity"];
+    assert(Array.isArray(opacity), "the contact shadow's opacity is an expression");
+    return opacity.at(-1);
+  };
 
   it("gives the contact shadow a stronger rim on a dark style", () => {
     expect(opacityPeak(contactShadowPaint("#202020", 16.5))).toBe(0.2);

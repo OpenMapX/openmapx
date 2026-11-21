@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import Redis from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDisposableValkeyFixture } from "../../__tests__/support/disposable-valkey-fixture";
@@ -142,7 +143,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       const keys = await redis.keys(`upstream-shared:${dedicated}:*`);
       expect(keys).toHaveLength(1);
-      const fields = await redis.hgetall(keys[0] as string);
+      const fields = await redis.hgetall(itemAt(keys, 0));
       const start = Number(Object.entries(fields).find(([field]) => field.endsWith(":start"))?.[1]);
       const denied = await subject.admitSharedRequest({ ...target, policy: long });
       expect(denied).toMatchObject({ allowed: false, reason: "quota" });
@@ -226,7 +227,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toMatchObject({ allowed: false, reason: "quota" });
       const keys = await redis.keys(`upstream-shared:${dedicated}:*`);
       expect(keys).toHaveLength(1);
-      expect(await redis.pttl(keys[0] as string)).toBeGreaterThan(50_000);
+      expect(await redis.pttl(itemAt(keys, 0))).toBeGreaterThan(50_000);
     });
 
     it("releases a generic refresh lease only for its owning token across runtimes", async () => {

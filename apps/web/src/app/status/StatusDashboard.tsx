@@ -100,8 +100,9 @@ export default function StatusDashboard() {
 
   const grouped = data
     ? data.services.reduce<Record<string, ServiceStatus[]>>((acc, s) => {
-        if (!acc[s.category]) acc[s.category] = [];
-        acc[s.category].push(s);
+        const group = acc[s.category] ?? [];
+        group.push(s);
+        acc[s.category] = group;
         return acc;
       }, {})
     : {};

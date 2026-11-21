@@ -195,7 +195,7 @@ export async function exportBuildBundle(opts: ExportBuildBundleOptions): Promise
   let target: Writable | undefined;
   try {
     await compatible();
-    target =
+    const output =
       opts.bundle === "-"
         ? new Writable({
             write(chunk, encoding, done) {
@@ -203,7 +203,8 @@ export async function exportBuildBundle(opts: ExportBuildBundleOptions): Promise
             },
           })
         : createWriteStream(resolveInvocationPath(opts.bundle), { flags: "wx", mode: 0o600 });
-    target.on("error", () => undefined);
+    target = output;
+    output.on("error", () => undefined);
     const written = await services.withConfigurationGenerationWriter(
       owner.paths.infraDir,
       async () => {
@@ -212,7 +213,7 @@ export async function exportBuildBundle(opts: ExportBuildBundleOptions): Promise
           dataRoot,
           serviceId: opts.serviceId,
           record,
-          target: target!,
+          target: output,
           limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
           signal: owner.signal,
         });
@@ -321,7 +322,7 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
         : null;
     const expectedFingerprint = await artifactPublicationFingerprint(dataRoot, manifest.service),
       expectedCurrentRevisionId = services.currentConfigurationGeneration(paths.infraDir);
-    owner = await openCliArtifactOwner(
+    const opened = await openCliArtifactOwner(
       {
         kind: "artifactTransfer.import",
         stageId,
@@ -336,6 +337,7 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
       },
       opts.rootDir,
     );
+    owner = opened;
     const transport = dm.createDataManagerTransport({
       baseUrl: dataManagerUrl(),
       authToken: cliDataManagerToken(),
@@ -362,7 +364,7 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
             throw Error("Insufficient destination capacity for MOTIS materialization");
           return (
             await materializeMotisPortableDestination({
-              ...(await motisDestination(owner!.signal)),
+              ...(await motisDestination(opened.signal)),
               expectedFingerprint: motisPreview.fingerprint,
               archiveFingerprint: bundle.artifactFingerprint,
             })
@@ -375,16 +377,16 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
       stagingRoot,
       stageId,
       dataRoot,
-      authority: owner!.authority,
-      lease: owner!.lease,
+      authority: opened.authority,
+      lease: opened.lease,
       expectedFingerprint,
-      signal: owner!.signal,
+      signal: opened.signal,
       beforePublication: async () => {
         await compatible();
         await requireCoordinator();
         if (
           motisPreview &&
-          (await inspectMotisPortableDestination(await motisDestination(owner!.signal)))
+          (await inspectMotisPortableDestination(await motisDestination(opened.signal)))
             .fingerprint !== motisPreview.fingerprint
         )
           throw Error("MOTIS destination changed before publication");
@@ -410,9 +412,9 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
               infraDir: paths.infraDir,
               revisionId,
               transport,
-              issuer: owner!.authority.execution,
-              leaseId: owner!.lease.leaseId,
-              signal: owner!.signal,
+              issuer: opened.authority.execution,
+              leaseId: opened.lease.leaseId,
+              signal: opened.signal,
             }),
           owner.signal,
         );

@@ -2,6 +2,7 @@ import {
   bboxAroundPoint,
   type DataSourceResult,
   type LngLat,
+  numberAt,
   type ProvenanceMeta,
   useDataSourceSearch,
 } from "@openmapx/core";
@@ -42,7 +43,9 @@ export function calculateMedian(values: number[]): number | null {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   const median =
-    sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    sorted.length % 2 === 1
+      ? numberAt(sorted, middle)
+      : (numberAt(sorted, middle - 1) + numberAt(sorted, middle)) / 2;
   return Number(median.toFixed(4));
 }
 
@@ -79,13 +82,18 @@ function quoteForGrade(
   attributions: Attribution[],
   freshness: Freshness | undefined,
 ): AmbientFuelQuote | null {
-  const samples = results.filter((result) => isValidPrice(result.sortValues?.[grade]));
-  const price = calculateMedian(samples.map((result) => result.sortValues?.[grade] as number));
+  const priced = results.flatMap((result) => {
+    const value = result.sortValues?.[grade];
+    return isValidPrice(value) ? [{ result, value }] : [];
+  });
+  const samples = priced.map(({ result }) => result);
+  const price = calculateMedian(priced.map(({ value }) => value));
   if (price === null) return null;
 
-  const currencies = new Set(samples.map((result) => result.currency).filter(Boolean));
-  if (currencies.size !== 1) return null;
-  const currency = [...currencies][0] as string;
+  const [currency, ...otherCurrencies] = new Set(
+    samples.flatMap((result) => (result.currency ? [result.currency] : [])),
+  );
+  if (currency === undefined || otherCurrencies.length > 0) return null;
   const source = quoteSource(samples, attributions);
   const calculatedAt = new Date().toISOString();
 

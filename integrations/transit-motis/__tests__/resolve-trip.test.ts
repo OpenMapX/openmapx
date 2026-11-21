@@ -1,4 +1,5 @@
 import { encodePolyline } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import type { TransitTripResolveRequest } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
@@ -144,11 +145,11 @@ describe("provider-native exact trip reconstruction", () => {
     async (kind) => {
       const f = fixture();
       const changed = rawTrip();
-      if (kind === "trip") changed.legs[0].tripId = "another";
-      if (kind === "boarding") changed.legs[0].from.stopId = "nearby";
-      if (kind === "arrival") changed.legs[0].scheduledEndTime = "2026-11-06T21:12:00Z";
+      if (kind === "trip") nth(changed.legs, 0).tripId = "another";
+      if (kind === "boarding") nth(changed.legs, 0).from.stopId = "nearby";
+      if (kind === "arrival") nth(changed.legs, 0).scheduledEndTime = "2026-11-06T21:12:00Z";
       if (kind === "dummy")
-        Object.assign(changed.legs[0], {
+        Object.assign(nth(changed.legs, 0), {
           tripId: undefined,
           routeId: undefined,
           routeShortName: undefined,
@@ -165,10 +166,13 @@ describe("provider-native exact trip reconstruction", () => {
   it("keeps a genuine cancelled train with matching provider identity", async () => {
     const f = fixture();
     const changed = rawTrip();
-    Object.assign(changed.legs[0], { cancelled: true });
+    Object.assign(nth(changed.legs, 0), { cancelled: true });
     f.response(changed);
     const result = await resolveMotisTrip(f.instance, f.params, { datasetEpoch: "E" });
-    expect(result?.itineraries[0].legs[0]).toMatchObject({ tripId: "ms:10935", cancelled: true });
+    expect(nth(result?.itineraries ?? [], 0).legs[0]).toMatchObject({
+      tripId: "ms:10935",
+      cancelled: true,
+    });
   });
 
   it("refuses a stale epoch before any provider request", async () => {
@@ -183,14 +187,16 @@ describe("provider-native exact trip reconstruction", () => {
     "preserves a native scheduled=%s flag or rejects an unknown flag",
     async (scheduled) => {
       const f = fixture();
-      Object.assign(f.original.legs[0], { scheduled });
+      Object.assign(nth(f.original.legs, 0), { scheduled });
       const result = await resolveMotisTrip(f.instance, f.params, { datasetEpoch: "E" });
       if (scheduled === undefined) {
         expect(result).toBeNull();
         expect(f.requests).toHaveLength(1);
       } else {
         expect(result).not.toBeNull();
-        expect(await f.requests[1].json()).toMatchObject({ id: { legs: [{ scheduled: false }] } });
+        expect(await nth(f.requests, 1).json()).toMatchObject({
+          id: { legs: [{ scheduled: false }] },
+        });
       }
     },
   );
@@ -200,20 +206,23 @@ describe("provider-native exact trip reconstruction", () => {
     async (dummy) => {
       const f = fixture();
       const second = rawTrip();
-      Object.assign(second.legs[0], {
+      Object.assign(nth(second.legs, 0), {
         tripId: "1541",
         scheduledStartTime: "2026-11-06T21:27:00Z",
         scheduledEndTime: "2026-11-07T05:04:00Z",
       });
-      Object.assign(second.legs[0].from, {
+      Object.assign(nth(second.legs, 0).from, {
         stopId: "b-platform-2",
         scheduledDeparture: "2026-11-06T21:27:00Z",
       });
-      Object.assign(second.legs[0].to, { stopId: "c", scheduledArrival: "2026-11-07T05:04:00Z" });
+      Object.assign(nth(second.legs, 0).to, {
+        stopId: "c",
+        scheduledArrival: "2026-11-07T05:04:00Z",
+      });
       const walk = {
         mode: "WALK",
-        from: f.original.legs[0].to,
-        to: second.legs[0].from,
+        from: nth(f.original.legs, 0).to,
+        to: nth(second.legs, 0).from,
         startTime: "2026-11-06T21:16:00Z",
         endTime: "2026-11-06T21:20:00Z",
         duration: 240,
@@ -227,7 +236,7 @@ describe("provider-native exact trip reconstruction", () => {
             postRequests.push(req.clone());
             return Response.json({
               ...f.original,
-              legs: [f.original.legs[0], walk, second.legs[0]],
+              legs: [nth(f.original.legs, 0), walk, nth(second.legs, 0)],
             });
           }
           return Response.json(
@@ -243,7 +252,7 @@ describe("provider-native exact trip reconstruction", () => {
         scheduledArrival: "2026-11-07T05:04:00Z",
       });
       const result = await resolveMotisTrip(f.instance, f.params, { datasetEpoch: "E" });
-      expect(await postRequests[0].json()).toMatchObject({
+      expect(await nth(postRequests, 0).json()).toMatchObject({
         id: {
           legs: [
             { tripId: "10935" },
@@ -254,7 +263,7 @@ describe("provider-native exact trip reconstruction", () => {
       });
       if (dummy) expect(result).toBeNull();
       else
-        expect(result?.itineraries[0].legs.map((leg) => leg.mode)).toEqual([
+        expect(nth(result?.itineraries ?? [], 0).legs.map((leg) => leg.mode)).toEqual([
           "rail",
           "walking",
           "rail",
@@ -332,7 +341,7 @@ it("uses the host HTTP client for both native requests, retaining SDK query/body
     http: http as unknown as import("@openmapx/integration-framework").HttpClient,
   };
   const result = await resolveMotisTrip(f.instance, f.params, options);
-  expect(result?.itineraries[0].legs[0].tripId).toBe("ms:10935");
+  expect(nth(nth(result?.itineraries ?? [], 0).legs, 0).tripId).toBe("ms:10935");
   expect(http.getResponse).toHaveBeenCalledWith(
     expect.stringContaining("/api/v6/trip?tripId=10935"),
     expect.objectContaining({

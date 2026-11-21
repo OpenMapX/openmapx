@@ -15,7 +15,7 @@ export interface BaseLayerOption {
   preview: ReactNode;
 }
 
-export const BASE_LAYER_OPTIONS: BaseLayerOption[] = [
+export const BASE_LAYER_OPTIONS: [BaseLayerOption, ...BaseLayerOption[]] = [
   {
     id: "default",
     labelKey: "default",

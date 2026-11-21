@@ -10,6 +10,7 @@ import {
 } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useNavAlerts } from "./useNavAlerts";
 import { useNavIncidents } from "./useNavIncidents";
 import { useNavTrafficSignals } from "./useNavTrafficSignals";
@@ -139,13 +140,13 @@ describe("offline live-data gating", () => {
       const trace = args[0] as [number, number][];
       return {
         signals: [],
-        speedLimitsByPoint: trace.map(() => (trace[0][1] === 0 ? 30 : 70)),
+        speedLimitsByPoint: trace.map(() => (nth(trace, 0)[1] === 0 ? 30 : 70)),
         countriesByPoint: trace.map(() => "DE"),
       };
     });
     useNavigationStore
       .getState()
-      .startGroundNavigation({ ...route, geometry: long }, "driving", [long[0], long[5]]);
+      .startGroundNavigation({ ...route, geometry: long }, "driving", [nth(long, 0), nth(long, 5)]);
     useNavigationStore.getState().setConnectivity("online");
     renderHook(() => useNavTrafficSignals());
 
@@ -177,7 +178,7 @@ describe("offline live-data gating", () => {
       useNavigationStore.getState().setConnectivity("online");
       const { unmount } = renderHook(() => useNavTrafficSignals());
       const signal = (
-        fetchRouteMatchWindow.mock.calls[0][2] as { signal?: AbortSignal } | undefined
+        nth(fetchRouteMatchWindow.mock.calls, 0)[2] as { signal?: AbortSignal } | undefined
       )?.signal;
       expect(signal?.aborted).toBe(false);
 
@@ -188,8 +189,11 @@ describe("offline live-data gating", () => {
       });
       expect(signal?.aborted).toBe(true);
       await act(async () =>
-        resolveRequests[0]({
-          signals: [geometry[0]],
+        nth(
+          resolveRequests,
+          0,
+        )({
+          signals: [nth(geometry, 0)],
           speedLimitsByPoint: [90, 90],
           countriesByPoint: ["DE", "DE"],
         }),
@@ -197,11 +201,14 @@ describe("offline live-data gating", () => {
       expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
       if (change === "reroute") {
         const replacementSignal = (
-          fetchRouteMatchWindow.mock.calls[1][2] as { signal: AbortSignal }
+          nth(fetchRouteMatchWindow.mock.calls, 1)[2] as { signal: AbortSignal }
         ).signal;
         expect(replacementSignal.aborted).toBe(false);
         await act(async () =>
-          resolveRequests[1]({
+          nth(
+            resolveRequests,
+            1,
+          )({
             signals: [],
             speedLimitsByPoint: [70, 70],
             countriesByPoint: ["DE", "DE"],
@@ -245,7 +252,7 @@ describe("offline live-data gating", () => {
               mode: "driving",
               provider: "routing-valhalla",
               geometry: [],
-              edges: [{ speedLimit: trace[0].lat === 0 ? 50 : 70, endNodeCountryCode: "DE" }],
+              edges: [{ speedLimit: nth(trace, 0).lat === 0 ? 50 : 70, endNodeCountryCode: "DE" }],
               points: trace.map(({ lat, lng }) => ({ lat, lng, type: "matched", edgeIndex: 0 })),
             }),
             { headers: { "Content-Type": "application/json" } },
@@ -255,7 +262,7 @@ describe("offline live-data gating", () => {
     );
     useNavigationStore
       .getState()
-      .startGroundNavigation({ ...route, geometry: long }, "driving", [long[0], long[5]]);
+      .startGroundNavigation({ ...route, geometry: long }, "driving", [nth(long, 0), nth(long, 5)]);
     useNavigationStore.getState().setConnectivity("online");
     vi.useFakeTimers();
     const { unmount } = renderHook(() => useNavTrafficSignals());

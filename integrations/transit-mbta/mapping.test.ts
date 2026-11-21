@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { Predictions, StopResource, VehicleResource } from "./generated/models";
 import { angularRadius, mapDepartures, mapStop, mapVehicle } from "./mapping";
@@ -81,15 +82,15 @@ describe("MBTA canonical mapping", () => {
   });
   it("falls back to the trip headsign when no override exists", () => {
     const p = page();
-    p.data[0].attributes.trip_headsign = "";
+    nth(p.data, 0).attributes.trip_headsign = "";
     expect(
-      mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z"))[0].headsign,
+      nth(mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z")), 0).headsign,
     ).toBe("Ashmont");
   });
   it("keeps an added trip without schedule linkage and does not invent its delay", () => {
     const p = page();
-    Object.assign(p.data[0].relationships.schedule, { data: null });
-    const d = mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z"))[0];
+    Object.assign(nth(p.data, 0).relationships.schedule, { data: null });
+    const d = nth(mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z")), 0);
     expect(d.expectedAt).toBe("2026-10-22T12:05:00Z");
     expect(d.delaySeconds).toBeUndefined();
   });
@@ -139,9 +140,12 @@ describe("MBTA canonical mapping", () => {
 
 it("keeps cancelled service with null realtime times when its included schedule is known", () => {
   const p = page();
-  Object.assign(p.data[0].attributes, { departure_time: null, schedule_relationship: "CANCELLED" });
+  Object.assign(nth(p.data, 0).attributes, {
+    departure_time: null,
+    schedule_relationship: "CANCELLED",
+  });
   expect(
-    mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z"))[0],
+    nth(mapDepartures(Predictions.parse(p), 30, Date.parse("2026-10-22T12:00:00Z")), 0),
   ).toMatchObject({
     scheduledAt: "2026-10-22T12:03:00Z",
     canceled: true,

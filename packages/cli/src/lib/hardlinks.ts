@@ -93,10 +93,9 @@ async function dataManagerReachable(baseUrl: string, timeoutMs: number): Promise
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const cliSignal = cliAcquisitionOptions().signal;
     const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/status`, {
-      signal: cliAcquisitionOptions().signal
-        ? AbortSignal.any([controller.signal, cliAcquisitionOptions().signal!])
-        : controller.signal,
+      signal: cliSignal ? AbortSignal.any([controller.signal, cliSignal]) : controller.signal,
     });
     return res.ok;
   } catch {

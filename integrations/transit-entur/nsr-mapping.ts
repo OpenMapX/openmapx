@@ -228,9 +228,11 @@ function nsrPointLocation(point: NsrPoint | null | undefined): { lat: number; ln
 }
 
 export function ensureClosedRing(coordinates: [number, number][]): [number, number][] {
-  if (coordinates.length === 0) return coordinates;
-  const [firstLng, firstLat] = coordinates[0];
-  const [lastLng, lastLat] = coordinates[coordinates.length - 1];
+  const first = coordinates[0];
+  const last = coordinates.at(-1);
+  if (!first || !last) return coordinates;
+  const [firstLng, firstLat] = first;
+  const [lastLng, lastLat] = last;
   if (firstLng === lastLng && firstLat === lastLat) return coordinates;
   return [...coordinates, [firstLng, firstLat]];
 }

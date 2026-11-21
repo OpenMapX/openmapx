@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The policy module pulls in the DB pool and the integration host at import
 // time; stub both so these stay offline. `getAllIntegrations` and the
@@ -215,7 +215,7 @@ describe("filterGatedSources", () => {
     };
     const out = filterGatedSources(fc, gated) as typeof fc;
     expect(out.features).toHaveLength(1);
-    expect(out.features[0].properties).toEqual({ source: "eonet", categoryId: "floods" });
+    expect(out.features[0]?.properties).toEqual({ source: "eonet", categoryId: "floods" });
     // No surviving feature with a nulled properties bag.
     expect(out.features.every((f) => f.properties != null)).toBe(true);
   });
@@ -274,7 +274,8 @@ describe("road-condition writer policy authority", () => {
   it("returns a bounded lease and stable revision for an observed policy", async () => {
     const first = await getRoadConditionsPolicySnapshot();
     expect(first.authoritative).toBe(true);
-    const leaseMs = Date.parse(first.validUntil!) - Date.parse(first.evaluatedAt);
+    assert.exists(first.validUntil, "an observed policy has a lease end");
+    const leaseMs = Date.parse(first.validUntil) - Date.parse(first.evaluatedAt);
     expect(leaseMs).toBeGreaterThan(0);
     expect(leaseMs).toBeLessThanOrEqual(150_000);
     await refreshDataUsePolicy();

@@ -155,8 +155,9 @@ export function WaypointMarkers() {
             // reordered, so look up where this one is now.
             const { waypoints: current, setWaypoint } = useDirectionsStore.getState();
             const index = current.findIndex((candidate) => candidate.id === id);
-            if (index < 0) return;
-            setWaypoint(index, coords, current[index].label);
+            const waypoint = current[index];
+            if (!waypoint) return;
+            setWaypoint(index, coords, waypoint.label);
           });
 
           markersRef.current.set(id, entry);

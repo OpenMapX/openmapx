@@ -59,26 +59,24 @@ export function interpolateAlong(
   coordinates: [number, number][],
   fraction: number,
 ): { lng: number; lat: number; bearing: number } {
-  if (coordinates.length === 0) return { lng: 0, lat: 0, bearing: 0 };
-  if (coordinates.length === 1) {
-    return { lng: coordinates[0][0], lat: coordinates[0][1], bearing: 0 };
-  }
+  const [first] = coordinates;
+  if (!first) return { lng: 0, lat: 0, bearing: 0 };
   const clampedFraction = Math.min(1, Math.max(0, fraction));
-  const lengths = coordinates
-    .slice(1)
-    .map((coordinate, index) => segmentLength(coordinates[index], coordinate));
-  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  const segments: { from: [number, number]; to: [number, number]; length: number }[] = [];
+  let start = first;
+  for (const end of coordinates.slice(1)) {
+    segments.push({ from: start, to: end, length: segmentLength(start, end) });
+    start = end;
+  }
+  const totalLength = segments.reduce((sum, segment) => sum + segment.length, 0);
   if (totalLength === 0) {
-    return { lng: coordinates[0][0], lat: coordinates[0][1], bearing: 0 };
+    return { lng: first[0], lat: first[1], bearing: 0 };
   }
 
   const targetLength = clampedFraction * totalLength;
   let traversedLength = 0;
-  for (let index = 0; index < lengths.length; index++) {
-    const length = lengths[index];
-    if (traversedLength + length >= targetLength || index === lengths.length - 1) {
-      const from = coordinates[index];
-      const to = coordinates[index + 1];
+  for (const [index, { from, to, length }] of segments.entries()) {
+    if (traversedLength + length >= targetLength || index === segments.length - 1) {
       const segmentFraction = length === 0 ? 0 : (targetLength - traversedLength) / length;
       return {
         lng: from[0] + (to[0] - from[0]) * segmentFraction,
@@ -89,7 +87,7 @@ export function interpolateAlong(
     traversedLength += length;
   }
 
-  const last = coordinates[coordinates.length - 1];
+  const last = coordinates.at(-1) ?? first;
   return { lng: last[0], lat: last[1], bearing: 0 };
 }
 

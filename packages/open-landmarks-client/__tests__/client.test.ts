@@ -116,7 +116,8 @@ function client(http: FakeHttp, overrides: Partial<OpenLandmarksClientOptions> =
 }
 
 /** Give one asset a gzip descriptor matching `bytes`, served at its URL. */
-function withModel(http: FakeHttp, asset: Record<string, unknown>, bytes: Uint8Array) {
+function withModel(http: FakeHttp, asset: Record<string, unknown> | undefined, bytes: Uint8Array) {
+  if (!asset) throw new Error("The fixture has no asset at that position");
   const low = (asset.lods as { low: { sha256: string; gzip: Record<string, unknown> } }).low;
   low.gzip = { ...low.gzip, sha256: sha256(bytes), bytes: bytes.byteLength };
   http.routes.set(`${BASE}${low.gzip.url as string}`, { status: 200, bytes });
@@ -214,7 +215,7 @@ describe("createOpenLandmarksClient", () => {
     const http = fakeHttp();
     const assets = barrelmanAssets();
     const bytes = new Uint8Array([1, 2, 3, 4]);
-    const sha = withModel(http, assets[0] as Record<string, unknown>, bytes);
+    const sha = withModel(http, assets[0], bytes);
     serveRelease(http, { release: "r1", assets });
     const c = client(http);
     await c.refresh();
@@ -236,7 +237,7 @@ describe("createOpenLandmarksClient", () => {
   it("gone schedules one early refresh", async () => {
     const http = fakeHttp();
     const assets = barrelmanAssets();
-    const sha = withModel(http, assets[0] as Record<string, unknown>, new Uint8Array([9]));
+    const sha = withModel(http, assets[0], new Uint8Array([9]));
     serveRelease(http, { release: "r1", assets });
     const url = [...http.routes.keys()].find((key) => key.endsWith(".glb.gz")) as string;
     http.routes.set(url, { status: 404 });
@@ -257,7 +258,7 @@ describe("createOpenLandmarksClient", () => {
   it("throws on a hash mismatch and on status 500", async () => {
     const http = fakeHttp();
     const assets = barrelmanAssets();
-    const sha = withModel(http, assets[0] as Record<string, unknown>, new Uint8Array([1]));
+    const sha = withModel(http, assets[0], new Uint8Array([1]));
     serveRelease(http, { release: "r1", assets });
     const url = [...http.routes.keys()].find((key) => key.endsWith(".glb.gz")) as string;
     const c = client(http);
@@ -274,7 +275,7 @@ describe("createOpenLandmarksClient", () => {
     for (const retainsReleases of [true, false]) {
       const http = fakeHttp();
       const first = barrelmanAssets();
-      const sha = withModel(http, first[0] as Record<string, unknown>, new Uint8Array([7]));
+      const sha = withModel(http, first[0], new Uint8Array([7]));
       serveRelease(http, { release: "r1", assets: first });
       const c = client(http, { retainsReleases });
       await c.refresh();
@@ -323,7 +324,7 @@ describe("createOpenLandmarksClient", () => {
   it("passes redirect error and the size caps to every request", async () => {
     const http = fakeHttp();
     const assets = barrelmanAssets();
-    const sha = withModel(http, assets[0] as Record<string, unknown>, new Uint8Array([1]));
+    const sha = withModel(http, assets[0], new Uint8Array([1]));
     serveRelease(http, { release: "r1", assets });
     const c = client(http);
     await c.refresh();

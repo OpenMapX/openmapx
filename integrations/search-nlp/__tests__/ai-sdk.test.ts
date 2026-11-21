@@ -84,8 +84,8 @@ describe("createAiSdkNlpProvider", () => {
       place_name: "train station",
     });
     expect(model.doGenerateCalls).toHaveLength(1);
-    expect(model.doGenerateCalls[0].responseFormat?.type).toBe("json");
-    expect(model.doGenerateCalls[0].responseFormat).toHaveProperty("schema");
+    expect(model.doGenerateCalls[0]?.responseFormat?.type).toBe("json");
+    expect(model.doGenerateCalls[0]?.responseFormat).toHaveProperty("schema");
   });
 
   it("rejects output that violates the portable schema", async () => {
@@ -120,7 +120,7 @@ describe("createAiSdkNlpProvider", () => {
 
     await provider.parseQuery("museums", CTX);
 
-    expect(model.doGenerateCalls[0].prompt[0]).toMatchObject({
+    expect(model.doGenerateCalls[0]?.prompt[0]).toMatchObject({
       role: "system",
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     });

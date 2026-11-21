@@ -4,6 +4,7 @@ import {
   haversineDistance,
   isLocalAccessClosure,
   isRoutingRelevantBinding,
+  itemAt,
   type LngLat,
   type RoadConditionRightsPolicy,
 } from "@openmapx/core";
@@ -74,7 +75,7 @@ export function sampleSpan(geometry: readonly LngLat[]): DirectedSample[] {
   const lengths: number[] = [];
   let total = 0;
   for (let i = 1; i < geometry.length; i++) {
-    const d = haversineDistance(geometry[i - 1] as LngLat, geometry[i] as LngLat);
+    const d = haversineDistance(itemAt(geometry, i - 1), itemAt(geometry, i));
     lengths.push(d);
     total += d;
   }
@@ -93,13 +94,14 @@ export function sampleSpan(geometry: readonly LngLat[]): DirectedSample[] {
   let segment = 0;
   let start = 0;
   for (const offset of offsets) {
-    while (segment < lengths.length - 1 && start + (lengths[segment] as number) < offset) {
-      start += lengths[segment] as number;
+    // A positive total means at least one segment, and `segment` stays below its count.
+    while (segment < lengths.length - 1 && start + itemAt(lengths, segment) < offset) {
+      start += itemAt(lengths, segment);
       segment++;
     }
-    const a = geometry[segment] as LngLat;
-    const b = geometry[segment + 1] as LngLat;
-    const len = lengths[segment] as number;
+    const a = itemAt(geometry, segment);
+    const b = itemAt(geometry, segment + 1);
+    const len = itemAt(lengths, segment);
     // A zero-length segment has no direction of its own; it never carries a sample.
     if (len === 0) continue;
     const t = Math.min(1, Math.max(0, (offset - start) / len));

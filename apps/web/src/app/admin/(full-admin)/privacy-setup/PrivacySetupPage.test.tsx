@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, expect, it, vi } from "vitest";
-import { createQueryWrapper, fireEvent, render, screen, waitFor, within } from "@/test";
+import { createQueryWrapper, fireEvent, nth, render, screen, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
@@ -113,7 +113,7 @@ it("groups setup fields and preserves environment locks without a release review
   fireEvent.change(screen.getByLabelText("privacySetup.settings.legalControllerName.label"), {
     target: { value: "Updated GmbH" },
   });
-  fireEvent.click(screen.getAllByRole("button", { name: "privacySetup.editor.save" })[0]);
+  fireEvent.click(nth(screen.getAllByRole("button", { name: "privacySetup.editor.save" }), 0));
   await waitFor(() =>
     expect(
       fetchMock.mock.calls.some(

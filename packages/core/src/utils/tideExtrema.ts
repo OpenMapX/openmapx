@@ -30,7 +30,9 @@ export interface TideExtremaOptions {
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const middle = sorted[mid];
+  if (middle === undefined) return Number.NaN;
+  return sorted.length % 2 ? middle : ((sorted[mid - 1] ?? middle) + middle) / 2;
 }
 
 /**
@@ -49,10 +51,10 @@ export function despikeSeries(
   if (samples.length <= window * 2) return samples;
   const values = samples.map((s) => s.value);
   const kept: TideSample[] = [];
-  for (let i = 0; i < samples.length; i++) {
+  for (const [i, sample] of samples.entries()) {
     const lo = Math.max(0, i - window);
     const hi = Math.min(values.length, i + window + 1);
-    if (Math.abs(values[i] - median(values.slice(lo, hi))) <= maxDeviation) kept.push(samples[i]);
+    if (Math.abs(sample.value - median(values.slice(lo, hi))) <= maxDeviation) kept.push(sample);
   }
   return kept;
 }
@@ -69,44 +71,52 @@ export function findTideExtrema(samples: TideSample[], opts: TideExtremaOptions)
   const delta = Math.max(opts.minDelta, (hi - lo) * (opts.relativeDelta ?? 0));
   if (!(delta > 0)) return [];
 
+  const [first] = samples;
+  if (!first) return [];
   const extrema: TideExtreme[] = [];
   let mn = Number.POSITIVE_INFINITY;
   let mx = Number.NEGATIVE_INFINITY;
   let mnIdx = 0;
   let mxIdx = 0;
+  let mnSample = first;
+  let mxSample = first;
   // null until the first significant move decides whether to open on a high or low.
   let lookForMax: boolean | null = null;
   // Value of the last confirmed extreme, to gauge whether the trailing swing is real.
   let pivot: number | null = null;
 
-  for (let i = 0; i < samples.length; i++) {
-    const v = samples[i].value;
+  for (const [i, sample] of samples.entries()) {
+    const v = sample.value;
     if (v > mx) {
       mx = v;
       mxIdx = i;
+      mxSample = sample;
     }
     if (v < mn) {
       mn = v;
       mnIdx = i;
+      mnSample = sample;
     }
 
     if (lookForMax !== false && v < mx - delta) {
       // Skip index 0: a drop from the first sample means the window opened past
       // a peak — a window edge, not a real turning point. Still transition.
       if (mxIdx > 0) {
-        extrema.push({ time: samples[mxIdx].time, value: samples[mxIdx].value, type: "H" });
+        extrema.push({ time: mxSample.time, value: mxSample.value, type: "H" });
       }
-      pivot = samples[mxIdx].value;
+      pivot = mxSample.value;
       mn = v;
       mnIdx = i;
+      mnSample = sample;
       lookForMax = false;
     } else if (lookForMax !== true && v > mn + delta) {
       if (mnIdx > 0) {
-        extrema.push({ time: samples[mnIdx].time, value: samples[mnIdx].value, type: "L" });
+        extrema.push({ time: mnSample.time, value: mnSample.value, type: "L" });
       }
-      pivot = samples[mnIdx].value;
+      pivot = mnSample.value;
       mx = v;
       mxIdx = i;
+      mxSample = sample;
       lookForMax = true;
     }
   }
@@ -118,10 +128,10 @@ export function findTideExtrema(samples: TideSample[], opts: TideExtremaOptions)
   // last pivot, so a still-rising/falling tail isn't reported as an extreme.
   const lastIdx = samples.length - 1;
   if (pivot !== null) {
-    if (lookForMax && mxIdx < lastIdx && samples[mxIdx].value - pivot >= delta) {
-      extrema.push({ time: samples[mxIdx].time, value: samples[mxIdx].value, type: "H" });
-    } else if (lookForMax === false && mnIdx < lastIdx && pivot - samples[mnIdx].value >= delta) {
-      extrema.push({ time: samples[mnIdx].time, value: samples[mnIdx].value, type: "L" });
+    if (lookForMax && mxIdx < lastIdx && mxSample.value - pivot >= delta) {
+      extrema.push({ time: mxSample.time, value: mxSample.value, type: "H" });
+    } else if (lookForMax === false && mnIdx < lastIdx && pivot - mnSample.value >= delta) {
+      extrema.push({ time: mnSample.time, value: mnSample.value, type: "L" });
     }
   }
 

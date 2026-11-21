@@ -137,7 +137,7 @@ it.each(["declared", "runtime"] as const)(
       { sourceId: "winner", attributionText: "Old required notice", url: "https://old.test" },
     ]);
     if (kind === "runtime")
-      expect(data?.contributors?.[0].publisher).toEqual({ name: "Original publisher" });
+      expect(data?.contributors?.[0]?.publisher).toEqual({ name: "Original publisher" });
   },
 );
 
@@ -187,7 +187,7 @@ it("captures a fallback's metadata when its own acquisition starts and preserves
       },
     ] as never;
   const orchestrator = createWeatherOrchestrator(ctx);
-  expect((await orchestrator.getCurrentWeather([6, 51]))?.contributors?.[0].attributionText).toBe(
+  expect((await orchestrator.getCurrentWeather([6, 51]))?.contributors?.[0]?.attributionText).toBe(
     "At fallback acquisition",
   );
   native = true;

@@ -7,7 +7,7 @@ import {
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { toIntegrationMeta } from "@openmapx/integration-framework";
 import Fastify from "fastify";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { integrationsRoute } from "../integrations";
 
 vi.mock("@openmapx/integration-framework", async (importOriginal) => {
@@ -324,6 +324,7 @@ describe("integration metadata memo", () => {
     const e1 = (await get()).headers.etag;
 
     const [source] = a.manifest.dataSources ?? [];
+    assert.isDefined(source);
     a.manifest.dataSources = [{ ...source, sourceId: "runtime-source", name: "Runtime source" }];
     const response = await get();
     expect(response.headers.etag).not.toBe(e1);

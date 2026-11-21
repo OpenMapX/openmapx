@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 import pino from "pino";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import * as safeLogFields from "../utils/safe-log-fields.js";
 import { createSafePinoOptions } from "../utils/safe-log-fields.js";
 import { type AppLogEntry, AppLogger } from "./app-logger.js";
@@ -73,6 +73,7 @@ describe("AppLogger sanitization boundary", () => {
 
     const consoleRecord = JSON.parse(consoleChunks.join("")) as Record<string, unknown>;
     const [stored] = appLogger.getEntries({}).entries;
+    assert.isDefined(stored);
     expect(consoleRecord.msg).toBe("Bearer [redacted]");
     expect(stored.msg).toBe(consoleRecord.msg);
     expect(stored.metadata).toMatchObject({ safe: "kept" });
@@ -106,6 +107,7 @@ describe("AppLogger sanitization boundary", () => {
 
     const consoleRecord = JSON.parse(consoleChunks.join("")) as Record<string, unknown>;
     const [stored] = appLogger.getEntries({}).entries;
+    assert.isDefined(stored);
     expect(consoleRecord.msg).toBe("[redacted-url]");
     expect(stored.msg).toBe(consoleRecord.msg);
     expect(consoleRecord).toMatchObject({ correlationId: "kept-correlation" });
@@ -137,6 +139,7 @@ describe("AppLogger sanitization boundary", () => {
     (metadata.nested as Record<string, unknown>).safeAfterAdd = PRIVATE_URL;
 
     const [entry] = logger.getEntries({}).entries;
+    assert.isDefined(entry);
     const output = stringify(entry);
     expect(entry.msg).toContain("[redacted-url]");
     expect(entry.metadata).toMatchObject({
@@ -201,6 +204,7 @@ describe("AppLogger sanitization boundary", () => {
     });
 
     const [entry] = logger.getEntries({}).entries;
+    assert.isDefined(entry);
     const output = stringify(entry);
     expect(output).toContain("[redacted-url]");
     expect(entry.metadata).toMatchObject({ authorization: "[redacted]" });
@@ -219,6 +223,7 @@ describe("AppLogger sanitization boundary", () => {
     });
 
     const [entry] = logger.getEntries({}).entries;
+    assert.isDefined(entry);
     expect(Object.getOwnPropertyDescriptor(entry.metadata ?? {}, "__proto__")?.value).toBe(
       "[redacted]",
     );

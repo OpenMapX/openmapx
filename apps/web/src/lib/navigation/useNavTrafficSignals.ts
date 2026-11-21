@@ -19,10 +19,10 @@ const PREFETCH_METERS = 2000;
 
 /** Write a window's per-point speed limits into the route-indexed array at `start`. */
 function writeLimits(arr: (number | null)[], start: number, perPoint: (number | null)[]): void {
-  for (let j = 0; j < perPoint.length; j++) {
+  perPoint.forEach((limit, j) => {
     const idx = start + j;
-    if (idx < arr.length && perPoint[j] !== null) arr[idx] = perPoint[j];
-  }
+    if (idx < arr.length && limit !== null) arr[idx] = limit;
+  });
 }
 
 /**

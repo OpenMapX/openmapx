@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor, within } from "@/test";
+import { nth, render, screen, userEvent, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@/integration-api/map/MapContext", () => ({
@@ -93,7 +93,7 @@ describe("MapClickFloatingCard on a phone", () => {
     await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
     const directions = useDirectionsStore.getState();
     expect(directions.isOpen).toBe(true);
-    expect(directions.waypoints[0].coords).toEqual(PIN);
+    expect(nth(directions.waypoints, 0).coords).toEqual(PIN);
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
     expect(useMapClickStore.getState().clickedLngLat).toBeNull();
   });
@@ -124,7 +124,7 @@ describe("MapClickFloatingCard on a touch screen wider than a phone", () => {
     expect(screen.getByRole("button", { name: "common.share" })).toBeDefined();
     expect(screen.getByRole("button", { name: "parking.saveParking" })).toBeDefined();
     await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
-    expect(useDirectionsStore.getState().waypoints[0].coords).toEqual(PIN);
+    expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toEqual(PIN);
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
   });
 });
@@ -176,7 +176,7 @@ describe("MapClickFloatingCard on a basemap place", () => {
   it("routes to it under its name", async () => {
     render(<MapClickFloatingCard />);
     await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
-    expect(useDirectionsStore.getState().waypoints[0].label).toBe("Café Kaiser");
+    expect(nth(useDirectionsStore.getState().waypoints, 0).label).toBe("Café Kaiser");
   });
 });
 

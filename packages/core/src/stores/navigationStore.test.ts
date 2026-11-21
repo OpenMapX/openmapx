@@ -1,5 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { remainingWaypoints } from "../navigation/reroute";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
@@ -351,7 +351,9 @@ describe("navigationStore", () => {
     } as TripItinerary;
     useNavigationStore.getState().startTransitNavigation(current);
     const other = structuredClone(current);
-    other.legs[0].tripId = "another";
+    const [otherLeg] = other.legs;
+    assert.isDefined(otherLeg);
+    otherLeg.tripId = "another";
     useNavigationStore.getState().updateItinerary(other);
     expect(useNavigationStore.getState().itinerary).toBe(current);
     expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);

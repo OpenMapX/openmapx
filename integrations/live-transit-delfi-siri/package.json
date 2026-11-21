@@ -6,6 +6,7 @@
   "type": "module",
   "main": "./index.ts",
   "dependencies": {
+    "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "saxes": "6.0.0"

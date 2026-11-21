@@ -2,6 +2,7 @@
 import {
   type FixInput,
   fetchVehicleJourney,
+  numberAt,
   prepareTransitProgress,
   useNavigationStore,
   useTransitStopAreas,
@@ -89,7 +90,8 @@ export function useTransitNavigationEngine(): void {
     const version = `${requestId}:${trips.join(",")}:${updateCounts.join(":")}`;
     if (captureVersion.current === version) return;
     captureVersion.current = version;
-    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i].data?.data?.stops]));
+    // One journey query per trip, in trip order.
+    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i]?.data?.data?.stops]));
     useNavigationStore
       .getState()
       .setTransitCaptures(
@@ -123,33 +125,38 @@ export function useTransitNavigationEngine(): void {
     if (!baseline || baseline.owner !== owner || connectivity === "offline" || !awaitingRecovery) {
       recoveryBaseline.current = {
         owner,
-        queries: counts.map((data, i) => ({
-          data,
-          settled: settledCounts[i],
-          pending: journeys[i].isFetching,
+        queries: journeys.map((journey, i) => ({
+          data: numberAt(counts, i),
+          settled: numberAt(settledCounts, i),
+          pending: journey.isFetching,
         })),
       };
       return;
     }
     // Cancellation can settle without increasing either query counter.
     baseline.queries.forEach((query, i) => {
-      if (!journeys[i].isFetching && settledCounts[i] === query.settled) query.pending = false;
+      const journey = journeys[i];
+      if (journey && !journey.isFetching && settledCounts[i] === query.settled)
+        query.pending = false;
     });
     if (
-      !journeys.every(
-        (q, i) =>
+      !journeys.every((q, i) => {
+        const before = baseline.queries[i];
+        return (
+          before &&
           q.isSuccess &&
           !q.isFetching &&
           q.data?.data &&
           q.data.freshness?.hasRealtimeData &&
           !q.data.freshness?.isStale &&
           !q.data.freshness?.isPartial &&
-          counts[i] > baseline.queries[i].data &&
-          (!baseline.queries[i].pending || settledCounts[i] > baseline.queries[i].settled + 1),
-      )
+          numberAt(counts, i) > before.data &&
+          (!before.pending || numberAt(settledCounts, i) > before.settled + 1)
+        );
+      })
     )
       return;
-    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i].data?.data?.stops]));
+    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i]?.data?.data?.stops]));
     const fresh = captureTransitLegStops(itinerary.legs, byTrip, Date.now()).filter((c) =>
       trips.includes(c.tripId),
     );

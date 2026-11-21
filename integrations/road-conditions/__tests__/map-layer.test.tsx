@@ -1,8 +1,8 @@
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
 let fake: FakeMap;
@@ -193,7 +193,8 @@ describe("RoadConditionsLayer rendered attribution", () => {
         .join(" "),
     ).toBe("");
 
-    const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible")!;
+    const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible");
+    assert.isDefined(visible);
     fake.setRenderedFeatures(MARKER_LAYER, [
       {
         ...visible,
@@ -784,7 +785,7 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     respondWith(eventsToFeatureCollection([current]).features);
     render(<RoadConditionsLayer />);
     await flush();
-    const marker = sourceFeatures("Point")[0]!;
+    const marker = nth(sourceFeatures("Point"), 0);
     fake.setRenderedFeatures(MARKER_LAYER, [
       {
         ...marker,
@@ -797,18 +798,18 @@ describe("RoadConditionsLayer viewport scheduler", () => {
       fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
     });
     expect(popupHtml).toHaveBeenCalledTimes(1);
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.effect.dimension_limit");
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.vehicle.truck");
+    expect(nth(popupHtml.mock.calls, -1)[0]).toContain("roadConditions.effect.dimension_limit");
+    expect(nth(popupHtml.mock.calls, -1)[0]).toContain("roadConditions.vehicle.truck");
 
     fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
     await flush(FRESHNESS_DEADLINE_MS);
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.freshness.needsRefresh");
+    expect(nth(popupHtml.mock.calls, -1)[0]).toContain("roadConditions.freshness.needsRefresh");
 
     const ended = { ...current, validity: { ...current.validity, status: "ended" as const } };
     respondWith(eventsToFeatureCollection([ended]).features);
     await flush(FRESHNESS_DEADLINE_MS);
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.validityStatus.ended");
-    expect(popupHtml.mock.lastCall![0]).not.toContain("roadConditions.freshness.needsRefresh");
+    expect(nth(popupHtml.mock.calls, -1)[0]).toContain("roadConditions.validityStatus.ended");
+    expect(nth(popupHtml.mock.calls, -1)[0]).not.toContain("roadConditions.freshness.needsRefresh");
 
     respondWith([]);
     await flush(FRESHNESS_DEADLINE_MS);
@@ -957,9 +958,9 @@ it("reads each feature through the client's validating reader", () => {
     updatedAt: "2026-09-11T12:00:00Z",
     expiresAt: "2026-09-11T12:10:00Z",
   });
-  const [feature] = eventsToFeatureCollection([served]).features;
+  const feature = nth(eventsToFeatureCollection([served]).features, 0);
   const result = buildSources([
-    feature!,
+    feature,
     {
       geometry: { type: "Point", coordinates: [13, 52] },
       properties: props({ id: "x", validity: undefined }),
@@ -997,12 +998,12 @@ describe("road-condition restriction display boundary", () => {
       },
     ]);
     const collection = sources.data as { features: Array<{ properties: unknown }> };
-    const marker = collection.features[0]!.properties as Record<string, unknown>;
+    const marker = nth(collection.features, 0).properties as Record<string, unknown>;
     expect(marker._icon).toBe("rc:restriction:major");
     // Situations stay out of the marker; the popup reads them from the lookup.
     expect(marker).not.toHaveProperty("effects");
     const events = [...sources.eventsByDisplayId.values()].flat();
-    expect(events[0]!.effects[0]?.applicability).toEqual({
+    expect(nth(events, 0).effects[0]?.applicability).toEqual({
       kind: "classes",
       include: [{ class: "hgv" }],
     });

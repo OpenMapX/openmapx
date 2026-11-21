@@ -299,17 +299,17 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     const body = req.body;
 
     // Protect only the actual system lists, including for legacy custom names.
-    const existing = await db
+    const [existing] = await db
       .select({ name: savedList.name })
       .from(savedList)
       .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
       .limit(1);
 
-    if (existing.length === 0) {
+    if (existing === undefined) {
       return reply.status(404).send({ error: "List not found" });
     }
 
-    const isDefault = isSystemSavedList(existing[0].name);
+    const isDefault = isSystemSavedList(existing.name);
     if (!isDefault && body.name?.startsWith("$")) {
       return reply.status(400).send({ error: "List names cannot start with $" });
     }
@@ -348,17 +348,17 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const { id } = req.params;
 
-    const existing = await db
+    const [existing] = await db
       .select({ name: savedList.name })
       .from(savedList)
       .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
       .limit(1);
 
-    if (existing.length === 0) {
+    if (existing === undefined) {
       return reply.status(404).send({ error: "List not found" });
     }
 
-    if (isSystemSavedList(existing[0].name)) {
+    if (isSystemSavedList(existing.name)) {
       return reply.status(400).send({ error: "Default lists cannot be deleted" });
     }
 
@@ -396,13 +396,13 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     const { id } = req.params;
     const format = req.query.format;
 
-    const list = await db
+    const [list] = await db
       .select({ id: savedList.id, name: savedList.name })
       .from(savedList)
       .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
       .limit(1);
 
-    if (list.length === 0) {
+    if (list === undefined) {
       return reply.status(404).send({ error: "List not found" });
     }
 
@@ -429,8 +429,8 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           ? placesToGpx(places)
           : placesToKml(places);
 
-    const asciiName = exportFilename(list[0].name, format);
-    const utf8Name = `${encodeURIComponent(list[0].name.replace(/^\$/, ""))}.${EXPORT_EXTENSION[format]}`;
+    const asciiName = exportFilename(list.name, format);
+    const utf8Name = `${encodeURIComponent(list.name.replace(/^\$/, ""))}.${EXPORT_EXTENSION[format]}`;
 
     return reply
       .type(`${EXPORT_CONTENT_TYPE[format]}; charset=utf-8`)
@@ -503,14 +503,14 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const { id } = req.params;
 
-    const existing = await db
+    const [existing] = await db
       .select({ placeId: savedPlace.id, listUserId: savedList.userId })
       .from(savedPlace)
       .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
       .where(eq(savedPlace.id, id))
       .limit(1);
 
-    if (existing.length === 0 || existing[0].listUserId !== userId) {
+    if (existing === undefined || existing.listUserId !== userId) {
       return reply.status(404).send({ error: "Place not found" });
     }
 
@@ -554,14 +554,14 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const { id } = req.params;
 
-    const existing = await db
+    const [existing] = await db
       .select({ placeId: savedPlace.id, listUserId: savedList.userId })
       .from(savedPlace)
       .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
       .where(eq(savedPlace.id, id))
       .limit(1);
 
-    if (existing.length === 0 || existing[0].listUserId !== userId) {
+    if (existing === undefined || existing.listUserId !== userId) {
       return reply.status(404).send({ error: "Place not found" });
     }
 
@@ -629,15 +629,15 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           .where(and(eq(labeledPlace.userId, userId), eq(labeledPlace.label, body.replaces)));
       }
 
-      const existing = await tx
+      const [existing] = await tx
         .select({ id: labeledPlace.id })
         .from(labeledPlace)
         .where(and(eq(labeledPlace.userId, userId), eq(labeledPlace.label, label)))
         .limit(1);
 
-      if (existing.length > 0) {
-        await tx.update(labeledPlace).set(fields).where(eq(labeledPlace.id, existing[0].id));
-        return { id: existing[0].id, label };
+      if (existing) {
+        await tx.update(labeledPlace).set(fields).where(eq(labeledPlace.id, existing.id));
+        return { id: existing.id, label };
       }
 
       const id = crypto.randomUUID();

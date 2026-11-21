@@ -11,6 +11,7 @@ import {
 } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+import { positionBounds } from "@/lib/positionBounds";
 
 const SOURCE_ID = "flight-arc-source";
 const LAYER_LINE = "flight-arc-line";
@@ -131,20 +132,12 @@ export function FlightArcLayer() {
     if (mode !== "flying" || !from || !to) return;
 
     const arc = greatCircleArc(from.coordinates, to.coordinates, 96);
-    let minLng = arc[0][0];
-    let maxLng = arc[0][0];
-    let minLat = arc[0][1];
-    let maxLat = arc[0][1];
-    for (const [lng, lat] of arc) {
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
+    const bounds = positionBounds(arc);
+    if (!bounds) return;
     fitBounds(
       [
-        [minLng, minLat],
-        [maxLng, maxLat],
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
       ],
       80,
     );

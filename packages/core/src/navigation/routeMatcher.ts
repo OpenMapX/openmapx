@@ -1,6 +1,8 @@
 import { degreesToRadians, earthRadius, lineString, point, radiansToLength } from "@turf/helpers";
 import nearestPointOnLine from "@turf/nearest-point-on-line";
 import type { LngLat } from "../types/geometry";
+import { indexAt } from "../utils/indexAt";
+import { numberAt } from "../utils/numberAt";
 import type { SnapResult } from "./types";
 
 /**
@@ -220,17 +222,17 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   const n = geometry.length;
   const edges = Math.max(0, n - 1);
 
-  let finite = true;
-  for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(geometry[i][0]) || !Number.isFinite(geometry[i][1])) {
-      finite = false;
-      break;
-    }
-  }
+  const finite = geometry.every(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
 
   const prefix = new Float64Array(n);
-  for (let i = 0; i < edges; i++) {
-    prefix[i + 1] = prefix[i] + turfDistanceMeters(geometry[i], geometry[i + 1]);
+  let travelled = 0;
+  let previous: LngLat | undefined;
+  for (const [i, vertex] of geometry.entries()) {
+    if (previous) {
+      travelled += turfDistanceMeters(previous, vertex);
+      prefix[i] = travelled;
+    }
+    previous = vertex;
   }
 
   const empty = new Int32Array(0);
@@ -261,7 +263,7 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
 
   // Vertex unit vectors, shared by the two edges that meet at each vertex.
   const vec = new Float64Array(n * 3);
-  for (let i = 0; i < n; i++) unitVector(geometry[i], vec, i * 3);
+  for (const [i, vertex] of geometry.entries()) unitVector(vertex, vec, i * 3);
 
   const capX = new Float64Array(edges);
   const capY = new Float64Array(edges);
@@ -273,12 +275,12 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   for (let i = 0; i < edges; i++) {
     const a = i * 3;
     const b = a + 3;
-    const ax = vec[a];
-    const ay = vec[a + 1];
-    const az = vec[a + 2];
-    const bx = vec[b];
-    const by = vec[b + 1];
-    const bz = vec[b + 2];
+    const ax = numberAt(vec, a);
+    const ay = numberAt(vec, a + 1);
+    const az = numberAt(vec, a + 2);
+    const bx = numberAt(vec, b);
+    const by = numberAt(vec, b + 1);
+    const bz = numberAt(vec, b + 2);
 
     const crx = ay * bz - az * by;
     const cry = az * bx - ax * bz;
@@ -361,10 +363,10 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
   let nodeCount = 0;
 
   const combine = (node: number, ax: number, ay: number, az: number, ar: number, other: number) => {
-    const bx = nodeX[other];
-    const by = nodeY[other];
-    const bz = nodeZ[other];
-    const br = nodeR[other];
+    const bx = numberAt(nodeX, other);
+    const by = numberAt(nodeY, other);
+    const bz = numberAt(nodeZ, other);
+    const br = numberAt(nodeR, other);
     const mx = ax + bx;
     const my = ay + by;
     const mz = az + bz;
@@ -395,16 +397,19 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
     nodeHi[node] = hi;
     if (hi - lo <= LEAF_EDGES) {
       // Union of the member caps, grown one member at a time.
-      const first = indexed[lo];
-      let cx = capX[first];
-      let cy = capY[first];
-      let cz = capZ[first];
-      let r = capR[first];
+      const first = indexAt(indexed, lo);
+      let cx = numberAt(capX, first);
+      let cy = numberAt(capY, first);
+      let cz = numberAt(capZ, first);
+      let r = numberAt(capR, first);
       for (let p = lo + 1; p < hi; p++) {
-        const e = indexed[p];
-        const mx = cx + capX[e];
-        const my = cy + capY[e];
-        const mz = cz + capZ[e];
+        const e = indexAt(indexed, p);
+        const ex = numberAt(capX, e);
+        const ey = numberAt(capY, e);
+        const ez = numberAt(capZ, e);
+        const mx = cx + ex;
+        const my = cy + ey;
+        const mz = cz + ez;
         const mag = Math.sqrt(mx * mx + my * my + mz * mz);
         if (!(mag > MIN_CENTRE_MAGNITUDE)) {
           r = Math.PI;
@@ -414,7 +419,7 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
         const ny = my / mag;
         const nz = mz / mag;
         const ra = angleBetween(nx, ny, nz, cx, cy, cz) + r;
-        const rb = angleBetween(nx, ny, nz, capX[e], capY[e], capZ[e]) + capR[e];
+        const rb = angleBetween(nx, ny, nz, ex, ey, ez) + numberAt(capR, e);
         cx = nx;
         cy = ny;
         cz = nz;
@@ -431,7 +436,14 @@ function buildIndex(geometry: LngLat[]): MatcherIndex {
     const right = build(mid, hi);
     nodeLeft[node] = left;
     nodeRight[node] = right;
-    combine(node, nodeX[left], nodeY[left], nodeZ[left], nodeR[left], right);
+    combine(
+      node,
+      numberAt(nodeX, left),
+      numberAt(nodeY, left),
+      numberAt(nodeZ, left),
+      numberAt(nodeR, left),
+      right,
+    );
     return node;
   };
 
@@ -555,11 +567,10 @@ export function snapPreparedRoute(
 
   const evaluate = (edge: number): void => {
     if (counting) counters.evaluatedEdges++;
-    const local = nearestPointOnLine(
-      lineString([coords[edge], coords[edge + 1]]),
-      inputPoint,
-      METERS,
-    );
+    const start = coords[edge];
+    const end = coords[edge + 1];
+    if (!start || !end) return;
+    const local = nearestPointOnLine(lineString([start, end]), inputPoint, METERS);
     const dist = local.properties.dist as number;
     // Strictly closer wins; an equal distance only wins for an earlier edge,
     // which is what Turf's ascending scan with a strict comparison produces.
@@ -568,7 +579,7 @@ export function snapPreparedRoute(
       bestEdge = edge;
       bestSnapped = local.geometry.coordinates as LngLat;
       bestIndex = edge + (local.properties.index as number);
-      bestAlong = idx.prefix[edge] + (local.properties.location as number);
+      bestAlong = numberAt(idx.prefix, edge) + (local.properties.location as number);
     }
   };
 
@@ -582,59 +593,59 @@ export function snapPreparedRoute(
     };
   }
 
-  for (let i = 0; i < idx.always.length; i++) evaluate(idx.always[i]);
+  for (const edge of idx.always) evaluate(edge);
 
   if (seedSegmentIndex !== undefined && idx.indexed.length > 0) {
     const seed = Math.max(0, Math.min(idx.edges - 1, Math.trunc(seedSegmentIndex)));
-    if (Number.isFinite(seed) && idx.capR[seed] > 0) evaluate(seed);
+    if (Number.isFinite(seed) && numberAt(idx.capR, seed) > 0) evaluate(seed);
   }
 
   if (idx.root >= 0) {
     const vq = new Float64Array(3);
     unitVector(raw, vq, 0);
-    const qx = vq[0];
-    const qy = vq[1];
-    const qz = vq[2];
+    const qx = numberAt(vq, 0);
+    const qy = numberAt(vq, 1);
+    const qz = numberAt(vq, 2);
 
     const visit = (node: number): void => {
       if (counting) counters.visitedNodes++;
-      const left = idx.nodeLeft[node];
+      const left = indexAt(idx.nodeLeft, node);
       if (left < 0) {
-        const hi = idx.nodeHi[node];
-        for (let p = idx.nodeLo[node]; p < hi; p++) {
-          const e = idx.indexed[p];
+        const hi = indexAt(idx.nodeHi, node);
+        for (let p = indexAt(idx.nodeLo, node); p < hi; p++) {
+          const e = indexAt(idx.indexed, p);
           const bound = capLowerBound(
             qx,
             qy,
             qz,
-            idx.capX[e],
-            idx.capY[e],
-            idx.capZ[e],
-            idx.capR[e],
+            numberAt(idx.capX, e),
+            numberAt(idx.capY, e),
+            numberAt(idx.capZ, e),
+            numberAt(idx.capR, e),
           );
           if (prunable(bound, bestDist)) continue;
           evaluate(e);
         }
         return;
       }
-      const right = idx.nodeRight[node];
+      const right = indexAt(idx.nodeRight, node);
       const boundL = capLowerBound(
         qx,
         qy,
         qz,
-        idx.nodeX[left],
-        idx.nodeY[left],
-        idx.nodeZ[left],
-        idx.nodeR[left],
+        numberAt(idx.nodeX, left),
+        numberAt(idx.nodeY, left),
+        numberAt(idx.nodeZ, left),
+        numberAt(idx.nodeR, left),
       );
       const boundR = capLowerBound(
         qx,
         qy,
         qz,
-        idx.nodeX[right],
-        idx.nodeY[right],
-        idx.nodeZ[right],
-        idx.nodeR[right],
+        numberAt(idx.nodeX, right),
+        numberAt(idx.nodeY, right),
+        numberAt(idx.nodeZ, right),
+        numberAt(idx.nodeR, right),
       );
       // Descend into the more promising child first so its exact result can
       // prune the other one.
@@ -650,10 +661,10 @@ export function snapPreparedRoute(
       qx,
       qy,
       qz,
-      idx.nodeX[idx.root],
-      idx.nodeY[idx.root],
-      idx.nodeZ[idx.root],
-      idx.nodeR[idx.root],
+      numberAt(idx.nodeX, idx.root),
+      numberAt(idx.nodeY, idx.root),
+      numberAt(idx.nodeZ, idx.root),
+      numberAt(idx.nodeR, idx.root),
     );
     if (!prunable(rootBound, bestDist)) visit(idx.root);
   }
@@ -694,7 +705,12 @@ export function inspectRouteMatcher(prepared: PreparedRouteMatcher): RouteMatche
     prefix: Array.from(idx.prefix),
     edgeCap(edge) {
       if (!indexed.includes(edge)) return null;
-      return { x: idx.capX[edge], y: idx.capY[edge], z: idx.capZ[edge], r: idx.capR[edge] };
+      return {
+        x: numberAt(idx.capX, edge),
+        y: numberAt(idx.capY, edge),
+        z: numberAt(idx.capZ, edge),
+        r: numberAt(idx.capR, edge),
+      };
     },
     ancestorCaps(edge) {
       const position = indexed.indexOf(edge);
@@ -703,14 +719,14 @@ export function inspectRouteMatcher(prepared: PreparedRouteMatcher): RouteMatche
       let node = idx.root;
       for (;;) {
         chain.push({
-          x: idx.nodeX[node],
-          y: idx.nodeY[node],
-          z: idx.nodeZ[node],
-          r: idx.nodeR[node],
+          x: numberAt(idx.nodeX, node),
+          y: numberAt(idx.nodeY, node),
+          z: numberAt(idx.nodeZ, node),
+          r: numberAt(idx.nodeR, node),
         });
-        const left = idx.nodeLeft[node];
+        const left = indexAt(idx.nodeLeft, node);
         if (left < 0) return chain;
-        node = position < idx.nodeHi[left] ? left : idx.nodeRight[node];
+        node = position < indexAt(idx.nodeHi, left) ? left : indexAt(idx.nodeRight, node);
       }
     },
   };

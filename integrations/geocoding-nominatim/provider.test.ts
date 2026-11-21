@@ -197,7 +197,7 @@ describe("Nominatim geocoding provider", () => {
       ]),
     );
     const [result] = await nominatimService.geocode("Cafe");
-    expect(result.addressEvidence).toEqual({
+    expect(result?.addressEvidence).toEqual({
       components: { road: "Main road", country_code: "de" },
       source: "geocoding-nominatim",
       method: "provider-address",

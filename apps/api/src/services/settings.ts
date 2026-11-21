@@ -566,8 +566,9 @@ export async function resolveSettings(database: typeof db = db): Promise<Setting
       value = "***";
     }
 
-    if (!grouped[def.group]) grouped[def.group] = [];
-    grouped[def.group].push({
+    const groupSettings = grouped[def.group] ?? [];
+    grouped[def.group] = groupSettings;
+    groupSettings.push({
       group: def.group,
       subgroup: def.subgroup,
       key: def.key,

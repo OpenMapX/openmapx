@@ -377,8 +377,8 @@ function validateRouteOptions(value: unknown): value is NavigationRouteOptions {
   );
 }
 
-function equivalentRoute(a: Route, b: Route): boolean {
-  return JSON.stringify(copyRoute(a)) === JSON.stringify(copyRoute(b));
+function equivalentRoute(a: Route | undefined, b: Route): boolean {
+  return a !== undefined && JSON.stringify(copyRoute(a)) === JSON.stringify(copyRoute(b));
 }
 
 function validatePackageId(value: unknown): value is string {

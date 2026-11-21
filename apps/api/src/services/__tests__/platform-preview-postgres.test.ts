@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { services as coreServices } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   adminActionReauthentication,
   adminJob,
@@ -276,7 +277,8 @@ dbDescribe("durable exact platform preview", () => {
       .where(
         sql`${dataSubjectRequestPreservation.requestId}=${request.id} AND ${dataSubjectRequestPreservation.registrationId}='platform-configuration-previews'`,
       );
-    expect(hold?.status).toBe("held");
+    assert.isDefined(hold, "the preservation hold was not recorded");
+    expect(hold.status).toBe("held");
     const trigger = () =>
       retainPlatformPreview(
         {
@@ -294,7 +296,7 @@ dbDescribe("durable exact platform preview", () => {
         .from(platformConfigurationPreview)
         .where(eq(platformConfigurationPreview.id, value.previewId)),
     ).toHaveLength(1);
-    await releasePreservation({ id: hold!.id, database: fixture.db });
+    await releasePreservation({ id: hold.id, database: fixture.db });
     await trigger();
     expect(
       await fixture.db
@@ -353,8 +355,10 @@ dbDescribe("durable exact platform preview", () => {
       .select()
       .from(dataSubjectRequestPreservation)
       .where(eq(dataSubjectRequestPreservation.requestId, request.id));
-    const jobHold = holds.find((row) => row.registrationId === "admin-jobs-attribution")!,
-      previewHold = holds.find((row) => row.registrationId === "platform-configuration-previews")!;
+    const jobHold = holds.find((row) => row.registrationId === "admin-jobs-attribution"),
+      previewHold = holds.find((row) => row.registrationId === "platform-configuration-previews");
+    assert.isDefined(jobHold, "no admin job preservation hold");
+    assert.isDefined(previewHold, "no preview preservation hold");
     await releasePreservation({ id: jobHold.id, database: fixture.db });
     await pruneCompletedJobs(1);
     expect(await fixture.db.select().from(adminJob).where(eq(adminJob.id, jobId))).toHaveLength(1);
@@ -429,7 +433,7 @@ dbDescribe("durable exact platform preview", () => {
       own.newOrigin,
     ])
       expect(JSON.stringify(records)).not.toContain(value);
-    expect(Object.keys(records[0]!.data).sort()).toEqual([
+    expect(Object.keys(itemAt(records, 0).data).sort()).toEqual([
       "consumedAt",
       "createdAt",
       "expiresAt",
@@ -497,14 +501,15 @@ dbDescribe("durable exact platform preview", () => {
       ),
     );
     expect(results[0]).toEqual(results[1]);
+    const { preview: retained } = itemAt(results, 0);
     const { platformConfigurationPreview } = await import("../../db/schema");
     await fixture.db
       .update(platformConfigurationPreview)
-      .set({ preview: { ...results[0]!.preview, authPolicyRevision: "e".repeat(64) } })
-      .where(eq(platformConfigurationPreview.id, results[0]!.preview.previewId));
+      .set({ preview: { ...retained, authPolicyRevision: "e".repeat(64) } })
+      .where(eq(platformConfigurationPreview.id, retained.previewId));
     await expect(
       readPlatformPreview(
-        { actorId, previewFingerprint: results[0]!.preview.previewFingerprint, now },
+        { actorId, previewFingerprint: retained.previewFingerprint, now },
         fixture.db,
       ),
     ).rejects.toThrow();

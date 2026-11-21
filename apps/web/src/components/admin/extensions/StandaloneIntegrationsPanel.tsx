@@ -123,10 +123,11 @@ function LocalInstallations() {
     setError(null);
     try {
       const result = sdk.unwrapAdminResponse(
-        await (selected.action === "adopt"
+        // An adoption without a digest returned above, so it never reaches the removal.
+        await (selected.action === "adopt" && selected.entry.contentDigest
           ? sdk.adoptAdminStandaloneIntegration(
               selected.entry.integrationId,
-              { expectedContentDigest: selected.entry.contentDigest! },
+              { expectedContentDigest: selected.entry.contentDigest },
               { "idempotency-key": selected.key },
               { client, timeoutMs: 30000 },
             )

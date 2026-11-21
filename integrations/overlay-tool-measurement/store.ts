@@ -4,6 +4,12 @@ import { create } from "zustand";
 export type MeasurementMode = "line" | "polygon";
 export type { UnitSystem };
 
+/** The polygon ring through `points` back to the first one, or null below three points. */
+export function closedRing(points: readonly LngLat[]): LngLat[] | null {
+  const first = points[0];
+  return first && points.length >= 3 ? [...points, first] : null;
+}
+
 export interface MeasurementState {
   isActive: boolean;
   mode: MeasurementMode;
@@ -71,8 +77,8 @@ export const useMeasurementStore = create<MeasurementState>((set, get) => ({
 
   undo: () =>
     set((s) => {
-      if (s.points.length === 0) return s;
-      const last = s.points[s.points.length - 1];
+      const last = s.points.at(-1);
+      if (last === undefined) return s;
       return {
         points: s.points.slice(0, -1),
         undonePoints: [...s.undonePoints, last],
@@ -82,8 +88,8 @@ export const useMeasurementStore = create<MeasurementState>((set, get) => ({
 
   redo: () =>
     set((s) => {
-      if (s.undonePoints.length === 0) return s;
-      const restored = s.undonePoints[s.undonePoints.length - 1];
+      const restored = s.undonePoints.at(-1);
+      if (restored === undefined) return s;
       return {
         points: [...s.points, restored],
         undonePoints: s.undonePoints.slice(0, -1),

@@ -165,8 +165,9 @@ export function createReport(
     runSucceeded:
       evidence.success &&
       reviewed.results.every((entry) => entry.status !== "failed") &&
-      cases.every(
-        (entry, index) => !catalog[index].suite || ["passed", "known-gap"].includes(entry.status),
+      catalog.every(
+        (entry, index) =>
+          !entry.suite || ["passed", "known-gap"].includes(cases[index]?.status ?? "missing"),
       ),
     metadata,
     cases,

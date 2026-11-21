@@ -14,7 +14,7 @@ import {
 } from "@openmapx/core/privacy";
 import { and, eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db/index.js";
 import {
   account,
@@ -441,13 +441,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         // The request is self-service, proven by the session, and stays in
         // progress while the operator-held sources are still open.
         const row = await subjectRequest();
+        assert.isDefined(row, "no subject request was recorded");
         expect(row).toMatchObject({
           channel: "self_service",
           state: "in_progress",
           identityMethod: "account_session",
         });
         await vi.waitFor(async () =>
-          expect(await eventTypes(row!.id)).toEqual(
+          expect(await eventTypes(row.id)).toEqual(
             expect.arrayContaining([
               "received",
               "state_in_progress",
@@ -626,10 +627,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         expect(status).toBe(200);
         const row = await subjectRequest();
-        await vi.waitFor(async () => expect(await eventTypes(row!.id)).toContain("export_failed"), {
+        assert.isDefined(row, "no subject request was recorded");
+        await vi.waitFor(async () => expect(await eventTypes(row.id)).toContain("export_failed"), {
           timeout: 20_000,
         });
-        const events = await eventTypes(row!.id);
+        const events = await eventTypes(row.id);
         expect(events).not.toContain("export_delivered");
         expect(events).not.toContain("state_completed");
         expect((await subjectRequest())?.state).toBe("in_progress");
@@ -639,7 +641,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(dataSubjectRequestEvent)
             .where(
               and(
-                eq(dataSubjectRequestEvent.requestId, row!.id),
+                eq(dataSubjectRequestEvent.requestId, row.id),
                 eq(dataSubjectRequestEvent.eventType, "export_failed"),
               ),
             ),

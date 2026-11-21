@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { renderComposeForRepo, renderComposeWithWriter } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
@@ -147,7 +147,9 @@ describe("services update pull failures", () => {
       } else {
         expect(current).not.toBe(seed);
         const directory = join(root, "infra/docker/state/ops-agent/lifecycle");
-        const raw = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
+        const [envelopeName] = readdirSync(directory);
+        assert.isDefined(envelopeName);
+        const raw = JSON.parse(readFileSync(join(directory, envelopeName), "utf8"));
         const receipt = await services.readServiceLifecycleReceipt({
           dataRoot: join(root, "infra/docker/data"),
           execution: raw.current.receipt.execution,
@@ -183,7 +185,9 @@ describe("services update and app-api's database migrations", () => {
   it("migrates after the pull and before recreation when app-api is replaced", async () => {
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
-      order.push(args[0] as string);
+      const [command] = args;
+      assert.isDefined(command, "docker compose was called without a command");
+      order.push(command);
       return 0;
     });
     vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {

@@ -20,6 +20,7 @@ import type {
   PricingPlanEntry,
   Translatable,
 } from "@openmapx/core";
+import { itemAt } from "@openmapx/core";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -208,7 +209,8 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     kind: "station",
     name: station.name,
     coordinates: station.coordinates,
-    source: station.sources[0],
+    // The provider drops records without a source before mapping.
+    source: itemAt(station.sources, 0, "shared-mobility source"),
     sources: [...station.sources],
     ...(station.contributors === undefined
       ? {}
@@ -535,7 +537,8 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     kind: "vehicle",
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
-    source: vehicle.sources[0],
+    // The provider drops records without a source before mapping.
+    source: itemAt(vehicle.sources, 0, "shared-mobility source"),
     sources: [...vehicle.sources],
     ...(vehicle.contributors === undefined
       ? {}

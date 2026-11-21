@@ -13,7 +13,7 @@ describe("createIntegrationLogger", () => {
     log.error("upstream call failed", boom);
 
     expect(error).toHaveBeenCalledTimes(1);
-    const [bindings, msg] = error.mock.calls[0];
+    const [bindings, msg] = error.mock.calls[0] ?? [];
     expect(bindings).toMatchObject({ integration: "test-int", err: boom });
     expect(msg).toBe("upstream call failed");
   });
@@ -35,7 +35,7 @@ describe("createIntegrationLogger", () => {
     const boom = new Error("nope");
     log.warn("failed for %s", "berlin", boom);
     expect(warn).toHaveBeenCalledTimes(1);
-    const [bindings, msg, arg] = warn.mock.calls[0];
+    const [bindings, msg, arg] = warn.mock.calls[0] ?? [];
     expect(bindings).toMatchObject({ integration: "y", err: boom });
     expect(msg).toBe("failed for %s");
     expect(arg).toBe("berlin");

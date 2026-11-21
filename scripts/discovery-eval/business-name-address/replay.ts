@@ -2,11 +2,11 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { getQueryVariants } from "../../../integrations/geocoding/query-expansion.js";
-import type { AutocompleteResult } from "../../../packages/core/src/types/geocoding.js";
 import {
   enterAction,
   rankAutocompleteRows,
-} from "../../../packages/core/src/utils/suggestionRanking.js";
+} from "../../../packages/core/src/search/suggestionRanking.js";
+import type { AutocompleteResult } from "../../../packages/core/src/types/geocoding.js";
 
 interface QuerySet {
   baseline: string;

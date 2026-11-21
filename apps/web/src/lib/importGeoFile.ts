@@ -105,7 +105,7 @@ export function parseGeoFile(filename: string, text: string): GeoJSON.FeatureCol
           );
           if (index < 0) continue;
           const [wpt] = candidates.splice(index, 1);
-          if (wpt.capture !== undefined)
+          if (wpt?.capture !== undefined)
             feature.properties = { ...feature.properties, fieldContributors: wpt.capture };
         }
       }

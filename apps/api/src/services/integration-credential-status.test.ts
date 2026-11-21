@@ -93,7 +93,7 @@ it("uses the actual env > file > vault cascade and keeps separate vault audit wi
     updatedBy: "fixture-actor",
   });
   vi.stubEnv("INTEGRATION_FIXTURE_APIKEY", "");
-  expect((await computeCredentialStatus(integration))[0].source).toBe("config.json");
+  expect((await computeCredentialStatus(integration))[0]?.source).toBe("config.json");
   rmSync(join(directory, "config.json"));
   const status = await computeCredentialStatus(integration);
   expect(status[0]).toMatchObject({ source: "vault", updatedAt: "2026-10-20T00:00:00.000Z" });

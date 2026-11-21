@@ -143,7 +143,7 @@ it("retains copied canonical geometry spans through the installed-navigation pac
   a.attributionText = "Later notice";
   expect(
     (result.startPackage.route.geometryContributors as Route["geometryContributors"])?.[0]
-      .contributors?.[0].attributionText,
+      ?.contributors?.[0]?.attributionText,
   ).toBe("A required");
 });
 

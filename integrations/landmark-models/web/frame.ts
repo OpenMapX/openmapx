@@ -1,3 +1,4 @@
+import { numberAt } from "@openmapx/core";
 import { MercatorCoordinate } from "maplibre-gl";
 
 /**
@@ -18,7 +19,7 @@ function multiply(a: ArrayLike<number>, b: ArrayLike<number>): Matrix {
   for (let col = 0; col < 4; col++) {
     for (let row = 0; row < 4; row++) {
       let sum = 0;
-      for (let k = 0; k < 4; k++) sum += (a[k * 4 + row] as number) * (b[col * 4 + k] as number);
+      for (let k = 0; k < 4; k++) sum += numberAt(a, k * 4 + row) * numberAt(b, col * 4 + k);
       out[col * 4 + row] = sum;
     }
   }
@@ -65,29 +66,31 @@ export function objectMatrix(
   );
 }
 
-type Tuple16 = [
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-];
-
-/** Inverse of a column-major 4×4 matrix (gl-matrix's cofactor expansion), or null if singular. */
+/**
+ * Inverse of a column-major 4×4 matrix (gl-matrix's cofactor expansion), or
+ * null if singular. A matrix shorter than 16 entries has a NaN determinant and
+ * counts as singular.
+ */
 function invert(m: ArrayLike<number>): Matrix | null {
-  const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] =
-    Array.from(m) as Tuple16;
+  const at = (index: number) => numberAt(m, index);
+  const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = [
+    at(0),
+    at(1),
+    at(2),
+    at(3),
+    at(4),
+    at(5),
+    at(6),
+    at(7),
+    at(8),
+    at(9),
+    at(10),
+    at(11),
+    at(12),
+    at(13),
+    at(14),
+    at(15),
+  ];
   const b00 = a00 * a11 - a01 * a10;
   const b01 = a00 * a12 - a02 * a10;
   const b02 = a00 * a13 - a03 * a10;
@@ -129,15 +132,10 @@ function transformPoint(
   y: number,
   z: number,
 ): [number, number, number] {
-  const out = [0, 0, 0, 0];
-  for (let row = 0; row < 4; row++)
-    out[row] =
-      (m[row] as number) * x +
-      (m[4 + row] as number) * y +
-      (m[8 + row] as number) * z +
-      (m[12 + row] as number);
-  const w = out[3] as number;
-  return [(out[0] as number) / w, (out[1] as number) / w, (out[2] as number) / w];
+  const row = (r: number) =>
+    numberAt(m, r) * x + numberAt(m, 4 + r) * y + numberAt(m, 8 + r) * z + numberAt(m, 12 + r);
+  const w = row(3);
+  return [row(0) / w, row(1) / w, row(2) / w];
 }
 
 /**
@@ -156,10 +154,7 @@ export function unprojectRay(
   if (!inverse) return { origin: [0, 0, 0], direction: [0, 0, -1] };
   const near = transformPoint(inverse, ndcX, ndcY, -1);
   const far = transformPoint(inverse, ndcX, ndcY, 1);
-  const d = [far[0] - near[0], far[1] - near[1], far[2] - near[2]];
-  const length = Math.hypot(d[0] as number, d[1] as number, d[2] as number) || 1;
-  return {
-    origin: near,
-    direction: [(d[0] as number) / length, (d[1] as number) / length, (d[2] as number) / length],
-  };
+  const [dx, dy, dz] = [far[0] - near[0], far[1] - near[1], far[2] - near[2]];
+  const length = Math.hypot(dx, dy, dz) || 1;
+  return { origin: near, direction: [dx / length, dy / length, dz / length] };
 }

@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { parseRouteFlowBody, routeCorridorBboxes } from "../flowAlongRoute.js";
 
@@ -12,7 +13,7 @@ describe("routeCorridorBboxes", () => {
   it("returns one padded box for a short route", () => {
     const boxes = routeCorridorBboxes(northRoute(1000));
     expect(boxes).toHaveLength(1);
-    const [west, south, east, north] = boxes[0];
+    const [west, south, east, north] = nth(boxes, 0);
     expect(west).toBeLessThan(8);
     expect(east).toBeGreaterThan(8);
     expect(south).toBeLessThan(50);

@@ -16,10 +16,9 @@ describe("native palette", () => {
         onAccent: colors.onPrimary,
         secondaryLabel: colors.primary,
       });
-      const channels = colors.primary
-        .slice(1)
-        .match(/.{2}/g)!
-        .map((channel) => Number.parseInt(channel, 16));
+      const channels = Array.from(colors.primary.slice(1).matchAll(/.{2}/g), ([channel]) =>
+        Number.parseInt(channel, 16),
+      );
       expect(palette.outline).toBe(`rgba(${channels.join(", ")}, 0.5)`);
     },
   );

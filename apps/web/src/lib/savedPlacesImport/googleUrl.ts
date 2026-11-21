@@ -1,3 +1,4 @@
+import { indexAt } from "@openmapx/core";
 import { validCoordinates } from "./types";
 
 export function decodeUrl(value: string): string {
@@ -38,34 +39,34 @@ export function s2CellCenter(hex: string): { lat: number; lng: number } | undefi
   while (trailing < 64 && ((id >> BigInt(trailing)) & BigInt(1)) === BigInt(0)) trailing++;
   if (trailing > 60 || trailing % 2 !== 0) return;
   const level = 30 - trailing / 2;
-  const positions = [
-    [0, 1, 3, 2],
-    [0, 2, 3, 1],
-    [3, 2, 0, 1],
-    [3, 1, 0, 2],
-  ];
+  // Hilbert-curve position for each orientation (row) and two-bit step (column).
+  const positions = [0, 1, 3, 2, 0, 2, 3, 1, 3, 2, 0, 1, 3, 1, 0, 2];
   const orientations = [1, 0, 0, 3];
   let orientation = face & 1;
   let i = 0;
   let j = 0;
   for (let depth = 0; depth < level; depth++) {
     const position = Number((id >> BigInt(59 - 2 * depth)) & BigInt(3));
-    const ij = positions[orientation][position];
+    const ij = indexAt(positions, orientation * 4 + position);
     i = 2 * i + (ij >> 1);
     j = 2 * j + (ij & 1);
-    orientation ^= orientations[position];
+    orientation ^= indexAt(orientations, position);
   }
   const uv = (s: number) => (s >= 0.5 ? (4 * s * s - 1) / 3 : (1 - 4 * (1 - s) ** 2) / 3);
   const u = uv((i + 0.5) / 2 ** level);
   const v = uv((j + 0.5) / 2 ** level);
-  const [x, y, z] = [
-    [1, u, v],
-    [-u, 1, v],
-    [-u, -v, 1],
-    [-1, -v, -u],
-    [v, -1, -u],
-    [v, u, -1],
-  ][face];
+  const faceAxes: Record<number, [number, number, number]> = {
+    0: [1, u, v],
+    1: [-u, 1, v],
+    2: [-u, -v, 1],
+    3: [-1, -v, -u],
+    4: [v, -1, -u],
+    5: [v, u, -1],
+  };
+  const axes = faceAxes[face];
+  // The face was checked to be 0 to 5 above.
+  if (!axes) throw new RangeError(`S2 face ${face} out of range`);
+  const [x, y, z] = axes;
   return {
     lat: (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI,
     lng: (Math.atan2(y, x) * 180) / Math.PI,
@@ -88,17 +89,17 @@ export function coordinatesFromGoogleUrl(url: string): {
     if (match && validCoordinates(Number(match[1]), Number(match[2])))
       return { lat: Number(match[1]), lng: Number(match[2]), status: "exact" };
   }
-  const fid = /(?:!1s|[?&]ftid=)(0x[0-9a-f]+):0x[0-9a-f]+/i.exec(decoded);
-  const hint = fid && s2CellCenter(fid[1]);
+  const fid = /(?:!1s|[?&]ftid=)(0x[0-9a-f]+):0x[0-9a-f]+/i.exec(decoded)?.[1];
+  const hint = fid && s2CellCenter(fid);
   if (hint && validCoordinates(hint.lat, hint.lng)) return { ...hint, status: "approximate" };
   return { status: "needsLookup" };
 }
 export function nameFromGoogleUrl(url: string): string {
-  const match = /\/maps\/place\/([^/?#]+)/.exec(url);
-  return match ? decodeUrl(match[1].replace(/\+/g, " ")) : "";
+  const name = /\/maps\/place\/([^/?#]+)/.exec(url)?.[1];
+  return name === undefined ? "" : decodeUrl(name.replace(/\+/g, " "));
 }
 export function addressFromGoogleUrl(url: string): string {
-  const match = /[?&](?:q|query)=([^&#]+)/i.exec(url);
-  const query = match ? decodeUrl(match[1].replace(/\+/g, " ")) : "";
+  const encoded = /[?&](?:q|query)=([^&#]+)/i.exec(url)?.[1];
+  const query = encoded === undefined ? "" : decodeUrl(encoded.replace(/\+/g, " "));
   return /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(query) ? "" : query;
 }

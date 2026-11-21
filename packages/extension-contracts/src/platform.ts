@@ -14,7 +14,11 @@ export function satisfiesPlatformVersion(required: string, current = PLATFORM_VE
     return false;
   const [requiredMajor, requiredMinor] = required.split(".").map(Number);
   const [currentMajor, currentMinor] = current.split(".").map(Number);
-  if (![requiredMajor, requiredMinor, currentMajor, currentMinor].every(Number.isSafeInteger))
+  if (
+    requiredMinor === undefined ||
+    currentMinor === undefined ||
+    ![requiredMajor, requiredMinor, currentMajor, currentMinor].every(Number.isSafeInteger)
+  )
     return false;
   return requiredMajor === currentMajor && currentMinor >= requiredMinor;
 }

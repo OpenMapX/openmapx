@@ -17,6 +17,7 @@ import {
   cleanup,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   waitFor,
@@ -596,9 +597,7 @@ describe("backup dialog and input ownership", () => {
       mount(<BackupsPage />);
       const row = (await screen.findByText("snapshot-1")).closest("tr") as HTMLElement;
       const open = () =>
-        fireEvent.click(
-          within(row).getAllByRole("button")[kind === "restore" ? 0 : 1] as HTMLElement,
-        );
+        fireEvent.click(nth(within(row).getAllByRole("button"), kind === "restore" ? 0 : 1));
       open();
       fireEvent.click(
         screen.getByRole("button", { name: kind === "restore" ? "Restore" : "Delete" }),

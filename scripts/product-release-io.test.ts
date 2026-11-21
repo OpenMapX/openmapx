@@ -148,7 +148,7 @@ it("creates, uploads, discovers and retries a tagless draft by exact release ID"
     t
       .read()
       .calls.filter(
-        (call: ExternalCall) => call.args.includes("POST") && call.args[1].endsWith("/releases"),
+        (call: ExternalCall) => call.args.includes("POST") && call.args[1]?.endsWith("/releases"),
       ),
   ).toHaveLength(1);
 });

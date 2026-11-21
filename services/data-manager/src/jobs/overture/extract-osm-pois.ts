@@ -1,7 +1,8 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
-import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
+import { itemAt } from "@openmapx/core/item-at";
+import type { OsmFilter } from "@openmapx/core/places/osmCategoryFilters";
+import { CATEGORY_FILTERS } from "@openmapx/core/places/osmCategoryFilters";
 import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
@@ -98,9 +99,8 @@ function sourceIdentity(feature: GeoJsonFeature): {
     if (/^-?\d+$/.test(osmId)) return { osmType: attributeType, osmId };
   }
 
-  const match = /^([nwa])(-?\d+)$/.exec(feature.id ?? "");
-  if (!match) return null;
-  const [, kind, encodedId] = match;
+  const [, kind, encodedId] = /^([nwa])(-?\d+)$/.exec(feature.id ?? "") ?? [];
+  if (encodedId === undefined) return null;
   if (kind === "n") return { osmType: "node", osmId: encodedId };
   if (kind === "w") return { osmType: "way", osmId: encodedId };
 
@@ -135,6 +135,7 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
   let lng: number;
   if (geom.type === "Point") {
     const [lngVal, latVal] = geom.coordinates as number[];
+    if (lngVal === undefined || latVal === undefined) return null;
     lng = lngVal;
     lat = latVal;
   } else if (
@@ -283,9 +284,13 @@ export async function extractOsmPois(
         rl.close();
       }
 
-      const [{ count: uniqueCountText }] = await sql.unsafe<{ count: string }[]>(
-        `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
-        [],
+      const { count: uniqueCountText } = itemAt(
+        await sql.unsafe<{ count: string }[]>(
+          `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
+          [],
+        ),
+        0,
+        "row from the unique OSM POI count query",
       );
       const extracted = Number(uniqueCountText ?? 0);
       opts.onProgress?.(
@@ -356,6 +361,7 @@ export function representativePoint(geom: {
   let sumCos = 0;
   let sumLat = 0;
   for (const [lngVal, latVal] of ring) {
+    if (lngVal === undefined || latVal === undefined) return null;
     const rad = (lngVal * Math.PI) / 180;
     sumSin += Math.sin(rad);
     sumCos += Math.cos(rad);

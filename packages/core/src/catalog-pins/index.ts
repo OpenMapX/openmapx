@@ -1,5 +1,6 @@
 export * from "./bootstrap";
 export * from "./generation";
+export * from "./pinned-commits";
 export * from "./proposal-schemas";
 export * from "./proposals";
 export * from "./review-records";

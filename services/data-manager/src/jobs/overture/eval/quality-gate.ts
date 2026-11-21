@@ -4,7 +4,7 @@ import {
   type PoiSearchResult,
   rankAndLimitPoiResults,
 } from "@openmapx/core";
-import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/utils/overtureCategoryMap";
+import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/places/overtureCategoryMap";
 import type postgres from "postgres";
 import { assertValidRegion } from "../pull.js";
 import { assertValidOvertureSchema } from "../schema.js";

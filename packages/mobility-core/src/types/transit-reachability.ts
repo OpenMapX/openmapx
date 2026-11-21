@@ -140,10 +140,12 @@ function thresholds(value: unknown): number[] {
     }
     return minutes as number;
   });
-  for (let index = 1; index < normalized.length; index += 1) {
-    if (normalized[index] <= normalized[index - 1]) {
+  let previous: number | undefined;
+  for (const minutes of normalized) {
+    if (previous !== undefined && minutes <= previous) {
       throw new RangeError("thresholdsMinutes must be sorted and unique");
     }
+    previous = minutes;
   }
   return normalized;
 }

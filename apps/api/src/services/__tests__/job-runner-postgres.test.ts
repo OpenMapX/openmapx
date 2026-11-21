@@ -109,10 +109,10 @@ describe.skipIf(
         protocol: { execution, ...(operations ? { operations } : {}) },
       })
       .returning();
-    return job;
+    return required(job);
   }
   const row = async (id: string) =>
-    (await state.db.select().from(adminJob).where(eq(adminJob.id, id)))[0];
+    required((await state.db.select().from(adminJob).where(eq(adminJob.id, id)))[0]);
   const run = (job: typeof adminJob.$inferSelect, observe = false) =>
     runner.executeJob(
       job.id,
@@ -252,7 +252,7 @@ describe.skipIf(
     const replacement = client.begin(async (tx) => {
       await tx`UPDATE admin_job SET protocol = protocol || ${JSON.stringify({ execution: { owner: randomUUID(), version: 2 } })}::jsonb WHERE id = ${job.id}`;
       const [backend] = await tx`SELECT pg_backend_pid() AS pid`;
-      locked.resolve(backend.pid);
+      locked.resolve(required(backend).pid);
       await commit.promise;
     });
     const pid = await locked.promise;
@@ -262,7 +262,7 @@ describe.skipIf(
         async () => {
           const [waiting] =
             await client`SELECT count(*)::int AS n FROM pg_stat_activity WHERE ${pid} = ANY(pg_blocking_pids(pid))`;
-          expect(waiting.n).toBe(1);
+          expect(waiting?.n).toBe(1);
         },
         { timeout: 2000, interval: 10 },
       );

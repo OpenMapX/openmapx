@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -96,8 +96,8 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
     [1, "maintenance-hardlinks", [0]],
     [2, "maintenance-recreate", [1]],
   ]);
-  expect(plan.steps[0]!.operation).toEqual(source.apply);
-  expect(plan.steps[0]!.operationKey).toBe(source.operation.applyOperationKey);
+  expect(plan.steps[0]?.operation).toEqual(source.apply);
+  expect(plan.steps[0]?.operationKey).toBe(source.operation.applyOperationKey);
   expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3]);
   expect(plan.reservations.map((value) => value.kind)).not.toContain("service.start");
   expect(plan.dmPrepare.planDigest).toBe(plan.planDigest);
@@ -107,7 +107,9 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   expect(JSON.stringify(plan.dmPrepare)).toBe(original);
   expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
-  changed.steps[1]!.prerequisites = [];
+  const hardlinks = changed.steps[1];
+  assert.isDefined(hardlinks);
+  hardlinks.prerequisites = [];
   expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 it.each(["body", "source", "parent", "foreign-target", "protected-target", "capacity"])(
@@ -346,7 +348,8 @@ it("freezes protected handoff after the original generation and ordinary childre
     "maintenance-recreate",
     "maintenance-handoff",
   ]);
-  const step = plan.steps.at(-1)!;
+  const step = plan.steps.at(-1);
+  assert.isDefined(step);
   expect(step.operation).toMatchObject({
     kind: "configurationHandoff.prepare",
     handoffId: handoff.handoffId,
@@ -370,7 +373,8 @@ it("freezes protected handoff after the original generation and ordinary childre
   );
   expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
-  changed.handoff!.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
+  assert.exists(changed.handoff);
+  changed.handoff.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
   expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 

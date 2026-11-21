@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { Route } from "../../types/routing";
 import { extractTimeline, type NavRecording, type ReplayStep, replayRecording } from "../recording";
 import { simulatePositions } from "../simulatePositions";
@@ -25,10 +25,12 @@ function makeRoute(over: Partial<Route> = {}): Route {
 }
 
 const fixes = simulatePositions(geometry, { speedMps: 14, intervalMs: 1000 });
+const [firstFix] = fixes;
+assert.isDefined(firstFix, "the simulated drive produced no fixes");
 
 const recording: NavRecording = {
   version: 1,
-  startedAtMs: fixes[0].timestampMs,
+  startedAtMs: firstFix.timestampMs,
   mode: "driving",
   route: makeRoute(),
   reroutes: [],
@@ -39,8 +41,10 @@ describe("replayRecording", () => {
   it("drives processFix over every recorded fix, one result per fix", () => {
     const steps = replayRecording(recording);
     expect(steps).toHaveLength(fixes.length);
-    expect(steps[0].result.progress).not.toBeNull();
-    expect(steps[0].routeIndex).toBe(0);
+    const [first] = steps;
+    assert.isDefined(first);
+    expect(first.result.progress).not.toBeNull();
+    expect(first.routeIndex).toBe(0);
   });
 
   it("is deterministic — the same recording replays to identical results", () => {
@@ -49,8 +53,10 @@ describe("replayRecording", () => {
 
   it("yields a monotonically non-decreasing step index over a full drive (gate)", () => {
     const indices = replayRecording(recording).map((s) => s.result.progress?.currentStepIndex ?? 0);
-    for (let i = 1; i < indices.length; i++) {
-      expect(indices[i]).toBeGreaterThanOrEqual(indices[i - 1]);
+    let previous = 0;
+    for (const index of indices) {
+      expect(index).toBeGreaterThanOrEqual(previous);
+      previous = index;
     }
     expect(indices.at(-1)).toBe(recording.route.steps.length - 1);
   });
@@ -61,8 +67,8 @@ describe("replayRecording", () => {
       reroutes: [{ afterFixCount: 2, route: makeRoute({ distance: 900 }) }],
     };
     const steps = replayRecording(rec);
-    expect(steps[1].routeIndex).toBe(0);
-    expect(steps[2].routeIndex).toBe(1);
+    expect(steps[1]?.routeIndex).toBe(0);
+    expect(steps[2]?.routeIndex).toBe(1);
   });
 });
 
@@ -125,7 +131,7 @@ describe("extractTimeline", () => {
 
   it("uses the first fix as the timeline origin (offsetMs)", () => {
     const events = extractTimeline([step(5000), step(6000, { stepIndex: 1 })]);
-    expect(events[0].offsetMs).toBe(0);
+    expect(events[0]?.offsetMs).toBe(0);
     expect(events.find((e) => e.type === "step")?.offsetMs).toBe(1000);
   });
 });

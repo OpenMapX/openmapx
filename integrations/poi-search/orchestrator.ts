@@ -205,8 +205,9 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       throw httpError(400, `Unknown category: ${category}`);
     }
 
-    if (matching.length === 1) {
-      const provider = matching[0];
+    const [onlyProvider] = matching;
+    if (matching.length === 1 && onlyProvider) {
+      const provider = onlyProvider;
       const run = await runWithShrink(
         (currentBbox) =>
           provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
@@ -218,23 +219,22 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     // The OSM/Overpass provider is the authoritative base set; every other
     // matching provider augments it (Overture gap-fill today). The split keys
     // off the base provider's id.
-    const overpassIdx = matching.findIndex((p) => p.id === BASE_PROVIDER_ID);
+    const baseProvider = matching.find((p) => p.id === BASE_PROVIDER_ID);
     const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
 
-    const basePromise =
-      overpassIdx >= 0
-        ? runWithShrink(
-            (currentBbox) =>
-              matching[overpassIdx].search(lookupCategory, currentBbox, {
-                lang: options?.lang,
-                osmTags,
-              }),
-            bbox,
-          ).catch((err: unknown) => {
-            if (err instanceof OverpassTimeoutError) throw err;
-            return FAILED_RUN;
-          })
-        : Promise.resolve(EMPTY_RUN);
+    const basePromise = baseProvider
+      ? runWithShrink(
+          (currentBbox) =>
+            baseProvider.search(lookupCategory, currentBbox, {
+              lang: options?.lang,
+              osmTags,
+            }),
+          bbox,
+        ).catch((err: unknown) => {
+          if (err instanceof OverpassTimeoutError) throw err;
+          return FAILED_RUN;
+        })
+      : Promise.resolve(EMPTY_RUN);
 
     // Augments need only the original inputs, not the authoritative base result.
     const augmentPromise = Promise.all(
@@ -355,8 +355,9 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     const maxDrops = Math.min(filter.require?.length ?? 0, MAX_RELAX_DROPS);
     for (let i = 0; i < maxDrops; i++) {
       const reqs = working.require;
-      if (!reqs || reqs.length === 0) break;
-      relaxed.push(reqs[reqs.length - 1]);
+      const last = reqs?.at(-1);
+      if (!reqs || !last) break;
+      relaxed.push(last);
       working = removeFilterPredicate(working, "require", reqs.length - 1);
       const next = await runFilter(working);
       best = { ...next, partial: best.partial || next.partial };

@@ -94,17 +94,19 @@ function transferPointFeatures(itinerary: TripItinerary): GeoJSON.FeatureCollect
       geometry: { type: "Point", coordinates: [leg.from.lng, leg.from.lat] },
     });
   }
-  const lastLeg = itinerary.legs[itinerary.legs.length - 1];
-  features.push({
-    type: "Feature",
-    properties: {
-      name: lastLeg.to.name,
-      _mapAttributions: serializeContributors(
-        lastLeg.to.contributors ?? contributorsForField(lastLeg, "to"),
-      ),
-    },
-    geometry: { type: "Point", coordinates: [lastLeg.to.lng, lastLeg.to.lat] },
-  });
+  const lastLeg = itinerary.legs.at(-1);
+  if (lastLeg) {
+    features.push({
+      type: "Feature",
+      properties: {
+        name: lastLeg.to.name,
+        _mapAttributions: serializeContributors(
+          lastLeg.to.contributors ?? contributorsForField(lastLeg, "to"),
+        ),
+      },
+      geometry: { type: "Point", coordinates: [lastLeg.to.lng, lastLeg.to.lat] },
+    });
+  }
 
   return { type: "FeatureCollection", features };
 }

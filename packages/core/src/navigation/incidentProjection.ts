@@ -2,6 +2,7 @@ import {
   type ContributingRecord,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
+import { closesRoadForCars, effectInForceAt } from "../road-conditions/roadConditionEffects";
 import type { LngLat } from "../types/geometry";
 import type {
   LocalizedText,
@@ -10,7 +11,6 @@ import type {
 } from "../types/roadConditions";
 import type { RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
-import { closesRoadForCars, effectInForceAt } from "../utils/roadConditionEffects";
 import type { RoadAlert } from "./alerts";
 import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
 import {

@@ -254,6 +254,8 @@ export function situationToNaturalHazard(
   const admin = rec(location["admin"]);
   const detection = rec(details["detection"]);
   const magnitude = rec(details["magnitude"]);
+  const magnitudeValue = num(magnitude["value"]);
+  const magnitudeScale = str(magnitude["scale"]);
   const depth = rec(details["depth"]);
   const maxWind = rec(details["maxWind"]);
   const cause = str(details["ignitionCause"]);
@@ -286,8 +288,8 @@ export function situationToNaturalHazard(
       : {}),
     ...(density === "light" || density === "medium" || density === "heavy" ? { density } : {}),
     ...(Object.keys(detectionFields).length > 0 ? { detection: detectionFields } : {}),
-    ...(num(magnitude["value"]) !== undefined && str(magnitude["scale"])
-      ? { magnitude: { value: magnitude["value"] as number, scale: magnitude["scale"] as string } }
+    ...(magnitudeValue !== undefined && magnitudeScale
+      ? { magnitude: { value: magnitudeValue, scale: magnitudeScale } }
       : {}),
     ...(depth["unit"] === "m" ? field("depthM", num(depth["value"])) : {}),
     ...field("tsunamiFlag", bool(details["tsunamiFlag"])),
@@ -377,6 +379,14 @@ export function gridCellsOf(cells: unknown, metadata?: unknown): FireDensityCell
       return [];
     }
     const [lon, lat, count, sum, max] = cell as number[];
+    if (
+      lon === undefined ||
+      lat === undefined ||
+      count === undefined ||
+      sum === undefined ||
+      max === undefined
+    )
+      return [];
     const metadata = receipts.get(`${lon},${lat}`);
     const captured = parseContributors(metadata?.["contributors"]);
     const nativeIds = metadata?.["native_sources"];
@@ -390,10 +400,10 @@ export function gridCellsOf(cells: unknown, metadata?: unknown): FireDensityCell
 
     return [
       {
-        point: [lon!, lat!] as [number, number],
-        count: count!,
-        frpSumMW: sum!,
-        frpMaxMW: max!,
+        point: [lon, lat] as [number, number],
+        count,
+        frpSumMW: sum,
+        frpMaxMW: max,
         sources: [...exactIds],
         ...field("lineageComplete", bool(metadata?.["lineage_complete"])),
         ...(nativeSources === undefined ? {} : { nativeSources: [...nativeSources] }),

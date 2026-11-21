@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "../index";
 import { CONSUME_QUOTA_SCRIPT, RELEASE_LEASE_SCRIPT } from "../scripts";
 
@@ -73,7 +73,7 @@ describe("RedisUpstreamRuntime", () => {
     });
     const lease = await runtime.acquireLease("refresh", 1_000);
     expect(lease?.token).toMatch(/^[a-f0-9-]{36}$/);
-    const key = redis.set.mock.calls[0][0];
+    const key = redis.set.mock.calls[0]?.[0];
     expect(key).toMatch(/^upstream:test:air-quality:lease:[a-f0-9]{64}$/);
     expect(redis.set).toHaveBeenCalledExactlyOnceWith(key, lease?.token, "PX", 1_000, "NX");
     redis.eval.mockResolvedValue(0);
@@ -145,8 +145,10 @@ describe("RedisUpstreamRuntime", () => {
       ["2", "10000", "50", "60000", "1800", "3600000"],
       ["2", "60001", "50", "60000", "1800", "3600000"],
     ]);
-    expect(calls[1].slice(2, 4)).toEqual(calls[0].slice(2, 4));
-    expect(calls[2][2]).not.toBe(calls[0][2]);
-    expect(calls[2][3]).toBe(calls[0][3]);
+    const [first, second, third] = calls;
+    assert(first && second && third, "three quota calls");
+    expect(second.slice(2, 4)).toEqual(first.slice(2, 4));
+    expect(third[2]).not.toBe(first[2]);
+    expect(third[3]).toBe(first[3]);
   });
 });

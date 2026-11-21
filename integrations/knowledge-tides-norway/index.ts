@@ -54,9 +54,9 @@ export function isoTimeFromKartverket(stamp: string): string {
   // the event in the user's browser-local zone. Dropping the offset made the
   // widget treat Norway-local numbers as the viewer's wall-clock, shifting
   // events by the user's UTC offset for anyone outside Norway.
-  const m = stamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2}))/);
-  if (!m) return stamp;
-  return m[1];
+  const [, iso] =
+    stamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2}))/) ?? [];
+  return iso ?? stamp;
 }
 
 /** The station list is a few KB and a 48 h curve a few tens of KB. */
@@ -117,12 +117,12 @@ export async function fetchHilo(http: HttpClient, station: CachedStation): Promi
   const events: TideEvent[] = [];
   // <waterlevel value="14.3" time="2026-05-18T05:24:00+01:00" flag="low"/>
   const re = /<waterlevel\s+value="([\d.-]+)"\s+time="([^"]+)"\s+flag="(high|low)"\s*\/>/g;
-  for (const m of xml.matchAll(re)) {
-    const cm = Number.parseFloat(m[1]);
+  for (const [, value = "", time = "", flag] of xml.matchAll(re)) {
+    const cm = Number.parseFloat(value);
     if (!Number.isFinite(cm)) continue;
     events.push({
-      time: isoTimeFromKartverket(m[2]),
-      type: m[3] === "high" ? "H" : "L",
+      time: isoTimeFromKartverket(time),
+      type: flag === "high" ? "H" : "L",
       valueFt: Math.round(cm * CM_TO_FT * 100) / 100,
     });
   }
@@ -143,11 +143,11 @@ export async function fetchCurve(
   if (!xml) return [];
   const curve: TideCurvePoint[] = [];
   const re = /<waterlevel\s+value="([\d.-]+)"\s+time="([^"]+)"\s+flag="pre"\s*\/>/g;
-  for (const m of xml.matchAll(re)) {
-    const cm = Number.parseFloat(m[1]);
+  for (const [, value = "", time = ""] of xml.matchAll(re)) {
+    const cm = Number.parseFloat(value);
     if (!Number.isFinite(cm)) continue;
     curve.push({
-      time: isoTimeFromKartverket(m[2]),
+      time: isoTimeFromKartverket(time),
       valueFt: Math.round(cm * CM_TO_FT * 100) / 100,
     });
   }

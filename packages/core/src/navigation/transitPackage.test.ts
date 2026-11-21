@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   buildTransitNavigationPackage,
   stripTransitSecretsForSnapshot,
@@ -101,6 +101,7 @@ describe("buildTransitNavigationPackage", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const capture = result.startPackage.captures[0];
+    assert.isDefined(capture);
     expect(capture.status).toBe("missing");
     expect(capture.stops).toEqual([]);
   });
@@ -146,13 +147,20 @@ describe("buildTransitNavigationPackage", () => {
   });
 });
 
+/** The ride leg of the fixture itinerary, viewed as a plain record. */
+function rideLeg(itinerary: { legs: Array<Record<string, unknown>> }): Record<string, unknown> {
+  const leg = itinerary.legs[1];
+  assert.isDefined(leg);
+  return leg;
+}
+
 describe("transitItineraryFingerprint", () => {
   it("does not change when a live time moves", () => {
     // This is the whole point: a refresh that reports a delay must not read as a
     // different journey, or progress would be discarded every thirty seconds.
     const delayed = itinerary() as unknown as { legs: Array<Record<string, unknown>> };
-    delayed.legs[1].startTime = "2026-08-09T08:14:00Z";
-    delayed.legs[1].endTime = "2026-08-09T08:44:00Z";
+    rideLeg(delayed).startTime = "2026-08-09T08:14:00Z";
+    rideLeg(delayed).endTime = "2026-08-09T08:44:00Z";
 
     expect(transitItineraryFingerprint(delayed as never)).toBe(
       transitItineraryFingerprint(itinerary()),
@@ -167,7 +175,7 @@ describe("transitItineraryFingerprint", () => {
 
   it("changes when the trip itself changes", () => {
     const other = itinerary() as unknown as { legs: Array<Record<string, unknown>> };
-    other.legs[1].tripId = "trip-2";
+    rideLeg(other).tripId = "trip-2";
 
     expect(transitItineraryFingerprint(other as never)).not.toBe(
       transitItineraryFingerprint(itinerary()),
@@ -176,7 +184,7 @@ describe("transitItineraryFingerprint", () => {
 
   it("changes when a scheduled time changes", () => {
     const other = itinerary() as unknown as { legs: Array<Record<string, unknown>> };
-    other.legs[1].scheduledStartTime = "2026-08-09T09:10:00Z";
+    rideLeg(other).scheduledStartTime = "2026-08-09T09:10:00Z";
 
     expect(transitItineraryFingerprint(other as never)).not.toBe(
       transitItineraryFingerprint(itinerary()),
@@ -239,13 +247,14 @@ describe("stripTransitSecretsForSnapshot", () => {
 
 it("omits alternative replacement geometry from the native bridge while retaining risk summaries", () => {
   const source = itinerary() as unknown as { legs: Array<Record<string, unknown>> };
-  source.legs[1].alternatives = [
+  const sourceRide = rideLeg(source);
+  sourceRide.alternatives = [
     {
       startTime: "2026-08-09T09:00:00Z",
       endTime: "2026-08-09T09:40:00Z",
       routeShortName: "RE1",
       tripId: "re1",
-      legs: [source.legs[1]],
+      legs: [sourceRide],
       replaces: { fromLegIndex: 0, toLegIndex: 2 },
     },
   ];
@@ -257,7 +266,9 @@ it("omits alternative replacement geometry from the native bridge while retainin
       legs: Array<{ alternatives?: Array<Record<string, unknown>> }>;
     }
   ).legs[1];
-  expect(ride.alternatives?.[0]).toMatchObject({ routeShortName: "RE1", tripId: "re1" });
-  expect(ride.alternatives?.[0]).not.toHaveProperty("legs");
-  expect(ride.alternatives?.[0]).not.toHaveProperty("replaces");
+  const alternative = ride?.alternatives?.[0];
+  assert.isDefined(alternative);
+  expect(alternative).toMatchObject({ routeShortName: "RE1", tripId: "re1" });
+  expect(alternative).not.toHaveProperty("legs");
+  expect(alternative).not.toHaveProperty("replaces");
 });

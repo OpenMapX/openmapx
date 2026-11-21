@@ -4,7 +4,7 @@ import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -86,10 +86,10 @@ describe("useCommandSources overlay commands", () => {
     });
 
     const command = result.current.find((c) => c.id === "overlays.traffic-flow");
-    expect(command).toBeDefined();
+    assert.isDefined(command, "no traffic-flow overlay command");
 
     expect(isOverlayActive("traffic-flow")).toBe(false);
-    command?.run();
+    command.run();
 
     expect(toggleOverlayMock).toHaveBeenCalledWith("traffic-flow", { kind: "user" });
     expect(isOverlayActive("traffic-flow")).toBe(true);

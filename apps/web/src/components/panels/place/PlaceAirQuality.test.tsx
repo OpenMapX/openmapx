@@ -8,6 +8,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -401,7 +402,12 @@ describe("PlaceAirQuality", () => {
   it("keeps ground and model evidence in separate visible cards and exposes quality flags", () => {
     const ground = evidence({
       pollutants: [
-        { ...evidence().pollutants[0], estimated: true, gapFilled: true, completenessPercent: 75 },
+        {
+          ...nth(evidence().pollutants, 0),
+          estimated: true,
+          gapFilled: true,
+          completenessPercent: 75,
+        },
       ],
     });
     const model = evidence({
@@ -434,7 +440,7 @@ describe("PlaceAirQuality", () => {
       freshness: "stale",
       sources: [
         {
-          ...evidence().sources[0],
+          ...nth(evidence().sources, 0),
           url: "javascript:alert(1)",
           methodologyUrl: "javascript:alert(2)",
         },
@@ -557,7 +563,7 @@ describe("PlaceAirQuality", () => {
     expect(within(frames).getByText("airQuality.frame.ok")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.partial")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.unavailable")).toBeVisible();
-    fireEvent.click(screen.getAllByRole("button", { name: "footer.attributions" })[0]!);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "footer.attributions" }), 0));
     expect(screen.getAllByText(/Fixture authority attribution/).length).toBeGreaterThan(0);
   });
 

@@ -1,5 +1,10 @@
 import type { BBox, RouteFlowInput, RouteFlowResponse, RouteFlowSpan } from "@openmapx/core";
-import { cumulativeDistances, projectFlowToRoute, routeFingerprint } from "@openmapx/core";
+import {
+  cumulativeDistances,
+  numberAt,
+  projectFlowToRoute,
+  routeFingerprint,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { aggregateRoadFlow } from "./orchestrator.js";
 
@@ -36,7 +41,11 @@ function routeChunkRanges(
   let start = 0;
   while (start < geometry.length - 1) {
     let end = start;
-    while (end < geometry.length - 1 && cumulative[end] - cumulative[start] < chunkMeters) end++;
+    while (
+      end < geometry.length - 1 &&
+      numberAt(cumulative, end) - numberAt(cumulative, start) < chunkMeters
+    )
+      end++;
     ranges.push([start, end]);
     start = end;
   }
@@ -59,8 +68,7 @@ export function routeCorridorBboxes(
     let south = Number.POSITIVE_INFINITY;
     let east = Number.NEGATIVE_INFINITY;
     let north = Number.NEGATIVE_INFINITY;
-    for (let i = start; i <= end; i++) {
-      const [lng, lat] = geometry[i];
+    for (const [lng, lat] of geometry.slice(start, end + 1)) {
       if (lng < west) west = lng;
       if (lng > east) east = lng;
       if (lat < south) south = lat;

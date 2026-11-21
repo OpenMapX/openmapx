@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IntegrationContext, ProviderCallContext } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { OPENAQ_METADATA_TTL, OPENAQ_SERIES_TTL } from "./cache-policy.js";
@@ -12,7 +12,7 @@ import { MemoryUpstreamRuntime } from "./test-helpers.js";
 
 const fixtureDir = fileURLToPath(new URL("./__fixtures__/", import.meta.url));
 const fixture = <T>(name: string): T => JSON.parse(readFileSync(`${fixtureDir}${name}`, "utf8"));
-const location = fixture<{ results: OpenAQLocation[] }>("locations-page-1.json").results[0];
+const location = nth(fixture<{ results: OpenAQLocation[] }>("locations-page-1.json").results, 0);
 const hours = fixture<{ results: OpenAQHour[] }>("sensor-hours.json").results;
 const call: ProviderCallContext = {
   signal: new AbortController().signal,
@@ -21,7 +21,7 @@ const call: ProviderCallContext = {
 
 describe("OpenAQ provider normalization", () => {
   it("keeps every series at one location and preserves sensor/source/license provenance", () => {
-    const evidence = buildOpenAQEvidence(location, [{ sensor: location.sensors[1], hours }], {
+    const evidence = buildOpenAQEvidence(location, [{ sensor: nth(location.sensors, 1), hours }], {
       requestedPoint: [35.13, -106.58],
     });
     expect(evidence).not.toBeNull();
@@ -50,9 +50,9 @@ describe("OpenAQ provider normalization", () => {
   });
 
   it("credits the named provider from captured metadata without inventing a station owner", () => {
-    const captured = fixture<{ results: OpenAQLocation[] }>("location-detail.json").results[0];
+    const captured = nth(fixture<{ results: OpenAQLocation[] }>("location-detail.json").results, 0);
     const original = structuredClone(captured);
-    const evidence = buildOpenAQEvidence(captured, [{ sensor: captured.sensors[0], hours }]);
+    const evidence = buildOpenAQEvidence(captured, [{ sensor: nth(captured.sensors, 0), hours }]);
     expect(evidence?.sources[0]).toMatchObject({
       name: "OpenAQ via AirNow",
       owner: null,
@@ -61,7 +61,7 @@ describe("OpenAQ provider normalization", () => {
     });
     expect(captured).toEqual(original);
     expect(captured.owner.name).toBe("Unknown Governmental Organization");
-    expect(captured.licenses?.[0].attribution.name).toBe("Unknown Governmental Organization");
+    expect(captured.licenses?.[0]?.attribution.name).toBe("Unknown Governmental Organization");
   });
 
   it("retains a distinct real owner, provider, supplied notice and attribution link", () => {
@@ -80,7 +80,7 @@ describe("OpenAQ provider normalization", () => {
         dateTo: null,
       },
     ];
-    const evidence = buildOpenAQEvidence(named, [{ sensor: named.sensors[1], hours }], {
+    const evidence = buildOpenAQEvidence(named, [{ sensor: nth(named.sensors, 1), hours }], {
       licenseUrls: new Map([[41, "https://creativecommons.org/licenses/by/4.0/"]]),
     });
     expect(evidence?.sources[0]).toMatchObject({
@@ -99,7 +99,7 @@ describe("OpenAQ provider normalization", () => {
     const named = structuredClone(location);
     named.owner.name = "Station operator";
     expect(
-      buildOpenAQEvidence(named, [{ sensor: named.sensors[1], hours }])?.sources[0],
+      buildOpenAQEvidence(named, [{ sensor: nth(named.sensors, 1), hours }])?.sources[0],
     ).toMatchObject({
       owner: "Station operator",
       attribution: "Station operator",
@@ -111,11 +111,11 @@ describe("OpenAQ provider normalization", () => {
     const unnamed = structuredClone(location);
     unnamed.provider.name = "Unknown Governmental Organization";
     expect(
-      buildOpenAQEvidence(unnamed, [{ sensor: unnamed.sensors[1], hours }])?.sources[0],
+      buildOpenAQEvidence(unnamed, [{ sensor: nth(unnamed.sensors, 1), hours }])?.sources[0],
     ).toMatchObject({ owner: null, attribution: "OpenAQ", name: "OpenAQ" });
     unnamed.owner.name = "Unknown Air Research Association";
     expect(
-      buildOpenAQEvidence(unnamed, [{ sensor: unnamed.sensors[1], hours }])?.sources[0],
+      buildOpenAQEvidence(unnamed, [{ sensor: nth(unnamed.sensors, 1), hours }])?.sources[0],
     ).toMatchObject({
       owner: "Unknown Air Research Association",
       attribution: "Unknown Air Research Association",
@@ -157,29 +157,30 @@ describe("OpenAQ provider normalization", () => {
       call,
     );
     expect(page?.evidence).toHaveLength(1);
-    expect(page?.evidence[0].sources[0]).toMatchObject({ owner: null, attribution: "AirNow" });
+    expect(page?.evidence[0]?.sources[0]).toMatchObject({ owner: null, attribution: "AirNow" });
   });
 
   it("keeps low-cost and mobile metadata raw-only instead of upgrading it", () => {
-    const lowCost = fixture<{ results: OpenAQLocation[] }>("locations-page-1.json").results[1];
-    const mobile = fixture<{ results: OpenAQLocation[] }>("locations-page-2.json").results[0];
+    const lowCost = nth(fixture<{ results: OpenAQLocation[] }>("locations-page-1.json").results, 1);
+    const mobile = nth(fixture<{ results: OpenAQLocation[] }>("locations-page-2.json").results, 0);
     expect(
-      buildOpenAQEvidence(lowCost, [{ sensor: lowCost.sensors[0], hours }])?.spatial.stationClass,
+      buildOpenAQEvidence(lowCost, [{ sensor: nth(lowCost.sensors, 0), hours }])?.spatial
+        .stationClass,
     ).toBe("low-cost");
     expect(
-      buildOpenAQEvidence(mobile, [{ sensor: mobile.sensors[0], hours }])?.spatial,
+      buildOpenAQEvidence(mobile, [{ sensor: nth(mobile.sensors, 0), hours }])?.spatial,
     ).toMatchObject({ mobile: true, stationClass: "unknown" });
   });
 
   it("rejects unsupported units instead of relabeling their concentration", () => {
     const unsupported = structuredClone(location);
-    unsupported.sensors[0].parameter.units = "particles/cm³";
+    nth(unsupported.sensors, 0).parameter.units = "particles/cm³";
     const altered = hours.map((hour) => ({
       ...hour,
       parameter: { ...hour.parameter, name: "pm10", units: "particles/cm³" },
     }));
     expect(
-      buildOpenAQEvidence(unsupported, [{ sensor: unsupported.sensors[0], hours: altered }]),
+      buildOpenAQEvidence(unsupported, [{ sensor: nth(unsupported.sensors, 0), hours: altered }]),
     ).toBeNull();
   });
 
@@ -299,7 +300,7 @@ describe("OpenAQ provider normalization", () => {
       call,
     );
     expect(result).toHaveLength(1);
-    expect(result?.[0].spatial.id).toBe("openaq-location-3001");
+    expect(result?.[0]?.spatial.id).toBe("openaq-location-3001");
   });
 
   it("returns explicit station demand and quota diagnostics", async () => {

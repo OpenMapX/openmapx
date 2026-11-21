@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { testExecution } from "./__fixtures__/execution";
 import {
@@ -80,10 +80,11 @@ function readPreparedDockerConfig(
   for (let index = 0; index < args.length; index++) {
     if (args[index] !== "-f") continue;
     const path = args[++index];
+    assert.isDefined(path, "-f without a compose file");
     expect([stack.composePath].filter(existsSync).map((path) => realpathSync(path))).toContain(
-      realpathSync(path!),
+      realpathSync(path),
     );
-    const configuration = parseYaml(readFileSync(path!, "utf8")) as {
+    const configuration = parseYaml(readFileSync(path, "utf8")) as {
       services: Record<string, unknown>;
     };
     Object.assign(serviceDefinitions, configuration.services);
@@ -340,9 +341,9 @@ describe("fixed Docker runtime adapters", () => {
     await dispatchOpsOperation(runtime, { kind: "motis.staging.restart" }, context());
     await dispatchOpsOperation(runtime, { kind: "motis.primary.stop" }, context());
     await dispatchOpsOperation(runtime, { kind: "motis.primary.restart" }, context());
-    expect(calls.at(-1)!.slice(-5)).toEqual(["up", "-d", "--force-recreate", "--no-deps", "motis"]);
+    expect(calls.at(-1)?.slice(-5)).toEqual(["up", "-d", "--force-recreate", "--no-deps", "motis"]);
     expect(calls[0]).toContain("compose");
-    expect(calls[0]!.slice(-5)).toEqual([
+    expect(calls[0]?.slice(-5)).toEqual([
       "up",
       "-d",
       "--force-recreate",

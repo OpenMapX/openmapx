@@ -5,6 +5,7 @@ import {
 } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { attributionToHtml } from "./useMapAttributions";
 
 /**
@@ -33,7 +34,7 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
 
 describe("attributionToHtml", () => {
   it("credits the license alongside the publisher", () => {
-    const html = attributionToHtml(dataSourceToAttribution(MANIFEST_SOURCES[0]));
+    const html = attributionToHtml(dataSourceToAttribution(nth(MANIFEST_SOURCES, 0)));
     expect(html).toContain("OpenAQ");
     expect(html).toContain("CC BY 4.0 (varies per source)");
     expect(html).toContain('href="https://docs.openaq.org/resources/licenses"');

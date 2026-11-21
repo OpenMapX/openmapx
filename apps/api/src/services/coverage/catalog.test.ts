@@ -78,5 +78,5 @@ it("counts a journey-platform-only live provider without claiming unsupported me
       getJourneyPlatforms: async () => ({ data: [] }),
     } as never,
   ]);
-  expect(buildCoverageCatalog([fixture]).providers[0].supports["transit.realtime"]).toBe(true);
+  expect(buildCoverageCatalog([fixture]).providers[0]?.supports["transit.realtime"]).toBe(true);
 });

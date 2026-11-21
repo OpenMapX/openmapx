@@ -84,7 +84,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/images/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
     const found = await upstream(ctx, reply, "Panoramax imagery", () => provider.getImage(id));
     if (!found.ok) return;
     const image = found.value;
@@ -96,7 +96,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/images/:id/links", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
     const found = await upstream(ctx, reply, "Panoramax imagery links", () =>
       provider.getLinks(id),
     );

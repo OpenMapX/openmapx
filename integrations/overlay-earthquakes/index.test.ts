@@ -1,5 +1,5 @@
 import type { HazardsProvider, NaturalHazard } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ageCategory,
@@ -113,7 +113,7 @@ describe("enrichFeatures", () => {
     ]);
 
     const out = enrichFeatures(fc);
-    const f = out.features[0];
+    const f = nth(out.features, 0);
     const props = f.properties as unknown as EnrichedProps;
 
     // Geometry is GeoJSON [lng, lat, depth] and must round-trip untouched.
@@ -128,14 +128,14 @@ describe("enrichFeatures", () => {
 
   it("labels a sub-hour-old quake as recent", () => {
     const fc = makeFeatureCollection([{ coordinates: [0, 0, 5], mag: 4, time: NOW - 1_800_000 }]);
-    const props = enrichFeatures(fc).features[0].properties as unknown as EnrichedProps;
+    const props = nth(enrichFeatures(fc).features, 0).properties as unknown as EnrichedProps;
     expect(props.ageCategory).toBe("recent");
   });
 
   it("coerces a null magnitude to 0 and labels it Micro", () => {
     const fc = makeFeatureCollection([{ coordinates: [0, 0, 10], mag: null, time: NOW }]);
 
-    const props = enrichFeatures(fc).features[0].properties as unknown as EnrichedProps;
+    const props = nth(enrichFeatures(fc).features, 0).properties as unknown as EnrichedProps;
     expect(props.mag).toBe(0);
     expect(props.magLabel).toBe("Micro");
   });
@@ -143,7 +143,7 @@ describe("enrichFeatures", () => {
   it("keeps a negative depth (above sea level) negative", () => {
     const fc = makeFeatureCollection([{ coordinates: [10, 20, -5], mag: 3, time: NOW }]);
 
-    const props = enrichFeatures(fc).features[0].properties as unknown as EnrichedProps;
+    const props = nth(enrichFeatures(fc).features, 0).properties as unknown as EnrichedProps;
     expect(props.depth).toBe(-5);
     expect(props.depthCategory).toBe("shallow");
   });
@@ -331,8 +331,8 @@ describe("GET /earthquakes", () => {
     const body = sent.body as EnrichedBody;
     expect(body.sources).toEqual(["usgs-quakes"]);
     expect(body.features).toHaveLength(1);
-    expect(body.features[0].geometry.coordinates[2]).toBe(-1.5);
-    expect(body.features[0].properties.depth).toBe(-1.5);
+    expect(nth(body.features, 0).geometry.coordinates[2]).toBe(-1.5);
+    expect(nth(body.features, 0).properties.depth).toBe(-1.5);
     expect(sent.headers["Cache-Control"]).toBe("public, max-age=300");
   });
 

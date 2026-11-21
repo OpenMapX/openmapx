@@ -7,7 +7,7 @@ import {
   readAmbientTile,
 } from "@openmapx/core/ambient-places-server";
 import { PbfReader } from "pbf";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildAmbientPlaces, rollbackAmbientPlaces } from "../../src/jobs/ambient-places/build.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import {
@@ -246,7 +246,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const [count] = await pg.sql.unsafe(
           `SELECT count(*)::INT AS count FROM ambient_places.generations`,
         );
-        expect(count.count).toBe(1);
+        expect(count?.count).toBe(1);
       } finally {
         await pg.stop();
       }
@@ -275,7 +275,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           `SELECT name FROM ambient_places.features WHERE generation=$1 AND id='osm:node/2001'`,
           [country.generation],
         );
-        expect(later.name).toBe("Original clinic 2001");
+        expect(later?.name).toBe("Original clinic 2001");
       } finally {
         await pg.stop();
       }
@@ -299,6 +299,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const [clock] = await pg.sql.unsafe<{ at: string }[]>(
               `SELECT clock_timestamp()::TEXT AS at`,
             );
+            assert.isDefined(clock);
             activationBoundary = new Date(clock.at).getTime();
           },
         });
@@ -307,6 +308,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           `SELECT cache_lease_until::TEXT AS until FROM ambient_places.generations WHERE id=$1`,
           [before.generation],
         );
+        assert.isDefined(retiring);
         expect(new Date(retiring.until).getTime()).toBeGreaterThanOrEqual(
           activationBoundary + (AMBIENT_LIMITS.cacheSeconds + 60) * 1000,
         );

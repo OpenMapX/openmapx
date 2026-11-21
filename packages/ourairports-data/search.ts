@@ -49,7 +49,7 @@ const RANK_KEYWORD_MATCH = 3;
  */
 function startsAWord(text: string, query: string): boolean {
   for (let at = text.indexOf(query); at !== -1; at = text.indexOf(query, at + 1)) {
-    if (at === 0 || !/[\p{L}\p{N}]/u.test(text[at - 1])) return true;
+    if (at === 0 || !/[\p{L}\p{N}]/u.test(text.charAt(at - 1))) return true;
   }
   return false;
 }

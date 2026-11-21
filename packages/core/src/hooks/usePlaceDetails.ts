@@ -7,9 +7,9 @@ import {
   DETAIL_QUERY_POLICY,
   rateLimitAwareRetry,
 } from "../api/queryPolicy";
+import { isDisplayablePhoto } from "../attribution/commons-metadata";
 import type { LngLat } from "../types/geometry";
 import type { Place } from "../types/place";
-import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 export function usePlaceDetails(
   placeId: string | null,

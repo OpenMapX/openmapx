@@ -4,7 +4,7 @@ import {
   readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import type { OpeningHoursSource } from "../utils/openingHoursSource";
+import type { OpeningHoursSource } from "../opening-hours/openingHoursSource";
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 import type { Place, PlacePhoto, PlaceProvenance } from "./place";

@@ -195,7 +195,8 @@ export function extractHosts(content: string): Set<string> {
   const hosts = new Set<string>();
   const src = stripComments(content);
   for (const m of src.matchAll(HOST_RE)) {
-    const host = m[1].toLowerCase();
+    const host = m[1]?.toLowerCase();
+    if (!host) continue;
     // Skip template-interpolated hosts — `https://www.x.${country}.com` captures a
     // truncated "www.x" that isn't a real host (these are deep-link URL builders).
     const tail = src.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 2);
@@ -255,8 +256,8 @@ function transitiveHosts(entryFile: string): Set<string> {
     if (!file || !existsSync(file)) continue;
     const content = readFileSync(file, "utf8");
     for (const h of extractHosts(content)) hosts.add(h);
-    for (const m of content.matchAll(REL_IMPORT_RE)) {
-      const resolved = resolveRelative(file, m[1]);
+    for (const [, specifier] of content.matchAll(REL_IMPORT_RE)) {
+      const resolved = specifier ? resolveRelative(file, specifier) : null;
       if (resolved && !seen.has(resolved)) {
         seen.add(resolved);
         stack.push(resolved);
@@ -272,10 +273,10 @@ function buildBarrelMap(indexFile: string): Map<string, string> {
   if (!existsSync(indexFile)) return map;
   const content = readFileSync(indexFile, "utf8");
   const re = /export\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["'](\.[^"']+)["']/g;
-  for (const m of content.matchAll(re)) {
-    const file = resolveRelative(indexFile, m[2]);
-    if (!file) continue;
-    for (const raw of m[1].split(",")) {
+  for (const [, names, from] of content.matchAll(re)) {
+    const file = names && from ? resolveRelative(indexFile, from) : null;
+    if (!names || !file) continue;
+    for (const raw of names.split(",")) {
       const name = raw
         .replace(/\btype\s+/g, "")
         .split(/\s+as\s+/)
@@ -333,6 +334,7 @@ function sharedHostsForFile(
     if (isTypeOnly) continue;
     const named = m[3];
     const spec = m[5];
+    if (!spec) continue;
 
     let pkg: string | undefined;
     for (const p of Object.keys(SHARED_PACKAGES)) {
@@ -341,8 +343,8 @@ function sharedHostsForFile(
         break;
       }
     }
-    if (!pkg) continue;
-    const resolver = resolvers[pkg];
+    const resolver = pkg ? resolvers[pkg] : undefined;
+    if (!pkg || !resolver) continue;
     const entryFiles: string[] = [];
 
     if (spec === pkg) {
@@ -351,7 +353,7 @@ function sharedHostsForFile(
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s && !s.startsWith("type "))
-        .map((s) => s.split(/\s+as\s+/)[0].trim());
+        .map((s) => s.replace(/\s+as\s+.*$/s, "").trim());
       for (const sym of symbols) {
         const file = resolver.barrel.get(sym);
         if (file) entryFiles.push(file);
@@ -376,9 +378,9 @@ function imageProxyAllowedHosts(): Set<string> {
   const set = new Set<string>();
   if (!existsSync(file)) return set;
   const content = readFileSync(file, "utf8");
-  const block = content.match(/ALLOWED_HOSTS\s*=\s*\[([\s\S]*?)\]/);
-  if (block) {
-    for (const m of block[1].matchAll(/["']([a-z0-9.-]+)["']/gi)) set.add(m[1].toLowerCase());
+  const block = content.match(/ALLOWED_HOSTS\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  for (const [, host] of block.matchAll(/["']([a-z0-9.-]+)["']/gi)) {
+    if (host) set.add(host.toLowerCase());
   }
   return set;
 }
@@ -433,15 +435,15 @@ function main(): void {
     const declared = new Set<string>();
     const declaredExact = new Set<string>();
     for (const ds of sources) {
-      const m = (ds.url ?? "").match(/^https?:\/\/([a-z0-9.-]+)/i);
-      if (m && !isInternalHost(m[1])) {
-        declared.add(registrable(m[1]));
-        declaredExact.add(m[1].toLowerCase());
+      const urlHost = (ds.url ?? "").match(/^https?:\/\/([a-z0-9.-]+)/i)?.[1];
+      if (urlHost && !isInternalHost(urlHost)) {
+        declared.add(registrable(urlHost));
+        declaredExact.add(urlHost.toLowerCase());
       }
       for (const host of ds.apiHosts ?? []) {
         const h = host
           .replace(/^https?:\/\//, "")
-          .split("/")[0]
+          .replace(/\/.*$/s, "")
           .toLowerCase();
         if (h && !isInternalHost(h)) {
           declared.add(registrable(h));
@@ -457,9 +459,9 @@ function main(): void {
       const content = readFileSync(file, "utf8");
       for (const h of extractHosts(content)) contacted.add(h);
       for (const h of sharedHostsForFile(content, resolvers)) contacted.add(h);
-      for (const m of stripComments(content).matchAll(MEDIA_HOST_RE)) {
-        const host = m[1].toLowerCase();
-        if (!isInternalHost(host)) mediaHosts.add(host);
+      for (const [, captured] of stripComments(content).matchAll(MEDIA_HOST_RE)) {
+        const host = captured?.toLowerCase();
+        if (host && !isInternalHost(host)) mediaHosts.add(host);
       }
     }
 

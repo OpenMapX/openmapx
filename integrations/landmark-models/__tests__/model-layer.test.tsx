@@ -8,7 +8,7 @@ import {
   MeshStandardMaterial,
   type Scene,
 } from "three";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { NEUTRAL_SCENE_LIGHT, sunVector } from "@/integration-api/map/sceneLight";
 
 const fake = vi.hoisted(() => {
@@ -31,7 +31,6 @@ const fake = vi.hoisted(() => {
   }
   return { state, FakeRenderer };
 });
-type FakeRenderer = InstanceType<typeof fake.FakeRenderer>;
 const renderers = fake.state.renderers;
 
 vi.mock("three", async (original) => ({
@@ -97,10 +96,11 @@ const NEUTRAL_LIGHTING = {
 
 function lightsOf(layer: LandmarkModelLayer) {
   const children = (layer as unknown as { scene: Scene }).scene.children;
-  return {
-    sun: children.find((child) => child instanceof DirectionalLight) as DirectionalLight,
-    ambient: children.find((child) => child instanceof AmbientLight) as AmbientLight,
-  };
+  const sun = children.find((child) => child instanceof DirectionalLight);
+  const ambient = children.find((child) => child instanceof AmbientLight);
+  assert.isDefined(sun, "the scene has a sun light");
+  assert.isDefined(ambient, "the scene has an ambient light");
+  return { sun, ambient };
 }
 
 afterEach(() => {
@@ -155,7 +155,8 @@ describe("LandmarkModelLayer", () => {
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("a")]);
     layer.render({} as WebGL2RenderingContext, renderArgs());
-    const renderer = renderers[0] as FakeRenderer;
+    const renderer = renderers[0];
+    assert(renderer, "the layer created a renderer");
     const order = [
       ...renderer.resetState.mock.invocationCallOrder,
       ...renderer.render.mock.invocationCallOrder,

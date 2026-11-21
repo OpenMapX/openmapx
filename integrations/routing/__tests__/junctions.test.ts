@@ -1,4 +1,5 @@
 import type { JunctionLookupPoint } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { LngLat } from "@openmapx/mobility-core/geometry";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import holz from "../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json";
@@ -25,7 +26,7 @@ import {
 // The recorded Kreuz Holz lookup point, its trace read as coordinate pairs.
 const holzLookupPoint: JunctionLookupPoint = {
   ...holz.lookupPoint,
-  trace: holz.lookupPoint.trace.map(([lng, lat]): LngLat => [lng, lat]),
+  trace: holz.lookupPoint.trace.map((pair): LngLat => [nth(pair, 0), nth(pair, 1)]),
 };
 
 // The A57 approach to exit 20: six route vertices ending 30 m past the split.
@@ -105,7 +106,7 @@ describe("parseJunctionPoints", () => {
   it("accepts 1–40 well-formed points", () => {
     const points = parseJunctionPoints({ points: [point()] });
     expect(points).toHaveLength(1);
-    expect(points?.[0].trace).toHaveLength(6);
+    expect(points?.[0]?.trace).toHaveLength(6);
     const many = parseJunctionPoints({ points: Array.from({ length: 40 }, () => point()) });
     expect(many).toHaveLength(40);
   });
@@ -157,7 +158,7 @@ describe("junctionCacheKey", () => {
 describe("mapJunctionWays", () => {
   it("preserves travel-direction geometry for matching the incoming lane layout", () => {
     const result = mapJunctionWays([APPROACH_WAY], point());
-    expect(result.approach[0].geometry).toEqual([
+    expect(nth(result.approach, 0).geometry).toEqual([
       [6.6785, 51.1786],
       [6.6768301, 51.1788713],
     ]);
@@ -167,7 +168,7 @@ describe("mapJunctionWays", () => {
   it("reads the bearing at the node nearest the point, splits ramps off, and signs the end distance", () => {
     const result = mapJunctionWays([APPROACH_WAY, RAMP_WAY, REVERSE_WAY], mapped());
     expect(result.approach.map((way) => way.wayId)).toEqual([314653469]);
-    const approach = result.approach[0];
+    const approach = nth(result.approach, 0);
     expect(approach.bearing).toBeGreaterThan(270);
     expect(approach.bearing).toBeLessThan(300);
     expect(approach.endDistanceMeters).toBeGreaterThanOrEqual(0);
@@ -175,10 +176,10 @@ describe("mapJunctionWays", () => {
     expect(approach.tags).toEqual({ lanes: 5, destinationRefLanes: "A 57|A 57|A 57|A 46|A 46" });
     expect(result.ramps.map((way) => way.wayId)).toEqual([163585518]);
     // The ramp heads north-west out of the split; its far end curves away.
-    expect(result.ramps[0].bearing).toBeGreaterThan(290);
-    expect(result.ramps[0].bearing).toBeLessThan(320);
-    expect(result.ramps[0].startDistanceMeters).toBeLessThan(5);
-    expect(result.ramps[0].endDistanceMeters).toBeLessThan(-50);
+    expect(nth(result.ramps, 0).bearing).toBeGreaterThan(290);
+    expect(nth(result.ramps, 0).bearing).toBeLessThan(320);
+    expect(nth(result.ramps, 0).startDistanceMeters).toBeLessThan(5);
+    expect(nth(result.ramps, 0).endDistanceMeters).toBeLessThan(-50);
     expect(approach.startDistanceMeters).toBeGreaterThan(100);
   });
 
@@ -232,7 +233,7 @@ describe("mapJunctionWays", () => {
       [{ ...APPROACH_WAY, tags: { highway: "motorway", oneway: "yes", lanes: "4" } }],
       mapped(),
     );
-    expect(result.approach[0]?.tags).toEqual({ lanes: 4 });
+    expect(nth(result.approach, 0)?.tags).toEqual({ lanes: 4 });
     expect(result.onMotorway).toBe(true);
   });
 
@@ -338,11 +339,13 @@ describe("POST /navigation/junctions", () => {
       junctions: { index: number; approach: unknown[]; ramps: unknown[] }[];
     };
     expect(body.junctions.map((j) => j.index)).toEqual([0, 1]);
-    expect(body.junctions[0].approach).toHaveLength(1);
-    expect(body.junctions[0].ramps).toHaveLength(1);
-    expect(body.junctions[1].approach).toEqual([]);
+    expect(nth(body.junctions, 0).approach).toHaveLength(1);
+    expect(nth(body.junctions, 0).ramps).toHaveLength(1);
+    expect(nth(body.junctions, 1).approach).toEqual([]);
     expect(overpassQuerySafe).toHaveBeenCalledTimes(1);
-    expect((String(overpassQuerySafe.mock.calls[0][0]).match(/around:/g) ?? []).length).toBe(2);
+    expect((String(nth(overpassQuerySafe.mock.calls, 0)[0]).match(/around:/g) ?? []).length).toBe(
+      2,
+    );
     expect(cache.set).toHaveBeenCalledTimes(2);
     expect(reply.header).not.toHaveBeenCalled();
   });
@@ -393,11 +396,12 @@ describe("POST /navigation/junctions", () => {
     const reply = createRoutingTestReply();
     await handler({ body: { points: [point(), farPoint()] }, query: {} }, reply);
     expect(overpassQuerySafe).toHaveBeenCalledTimes(1);
-    const query = String(overpassQuerySafe.mock.calls[0][0]);
+    const query = String(nth(overpassQuerySafe.mock.calls, 0)[0]);
     expect((query.match(/around:/g) ?? []).length).toBe(1);
-    expect(query).toContain(`${FAR_TRACE[0][1]},${FAR_TRACE[0][0]}`);
+    const [farLng, farLat] = nth(FAR_TRACE, 0);
+    expect(query).toContain(`${farLat},${farLng}`);
     const body = reply.body as { junctions: { approach: unknown[] }[] };
-    expect(body.junctions[0].approach).toHaveLength(1);
+    expect(nth(body.junctions, 0).approach).toHaveLength(1);
 
     overpassQuerySafe.mockClear();
     await handler({ body: { points: [point(), farPoint()] }, query: {} }, createRoutingTestReply());
@@ -419,9 +423,9 @@ describe("connected outgoing roads at Kreuz Holz", () => {
 
   it("rejects a nearby road with a different start node, even at the same coordinates", () => {
     const adjacent = {
-      ...holz.osmTopology[2],
+      ...nth(holz.osmTopology, 2),
       id: 987,
-      nodes: [999, ...holz.osmTopology[2].nodes.slice(1)],
+      nodes: [999, ...nth(holz.osmTopology, 2).nodes.slice(1)],
     };
     const result = mapJunctionWays(
       [...holz.osmTopology, adjacent] as unknown as OverpassWayElement[],
@@ -431,7 +435,7 @@ describe("connected outgoing roads at Kreuz Holz", () => {
   });
 
   it("uses travel node order for a reversed one-way outgoing road", () => {
-    const forward = holz.osmTopology[2];
+    const forward = nth(holz.osmTopology, 2);
     const reverse = {
       ...forward,
       tags: { ...forward.tags, oneway: "-1" },

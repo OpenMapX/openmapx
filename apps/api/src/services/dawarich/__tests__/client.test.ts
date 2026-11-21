@@ -1,7 +1,7 @@
 import { SafeFetchHttpError, type SafeJsonResponse } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import { currentUserFixture, timelineResponseFixture } from "../__fixtures__/timeline-day";
-import { tracksPageFixture } from "../__fixtures__/tracks-page";
+import { trackFeatureFixture, tracksPageFixture } from "../__fixtures__/tracks-page";
 import { DawarichClient, DawarichClientError, type FetchJsonResponse } from "../client";
 
 function response<T>(data: T, headers: Record<string, string> = {}): SafeJsonResponse<T> {
@@ -33,7 +33,7 @@ describe("DawarichClient", () => {
     const user = await client.getCurrentUser();
 
     expect(user.user.email).toBe("fixture@example.invalid");
-    const [url, options] = vi.mocked(fetchJsonResponse).mock.calls[0];
+    const [url, options] = vi.mocked(fetchJsonResponse).mock.calls[0] ?? [];
     expect(url).toBe("https://fixture.invalid/api/v1/users/me");
     expect(options).toMatchObject({
       acceptedContentTypes: ["application/json"],
@@ -43,7 +43,7 @@ describe("DawarichClient", () => {
       timeoutMs: 10_000,
       maxBytes: 2 * 1024 * 1024,
     });
-    expect(options.headers).toEqual({
+    expect(options?.headers).toEqual({
       Accept: "application/json",
       Authorization: "Bearer fixture-token",
     });
@@ -60,9 +60,9 @@ describe("DawarichClient", () => {
       "km & miles",
     );
 
-    expect(timeline.days[0].date).toBe("2026-01-02");
-    expect(vi.mocked(fetchJsonResponse).mock.calls[0][0]).toContain("distance_unit=km+%26+miles");
-    expect(vi.mocked(fetchJsonResponse).mock.calls[0][0]).toContain(
+    expect(timeline.days[0]?.date).toBe("2026-01-02");
+    expect(vi.mocked(fetchJsonResponse).mock.calls[0]?.[0]).toContain("distance_unit=km+%26+miles");
+    expect(vi.mocked(fetchJsonResponse).mock.calls[0]?.[0]).toContain(
       "start_at=2026-01-02T00%3A00%3A00%2B01%3A00",
     );
   });
@@ -84,7 +84,7 @@ describe("DawarichClient", () => {
 
     expect(tracks.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 1 });
     expect(tracks.data.features).toHaveLength(1);
-    const [url, options] = vi.mocked(fetchJsonResponse).mock.calls[0];
+    const [url, options] = vi.mocked(fetchJsonResponse).mock.calls[0] ?? [];
     expect(url).toContain("page=1");
     expect(url).toContain("per_page=500");
     expect(options).toMatchObject({
@@ -225,7 +225,7 @@ describe("DawarichClient", () => {
       response(
         {
           ...tracksPageFixture,
-          features: Array.from({ length: 501 }, () => tracksPageFixture.features[0]),
+          features: Array.from({ length: 501 }, () => trackFeatureFixture),
         },
         {
           "x-current-page": "1",

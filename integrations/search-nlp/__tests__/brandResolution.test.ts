@@ -33,8 +33,8 @@ describe("resolveBrandPredicates", () => {
       require: [{ key: "brand", op: "=" as const, value: "Lidl" }],
     };
     const resolved = resolveBrandPredicates(filter, "de");
-    expect(resolved.require?.[0].key).toBe("brand:wikidata");
-    expect(resolved.require?.[0].value).toMatch(/^Q\d+$/);
+    expect(resolved.require?.[0]?.key).toBe("brand:wikidata");
+    expect(resolved.require?.[0]?.value).toMatch(/^Q\d+$/);
   });
 
   it("leaves an unrecognised brand name untouched", () => {

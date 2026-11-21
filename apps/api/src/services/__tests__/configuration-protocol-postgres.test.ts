@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { maintenanceRecordSchema } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -167,13 +168,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ctx.protocol = saved.protocol;
           } else {
             const { replaceJobCheckpoint } = await import("../admin-job-state");
-            const [saved] = await fixture.db
-              .update(schema.adminJob)
-              .set(replaceJobCheckpoint(result))
-              .where(eq(schema.adminJob.id, jobId))
-              .returning({ protocol: schema.adminJob.protocol });
+            const saved = itemAt(
+              await fixture.db
+                .update(schema.adminJob)
+                .set(replaceJobCheckpoint(result))
+                .where(eq(schema.adminJob.id, jobId))
+                .returning({ protocol: schema.adminJob.protocol }),
+              0,
+            );
             ctx.checkpointResult = result;
-            ctx.protocol = saved!.protocol as JobContext["protocol"];
+            ctx.protocol = saved.protocol as JobContext["protocol"];
           }
         },
       };
@@ -190,6 +194,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           run,
         ),
       );
+    }
+    /** The data-manager the last `coordinator()` call started. */
+    function runningDataManager() {
+      assert.isDefined(dm, "no data-manager was started");
+      return dm;
     }
     /** A running data-manager the maintenance replaces, and the container that replaces it. */
     async function coordinator(
@@ -302,17 +311,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, ctx.jobId));
+      assert.isDefined(original, "the job row is missing");
       const { claimAdminJob, jobCheckpoint } = await import("../admin-job-state"),
-        reclaimed = await claimAdminJob(original!);
-      ctx.execution = (
-        reclaimed!.protocol as { execution: NonNullable<JobContext["execution"]> }
-      ).execution;
-      ctx.checkpointResult = jobCheckpoint(reclaimed!.result, reclaimed!.protocol);
-      ctx.protocol = reclaimed!.protocol;
+        reclaimed = await claimAdminJob(original);
+      assert.exists(reclaimed, "the job could not be reclaimed");
+      const { execution } = reclaimed.protocol as {
+        execution: NonNullable<JobContext["execution"]>;
+      };
+      ctx.execution = execution;
+      ctx.checkpointResult = jobCheckpoint(reclaimed.result, reclaimed.protocol);
+      ctx.protocol = reclaimed.protocol;
       ctx.checkpoint = async (result, progress, admissionKey, stepAddress, operations) => {
         const saved = await checkpointOwnedAdminJob(
           ctx.jobId,
-          ctx.execution!,
+          execution,
           result,
           operations ?? (ctx.protocol?.operations as NonNullable<typeof operations>),
           progress,
@@ -323,7 +335,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ctx.checkpointResult = saved.result;
         ctx.protocol = saved.protocol;
       };
-      return original!;
+      return original;
     }
     const phase = (ctx: { protocol?: unknown }) =>
       (ctx.protocol as { candidate?: { phase?: string } } | undefined)?.candidate?.phase;
@@ -364,8 +376,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
           ).toEqual(record);
           expect(phase(ctx)).toBe("generation_applied");
-          expect(await dm!.fenceStates()).toEqual(["settled"]);
-          if (loseSettleResponseOnce) expect(dm!.settlementResponseStatuses).toEqual([200, 200]);
+          expect(await runningDataManager().fenceStates()).toEqual(["settled"]);
+          if (loseSettleResponseOnce)
+            expect(runningDataManager().settlementResponseStatuses).toEqual([200, 200]);
           expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
           expect(heldTargets(host.infraDir)).toEqual([]);
           expect(readdirSync(host.candidates)).toEqual([]);
@@ -408,7 +421,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(application).toMatchObject({ outcome: "committed", followUp: "complete" });
         expect(operations(ctx, "configurationMaintenance.settle")).toHaveLength(1);
         expect(agentRecord(ctx)).toMatchObject({ state: "settled", fenceOutcome: "applied" });
-        expect(await dm!.fenceStates()).toEqual(["settled"]);
+        expect(await runningDataManager().fenceStates()).toEqual(["settled"]);
         expect(heldTargets(host.infraDir)).toEqual([]);
       });
     }, 180000);
@@ -512,11 +525,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(application).toMatchObject({ outcome: "not_committed", reason: "conflict" });
       });
       expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
-      const [row] = await fixture.db
-        .select()
-        .from(schema.adminJob)
-        .where(eq(schema.adminJob.id, ctx.jobId));
-      expect(phase(row!)).toBeUndefined();
+      const row = itemAt(
+        await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, ctx.jobId)),
+        0,
+      );
+      expect(phase(row)).toBeUndefined();
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       expect(agentRecord(ctx)).toMatchObject({
         state: "settled",
@@ -569,7 +582,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         fence: { state: "settled" },
       });
       expect(admitted("configurationMaintenance.apply")).toHaveLength(0);
-      expect(await dm!.fenceStates()).toEqual(["settled"]);
+      expect(await runningDataManager().fenceStates()).toEqual(["settled"]);
       expect(heldTargets(host.infraDir)).toEqual([]);
       expect(readdirSync(host.candidates)).toEqual([]);
     }, 180000);
@@ -766,7 +779,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(record.state).toBe("recovery_required");
       expect(record.steps.at(-1)).toMatchObject({ state: "terminal", outcome: "unknown" });
       expect(heldTargets(host.infraDir)).toContain("data-manager");
-      expect(await dm!.fenceStates()).toEqual(["prepared"]);
+      expect(await runningDataManager().fenceStates()).toEqual(["prepared"]);
       // The job's next run neither settles nor releases it.
       await reclaim(ctx);
       await expect(
@@ -784,18 +797,22 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       })
         .list()
         .find((value) => value.ownerKind === "configurationMaintenance.prepare");
+      assert.isDefined(lease, "no maintenance preparation lease is held");
       const { settleMaintenanceFence } = await import(
         "../../../../../packages/cli/src/lib/control-resolve"
       );
       // The CLI presents the host CLI's own data-manager token.
-      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(`${dm!.token}-cli`));
-      await settleMaintenanceFence(host.infraDir, lease!, "failed");
+      vi.stubEnv(
+        "DATA_MANAGER_TOKEN_FILE",
+        dataManagerTokenFile(`${runningDataManager().token}-cli`),
+      );
+      await settleMaintenanceFence(host.infraDir, lease, "failed");
       expect(agentRecord(ctx)).toMatchObject({
         state: "settled",
         fenceOutcome: "applied",
         fence: { state: "settled" },
       });
-      expect(await dm!.fenceStates()).toEqual(["settled"]);
+      expect(await runningDataManager().fenceStates()).toEqual(["settled"]);
     }, 120000);
 
     it("settles a preparation data-manager refuses, releases its targets and saves nothing", async () => {
@@ -821,7 +838,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // The job fails busy without recovery: no fence, no rows, no generation.
       // Data-manager keeps only the record of its refusal.
       expect(outcome).toEqual({ error: "busy" });
-      expect(await dm!.fenceStates()).toEqual(["refused"]);
+      expect(await runningDataManager().fenceStates()).toEqual(["refused"]);
       expect(phase(ctx)).toBeUndefined();
       expect(readdirSync(host.candidates)).toEqual([]);
       expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);

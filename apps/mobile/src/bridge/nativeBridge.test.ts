@@ -433,16 +433,18 @@ describe("NativeBridge.receive", () => {
     // The bridge is not the authority on staleness — it hands the claim to the
     // coordinator, which compares it against the persisted revision.
     expect(dispatched).toHaveLength(1);
-    expect(dispatched[0].sessionId).toBe("s1");
-    expect(dispatched[0].revision).toBe(3);
+    expect(dispatched[0]).toMatchObject({ sessionId: "s1", revision: 3 });
   });
 });
 
 /** Recovers the message a generated script would deliver. */
-function decodePayload(script: string): { type: string; payload: Record<string, never> } {
-  const match = script.match(/atob\("([^"]*)"\)/);
-  if (!match) throw new Error("no payload in script");
-  return JSON.parse(Buffer.from(match[1], "base64").toString("utf8"));
+function decodePayload(script: string | undefined): {
+  type: string;
+  payload: Record<string, never>;
+} {
+  const encoded = script?.match(/atob\("([^"]*)"\)/)?.[1];
+  if (encoded === undefined) throw new Error("no payload in script");
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
 }
 
 describe("NativeBridge.send", () => {

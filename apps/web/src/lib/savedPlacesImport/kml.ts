@@ -25,9 +25,15 @@ export function parseKml(
     const places = elements(root, "Placemark").flatMap((mark) => {
       const point = elements(mark, "Point")[0];
       const coordinates =
-        point && elements(point, "coordinates")[0]?.textContent?.trim().split(/\s+/)[0].split(",");
-      if (!coordinates?.[0]?.trim() || !coordinates[1]?.trim()) return [];
-      const [lng, lat] = coordinates.map(Number);
+        point &&
+        elements(point, "coordinates")[0]
+          ?.textContent?.trim()
+          .replace(/\s[\s\S]*/, "")
+          .split(",");
+      const [lngText, latText] = coordinates ?? [];
+      if (!lngText?.trim() || !latText?.trim()) return [];
+      const lng = Number(lngText);
+      const lat = Number(latText);
       if (!validCoordinates(lat, lng)) return [];
       const extended = elements(mark, "ExtendedData")[0];
       const data = extended ? elements(extended, "Data") : [];

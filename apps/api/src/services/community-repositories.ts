@@ -191,11 +191,12 @@ export async function reconcileCommunityRepositoryTransactions(
   }
   if (!options.ctx) throw new JobObservationPending("recovery_required");
   const projection = readProjection(options.ctx.protocol, options.ctx.checkpointResult);
+  const { jobId } = options.ctx;
   for (const entry of pending) {
     const original = Object.values(projection.operations).find(
       (operation) =>
         operation.kind === "serviceRepository.publish" &&
-        operation.attempt?.apiJobId === options.ctx!.jobId &&
+        operation.attempt?.apiJobId === jobId &&
         operation.operation?.kind === "serviceRepository.publish" &&
         hashUrl(operation.operation.url) === entry.repository,
     );

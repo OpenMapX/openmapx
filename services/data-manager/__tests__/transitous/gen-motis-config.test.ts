@@ -5,10 +5,16 @@ import {
   type TransitousRunnerScript,
   transitousRunnerArgv,
 } from "@openmapx/core/transitous-runner";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import { run as genMotisConfigRun } from "../../src/jobs/transitous/gen-motis-config.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
+
+function firstCall(calls: readonly TransitousRunnerScript[]): TransitousRunnerScript {
+  const [call] = calls;
+  assert.isDefined(call, "the runner was not called");
+  return call;
+}
 
 let tmp: string | undefined;
 const ENV_KEYS = [
@@ -189,7 +195,7 @@ describe("gen-motis-config region scoping", () => {
       },
     ]);
     // The runner derives the argv; the stage never assembles one.
-    expect(transitousRunnerArgv(calls[0])).toEqual([
+    expect(transitousRunnerArgv(firstCall(calls))).toEqual([
       "./src/generate-motis-config.py",
       "--import-only",
       "--skip-missing-files",
@@ -215,7 +221,7 @@ describe("gen-motis-config region scoping", () => {
     expect(calls).toEqual([
       { script: "generate-motis-config", importOnly: true, feedProxy: false, countries: [] },
     ]);
-    expect(transitousRunnerArgv(calls[0])).toEqual([
+    expect(transitousRunnerArgv(firstCall(calls))).toEqual([
       "./src/generate-motis-config.py",
       "--import-only",
       "--skip-missing-files",

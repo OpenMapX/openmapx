@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
+import { callArg } from "../../test/mock-calls";
 
 vi.mock("../../db/index.js", () => {
   const builder: Record<string, unknown> = {};
@@ -96,7 +97,7 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
 
     expect(res.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const args = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const args = callArg(fetchMock, 0, 1) as RequestInit;
     expect(JSON.parse(args.body as string)).toMatchObject({
       branch: "main",
       force: false,

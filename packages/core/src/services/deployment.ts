@@ -147,10 +147,10 @@ export function readDeploymentUserAssignments(infraDir: string): {
   if (bytes === null) return {};
   const found: { uid?: number; gid?: number } = {};
   for (const line of bytes.toString("utf8").split(/\r?\n/)) {
-    const match = DEPLOYMENT_USER_ASSIGNMENT.exec(line);
-    if (!match) continue;
-    const id = parseDeploymentId(match[1] as "UID" | "GID", match[2] as string, path);
-    if (match[1] === "UID") found.uid = id;
+    const [, name, raw] = DEPLOYMENT_USER_ASSIGNMENT.exec(line) ?? [];
+    if ((name !== "UID" && name !== "GID") || raw === undefined) continue;
+    const id = parseDeploymentId(name, raw, path);
+    if (name === "UID") found.uid = id;
     else found.gid = id;
   }
   return found;

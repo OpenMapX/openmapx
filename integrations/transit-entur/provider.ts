@@ -278,9 +278,10 @@ function routeGeometryFromPatterns(
   const coordinates = (patterns ?? [])
     .map((pattern) => decodePoints(pattern?.pointsOnLink?.points))
     .filter((line) => line.length >= 2);
-  if (coordinates.length === 0) return undefined;
+  const [only] = coordinates;
+  if (!only) return undefined;
   if (coordinates.length === 1) {
-    return { type: "LineString", coordinates: coordinates[0] };
+    return { type: "LineString", coordinates: only };
   }
   return { type: "MultiLineString", coordinates };
 }
@@ -291,8 +292,7 @@ function findNearestCoordinateIndex(
 ): number {
   let bestIndex = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < coordinates.length; index++) {
-    const [lng, lat] = coordinates[index];
+  for (const [index, [lng, lat]] of coordinates.entries()) {
     const deltaLng = lng - target[0];
     const deltaLat = lat - target[1];
     const score = deltaLng * deltaLng + deltaLat * deltaLat;
@@ -629,7 +629,9 @@ function normalizeTripPlan(trip: PlanTripQuery["trip"] | null | undefined): Trip
     const legs = (pattern.legs ?? [])
       .map((leg) => normalizeTripLeg(leg))
       .filter((leg): leg is TripLeg => leg !== null);
-    if (legs.length === 0) continue;
+    const firstLeg = legs[0];
+    const lastLeg = legs.at(-1);
+    if (!firstLeg || !lastLeg) continue;
     const walkDistance =
       typeof pattern.streetDistance === "number"
         ? Math.round(pattern.streetDistance)
@@ -640,8 +642,8 @@ function normalizeTripPlan(trip: PlanTripQuery["trip"] | null | undefined): Trip
           );
     itineraries.push({
       duration: Math.round(pattern.duration ?? 0),
-      startTime: pattern.expectedStartTime ?? legs[0].startTime,
-      endTime: pattern.expectedEndTime ?? legs[legs.length - 1].endTime,
+      startTime: pattern.expectedStartTime ?? firstLeg.startTime,
+      endTime: pattern.expectedEndTime ?? lastLeg.endTime,
       transfers: Math.max(0, legs.filter((leg) => leg.route !== undefined).length - 1),
       walkDistance,
       co2Grams: typeof pattern.emission?.co2 === "number" ? pattern.emission.co2 : undefined,

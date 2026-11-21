@@ -135,8 +135,8 @@ async function* decode(source: Bytes, limits: ArtifactArchiveLimits): AsyncGener
     return;
   }
   const header = await source.exact(8);
-  if (header[0] !== 8 || header[1]! & 0xe0) throw Error("Unsupported gzip header");
-  const flags = header[1]!;
+  const flags = header.readUInt8(1);
+  if (header[0] !== 8 || flags & 0xe0) throw Error("Unsupported gzip header");
   let headerBytes = 10;
   if (flags & 4) {
     const size = (await source.exact(2)).readUInt16LE();
@@ -198,7 +198,8 @@ async function* decode(source: Bytes, limits: ArtifactArchiveLimits): AsyncGener
 function number(header: Buffer, start: number, length: number): number {
   const field = header.subarray(start, start + length);
   let value = 0;
-  if (field[0]! & 0x80) {
+  // An empty field has no base-256 marker and reads as an empty octal number.
+  if ((field[0] ?? 0) & 0x80) {
     if (field[0] !== 0x80) throw Error("Invalid tar size");
     for (const byte of field.subarray(1)) {
       value = value * 256 + byte;
@@ -344,7 +345,7 @@ export async function validateBuildBundle(options: {
       }
       if (++headers > limits.maxEntries + 1) throw Error("Archive entry limit exceeded");
       let checksum = 0;
-      for (let i = 0; i < 512; i++) checksum += i >= 148 && i < 156 ? 32 : header[i]!;
+      for (let i = 0; i < 512; i++) checksum += i >= 148 && i < 156 ? 32 : header.readUInt8(i);
       if (checksum !== number(header, 148, 8)) throw Error("Invalid tar header checksum");
       const type = String.fromCharCode(header[156] || 48);
       const rawSize = number(header, 124, 12);
@@ -417,7 +418,8 @@ export async function validateBuildBundle(options: {
         if (!file) throw Error(`Bundle contains entries its manifest does not list: ${name}`);
         if (file.sizeBytes !== size) throw Error(`Bundle file failed verification: ${name} (size)`);
         const parts = name.split("/");
-        const leaf = parts.pop()!;
+        const leaf = parts.pop();
+        if (leaf === undefined) throw Error(`Bundle entry has no name: ${name}`);
         const dirs: AnchoredDirectory[] = [];
         let parent = root;
         let fd: number | undefined;
@@ -538,6 +540,12 @@ export async function writeBuildBundle(options: {
   const files: BundleFile[] = [];
   const directories: string[] = [];
   const sources = new Map<string, string>();
+  // Every listed file was recorded with its physical path by the same scan.
+  const sourcePath = (path: string) => {
+    const physical = sources.get(path);
+    if (physical === undefined) throw Error(`Build artifact file was not scanned: ${path}`);
+    return physical;
+  };
   // Real DM candidates hardlink acquired bulk inputs. No generated metadata,
   // script, proxy configuration or other service can use this exception.
   const linkedMotisInput = (path: string) =>
@@ -545,7 +553,8 @@ export async function writeBuildBundle(options: {
     /^motis\/(?:live|slots\/[AB])\/[^/]+\.(?:gtfs\.zip|netex\.zip|osm\.pbf)$/.test(path);
   const fileRead = async (path: string, read: (fd: number, stat: Stats) => Promise<void>) => {
     const parts = path.split("/");
-    const leaf = parts.pop()!;
+    const leaf = parts.pop();
+    if (leaf === undefined) throw Error(`Build artifact path has no name: ${path}`);
     const opened: AnchoredDirectory[] = [];
     let parent = root;
     let fd: number | undefined;
@@ -701,7 +710,7 @@ export async function writeBuildBundle(options: {
       await entry(BUNDLE_MANIFEST_PATH, manifestBytes);
       for (const d of directories) await entry(d, Buffer.alloc(0), "directory");
       for (const file of files)
-        await fileRead(sources.get(file.path)!, async (fd, stat) => {
+        await fileRead(sourcePath(file.path), async (fd, stat) => {
           if (stat.size !== file.sizeBytes) throw Error("Build artifact size changed");
           const digest = createHash("sha256");
           const member = archive.entry({

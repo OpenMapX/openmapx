@@ -7,8 +7,8 @@ import {
   privateFeedHostAllowlist,
   safeFetchJson,
   safeFetchText,
-} from "./utils/safe-download.js";
-import { USER_AGENT } from "./utils/userAgent.js";
+} from "./http/safe-download.js";
+import { USER_AGENT } from "./http/userAgent.js";
 
 /**
  * Mobility requests are feed downloads, so they honour the operator's private

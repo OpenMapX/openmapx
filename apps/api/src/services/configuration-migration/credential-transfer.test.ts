@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import { describe, expect, it } from "vitest";
 import {
   decodeTransferredFeedCredentialMap,
@@ -39,7 +40,7 @@ describe("bounded authenticated credential envelopes", () => {
     await expect(
       encryptCredentialTransfer(
         "actor",
-        { ...payload, entries: [payload.entries[0]!, payload.entries[0]!] },
+        { ...payload, entries: [itemAt(payload.entries, 0), itemAt(payload.entries, 0)] },
         "synthetic passphrase",
       ),
     ).rejects.toThrow();

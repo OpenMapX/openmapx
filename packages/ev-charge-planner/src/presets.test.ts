@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { getVehiclePreset, listVehicles, VEHICLE_PRESETS } from "./presets";
 
 describe("vehicle presets", () => {
@@ -42,7 +42,9 @@ describe("vehicle presets", () => {
   });
 
   it("looks a preset up by id", () => {
-    expect(getVehiclePreset(listVehicles()[0].id)).toBeTruthy();
+    const [first] = listVehicles();
+    assert.isDefined(first);
+    expect(getVehiclePreset(first.id)).toBeTruthy();
     expect(getVehiclePreset("nope")).toBeNull();
   });
 

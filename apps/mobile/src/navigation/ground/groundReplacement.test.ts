@@ -1,6 +1,7 @@
 import type { GroundMobileSession } from "@openmapx/core/navigation";
 import { parseMobileSession } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { nth } from "../../testing/nth";
 import { applyGroundReplacement, validateGroundReplacement } from "./groundReplacement";
 
 const NOW = 1_700_000_100_000;
@@ -146,7 +147,7 @@ describe("applyGroundReplacement", () => {
     expect(next.cueLedger).toEqual({ spoken: ["old-cue"], events: ["old-event"] });
     expect(mutation.effects).toEqual([{ kind: "publish-snapshot", immediate: true }]);
     expect(parseMobileSession(JSON.stringify(next)).ok).toBe(true);
-    waypoints[1][0] = 9;
+    nth(waypoints, 1)[0] = 9;
     source.route.geometry.push([9.99, 49.99]);
     expect(next.payload.startPackage.destinationWaypoints[1]).toEqual([8.71, 50.11]);
     expect(next.payload.startPackage.route.geometry).toEqual(GEOMETRY.slice(0, 20));

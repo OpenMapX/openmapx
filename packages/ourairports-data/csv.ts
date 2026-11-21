@@ -11,20 +11,18 @@ export interface CsvRecord {
 }
 
 export function parseCsv(text: string): CsvRecord[] {
-  const rows = splitRows(text);
-  if (rows.length === 0) return [];
-  const headers = rows[0];
-  const records: CsvRecord[] = new Array(rows.length - 1);
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
+  const [headers, ...rows] = splitRows(text);
+  if (!headers) return [];
+  const records: CsvRecord[] = [];
+  for (const row of rows) {
     if (row.length === 1 && row[0] === "") continue;
     const rec: CsvRecord = {};
-    for (let j = 0; j < headers.length; j++) {
-      rec[headers[j]] = row[j] ?? "";
+    for (const [j, header] of headers.entries()) {
+      rec[header] = row[j] ?? "";
     }
-    records[i - 1] = rec;
+    records.push(rec);
   }
-  return records.filter(Boolean);
+  return records;
 }
 
 function splitRows(text: string): string[][] {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { recordToBorderCrossing } from "../border/map";
 import { recordToCamera } from "../cameras/map";
 import { recordToChargingSite } from "../charging/map";
@@ -57,8 +57,10 @@ describe("expanded reading receipts", () => {
     "keeps the selected $name observation's capture, independent of feature metadata",
     ({ fixture, map }) => {
       const wire = structuredClone(fixture) as unknown as Wire;
-      const record = wire.records[0]!;
-      const readings = wire.latest[String(record.id)]!;
+      const [record] = wire.records;
+      assert.isDefined(record);
+      const readings = wire.latest[String(record.id)];
+      assert.isDefined(readings);
       for (const reading of readings)
         reading.provenance = {
           sourceId: "historical-reading",
@@ -71,8 +73,8 @@ describe("expanded reading receipts", () => {
           upstream: [{ publisher: "Original upstream", attribution: "Original upstream notice" }],
         };
       const result = map(record, readings as unknown as LatestReading[]);
-      expect(result).not.toBeNull();
-      const receipts = result!.attributions;
+      assert.exists(result);
+      const receipts = result.attributions;
       expect(receipts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

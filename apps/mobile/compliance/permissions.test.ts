@@ -118,7 +118,7 @@ describe("diffPermissionSurface", () => {
 
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({ kind: "forbidden", id });
-    expect(violations[0].reason).toBe(FORBIDDEN_ANDROID_PERMISSIONS[id]);
+    expect(violations[0]?.reason).toBe(FORBIDDEN_ANDROID_PERMISSIONS[id]);
   });
 
   it.each(Object.keys(FORBIDDEN_IOS_KEYS))("rejects the iOS key %s", (id) => {

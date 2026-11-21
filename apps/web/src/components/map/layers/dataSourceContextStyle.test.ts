@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   CONTEXT_ZONE_CLASSES,
   CONTEXT_ZONE_STYLES,
@@ -12,7 +12,11 @@ import {
 function matchArms(expression: unknown): Map<string, unknown> {
   const [, , ...rest] = expression as unknown[];
   const arms = new Map<string, unknown>();
-  for (let i = 0; i + 1 < rest.length; i += 2) arms.set(rest[i] as string, rest[i + 1]);
+  for (let i = 0; i + 1 < rest.length; i += 2) {
+    const label = rest[i];
+    assert(typeof label === "string", `match arm ${i} has no string label`);
+    arms.set(label, rest[i + 1]);
+  }
   return arms;
 }
 

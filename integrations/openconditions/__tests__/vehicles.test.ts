@@ -4,7 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
@@ -49,7 +49,8 @@ function providerWith(
   const http = fakeHttpClient((req: FakeHttpRequest) =>
     req.url === `${BASE_URL}/observations/latest` ? answer(req) : undefined,
   );
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http)!;
+  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
+  assert.exists(client);
   return { http, provider: createServiceVehicleProvider(client, sources, { now: () => now }) };
 }
 
@@ -65,7 +66,8 @@ describe("service-vehicles-openconditions", () => {
     });
     expect(partial).toBeUndefined();
     expect(vehicles).toHaveLength(8);
-    const sanding = vehicles.find((v) => v.tasks.includes("SPOT_SANDING"))!;
+    const sanding = vehicles.find((v) => v.tasks.includes("SPOT_SANDING"));
+    assert.isDefined(sanding);
     expect(sanding).toMatchObject({
       coordinates: [27.119327, 68.100155],
       spreaderOn: true,
@@ -96,10 +98,11 @@ describe("service-vehicles-openconditions", () => {
 
   test("reads a ploughing vehicle's blade and activity", () => {
     const [record] = body().records;
-    const value = (record!.result as Rec).value as Rec;
+    assert.isDefined(record);
+    const value = (record.result as Rec).value as Rec;
     Object.assign(value, { activity: "plowing", plowUp: false, spreaderOn: true });
-    (record!.extras as Rec).tasks = ["PLOUGHING_AND_SLUSH_REMOVAL", "SPOT_SANDING"];
-    expect(readingToServiceVehicle(record!)).toMatchObject({
+    (record.extras as Rec).tasks = ["PLOUGHING_AND_SLUSH_REMOVAL", "SPOT_SANDING"];
+    expect(readingToServiceVehicle(record)).toMatchObject({
       activity: "plowing",
       plowDown: true,
       spreaderOn: true,
@@ -109,8 +112,10 @@ describe("service-vehicles-openconditions", () => {
 
   test("reads where a vehicle has just been as its trail, ending at its point", () => {
     const trails = structuredClone(trailsResponse) as unknown as Body;
-    const vehicles = trails.records.map((r) => readingToServiceVehicle(r)!);
-    const poles = vehicles.find((v) => v.trail?.length === 6)!;
+    const vehicles = trails.records.flatMap((r) => readingToServiceVehicle(r) ?? []);
+    expect(vehicles).toHaveLength(trails.records.length);
+    const poles = vehicles.find((v) => v.trail?.length === 6);
+    assert.isDefined(poles);
     expect(poles.trail).toEqual([
       [26.803067, 61.386519],
       [26.802662, 61.386244],
@@ -124,8 +129,11 @@ describe("service-vehicles-openconditions", () => {
     expect(vehicles.filter((v) => v.trail === undefined)).toHaveLength(3);
     // A trail that is no line of positions is none.
     const [record] = trails.records;
-    ((record!.result as Rec).value as Rec).trail = { type: "LineString", coordinates: [[1, 2]] };
-    expect(readingToServiceVehicle(record!)).not.toHaveProperty("trail");
+    assert.isDefined(record);
+    ((record.result as Rec).value as Rec).trail = { type: "LineString", coordinates: [[1, 2]] };
+    const vehicle = readingToServiceVehicle(record);
+    assert.isNotNull(vehicle);
+    expect(vehicle).not.toHaveProperty("trail");
   });
 
   test("follows a reopened vehicle to its next position, whose trail passes where it stood", async () => {
@@ -159,7 +167,8 @@ describe("service-vehicles-openconditions", () => {
     const unlisted = providerWith(() => body(), { ...EVERY_SOURCE, has: () => false });
     await expect(unlisted.provider.searchVehicles(BBOX)).resolves.toEqual({ vehicles: [] });
     const [record] = body().records;
-    expect(readingToServiceVehicle({ ...record!, property: "fire.frp" })).toBeNull();
+    assert.isDefined(record);
+    expect(readingToServiceVehicle({ ...record, property: "fire.frp" })).toBeNull();
   });
 
   test("reads every page and marks both the position cap and a non-progressing page partial", async () => {
@@ -178,7 +187,8 @@ describe("service-vehicles-openconditions", () => {
     const capped = await endless.provider.searchVehicles(BBOX);
     expect(capped).toEqual({ vehicles: [], partial: "area" });
 
-    const template = body().records[0]!;
+    const [template] = body().records;
+    assert.isDefined(template);
     const records = Array.from({ length: 3001 }, (_, index) => ({
       ...template,
       id: `position-${index}`,
@@ -200,9 +210,12 @@ describe("service-vehicles-openconditions", () => {
   test("opens a position by reading the box around the place its id carries", async () => {
     const searched = providerWith(() => body());
     const { vehicles } = await searched.provider.searchVehicles(BBOX);
-    const target = vehicles[2]!;
+    const target = vehicles[2];
+    const targetRecord = body().records[2];
+    assert.isDefined(target);
+    assert.isDefined(targetRecord);
     expect(target.id).toBe(
-      `${body().records[2]!.id}~${target.coordinates[0].toFixed(6)}~${target.coordinates[1].toFixed(6)}`,
+      `${targetRecord.id}~${target.coordinates[0].toFixed(6)}~${target.coordinates[1].toFixed(6)}`,
     );
 
     // Another process, one that never searched, opens it from its id alone.

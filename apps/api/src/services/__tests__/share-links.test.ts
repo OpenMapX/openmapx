@@ -270,11 +270,11 @@ it("retains cloned per-field acquisition receipts through snapshot and public pa
   ]);
   if (!snapshot) throw new Error("Snapshot rejected");
   const parsed = parseStoredListSnapshot(JSON.parse(JSON.stringify(snapshot)));
-  expect(parsed?.places[0].fieldContributors).toEqual(fieldContributors);
+  expect(parsed?.places[0]?.fieldContributors).toEqual(fieldContributors);
   if (!parsed) throw new Error("Snapshot rejected");
-  expect(toPublicListShare("snapshot", parsed).places[0].fieldContributors).toEqual(
+  expect(toPublicListShare("snapshot", parsed).places[0]?.fieldContributors).toEqual(
     fieldContributors,
   );
   receipt.attributionText = "Changed catalogue";
-  expect(snapshot.places[0].fieldContributors?.name?.[0].attributionText).toBe("Original notice");
+  expect(snapshot.places[0]?.fieldContributors?.name?.[0]?.attributionText).toBe("Original notice");
 });

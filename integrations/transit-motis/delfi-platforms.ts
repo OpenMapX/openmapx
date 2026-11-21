@@ -36,10 +36,11 @@ export function delfiTripIdentity(
     source?: string;
   }[],
 ) {
-  const match = /^(\d{4})(\d{2})(\d{2})_\d{2}:\d{2}_(de-DELFI|de_DELFI)_/.exec(id);
+  const [, year, month, day, feedTag] =
+    /^(\d{4})(\d{2})(\d{2})_\d{2}:\d{2}_(de-DELFI|de_DELFI)_/.exec(id) ?? [];
   const leg = legs[0];
   if (
-    !match ||
+    !feedTag ||
     legs.length !== 1 ||
     !/^\d{1,6}$/.test(leg?.tripShortName ?? "") ||
     !leg?.routeShortName ||
@@ -47,7 +48,7 @@ export function delfiTripIdentity(
   )
     return undefined;
   if (leg.source && !leg.source.startsWith("de_DELFI.gtfs.zip/")) return undefined;
-  const serviceDate = `${match[1]}-${match[2]}-${match[3]}`;
+  const serviceDate = `${year}-${month}-${day}`;
   const date = new Date(`${serviceDate}T12:00:00Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== serviceDate)
     return undefined;
@@ -56,6 +57,6 @@ export function delfiTripIdentity(
     trainNumber: String(Number(leg.tripShortName)),
     lineName: leg.routeShortName,
     routeId: leg.routeId,
-    feedTag: match[4],
+    feedTag,
   };
 }

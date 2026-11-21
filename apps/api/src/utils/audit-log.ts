@@ -26,7 +26,7 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
   // actor there is no row to reference, so substitute null + a user-agent
   // marker so audit consumers can still distinguish CLI/loopback origin from
   // unauthenticated.
-  const baseUa = (entry.request?.headers["user-agent"] as string) ?? null;
+  const baseUa = entry.request?.headers["user-agent"] ?? null;
   const userAgent = isLoopback ? `${baseUa ?? "unknown"} (loopback)` : baseUa;
 
   try {

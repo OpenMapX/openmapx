@@ -16,7 +16,7 @@ import {
   prepareConfigurationCandidate,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import {
   issueApiJobChildAssertion,
   prepareApiJobChildAttempt,
@@ -451,7 +451,8 @@ describe("authenticated conditional configuration admission", () => {
         sealed.operation,
         operationKey,
         prepared,
-      )!;
+      );
+      assert.exists(attempt);
       await parentContext.checkpoint({ _parentExecution: prepared.parent, attempt });
       const parentAssertion = await issueApiJobChildAssertion(attempt);
       let journalRecords: readonly PersistedOpsJob[] = [];
@@ -589,7 +590,8 @@ describe("authenticated conditional configuration admission", () => {
           changedBody,
           operationKey,
           prepared,
-        )!;
+        );
+        assert.exists(changedAttempt);
         await parentContext.checkpoint({
           _parentExecution: prepared.parent,
           attempt: changedAttempt,

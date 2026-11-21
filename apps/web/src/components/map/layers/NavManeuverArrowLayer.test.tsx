@@ -1,7 +1,7 @@
-import { cumulativeDistances, haversineDistance, positionAt } from "@openmapx/core";
+import { cumulativeDistances, haversineDistance, numberAt, positionAt } from "@openmapx/core";
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -138,8 +138,9 @@ describe("NavManeuverArrowLayer", () => {
       number,
       number,
     ];
-    const first = line.geometry.coordinates[0] as [number, number];
-    const last = line.geometry.coordinates.at(-1) as [number, number];
+    const coordinates = line.geometry.coordinates;
+    const first = nth(coordinates, 0);
+    const last = nth(coordinates, coordinates.length - 1);
     expect(haversine(first, maneuverPoint)).toBeGreaterThan(25);
     expect(haversine(first, maneuverPoint)).toBeLessThan(35);
     expect(haversine(last, maneuverPoint)).toBeGreaterThan(15);
@@ -165,7 +166,7 @@ describe("NavManeuverArrowLayer", () => {
   });
 });
 
-/** haversine metres between two lng/lats. */
-function haversine(a: [number, number], b: [number, number]): number {
-  return haversineDistance(a, b);
+/** haversine metres between two lng/lats; a short position gives NaN and fails the comparison. */
+function haversine(a: readonly number[], b: readonly number[]): number {
+  return haversineDistance([numberAt(a, 0), numberAt(a, 1)], [numberAt(b, 0), numberAt(b, 1)]);
 }

@@ -1,6 +1,6 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "./dataSourceBrandMarker";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -25,18 +25,18 @@ it("proxies provider logos, embeds the bytes and ignores stale image completion"
   const url = "https://provider.example/real-logo.png";
   const pending = loadDataSourceBrandMarker(map, url, () => current);
   await waitFor(() => expect(images).toHaveLength(1));
-  const requested = new URL(String(fetcher.mock.calls[0][0]), "http://localhost");
+  const requested = new URL(String(nth(fetcher.mock.calls, 0)[0]), "http://localhost");
   expect(requested.pathname).toBe("/api/image-proxy");
   expect(requested.searchParams.get("url")).toBe(url);
-  expect(decodeURIComponent(images[0].src)).toContain("data:application/octet-stream;base64,");
+  expect(decodeURIComponent(nth(images, 0).src)).toContain("data:application/octet-stream;base64,");
   current = false;
-  images[0].onload();
+  nth(images, 0).onload();
   expect(await pending).toBe(false);
   expect(map.hasImage(dataSourceBrandImageId(url))).toBe(false);
   current = true;
   const fresh = loadDataSourceBrandMarker(map, url, () => current);
   await waitFor(() => expect(images).toHaveLength(2));
-  images[1].onload();
+  nth(images, 1).onload();
   expect(await fresh).toBe(true);
   expect(map.hasImage(dataSourceBrandImageId(url))).toBe(true);
 });

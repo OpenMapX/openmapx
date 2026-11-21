@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 const SRC_DIR = fileURLToPath(new URL("../", import.meta.url));
 
@@ -68,7 +68,8 @@ describe("value imports resolve to files that exist", () => {
     for (const file of files) {
       const text = fs.readFileSync(file, "utf8");
       for (const match of text.matchAll(VALUE_SPECIFIER)) {
-        const specifier = match[1];
+        const [, specifier] = match;
+        assert.isDefined(specifier);
         if (resolves(file, specifier)) continue;
         const line = text.slice(0, match.index).split("\n").length;
         offenders.push(`${path.relative(process.cwd(), file)}:${line} -> ${specifier}`);

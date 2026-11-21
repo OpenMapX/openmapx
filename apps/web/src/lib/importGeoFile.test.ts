@@ -1,5 +1,6 @@
 import { placesToGeoJson, placesToGpx, placesToKml } from "@openmapx/core/saved-place-export";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
+import { nth } from "@/test";
 import { parseGeoFile } from "./importGeoFile";
 
 const name = { sourceId: "names", name: "Name supplier", attributionText: "Name notice" };
@@ -29,7 +30,7 @@ it.each(["geojson", "gpx", "kml"] as const)(
     const parsed = parseGeoFile(`trip.${format}`, text);
     expect(parsed?.features).toHaveLength(1);
     if (!parsed) throw new Error("File rejected");
-    const feature = parsed.features[0];
+    const feature = nth(parsed.features, 0);
     expect(feature.properties?.fieldContributors).toEqual(place.fieldContributors);
     expect(JSON.parse(feature.properties?._mapAttributions)).toEqual([coordinates]);
     expect(feature.geometry).toEqual({ type: "Point", coordinates: [8, 50] });
@@ -50,8 +51,10 @@ it("does not trust imported map-owner metadata or malformed capture", () => {
     }),
   )?.features;
   if (!features) throw new Error("File rejected");
-  expect(features[0].properties?._mapAttributions).toBe("[]");
-  expect(features[0].properties?.fieldContributors).toBeUndefined();
+  const { properties } = nth(features, 0);
+  assert.exists(properties, "the imported feature has no properties");
+  expect(properties._mapAttributions).toBe("[]");
+  expect(properties.fieldContributors).toBeUndefined();
 });
 
 it("keeps duplicate waypoint receipts matched independently in GPX", () => {

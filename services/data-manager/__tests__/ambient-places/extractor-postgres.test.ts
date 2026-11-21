@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildAmbientPlaces } from "../../src/jobs/ambient-places/build.js";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { featureToSearchPlace } from "../../src/jobs/search-index/extract.js";
@@ -27,7 +27,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           sizeBytes: 7,
           downloadedAt: new Date().toISOString(),
         });
-        const base = featureToSearchPlace(corpus.cases[0].feature)!;
+        const [firstCase] = corpus.cases;
+        assert.isDefined(firstCase);
+        const base = featureToSearchPlace(firstCase.feature);
+        assert.isNotNull(base);
         const records = [
           base,
           { ...base, osmId: "990001", tags: { ...base.tags, access: "private" } },
@@ -50,7 +53,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           `SELECT jsonb_typeof(tags) AS kind,tags->>'basilica' AS basilica FROM osm_search.places`,
         );
         expect(rows.every((r) => r.kind === "object")).toBe(true);
-        expect(rows[0].basilica).toBe("minor");
+        expect(rows[0]?.basilica).toBe("minor");
         const manifest = await buildAmbientPlaces(pg.sql, {
           name: "Neuss",
           bounds: [6.58, 50.89, 7.07, 51.31],

@@ -4,6 +4,7 @@ import {
   processTransitFix,
   type TransitMobileSession,
 } from "@openmapx/core/navigation";
+import { nth } from "../../testing/nth";
 import { FIXTURE_FINGERPRINT, transitSessionFixture } from "./testing/transitFixture";
 import { processTransitBatch, TransitItineraryCache } from "./transitBatch";
 
@@ -108,7 +109,7 @@ describe("processTransitBatch commits", () => {
     const itinerary = initial.payload.startPackage.itinerary as {
       legs: Array<Record<string, unknown>>;
     };
-    Object.assign(itinerary.legs[0], {
+    Object.assign(nth(itinerary.legs, 0), {
       from: { name: "Home", lat: 50.11, lng: 8.67 },
       to: { name: "Platform", lat: 50.11, lng: 8.68 },
       geometry: {
@@ -125,7 +126,7 @@ describe("processTransitBatch commits", () => {
     const batched = run({
       session: structuredClone(initial),
       fixes,
-      nowMs: fixes.at(-1)!.timestampMs,
+      nowMs: nth(fixes, -1).timestampMs,
     }).session as TransitMobileSession;
     expect(batched.lastAcceptedFix?.coords).toEqual([8.679, 50.11]);
     expect(batched.payload.progress).not.toBeNull();
@@ -189,13 +190,13 @@ describe("processTransitBatch events", () => {
     const itinerary = current.payload.startPackage.itinerary as {
       legs: Array<{ geometry?: { coordinates: [number, number][] } }>;
     };
-    itinerary.legs[1].geometry = {
+    nth(itinerary.legs, 1).geometry = {
       coordinates: [
         [8.68, 50.11],
         [8.64, 50.11],
       ],
     };
-    itinerary.legs[2].geometry = {
+    nth(itinerary.legs, 2).geometry = {
       coordinates: [
         [8.64, 50.11],
         [8.63, 50.11],
@@ -214,7 +215,7 @@ describe("processTransitBatch events", () => {
     expect((alight.session as TransitMobileSession).payload.tickState.phase).toBe("walking");
     expect(alight.events.some((event) => event.type === "alight")).toBe(true);
 
-    (itinerary.legs[2] as unknown as { to: unknown }).to = {
+    (nth(itinerary.legs, 2) as unknown as { to: unknown }).to = {
       name: "Office",
       lng: 8.63,
       lat: 50.11,
@@ -234,19 +235,19 @@ describe("processTransitBatch events", () => {
     const itinerary = base.payload.startPackage.itinerary as {
       legs: Array<{ geometry?: { coordinates: [number, number][] }; to?: unknown }>;
     };
-    itinerary.legs[1].geometry = {
+    nth(itinerary.legs, 1).geometry = {
       coordinates: [
         [8.68, 50.11],
         [8.64, 50.11],
       ],
     };
-    itinerary.legs[2].geometry = {
+    nth(itinerary.legs, 2).geometry = {
       coordinates: [
         [8.64, 50.11],
         [8.63, 50.11],
       ],
     };
-    itinerary.legs[2].to = { name: "Office", lng: 8.63, lat: 50.11 };
+    nth(itinerary.legs, 2).to = { name: "Office", lng: 8.63, lat: 50.11 };
     const current = {
       ...base,
       payload: {
@@ -329,14 +330,14 @@ describe("processTransitBatch stop areas", () => {
     const itinerary = structuredClone(startPackage.itinerary) as {
       legs: Array<Record<string, unknown>>;
     };
-    itinerary.legs[0].geometry = {
+    nth(itinerary.legs, 0).geometry = {
       type: "LineString",
       coordinates: [
         [8.67, 50.11],
         [8.68, 50.11],
       ],
     };
-    itinerary.legs[1].geometry = {
+    nth(itinerary.legs, 1).geometry = {
       type: "LineString",
       coordinates: [
         [8.68, 50.11],

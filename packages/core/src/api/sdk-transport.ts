@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import { readBoundedJsonResponse } from "../utils/fetchJson";
+import { readBoundedJsonResponse } from "../http/fetchJson";
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
 
 /** Success bodies share the binders' ordinary JSON ceiling. */

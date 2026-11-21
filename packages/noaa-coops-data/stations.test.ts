@@ -5,7 +5,7 @@ import {
   fakeHttpClient,
   httpStatus,
 } from "@openmapx/integration-framework/testing";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { loadStations } from "./stations";
 
 function createMockCacheClient() {
@@ -27,9 +27,11 @@ it("captures NOAA catalog receipts before caching and preserves them across call
   }));
   const original = [{ sourceId: "noaa-co-ops", name: "original-notice" }];
   const first = await loadStations(http, cache, log, undefined, original);
-  original[0].name = "replacement-notice";
+  const [notice] = original;
+  assert.isDefined(notice);
+  notice.name = "replacement-notice";
   const second = await loadStations(http, cache, log, undefined, original);
-  expect(second[0].contributors).toEqual([{ sourceId: "noaa-co-ops", name: "original-notice" }]);
+  expect(second[0]?.contributors).toEqual([{ sourceId: "noaa-co-ops", name: "original-notice" }]);
   expect(http.calls).toHaveLength(3);
   expect(http.calls[0]).toMatchObject({
     method: "get",
@@ -39,11 +41,11 @@ it("captures NOAA catalog receipts before caching and preserves them across call
       maxResponseBytes: 16 * 1024 * 1024,
     },
   });
-  const receipt = first[0].contributors?.[0];
+  const receipt = first[0]?.contributors?.[0];
   if (!receipt) throw new Error("missing receipt");
   receipt.name = "mutated-consumer";
   expect(
-    (await loadStations(http, cache, log, undefined, original))[0].contributors?.[0].name,
+    (await loadStations(http, cache, log, undefined, original))[0]?.contributors?.[0]?.name,
   ).toBe("original-notice");
 });
 it("captures authoritative empty and excludes legacy raw catalogs from receipt-aware calls", async () => {

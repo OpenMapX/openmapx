@@ -74,7 +74,7 @@ for the augment-only strategy).
 ### 6. Apply the chosen thresholds
 
 Update `DEFAULT_CONFLATION_THRESHOLDS` in
-`packages/core/src/utils/poiConflation.ts` with the winning `alwaysMergeM`,
+`packages/core/src/places/poiConflation.ts` with the winning `alwaysMergeM`,
 `softWindowM`, and `nameDiceFloor`. The `confidenceFloor` from the winning cell
 becomes the runtime pre-filter value in the ingest job, not part of
 `ConflationThresholds`.

@@ -1,6 +1,11 @@
 /** Actual durable workers + PostgreSQL + a separate production agent. Only
  * external Docker/MOTIS IO and pinned upstream CSV bytes are synthetic here. */
-import { execFile as execFileCallback, execFileSync, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFile as execFileCallback,
+  execFileSync,
+  spawn,
+} from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   cpSync,
@@ -43,7 +48,7 @@ import {
 } from "@openmapx/transitous-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import Fastify from "fastify";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { createMigratedPostgresFixture } from "../../../../apps/api/src/test/postgres-fixture";
 import { ownedServiceHost } from "../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { runContainedProcess } from "../../../../apps/ops-agent/src/docker-runtime";
@@ -52,6 +57,22 @@ import { heldTargets } from "../../../../packages/core/src/build-artifacts/__fix
 import { ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs";
 import { BERLIN_TINY_OSM_PBF_BASE64 } from "./fixtures/tiny-osm";
+
+/** `uid:gid` of this process, for a container that writes into a bind mount. */
+function posixUser(): string {
+  assert.isDefined(process.getuid);
+  assert.isDefined(process.getgid);
+  return `${process.getuid()}:${process.getgid()}`;
+}
+
+/** The standard streams of a child spawned with every stream piped. */
+function pipesOf(child: ChildProcess) {
+  const { stdin, stdout, stderr } = child;
+  assert.exists(stdin);
+  assert.exists(stdout);
+  assert.exists(stderr);
+  return { stdin, stdout, stderr };
+}
 
 const state = vi.hoisted(() => ({
   db: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
@@ -66,8 +87,8 @@ vi.mock("../../src/db/index", () => ({
 }));
 const csv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n";
-vi.mock("@openmapx/core/utils/safe-download", async (original) => ({
-  ...(await original<typeof import("@openmapx/core/utils/safe-download")>()),
+vi.mock("@openmapx/core/http/safe-download", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/http/safe-download")>()),
   safeFetchTextResponse: async (url: string) => ({
     text: csv,
     status: 200,
@@ -126,8 +147,8 @@ it
     try {
       motis.all("/*", async (request, reply) => {
         if (fault === "live") {
-          const [id, ...path] = request.url.slice(1).split("/"),
-            port = livePorts.get(id!);
+          const [id = "", ...path] = request.url.slice(1).split("/"),
+            port = livePorts.get(id);
           if (!port) return reply.code(503).send({ error: "Owned MOTIS is stopped" });
           try {
             const response = await fetch(`http://127.0.0.1:${port}/${path.join("/")}`, {
@@ -238,7 +259,8 @@ it
           Buffer.from(BERLIN_TINY_OSM_PBF_BASE64, "base64"),
         );
       const atlasSha = git(atlas, ["rev-parse", "HEAD"]),
-        feed = feeds.entries.find((entry) => entry.region === "de")!;
+        feed = feeds.entries.find((entry) => entry.region === "de");
+      assert.isDefined(feed);
       git(catalog, ["init", "--initial-branch=main"]);
       writeFileSync(
         join(catalog, "feeds/de.json"),
@@ -316,7 +338,8 @@ it
         serviceIds,
       });
       await initializeManagedCatalogPins({ rootDir: f.root, installation: agentInstallation });
-      const active = readCatalogPinSet(f.root)!;
+      const active = readCatalogPinSet(f.root);
+      assert.exists(active);
       mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
       writeFileSync(
         join(data, "motis-feed-proxy/conf/default.conf"),
@@ -403,7 +426,7 @@ it
                 "--memory=1g",
                 "--cpus=2",
                 "--user",
-                `${process.getuid!()}:${process.getgid!()}`,
+                posixUser(),
                 "-p",
                 "127.0.0.1::8080",
                 "--mount",
@@ -419,7 +442,9 @@ it
               { timeout: 30000 },
             );
             const { stdout } = await execFile("docker", ["port", name, "8080/tcp"]);
-            livePorts.set(id, stdout.trim().split(":").at(-1)!);
+            const hostPort = stdout.trim().split(":").at(-1);
+            assert.isDefined(hostPort);
+            livePorts.set(id, hostPort);
           }
           const row = rows.find((row) => row.Labels["com.docker.compose.service"] === args.at(-1));
           if (row) row.State = "running";
@@ -483,13 +508,14 @@ it
           },
         );
         children.push(child);
+        const io = pipesOf(child);
         let stderr = "";
-        child.stderr!.on("data", (chunk) => {
+        io.stderr.on("data", (chunk) => {
           stderr += String(chunk);
         });
-        const lines = createInterface({ input: child.stdout! }),
+        const lines = createInterface({ input: io.stdout }),
           iterator = lines[Symbol.asyncIterator]();
-        child.stdin!.end(
+        io.stdin.end(
           JSON.stringify({
             root: f.root,
             infraDir: f.infraDir,
@@ -664,11 +690,12 @@ it
           { stdio: ["pipe", "pipe", "pipe"] },
         );
         children.push(child);
+        const io = pipesOf(child);
         let stderr = "";
-        child.stderr!.on("data", (value) => {
+        io.stderr.on("data", (value) => {
           stderr += String(value);
         });
-        child.stdin!.end(
+        io.stdin.end(
           JSON.stringify({
             databaseUrl: state.db.connectionUri,
             agentUrl: processAgent.url,
@@ -686,7 +713,7 @@ it
             ),
           }) + "\n",
         );
-        const lines = createInterface({ input: child.stdout! });
+        const lines = createInterface({ input: io.stdout });
         let markCrashReady!: () => void;
         const crashReady = new Promise<void>((resolve) => {
           markCrashReady = resolve;
@@ -772,7 +799,7 @@ it
         expect(["running", "interrupted", "cancel_pending"]).toContain(validated.status);
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${validation.id}`;
-        expect(row!.finished_at).toBeNull();
+        expect(row?.finished_at).toBeNull();
         expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         return;
       }
@@ -794,15 +821,17 @@ it
       await vi.waitFor(
         async () => {
           const row = await store.lookup(proof.sourceExecution.operationKey);
+          assert.exists(row);
           expect(() =>
-            control.assertDataManagerTerminal(proof.sourceExecution, row!.status),
+            control.assertDataManagerTerminal(proof.sourceExecution, row.status),
           ).not.toThrow();
           expect(heldTargets(dirname(data)).includes("motis")).toBe(false);
         },
         { timeout: 10000, interval: 100 },
       );
       const completedValidation = await store.inspect(validation.id);
-      const child = completedValidation!.children.find((child) => child.state === "terminal");
+      assert.exists(completedValidation);
+      const child = completedValidation.children.find((child) => child.state === "terminal");
       if (!child || child.state !== "terminal")
         throw Error("Expected actual settled validation child");
       const originalOwner = await control.restoreAdmittedControlExecution(
@@ -902,11 +931,14 @@ it
               ),
             ),
           ).toBe(false);
-          nativeDm.child.kill("SIGKILL");
-          await new Promise((resolve) => nativeDm!.child.once("exit", resolve));
+          const dmChild = nativeDm.child;
+          dmChild.kill("SIGKILL");
+          await new Promise((resolve) => dmChild.once("exit", resolve));
         }
-        agent!.kill("SIGKILL");
-        await new Promise((resolve) => agent!.once("exit", resolve));
+        const stoppedAgent = agent;
+        assert.isDefined(stoppedAgent);
+        stoppedAgent.kill("SIGKILL");
+        await new Promise((resolve) => stoppedAgent.once("exit", resolve));
         processAgent = await startAgent("none", Number(new URL(processAgent.url).port));
         agent = processAgent.child;
         resetOpsClient(new OpsClient({ baseUrl: processAgent.url, tokenFile }));
@@ -920,7 +952,7 @@ it
       }
       if (fault === "before-pointer") {
         const retained = await store.inspect(activation.id),
-          approval = retained!.children.find((child) => child.phase === "paired-pin-commit");
+          approval = retained?.children.find((child) => child.phase === "paired-pin-commit");
         if (!approval || approval.state === "reserved" || approval.state === "bound")
           throw Error("Original attempted approval required");
         expect(await ops.status("transitousLock.approve", approval.proposedId)).toMatchObject({
@@ -944,7 +976,7 @@ it
         );
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${activation.id}`;
-        expect(row!.finished_at).toBeNull();
+        expect(row?.finished_at).toBeNull();
         expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         const next = await sdk.startDataExecution(
           {

@@ -1,6 +1,7 @@
 import { createApiClient } from "@openmapx/core";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { deferred } from "@/test/extensionAdmin";
 import { browserAdminApiBase } from "./browserAdminApiBase";
 import { extensionAdminQueries, invalidateExtensionAdministration } from "./extensionAdmin";
@@ -69,9 +70,9 @@ describe("extension administration query graph", () => {
         new QueryObserver(qc, {
           queryKey,
           queryFn: ({ signal }) => {
-            counts[i]++;
+            counts[i] = nth(counts, i) + 1;
             signals[i] ??= signal;
-            return counts[i] === 1 ? initial[i].promise : Promise.resolve("after");
+            return counts[i] === 1 ? nth(initial, i).promise : Promise.resolve("after");
           },
         }),
     );

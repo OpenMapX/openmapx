@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appLogger } from "../services/app-logger.js";
+import { callArg } from "../test/mock-calls";
 import { summarizeExternalUrl } from "./safe-log-fields.js";
 
 // Hoisted so the vi.mock factory (itself hoisted) can reference the spies.
@@ -43,7 +44,7 @@ describe("writeAuditLog", () => {
 
     expect(h.insertMock).toHaveBeenCalledTimes(1);
     expect(h.valuesMock).toHaveBeenCalledTimes(1);
-    const values = h.valuesMock.mock.calls[0][0] as Record<string, unknown>;
+    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values).toMatchObject({
       actorId: "admin-1",
       action: "user.ban",
@@ -57,7 +58,7 @@ describe("writeAuditLog", () => {
   it("maps the loopback sentinel actor to null with a tagged user-agent", async () => {
     await writeAuditLog({ actorId: "loopback", action: "user.role.change" });
 
-    const values = h.valuesMock.mock.calls[0][0] as Record<string, unknown>;
+    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values.actorId).toBeNull();
     expect(values.userAgent).toBe("unknown (loopback)");
   });
@@ -98,7 +99,7 @@ describe("writeAuditLog", () => {
       },
     });
 
-    const values = h.valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values.details).toEqual({
       label: "[redacted-url]",
       nested: { authorization: "[redacted]", safe: "kept" },
@@ -119,7 +120,7 @@ describe("writeAuditLog", () => {
       details: { sourceUrl: summarizeExternalUrl(PRIVATE_URL), safe: "kept" },
     });
 
-    const values = h.valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values.details).toEqual({
       sourceUrl: {
         host: "sources.example.test",
@@ -139,7 +140,7 @@ describe("writeAuditLog", () => {
       ),
     });
 
-    const values = h.valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values.details).toEqual({ truncated: "[metadata exceeds 16 KiB]" });
     expect(Buffer.byteLength(JSON.stringify(values.details), "utf8")).toBeLessThanOrEqual(
       16 * 1_024,

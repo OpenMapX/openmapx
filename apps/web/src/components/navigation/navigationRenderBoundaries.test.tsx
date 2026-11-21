@@ -18,7 +18,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
-import { createQueryWrapper } from "@/test";
+import { createQueryWrapper, nth } from "@/test";
 import type { NavMenuProps } from "./NavMenu";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -303,7 +303,7 @@ function startNav(route: Route) {
   act(() => {
     useNavigationStore
       .getState()
-      .startGroundNavigation(route, "driving", [route.geometry[0], route.geometry[3]]);
+      .startGroundNavigation(route, "driving", [nth(route.geometry, 0), nth(route.geometry, 3)]);
   });
 }
 
@@ -343,7 +343,7 @@ function buildSessionSnapshot(route: Route): NavigationSessionSnapshot {
       avoidClosures: false,
     },
     routeProvider: null,
-    destinationWaypoints: [route.geometry[0], route.geometry[3]],
+    destinationWaypoints: [nth(route.geometry, 0), nth(route.geometry, 3)],
     progress: null,
     packageIds: [],
     startedAtMs: BASE_TIME_MS,
@@ -489,7 +489,7 @@ describe("navigation render boundaries — static-route fallback before the firs
 
     expect(useNavigationStore.getState().progress).toBeNull();
 
-    const expectedStep = route.steps[1];
+    const expectedStep = nth(route.steps, 1);
     const maneuverProps = lastManeuverBannerProps;
     if (!maneuverProps) throw new Error("ManeuverBanner never rendered");
     expect(maneuverProps.distanceToManeuver).toBe(expectedStep.distance);

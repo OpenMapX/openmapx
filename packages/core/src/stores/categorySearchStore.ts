@@ -1,14 +1,14 @@
 import { create } from "zustand";
+import type { OverpassFilter } from "../places/overpassFilter";
 import type { BrandSummary } from "../types/brand";
 import type { CategoryId } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { Place } from "../types/place";
-import type { OverpassFilter } from "../utils/overpassFilter";
 import { useCategoryFacetStore } from "./categoryFacetStore";
 import { useOpeningHoursStore } from "./openingHoursStore";
 
 /**
- * The `brand` facet (`packages/core/src/utils/categoryFacets.ts`) is written
+ * The `brand` facet (`packages/core/src/places/categoryFacets.ts`) is written
  * by `nlpSearchStore.applyFacets` into the global facet store whenever an NLP
  * intent resolves a chain name to a `brand:wikidata` predicate. That
  * selection has no query scope of its own, so it must be cleared at every

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { PhotoProvider } from "./contracts/photo-provider";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider";
 import {
@@ -6,6 +6,15 @@ import {
   captureStreetLevelProviderContributors,
 } from "./media-attribution";
 import { createMockIntegrationContext } from "./testing";
+
+function setFirstBindingSubject(
+  ctx: ReturnType<typeof createMockIntegrationContext>,
+  subject: string,
+): void {
+  const binding = ctx.manifest.dataSources?.[0]?.licensing?.bindings[0];
+  assert.isDefined(binding, "the manifest has no first licensing binding");
+  binding.subject = subject;
+}
 
 const api = {
   sourceId: "photos",
@@ -62,7 +71,7 @@ it("captures API branding before acquisition and retains the actual per-file gra
   ctx.manifest.dataSources = [structuredClone(api)];
   const wrapped = capturePhotoProviderContributors(ctx, provider);
   const pending = wrapped.search({ lat: 51, lng: 6 });
-  ctx.manifest.dataSources[0]!.licensing.bindings[0]!.subject = "Changed API";
+  setFirstBindingSubject(ctx, "Changed API");
   complete([file]);
   const [result] = await pending;
   expect(result?.licensing?.bindings.map((binding) => binding.subject)).toEqual([
@@ -136,7 +145,7 @@ it("keeps already captured service terms when a provider returns retained cached
     },
     contributors: [{ sourceId: "photos", name: "Original API", licensing: api.licensing }],
   };
-  ctx.manifest.dataSources[0]!.licensing.bindings[0]!.subject = "New API terms";
+  setFirstBindingSubject(ctx, "New API terms");
   const wrapped = capturePhotoProviderContributors(ctx, {
     id: "photos",
     name: "Photos",

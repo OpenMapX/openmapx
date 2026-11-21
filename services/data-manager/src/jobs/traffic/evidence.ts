@@ -104,11 +104,8 @@ export async function loadTrafficEvidence(path: string): Promise<TrafficEvidence
           throw new Error("invalid traffic timestamp");
       }
       for (const key of ["total", "matched", "written", "outOfBounds"] as const) {
-        if (
-          stream[key] !== null &&
-          stream[key] !== undefined &&
-          (!Number.isSafeInteger(stream[key]) || (stream[key] as number) < 0)
-        )
+        const count = stream[key];
+        if (count !== null && count !== undefined && (!Number.isSafeInteger(count) || count < 0))
           throw new Error("invalid traffic count");
       }
       for (const key of ["activeVersion", "lastAttemptMessage"] as const) {

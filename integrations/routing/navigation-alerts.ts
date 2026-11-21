@@ -1,4 +1,4 @@
-import { haversineDistance, type LngLat } from "@openmapx/core";
+import { haversineDistance, itemAt, type LngLat, numberAt } from "@openmapx/core";
 
 /**
  * `GET /navigation/alerts` — approach hazards from OpenStreetMap (stop signs,
@@ -233,8 +233,16 @@ function isClosed(way: Way): boolean {
   return way.nodes.length > 3 && way.nodes[0] === way.nodes[way.nodes.length - 1];
 }
 
+/** The way's {@link ROAD_RANK}; undefined for a way that is no road at a junction. */
+function roadRank(way: Way): number | undefined {
+  const highway = way.tags.highway;
+  return highway !== undefined && Object.hasOwn(ROAD_RANK, highway)
+    ? ROAD_RANK[highway]
+    : undefined;
+}
+
 function isDrivable(way: Way): boolean {
-  return way.tags.highway !== undefined && way.tags.highway in ROAD_RANK;
+  return roadRank(way) !== undefined;
 }
 
 /**
@@ -272,9 +280,12 @@ function distanceToJunction(
 ): number | null {
   let travelled = 0;
   for (let i = index + step; i >= 0 && i < way.nodes.length; i += step) {
-    travelled += haversineDistance(way.coords[i - step], way.coords[i]);
+    travelled += haversineDistance(
+      itemAt(way.coords, i - step, "way vertex"),
+      itemAt(way.coords, i, "way vertex"),
+    );
     if (travelled > JUNCTION_SEARCH_M) return null;
-    if (junctionDegree(way.nodes[i], waysByNode) >= 3) return travelled;
+    if (junctionDegree(itemAt(way.nodes, i, "way node"), waysByNode) >= 3) return travelled;
   }
   return null;
 }
@@ -312,10 +323,10 @@ function inferredStopFlags(
     step: 1 | -1;
     distance: number;
   }[];
-  if (found.length === 0) return both;
   found.sort((a, b) => a.distance - b.distance);
-  const nearest = found[0];
-  if (found[1] && found[1].distance - nearest.distance <= 1) return both;
+  const [nearest, second] = found;
+  if (!nearest) return both;
+  if (second && second.distance - nearest.distance <= 1) return both;
 
   const flags = new Map(parents.map((way) => [way, { forward: false, backward: false }]));
   for (const side of sides) {
@@ -356,7 +367,7 @@ function resolveOnRoad(
   const placements: Placement[] = [];
   const allWay = type === "stop" && (tags.stop === "all" || explicit === "both");
   const atJunction = type === "stop" && !allWay && junctionDegree(nodeId, waysByNode) >= 3;
-  const ranks = parents.filter(isDrivable).map((way) => ROAD_RANK[way.tags.highway]);
+  const ranks = parents.flatMap((way) => roadRank(way) ?? []);
   const topRank = Math.max(...ranks);
   const ranked = ranks.some((rank) => rank < topRank);
   const inferred =
@@ -368,8 +379,9 @@ function resolveOnRoad(
     const index = way.nodes.indexOf(nodeId);
     let flags: Flags;
     if (atJunction) {
-      if (!isDrivable(way)) continue;
-      const minorApproach = ranked ? ROAD_RANK[way.tags.highway] < topRank : explicit !== null;
+      const rank = roadRank(way);
+      if (rank === undefined) continue;
+      const minorApproach = ranked ? rank < topRank : explicit !== null;
       if (!minorApproach) continue;
       flags = intersect(approachFlags(way, index), flagsFor(explicit));
     } else if (inferred) {
@@ -378,7 +390,13 @@ function resolveOnRoad(
       flags = flagsFor(allWay ? "both" : explicit);
     }
     const cum = cumulative(way.coords);
-    placements.push({ way, index, flags, anchorAlong: cum[index], anchor: way.coords[index] });
+    placements.push({
+      way,
+      index,
+      flags,
+      anchorAlong: numberAt(cum, index),
+      anchor: itemAt(way.coords, index, "way vertex"),
+    });
   }
   return placements;
 }
@@ -404,8 +422,8 @@ function resolveOffRoad(
     if (projection.distance <= OFF_ROAD_SNAP_M) near.push({ way: road.way, projection });
   }
   near.sort((a, b) => a.projection.distance - b.projection.distance);
-  if (near.length === 0) return [];
-  const nearest = near[0].projection.distance;
+  const nearest = near[0]?.projection.distance;
+  if (nearest === undefined) return [];
   const candidates = near.filter(
     ({ projection }) => projection.distance <= nearest + OFF_ROAD_TIE_M,
   );
@@ -505,8 +523,10 @@ export function mapAlertElements(elements: readonly AlertOverpassElement[]): Raw
     if (!type || node.lat === undefined || node.lon === undefined) continue;
     const attached = waysByNode.get(node.id) ?? [];
     if (type === "railway_crossing") {
-      const rails = attached.filter((way) => way.tags.railway && !way.tags.highway);
-      if (rails.length > 0 && rails.every((way) => INACTIVE_RAILWAY.has(way.tags.railway))) {
+      const rails = attached.flatMap((way) =>
+        way.tags.railway && !way.tags.highway ? [way.tags.railway] : [],
+      );
+      if (rails.length > 0 && rails.every((railway) => INACTIVE_RAILWAY.has(railway))) {
         continue;
       }
     }
@@ -557,8 +577,12 @@ function toCoords(element: AlertOverpassElement): LngLat[] | undefined {
 
 function cumulative(coords: LngLat[]): number[] {
   const cum = [0];
-  for (let i = 1; i < coords.length; i++) {
-    cum.push(cum[i - 1] + haversineDistance(coords[i - 1], coords[i]));
+  let total = 0;
+  for (const [i, point] of coords.entries()) {
+    const previous = coords[i - 1];
+    if (!previous) continue;
+    total += haversineDistance(previous, point);
+    cum.push(total);
   }
   return cum;
 }
@@ -584,13 +608,15 @@ function nearestOnLine(coords: LngLat[], position: LngLat, kx: number): LineProj
     distance: Number.POSITIVE_INFINITY,
     segment: 0,
     t: 0,
-    point: coords[0],
+    point: itemAt(coords, 0, "way vertex"),
   };
   for (let i = 0; i < coords.length - 1; i++) {
-    const ax = (coords[i][0] - position[0]) * kx;
-    const ay = (coords[i][1] - position[1]) * ky;
-    const bx = (coords[i + 1][0] - position[0]) * kx;
-    const by = (coords[i + 1][1] - position[1]) * ky;
+    const a = itemAt(coords, i, "way vertex");
+    const b = itemAt(coords, i + 1, "way vertex");
+    const ax = (a[0] - position[0]) * kx;
+    const ay = (a[1] - position[1]) * ky;
+    const bx = (b[0] - position[0]) * kx;
+    const by = (b[1] - position[1]) * ky;
     const dx = bx - ax;
     const dy = by - ay;
     const lengthSquared = dx * dx + dy * dy;
@@ -604,10 +630,7 @@ function nearestOnLine(coords: LngLat[], position: LngLat, kx: number): LineProj
         distance,
         segment: i,
         t,
-        point: [
-          coords[i][0] + t * (coords[i + 1][0] - coords[i][0]),
-          coords[i][1] + t * (coords[i + 1][1] - coords[i][1]),
-        ],
+        point: [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])],
       };
     }
   }
@@ -617,7 +640,8 @@ function nearestOnLine(coords: LngLat[], position: LngLat, kx: number): LineProj
 /** Distance along the polyline, from its start, to a projection onto it. */
 function alongLine(coords: LngLat[], { segment, t }: LineProjection): number {
   const cum = cumulative(coords);
-  return cum[segment] + t * (cum[segment + 1] - cum[segment]);
+  const start = numberAt(cum, segment);
+  return start + t * (numberAt(cum, segment + 1) - start);
 }
 
 const round7 = (value: number): number => Math.round(value * 1e7) / 1e7;
@@ -637,28 +661,29 @@ function sliceAround(
   const coords = closed
     ? [...way.coords, ...way.coords.slice(1), ...way.coords.slice(1)]
     : way.coords;
-  const perimeter = closed ? cumulative(way.coords)[way.coords.length - 1] : 0;
+  const perimeter = closed ? numberAt(cumulative(way.coords), way.coords.length - 1) : 0;
   const anchorAlong = wayAnchorAlong + perimeter;
   const cum = cumulative(coords);
-  const total = cum[cum.length - 1];
+  const total = numberAt(cum, cum.length - 1);
   const start = Math.max(0, anchorAlong - ROAD_CONTEXT_REACH_M);
   const end = Math.min(total, anchorAlong + ROAD_CONTEXT_REACH_M);
   const pointAt = (along: number): LngLat => {
     let i = 0;
-    while (i < cum.length - 2 && cum[i + 1] < along) i++;
-    const span = cum[i + 1] - cum[i];
-    const t = span > 0 ? (along - cum[i]) / span : 0;
-    return [
-      coords[i][0] + t * (coords[i + 1][0] - coords[i][0]),
-      coords[i][1] + t * (coords[i + 1][1] - coords[i][1]),
-    ];
+    while (i < cum.length - 2 && numberAt(cum, i + 1) < along) i++;
+    const from = numberAt(cum, i);
+    const span = numberAt(cum, i + 1) - from;
+    const t = span > 0 ? (along - from) / span : 0;
+    const a = itemAt(coords, i, "way vertex");
+    const b = itemAt(coords, i + 1, "way vertex");
+    return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
   };
 
   const before: LngLat[] = [pointAt(start)];
   const after: LngLat[] = [];
-  for (let i = 0; i < coords.length; i++) {
-    if (cum[i] > start && cum[i] < anchorAlong) before.push(coords[i]);
-    else if (cum[i] > anchorAlong && cum[i] < end) after.push(coords[i]);
+  for (const [i, point] of coords.entries()) {
+    const along = numberAt(cum, i);
+    if (along > start && along < anchorAlong) before.push(point);
+    else if (along > anchorAlong && along < end) after.push(point);
   }
   after.push(pointAt(end));
 

@@ -5,7 +5,7 @@ import type {
 } from "@openmapx/air-quality";
 import { ApiClientError, apiClient } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, type FakeMap, renderHook, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, renderHook, waitFor } from "@/test";
 
 import { useAirQualityStore } from "./store";
 
@@ -325,7 +325,7 @@ it("keeps distinct per-page captured monitor receipts without collecting unrelat
     [{ sourceId: "a", name: "Captured A" }],
     [{ sourceId: "b", name: "Captured B" }],
   ]);
-  a.properties.contributors[0]!.name = "Metadata updated";
+  nth(a.properties.contributors, 0).name = "Metadata updated";
   expect(JSON.parse(String(data.features[0]?.properties?._mapAttributions))[0]?.name).toBe(
     "Captured A",
   );

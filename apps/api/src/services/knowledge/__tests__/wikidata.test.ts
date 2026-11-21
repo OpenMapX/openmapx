@@ -1,5 +1,6 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../../test/mock-calls";
 import { emptyResponse, streamedJsonResponse } from "../../../test/streamed-response.js";
 
 vi.mock("@openmapx/core", async (importOriginal) => {
@@ -263,7 +264,7 @@ describe("wikidataSource", () => {
 
     // Verify second fetch call has both IDs
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    const secondCallUrl = mockFetch.mock.calls[1][0] as string;
+    const secondCallUrl = callArg(mockFetch, 1, 0) as string;
     expect(secondCallUrl).toContain("Q123");
     expect(secondCallUrl).toContain("Q456");
 
@@ -342,7 +343,7 @@ describe("wikidataSource", () => {
     const result = await wikidataSource.lookup({ wikidata: "Q64" });
     expect(result?.description).toBe("Test place");
 
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = callArg(mockFetch, 0, 0) as string;
     expect(url).toContain("languages=en");
     expect(url).toContain("sitefilter=enwiki");
   });

@@ -34,11 +34,11 @@ describe("geocode", () => {
     const results = await nominatimService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("osm:node/123456");
-    expect(results[0].label).toBe("Berlin, Germany");
-    expect(results[0].coordinates).toEqual([13.37, 52.52]);
-    expect(results[0].confidence).toBe(0.87);
-    expect(results[0].rawCategory).toBe("place/city");
+    expect(results[0]?.id).toBe("osm:node/123456");
+    expect(results[0]?.label).toBe("Berlin, Germany");
+    expect(results[0]?.coordinates).toEqual([13.37, 52.52]);
+    expect(results[0]?.confidence).toBe(0.87);
+    expect(results[0]?.rawCategory).toBe("place/city");
   });
 
   it("makes ID from osm_type/osm_id", async () => {
@@ -47,7 +47,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].id).toBe("osm:way/999");
+    expect(results[0]?.id).toBe("osm:way/999");
   });
 
   it('maps class "highway" to "street"', async () => {
@@ -56,7 +56,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("street");
+    expect(results[0]?.type).toBe("street");
   });
 
   it('maps class "place" + type "house" to "address"', async () => {
@@ -65,7 +65,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("address");
+    expect(results[0]?.type).toBe("address");
   });
 
   it('maps class "amenity" to "poi"', async () => {
@@ -74,7 +74,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it('maps class "shop" to "poi"', async () => {
@@ -83,7 +83,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it('maps class "tourism" to "poi"', async () => {
@@ -92,7 +92,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it('maps class "leisure" to "poi"', async () => {
@@ -101,7 +101,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it('maps unknown class to "region"', async () => {
@@ -110,7 +110,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it("sends User-Agent and Accept-Language headers", async () => {
@@ -119,7 +119,7 @@ describe("geocode", () => {
 
     await nominatimService.geocode("Berlin", "de");
 
-    const [, options] = mockFetch.mock.calls[0];
+    const [, options] = mockFetch.mock.calls[0] ?? [];
     expect(options.headers["User-Agent"]).toBe("Open-MapX/1.0");
     expect(options.headers["Accept-Language"]).toBe("de");
   });
@@ -130,7 +130,7 @@ describe("geocode", () => {
 
     await nominatimService.geocode("Berlin");
 
-    const [, options] = mockFetch.mock.calls[0];
+    const [, options] = mockFetch.mock.calls[0] ?? [];
     expect(options.headers["Accept-Language"]).toBe("en");
   });
 
@@ -257,8 +257,8 @@ describe("autocomplete", () => {
     const results = await nominatimService.autocomplete("Ber");
 
     expect(results).toHaveLength(1);
-    expect(results[0].label).toBe("Berlin");
-    expect(results[0].sublabel).toBe("Berlin, Germany");
+    expect(results[0]?.label).toBe("Berlin");
+    expect(results[0]?.sublabel).toBe("Berlin, Germany");
   });
 
   it("maps all fields correctly for autocomplete", async () => {
@@ -268,10 +268,10 @@ describe("autocomplete", () => {
 
     const results = await nominatimService.autocomplete("restaurant");
 
-    expect(results[0].id).toBe("osm:node/123456");
-    expect(results[0].coordinates).toEqual([13.37, 52.52]);
-    expect(results[0].type).toBe("poi");
-    expect(results[0].rawCategory).toBe("amenity/restaurant");
-    expect(typeof results[0].iconPath).toBe("string");
+    expect(results[0]?.id).toBe("osm:node/123456");
+    expect(results[0]?.coordinates).toEqual([13.37, 52.52]);
+    expect(results[0]?.type).toBe("poi");
+    expect(results[0]?.rawCategory).toBe("amenity/restaurant");
+    expect(typeof results[0]?.iconPath).toBe("string");
   });
 });

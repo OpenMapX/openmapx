@@ -50,7 +50,7 @@ it("preserves composed geometry receipts and native empty spans through schedule
     supportedModes: ["driving"],
     supportsTimeAware: true,
     async getRoute(points) {
-      const contributors = points[0][0] === 6.96 ? [first] : points[0][0] === 7.1 ? [] : [last];
+      const contributors = points[0]?.[0] === 6.96 ? [first] : points[0]?.[0] === 7.1 ? [] : [last];
       return {
         waypoints: points,
         activeRouteIndex: 0,
@@ -123,17 +123,17 @@ it("preserves composed geometry receipts and native empty spans through schedule
       departAt: "2027-09-01T09:00",
     });
     expect(parsed.routes).toHaveLength(1);
-    expect(parsed.routes[0].geometry).toEqual(waypoints);
-    expect(parsed.routes[0].geometryContributors).toEqual([
+    expect(parsed.routes[0]?.geometry).toEqual(waypoints);
+    expect(parsed.routes[0]?.geometryContributors).toEqual([
       { startIndex: 0, endIndex: 1, contributors: [first] },
       { startIndex: 1, endIndex: 2, contributors: [] },
       { startIndex: 2, endIndex: 3, contributors: [last] },
     ]);
-    expect(parsed.routes[0].contributors).toEqual([first, last]);
-    expect(parsed.routes[0].legs.map((leg) => leg.contributors)).toEqual([[first], [], [last]]);
+    expect(parsed.routes[0]?.contributors).toEqual([first, last]);
+    expect(parsed.routes[0]?.legs.map((leg) => leg.contributors)).toEqual([[first], [], [last]]);
     first.attributionText = "Changed after delivery";
     first.publisher.name = "Changed publisher";
-    const captured = parsed.routes[0].geometryContributors?.[0].contributors?.[0];
+    const captured = parsed.routes[0]?.geometryContributors?.[0]?.contributors?.[0];
     expect(captured).toBeDefined();
     if (!captured) throw new Error("Expected the first captured geometry receipt");
     expect(captured).toMatchObject({

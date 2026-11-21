@@ -16,6 +16,7 @@ import { createTranslator } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useNavigationEngine } from "./useNavigationEngine";
 
 /** No live incident data — most of this file exercises fix/reroute plumbing unrelated to it. */
@@ -121,7 +122,10 @@ describe("useNavigationEngine", () => {
   });
 
   function speakManeuver(step: Partial<RouteStep>, longitude = 0.0011) {
-    const withSpeech = { ...route, steps: [route.steps[0], { ...route.steps[1], ...step }] };
+    const withSpeech = {
+      ...route,
+      steps: [nth(route.steps, 0), { ...nth(route.steps, 1), ...step }],
+    };
     useNavigationStore.getState().startGroundNavigation(withSpeech, "driving", [
       [0, 0],
       [0.004, 0],
@@ -196,7 +200,7 @@ describe("useNavigationEngine", () => {
       expect.objectContaining({
         // The fifth fix reaches the score threshold. A reroute must start at
         // that raw GPS position, not its projection onto the obsolete route.
-        waypoints: [offFixes[4].coords, [0.004, 0]],
+        waypoints: [nth(offFixes, 4).coords, [0.004, 0]],
         avoidClosures: false,
       }),
     );
@@ -214,7 +218,7 @@ describe("useNavigationEngine", () => {
     fetchDirections.mockResolvedValue({ routes: [replacement], activeRouteIndex: 0 });
     renderHook(() => useNavigationEngine(disabledResource));
     const fixes = await triggerOffRoute();
-    const captured = [fixes[4].coords, b, destination];
+    const captured = [nth(fixes, 4).coords, b, destination];
     expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ waypoints: captured }));
     const state = useNavigationStore.getState();
     expect(state.destinationWaypoints).toEqual(captured);

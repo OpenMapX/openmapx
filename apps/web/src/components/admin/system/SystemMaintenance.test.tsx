@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
@@ -62,12 +63,12 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 afterEach(() => {
   cleanup();
   systemStatus.deployment.maintenanceReady = true;
-  systemStatus.images[1].status = "up-to-date";
-  systemStatus.images[1].updateAvailable = false;
-  systemStatus.images[0].runningImageId = "sha256:old-image";
-  systemStatus.images[0].localImageId = "sha256:new-image";
-  systemStatus.images[0].updateAvailable = true;
-  systemStatus.images[0].status = "update-available";
+  nth(systemStatus.images, 1).status = "up-to-date";
+  nth(systemStatus.images, 1).updateAvailable = false;
+  nth(systemStatus.images, 0).runningImageId = "sha256:old-image";
+  nth(systemStatus.images, 0).localImageId = "sha256:new-image";
+  nth(systemStatus.images, 0).updateAvailable = true;
+  nth(systemStatus.images, 0).status = "update-available";
   systemStatus.release.currentReleaseId = "prebaseline";
 });
 
@@ -87,8 +88,8 @@ describe("SystemMaintenance", () => {
   });
 
   it("lets the update replace an outdated agent first", async () => {
-    systemStatus.images[1].status = "update-available";
-    systemStatus.images[1].updateAvailable = true;
+    nth(systemStatus.images, 1).status = "update-available";
+    nth(systemStatus.images, 1).updateAvailable = true;
     const { SystemMaintenance } = await import("./SystemMaintenance");
     render(<SystemMaintenance />);
     expect(screen.getByRole("button", { name: "Update OpenMapX" })).not.toBeDisabled();
@@ -99,7 +100,7 @@ describe("SystemMaintenance", () => {
   it.each(["unknown", "not-running"] as const)(
     "requires a host update when agent and helper readiness is %s",
     async (status) => {
-      systemStatus.images[1].status = status;
+      nth(systemStatus.images, 1).status = status;
       const { SystemMaintenance } = await import("./SystemMaintenance");
       render(<SystemMaintenance />);
       expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
@@ -115,7 +116,7 @@ describe("SystemMaintenance", () => {
   );
 
   it("blocks updates if the agent inspection is missing", async () => {
-    const agent = systemStatus.images[1];
+    const agent = nth(systemStatus.images, 1);
     systemStatus.images.splice(1, 1);
     try {
       const { SystemMaintenance } = await import("./SystemMaintenance");
@@ -165,10 +166,10 @@ describe("SystemMaintenance", () => {
   });
 
   it("disables application updates when every core image is current", async () => {
-    systemStatus.images[0].runningImageId = "sha256:current-image";
-    systemStatus.images[0].localImageId = "sha256:current-image";
-    systemStatus.images[0].updateAvailable = false;
-    systemStatus.images[0].status = "up-to-date";
+    nth(systemStatus.images, 0).runningImageId = "sha256:current-image";
+    nth(systemStatus.images, 0).localImageId = "sha256:current-image";
+    nth(systemStatus.images, 0).updateAvailable = false;
+    nth(systemStatus.images, 0).status = "up-to-date";
     systemStatus.release.currentReleaseId = "v0.1.0-alpha.1";
 
     const { SystemMaintenance } = await import("./SystemMaintenance");

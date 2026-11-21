@@ -35,13 +35,14 @@ export function isBrandDomain(
 ): boolean {
   const host = stripHostPrefixes(hostname, options.prefixes ?? ["www"]);
   const parts = host.split(".");
-  if (parts[0] !== brand) return false;
+  const [label, second = "", third = ""] = parts;
+  if (label !== brand) return false;
   if (parts.length === 2) {
-    return parts[1] === "com" || Boolean(options.localized && /^[a-z]{2,3}$/.test(parts[1]));
+    return second === "com" || Boolean(options.localized && /^[a-z]{2,3}$/.test(second));
   }
   if (parts.length === 3) {
     return Boolean(
-      options.localized && (parts[1] === "com" || parts[1] === "co") && /^[a-z]{2}$/.test(parts[2]),
+      options.localized && (second === "com" || second === "co") && /^[a-z]{2}$/.test(third),
     );
   }
   return false;

@@ -37,7 +37,7 @@ it("makes only the detail request for a resolved fixed data-source place", async
   const view = renderHook(() => useMergedPlace(selected), { wrapper: createQueryWrapper(client) });
   await waitFor(() => expect(view.result.current.isLoading).toBe(false));
   expect(get).toHaveBeenCalledTimes(1);
-  expect(get.mock.calls[0][0]).toBe(`${API_ENDPOINTS.places}/fuel%3A1`);
+  expect(get.mock.calls[0]?.[0]).toBe(`${API_ENDPOINTS.places}/fuel%3A1`);
   expect(view.result.current.place?.address).toBe("Main St 1");
   view.unmount();
   client.clear();
@@ -97,7 +97,7 @@ it("still reverse-geocodes coordinate selections once", async () => {
   const view = renderHook(() => useMergedPlace(point), { wrapper: createQueryWrapper(client) });
   await waitFor(() => expect(view.result.current.place?.address).toBe("Main St"));
   expect(get).toHaveBeenCalledTimes(1);
-  expect(get.mock.calls[0][0]).toBe(API_ENDPOINTS.geocodeReverse);
+  expect(get.mock.calls[0]?.[0]).toBe(API_ENDPOINTS.geocodeReverse);
   view.unmount();
   client.clear();
 });
@@ -157,7 +157,7 @@ it("does not snap elsewhere when the directly referenced OSM object is unavailab
   const view = renderHook(() => useMergedPlace(maptiler), { wrapper: createQueryWrapper(client) });
   await waitFor(() => expect(view.result.current.isLoading).toBe(false));
   expect(get).toHaveBeenCalledTimes(1);
-  expect(get.mock.calls[0][0]).toBe(`${API_ENDPOINTS.places}/osm%3Away%2F1`);
+  expect(get.mock.calls[0]?.[0]).toBe(`${API_ENDPOINTS.places}/osm%3Away%2F1`);
   expect(view.result.current.place?.id).toBe("maptiler:poi.1");
   expect(view.result.current.place?.address).toBe(selected.address);
   view.unmount();

@@ -41,9 +41,9 @@ describe("searchPresets", () => {
       limit: 8,
       suppressTagSets: noSuppression,
     });
-    expect(results[0].id).toBe("amenity/ice_cream");
-    expect(results[0].matchedOn).toBe("term");
-    expect(results[0].tags).toEqual({ amenity: "ice_cream" });
+    expect(results[0]?.id).toBe("amenity/ice_cream");
+    expect(results[0]?.matchedOn).toBe("term");
+    expect(results[0]?.tags).toEqual({ amenity: "ice_cream" });
   });
 
   it("finds fuel by German colloquial 'Tanke'", () => {
@@ -53,7 +53,7 @@ describe("searchPresets", () => {
       limit: 8,
       suppressTagSets: noSuppression,
     });
-    expect(results[0].id).toBe("amenity/fuel");
+    expect(results[0]?.id).toBe("amenity/fuel");
   });
 
   it("finds pharmacy by German 'Apotheke'", () => {
@@ -63,7 +63,7 @@ describe("searchPresets", () => {
       limit: 8,
       suppressTagSets: noSuppression,
     });
-    expect(results[0].id).toBe("amenity/pharmacy");
+    expect(results[0]?.id).toBe("amenity/pharmacy");
   });
 
   it("finds ice cream shop by English query and returns the display-cased name", () => {
@@ -73,9 +73,9 @@ describe("searchPresets", () => {
       limit: 8,
       suppressTagSets: noSuppression,
     });
-    expect(results[0].id).toBe("amenity/ice_cream");
-    expect(results[0].matchedOn).toBe("name");
-    expect(results[0].name).toBe("Ice Cream Shop");
+    expect(results[0]?.id).toBe("amenity/ice_cream");
+    expect(results[0]?.matchedOn).toBe("name");
+    expect(results[0]?.name).toBe("Ice Cream Shop");
   });
 
   it("returns empty for nonsense", () => {
@@ -112,7 +112,7 @@ describe("searchPresets", () => {
       limit: 8,
       suppressTagSets: noSuppression,
     });
-    expect(results[0].id).toBe("amenity/ice_cream");
+    expect(results[0]?.id).toBe("amenity/ice_cream");
   });
 
   it("respects the limit", () => {

@@ -2,9 +2,9 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { isDisplayablePhoto } from "../attribution/commons-metadata";
 import type { BrandDetail } from "../types/brand";
 import type { PlacePhoto } from "../types/place";
-import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 /** Author + licence for one Commons logo displayed in a header, list or detail. */
 export interface BrandLogoAttribution extends PlacePhoto {

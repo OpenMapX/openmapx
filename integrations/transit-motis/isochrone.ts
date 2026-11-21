@@ -62,7 +62,7 @@ export async function sampleMotisTravelTimeField(
         return { lat, lng };
       });
       const durations = await runOneToManyBatch(instance, request, destinations, requestSignal);
-      for (let index = 0; index < size; index += 1) values[offset + index] = durations[index];
+      for (const [index, duration] of durations.entries()) values[offset + index] = duration;
       batchCount += 1;
     }
   } catch (error) {

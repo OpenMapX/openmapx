@@ -3,6 +3,7 @@ import type {
   TransitProvider,
   TripPlanRequest,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TripPlan } from "@openmapx/mobility-core/transit";
@@ -275,7 +276,7 @@ describe("GET /plan parameters", () => {
 
     expect(reply.statusCode).toBe(200);
     expect(planTrip).toHaveBeenCalledTimes(1);
-    const request = planTrip.mock.calls[0][0];
+    const request = nth(planTrip.mock.calls, 0)[0];
     expect(request).toMatchObject({
       from: { lat: 50.85, lng: 4.35 },
       to: { lat: 51.22, lng: 4.42 },
@@ -316,7 +317,7 @@ describe("GET /plan page tokens", () => {
       const reply = await plan({ ...search, page_token: page[field] ?? "" });
 
       expect(reply.statusCode).toBe(200);
-      expect(planTrip.mock.calls[1][0].pageCursor).toBe(cursor);
+      expect(nth(planTrip.mock.calls, 1)[0].pageCursor).toBe(cursor);
     },
   );
 

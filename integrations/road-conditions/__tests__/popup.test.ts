@@ -1,4 +1,5 @@
 import type { RoadConditionEvent } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import {
@@ -500,11 +501,11 @@ describe("grouped records", () => {
   it("spans the time of records that disagree on it", () => {
     const shown = card([
       {
-        ...events[0]!,
+        ...nth(events, 0),
         validity: { status: "active", start: "2026-09-01T00:00:00Z", end: "2026-09-12T00:00:00Z" },
       },
       {
-        ...events[1]!,
+        ...nth(events, 1),
         validity: { status: "active", start: "2026-09-05T00:00:00Z", end: "2026-09-20T10:00:00Z" },
       },
     ]);
@@ -513,7 +514,11 @@ describe("grouped records", () => {
 
   it("credits every source of the group once", () => {
     const other = { provider: "Stadt Düsseldorf" };
-    const shown = card([events[0]!, events[1]!, { ...events[1]!, id: "x", attribution: other }]);
+    const shown = card([
+      nth(events, 0),
+      nth(events, 1),
+      { ...nth(events, 1), id: "x", attribution: other },
+    ]);
     expect(shown?.credits.map((credit) => credit.name)).toEqual(["NDW", "Stadt Düsseldorf"]);
   });
 });

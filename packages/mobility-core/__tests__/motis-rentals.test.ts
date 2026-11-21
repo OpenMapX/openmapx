@@ -395,9 +395,9 @@ it("captures known Transitous branch for stations, vehicles and station-area geo
   const mapped = mapMotisRentalSnapshot(fixture(), "transitous", undefined, [], (ids) =>
     ids.includes("transitous") ? [receipt] : [],
   );
-  expect(mapped.stations[0].sources).toContain("transitous");
-  expect(mapped.stations[0].contributors).toEqual([receipt]);
-  expect(mapped.vehicles[0].contributors).toEqual([receipt]);
-  expect(mapped.providers[0].contributors).toEqual([receipt]);
-  expect(mapped.zones[0].contributors).toEqual([receipt]);
+  expect(mapped.stations[0]?.sources).toContain("transitous");
+  expect(mapped.stations[0]?.contributors).toEqual([receipt]);
+  expect(mapped.vehicles[0]?.contributors).toEqual([receipt]);
+  expect(mapped.providers[0]?.contributors).toEqual([receipt]);
+  expect(mapped.zones[0]?.contributors).toEqual([receipt]);
 });

@@ -122,8 +122,8 @@ describe("vehicles", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().vehicles).toHaveLength(1);
     expect(res.headers["cache-control"]).toBe("no-store");
-    expect(predicates[0].sql).toContain("user_id");
-    expect(predicates[0].params).toEqual(["user-1"]);
+    expect(predicates[0]?.sql).toContain("user_id");
+    expect(predicates[0]?.params).toEqual(["user-1"]);
   });
 
   it("creates a vehicle and makes the first one the default", async () => {
@@ -214,8 +214,8 @@ describe("parking", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().parked).toHaveLength(1);
     expect(res.headers["cache-control"]).toBe("no-store");
-    expect(predicates[0].sql).toContain("user_id");
-    expect(predicates[0].params).toEqual(["user-1"]);
+    expect(predicates[0]?.sql).toContain("user_id");
+    expect(predicates[0]?.params).toEqual(["user-1"]);
   });
 
   it("upserts the unassigned record", async () => {

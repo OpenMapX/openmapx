@@ -1,4 +1,5 @@
 import type { DiagnosticRow } from "../storage/SessionRepository";
+import { nth } from "../testing/nth";
 import {
   buildDiagnosticExport,
   DIAGNOSTIC_EXPORT_SCHEMA_VERSION,
@@ -101,7 +102,7 @@ describe("buildDiagnosticExport", () => {
       NOW,
     );
 
-    expect(document.events[0].fields).toEqual({ accepted: 1 });
+    expect(document.events[0]?.fields).toEqual({ accepted: 1 });
     const serialised = JSON.stringify(document);
     expect(serialised).not.toContain("50.11");
     expect(serialised).not.toContain("tok_secret");
@@ -115,7 +116,7 @@ describe("buildDiagnosticExport", () => {
       NOW,
     );
 
-    expect(document.events[0].fields).toEqual({ accepted: 1, droppedFieldCount: 2 });
+    expect(document.events[0]?.fields).toEqual({ accepted: 1, droppedFieldCount: 2 });
   });
 });
 
@@ -126,12 +127,13 @@ describe("exportDiagnostics", () => {
     const result = await exportDiagnostics(p);
 
     expect(result).toEqual({ ok: true, eventCount: 1 });
-    expect(written[0].name).toBe("openmapx-diagnostics-abc123.json");
+    const file = nth(written, 0);
+    expect(file.name).toBe("openmapx-diagnostics-abc123.json");
     expect(shared).toEqual(["file:///cache/openmapx-diagnostics-abc123.json"]);
 
     expect(deleted).toEqual(shared);
-    expect(written[0].contents).toContain("\n");
-    expect(JSON.parse(written[0].contents)).toMatchObject({
+    expect(file.contents).toContain("\n");
+    expect(JSON.parse(file.contents)).toMatchObject({
       exportId: "abc123",
       events: [{ type: "location.batch", fields: { accepted: 3, rejected: 1 } }],
     });
@@ -185,10 +187,9 @@ describe("exportDiagnostics", () => {
     await exportDiagnostics(p);
     await exportDiagnostics(p);
 
-    expect(written[0].name).not.toBe(written[1].name);
+    const [first, second] = [nth(written, 0), nth(written, 1)];
+    expect(first.name).not.toBe(second.name);
     // Two exports from one device cannot be linked by their contents.
-    expect(JSON.parse(written[0].contents).exportId).not.toBe(
-      JSON.parse(written[1].contents).exportId,
-    );
+    expect(JSON.parse(first.contents).exportId).not.toBe(JSON.parse(second.contents).exportId);
   });
 });

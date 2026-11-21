@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { adminActionReauthentication, session, sessionAuthAssurance, user } from "../db/schema";
@@ -254,7 +255,10 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
         service.consumeMany(
           {
             ...input,
-            proofs: [input.proofs[0]!, { ...input.proofs[1]!, targetId: "changed-catalog" }],
+            proofs: [
+              itemAt(input.proofs, 0),
+              { ...itemAt(input.proofs, 1), targetId: "changed-catalog" },
+            ],
           },
           tx,
         ),

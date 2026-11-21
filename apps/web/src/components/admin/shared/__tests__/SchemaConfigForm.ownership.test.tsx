@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
-import { cleanup, render, screen, userEvent } from "@/test";
+import { cleanup, nth, render, screen, userEvent } from "@/test";
 import { SchemaConfigForm } from "../SchemaConfigForm";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
@@ -22,8 +22,8 @@ it("locks config.json winners and never sends them in a save alongside an editab
   );
   const fields = screen.getAllByRole("textbox");
   expect(fields[0]).toBeDisabled();
-  await userEvent.clear(fields[1]!);
-  await userEvent.type(fields[1]!, "new");
+  await userEvent.clear(nth(fields, 1));
+  await userEvent.type(nth(fields, 1), "new");
   await userEvent.click(screen.getByRole("button", { name: /^Save/ }));
   expect(save).toHaveBeenCalledWith({ region: "new" });
   expect(await screen.findByText(/Controlled by the host config file/i)).toBeInTheDocument();

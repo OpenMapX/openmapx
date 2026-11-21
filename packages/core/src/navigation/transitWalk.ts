@@ -113,8 +113,8 @@ export function walkLegStepProgress(
 
   const target = Math.max(0, Math.min(1, fractionAlongLeg)) * total;
   let cum = 0;
-  for (let i = 0; i < steps.length; i++) {
-    const len = steps[i].distanceMeters || 0;
+  for (const [i, step] of steps.entries()) {
+    const len = step.distanceMeters || 0;
     if (cum + len > target || i === steps.length - 1) {
       return { currentStepIndex: i, distanceToNextStepMeters: Math.max(0, cum + len - target) };
     }
@@ -141,9 +141,11 @@ export function nextWalkManeuver(
   // flight of stairs split by a bare "continue" still reads as one.
   const current = steps[currentStepIndex];
   const last = current ? walkStepInfo(current) : undefined;
-  for (let i = currentStepIndex + 1; i < steps.length; i++) {
-    if (!addsNothing(walkStepInfo(steps[i]), last)) return { index: i, distanceMeters };
-    distanceMeters += steps[i].distanceMeters || 0;
+  for (const [offset, step] of steps.slice(currentStepIndex + 1).entries()) {
+    if (!addsNothing(walkStepInfo(step), last)) {
+      return { index: currentStepIndex + 1 + offset, distanceMeters };
+    }
+    distanceMeters += step.distanceMeters || 0;
   }
   return { index: null, distanceMeters };
 }

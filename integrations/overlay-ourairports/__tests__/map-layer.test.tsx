@@ -74,7 +74,7 @@ describe("AirportsOverlay zoom gate", () => {
     render(<AirportsOverlay />, { wrapper });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toContain(
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/integrations/overlay-ourairports/airports",
     );
   });

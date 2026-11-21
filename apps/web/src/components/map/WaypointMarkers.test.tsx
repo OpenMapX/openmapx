@@ -2,7 +2,8 @@
 
 import type { LngLat } from "@openmapx/core";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 interface FakeMarkerShape {
   element: HTMLElement;
@@ -77,8 +78,11 @@ function setUp(points: Array<[LngLat, string]>) {
   const s = useDirectionsStore.getState();
   s.close();
   s.open();
-  s.setWaypoint(0, points[0][0], points[0][1]);
-  s.setWaypoint(1, points[points.length - 1][0], points[points.length - 1][1]);
+  const first = points[0];
+  const last = points.at(-1);
+  assert(first && last, "a start and an end waypoint");
+  s.setWaypoint(0, first[0], first[1]);
+  s.setWaypoint(1, last[0], last[1]);
   points.slice(1, -1).forEach(([coords, label], k) => {
     useDirectionsStore.getState().insertWaypoint(k + 1, coords, label);
   });
@@ -90,7 +94,9 @@ const live = () => fake.markers.filter((m) => !m.removed);
 const markerAt = (c: LngLat) => {
   const found = live().filter((m) => m.lngLat[0] === c[0] && m.lngLat[1] === c[1]);
   expect(found).toHaveLength(1);
-  return found[0];
+  const [marker] = found;
+  assert.isDefined(marker);
+  return marker;
 };
 
 const byId = (id: string) => useDirectionsStore.getState().waypoints.find((w) => w.id === id);
@@ -115,11 +121,12 @@ afterEach(() => {
 
 describe("WaypointMarkers", () => {
   it("moves the dragged waypoint and swaps pin styles after a reverse", async () => {
-    const [a, b, c] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, b, c] = [nth(ids, 0), nth(ids, 1), nth(ids, 2)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 
@@ -139,10 +146,13 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint after a stop is inserted before it", async () => {
-    const [, c] = setUp([
-      [A, "A"],
-      [C, "C"],
-    ]);
+    const c = nth(
+      setUp([
+        [A, "A"],
+        [C, "C"],
+      ]),
+      1,
+    );
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(2));
 
@@ -150,7 +160,7 @@ describe("WaypointMarkers", () => {
       useDirectionsStore.getState().insertWaypoint(1, B, "B");
     });
     await waitFor(() => expect(live()).toHaveLength(3));
-    const b = useDirectionsStore.getState().waypoints[1].id;
+    const b = nth(useDirectionsStore.getState().waypoints, 1).id;
 
     drag(markerAt(C), DROP);
     expect(byId(c)?.coords).toEqual(DROP);
@@ -160,12 +170,13 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint and renumbers stops after a removal", async () => {
-    const [, , c, d] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
       [D, "D"],
     ]);
+    const [c, d] = [nth(ids, 2), nth(ids, 3)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(4));
 
@@ -179,11 +190,12 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint and restyles pins after a reorder", async () => {
-    const [a, b] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, b] = [nth(ids, 0), nth(ids, 1)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 
@@ -200,11 +212,12 @@ describe("WaypointMarkers", () => {
   });
 
   it("keeps a marker that is being dragged across a reverse", async () => {
-    const [a, , c] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, c] = [nth(ids, 0), nth(ids, 2)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 

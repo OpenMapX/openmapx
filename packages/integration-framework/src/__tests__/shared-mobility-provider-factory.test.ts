@@ -6,7 +6,7 @@ import type {
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
 import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../context";
 import type { IntegrationDataSource } from "../manifest";
 import { buildSharedMobilityMapContext } from "../shared-mobility/context";
@@ -184,6 +184,24 @@ describe("createSharedMobilityProvider", () => {
     expect(warn).toHaveBeenCalledWith("[car-sharing] Entur enrichment failed", expect.any(Error));
   });
 
+  it("skips and counts records without a source instead of failing the viewport", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const shared = definition(
+      vi.fn(async () => ({
+        stations: [station(), { ...station("gbfs/provider/station-2"), sources: [] }],
+        vehicles: [{ ...vehicle(), sources: [] }],
+      })),
+    );
+
+    const result = await shared.search(BBOX);
+
+    expect(result.data.map((item) => item.id)).toEqual(["s:gbfs/provider/station-1"]);
+    expect(warn).toHaveBeenCalledWith("[car-sharing] skipped 2 records without a source");
+    await expect(shared.getDetail("s:gbfs/provider/station-2")).resolves.toMatchObject({
+      data: null,
+    });
+  });
+
   it("maps cached station and vehicle details and enriches each by kind", async () => {
     const shared = definition(undefined, {
       dataSources: [manifestSource("gbfs", "GBFS", "https://example.com")],
@@ -312,10 +330,12 @@ it("captures secondary inventory sources for both search records and cached deta
     },
   );
   const response = await shared.search(BBOX);
-  expect(response.data[0].contributors?.map((a) => a.sourceId)).toEqual(["transitous", "gbfs"]);
+  const [result] = response.data;
+  assert.isDefined(result);
+  expect(result.contributors?.map((a) => a.sourceId)).toEqual(["transitous", "gbfs"]);
   expect(response.attributions.map((a) => a.sourceId)).toEqual(["transitous", "gbfs"]);
-  const detail = await shared.getDetail(response.data[0].id);
-  expect(detail.data?.contributors).toEqual(response.data[0].contributors);
+  const detail = await shared.getDetail(result.id);
+  expect(detail.data?.contributors).toEqual(result.contributors);
 });
 
 it("credits only the map context feature receipts, including no credit for empty context", async () => {
@@ -374,7 +394,7 @@ it("treats explicit empty inventory receipts as authoritative", async () => {
     { dataSources: [manifestSource("gbfs", "GBFS", "https://gbfs.example")] },
   );
   const response = await shared.search(BBOX);
-  expect(response.data[0].contributors).toEqual([]);
+  expect(response.data[0]?.contributors).toEqual([]);
   expect(response.attributions).toEqual([]);
 });
 
@@ -388,12 +408,14 @@ it("adds only newly supplied detail enrichment sources to cached receipts", asyn
   await shared.search(BBOX);
   vi.mocked(enrichEnturMobilityItems).mockImplementationOnce(
     async (stations, _vehicles, options) => {
-      stations[0].address = { street: "Newly acquired field" };
-      stations[0].contributors = [
-        ...(stations[0].contributors ?? []),
+      const [station] = stations;
+      assert.isDefined(station);
+      station.address = { street: "Newly acquired field" };
+      station.contributors = [
+        ...(station.contributors ?? []),
         ...(options.resolveContributors?.(["entur-mobility"]) ?? []),
       ];
-      stations[0].sources = [...stations[0].sources, "entur-mobility"];
+      station.sources = [...station.sources, "entur-mobility"];
     },
   );
   const response = await shared.getDetail("s:gbfs/provider/station-1");

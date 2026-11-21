@@ -407,14 +407,14 @@ describe("real resolver through extension routes and final SDK", () => {
         }),
     );
     expect((await sdk.installAdminExtension({ manifestUrl: url }, options())).status).toBe(202);
-    expect(ports.enqueue.mock.calls[0][1].sourceTrust).toBe("community");
+    expect(ports.enqueue.mock.calls[0]?.[1].sourceTrust).toBe("community");
     await resetLimits();
     catalog({
       trust: "verified",
       manifestSha256: createHash("sha256").update(JSON.stringify(raw)).digest("hex"),
     });
     expect((await sdk.installAdminExtension({ id: manifest.id }, options())).status).toBe(202);
-    expect(ports.enqueue.mock.calls[1][1].sourceTrust).toBe("verified");
+    expect(ports.enqueue.mock.calls[1]?.[1].sourceTrust).toBe("verified");
   });
   it.each(["provider", "JSON", "staging", "Redis"])(
     "bounds %s failures and logs without reflecting dependency data",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { resolveGbfsCatalogCandidate } from "@openmapx/transitous-core";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { combinedPinsAreCurrent, diffFeedFiles } from "../src/commands/transitous-bump.js";
 
 const TRANSITOUS = {
@@ -114,7 +114,8 @@ it("delegates a CLI bump to the actual paired proposal HTTP operation", async ()
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const bytes of request) body += bytes;
-    calls.push({ url: request.url!, body: JSON.parse(body) });
+    assert.isDefined(request.url);
+    calls.push({ url: request.url, body: JSON.parse(body) });
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({

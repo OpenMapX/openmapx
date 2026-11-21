@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../types/geometry";
-import { cumulativeDistances } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex } from "./deadReckon";
 import {
   COAST_START_DELAY_MS,
   canRequestReroute,
@@ -152,12 +152,16 @@ describe("coasting", () => {
     const fast = { ...anchor, speedMps: 80 };
     const fix = coastedFix(fast, geometry, cumulative, NOW + MAX_COAST_MS - 1_000);
     const start = geometry[0];
-    const metersPerDegree = (cumulative[1] - cumulative[0]) / 0.001;
+    const end = geometry.at(-1);
+    assert.isDefined(start);
+    assert.isDefined(end);
+    const metersPerDegree =
+      (distanceAtVertex(cumulative, 1) - distanceAtVertex(cumulative, 0)) / 0.001;
 
     expect(fix).not.toBeNull();
     const travelled = ((fix?.coords[0] ?? 0) - start[0]) * metersPerDegree - anchor.alongMeters;
     expect(travelled).toBeLessThanOrEqual(MAX_COAST_METERS + 1);
-    expect(fix?.coords[0]).toBeLessThanOrEqual(geometry[geometry.length - 1][0]);
+    expect(fix?.coords[0]).toBeLessThanOrEqual(end[0]);
   });
 });
 
@@ -212,7 +216,8 @@ describe("canRequestReroute", () => {
     for (let attempt = 0; attempt < REROUTE_FAILURES_REPORTED + 2; attempt += 1) {
       runtime = onRerouteFailed(runtime, "network", NOW, 0);
     }
-    const longest = REROUTE_RETRY_DELAYS_MS[REROUTE_RETRY_DELAYS_MS.length - 1];
+    const longest = REROUTE_RETRY_DELAYS_MS.at(-1);
+    assert.isDefined(longest);
 
     expect(runtime).toMatchObject({ status: "failed", attempts: REROUTE_FAILURES_REPORTED });
     expect(canRequestReroute(runtime, EMPTY_REROUTE_CHURN, "online", NOW + longest - 1)).toEqual({

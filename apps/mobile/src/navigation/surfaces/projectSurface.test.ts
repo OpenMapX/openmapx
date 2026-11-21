@@ -1,4 +1,5 @@
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { nth } from "../../testing/nth";
 import {
   FIXTURE_TOKEN,
   transitItineraryFixture,
@@ -61,7 +62,7 @@ it.each([
     s.lastAcceptedFix = { coords: [1, 2], accuracy: 5, timestampMs: now - 120_000 };
     const itinerary = transitItineraryFixture();
     s.payload.startPackage.itinerary = itinerary;
-    const leg = itinerary.legs[legIndex];
+    const leg = nth(itinerary.legs, legIndex);
     const eventAt = now + 40_000;
     if (phase === "waiting-to-board") leg.startTime = new Date(eventAt).toISOString();
     else leg.endTime = new Date(eventAt).toISOString();
@@ -127,8 +128,7 @@ it.each([
 });
 it("bounds untrusted feed text and ignores impossible progress", () => {
   const s = ground();
-  (s.payload.startPackage.route.steps[0] as { instruction: string }).instruction =
-    `\n${"ä".repeat(400)}\u0000`;
+  nth(s.payload.startPackage.route.steps, 0).instruction = `\n${"ä".repeat(400)}\u0000`;
   s.payload.progress = {
     currentStepIndex: Infinity,
     distanceRemaining: -1,

@@ -1,4 +1,4 @@
-import type { OverpassFilter } from "../utils/overpassFilter";
+import type { OverpassFilter } from "../places/overpassFilter";
 
 export type SpatialConstraint =
   | { type: "near_place"; place_name: string }

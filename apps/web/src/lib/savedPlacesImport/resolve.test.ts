@@ -1,9 +1,21 @@
 import type { SearchResult } from "@openmapx/core";
 import { API_ENDPOINTS, ApiClientError, apiClient } from "@openmapx/core";
 import { waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { resolveImportPlaces } from "./resolve";
 import type { ImportList } from "./types";
+
+function firstList(lists: readonly ImportList[]): ImportList {
+  const [list] = lists;
+  assert.isDefined(list, "an import list");
+  return list;
+}
+
+function firstPlace(lists: readonly ImportList[]): ImportList["places"][number] {
+  const [place] = firstList(lists).places;
+  assert.isDefined(place, "a place in the first list");
+  return place;
+}
 
 const result = (overrides: Partial<SearchResult> = {}): SearchResult => ({
   id: "osm:node:1",
@@ -43,7 +55,7 @@ describe("import coordinate resolution", () => {
     const resolved = await pending;
 
     expect(get).toHaveBeenCalledTimes(2);
-    expect(resolved[0].places[0]).toMatchObject({ status: "located" });
+    expect(firstPlace(resolved)).toMatchObject({ status: "located" });
   });
   it("stops waiting when the import is cancelled", async () => {
     vi.useFakeTimers();
@@ -68,7 +80,7 @@ describe("import coordinate resolution", () => {
       { q: "Cafe West", lang: "de", lat: "52.00", lng: "13.00" },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(resolved[0].places[0]).toMatchObject({
+    expect(firstPlace(resolved)).toMatchObject({
       status: "located",
       lat: 52,
       lng: 13,
@@ -86,26 +98,26 @@ describe("import coordinate resolution", () => {
       }),
     ]);
     const input = lists();
-    input[0].places[0].fieldContributors = { name: [old], address: [], lat: [old], lng: [old] };
-    expect((await resolveImportPlaces(input))[0].places[0].fieldContributors).toEqual({
+    firstPlace(input).fieldContributors = { name: [old], address: [], lat: [old], lng: [old] };
+    expect(firstPlace(await resolveImportPlaces(input)).fieldContributors).toEqual({
       name: [old],
       address: [],
       lat: [geo],
       lng: [],
     });
-    expect(input[0].places[0].fieldContributors?.lat).toEqual([old]);
+    expect(firstPlace(input).fieldContributors?.lat).toEqual([old]);
   });
   it("clears old coordinate receipts when a new match has unknown ownership", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue([result()]);
     const input = lists();
-    input[0].places[0].fieldContributors = { name: [], lat: [{ sourceId: "old", name: "Old" }] };
-    expect((await resolveImportPlaces(input))[0].places[0].fieldContributors).toEqual({ name: [] });
+    firstPlace(input).fieldContributors = { name: [], lat: [{ sourceId: "old", name: "Old" }] };
+    expect(firstPlace(await resolveImportPlaces(input)).fieldContributors).toEqual({ name: [] });
   });
   it("leaves exact file captures untouched without lookup", async () => {
     const get = vi.spyOn(apiClient, "get");
     const input = lists();
-    input[0].places[0].status = "exact";
-    input[0].places[0].fieldContributors = { lat: [], lng: [] };
+    firstPlace(input).status = "exact";
+    firstPlace(input).fieldContributors = { lat: [], lng: [] };
     expect(await resolveImportPlaces(input)).toEqual(input);
     expect(get).not.toHaveBeenCalled();
   });
@@ -114,7 +126,7 @@ describe("import coordinate resolution", () => {
     result({ name: "Different shop", label: "Different shop, Berlin" }),
   ])("rejects distant or mismatched results", async (match) => {
     vi.spyOn(apiClient, "get").mockResolvedValue([match]);
-    expect((await resolveImportPlaces(lists()))[0].places[0]).toMatchObject({
+    expect(firstPlace(await resolveImportPlaces(lists()))).toMatchObject({
       status: "approximate",
       lat: 52,
       lng: 13,
@@ -129,8 +141,8 @@ describe("import coordinate resolution", () => {
       }),
     ]);
     const value = lists("needsLookup");
-    value[0].places[0].name = "Starbucks";
-    expect((await resolveImportPlaces(value))[0].places[0].status).toBe("unresolved");
+    firstPlace(value).name = "Starbucks";
+    expect(firstPlace(await resolveImportPlaces(value)).status).toBe("unresolved");
   });
   it.each([
     ["Rua Augusta 20, 1100 Lisbon", "Rua Augusta 20, 1100 Lisbon", "Cafe West", "located"],
@@ -151,8 +163,8 @@ describe("import coordinate resolution", () => {
         }),
       ]);
       const value = lists("needsLookup");
-      value[0].places[0].address = address;
-      expect((await resolveImportPlaces(value))[0].places[0].status).toBe(status);
+      firstPlace(value).address = address;
+      expect(firstPlace(await resolveImportPlaces(value)).status).toBe(status);
     },
   );
   it("requires the house number for an address-only lookup", async () => {
@@ -160,12 +172,12 @@ describe("import coordinate resolution", () => {
       result({ name: "Main Street 12", label: "Main Street 12, Berlin", type: "address" }),
     ]);
     const value = lists("needsLookup");
-    value[0].places[0] = {
+    firstList(value).places[0] = {
       name: "Main Street 20",
       address: "Main Street 20",
       status: "needsLookup",
     };
-    expect((await resolveImportPlaces(value))[0].places[0].status).toBe("unresolved");
+    expect(firstPlace(await resolveImportPlaces(value)).status).toBe("unresolved");
   });
   it("accepts a matching address-only result regardless of provider confidence", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue([
@@ -177,12 +189,12 @@ describe("import coordinate resolution", () => {
       }),
     ]);
     const value = lists("needsLookup");
-    value[0].places[0] = {
+    firstList(value).places[0] = {
       name: "Main Street 20",
       address: "Main Street 20",
       status: "needsLookup",
     };
-    expect((await resolveImportPlaces(value))[0].places[0].status).toBe("located");
+    expect(firstPlace(await resolveImportPlaces(value)).status).toBe("located");
   });
   it("bounds concurrency at three, deduplicates identical queries, and reports progress", async () => {
     let active = 0;
@@ -196,7 +208,7 @@ describe("import coordinate resolution", () => {
       return [] as never;
     });
     const value = lists("needsLookup");
-    value[0].places = Array.from({ length: 7 }, (_, i) => ({
+    firstList(value).places = Array.from({ length: 7 }, (_, i) => ({
       name: `Place ${i % 6}`,
       status: "needsLookup",
     }));
@@ -214,7 +226,7 @@ describe("import coordinate resolution", () => {
     expect(maximum).toBe(3);
     expect(get).toHaveBeenCalledTimes(6);
     expect(onProgress).toHaveBeenLastCalledWith(7, 7);
-    expect(resolved[0].places.every((p) => p.status === "unresolved")).toBe(true);
+    expect(firstList(resolved).places.every((p) => p.status === "unresolved")).toBe(true);
   });
   it("aborts pending requests and never starts further work", async () => {
     const controller = new AbortController();
@@ -231,7 +243,7 @@ describe("import coordinate resolution", () => {
           ),
       );
     const value = lists("needsLookup");
-    value[0].places = Array.from({ length: 10 }, (_, i) => ({
+    firstList(value).places = Array.from({ length: 10 }, (_, i) => ({
       name: `Place ${i}`,
       status: "needsLookup",
     }));

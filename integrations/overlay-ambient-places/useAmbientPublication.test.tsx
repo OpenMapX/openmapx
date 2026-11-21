@@ -1,6 +1,7 @@
 import { AMBIENT_MAX_AGE_MS, type AmbientManifest } from "@openmapx/core/ambient-places";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useAmbientPublication } from "./useAmbientPublication";
 
 const DAY = 86_400_000;
@@ -104,8 +105,8 @@ describe("useAmbientPublication discovery", () => {
     const view = await mount();
     expect(view.result.current).toBeNull();
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe(`${ORIGIN_A}/api/ambient-places/manifest`);
-    expect(requests[0].init.cache).toBe("no-store");
+    expect(nth(requests, 0).url).toBe(`${ORIGIN_A}/api/ambient-places/manifest`);
+    expect(nth(requests, 0).init.cache).toBe("no-store");
 
     const manifest = publication(FIRST);
     await answer(0, { manifest });
@@ -141,7 +142,7 @@ describe("useAmbientPublication discovery", () => {
     // The previous refresh never settles; the next tick cancels it.
     await advance(60_000);
     expect(requests).toHaveLength(3);
-    expect(requests[1].signal.aborted).toBe(true);
+    expect(nth(requests, 1).signal.aborted).toBe(true);
 
     await answer(2, { manifest: publication(SECOND) });
     expect(view.result.current?.generation).toBe(SECOND);
@@ -149,7 +150,7 @@ describe("useAmbientPublication discovery", () => {
 
   it.each([
     ["an HTTP error", (i: number) => answer(i, { error: "down" }, 503)],
-    ["a network error", async (i: number) => requests[i].fail(new TypeError("offline"))],
+    ["a network error", async (i: number) => nth(requests, i).fail(new TypeError("offline"))],
     [
       "an unsupported version",
       (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 3 } }),
@@ -212,7 +213,7 @@ describe("useAmbientPublication discovery", () => {
     vi.setSystemTime(Date.now() + 2 * DAY);
     await advance(60_000);
     expect(requests).toHaveLength(3);
-    expect(requests[2].signal.aborted).toBe(false);
+    expect(nth(requests, 2).signal.aborted).toBe(false);
     expect(view.result.current).toBeNull();
   });
 });
@@ -227,8 +228,8 @@ describe("useAmbientPublication ownership", () => {
     // Cleared in the very render that changes origin, before any reply.
     expect(view.result.current).toBeNull();
     await settle();
-    expect(requests[0].signal.aborted).toBe(true);
-    expect(requests[1].url).toBe(`${ORIGIN_B}/api/ambient-places/manifest`);
+    expect(nth(requests, 0).signal.aborted).toBe(true);
+    expect(nth(requests, 1).url).toBe(`${ORIGIN_B}/api/ambient-places/manifest`);
     expect(view.result.current).toBeNull();
 
     // A failed first discovery on the new origin cannot reuse the old publication.
@@ -259,7 +260,7 @@ describe("useAmbientPublication ownership", () => {
     const view = await mount(ORIGIN_A);
     view.rerender({ url: ORIGIN_B });
     await settle();
-    expect(requests[0].signal.aborted).toBe(true);
+    expect(nth(requests, 0).signal.aborted).toBe(true);
 
     // Even a transport that ignores abort cannot publish for the wrong origin.
     await answer(0, { manifest: publication(FIRST) });
@@ -271,7 +272,7 @@ describe("useAmbientPublication ownership", () => {
   it("cancels the request and the refresh timer on unmount", async () => {
     const view = await mount();
     view.unmount();
-    expect(requests[0].signal.aborted).toBe(true);
+    expect(nth(requests, 0).signal.aborted).toBe(true);
 
     await advance(180_000);
     expect(requests).toHaveLength(1);

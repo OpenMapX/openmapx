@@ -116,10 +116,10 @@ function assertSchemaNode(
     (typeof schema.description !== "string" || schema.description.length > 8 * 1024)
   )
     rejected();
+  const sharedSecretName = schema["x-openmapx-sharedSecretName"];
   if (
-    schema["x-openmapx-sharedSecretName"] !== undefined &&
-    (typeof schema["x-openmapx-sharedSecretName"] !== "string" ||
-      (schema["x-openmapx-sharedSecretName"] as string).length > 128)
+    sharedSecretName !== undefined &&
+    (typeof sharedSecretName !== "string" || sharedSecretName.length > 128)
   )
     rejected();
   if (schema["x-openmapx-setup"] !== undefined && !boundedJson(schema["x-openmapx-setup"]))

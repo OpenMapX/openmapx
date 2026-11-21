@@ -2,7 +2,7 @@ import { useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { act, createFakeMap, type FakeMap, render } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, render } from "@/test";
 import { LiveTransitLayer } from "../map-layer";
 import { useLiveTransitStore } from "../store";
 import type { LiveTransitSnapshot } from "../types";
@@ -88,7 +88,7 @@ function expectRetainedVehicle() {
     geometry: { type: "Point", coordinates: [6, 50] },
     properties: { id: "bus-42", tripId: "trip-current", displayLabel: "42" },
   });
-  expect(JSON.parse(String(vehicleData()?.features[0].properties?._mapAttributions))).toEqual([
+  expect(JSON.parse(String(vehicleData()?.features[0]?.properties?._mapAttributions))).toEqual([
     receipt,
   ]);
   expect(fake.map.getFilter(RING)).toEqual([
@@ -220,21 +220,21 @@ it("republishes the full vehicle collection into a rebuilt source before diffing
   current = relabel("42A");
   await poll();
   expect(diffs).toHaveLength(1);
-  expect(diffs[0].source).toBe(fake.map.getSource(SOURCE));
+  expect(nth(diffs, 0).source).toBe(fake.map.getSource(SOURCE));
 
   act(() => {
     fake.map.setStyle({ version: 8, sources: {}, layers: [] });
   });
   const rebuilt = fake.map.getSource(SOURCE);
-  expect(rebuilt).not.toBe(diffs[0].source);
+  expect(rebuilt).not.toBe(nth(diffs, 0).source);
   expect(vehicleData()?.features).toHaveLength(1);
-  expect(vehicleData()?.features[0].properties).toMatchObject({ displayLabel: "42A" });
+  expect(vehicleData()?.features[0]?.properties).toMatchObject({ displayLabel: "42A" });
   expect(diffs).toHaveLength(1);
 
   current = relabel("42B");
   await poll();
   expect(diffs).toHaveLength(2);
-  expect(diffs[1].source).toBe(rebuilt);
-  expect(diffs[1].diff.update?.map((entry) => entry.id)).toEqual(["bus-42"]);
+  expect(nth(diffs, 1).source).toBe(rebuilt);
+  expect(nth(diffs, 1).diff.update?.map((entry) => entry.id)).toEqual(["bus-42"]);
   view.unmount();
 });

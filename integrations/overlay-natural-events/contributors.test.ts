@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { HazardAlert, NaturalHazard } from "@openmapx/mobility-core/hazards";
 import { describe, expect, it } from "vitest";
 import { hazardToFeature as earthquakeFeature } from "../overlay-earthquakes/index";
@@ -43,7 +44,7 @@ describe("hazard route receipt preservation", () => {
         contributors: receipt,
       });
     }
-    receipt[0]!.name = "Changed catalogue";
+    nth(receipt, 0).name = "Changed catalogue";
     for (const feature of [quake, natural, warning])
       expect(
         (feature?.properties as { contributors?: { name: string }[] }).contributors?.[0]?.name,

@@ -2,6 +2,7 @@ import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { MobileRuntimeProvider } from "./MobileRuntimeProvider";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
 import { useMobileRuntime, useNavigationModeAvailable } from "./useMobileRuntime";
@@ -65,7 +66,7 @@ function deliverHello(
   shell: ReturnType<typeof shellScope>,
   overrides: Record<string, unknown> = {},
 ) {
-  const forMessageId = JSON.parse(shell.sent[0]).messageId as string;
+  const forMessageId = JSON.parse(nth(shell.sent, 0)).messageId as string;
   shell.deliver(helloReply(forMessageId, overrides));
 }
 
@@ -138,7 +139,7 @@ describe("MobileRuntimeProvider inside the shell", () => {
       expect(text("microphone")).toBe("false");
       expect(useNavigationStore.getState().navigationAuthority).toBe("native");
       expect(shell.sent).toHaveLength(1);
-      expect(JSON.parse(shell.sent[0]).type).toBe("web.hello");
+      expect(JSON.parse(nth(shell.sent, 0)).type).toBe("web.hello");
       expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
         "width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no",
       );
@@ -232,7 +233,7 @@ describe("MobileRuntimeProvider read model", () => {
     );
 
     await waitFor(() => expect(shell.sent.length).toBeGreaterThan(0));
-    expect(JSON.parse(shell.sent[0]).type).toBe("snapshot.request");
+    expect(JSON.parse(nth(shell.sent, 0)).type).toBe("snapshot.request");
     expect(text("revision")).toBe("4");
   });
 
@@ -323,7 +324,7 @@ describe("MobileRuntimeProvider store integration", () => {
     shell.deliver(transit(8, "2026-11-06T08:45:00Z"));
     await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(8));
     const delayed = useNavigationStore.getState();
-    expect(delayed.itinerary?.legs[0].startTime).toBe("2026-11-06T08:45:00Z");
+    expect(delayed.itinerary?.legs[0]?.startTime).toBe("2026-11-06T08:45:00Z");
     expect(delayed.liveDataUnavailable).toBe(true);
     shell.sent.length = 0;
     shell.deliver(transit(7, "2026-11-06T08:44:00Z"));
@@ -333,10 +334,12 @@ describe("MobileRuntimeProvider store integration", () => {
     expect(shell.sent).toEqual([]);
     shell.deliver(transit(9, "2026-11-06T08:44:00Z"));
     await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(9));
-    expect(useNavigationStore.getState().itinerary?.legs[0].startTime).toBe("2026-11-06T08:44:00Z");
-    expect(useNavigationStore.getState().transitCaptures[0].stops[0].expectedDeparture).toBe(
+    expect(useNavigationStore.getState().itinerary?.legs[0]?.startTime).toBe(
       "2026-11-06T08:44:00Z",
     );
+    expect(
+      nth(nth(useNavigationStore.getState().transitCaptures, 0).stops, 0).expectedDeparture,
+    ).toBe("2026-11-06T08:44:00Z");
   });
 
   it("updates the store when a snapshot arrives, never while React renders", async () => {

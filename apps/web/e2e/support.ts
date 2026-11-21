@@ -68,13 +68,16 @@ export async function countPixels(
       if (!context) throw new Error("No 2D context");
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      // This runs serialized in the page, so it cannot import a helper. Image
+      // data always holds four channels per pixel; a missing one is a bug.
+      const near = (at: number, target: number) => {
+        const value = pixels[at];
+        if (value === undefined) throw new Error(`No channel at ${at} of ${pixels.length}`);
+        return Math.abs(value - target) <= tolerance;
+      };
       let count = 0;
       for (let index = 0; index < pixels.length; index += 4) {
-        if (
-          Math.abs(pixels[index] - color[0]) <= tolerance &&
-          Math.abs(pixels[index + 1] - color[1]) <= tolerance &&
-          Math.abs(pixels[index + 2] - color[2]) <= tolerance
-        ) {
+        if (near(index, color[0]) && near(index + 1, color[1]) && near(index + 2, color[2])) {
           count += 1;
         }
       }

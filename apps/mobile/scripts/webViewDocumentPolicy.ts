@@ -1,10 +1,13 @@
 /** Check the installed SDK's event origin, including ordering before page code. */
 export function hasWebViewDocumentStartPolicy(source: string): boolean {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  const method = (name: string) =>
-    (code.split(`public void ${name} (`)[1] ?? code.split(`public void ${name}(`)[1] ?? "")
-      .split("@Override")[0]
-      .replace(/\s+/g, " ");
+  // The method body runs from its signature to the next annotated method.
+  const method = (name: string) => {
+    const fromSignature =
+      code.split(`public void ${name} (`)[1] ?? code.split(`public void ${name}(`)[1] ?? "";
+    const body = fromSignature.split("@Override")[0] ?? "";
+    return body.replace(/\s+/g, " ");
+  };
   const start = method("onPageStarted");
   const history = method("doUpdateVisitedHistory");
   const taggedBeforeDelivery = (body: string, tag: boolean) => {

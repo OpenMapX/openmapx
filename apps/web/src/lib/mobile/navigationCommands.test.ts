@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import type { BridgeClient } from "./bridgeClient";
 import { BridgeError, NativeCommandError } from "./bridgeClient";
 import { CommandError, NativeNavigationCommands } from "./navigationCommands";
@@ -92,7 +93,7 @@ describe("NativeNavigationCommands start", () => {
     // Prompting before the shell accepted the package would spend the user's one
     // prompt on a trip that may never start.
     expect(order).toEqual(["permission after 1 calls"]);
-    expect(calls[1].type).toBe("session.start");
+    expect(nth(calls, 1).type).toBe("session.start");
   });
 
   it("never starts when the permission flow throws", async () => {
@@ -263,7 +264,7 @@ describe("NativeNavigationCommands serialization", () => {
       "session.start",
       "settings.update",
     ]);
-    expect(calls[2].options.sessionId).toBeUndefined();
+    expect(nth(calls, 2).options.sessionId).toBeUndefined();
   });
 
   it("does not strand later mutations behind a failed one", async () => {
@@ -303,7 +304,7 @@ describe("NativeNavigationCommands revision stamping", () => {
 
     await new NativeNavigationCommands(client, acknowledged("s7", 12)).stop();
 
-    expect(calls[0].options).toMatchObject({ sessionId: "s7", revision: 12 });
+    expect(nth(calls, 0).options).toMatchObject({ sessionId: "s7", revision: 12 });
   });
 
   it("omits a stamp it does not have", async () => {
@@ -313,8 +314,8 @@ describe("NativeNavigationCommands revision stamping", () => {
       voiceEnabled: true,
     });
 
-    expect(calls[0].options.sessionId).toBeUndefined();
-    expect(calls[0].options.revision).toBeUndefined();
+    expect(nth(calls, 0).options.sessionId).toBeUndefined();
+    expect(nth(calls, 0).options.revision).toBeUndefined();
   });
 
   it("sends arrival as its own command", async () => {
@@ -322,6 +323,6 @@ describe("NativeNavigationCommands revision stamping", () => {
 
     await new NativeNavigationCommands(client, acknowledged()).stop(true);
 
-    expect(calls[0].type).toBe("session.complete");
+    expect(nth(calls, 0).type).toBe("session.complete");
   });
 });

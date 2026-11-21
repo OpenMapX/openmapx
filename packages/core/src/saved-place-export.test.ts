@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   type ExportPlace,
   exportFilename,
@@ -26,6 +26,8 @@ describe("placesToGeoJson", () => {
     expect(fc.features).toHaveLength(2);
 
     const [first, second] = fc.features;
+    assert.isDefined(first);
+    assert.isDefined(second);
     // GeoJSON coordinates MUST be [lng, lat] — guard against a silent swap.
     expect(first.geometry).toEqual({ type: "Point", coordinates: [13.3777, 52.5163] });
     expect(first.properties).toEqual({
@@ -166,6 +168,7 @@ it("exports complete acquired notices and durable links with structured field re
     fieldContributors: { name: [receipt], address: [], lat: [receipt], lng: [receipt] },
   };
   const feature = placesToGeoJson([place]).features[0];
+  assert.isDefined(feature);
   expect(feature.properties?.fieldContributors).toEqual(place.fieldContributors);
   expect(JSON.stringify(feature.properties?.attribution)).toContain("Original notice");
   for (const output of [placesToGpx([place]), placesToKml([place])]) {

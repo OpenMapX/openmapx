@@ -1,0 +1,273 @@
+import { describe, expect, it } from "vitest";
+import { getRoadConditionRoutingDecision, routingRightsReasons } from "../roadConditionRouting";
+import { closure, closureEvidence, effect, event, evidence } from "./fixtures/roadCondition";
+
+const now = Date.parse("2026-09-11T12:00:00Z");
+
+describe("routing rights", () => {
+  const rightsOf = (over: Partial<ReturnType<typeof evidence>["rights"]> = {}) => {
+    const e = evidence();
+    return { ...e, rights: { ...e.rights, ...over } };
+  };
+  const GREY = { allowGreyArea: true, allowNonCommercial: false };
+  const ANY = { allowGreyArea: true, allowNonCommercial: true };
+
+  it("routes on established derived use, retention and commercial use", () => {
+    expect(routingRightsReasons(rightsOf())).toEqual([]);
+  });
+
+  it("does not need the right to pass the source data itself on", () => {
+    expect(routingRightsReasons(rightsOf({ source_redistribution: "no" }))).toEqual([]);
+  });
+
+  it("always refuses a denied derived use or retention", () => {
+    for (const over of [{ derived_redistribution: "no" }, { retention: "no" }] as const)
+      expect(routingRightsReasons(rightsOf(over), ANY)).toEqual(["rights_denied"]);
+  });
+
+  it("treats unclear rights as the policy decides, strict without one", () => {
+    const unclear = rightsOf({ derived_redistribution: "unknown" });
+    expect(routingRightsReasons(unclear)).toEqual(["unverified_rights"]);
+    expect(routingRightsReasons(unclear, GREY)).toEqual([]);
+  });
+
+  it("counts a grant reported without a review date as unclear", () => {
+    const unchecked = rightsOf({ reviewed_at: null });
+    expect(routingRightsReasons(unchecked)).toEqual(["unverified_rights"]);
+    expect(routingRightsReasons(unchecked, GREY)).toEqual([]);
+  });
+
+  it("admits a non-commercial source only when the policy does", () => {
+    const nc = rightsOf({ commercial_use: "no" });
+    expect(routingRightsReasons(nc, GREY)).toEqual(["non_commercial_source"]);
+    expect(routingRightsReasons(nc, ANY)).toEqual([]);
+  });
+
+  it("needs the credit the licence asks for, whatever the policy", () => {
+    const e = { ...rightsOf(), attribution: null };
+    expect(routingRightsReasons(e, ANY)).toEqual(["missing_attribution"]);
+    expect(routingRightsReasons({ ...rightsOf(), license_url: null }, ANY)).toEqual([
+      "missing_attribution",
+    ]);
+    expect(
+      routingRightsReasons({ ...e, rights: { ...e.rights, attribution_required: "no" } }),
+    ).toEqual([]);
+  });
+
+  it("passes the policy through the routing decision", () => {
+    const e = event();
+    closureEvidence(e).rights.retention = "unknown";
+    expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).eligible).toBe(
+      false,
+    );
+    expect(
+      getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now, rightsPolicy: GREY })
+        .eligible,
+    ).toBe(true);
+  });
+});
+
+describe("road-condition routing evidence", () => {
+  it("accepts a current, permitted complete binding until its source deadline", () => {
+    expect(getRoadConditionRoutingDecision(event(), closure(), { evaluatedAt: now })).toEqual({
+      eligible: true,
+      reasons: [],
+      validUntil: "2026-09-11T12:10:00.000Z",
+    });
+  });
+
+  it.each(["ambiguous", "unresolved", "no_coverage", "obsolete", "unattempted"])(
+    "withholds %s bindings",
+    (status) => {
+      const e = event();
+      closureEvidence(e).binding_status = status as "ambiguous";
+      expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).eligible).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each(["planned", "suspended", "unknown"] as const)(
+    "never routes an effect under a %s lifecycle, whatever its evidence",
+    (status) => {
+      const e = { ...event(), validity: { status } };
+      expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now })).toMatchObject({
+        eligible: false,
+        reasons: ["lifecycle_not_in_force"],
+      });
+    },
+  );
+
+  it("weighs a planned start against the instant of evaluation, for a trip inside its window", () => {
+    const planned = (start: string) => ({
+      ...event(),
+      validity: { status: "planned" as const, start },
+    });
+    const later = Date.parse("2026-09-11T12:05:00Z");
+    const ahead = planned("2026-09-11T12:01:00Z");
+    expect(
+      getRoadConditionRoutingDecision(ahead, closure(ahead), { evaluatedAt: now, travelAt: later })
+        .reasons,
+    ).not.toContain("lifecycle_not_in_force");
+    const passed = planned("2026-09-11T11:00:00Z");
+    expect(
+      getRoadConditionRoutingDecision(passed, closure(passed), {
+        evaluatedAt: now,
+        travelAt: later,
+      }).reasons,
+    ).toContain("lifecycle_not_in_force");
+  });
+
+  it("never routes an operator action that is not in place", () => {
+    const e = event();
+    const approved = { ...closure(e), actionStatus: "approved" };
+    expect(getRoadConditionRoutingDecision(e, approved, { evaluatedAt: now })).toMatchObject({
+      eligible: false,
+      reasons: ["action_not_routable"],
+    });
+  });
+
+  it("cannot use a binding of an earlier revision", () => {
+    const e = event();
+    closureEvidence(e).binding_revision = 2;
+    expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).reasons).toContain(
+      "obsolete_binding",
+    );
+  });
+
+  it("expires at the boundary even if the situation has a later end date", () => {
+    expect(
+      getRoadConditionRoutingDecision(event(), closure(), { evaluatedAt: now + 600_000 }).eligible,
+    ).toBe(false);
+  });
+
+  it("checks evidence now and a future situation at travel time separately", () => {
+    const e = event();
+    closureEvidence(e).valid_from = "2026-09-12T10:00:00Z";
+    closureEvidence(e).valid_to = "2026-09-12T16:00:00Z";
+    expect(
+      getRoadConditionRoutingDecision(e, closure(e), {
+        evaluatedAt: now,
+        travelAt: Date.parse("2026-09-12T12:00:00Z"),
+      }).eligible,
+    ).toBe(true);
+  });
+
+  it("rejects class-scoped evidence, denied parents and unknown grants", () => {
+    const e = event();
+    closureEvidence(e).applicability = {
+      kind: "classes",
+      include: [{ class: "truck" }],
+    };
+    expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).reasons).toContain(
+      "unsupported_vehicle_scope",
+    );
+    expect(
+      getRoadConditionRoutingDecision(event(), closure(), {
+        evaluatedAt: now,
+        disallowedSources: new Set(["fr"]),
+      }).eligible,
+    ).toBe(false);
+    const unknown = event();
+    closureEvidence(unknown).rights.derived_redistribution = "unknown";
+    expect(
+      getRoadConditionRoutingDecision(unknown, closure(unknown), { evaluatedAt: now }).reasons,
+    ).toContain("unverified_rights");
+  });
+
+  it("routes a closure for cars outright as it routes one for all traffic", () => {
+    const cars = { kind: "classes" as const, include: [{ class: "car" as const }] };
+    const rule = effect("fr1/closure", "closure", { applicability: cars });
+    const e = { ...event(), effects: [rule] };
+    closureEvidence(e).applicability = cars;
+    expect(getRoadConditionRoutingDecision(e, rule, { evaluatedAt: now }).eligible).toBe(true);
+  });
+
+  it("routes an effect only on its own evidence, of this situation and this kind", () => {
+    const e = event();
+    delete e.routingEvidence;
+    expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).reasons).toEqual([
+      "missing_routing_evidence",
+    ]);
+    const other = event();
+    other.routingEvidence = { "fr1/closure": { ...evidence(), record_id: "oc:situation:fr:fr2" } };
+    expect(
+      getRoadConditionRoutingDecision(other, closure(other), { evaluatedAt: now }).reasons,
+    ).toEqual(["invalid_routing_evidence"]);
+    const kind = event();
+    kind.routingEvidence = { "fr1/closure": evidence("fr1/closure", "speed_limit") };
+    expect(
+      getRoadConditionRoutingDecision(kind, closure(kind), { evaluatedAt: now }).eligible,
+    ).toBe(false);
+  });
+
+  it("routes a crowd situation only once its evidence made it routing-eligible", () => {
+    const crowd = { ...event(), origin: "crowd" as const, evidence: { state: "reported" } };
+    expect(
+      getRoadConditionRoutingDecision(crowd, closure(crowd), { evaluatedAt: now }).reasons,
+    ).toContain("unconfirmed_origin");
+    const corroborated = {
+      ...crowd,
+      evidence: { state: "corroborated", routingEligible: true },
+    };
+    expect(
+      getRoadConditionRoutingDecision(corroborated, closure(corroborated), { evaluatedAt: now })
+        .eligible,
+    ).toBe(true);
+  });
+
+  it("needs a transition instant to route an effect that recurs", () => {
+    const e = event();
+    e.effects = [
+      effect("fr1/closure", "closure", {
+        validity: {
+          status: "active",
+          periods: [{ startTime: "22:00", duration: "PT6H", scheduleTimezone: "Europe/Paris" }],
+        },
+      }),
+    ];
+    expect(getRoadConditionRoutingDecision(e, closure(e), { evaluatedAt: now }).reasons).toContain(
+      "unsupported_schedule",
+    );
+  });
+
+  it("fails closed without throwing for malformed runtime evidence", () => {
+    for (const patch of [
+      { segments: [null] },
+      { reason_codes: "exact" },
+      { rights: [] },
+      { applicability: { kind: "all", raw: [1] } },
+      { record_revision: "3" },
+      { fresh_until: "bad" },
+    ]) {
+      const malformed = event();
+      Object.assign(closureEvidence(malformed), patch);
+      const decide = () =>
+        getRoadConditionRoutingDecision(malformed, closure(malformed), { evaluatedAt: now });
+      expect(decide).not.toThrow();
+      expect(decide().eligible).toBe(false);
+    }
+  });
+
+  it("never routes restriction evidence or a vehicle rule, whatever the evidence claims", () => {
+    for (const rule of [
+      effect("fr1/closure", "closure", { applicability: { kind: "unknown" } }),
+      effect("fr1/closure", "closure", { normalization: "partial" }),
+      effect("fr1/closure", "closure", {
+        applicability: { kind: "classes", include: [{ class: "hgv" }] },
+      }),
+      effect("fr1/closure", "dimension_limit", {
+        dimension: "gross_weight",
+        value: { value: 26000, unit: "kg" },
+        operator: "lte",
+        meaning: "maximum_permitted",
+      }),
+    ]) {
+      const e = { ...event(), effects: [rule] };
+      expect(getRoadConditionRoutingDecision(e, rule, { evaluatedAt: now })).toMatchObject({
+        eligible: false,
+        reasons: ["vehicle_specific_restriction"],
+      });
+    }
+  });
+});

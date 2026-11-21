@@ -5,6 +5,7 @@ import {
   resolveToken,
   sharedStrings,
 } from "@openmapx/integration-framework/strings";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { Camera, CameraView } from "@openmapx/mobility-core/camera";
 import { describe, expect, it } from "vitest";
 import { mapCameraToDetail, mapCameraToResult } from "../mapper.js";
@@ -199,8 +200,8 @@ describe("mapCameraToDetail", () => {
       true,
     );
     expect(images.every((s) => s.sectionIcon === "videocam")).toBe(true);
-    expect(text(images[0].imageAlt)).toBe("Tie 1 Espoo");
-    expect(text(images[0].caption)).toBe("Updated");
+    expect(text(nth(images, 0).imageAlt)).toBe("Tie 1 Espoo");
+    expect(text(nth(images, 0).caption)).toBe("Updated");
   });
 
   it("puts the images first, then the streams, the player and the info table", () => {
@@ -249,7 +250,7 @@ describe("mapCameraToDetail", () => {
     );
 
     expect(ofType(detail.sections, "image")).toEqual([]);
-    const [embed] = ofType(detail.sections, "embed");
+    const embed = nth(ofType(detail.sections, "embed"), 0);
     expect(embed.embedUrl).toBe("https://tdx.example.tw/stream/CCTV-1.m3u8");
     expect(embed.embedType).toBe("video");
     expect(embed.sectionIcon).toBe("videocam");
@@ -284,7 +285,7 @@ describe("mapCameraToDetail", () => {
       }),
     );
 
-    const [player] = ofType(detail.sections, "embed");
+    const player = nth(ofType(detail.sections, "embed"), 0);
     expect(player.embedUrl).toBe("https://webcams.windy.com/webcams/public/embed/player/1/day");
     expect(player.embedType).toBe("iframe");
     expect(player.sectionIcon).toBe("open_in_new");
@@ -317,7 +318,7 @@ describe("mapCameraToDetail", () => {
       }),
     );
 
-    const [info] = ofType(detail.sections, "table");
+    const info = nth(ofType(detail.sections, "table"), 0);
     expect(info.sectionIcon).toBe("info");
     expect(info.rows?.map(([label, value]) => [text(label), text(value)])).toEqual([
       ["Road", "E18"],
@@ -327,7 +328,7 @@ describe("mapCameraToDetail", () => {
 
     const seconds = mapCameraToDetail(camera({ views: [view({ refreshSec: 45 })] }));
     expect(
-      ofType(seconds.sections, "table")[0].rows?.map(([label, value]) => [
+      nth(ofType(seconds.sections, "table"), 0).rows?.map(([label, value]) => [
         text(label),
         text(value),
       ]),
@@ -350,12 +351,12 @@ describe("mapCameraToDetail", () => {
     const detail = mapCameraToDetail(camera({ detailUrl: "javascript:alert(1)" }));
 
     expect(detail.website).toBeUndefined();
-    expect(ofType(detail.sections, "image")[0].linkUrl).toBeUndefined();
+    expect(nth(ofType(detail.sections, "image"), 0).linkUrl).toBeUndefined();
 
     const viewLink = mapCameraToDetail(
       camera({ detailUrl: undefined, views: [view({ detailUrl: "javascript:alert(1)" })] }),
     );
-    expect(ofType(viewLink.sections, "image")[0].linkUrl).toBeUndefined();
+    expect(nth(ofType(viewLink.sections, "image"), 0).linkUrl).toBeUndefined();
   });
 
   it("links each still to its own view's page first, then the camera's", () => {

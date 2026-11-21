@@ -5,6 +5,7 @@ import {
   resolveToken,
   sharedStrings,
 } from "@openmapx/integration-framework/strings";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { RoadWeatherStation } from "@openmapx/mobility-core/road-weather";
 import { describe, expect, it } from "vitest";
 import { mapStationToDetail, mapStationToResult, variantOf } from "../mapper.js";
@@ -227,7 +228,7 @@ describe("mapStationToDetail", () => {
   });
 
   it("titles a single sensor's section the road surface", () => {
-    const detail = mapStationToDetail(station({ surface: [station().surface[0]!] }));
+    const detail = mapStationToDetail(station({ surface: [nth(station().surface, 0)] }));
     expect(text(detail.sections[0]?.title, "de")).toBe("Fahrbahn");
   });
 

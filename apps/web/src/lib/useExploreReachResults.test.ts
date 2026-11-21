@@ -66,7 +66,12 @@ describe("exact Explore transit mask", () => {
 
 describe("provider order after reach filtering", () => {
   it("restores original rank within the returned reachable subset", () => {
-    const provider = [{ id: "far" }, { id: "outside" }, { id: "near" }, { id: "capped-out" }];
+    const provider: [{ id: string }, { id: string }, { id: string }, { id: string }] = [
+      { id: "far" },
+      { id: "outside" },
+      { id: "near" },
+      { id: "capped-out" },
+    ];
     expect(restoreProviderOrder(provider, [provider[2], provider[0]])).toEqual([
       provider[0],
       provider[2],

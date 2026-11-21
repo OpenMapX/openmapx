@@ -10,7 +10,7 @@ function fakeMap() {
   let terrain: { source: string } | null = null;
   const map = {
     getSource: (id: string) => sources.get(id),
-    addSource: vi.fn((...args: unknown[]) => sources.set(args[0] as string, args[1])),
+    addSource: vi.fn((id: string, source: unknown) => sources.set(id, source)),
     getLayer: (id: string) => layers.get(id),
     addLayer: vi.fn((...args: unknown[]) => {
       const layer = args[0] as { id: string; type: string };

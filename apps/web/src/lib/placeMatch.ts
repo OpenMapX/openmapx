@@ -69,7 +69,7 @@ function significantTokens(s: string): string[] {
 export function isConfidentPlaceMatch(query: string, result: SearchResult): boolean {
   const qTokens = significantTokens(query);
   if (qTokens.length === 0) return false;
-  const primaryName = normalize(result.label.split(",")[0]).trim();
+  const primaryName = normalize(result.label.replace(/,[\s\S]*/, "")).trim();
   const primaryTokens = significantTokens(primaryName);
   // A single word is otherwise enough to auto-select any place whose name
   // starts with it ("coffee" → Coffee County, "hotel" → Hotel California).

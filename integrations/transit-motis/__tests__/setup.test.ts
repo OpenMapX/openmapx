@@ -4,6 +4,7 @@ import {
   assertTransitProviderContract,
   resolveIntegrationPlatformEndpoint,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
@@ -57,7 +58,7 @@ describe("transit-motis setup", () => {
   it("serves transit from Transitous when no local MOTIS is configured", () => {
     const providers = registeredProviders();
     expect(providers.map((p) => p.id)).toEqual(["transit-motis-transitous"]);
-    const [transitous] = providers;
+    const transitous = nth(providers, 0);
     expect(transitous.prefix).toBe("mo:");
     expect(transitous.role).toBe("baseline");
     expect(transitous.capabilities.stops).toMatchObject({
@@ -81,7 +82,7 @@ describe("transit-motis setup", () => {
   it("keeps Transitous a narrow fallback beside a self-hosted MOTIS", () => {
     const providers = registeredProviders({ serviceUrl: "http://motis:8080" });
     expect(providers.map((p) => p.id)).toEqual(["transit-motis-local", "transit-motis-transitous"]);
-    const transitous = providers[1];
+    const transitous = nth(providers, 1);
     expect(transitous.role).toBe("fallback");
     expect(transitous.capabilities.stops.bbox).toBe(false);
     expect(transitous.getVehicleRadar).toBeUndefined();

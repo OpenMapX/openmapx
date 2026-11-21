@@ -1,6 +1,7 @@
 import type { CacheClient } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
@@ -21,7 +22,7 @@ describe("search suggestions route", () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
     const res = reply();
-    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "F" } }), res);
+    await nth(ctx.registered.routes, 0).handler(routeRequest({ query: { q: "F" } }), res);
     expect(res.send).toHaveBeenCalledWith({
       suggestions: [],
       attributions: [],
@@ -33,7 +34,10 @@ describe("search suggestions route", () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
     const res = reply();
-    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "FRA", lat: "50" } }), res);
+    await nth(ctx.registered.routes, 0).handler(
+      routeRequest({ query: { q: "FRA", lat: "50" } }),
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -73,7 +77,7 @@ describe("search suggestions route", () => {
     setup(ctx);
     const res = reply();
 
-    await ctx.registered.routes[0].handler(routeRequest({ query: { q: "Berlin" } }), res);
+    await nth(ctx.registered.routes, 0).handler(routeRequest({ query: { q: "Berlin" } }), res);
 
     expect(res.header).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(calls).toEqual([{ key: expect.any(String), ttlSeconds: 300, callerSignal: undefined }]);

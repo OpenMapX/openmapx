@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   dataSubjectRequest,
   dataSubjectRequestEvent,
@@ -19,7 +19,7 @@ const OPERATOR_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy === "op
   .map((r) => r.id)
   .sort();
 const HELD_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy !== "not_personal");
-const ADMINS = ["lifecycle-admin-a", "lifecycle-admin-b"];
+const ADMINS = ["lifecycle-admin-a", "lifecycle-admin-b"] as const;
 
 const suite = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
 suite("privacy request lifecycle on PostgreSQL", () => {
@@ -90,7 +90,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         taskId: task.id,
         version: current.version,
         reasonCode: "checked-outside-openmapx",
-        actorId: ADMINS[0]!,
+        actorId: ADMINS[0],
         idempotencyKey: `resolve-${task.id}`,
       });
     }
@@ -151,14 +151,15 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       const racing = [service().create(input), service().create(input)];
       // Wait until both transactions block on the retention lock (both passed the pre-check).
       for (let i = 0; ; i++) {
-        const [{ waiting }] = await fixture.sql<{ waiting: number }[]>`
+        const [locks] = await fixture.sql<{ waiting: number }[]>`
           select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`;
-        if (waiting >= 2) break;
+        if (locks && locks.waiting >= 2) break;
         if (i > 200) throw new Error("creates never reached the retention lock");
         await new Promise((r) => setTimeout(r, 25));
       }
       await holder`select pg_advisory_unlock(1330464848, 1380275027)`;
       const [a, b] = await Promise.all(racing);
+      assert(a && b, "both creates return a request");
       expect(a.id).toBe(b.id);
     } finally {
       // A failure above must not leave the session lock held for later tests.
@@ -225,7 +226,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         version: downloaded.version,
         decision: "completed",
         reasonCode: "export-delivered",
-        actorId: ADMINS[0]!,
+        actorId: ADMINS[0],
         idempotencyKey: `complete-early-${request.id}`,
       }),
     ).rejects.toMatchObject({ code: "TASKS_UNRESOLVED", statusCode: 409 });
@@ -237,7 +238,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       version: resolved.version,
       decision: "completed",
       reasonCode: "operator-sources-checked",
-      actorId: ADMINS[0]!,
+      actorId: ADMINS[0],
       idempotencyKey: `complete-${request.id}`,
     });
     expect(completed).toMatchObject({ state: "completed" });
@@ -357,7 +358,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         version,
         decision,
         reasonCode: "need-information",
-        actorId: ADMINS[0]!,
+        actorId: ADMINS[0],
         idempotencyKey: key,
       });
     const firstWait = await decide("waiting_on_requester", request.version, `wait-1-${request.id}`);
@@ -394,7 +395,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         extendedUntil: until,
         extensionNotifiedAt: now,
         reasonCode: "complexity",
-        actorId: ADMINS[0]!,
+        actorId: ADMINS[0],
         idempotencyKey: key,
       });
     const first = await extend(
@@ -430,7 +431,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       extendedUntil: new Date(request.dueAt.getTime() + 14 * 86_400_000),
       extensionNotifiedAt: now,
       reasonCode: "complexity",
-      actorId: ADMINS[0]!,
+      actorId: ADMINS[0],
       idempotencyKey: `extend-reminded-${request.id}`,
     });
     now = new Date(extended.dueAt.getTime() - 24 * 3_600_000);

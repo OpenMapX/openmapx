@@ -1,0 +1,338 @@
+import { assert, describe, expect, it } from "vitest";
+import {
+  actionInForce,
+  actionInPlace,
+  bindsEveryCar,
+  closesRoadForCars,
+  effectInForceAt,
+  effectStatusInForce,
+  isLocalAccessClosure,
+  lifecycleInForce,
+  localizedTextFor,
+  readRoadConditionEffects,
+  scheduleOccursAt,
+  speedCapKph,
+  validityHoldsAt,
+  validityWindowHoldsAt,
+} from "../roadConditionEffects";
+import { closure, effect, event } from "./fixtures/roadCondition";
+
+describe("readRoadConditionEffects", () => {
+  it("keeps every effect it can read, with fields a newer producer added", () => {
+    const [read] = readRoadConditionEffects([
+      { ...effect("a/closure", "closure"), futureField: { x: 1 } },
+    ]);
+    expect(read).toMatchObject({ id: "a/closure", kind: "closure", scope: "road" });
+  });
+
+  it("turns an effect it cannot read into unsupported restriction evidence, keeping its id", () => {
+    expect(
+      readRoadConditionEffects([
+        { ...effect("a/teleport", "closure"), kind: "teleport" },
+        { ...effect("a/limit", "speed_limit") },
+        "nonsense",
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        id: "a/teleport",
+        kind: "unsupported",
+        applicability: { kind: "unknown" },
+        normalization: "unsupported",
+      }),
+      expect.objectContaining({ id: "a/limit", kind: "unsupported" }),
+      expect.objectContaining({ id: "effects[2]", kind: "unsupported" }),
+    ]);
+    expect(readRoadConditionEffects(undefined)).toEqual([]);
+  });
+});
+
+describe("what an effect does to cars", () => {
+  it("binds every car only when no vehicle could be spared", () => {
+    expect(bindsEveryCar({ kind: "all" })).toBe(true);
+    expect(bindsEveryCar({ kind: "classes", include: [{ class: "car" }] })).toBe(true);
+    expect(
+      bindsEveryCar({
+        kind: "classes",
+        include: [
+          {
+            class: "car",
+            when: [
+              { dimension: "gross_weight", operator: "gt", value: { value: 3500, unit: "kg" } },
+            ],
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(bindsEveryCar({ kind: "classes", include: [{ class: "hgv" }] })).toBe(false);
+    // An exception for a purpose spares no ordinary car; one by fuel may.
+    expect(bindsEveryCar({ kind: "all", except: [{ usage: "residents" }] })).toBe(true);
+    expect(bindsEveryCar({ kind: "all", except: [{ fuel: "electric" }] })).toBe(false);
+    expect(bindsEveryCar({ kind: "unknown" })).toBe(false);
+  });
+
+  it("tells a closure open to local access from one no car may use", () => {
+    const except = (...usages: string[]) =>
+      effect("c", "closure", {
+        applicability: { kind: "all", except: usages.map((usage) => ({ usage })) },
+      });
+    const offRoad = effect("c", "closure", {
+      scope: "cycleway",
+      applicability: { kind: "all", except: [{ usage: "local_access" }] },
+    });
+    expect(isLocalAccessClosure(except("local_access"))).toBe(true);
+    expect(isLocalAccessClosure(except("residents"))).toBe(true);
+    expect(isLocalAccessClosure(except("local_access", "emergency_services"))).toBe(true);
+    expect(isLocalAccessClosure(except("emergency_services"))).toBe(false);
+    expect(isLocalAccessClosure(effect("c", "closure"))).toBe(false);
+    expect(isLocalAccessClosure(offRoad)).toBe(false);
+  });
+
+  it("closes the road for a carriageway closure or every lane closed, not for a cycleway", () => {
+    expect(closesRoadForCars(effect("c", "closure"))).toBe(true);
+    expect(closesRoadForCars(effect("c", "closure", { scope: "cycleway" }))).toBe(false);
+    expect(
+      closesRoadForCars(effect("l", "lane_restriction", { vehicleImpact: "all_lanes_closed" })),
+    ).toBe(true);
+    expect(
+      closesRoadForCars(effect("l", "lane_restriction", { vehicleImpact: "some_lanes_closed" })),
+    ).toBe(false);
+    expect(closesRoadForCars(effect("c", "closure", { normalization: "partial" }))).toBe(false);
+    expect(
+      closesRoadForCars(
+        effect("c", "closure", { applicability: { kind: "classes", include: [{ class: "hgv" }] } }),
+      ),
+    ).toBe(false);
+  });
+
+  it("never closes the road for lanes that are only restricted, however many", () => {
+    const [restricted] = readRoadConditionEffects([
+      effect("l", "lane_restriction", {
+        vehicleImpact: "some_lanes_closed",
+        lanesTotal: 2,
+        lanesRestricted: 2,
+        lanesOperational: 0,
+      }),
+    ]);
+    expect(restricted).toMatchObject({ lanesRestricted: 2, lanesOperational: 0 });
+    assert.isDefined(restricted);
+    expect(closesRoadForCars(restricted)).toBe(false);
+  });
+
+  it("keeps a delay's band and description when its length is not given", () => {
+    const [delay] = readRoadConditionEffects([
+      effect("d", "delay", { delayBand: "longer_than_six_hours", delayType: "very_long_delays" }),
+    ]);
+    expect(delay).toMatchObject({
+      kind: "delay",
+      delayBand: "longer_than_six_hours",
+      delayType: "very_long_delays",
+    });
+  });
+
+  it("caps speed by a mandatory limit only", () => {
+    const limit = (fields: Record<string, unknown>) =>
+      effect("s", "speed_limit", { limit: { value: 60, unit: "km/h" }, ...fields });
+    expect(speedCapKph(limit({}))).toBe(60);
+    expect(speedCapKph(limit({ advisory: true }))).toBeUndefined();
+    expect(speedCapKph(limit({ applicability: { kind: "unknown" } }))).toBeUndefined();
+    expect(speedCapKph(effect("c", "closure"))).toBeUndefined();
+  });
+});
+
+describe("when an effect is in force", () => {
+  it("preserves subsecond precision with an exclusive schedule end", () => {
+    const schedule = {
+      startDate: "2026-09-11",
+      endDate: "2026-09-11",
+      startTime: "10:00",
+      duration: "PT0.5S",
+      scheduleTimezone: "UTC",
+    };
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:00:00.499Z"))).toBe(true);
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:00:00.500Z"))).toBe(false);
+  });
+
+  it.each(["P", "PT", "P1DT", "garbagePT1Hgarbage", "P1M", `PT${"9".repeat(306)}S`])(
+    "uses the existing end-time fallback for unusable duration %s",
+    (duration) => {
+      const schedule = {
+        startDate: "2026-09-11",
+        endDate: "2026-09-11",
+        startTime: "10:00",
+        endTime: "11:00",
+        duration,
+        scheduleTimezone: "UTC",
+      };
+      expect(scheduleOccursAt(schedule, new Date("2026-09-11T10:30:00Z"))).toBe(true);
+      expect(scheduleOccursAt(schedule, new Date("2026-09-11T11:00:00Z"))).toBe(false);
+    },
+  );
+
+  it("retains the whole-day fallback when neither duration nor end time is usable", () => {
+    const schedule = {
+      startDate: "2026-09-11",
+      endDate: "2026-09-11",
+      duration: "P",
+      scheduleTimezone: "UTC",
+    };
+    expect(scheduleOccursAt(schedule, new Date("2026-09-11T12:00:00Z"))).toBe(true);
+    expect(scheduleOccursAt(schedule, new Date("2026-09-12T00:00:00Z"))).toBe(false);
+  });
+
+  it("holds inside its bounds, not when ended, cancelled or outside them", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    expect(validityHoldsAt({ status: "active", start: "2026-09-11T08:00:00Z" }, at)).toBe(true);
+    expect(validityHoldsAt({ status: "active", end: "2026-09-11T11:00:00Z" }, at)).toBe(false);
+    expect(validityHoldsAt({ status: "active", start: "2026-09-12T00:00:00Z" }, at)).toBe(false);
+    expect(validityHoldsAt({ status: "cancelled" }, at)).toBe(false);
+  });
+
+  it("holds from its start up to, not at, its end", () => {
+    const window = {
+      status: "active" as const,
+      start: "2026-09-11T08:00:00Z",
+      end: "2026-09-11T12:00:00Z",
+    };
+    expect(validityHoldsAt(window, new Date("2026-09-11T08:00:00Z"))).toBe(true);
+    expect(validityHoldsAt(window, new Date("2026-09-11T11:59:59.999Z"))).toBe(true);
+    expect(validityHoldsAt(window, new Date("2026-09-11T12:00:00Z"))).toBe(false);
+  });
+
+  it("holds a nightly window in its own time zone, across midnight, and not in an exception", () => {
+    const nightly = {
+      status: "active" as const,
+      periods: [{ startTime: "22:00", duration: "PT6H", scheduleTimezone: "Europe/Paris" }],
+    };
+    // 23:30 and 03:30 Paris (CEST, UTC+2) are inside; 12:00 is not.
+    expect(validityHoldsAt(nightly, new Date("2026-09-11T21:30:00Z"))).toBe(true);
+    expect(validityHoldsAt(nightly, new Date("2026-09-12T01:30:00Z"))).toBe(true);
+    expect(validityHoldsAt(nightly, new Date("2026-09-11T10:00:00Z"))).toBe(false);
+    const sundaysOff = {
+      ...nightly,
+      exceptions: [{ byDay: ["SU"], scheduleTimezone: "Europe/Paris" }],
+    };
+    expect(validityHoldsAt(sundaysOff, new Date("2026-09-12T21:30:00Z"))).toBe(true);
+    expect(validityHoldsAt(sundaysOff, new Date("2026-09-13T21:30:00Z"))).toBe(false);
+  });
+
+  it("holds a one-off window longer than a day throughout, and not after it ends", () => {
+    // How OpenConditions writes a DATEX period: one start day, a long duration.
+    const works = {
+      status: "active" as const,
+      periods: [
+        {
+          startDate: "2026-09-10",
+          endDate: "2026-09-10",
+          startTime: "06:00",
+          duration: "P3DT9H",
+          scheduleTimezone: "Europe/Paris",
+        },
+      ],
+    };
+    // Starts 2026-09-10 04:00Z, ends 2026-09-13 13:00Z.
+    expect(validityHoldsAt(works, new Date("2026-09-12T12:00:00Z"))).toBe(true);
+    expect(validityHoldsAt(works, new Date("2026-09-13T12:59:00Z"))).toBe(true);
+    expect(validityHoldsAt(works, new Date("2026-09-13T13:00:00Z"))).toBe(false);
+    expect(validityHoldsAt(works, new Date("2026-09-10T03:59:00Z"))).toBe(false);
+  });
+
+  it("evaluates an effect against its own window, else its situation's", () => {
+    const e = event();
+    const phase = effect("p", "closure", {
+      validity: { status: "active", start: "2026-09-20T00:00:00Z" },
+    });
+    const at = new Date("2026-09-11T12:00:00Z");
+    expect(effectInForceAt(e, closure(e), at)).toBe(true);
+    expect(effectInForceAt(e, phase, at)).toBe(false);
+  });
+
+  it("is in force only under an active lifecycle, as OpenConditions decides", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    for (const status of ["planned", "suspended", "ended", "cancelled", "unknown"] as const) {
+      expect(lifecycleInForce({ status })).toBe(false);
+      expect(validityHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(false);
+      expect(validityWindowHoldsAt({ status, start: "2026-09-11T08:00:00Z" }, at)).toBe(true);
+      const e = { ...event(), validity: { status } };
+      expect(effectStatusInForce(e, closure(e))).toBe(false);
+      expect(effectInForceAt(e, closure(e), at)).toBe(false);
+    }
+    expect(lifecycleInForce({ status: "active" })).toBe(true);
+  });
+
+  it("counts a planned or approved effect for a later instant while its start is still ahead", () => {
+    const now = new Date("2026-09-11T12:00:00Z");
+    const later = new Date("2026-09-13T12:00:00Z");
+    const window = { start: "2026-09-12T00:00:00Z", end: "2026-09-14T00:00:00Z" };
+    const planned = { ...event(), validity: { status: "planned" as const, ...window } };
+    const plannedClosure = closure(planned);
+    expect(effectInForceAt(planned, plannedClosure, later, now)).toBe(true);
+    // Not before its window, not without a wall clock, not once the start has passed.
+    expect(effectInForceAt(planned, plannedClosure, now, now)).toBe(false);
+    expect(effectInForceAt(planned, plannedClosure, later)).toBe(false);
+    expect(effectInForceAt(planned, plannedClosure, later, new Date("2026-09-12T06:00:00Z"))).toBe(
+      false,
+    );
+    const undated = { ...event(), validity: { status: "planned" as const, end: window.end } };
+    expect(effectInForceAt(undated, plannedClosure, later, now)).toBe(false);
+    const suspended = { ...event(), validity: { status: "suspended" as const, ...window } };
+    expect(effectInForceAt(suspended, plannedClosure, later, now)).toBe(false);
+
+    const active = { ...event(), validity: { status: "active" as const, ...window } };
+    const approved = effect("c", "closure", { actionStatus: "approved" });
+    const requested = effect("c", "closure", { actionStatus: "requested" });
+    expect(actionInForce(approved, window, now)).toBe(true);
+    expect(effectInForceAt(active, approved, later, now)).toBe(true);
+    expect(effectInForceAt(active, approved, later, new Date("2026-09-12T06:00:00Z"))).toBe(false);
+    expect(effectInForceAt(active, requested, later, now)).toBe(false);
+  });
+
+  it("reads the lifecycle of an effect's own validity before its situation's", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const plannedPhase = effect("p", "closure", { validity: { status: "planned" } });
+    const activePhase = effect("p", "closure", { validity: { status: "active" } });
+    expect(effectInForceAt(event(), plannedPhase, at)).toBe(false);
+    const planned = { ...event(), validity: { status: "planned" as const } };
+    expect(effectInForceAt(planned, activePhase, at)).toBe(true);
+  });
+
+  it("is in force only when the operator action it states is in place", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const e = event();
+    for (const actionStatus of ["requested", "approved", "rejected"]) {
+      const pending = effect("c", "closure", { actionStatus });
+      expect(actionInPlace(pending)).toBe(false);
+      expect(effectInForceAt(e, pending, at)).toBe(false);
+    }
+    for (const actionStatus of [
+      undefined,
+      "being_implemented",
+      "implemented",
+      "termination_requested",
+      "being_terminated",
+    ]) {
+      const placed = effect("c", "closure", actionStatus ? { actionStatus } : {});
+      expect(actionInPlace(placed)).toBe(true);
+      expect(effectInForceAt(e, placed, at)).toBe(true);
+    }
+  });
+
+  it("is never in force when its window could not be read", () => {
+    const unread = effect("c", "closure", {
+      issues: [{ code: "unsupported_schedule", sourcePath: "validity" }],
+    });
+    expect(effectInForceAt(event(), unread, new Date("2026-09-11T12:00:00Z"))).toBe(false);
+  });
+});
+
+describe("localizedTextFor", () => {
+  const text = [
+    { lang: "nl", text: "Weg dicht" },
+    { lang: "en-GB", text: "Road closed" },
+  ];
+  it("picks the locale, then its base language, then the publisher's own", () => {
+    expect(localizedTextFor(text, "en-GB")).toBe("Road closed");
+    expect(localizedTextFor(text, "en")).toBe("Road closed");
+    expect(localizedTextFor(text, "de")).toBe("Weg dicht");
+    expect(localizedTextFor(undefined, "de")).toBeUndefined();
+  });
+});

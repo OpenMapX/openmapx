@@ -217,7 +217,9 @@ function infoSection(crossing: BorderCrossing): DataSourceDetailSection | null {
   }
   if (crossing.location) rows.push([token("row.location"), crossing.location]);
   const providers = [...new Set(crossing.attributions.map((a) => a.name))];
-  if (providers.length === 1) rows.push([token("row.provider"), providers[0]!]);
+  const [onlyProvider] = providers;
+  if (providers.length === 1 && onlyProvider !== undefined)
+    rows.push([token("row.provider"), onlyProvider]);
   if (providers.length > 1) rows.push([token("row.providers"), providers]);
   if (rows.length === 0) return null;
   return { title: sharedT.section.info, type: "table", rows, sectionIcon: "info" };

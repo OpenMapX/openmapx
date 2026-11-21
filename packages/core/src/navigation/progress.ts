@@ -44,25 +44,28 @@ export function computeProgress(
   const positions = prepareManeuverPositions(route);
   const total = positions.total;
   const along = Math.max(0, Math.min(alongMeters, total));
+  // Positions hold one start and end per step; a missing one sits at the route end.
+  const endOf = (index: number): number => positions.ends[index] ?? total;
   let rawIdx = steps.length - 1;
   for (let i = 0; i < steps.length; i++) {
-    if (along <= positions.ends[i]) {
+    if (along <= endOf(i)) {
       rawIdx = i;
       break;
     }
   }
   const idx =
     forcedStepIndex != null ? Math.min(Math.max(forcedStepIndex, 0), steps.length - 1) : rawIdx;
-  const distanceToNextManeuver = Math.max(0, positions.ends[idx] - along);
-  const rawLength = positions.ends[rawIdx] - positions.starts[rawIdx];
+  const distanceToNextManeuver = Math.max(0, endOf(idx) - along);
+  const rawLength = endOf(rawIdx) - (positions.starts[rawIdx] ?? total);
   const fractionLeft =
-    rawLength > 0 ? Math.min(1, Math.max(0, (positions.ends[rawIdx] - along) / rawLength)) : 0;
+    rawLength > 0 ? Math.min(1, Math.max(0, (endOf(rawIdx) - along) / rawLength)) : 0;
   // Convert the physical fraction back into provider travel-distance and ETA units.
-  let distanceRemaining = steps[rawIdx].distance * fractionLeft;
-  let durationRemaining = steps[rawIdx].duration * fractionLeft;
-  for (let i = rawIdx + 1; i < steps.length; i++) {
-    distanceRemaining += steps[i].distance;
-    durationRemaining += steps[i].duration;
+  const rawStep = steps[rawIdx];
+  let distanceRemaining = (rawStep?.distance ?? 0) * fractionLeft;
+  let durationRemaining = (rawStep?.duration ?? 0) * fractionLeft;
+  for (const step of steps.slice(rawIdx + 1)) {
+    distanceRemaining += step.distance;
+    durationRemaining += step.duration;
   }
 
   return { currentStepIndex: idx, distanceToNextManeuver, distanceRemaining, durationRemaining };

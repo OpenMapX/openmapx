@@ -1,4 +1,4 @@
-import { FetchJsonHttpError, fetchJson, isoWithOffsetInZone } from "@openmapx/core";
+import { FetchJsonHttpError, fetchJson, isoWithOffsetInZone, itemAt } from "@openmapx/core";
 import {
   ProviderInputError,
   parseProviderPayload,
@@ -442,8 +442,8 @@ function connectionToItinerary(
       ),
     );
     for (let i = 0; i < vias.length - 1; i++) {
-      const fromVia = vias[i] as (typeof vias)[number];
-      const toVia = vias[i + 1] as (typeof vias)[number];
+      const fromVia = itemAt(vias, i, "via");
+      const toVia = itemAt(vias, i + 1, "via");
       legs.push(
         railLeg(
           epochIso(fromVia.departure.time),

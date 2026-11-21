@@ -7,6 +7,7 @@ import {
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
+import { itemAt } from "@openmapx/core/item-at";
 import postgres from "postgres";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
@@ -34,15 +35,23 @@ async function withPlanetSession<T>(
   let writer = false;
   const held: (readonly [number, number])[] = [];
   try {
-    const [lock] = await connection.unsafe<{ locked: boolean; pid: number }[]>(
-      `SELECT pg_try_advisory_lock(${AMBIENT_WRITE_LOCK}) AS locked,pg_backend_pid() AS pid`,
+    const lock = itemAt(
+      await connection.unsafe<{ locked: boolean; pid: number }[]>(
+        `SELECT pg_try_advisory_lock(${AMBIENT_WRITE_LOCK}) AS locked,pg_backend_pid() AS pid`,
+      ),
+      0,
+      "row from the ambient write lock query",
     );
     if (!lock.locked) throw new AmbientPublicationBusyError();
     writer = true;
     for (const pair of [DATA_ADVISORY_LOCKS.overture, DATA_ADVISORY_LOCKS.searchIndex]) {
-      const [source] = await connection.unsafe<{ locked: boolean }[]>(
-        `SELECT pg_try_advisory_lock_shared($1,$2) AS locked`,
-        [...pair],
+      const source = itemAt(
+        await connection.unsafe<{ locked: boolean }[]>(
+          `SELECT pg_try_advisory_lock_shared($1,$2) AS locked`,
+          [...pair],
+        ),
+        0,
+        "row from the planet source lock query",
       );
       if (!source.locked)
         throw new AmbientPublicationBusyError(
@@ -65,7 +74,7 @@ async function assertSession(connection: Pick<postgres.Sql, "unsafe">, pid: numb
   const [row] = await connection.unsafe<{ pid: number; locked: boolean }[]>(
     `SELECT pg_backend_pid() AS pid,EXISTS(SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND classid=0 AND objid=${AMBIENT_WRITE_LOCK} AND objsubid=1 AND granted) AS locked`,
   );
-  if (row.pid !== pid || !row.locked)
+  if (row?.pid !== pid || !row.locked)
     throw new Error(
       "Planet build connection lost its source locks; resume the committed checkpoint",
     );
@@ -210,10 +219,11 @@ async function runPlanet(
       );
       checkpoint = await planetTransaction(connection, pid, async (tx) => {
         await tx.unsafe(`SET LOCAL statement_timeout='120000ms'`);
-        const batch =
-          checkpoint.phase === "osm"
-            ? await planetOsmBatch(tx, checkpoint, manifest.sources.overture?.release ?? null)
-            : await planetOvertureBatch(tx, checkpoint, manifest.sources.overture!.release);
+        const release = manifest.sources.overture?.release ?? null;
+        let batch: Awaited<ReturnType<typeof planetOsmBatch>>;
+        if (checkpoint.phase === "osm") batch = await planetOsmBatch(tx, checkpoint, release);
+        else if (release !== null) batch = await planetOvertureBatch(tx, checkpoint, release);
+        else throw new Error("Planet build reached its Overture phase without an Overture release");
         const next = {
           ...batch.checkpoint,
           processed: checkpoint.processed + batch.rows,

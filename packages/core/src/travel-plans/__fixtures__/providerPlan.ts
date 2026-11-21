@@ -18,6 +18,8 @@ export function providerPlanSelection(options: TravelPlanResolutionOptions = {})
       geometry: { type: "LineString", coordinates: [[6.091, 50.768], [6.5, 50.9], [6.959, 50.943]] },
     }],
   };
+  const [ride] = itinerary.legs;
+  if (!ride) throw new Error("The provider fixture itinerary has no ride");
   return {
     query: { kind: "search", params: {
       origin: [6.091, 50.768], destination: [6.959, 50.943], time: "2026-11-06T20:16:00.000Z",
@@ -26,7 +28,7 @@ export function providerPlanSelection(options: TravelPlanResolutionOptions = {})
       requireBikeTransport: options.requireBikeTransport ?? false,
       bikeHillPreference: options.bikeHillPreference ?? "default",
     } },
-    plan: { data: { from: itinerary.legs[0].from, to: itinerary.legs[0].to, itineraries: [itinerary], provider: "ms", source: "transit-motis-local", datasetEpoch: "E" },
+    plan: { data: { from: ride.from, to: ride.to, itineraries: [itinerary], provider: "ms", source: "transit-motis-local", datasetEpoch: "E" },
       attributions: [], freshness: { fetchedAt: "2026-11-06T20:00:00Z", hasRealtimeData: true, isStale: false } },
     selectedItineraryKey: transitItineraryKey(itinerary, "ms"),
   };

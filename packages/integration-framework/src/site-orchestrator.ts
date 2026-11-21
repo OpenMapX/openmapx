@@ -123,11 +123,14 @@ export function createSiteOrchestrator<
       const settled = await Promise.allSettled(all.map((p) => options.get.run(p, id, query)));
       let site: TSite | null = null;
       for (const [i, res] of settled.entries()) {
+        // One settled result per provider, in the same order.
+        const provider = all[i];
+        if (!provider) continue;
         if (res.status === "rejected") {
-          outages.failed(all[i].id, options.get.name, res.reason);
+          outages.failed(provider.id, options.get.name, res.reason);
           continue;
         }
-        outages.succeeded(all[i].id);
+        outages.succeeded(provider.id);
         if (!site && res.value?.id === id) site = res.value;
       }
       if (!site) return null;

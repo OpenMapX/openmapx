@@ -116,9 +116,10 @@ export function markerImageIdFor(
 
 /** Parse a marker image id back into its glyph + severity. */
 export function parseMarkerImageId(id: string): { glyph: string; severity: string } | null {
-  const parts = id.split(":");
-  if (parts.length !== 3 || parts[0] !== MARKER_PREFIX) return null;
-  return { glyph: parts[1] as string, severity: parts[2] as string };
+  const [prefix, glyph, severity, ...rest] = id.split(":");
+  if (prefix !== MARKER_PREFIX || glyph === undefined || severity === undefined || rest.length > 0)
+    return null;
+  return { glyph, severity };
 }
 
 /**
@@ -155,30 +156,51 @@ export function markerImageData(glyph: string, severity: string, size = 64): Ima
   return ctx.getImageData(0, 0, size, size);
 }
 
-function lineLength(coords: number[][]): number {
+/** A position as a pair; one without two coordinates gives none. */
+function pairOf(position: readonly number[] | undefined): LngLat | null {
+  const [lng, lat] = position ?? [];
+  return lng === undefined || lat === undefined ? null : [lng, lat];
+}
+
+/** A line's positions as pairs, skipping any without two coordinates. */
+function linePairs(coords: readonly (readonly number[])[]): LngLat[] {
+  const pairs: LngLat[] = [];
+  for (const position of coords) {
+    const pair = pairOf(position);
+    if (pair) pairs.push(pair);
+  }
+  return pairs;
+}
+
+function lineLength(line: readonly LngLat[]): number {
   let len = 0;
-  for (let i = 0; i < coords.length - 1; i++) {
-    len += haversineDistance(coords[i] as LngLat, coords[i + 1] as LngLat);
+  let previous: LngLat | undefined;
+  for (const point of line) {
+    if (previous) len += haversineDistance(previous, point);
+    previous = point;
   }
   return len;
 }
 
-function midpointOfLine(coords: number[][]): LngLat | null {
-  if (coords.length === 0) return null;
-  if (coords.length === 1) return coords[0] as LngLat;
-  const half = lineLength(coords) / 2;
+function midpointOfLine(line: readonly LngLat[]): LngLat | null {
+  const half = lineLength(line) / 2;
   let acc = 0;
-  for (let i = 0; i < coords.length - 1; i++) {
-    const a = coords[i] as LngLat;
-    const b = coords[i + 1] as LngLat;
-    const seg = haversineDistance(a, b);
-    if (acc + seg >= half) {
-      const t = seg === 0 ? 0 : (half - acc) / seg;
-      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  let previous: LngLat | undefined;
+  for (const point of line) {
+    if (previous) {
+      const seg = haversineDistance(previous, point);
+      if (acc + seg >= half) {
+        const t = seg === 0 ? 0 : (half - acc) / seg;
+        return [
+          previous[0] + (point[0] - previous[0]) * t,
+          previous[1] + (point[1] - previous[1]) * t,
+        ];
+      }
+      acc += seg;
     }
-    acc += seg;
+    previous = point;
   }
-  return coords[coords.length - 1] as LngLat;
+  return previous ?? null;
 }
 
 /**
@@ -208,11 +230,11 @@ export function representativePoint(
     }
     return [sx / pts.length, sy / pts.length];
   }
-  if (type === "LineString") return midpointOfLine(coordinates as number[][]);
+  if (type === "LineString") return midpointOfLine(linePairs(coordinates as number[][]));
   if (type === "MultiLineString") {
-    let best: number[][] | null = null;
+    let best: LngLat[] | null = null;
     let bestLen = -1;
-    for (const line of coordinates as number[][][]) {
+    for (const line of (coordinates as number[][][]).map(linePairs)) {
       const len = lineLength(line);
       if (len > bestLen) {
         bestLen = len;
@@ -222,12 +244,10 @@ export function representativePoint(
     return best ? midpointOfLine(best) : null;
   }
   if (type === "Polygon") {
-    const ring = (coordinates as number[][][])[0];
-    return ring && ring.length > 0 ? (ring[0] as LngLat) : null;
+    return pairOf((coordinates as number[][][])[0]?.[0]);
   }
   if (type === "MultiPolygon") {
-    const ring = (coordinates as number[][][][])[0]?.[0];
-    return ring && ring.length > 0 ? (ring[0] as LngLat) : null;
+    return pairOf((coordinates as number[][][][])[0]?.[0]?.[0]);
   }
   if (type === "GeometryCollection") {
     const geometries =

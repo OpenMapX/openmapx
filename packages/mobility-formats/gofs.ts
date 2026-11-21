@@ -209,9 +209,12 @@ export function gofsFeedUrl(feeds: GofsFeedReference[], name: string): string | 
  */
 function pointInRing(ring: number[][], [x, y]: [number, number]): boolean {
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+  let previous = ring.at(-1);
+  for (const current of ring) {
+    const [xi, yi] = current;
+    const [xj, yj] = previous ?? current;
+    previous = current;
+    if (xi === undefined || yi === undefined || xj === undefined || yj === undefined) continue;
 
     const onSegment =
       Math.abs((xj - xi) * (y - yi) - (x - xi) * (yj - yi)) < 1e-12 &&
@@ -282,6 +285,7 @@ export function gofsCalendarActive(calendar: GofsCalendar, date: string): boolea
   if (calendar.excepted_dates?.some((d) => normalizeDate(d) === day)) return false;
   if (!calendar.days || calendar.days.length === 0) return true;
   const weekday = DAY_KEYS[new Date(`${day}T00:00:00Z`).getUTCDay()];
+  if (weekday === undefined) return false;
   return calendar.days.some((d) => d.toLowerCase().startsWith(weekday));
 }
 
@@ -314,7 +318,7 @@ export interface GofsRuleMatch {
  * timezone maths of its own.
  */
 export function gofsMatchingRules(match: GofsRuleMatch): GofsOperatingRule[] {
-  const [date, time = "00:00"] = match.at.split("T");
+  const [date = "", time = "00:00"] = match.at.split("T");
   const activeCalendars = new Set(
     match.calendars.filter((c) => gofsCalendarActive(c, date)).map((c) => c.calendar_id),
   );

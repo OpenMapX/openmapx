@@ -193,9 +193,9 @@ export async function prepareMigrationPlan(
         denials.push(`integration:${binding.integrationId}:${binding.capability}:missing_provider`);
         continue;
       }
-      bindingVersions[binding.integrationId] ??= randomUUID();
+      const version = bindingVersions[binding.integrationId] ?? randomUUID();
+      bindingVersions[binding.integrationId] = version;
       const before = capturedBindingState(read, binding.integrationId),
-        version = bindingVersions[binding.integrationId],
         next = {
           ...before.bindings,
           ...Object.fromEntries(

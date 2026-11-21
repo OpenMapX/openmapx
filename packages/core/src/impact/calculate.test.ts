@@ -621,17 +621,17 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
 
     expect(impacts).toHaveLength(2);
     // Fastest route
-    expect(impacts[0].comparison?.isFastest).toBe(true);
-    expect(impacts[0].comparison?.isLowestEmissions).toBe(false);
-    expect(impacts[0].comparison?.emissionsDeltaGrams).toBe(0);
-    expect(impacts[0].comparison?.emissionsDeltaPct).toBe(0);
+    expect(impacts[0]?.comparison?.isFastest).toBe(true);
+    expect(impacts[0]?.comparison?.isLowestEmissions).toBe(false);
+    expect(impacts[0]?.comparison?.emissionsDeltaGrams).toBe(0);
+    expect(impacts[0]?.comparison?.emissionsDeltaPct).toBe(0);
 
     // Eco route (saves 10% >= 5%)
-    expect(impacts[1].comparison?.isFastest).toBe(false);
-    expect(impacts[1].comparison?.isLowestEmissions).toBe(true);
-    expect(impacts[1].comparison?.emissionsDeltaPct).toBeCloseTo(-10, 1);
-    expect(impacts[1].comparison?.emissionsDeltaGrams).toBeCloseTo(-1012.925875, 1);
-    expect(impacts[1].comparison?.reason).toEqual({ kind: "shorter", distanceMeters: 5000 });
+    expect(impacts[1]?.comparison?.isFastest).toBe(false);
+    expect(impacts[1]?.comparison?.isLowestEmissions).toBe(true);
+    expect(impacts[1]?.comparison?.emissionsDeltaPct).toBeCloseTo(-10, 1);
+    expect(impacts[1]?.comparison?.emissionsDeltaGrams).toBeCloseTo(-1012.925875, 1);
+    expect(impacts[1]?.comparison?.reason).toEqual({ kind: "shorter", distanceMeters: 5000 });
   });
 
   it("suppresses Eco Choice badge (isLowestEmissions: false) when alternative savings < 5%", () => {
@@ -645,8 +645,8 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
 
     expect(impacts).toHaveLength(2);
     // Marginal route does NOT get the badge
-    expect(impacts[1].comparison?.isLowestEmissions).toBe(false);
-    expect(impacts[1].comparison?.reason).toBeNull();
+    expect(impacts[1]?.comparison?.isLowestEmissions).toBe(false);
+    expect(impacts[1]?.comparison?.reason).toBeNull();
   });
 
   it("generates elevation explanation for an EV when emissions are saved by avoiding climb", () => {
@@ -668,8 +668,8 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
 
     const impacts = compareRouteAlternatives([mountainRoute, flatAlternative], evCar);
 
-    expect(impacts[1].comparison?.isLowestEmissions).toBe(true);
-    expect(impacts[1].comparison?.reason).toEqual({ kind: "less_climbing", climbMeters: 300 });
+    expect(impacts[1]?.comparison?.isLowestEmissions).toBe(true);
+    expect(impacts[1]?.comparison?.reason).toEqual({ kind: "less_climbing", climbMeters: 300 });
   });
 
   it("does not credit elevation for combustion savings that come only from distance", () => {
@@ -686,8 +686,8 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
 
     const impacts = compareRouteAlternatives([fastestRoute, shorterRoute], petrolCar);
 
-    expect(impacts[1].comparison?.isLowestEmissions).toBe(true);
-    expect(impacts[1].comparison?.reason).toEqual({ kind: "shorter", distanceMeters: 300 });
+    expect(impacts[1]?.comparison?.isLowestEmissions).toBe(true);
+    expect(impacts[1]?.comparison?.reason).toEqual({ kind: "shorter", distanceMeters: 300 });
   });
 
   it("identifies lowest cost route correctly", () => {
@@ -696,17 +696,17 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
 
     const impacts = compareRouteAlternatives([routeExpensive, routeCheap], petrolCar);
 
-    expect(impacts[0].comparison?.isFastest).toBe(true);
-    expect(impacts[0].comparison?.isLowestCost).toBe(false);
-    expect(impacts[1].comparison?.isLowestCost).toBe(true);
-    expect(impacts[1].cost.knownCost).toBeLessThan(impacts[0].cost.knownCost ?? Infinity);
+    expect(impacts[0]?.comparison?.isFastest).toBe(true);
+    expect(impacts[0]?.comparison?.isLowestCost).toBe(false);
+    expect(impacts[1]?.comparison?.isLowestCost).toBe(true);
+    expect(impacts[1]?.cost.knownCost).toBeLessThan(impacts[0]?.cost.knownCost ?? Infinity);
   });
 
   it("finds the fastest route instead of assuming the first route is fastest", () => {
     const slower = makeRoute({ distance: 40_000, duration: 2400 });
     const faster = makeRoute({ distance: 50_000, duration: 1800 });
     const impacts = compareRouteAlternatives([slower, faster], petrolCar);
-    expect(impacts[0].comparison?.isFastest).toBe(false);
-    expect(impacts[1].comparison?.isFastest).toBe(true);
+    expect(impacts[0]?.comparison?.isFastest).toBe(false);
+    expect(impacts[1]?.comparison?.isFastest).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { toPoiSearchOutcome } from "@openmapx/core";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/integration-poi-search/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Providers may answer with a bare array or an outcome; normalize either. */
 async function toOutcome(pending: Promise<PoiSearchReturn>) {
@@ -104,13 +104,13 @@ describe("poi-overture provider.search", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+    const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
     const { results, truncated } = await toOutcome(
       provider.search("cafes", BBOX, { lang: "de-DE" }),
     );
     expect(results.length).toBe(2);
     expect(truncated).toBe(false);
-    const first = results[0];
+    const first = nth(results, 0);
     expect(first.id).toBe("overture:gers-abc-001");
     expect(first.gersId).toBe("gers-abc-001");
     expect(first.osmTags?.brand).toBe("Starbucks");
@@ -122,10 +122,10 @@ describe("poi-overture provider.search", () => {
     expect(first.email).toBe("mitte@starbucks.example");
     expect(first.category).toBe("cafes");
     expect(first.provenance?.map((source) => source.sourceId)).toEqual(["overture", "foursquare"]);
-    expect(db.execute.mock.calls[0][0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
-    expect(db.execute.mock.calls[0][0]).toContain("ORDER BY");
-    expect(db.execute.mock.calls[0][0]).toContain("confidence DESC NULLS LAST");
-    expect(db.execute.mock.calls[0][1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain("ORDER BY");
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain("confidence DESC NULLS LAST");
+    expect(nth(db.execute.mock.calls, 0)[1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);
   });
 
   it("returns [] for non-commercial category that has no Overture leaves", async () => {
@@ -133,7 +133,7 @@ describe("poi-overture provider.search", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+    const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
     const { results } = await toOutcome(provider.search("drinking_water", BBOX));
     expect(results).toEqual([]);
     expect(db.execute).not.toHaveBeenCalled();
@@ -144,9 +144,9 @@ describe("poi-overture provider.search", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+    const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
     const { results } = await toOutcome(provider.search("restaurants", BBOX));
-    expect(results[0].phone).toBe("+49 30 12345678");
+    expect(nth(results, 0).phone).toBe("+49 30 12345678");
   });
 });
 
@@ -170,7 +170,7 @@ describe("poi-overture health check", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const healthCheck = ctx.registered.healthChecks[0];
+    const healthCheck = nth(ctx.registered.healthChecks, 0);
     const status = await healthCheck();
     expect(status.status).toBe("up");
   });
@@ -190,7 +190,7 @@ describe("poi-overture health check", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const status = await ctx.registered.healthChecks[0]();
+    const status = await nth(ctx.registered.healthChecks, 0)();
     expect(status).toEqual({
       status: "up",
       error: "Places available; conflation is failed in assign: worker restarted",
@@ -212,7 +212,7 @@ describe("poi-overture health check", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const status = await ctx.registered.healthChecks[0]();
+    const status = await nth(ctx.registered.healthChecks, 0)();
     expect(status.status).toBe("down");
     expect(status.error).toContain("release mismatch");
   });
@@ -224,7 +224,7 @@ describe("poi-overture health check", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const healthCheck = ctx.registered.healthChecks[0];
+    const healthCheck = nth(ctx.registered.healthChecks, 0);
     const status = await healthCheck();
     expect(status.status).toBe("down");
   });
@@ -236,7 +236,7 @@ describe("canonical accepted-link identity", () => {
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
-    const provider = ctx.registered.poiSearch[0];
+    const provider = nth(ctx.registered.poiSearch, 0);
     const result = await toOutcome(provider.search("cafes", BBOX));
     expect(result.results[0]).toMatchObject({
       id: "osm:node/9007199254740993",
@@ -247,7 +247,8 @@ describe("canonical accepted-link identity", () => {
 
 it("captures exact localized-name and contact suppliers before the database read settles", async () => {
   const manifest = structuredClone((await import("../manifest.json")).default);
-  const nameSource = manifest.dataSources.find((source) => source.sourceId === "microsoft-places")!;
+  const nameSource = manifest.dataSources.find((source) => source.sourceId === "microsoft-places");
+  assert.isDefined(nameSource);
   const originalName = nameSource.name;
   const sources_catalogue = manifest.dataSources.map((source) => ({
     sourceId: source.sourceId,
@@ -263,7 +264,7 @@ it("captures exact localized-name and contact suppliers before the database read
   const ctx = createMockIntegrationContext({ db, manifest: manifest as never });
   const { setup } = await import("../index.js");
   setup(ctx);
-  const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+  const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
   const pending = toOutcome(provider.search("cafes", BBOX, { lang: "de" }));
   nameSource.name = "Changed catalogue";
   finish([
@@ -279,7 +280,7 @@ it("captures exact localized-name and contact suppliers before the database read
       ],
     },
   ]);
-  const result = (await pending).results[0];
+  const result = nth((await pending).results, 0);
   expect(result.fieldContributors?.name?.map((receipt) => receipt.sourceId).sort()).toEqual([
     "microsoft-places",
     "overture",
@@ -306,16 +307,18 @@ it("credits the stored catalogue and keeps an explicit empty catalogue empty", a
   const ctx = createMockIntegrationContext({ db, manifest: manifest as never });
   const { setup } = await import("../index.js");
   setup(ctx);
-  const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+  const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
   expect(
-    (await toOutcome(provider.search("cafes", BBOX))).results[0].contributors?.map(
+    nth((await toOutcome(provider.search("cafes", BBOX))).results, 0).contributors?.map(
       (r) => r.sourceId,
     ),
   ).toEqual(["overture"]);
   db.execute.mockResolvedValue([
     { ...FIXTURE_ROWS[0], sources_catalogue: [], sources: [{ property: "", dataset: "Meta" }] },
   ]);
-  expect((await toOutcome(provider.search("cafes", BBOX))).results[0].contributors).toEqual([]);
+  expect(nth((await toOutcome(provider.search("cafes", BBOX))).results, 0).contributors).toEqual(
+    [],
+  );
 });
 
 const reviewedRow = {
@@ -342,19 +345,21 @@ it("captures the actual localized brand name pointer on the normalized brand and
   const { setup } = await import("../index.js");
   const ctx = createMockIntegrationContext({ db: makeFakeDb([reviewedRow]) });
   setup(ctx);
-  const result = (
-    await toOutcome(ctx.registered.poiSearch[0].search("cafes", BBOX, { lang: "de" }))
-  ).results[0];
+  const result = nth(
+    (await toOutcome(nth(ctx.registered.poiSearch, 0).search("cafes", BBOX, { lang: "de" })))
+      .results,
+    0,
+  );
   expect(result.brand?.name).toBe("Deutsche Marke");
-  expect(result.fieldContributors?.brand.map((r) => r.sourceId)).toEqual([
+  expect(result.fieldContributors?.brand?.map((r) => r.sourceId)).toEqual([
     "overture",
     "microsoft-places",
   ]);
-  expect(result.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+  expect(result.fieldContributors?.["brand.name"]?.map((r) => r.sourceId)).toEqual([
     "overture",
     "microsoft-places",
   ]);
-  expect(result.fieldContributors?.["osmTags.brand"].map((r) => r.sourceId)).toEqual([
+  expect(result.fieldContributors?.["osmTags.brand"]?.map((r) => r.sourceId)).toEqual([
     "overture",
     "microsoft-places",
   ]);
@@ -364,10 +369,10 @@ it("credits the retained requested category rather than a competing global taxon
   const db = makeFakeDb([reviewedRow]);
   const ctx = createMockIntegrationContext({ db });
   setup(ctx);
-  const provider = ctx.registered.poiSearch[0];
-  const result = (await toOutcome(provider.search("cafes", BBOX))).results[0];
+  const provider = nth(ctx.registered.poiSearch, 0);
+  const result = nth((await toOutcome(provider.search("cafes", BBOX))).results, 0);
   expect(result.category).toBe("cafes");
-  expect(result.fieldContributors?.category.map((r) => r.sourceId)).toEqual([
+  expect(result.fieldContributors?.category?.map((r) => r.sourceId)).toEqual([
     "overture",
     "meta-places",
   ]);
@@ -379,7 +384,7 @@ it("credits the retained requested category rather than a competing global taxon
       taxonomy_alternates: ["restaurant"],
     },
   ]);
-  const criterion = (await toOutcome(provider.search("cafes", BBOX))).results[0];
+  const criterion = nth((await toOutcome(provider.search("cafes", BBOX))).results, 0);
   expect(criterion.category).toBe("cafes");
   expect(criterion.fieldContributors?.category).toEqual([]);
 });

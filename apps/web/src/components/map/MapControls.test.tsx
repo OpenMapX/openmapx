@@ -1,4 +1,4 @@
-import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import { numberAt, useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { announceAlign, clearAlignAnnouncement } from "@/lib/alignAnnouncement";
 import { publishMapObstruction } from "@/lib/mapObstructions";
@@ -311,7 +311,8 @@ describe("MapControls sheet following", () => {
       const rows = Math.ceil(stack.querySelectorAll("button, [role='button']").length / 2);
       const grid = rows * 60 + (rows - 1) * 8;
       const style = getComputedStyle(stack);
-      const [start, end] = style.getPropertyValue("animation-range").split(" ").map(parseFloat);
+      const range = style.getPropertyValue("animation-range").split(" ").map(parseFloat);
+      const [start, end] = [numberAt(range, 0), numberAt(range, 1)];
       // It rises from 12px to the grid's ceiling, 400 - (100 + 12) - grid.
       expect(style.bottom).toBe(resolvedStyle("bottom", "calc(12px + var(--omx-safe-bottom))"));
       expect(end - start).toBe(400 - 112 - grid - 12);

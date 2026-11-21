@@ -17,10 +17,9 @@ const JOURNAL_PATH = "apps/api/src/db/migrations/meta/_journal.json";
 
 export function findMigrationOrderViolations(entries: readonly JournalEntry[]): string[] {
   const violations: string[] = [];
-  for (let index = 1; index < entries.length; index += 1) {
-    const previous = entries[index - 1] as JournalEntry;
-    const current = entries[index] as JournalEntry;
-    if (current.when <= previous.when) {
+  for (const [index, current] of entries.entries()) {
+    const previous = entries[index - 1];
+    if (previous && current.when <= previous.when) {
       violations.push(
         `${current.tag} (when ${current.when}) is not later than ${previous.tag} (when ${previous.when}); the migrator would skip it on existing databases`,
       );

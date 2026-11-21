@@ -1,5 +1,5 @@
 import type { ReviewAggregate, ReviewProvider, ReviewSubject } from "@openmapx/core";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { captureReviewProviderContributors } from "./review-attribution";
 import { createMockIntegrationContext } from "./testing";
 
@@ -47,7 +47,9 @@ it("keeps explicit aggregate receipts authoritative and copies them before a cal
   const wrapped = captureReviewProviderContributors(ctx, provider);
   const captured = await wrapped.getAggregate(subject);
   expect(captured).not.toBe(result);
-  result.contributors[0].publisher.name = "Changed publisher";
+  const [receipt] = result.contributors;
+  assert.isDefined(receipt);
+  receipt.publisher.name = "Changed publisher";
   expect(captured.contributors?.[0]?.publisher?.name).toBe("Original publisher");
   for (const contributors of [[], null, [{ sourceId: "invalid" }]]) {
     result = { ...aggregate, contributors } as never;

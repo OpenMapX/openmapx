@@ -290,8 +290,11 @@ function parseIndexBin(fd: number): Map<bigint, TileEntry> {
     map.set(BigInt(tileId), { dataOffset: offset, directedEdgeCount });
   }
   ranges.sort((a, b) => a[0] - b[0]);
-  for (let i = 1; i < ranges.length; i++)
-    if (ranges[i][0] < ranges[i - 1][1]) throw new Error("Overlapping traffic tiles");
+  let previousEnd = Number.NEGATIVE_INFINITY;
+  for (const [start, end] of ranges) {
+    if (start < previousEnd) throw new Error("Overlapping traffic tiles");
+    previousEnd = end;
+  }
   return map;
 }
 

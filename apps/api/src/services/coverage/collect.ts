@@ -114,32 +114,34 @@ function operationalReads(
   catalog: CoverageCatalog,
   integrations: readonly LoadedIntegration[],
 ): OperationalRead[] {
-  const roads = catalog.providers
-    .filter(
-      (p) =>
-        p.kind === "road-conditions" &&
-        p.enabled &&
-        (p.provider as RoadConditionsProvider).getOperationalEvidence,
-    )
-    .map(
-      (p): OperationalRead => ({
-        read: () => (p.provider as RoadConditionsProvider).getOperationalEvidence!(),
+  const roads = catalog.providers.flatMap((p): OperationalRead[] => {
+    if (p.kind !== "road-conditions" || !p.enabled) return [];
+    const provider = p.provider as RoadConditionsProvider;
+    const evidence = provider.getOperationalEvidence;
+    if (!evidence) return [];
+    return [
+      {
+        read: () => evidence.call(provider),
         streams: (snapshot) => roadConditionStreams(p.integrationId, snapshot),
-      }),
-    );
+      },
+    ];
+  });
   const places = integrations
     .filter((integration) => integration.enabled)
     .flatMap((integration) =>
       PLACE_DOMAINS.flatMap(({ kind, domain }) =>
         (integration.providers.get(kind) ?? [])
           .map((raw) => raw as Pick<ChargingSiteProvider, "getOperationalEvidence">)
-          .filter((provider) => typeof provider.getOperationalEvidence === "function")
-          .map(
-            (provider): OperationalRead => ({
-              read: () => provider.getOperationalEvidence!(),
-              streams: (snapshot) => siteStreams(integration.id, domain, snapshot),
-            }),
-          ),
+          .flatMap((provider): OperationalRead[] => {
+            const evidence = provider.getOperationalEvidence;
+            if (typeof evidence !== "function") return [];
+            return [
+              {
+                read: () => evidence.call(provider),
+                streams: (snapshot) => siteStreams(integration.id, domain, snapshot),
+              },
+            ];
+          }),
       ),
     );
   return [...roads, ...places].slice(0, 32);

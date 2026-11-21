@@ -168,13 +168,15 @@ function candidateArtifacts(
   ]) {
     const parts = file.path.split("/"),
       owned: AnchoredDirectory[] = [];
+    const leaf = parts.at(-1);
+    if (leaf === undefined) throw Error(`Candidate path has no name: ${file.path}`);
     let parent = directory;
     try {
       for (const part of parts.slice(0, -1)) {
         parent = parent.directory(part);
         owned.push(parent);
       }
-      const path = parent.name(parts.at(-1)!);
+      const path = parent.name(leaf);
       const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
       try {
         const stat = fstatSync(fd, { bigint: true });
@@ -317,20 +319,22 @@ function snapshot(
   if (!path.startsWith(root + sep)) throw Error("Candidate directory escaped data root");
   const directory = new AnchoredDirectory(path);
   try {
-    const files = proxy
+    const files: { name: string; folder?: string; leaf: string }[] = proxy
       ? [
-          { name: "conf/default.conf", parts: ["conf", "default.conf"] },
-          { name: "feed-proxy-vars.json", parts: ["feed-proxy-vars.json"] },
+          { name: "conf/default.conf", folder: "conf", leaf: "default.conf" },
+          { name: "feed-proxy-vars.json", leaf: "feed-proxy-vars.json" },
         ]
-      : [{ name: "motis-candidate-manifest.json", parts: ["motis-candidate-manifest.json"] }];
-    const retainedFiles = files.map(({ name, parts }) => {
-      const nested = parts.length === 2 ? directory.directory(parts[0]!) : undefined;
+      : [{ name: "motis-candidate-manifest.json", leaf: "motis-candidate-manifest.json" }];
+    const retainedFiles = files.map(({ name, folder, leaf }) => {
+      const nested = folder === undefined ? undefined : directory.directory(folder);
       try {
-        return { name, ...readCandidateFile(nested ?? directory, parts.at(-1)!) };
+        return { name, ...readCandidateFile(nested ?? directory, leaf) };
       } finally {
         nested?.close();
       }
     });
+    const [primaryFile] = retainedFiles;
+    if (!primaryFile) throw Error("Candidate has no retained files");
     return {
       version: 1 as const,
       execution: s.execution,
@@ -342,12 +346,12 @@ function snapshot(
         : (activation?.validationId ?? s.execution.executionId),
       directory: identity(directory.stat),
       files: retainedFiles.map(({ name, inode, sha256 }) => ({ name, inode, sha256 })),
-      consumer: proxy ? proxyConsumer(directory, retainedFiles[0]!) : null,
+      consumer: proxy ? proxyConsumer(directory, primaryFile) : null,
       artifactsDigest: proxy
         ? null
         : candidateArtifacts(
             directory,
-            retainedFiles[0]!.bytes,
+            primaryFile.bytes,
             activation?.validationId ?? s.execution.executionId,
           ),
     };
@@ -452,11 +456,12 @@ export function inspectDataTransitCandidate(
       throw Error("Candidate files changed");
     let manifestBytes: Buffer | undefined;
     for (const file of candidate.files) {
-      const parts = file.name.split("/"),
-        nested = parts.length === 2 ? confined.directory(parts[0]!) : undefined,
+      const [first, second, ...rest] = file.name.split("/");
+      if (first === undefined || rest.length > 0) throw Error("Candidate files changed");
+      const nested = second === undefined ? undefined : confined.directory(first),
         parent = nested ?? confined;
       try {
-        const current = readCandidateFile(parent, parts.at(-1)!);
+        const current = readCandidateFile(parent, second ?? first);
         if (
           canonicalJson(current.inode) !== canonicalJson(file.inode) ||
           current.sha256 !== file.sha256
@@ -467,6 +472,7 @@ export function inspectDataTransitCandidate(
         nested?.close();
       }
     }
+    const [producer] = candidate.files;
     if (promotion) {
       if (
         !manifestBytes ||
@@ -475,9 +481,9 @@ export function inspectDataTransitCandidate(
       )
         throw Error("Prepared candidate artifacts changed");
     } else if (
+      !producer ||
       candidate.artifactsDigest !== null ||
-      canonicalJson(proxyConsumer(confined, candidate.files[0]!)) !==
-        canonicalJson(candidate.consumer)
+      canonicalJson(proxyConsumer(confined, producer)) !== canonicalJson(candidate.consumer)
     )
       throw Error("Mounted candidate inode/bytes replaced");
   } finally {

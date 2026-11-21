@@ -65,10 +65,10 @@ function effectGeometry(
 }
 
 function toLngLat(coord: number[]): LngLat | null {
-  if (coord.length < 2) return null;
   const [lng, lat] = coord;
+  if (lng === undefined || lat === undefined) return null;
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-  return [lng as number, lat as number];
+  return [lng, lat];
 }
 
 function sampleCoords(coords: number[][]): LngLat[] {

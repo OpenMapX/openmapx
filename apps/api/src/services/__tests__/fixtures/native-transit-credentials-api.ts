@@ -19,7 +19,7 @@ try {
   else await jobRunner.applyImmediateTransitCredentials(input);
   const rows =
     await sql`SELECT status FROM admin_job WHERE payload->>'operationKey'=${input.operationKey}`;
-  if (rows.length !== 1 || rows[0]!.status !== "success") exit = 2;
+  if (rows.length !== 1 || rows[0]?.status !== "success") exit = 2;
   process.stdout.write(JSON.stringify({ status: rows[0]?.status ?? "missing" }) + "\n");
 } catch {
   exit = 2;

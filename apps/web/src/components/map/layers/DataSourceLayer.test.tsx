@@ -1,8 +1,8 @@
 import { createPlace, useDataSourceStore, useParkingStore, usePlaceStore } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
 import { DataSourceLayer } from "./DataSourceLayer";
 
@@ -16,23 +16,22 @@ vi.mock("@/lib/dataSourceBrandMarker", () => ({
   dataSourceBrandImageId: (url: string) => `ds-brand-${encodeURIComponent(url)}`,
   loadDataSourceBrandMarker: (...args: unknown[]) => logoLoad(...args),
 }));
-const results = [
-  {
-    id: "one",
-    name: "One",
-    source: "sample",
-    summary: { $t: "summary" },
-    branding: undefined as { logoUrl: string } | undefined,
-    availability: undefined as { available: number; total: number } | undefined,
-    contributors: undefined as
-      | { sourceId: string; name: string; attributionText?: string }[]
-      | undefined,
-    get coordinates() {
-      reads++;
-      return [8, 50];
-    },
+const firstResult = {
+  id: "one",
+  name: "One",
+  source: "sample",
+  summary: { $t: "summary" },
+  branding: undefined as { logoUrl: string } | undefined,
+  availability: undefined as { available: number; total: number } | undefined,
+  contributors: undefined as
+    | { sourceId: string; name: string; attributionText?: string }[]
+    | undefined,
+  get coordinates() {
+    reads++;
+    return [8, 50];
   },
-];
+};
+const results: [typeof firstResult, ...(typeof firstResult)[]] = [firstResult];
 const sources = {
   sources: [
     {
@@ -145,7 +144,7 @@ it("does not rebuild or upload unchanged data-source results on style notificati
     fake.map.setStyle({} as never);
   });
   expect(
-    (fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection).features[0].properties
+    (fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection).features[0]?.properties
       ?.name,
   ).toBe("One");
   view.unmount();
@@ -181,7 +180,7 @@ it("refreshes locale and context data, clears context, and handles zoom and sour
   resolveToken = () => "Deutsch";
   view.rerender(<DataSourceLayer />);
   const markers = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
-  expect(markers.features[0].properties?.summary).toBe("Deutsch");
+  expect(markers.features[0]?.properties?.summary).toBe("Deutsch");
   context = { geojson: { ...context.geojson, features: [] } };
   view.rerender(<DataSourceLayer />);
   expect(fake.state.sources.has("ds-sample-map-context")).toBe(false);
@@ -234,7 +233,7 @@ it("adds a supplied logo pin while retaining live availability styling and fallb
   await waitFor(() =>
     expect(
       (fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection | undefined)
-        ?.features[0].properties?.brandImageId,
+        ?.features[0]?.properties?.brandImageId,
     ).toBeDefined(),
   );
   expect(fake.map.getLayer("ds-sample-brand-logos")).toBeDefined();
@@ -244,12 +243,12 @@ it("adds a supplied logo pin while retaining live availability styling and fallb
     expect.any(Function),
   );
   const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0].properties?.brandImageId).toBe(
+  expect(data.features[0]?.properties?.brandImageId).toBe(
     "ds-brand-https%3A%2F%2Fprovider.example%2Flogo.png",
   );
   expect(fake.map.getLayer("ds-sample-markers")?.type).toBe("circle");
   expect(fake.map.getLayer("ds-sample-brand-halos")?.type).toBe("circle");
-  expect(data.features[0].properties?.availState).toBe("busy");
+  expect(data.features[0]?.properties?.availState).toBe("busy");
   expect(fake.map.getPaintProperty("ds-sample-brand-halos", "circle-color")).toEqual([
     "match",
     ["get", "availState"],
@@ -278,19 +277,19 @@ it("drops late logos after leaving the source and reloads logos after style repl
   expect(pending).toHaveLength(1);
   fake.state.styleLoaded = false;
   // Tile loading does not invalidate the still-current stylesheet/source.
-  expect(pending[0].current()).toBe(true);
+  expect(pending[0]?.current()).toBe(true);
   fake.state.styleLoaded = true;
   act(() => fake.map.setStyle({} as never));
   expect(pending).toHaveLength(2);
   // A load that outlives the switch lands in the style now shown, which wants it.
-  expect(pending[0].current()).toBe(true);
-  expect(pending[1].current()).toBe(true);
-  await act(async () => pending[0].resolve(false));
+  expect(pending[0]?.current()).toBe(true);
+  expect(pending[1]?.current()).toBe(true);
+  await act(async () => pending[0]?.resolve(false));
   // Leaving the source drops every logo still loading for it, whenever it started.
   act(() => useDataSourceStore.setState({ activeSource: null }));
-  expect(pending[0].current()).toBe(false);
-  expect(pending[1].current()).toBe(false);
-  await act(async () => pending[1].resolve(false));
+  expect(pending[0]?.current()).toBe(false);
+  expect(pending[1]?.current()).toBe(false);
+  await act(async () => pending[1]?.resolve(false));
   expect(fake.map.getSource("ds-sample")).toBeUndefined();
   expect(fake.map.getLayer("ds-sample-brand-logos")).toBeUndefined();
   view.unmount();
@@ -309,7 +308,8 @@ it("keeps generic pins after a logo failure without retrying each style notifica
   });
   expect(logoLoad).toHaveBeenCalledTimes(1);
   const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0].properties?.brandImageId).toBeUndefined();
+  expect(data.features).toHaveLength(1);
+  expect(nth(data.features, 0).properties?.brandImageId).toBeUndefined();
   expect(fake.map.getLayer("ds-sample-markers")).toBeDefined();
   view.unmount();
   results[0].branding = undefined;
@@ -498,15 +498,19 @@ it("serializes independent label, paint and logo channels with authoritative emp
       "branding.name": credit("unused-brand-name"),
     },
   };
-  const f = buildGeoJson([place], () => "Summary", "icon", {
-    ...sources.sources[0].markerStyle,
-    type: "icon",
-    iconPath: "",
-  }).features[0];
-  const ids = (key: string) =>
-    JSON.parse(f.properties[key as keyof typeof f.properties] as string).map(
-      (receipt: { sourceId: string }) => receipt.sourceId,
-    );
+  const f = nth(
+    buildGeoJson([place], () => "Summary", "icon", {
+      ...nth(sources.sources, 0).markerStyle,
+      type: "icon",
+      iconPath: "",
+    }).features,
+    0,
+  );
+  const ids = (key: string) => {
+    const receipts = f.properties[key as keyof typeof f.properties];
+    assert(typeof receipts === "string", `${key} is not a serialized receipt list`);
+    return JSON.parse(receipts).map((receipt: { sourceId: string }) => receipt.sourceId);
+  };
   expect(ids("_mapMarkerAttributions")).toEqual(["coords"]);
   expect(ids("_mapHaloAttributions")).toEqual(["coords", "availability", "status"]);
   expect(ids("_mapLabelAttributions")).toEqual(["coords", "name"]);
@@ -535,10 +539,11 @@ it("labels the map with a result's label summary, crediting that field, and its 
     },
   };
   const translate = (value: unknown) => (value as { $t: string } | undefined)?.$t;
-  const [labelled, plain] = buildGeoJson(
+  const { features } = buildGeoJson(
     [place, { ...place, id: "plain", labelSummary: undefined }],
     translate,
-  ).features;
+  );
+  const [labelled, plain] = [nth(features, 0), nth(features, 1)];
   const ids = (f: typeof labelled) =>
     JSON.parse(f.properties._mapSummaryLabelAttributions).map(
       (receipt: { sourceId: string }) => receipt.sourceId,
@@ -634,7 +639,7 @@ it("adds captured file receipts only after the actual logo image loads and only 
     flush();
     expect(html()).toContain("Required logo notice");
     expect(
-      JSON.parse(data.features[0].properties?._mapBrandAttributions ?? "[]").find(
+      JSON.parse(data.features[0]?.properties?._mapBrandAttributions ?? "[]").find(
         (receipt: { sourceId: string }) => receipt.sourceId === "file",
       ).name,
     ).toBe("Original logo file");
@@ -662,7 +667,7 @@ it("credits the actual name label and adds summary ownership only after its zoom
   fake.state.zoom = 12;
   useMapAttributionStore.setState({ byLayer: {} });
   const old = results[0];
-  const style = sources.sources[0].markerStyle;
+  const style = nth(sources.sources, 0).markerStyle;
   const oldType = style.type;
   Object.assign(style, { type: "icon", iconPath: "" });
   fake.map.addImage("ds-marker-sample", {} as never);
@@ -811,6 +816,6 @@ it("does not credit an unused status field on a track without status", async () 
       status: [{ sourceId: "unused", name: "Unused status supplier" }],
     },
   };
-  const feature = buildTrackGeoJson([result] as never).features[0];
+  const feature = nth(buildTrackGeoJson([result] as never).features, 0);
   expect(JSON.parse(feature.properties._mapTrackAttributions ?? "null")).toEqual(track);
 });

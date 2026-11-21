@@ -69,8 +69,8 @@ export function parseMediaHostEntry(entry: string): MediaHostEntry | null {
 
   const labels = host.split(".");
   if (labels.length < 2 || !labels.every((label) => LABEL.test(label))) return null;
-  const last = labels[labels.length - 1];
-  if (NUMERIC_LABEL.test(last) || last === "localhost") return null;
+  const last = labels.at(-1);
+  if (last === undefined || NUMERIC_LABEL.test(last) || last === "localhost") return null;
   if (wildcard && isTooBroadForWildcard(host)) return null;
   if (!wildcard && path === undefined && isMultiTenant(host)) return null;
 

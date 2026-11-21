@@ -266,6 +266,7 @@ export function AirportsOverlay() {
       // silently produced undefined coordinates for any other geometry.
       if (f.geometry.type !== "Point") return;
       const [lng, lat] = f.geometry.coordinates;
+      if (lng === undefined || lat === undefined) return;
       const ident = String(p.ident ?? p.icao ?? p.iata ?? "")
         .trim()
         .toUpperCase();

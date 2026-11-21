@@ -1,5 +1,5 @@
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { journeysToTripPlan } from "../src/fptf-journey.js";
 
 interface RawLeg {
@@ -39,7 +39,11 @@ describe("journeysToTripPlan", () => {
       leg("walk", "2026-08-31T10:05:00Z", "2026-08-31T10:10:00Z", false),
       leg("rail-2", "2026-08-31T10:10:00Z", "2026-08-31T10:20:00Z"),
     ];
-    const mapLeg = vi.fn((raw: RawLeg) => mapped[rawLegs.indexOf(raw)]);
+    const mapLeg = vi.fn((raw: RawLeg) => {
+      const mappedLeg = mapped[rawLegs.indexOf(raw)];
+      assert.isDefined(mappedLeg);
+      return mappedLeg;
+    });
 
     const plan = journeysToTripPlan([{ legs: rawLegs }], ENDPOINTS, mapLeg);
 

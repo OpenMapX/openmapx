@@ -50,6 +50,7 @@ import { dataSourceRecordContributors } from "@/lib/attributionForProviders";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
+import { positionBounds } from "@/lib/positionBounds";
 import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
 import {
   CONTEXT_ZONE_STYLES,
@@ -698,13 +699,12 @@ export function DataSourceLayer() {
         if (Array.isArray(value)) for (const child of value) collect(child);
       };
       collect(feature.geometry.coordinates);
-      if (positions.length === 0) return;
-      const lngs = positions.map((position) => position[0]);
-      const lats = positions.map((position) => position[1]);
+      const bounds = positionBounds(positions);
+      if (!bounds) return;
       fitBounds(
         [
-          [Math.min(...lngs), Math.min(...lats)],
-          [Math.max(...lngs), Math.max(...lats)],
+          [bounds.west, bounds.south],
+          [bounds.east, bounds.north],
         ],
         48,
         { maxZoom: 17 },
@@ -727,15 +727,15 @@ export function DataSourceLayer() {
       : [],
     priority: RESULT_INTERACTION_PRIORITY,
     enabled: activeSource !== null,
-    onClick: ({ features }) => {
-      if (!activeSource) return;
-      const props = features[0].properties as {
+    onClick: ({ features: [feature] }) => {
+      if (!activeSource || !feature) return;
+      const props = feature.properties as {
         id: string;
         name: string;
         summary?: string;
         kind?: string;
       };
-      const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
+      const coords = (feature.geometry as { coordinates: number[] }).coordinates as LngLat;
       openDataSourceItem(activeSource, props, coords, activeMeta);
     },
     onHover: (features) =>

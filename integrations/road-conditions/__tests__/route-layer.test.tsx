@@ -2,7 +2,7 @@ import { fetchRoadConditionsWithStatus } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 import { effect, situation, text } from "./fixtures";
 
@@ -155,16 +155,16 @@ describe("RouteConditionsLayer", () => {
   ])(
     "preserves cached canonical receipts during style republishing: $contributors",
     async ({ contributors }) => {
-      fetchMock.mockResolvedValue(ok([{ ...events[0]!, contributors }]));
+      fetchMock.mockResolvedValue(ok([{ ...nth(events, 0), contributors }]));
       const view = render(<RouteConditionsLayer />);
       await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
-      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+      expect(JSON.parse(nth(sourceFeatures("LineString"), 0).properties?._mapAttributions)).toEqual(
         contributors,
       );
       mockStyleVersion++;
       view.rerender(<RouteConditionsLayer />);
       await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
-      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+      expect(JSON.parse(nth(sourceFeatures("LineString"), 0).properties?._mapAttributions)).toEqual(
         contributors,
       );
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -175,14 +175,14 @@ describe("RouteConditionsLayer", () => {
     fetchMock.mockResolvedValue(
       ok([
         {
-          ...events[0]!,
+          ...nth(events, 0),
           attribution: { provider: "Route publisher", license: "CC0-1.0" },
         },
       ]),
     );
     const view = render(<RouteConditionsLayer />);
     await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
-    const line = sourceFeatures("LineString")[0]!;
+    const line = nth(sourceFeatures("LineString"), 0);
     fake.setRenderedFeatures("omx-road-conditions-route-line", [
       {
         ...line,
@@ -484,7 +484,7 @@ describe("RouteConditionsLayer", () => {
       fetchMock.mockResolvedValueOnce(
         ok([
           situation({
-            ...events[0]!,
+            ...nth(events, 0),
             kind: "restriction",
             type: "dimension",
             effects: [
@@ -503,7 +503,7 @@ describe("RouteConditionsLayer", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
-      const marker = sourceFeatures("Point")[0]!;
+      const marker = nth(sourceFeatures("Point"), 0);
       fake.setRenderedFeatures("omx-road-conditions-route-markers", [
         {
           ...marker,

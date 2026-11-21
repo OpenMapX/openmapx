@@ -73,11 +73,10 @@ const HOST_DIR_SOURCE =
  */
 function checkoutPath(serviceId: string, source: string): string | null {
   const within = (...parts: string[]) => posix.normalize(posix.join(...parts)).replace(/\/+$/, "");
-  const hostDir = HOST_DIR_SOURCE.exec(source);
+  const [, hostDirRest] = HOST_DIR_SOURCE.exec(source) ?? [];
   // Compose interpolates a `$` anywhere in the rendered path.
-  const rest = hostDir ? (hostDir[1] as string) : source;
-  if (rest.includes("$")) return null;
-  if (hostDir) return within(".", rest);
+  if ((hostDirRest ?? source).includes("$")) return null;
+  if (hostDirRest !== undefined) return within(".", hostDirRest);
   if (source.startsWith("/")) return null;
   if (source.startsWith("@infra:")) return within("infra/docker", source.slice("@infra:".length));
   if (source.startsWith("@service:")) {
@@ -193,7 +192,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
   const violations: AuthorityViolation[] = [];
 
   for (const manifestPath of serviceManifests(root)) {
-    const serviceId = relative(root, dirname(manifestPath)).split(/[/\\]/).at(-1) as string;
+    const serviceId = relative(root, dirname(manifestPath)).replace(/^.*[/\\]/s, "");
     const text = readFileSync(manifestPath, "utf8");
     const manifest = JSON.parse(text) as {
       container?: { environment?: Record<string, unknown> };

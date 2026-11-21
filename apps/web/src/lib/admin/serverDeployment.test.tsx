@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { apiClient, configureApiClient } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { getSelfHosted } from "./serverDeployment";
 
 vi.mock("@openmapx/core/server-api", async (importOriginal) => ({
@@ -58,18 +59,20 @@ describe("request-scoped deployment", () => {
       `${browserOrigin}/probe`,
     ]);
     for (const [i, cookie] of ["session=one", "session=two"].entries()) {
-      expect(Object.fromEntries(new Headers(requests[i].init.headers))).toEqual({
+      expect(Object.fromEntries(new Headers(nth(requests, i).init.headers))).toEqual({
         accept: "application/json",
         cookie,
       });
-      expect(requests[i].init).toMatchObject({
+      expect(nth(requests, i).init).toMatchObject({
         cache: "no-store",
         credentials: "omit",
         signal: expect.any(AbortSignal),
       });
     }
-    expect(new Headers(requests[2].init.headers).get("cookie")).toBeNull();
-    expect(new Headers(requests[2].init.headers).get("authorization")).toBe("synthetic-browser");
+    expect(new Headers(nth(requests, 2).init.headers).get("cookie")).toBeNull();
+    expect(new Headers(nth(requests, 2).init.headers).get("authorization")).toBe(
+      "synthetic-browser",
+    );
   });
   it.each([
     Response.json({ selfHosted: true }),

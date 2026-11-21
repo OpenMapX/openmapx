@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  assert,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { serviceConfig } from "../db/schema";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
 
@@ -58,6 +68,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const [backend] = await tx.execute<{ pid: number }>(
               sql`SELECT pg_backend_pid() AS pid`,
             );
+            assert.isDefined(backend);
             hold.entered.resolve(backend.pid);
             await bounded(hold.resume.promise);
           }
@@ -109,7 +120,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         held.resume.resolve();
         await first;
         await second;
-        expect((await rows())[0].config).toEqual({ base: 1, concurrent: 2, partial: 3 });
+        expect((await rows())[0]?.config).toEqual({ base: 1, concurrent: 2, partial: 3 });
       } finally {
         held.resume.resolve();
         await Promise.allSettled([first, second]);

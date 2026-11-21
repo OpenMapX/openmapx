@@ -3,8 +3,9 @@ import { crashScenario } from "../scenario";
 
 const MAINTENANCE = "00000000-0000-4000-8000-000000000000";
 // Routes only the operations agent and the host CLI use.
+const PREPARE_ROUTE = "/executions/configuration-maintenance/prepare";
 const AGENT_ROUTES: [string, string][] = [
-  ["POST", "/executions/configuration-maintenance/prepare"],
+  ["POST", PREPARE_ROUTE],
   ["POST", "/executions/configuration-maintenance/recovery"],
   ["GET", `/executions/configuration-maintenance/${MAINTENANCE}`],
   ["POST", `/executions/configuration-maintenance/${MAINTENANCE}/settle`],
@@ -36,9 +37,7 @@ crashScenario({
       });
     }
     // The agent's token reaches the same route; it is refused only for its body.
-    expect((await host.callDataManager("ops-agent", "POST", AGENT_ROUTES[0][1], {})).status).toBe(
-      400,
-    );
+    expect((await host.callDataManager("ops-agent", "POST", PREPARE_ROUTE, {})).status).toBe(400);
     // Nothing was started or fenced.
     expect(host.dockerEffects({ since: start })).toEqual([]);
     expect((await host.submitDataJob()).status).toBe(200);

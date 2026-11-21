@@ -72,22 +72,22 @@ const entry = {
   critical: null,
   status: "stale-revocation-data",
 };
+const previewHostPort = { host: 8080, container: 80, protocol: "tcp", bindAddress: "127.0.0.1" };
+const previewService = {
+  id: "example",
+  name: "Example",
+  version: "1",
+  repositoryCommit: "a".repeat(40),
+  hostPorts: [
+    previewHostPort,
+    { host: 65535, container: 1, protocol: "udp", bindAddress: "0.0.0.0" },
+  ],
+  securityRating: rating,
+};
 const preview = {
   extension: { id: "example", name: "Synthetic", version: "opaque version" },
   sourceTrust: "community",
-  services: [
-    {
-      id: "example",
-      name: "Example",
-      version: "1",
-      repositoryCommit: "a".repeat(40),
-      hostPorts: [
-        { host: 8080, container: 80, protocol: "tcp", bindAddress: "127.0.0.1" },
-        { host: 65535, container: 1, protocol: "udp", bindAddress: "0.0.0.0" },
-      ],
-      securityRating: rating,
-    },
-  ],
+  services: [previewService],
   requiresHostPortConfirmation: true,
   confirmation: "b".repeat(64),
 };
@@ -138,7 +138,7 @@ describe("complete extension administration contracts", () => {
     expect(parsed).toEqual(entry);
     expect(parsed).not.toHaveProperty("version");
     expect(parsed.services?.[0]).not.toHaveProperty("default");
-    expectTypeOf(parsed.services?.[0].repo).toEqualTypeOf<string | undefined>();
+    expectTypeOf(parsed.services?.[0]?.repo).toEqualTypeOf<string | undefined>();
     expectTypeOf(parsed.version).toEqualTypeOf<string | undefined>();
     const sparse = {
       id: "unknown",
@@ -270,7 +270,7 @@ describe("complete extension administration contracts", () => {
         components: [
           { kind: "service", componentId: "example", enabled: true, securityRating: rating },
         ],
-      }).components[0].securityRating,
+      }).components[0]?.securityRating,
     ).toEqual(rating);
     for (const patch of [
       { sourceTrust: "other" },
@@ -325,12 +325,12 @@ describe("complete extension administration contracts", () => {
         { protocol: "sctp" },
         { protocol: undefined },
         { bindAddress: undefined },
-      ].map((port) => ({ hostPorts: [{ ...preview.services[0].hostPorts[0], ...port }] })),
+      ].map((port) => ({ hostPorts: [{ ...previewHostPort, ...port }] })),
     ])
       expect(
         contracts.adminExtensionInstallPreviewSchema.safeParse({
           ...preview,
-          services: [{ ...preview.services[0], ...patch }],
+          services: [{ ...previewService, ...patch }],
         }).success,
       ).toBe(false);
   });

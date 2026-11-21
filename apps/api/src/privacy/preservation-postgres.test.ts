@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { db } from "../db/index.js";
 import {
   adminAuditLog,
@@ -72,6 +72,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             eq(dataSubjectRequestPreservation.registrationId, "admin-audit-attribution"),
           ),
         );
+      assert.isDefined(preservation);
 
       // Model request intake committing its hold while a retention worker is
       // already queued. The worker must wait for the separate lock statement,

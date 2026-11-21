@@ -20,14 +20,14 @@ export function installCoreServiceRuntime(
 ): void {
   const execFile = options.execFile ?? runContainedProcess;
   runtime["coreService.restart"] = async (operation, context) => {
-    if (!context.controlAuthority || !context.ownedTargetLease)
-      throw new OpsHostUpdateRequiredError();
+    const { controlAuthority, ownedTargetLease } = context;
+    if (!controlAuthority || !ownedTargetLease) throw new OpsHostUpdateRequiredError();
     try {
       return await services.withConfigurationGenerationWriter(
         options.infraDir,
         async () => {
           context.signal.throwIfAborted();
-          await assertArtifactTargetLeaseForward(context.ownedTargetLease!);
+          await assertArtifactTargetLeaseForward(ownedTargetLease);
           if (
             services.currentConfigurationGeneration(options.infraDir) !==
             operation.expectedConfigurationRevisionId
@@ -58,7 +58,7 @@ export function installCoreServiceRuntime(
             JSON.stringify(claimed.provenance) !== JSON.stringify(target.provenance)
           )
             throw new OpsExecutionFailure("conflict", {});
-          await beginControlEffect(context.controlAuthority!);
+          await beginControlEffect(controlAuthority);
           await execFile("docker", ["restart", "--time", "30", target.containerId], {
             signal: context.signal,
             timeout: Math.max(1, context.execution.deadlineAt - Date.now()),
@@ -82,7 +82,7 @@ export function installCoreServiceRuntime(
       // Recorded only while the row shows no effect start and no attempted
       // child; it refuses after Docker was dispatched.
       try {
-        await retainConfigurationPreEffectRefusal(context.controlAuthority);
+        await retainConfigurationPreEffectRefusal(controlAuthority);
       } catch {
         /* Unknown effects keep the original fence. */
       }

@@ -1,8 +1,8 @@
+import { buildAttributionPresentation, parseAttributionHtml } from "./attribution/attribution-api";
 import {
   type SavedPlaceFieldContributors,
   savedPlaceContributors,
 } from "./saved-place-contributors";
-import { buildAttributionPresentation, parseAttributionHtml } from "./utils/attribution-api";
 
 export const SAVED_PLACE_XML_NAMESPACE = "https://openmapx.org/ns/saved-place/1";
 

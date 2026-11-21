@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { composeTransitAlternative } from "./transit-alternative.js";
 import type { TripItinerary, TripLeg } from "./types/transit.js";
 
@@ -13,11 +13,14 @@ const leg = (mode: TripLeg["mode"], start: string, end: string, distanceMeters =
   geometry: { type: "LineString", coordinates: [[6, 50]] },
   ...(mode === "rail" ? { route: { shortName: "RE1", longName: "" }, tripId: "mo:re1" } : {}),
 });
-const replacement = [
-  leg("walking", "20:50", "20:51", 10),
-  leg("rail", "20:51", "21:44", 70000),
-  leg("walking", "21:44", "21:45", 15),
-];
+const replacementRail = leg("rail", "20:51", "21:44", 70000);
+const replacementEgress = leg("walking", "21:44", "21:45", 15);
+const replacement = [leg("walking", "20:50", "20:51", 10), replacementRail, replacementEgress];
+const alternativeOf = (itinerary: TripItinerary) => {
+  const alternative = itinerary.legs[1]?.alternatives?.[0];
+  assert.isDefined(alternative);
+  return alternative;
+};
 const parent = (): TripItinerary => ({
   id: "parent",
   source: "mo",
@@ -39,8 +42,8 @@ const parent = (): TripItinerary => ({
       ...leg("rail", "20:44", "21:22"),
       alternatives: [
         {
-          startTime: replacement[1].startTime,
-          endTime: replacement[1].endTime,
+          startTime: replacementRail.startTime,
+          endTime: replacementRail.endTime,
           routeShortName: "RE1",
           regionalOnly: true,
           replaces: { fromLegIndex: 0, toLegIndex: 2 },
@@ -53,7 +56,8 @@ const parent = (): TripItinerary => ({
 });
 describe("composeTransitAlternative", () => {
   it("selects the complete overtaken RE1, recomputes totals, and drops parent identity/fare/token", () => {
-    const result = composeTransitAlternative(parent(), 1, 0)!;
+    const result = composeTransitAlternative(parent(), 1, 0);
+    assert.isNotNull(result);
     expect(result).toMatchObject({
       startTime: "2026-11-06T20:50:00Z",
       endTime: "2026-11-06T21:45:00Z",
@@ -74,25 +78,27 @@ describe("composeTransitAlternative", () => {
       "refreshedAt",
     ])
       expect(result).not.toHaveProperty(k);
-    expect(result.legs[1].tripId).toBe("mo:re1");
+    expect(result.legs[1]?.tripId).toBe("mo:re1");
   });
   it("does not compose legacy compact alternatives or out-of-bounds spans", () => {
     const p = parent();
-    delete p.legs[1].alternatives![0].legs;
+    const alternative = alternativeOf(p);
+    delete alternative.legs;
     expect(composeTransitAlternative(p, 1, 0)).toBeNull();
-    p.legs[1].alternatives![0].legs = replacement;
-    p.legs[1].alternatives![0].replaces!.toLegIndex = 99;
+    alternative.legs = replacement;
+    assert.isDefined(alternative.replaces);
+    alternative.replaces.toLegIndex = 99;
     expect(composeTransitAlternative(p, 1, 0)).toBeNull();
   });
   it("rejects overlapping timing and mismatched connection places", () => {
     const p = parent();
-    p.legs[1].alternatives![0].legs = [
+    alternativeOf(p).legs = [
       ...replacement,
-      { ...replacement[2], startTime: "2026-11-06T21:43:00Z" },
+      { ...replacementEgress, startTime: "2026-11-06T21:43:00Z" },
     ];
     expect(composeTransitAlternative(p, 1, 0)).toBeNull();
     const disconnected = parent();
-    disconnected.legs[1].alternatives![0].legs = replacement.map((l, index) =>
+    alternativeOf(disconnected).legs = replacement.map((l, index) =>
       index === 1 ? { ...l, from: { ...l.from, stopId: "mo:another-station" } } : l,
     );
     expect(composeTransitAlternative(disconnected, 1, 0)).toBeNull();
@@ -105,12 +111,15 @@ describe("composeTransitAlternative", () => {
       effectiveFareLegIndex: 0,
       alternatives: [],
     }));
-    p.legs[1].alternatives![0].legs = selected;
-    selected[1].contributors = [
+    alternativeOf(p).legs = selected;
+    const selectedRail = selected[1];
+    assert.isDefined(selectedRail);
+    selectedRail.contributors = [
       { sourceId: "regional", name: "Regional", url: "https://example.com" },
     ];
     p.contributors = [{ sourceId: "eurostar", name: "Eurostar", url: "https://example.com" }];
-    const result = composeTransitAlternative(p, 1, 0)!;
+    const result = composeTransitAlternative(p, 1, 0);
+    assert.isNotNull(result);
     expect(result.contributors?.map((a) => a.sourceId)).toEqual(["regional"]);
     expect(
       result.legs.every(

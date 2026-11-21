@@ -415,5 +415,5 @@ it("captures local realtime records from their typed feed references, not the MO
   expect(result?.data?.contributors).toEqual([a]);
   expect(result?.attributions).toEqual([a]);
   a.name = "Updated registry";
-  expect(result?.data?.contributors?.[0].name).toBe("Actual feed A");
+  expect(result?.data?.contributors?.[0]?.name).toBe("Actual feed A");
 });

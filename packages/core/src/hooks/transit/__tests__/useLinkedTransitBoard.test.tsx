@@ -1,9 +1,9 @@
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../../api/client";
+import { makeSyntheticStopPlace } from "../../../search/geocodeStopAsPlace";
 import { createQueryWrapper } from "../../../test/queryWrapper";
-import { makeSyntheticStopPlace } from "../../../utils/geocodeStopAsPlace";
 import { useLinkedTransitArrivals } from "../useLinkedTransitArrivals";
 import { useLinkedTransitDepartures } from "../useLinkedTransitDepartures";
 
@@ -43,7 +43,7 @@ describe.each([
     const place = { ...makeSyntheticStopPlace(stop), ids: { ms: "breslauer", osm: "node/42" } };
     const { result } = renderHook(() => useBoard(place, 30), { wrapper: createQueryWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy.mock.calls[0][1]).toMatchObject({ osm_id: "node/42" });
+    expect(spy.mock.calls[0]?.[1]).toMatchObject({ osm_id: "node/42" });
   });
 
   it("sends no stop for a place not opened for one", async () => {
@@ -53,6 +53,8 @@ describe.each([
     const { transitStop: _, ...place } = makeSyntheticStopPlace(stop);
     const { result } = renderHook(() => useBoard(place, 30), { wrapper: createQueryWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy.mock.calls[0][1]).not.toHaveProperty("stop_name");
+    const params = spy.mock.calls[0]?.[1];
+    assert.isDefined(params);
+    expect(params).not.toHaveProperty("stop_name");
   });
 });

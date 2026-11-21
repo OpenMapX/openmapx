@@ -60,24 +60,18 @@ const THUNDERFOREST_ATTRIBUTIONS: Attribution[] = [
   OSM_ATTRIBUTION,
 ];
 
-const CYCLOSM_SUBDOMAINS = ["a", "b", "c"] as const;
-let cyclOSMSubdomainIndex = 0;
-
-function nextCyclOSMSubdomain(): string {
-  const sub = CYCLOSM_SUBDOMAINS[cyclOSMSubdomainIndex % CYCLOSM_SUBDOMAINS.length];
-  cyclOSMSubdomainIndex++;
-  return sub;
+/** A round-robin over the tile servers' a/b/c subdomains. */
+function subdomainRotation(): () => string {
+  let next = 0;
+  return () => {
+    const sub = next === 0 ? "a" : next === 1 ? "b" : "c";
+    next = (next + 1) % 3;
+    return sub;
+  };
 }
 
-const THUNDERFOREST_SUBDOMAINS = ["a", "b", "c"] as const;
-let thunderforestSubdomainIndex = 0;
-
-function nextThunderforestSubdomain(): string {
-  const sub =
-    THUNDERFOREST_SUBDOMAINS[thunderforestSubdomainIndex % THUNDERFOREST_SUBDOMAINS.length];
-  thunderforestSubdomainIndex++;
-  return sub;
-}
+const nextCyclOSMSubdomain = subdomainRotation();
+const nextThunderforestSubdomain = subdomainRotation();
 
 const TILE_PARAMS_SCHEMA = {
   type: "object" as const,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { ManeuverLane } from "../../types/routing";
 import {
   guidanceApproachMeters,
@@ -31,7 +31,9 @@ describe("resolveRecommendedLanes", () => {
     const lanes = [lane(["left"], false), lane(["through"], false), lane(["right"], false)];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
     expect(out.map((l) => l.valid)).toEqual([false, false, false]);
-    expect(out[0].active).toBeUndefined();
+    const [first] = out;
+    assert.isDefined(first);
+    expect(first.active).toBeUndefined();
   });
   it("trusts the engine when a lane is already valid", () => {
     const lanes = [lane(["left"], true), lane(["through"])];
@@ -41,7 +43,7 @@ describe("resolveRecommendedLanes", () => {
   it("does not infer branch identity from the same side", () => {
     const lanes = [lane(["slight left"]), lane(["through"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out[0].valid).toBe(false);
+    expect(out[0]?.valid).toBe(false);
   });
 
   it("retains rejected through lanes for a straight maneuver", () => {

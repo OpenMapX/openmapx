@@ -109,9 +109,8 @@ export async function searchPhotos(
   if (imageResult?.status === "fulfilled") all.push(...imageResult.value);
   else if (!providers.some((provider) => provider.id === OSM_IMAGES_PROVIDER_ID) && query.osmTags)
     all.push(...(await extractImageTagPhotos(query.osmTags, { signal: query.signal })));
-  for (let index = 0; index < results.length; index++) {
-    const result = results[index];
-    if (providers[index].id !== OSM_IMAGES_PROVIDER_ID && result.status === "fulfilled")
+  for (const [index, result] of results.entries()) {
+    if (providers[index]?.id !== OSM_IMAGES_PROVIDER_ID && result.status === "fulfilled")
       all.push(...result.value);
   }
 
@@ -199,8 +198,7 @@ async function extractImageTagPhotos(
     ),
   );
 
-  for (let i = 0; i < resolved.length; i++) {
-    const result = resolved[i];
+  for (const result of resolved) {
     if (result.status !== "fulfilled") {
       continue;
     }
@@ -370,9 +368,10 @@ export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[
     if (allGoogleUrls.length > 0) return allGoogleUrls;
 
     // Strategy 2: og:image meta tag (single image fallback)
-    const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
-    if (ogMatch) {
-      let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+    const [, ogImage] =
+      html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i) ?? [];
+    if (ogImage !== undefined) {
+      let imgUrl = ogImage.replace(/&amp;/g, "&");
       if (!isGooglePhotosImageUrl(imgUrl)) return [];
       if (!imgUrl.includes("=w")) {
         imgUrl += "=w1200";
@@ -401,9 +400,10 @@ async function resolveGooglePhotosPreview(
 
     const html = await res.text();
 
-    const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
-    if (ogMatch) {
-      let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+    const [, ogImage] =
+      html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i) ?? [];
+    if (ogImage !== undefined) {
+      let imgUrl = ogImage.replace(/&amp;/g, "&");
       if (!isGooglePhotosImageUrl(imgUrl)) return null;
       // Replace any existing size suffix with high-quality one
       imgUrl = imgUrl.replace(/=[swh]\d[\da-z-]*$/i, "").replace(/=s\d[\da-z-]*$/i, "");
@@ -472,14 +472,15 @@ export function deduplicatePhotos(photos: PlacePhoto[], limit = 20): PlacePhoto[
  */
 function dedupKey(url: string): string {
   // Special:FilePath/Filename.jpg?width=800 -> filename.jpg
-  const filePathMatch = url.match(/Special:FilePath\/([^?]+)/);
-  if (filePathMatch) return decodeURIComponent(filePathMatch[1]).toLowerCase();
+  const [, filePathName] = url.match(/Special:FilePath\/([^?]+)/) ?? [];
+  if (filePathName !== undefined) return decodeURIComponent(filePathName).toLowerCase();
 
   // upload.wikimedia.org/.../thumb/a/ab/Filename.jpg/800px-Filename.jpg -> filename.jpg
-  const uploadMatch = url.match(
-    /upload\.wikimedia\.org\/wikipedia\/\w+\/(?:thumb\/)?[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/,
-  );
-  if (uploadMatch) return decodeURIComponent(uploadMatch[1]).toLowerCase();
+  const [, uploadName] =
+    url.match(
+      /upload\.wikimedia\.org\/wikipedia\/\w+\/(?:thumb\/)?[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/,
+    ) ?? [];
+  if (uploadName !== undefined) return decodeURIComponent(uploadName).toLowerCase();
 
   // Fallback: normalize generic URL patterns
   return url
@@ -498,9 +499,8 @@ export async function resolveOsmTags(
   try {
     const parsed = parseId(placeId);
     if (parsed?.scheme === "osm") {
-      const osmMatch = parsed.value.match(/^(node|way|relation)\/(\d+)/);
-      if (osmMatch) {
-        const [, osmType, osmId] = osmMatch;
+      const [, osmType, osmId] = parsed.value.match(/^(node|way|relation)\/(\d+)/) ?? [];
+      if (osmType !== undefined && osmId !== undefined) {
         const place = await lookupByOsmRef(osmType, osmId, placeId);
         return place.osmTags ?? undefined;
       }

@@ -1,6 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  assert,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { db, sql } from "../db";
 import {
   dataSubjectRequest,
@@ -107,7 +117,7 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
 
       // The whole point of PKCE: another app that intercepted the callback still
       // cannot redeem it.
-      expect(rows[0].codeChallenge).toBe(CHALLENGE);
+      expect(rows[0]?.codeChallenge).toBe(CHALLENGE);
       expect(JSON.stringify(rows[0])).not.toContain(VERIFIER);
     });
 
@@ -175,6 +185,7 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
           dueAt: new Date(Date.now() + 30 * 86_400_000),
         })
         .returning({ id: dataSubjectRequest.id });
+      assert.isDefined(request);
       await db.insert(dataSubjectRequestPreservation).values({
         requestId: request.id,
         registrationId: "mobile-auth-handoffs",

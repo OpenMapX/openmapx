@@ -131,7 +131,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).toEqual({ ok: true });
         const changed = sdk.unwrapSavedResponse(await sdk.listSavedListPlaces(id, { client }))
           .places[0];
-        expect(changed.fieldContributors).toEqual({ lat: [], lng: [] });
+        expect(changed?.fieldContributors).toEqual({ lat: [], lng: [] });
         const written = sdk.unwrapSavedResponse(
           await sdk.writeSavedLabel("SDK home", { ...point }, { client }),
         );
@@ -203,10 +203,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       const refusedImport = await send({ name: "Beyond the limit" });
       expect(refusedImport.statusCode).toBe(409);
-      const [{ count }] = await fixture.sql<
+      const [listCount] = await fixture.sql<
         { count: number }[]
       >`SELECT count(*)::int AS count FROM saved_list WHERE user_id = 'import-user'`;
-      expect(count).toBe(500);
+      expect(listCount?.count).toBe(500);
     });
     it("applies only one of two concurrent imports that together pass the place limit", async () => {
       await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
@@ -226,10 +226,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(imports.find((response) => response.statusCode === 409)?.json()).toMatchObject({
         code: "SAVED_PLACE_LIMIT",
       });
-      const [{ places }] = await fixture.sql<
+      const [placeCount] = await fixture.sql<
         { places: number }[]
       >`SELECT count(*)::int AS places FROM saved_place JOIN saved_list ON saved_list.id = saved_place.list_id WHERE saved_list.user_id = 'import-user'`;
-      expect(places).toBe(49_600);
+      expect(placeCount?.places).toBe(49_600);
       // The refused batch's new list was rolled back with it.
       const lists = await fixture.sql<
         { name: string }[]

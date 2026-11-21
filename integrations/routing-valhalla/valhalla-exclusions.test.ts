@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import {
   MAX_VALHALLA_EXCLUDE_LOCATIONS,
@@ -36,7 +37,7 @@ describe("sanitizeValhallaExclusions", () => {
       const angle = (index / vertices) * Math.PI * 2;
       ring.push([6 + Math.cos(angle) * 0.1, 50 + Math.sin(angle) * 0.1]);
     }
-    ring.push(ring[0] as [number, number]);
+    ring.push(nth(ring, 0));
 
     const result = sanitizeValhallaExclusions({ polygons: [ring] });
 

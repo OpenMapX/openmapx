@@ -20,7 +20,7 @@ import {
   executionFingerprint,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildFixedConfigurationMaintenancePlan } from "../../../packages/core/src/build-artifacts/fixed-configuration-maintenance";
 import { type HandoffHelperHost, runConfigurationHandoff } from "./handoff-helper";
 import {
@@ -175,7 +175,8 @@ async function launched() {
     runStep: async () => ({ outcome: "committed", appliedRevisionId: revisionId, result: {} }),
     settleHandoff: async () => {},
     launchHelper: async (value) => {
-      const step = value.plan.steps.at(-1)!;
+      const step = value.plan.steps.at(-1);
+      assert.isDefined(step);
       await leases.delegate({
         leaseId: lease.leaseId,
         child: {
@@ -306,7 +307,8 @@ describe("configuration helper", () => {
       }),
     );
     expect(replaced).toHaveLength(1);
-    const progress = readHandoffProgress(installation, maintenanceId)!;
+    const progress = readHandoffProgress(installation, maintenanceId);
+    assert.exists(progress);
     expect(progress.phase).toBe("cancelled");
     expect(progress.targets.map((target) => target.phase).sort()).toEqual(["pending", "verified"]);
   });
@@ -340,7 +342,8 @@ describe("configuration helper", () => {
 
   it("starts nothing once the agent settled its child as never launched", async () => {
     const leaseId = await launched();
-    const child = leases.readSync(leaseId)!.children.find((value) => value.key === handoffId)!;
+    const child = leases.readSync(leaseId)?.children.find((value) => value.key === handoffId);
+    assert.isDefined(child);
     await leases.settle({
       leaseId,
       key: handoffId,

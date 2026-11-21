@@ -381,7 +381,7 @@ describe("contribution policy consumers", () => {
       steps: { uses?: string; with?: { script?: string; "persist-credentials"?: boolean } }[];
     }[]) {
       expect(job.if).toContain("github.ref == 'refs/heads/main'");
-      expect(job.steps[0].with?.["persist-credentials"]).toBe(false);
+      expect(job.steps[0]?.with?.["persist-credentials"]).toBe(false);
       for (const step of job.steps) expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
     }
     const script = workflow.jobs.housekeeping.steps.find(

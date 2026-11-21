@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "./fixtures/nth";
 import { packageReleaseSourceFixture } from "./fixtures/package-release-source";
 import { planPackageRelease } from "./package-release.mjs";
 import {
@@ -56,7 +57,7 @@ function fixture() {
   });
   mkdirSync(join(cwd, "packages"));
   const items = packages.map((item) => {
-    const staging = join(cwd, item.name.split("/")[1]);
+    const staging = join(cwd, item.name.replace(/^[^/]*\//, ""));
     mkdirSync(join(staging, "package"), { recursive: true });
     writeFileSync(
       join(staging, "package/package.json"),
@@ -148,7 +149,7 @@ describe("immutable candidate receipt and exact bytes", () => {
     "rejects %s mutation after approval",
     (kind) => {
       const f = candidate();
-      if (kind === "tarball") writeFileSync(join(f.cwd, f.items[0].path), "modified");
+      if (kind === "tarball") writeFileSync(join(f.cwd, nth(f.items, 0).path), "modified");
       if (kind === "plan") writeFileSync(join(f.cwd, "publish-plan.json"), "{}");
       if (kind === "receipt") {
         const r = JSON.parse(readFileSync(join(f.cwd, "receipt.json"), "utf8"));
@@ -157,8 +158,8 @@ describe("immutable candidate receipt and exact bytes", () => {
       }
       if (kind === "extra") writeFileSync(join(f.cwd, "unexpected.tgz"), "extra");
       if (kind === "symlink") {
-        rmSync(join(f.cwd, f.items[0].path));
-        symlinkSync("/etc/hosts", join(f.cwd, f.items[0].path));
+        rmSync(join(f.cwd, nth(f.items, 0).path));
+        symlinkSync("/etc/hosts", join(f.cwd, nth(f.items, 0).path));
       }
       expect(() =>
         readPackageCandidate({ directory: f.cwd, expectedHash: f.receipt.hash, context }),
@@ -172,7 +173,7 @@ describe("immutable candidate receipt and exact bytes", () => {
     "packages/nested/escape.tgz",
   ])("rejects unsafe candidate path %s", (path) => {
     const f = fixture();
-    f.items[0].path = path;
+    nth(f.items, 0).path = path;
     expect(() =>
       writePackageCandidate({ directory: f.cwd, batch: f.batch, items: f.items, tools: {} }),
     ).toThrow(/path/i);
@@ -432,7 +433,7 @@ describe("verified public provenance identity", () => {
     const f = candidate();
     const item = f.receipt.items.find((p: { name: string }) => p.name === name);
     const attestation = statement(item);
-    attestation.subject[0].name = purl;
+    nth(attestation.subject, 0).name = purl;
     expect(() => verifyPackageProvenance(attestation, item, f.batch)).not.toThrow();
   });
   it.each(["repository", "workflow", "source", "subject", "event", "builder"])(
@@ -448,8 +449,8 @@ describe("verified public provenance identity", () => {
         s.predicate.buildDefinition.externalParameters.workflow.path =
           ".github/workflows/other.yml";
       if (field === "source")
-        s.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit = "b".repeat(40);
-      if (field === "subject") s.subject[0].digest.sha512 = "b".repeat(128);
+        nth(s.predicate.buildDefinition.resolvedDependencies, 0).digest.gitCommit = "b".repeat(40);
+      if (field === "subject") nth(s.subject, 0).digest.sha512 = "b".repeat(128);
       if (field === "event")
         s.predicate.buildDefinition.internalParameters.github.event_name = "pull_request";
       if (field === "builder") s.predicate.runDetails.builder.id = "https://other/builder";
@@ -508,6 +509,7 @@ describe("production npm and GitHub command ports with injected external systems
       }
       if (executable === "gh") {
         const path = args[1];
+        if (path === undefined) throw new Error("gh was called without an endpoint");
         if (path.includes("matching-refs"))
           return JSON.stringify(
             tag

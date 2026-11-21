@@ -4,7 +4,7 @@ import {
   readAmbientManifest,
   readAmbientPlaceByGers,
 } from "@openmapx/core/ambient-places-server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import * as publisher from "../../src/jobs/ambient-places/build.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import {
@@ -81,7 +81,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [storage] = await pg.sql.unsafe(
         `SELECT count(*)::INT AS partitions FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass`,
       );
-      expect(storage.partitions).toBe(1);
+      expect(storage?.partitions).toBe(1);
     }, 60000);
     it.each([
       { status: "temporarily_closed", confidence: 0.9 },
@@ -111,7 +111,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           generation: result.generation,
           place: { id: "osm:node/1", gersId: "g-excluded", name: "世界 Clinic 1", sources: "osm" },
         });
-        const resolved = (await readAmbientPlaceByGers(pg.sql, "g-excluded"))!.place;
+        const excluded = await readAmbientPlaceByGers(pg.sql, "g-excluded");
+        assert.exists(excluded);
+        const resolved = excluded.place;
         expect(resolved.fieldContributors?.gersId).toEqual([
           { sourceId: "overture", name: "Captured GERS identity" },
         ]);
@@ -134,7 +136,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               const [row] = await pg.sql.unsafe(
                 `SELECT checkpoint->>'processed' AS processed FROM ambient_places.planet_builds`,
               );
-              expect(row.processed).toBe("2000");
+              expect(row?.processed).toBe("2000");
               expect(await readAmbientManifest(pg.sql)).toBeNull();
               throw new Error("stop after committed page");
             }
@@ -144,6 +146,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [stage] = await pg.sql.unsafe(
         `SELECT generation,status,checkpoint FROM ambient_places.planet_builds`,
       );
+      assert.isDefined(stage);
       expect(stage.status).toBe("failed");
       expect(stage.checkpoint.placeCount).toBe(1999);
       await pg.sql.unsafe(
@@ -182,6 +185,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }),
       ).rejects.toThrow("stop");
       const [stage] = await pg.sql.unsafe(`SELECT generation FROM ambient_places.planet_builds`);
+      assert.isDefined(stage);
       await pg.sql.unsafe(
         `UPDATE overture_places.conflation_state SET attempt_count=attempt_count+1,completed_at=clock_timestamp()`,
       );
@@ -194,7 +198,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [empty] = await pg.sql.unsafe(
         `SELECT count(*)::INT AS n FROM ambient_places.generations`,
       );
-      expect(empty.n).toBe(0);
+      expect(empty?.n).toBe(0);
       const complete = await publisher.buildAmbientPlaces(
         pg.sql,
         AMBIENT_PLANET_REGION,
@@ -219,12 +223,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   "SELECT pg_try_advisory_xact_lock(1330466120,$1) AS locked",
                   [key],
                 );
-                expect(lock.locked).toBe(false);
+                expect(lock?.locked).toBe(false);
               });
             }
             const [backend] = await pg.sql.unsafe(
               "SELECT pid FROM pg_locks WHERE locktype='advisory' AND classid=0 AND objid=139399 AND granted",
             );
+            assert.isDefined(backend);
             await pg.sql.unsafe("SELECT pg_terminate_backend($1)", [backend.pid]);
           },
         }),
@@ -232,6 +237,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [stage] = await pg.sql.unsafe(
         "SELECT generation,checkpoint FROM ambient_places.planet_builds",
       );
+      assert.isDefined(stage);
       expect(stage.checkpoint.processed).toBe(2000);
       expect(await readAmbientManifest(pg.sql)).toBeNull();
       const result = await publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
@@ -253,6 +259,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [stage] = await pg.sql.unsafe(
         "SELECT generation FROM ambient_places.planet_builds WHERE status='failed'",
       );
+      assert.isDefined(stage);
       await pg.sql.unsafe(
         "UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{policyVersion}','999') WHERE id=$1",
         [stage.generation],
@@ -281,7 +288,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         `SELECT count(*)::INT AS n FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation<>$1`,
         [active.generation],
       );
-      expect(count.n).toBe(0);
+      expect(count?.n).toBe(0);
     }, 60000);
     it("retires expired planet partitions, retains leases and supports pointer rollback", async () => {
       await seed();
@@ -309,7 +316,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [partitions] = await pg.sql.unsafe(
         "SELECT count(*)::INT AS n FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass",
       );
-      expect(partitions.n).toBe(3);
+      expect(partitions?.n).toBe(3);
     }, 60000);
     it("requires complete matching planet sources and reports disk failure without switching active", async () => {
       await seed();

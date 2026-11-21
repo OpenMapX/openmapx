@@ -162,7 +162,8 @@ function poleBranchRing(
     ring.push([lng, phi]);
   }
 
-  ring.push([180, darkPole], [-180, darkPole], ring[0]);
+  // Close the ring on its first point; a ring with no samples starts at the pole corner.
+  ring.push([180, darkPole], [-180, darkPole], ring[0] ?? [180, darkPole]);
   return ring;
 }
 
@@ -191,7 +192,8 @@ function capBranchRing(
     ring.push([unwrapped, lat]);
   }
 
-  ring[ring.length - 1] = [...ring[0]] as [number, number];
+  const [start] = ring;
+  if (start) ring[ring.length - 1] = [start[0], start[1]];
   return ring;
 }
 

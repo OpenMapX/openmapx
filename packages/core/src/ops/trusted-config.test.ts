@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   inspectPreparedConfigurationRecord,
   prepareConfigurationCandidate,
@@ -80,10 +80,13 @@ describe("configuration payload", () => {
       },
     ];
     const size = () => Buffer.byteLength(JSON.stringify(input), "utf8");
-    input.serviceSecrets[0]!.values.PAD = "x".repeat(OPS_TRUSTED_CONFIG_MAX_BYTES - size());
+    const [secret] = input.serviceSecrets;
+    assert.isDefined(secret);
+    const pad = "x".repeat(OPS_TRUSTED_CONFIG_MAX_BYTES - size());
+    secret.values.PAD = pad;
     expect(size()).toBe(OPS_TRUSTED_CONFIG_MAX_BYTES);
     expect(() => parseTrustedConfigurationPayload(input)).not.toThrow();
-    input.serviceSecrets[0]!.values.PAD += "x";
+    secret.values.PAD = `${pad}x`;
     expect(() => parseTrustedConfigurationPayload(input)).toThrow("Configuration payload rejected");
   });
 

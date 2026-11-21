@@ -849,6 +849,6 @@ describe("MapContextMenu dismissal and semantics", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "parking.saveHere" }));
 
     await waitFor(() => expect(parking.saveAt).toHaveBeenCalledTimes(1));
-    expect(parking.saveAt.mock.calls[0][0]).toEqual([-77.02573, 38.88859]);
+    expect(parking.saveAt.mock.calls[0]?.[0]).toEqual([-77.02573, 38.88859]);
   });
 });

@@ -5,7 +5,11 @@ import { envString } from "@openmapx/core/server-env";
 import { runOpsOperation } from "../../ops-client.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
 import { openConditionsHeaders } from "./openconditions-auth.js";
-import { encodePredictedSpeeds, expandHourlyToBuckets } from "./predicted-encode.js";
+import {
+  encodePredictedSpeeds,
+  expandHourlyToBuckets,
+  HOURS_PER_WEEK,
+} from "./predicted-encode.js";
 import { PredictedTrafficInputError } from "./predicted-input-error.js";
 import {
   loadWaysToEdges as loadWaysToEdgesDefault,
@@ -67,8 +71,26 @@ export interface ProfileSegment {
   dir: "f" | "b";
   free_flow_kph: number;
   constrained_kph: number;
-  /** 168 hourly speeds, Sunday-first (`hourly[24*day + hour]`); `null` falls back to `free_flow_kph`. */
+  /**
+   * 168 hourly speeds, Sunday-first (`hourly[24*day + hour]`); `null` falls back
+   * to `free_flow_kph`. The bake skips and counts a profile of any other length.
+   */
   hourly: (number | null)[];
+}
+
+/**
+ * The feed is cast from JSON without a schema, so a short or missing `hourly`
+ * array would otherwise be encoded with invented hours that look like real
+ * data. Such profiles are dropped here and only counted.
+ */
+function splitMalformedProfiles(fetched: readonly ProfileSegment[]): {
+  wellFormed: ProfileSegment[];
+  malformed: number;
+} {
+  const wellFormed = fetched.filter(
+    (profile) => Array.isArray(profile.hourly) && profile.hourly.length === HOURS_PER_WEEK,
+  );
+  return { wellFormed, malformed: fetched.length - wellFormed.length };
 }
 
 interface TrafficLogger {
@@ -106,6 +128,11 @@ export interface BakePredictedDeps {
 export interface BakePredictedResult {
   /** Number of profile segments fetched from OpenConditions. */
   segments: number;
+  /**
+   * Fetched profiles skipped because their `hourly` array is not one full
+   * week. They are not baked and do not count towards any rate below.
+   */
+  malformed: number;
   /** Total per-tile CSV rows written (after the forward/backward direction filter). */
   rows: number;
   /** Number of distinct tiles (CSV files) touched. */
@@ -126,7 +153,7 @@ export interface BakePredictedResult {
    */
   matchRatePct: number;
   /**
-   * `resolvable` as a percentage of the profiles served. The denominator is
+   * `resolvable` as a percentage of the well-formed profiles served. The denominator is
    * external to the map, so unlike `matchRatePct` this moves when the map is
    * narrow. Around 20 in normal operation: the graph covers one country while
    * the feed spans several.
@@ -245,12 +272,26 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
   //
   // A failure here is fatal by design. Falling back to the map on disk is the
   // exact behaviour that produced the incident.
-  const [profiles, coveredWayIds] = await Promise.all([
+  const [fetchedProfiles, coveredWayIds] = await Promise.all([
     fetchProfiles(),
     resolveCoveredWayIds(),
   ]).catch((cause: unknown) => {
     throw new PredictedTrafficInputError(cause);
   });
+  const { wellFormed: profiles, malformed } = splitMalformedProfiles(fetchedProfiles);
+  // A feed with nothing usable is a broken feed, not a quiet one: an empty
+  // bake would rebuild nothing and report success.
+  if (malformed > 0 && profiles.length === 0) {
+    throw new Error(
+      `bake-predicted: all ${malformed} profiles from ${deps.openConditionsUrl}/segments/profiles.json lack a full week of hourly speeds`,
+    );
+  }
+  if (malformed > 0) {
+    deps.logger?.warn("bake-predicted: skipped profiles without a full week of hourly speeds", {
+      segments: fetchedProfiles.length,
+      malformed,
+    });
+  }
   const waysResult = await refreshWays(coveredWayIds, { logger: deps.logger });
   const waysToEdges = await loadEdges();
 
@@ -295,7 +336,8 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
   const coverageRatePct =
     profiles.length === 0 ? 0 : Math.round((resolvable / profiles.length) * 100);
   const counts = {
-    segments: profiles.length,
+    segments: fetchedProfiles.length,
+    malformed,
     resolvable,
     matched,
     matchRatePct,

@@ -21,7 +21,7 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../journal";
 import { createProductionOpsRuntime, productionOwnedServices } from "../production-runtime";
@@ -598,11 +598,13 @@ it("observes committed publication after result loss without rewriting its origi
   const files = readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8");
   await f.app.close();
   const next = await reassembleCommittedFixture(f);
+  assert.isDefined(original.fingerprint);
+  assert.isDefined(original.deadlineAt);
   const identity = {
     executionId: original.operationId,
     operationKey: original.operationKey,
-    fingerprint: original.fingerprint!,
-    executionDeadlineAt: new Date(original.deadlineAt!).toISOString(),
+    fingerprint: original.fingerprint,
+    executionDeadlineAt: new Date(original.deadlineAt).toISOString(),
   };
   const observed = await next.freshClient.execute({
     kind: "artifactTransfer.inspectClaim",
@@ -736,6 +738,8 @@ it("contains a failed archive validation and exposes only its original private-p
   });
   expect(failed).toMatchObject({ state: "failed", cleanup: "complete" });
   expect(await f.store.reservedBytes()).toBe(before);
+  assert.isDefined(status.fingerprint);
+  assert.isDefined(status.deadlineAt);
   const observed = await f.client.execute({
     kind: "artifactTransfer.inspectClaim",
     stageId: stage.stageId,
@@ -743,8 +747,8 @@ it("contains a failed archive validation and exposes only its original private-p
     identity: {
       executionId: status.operationId,
       operationKey: status.operationKey,
-      fingerprint: status.fingerprint!,
-      executionDeadlineAt: new Date(status.deadlineAt!).toISOString(),
+      fingerprint: status.fingerprint,
+      executionDeadlineAt: new Date(status.deadlineAt).toISOString(),
     },
   });
   if (observed.execution !== "sync") throw Error("No private-purpose observation");

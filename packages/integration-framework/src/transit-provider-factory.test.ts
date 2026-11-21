@@ -8,8 +8,8 @@ describe("transit acquisition receipt capture", () => {
     const original = { itineraries: [{ legs: [{ mode: "rail" }], fare: { transfers: [] } }] };
     const out = captureTransitContributors(original, [a]);
     expect(out).toMatchObject({ contributors: [a] });
-    expect(out.itineraries[0].legs[0]).toMatchObject({ contributors: [a] });
-    expect(out.itineraries[0].fare).toMatchObject({ contributors: [a] });
+    expect(out.itineraries[0]?.legs[0]).toMatchObject({ contributors: [a] });
+    expect(out.itineraries[0]?.fare).toMatchObject({ contributors: [a] });
     expect(original).not.toHaveProperty("contributors");
   });
   it("keeps heterogeneous row snapshots, including unknown and explicit empty", () => {

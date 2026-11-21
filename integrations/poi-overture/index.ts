@@ -8,7 +8,7 @@ import {
   overtureTaxonomyToOpenMapX,
   selectOvertureName,
 } from "@openmapx/core";
-import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/utils/overtureCategoryMap";
+import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/places/overtureCategoryMap";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
   CategoryId,

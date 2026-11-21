@@ -143,7 +143,7 @@ export function createTransitousScriptRunner(
       request = { version: TRANSITOUS_RUNNER_PROTOCOL_VERSION, capability, run };
     const journal = context?.store.controlJournal;
     if (context && !journal) throw Error("Retained runner owner is unavailable");
-    journal?.retainRunnerAttempt(context!.authority, request);
+    if (context && journal) journal.retainRunnerAttempt(context.authority, request);
     const timer = setTimeout(() => controller.abort(), TRANSITOUS_RUNNER_TIMEOUT_MS + 30000),
       signal = workerSignal
         ? AbortSignal.any([workerSignal, controller.signal])
@@ -199,7 +199,7 @@ export function createTransitousScriptRunner(
           `Transitous runner returned an unexpected response for ${describe(run)}`,
         );
       const parsed = checked.data;
-      journal?.completeRunnerAttempt(context!.authority, request, parsed);
+      if (context && journal) journal.completeRunnerAttempt(context.authority, request, parsed);
       remoteContained = true;
       if (context)
         try {

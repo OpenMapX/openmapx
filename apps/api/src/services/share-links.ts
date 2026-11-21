@@ -171,7 +171,9 @@ function waypointName(waypoint: RouteShareWaypoint): string {
 
 export function routeShareLabel(route: RouteSharePayload): string {
   const first = route.waypoints[0];
-  const last = route.waypoints[route.waypoints.length - 1];
+  const last = route.waypoints.at(-1);
+  // The share schema requires at least two waypoints.
+  if (!first || !last) throw new RangeError("A route share needs at least two waypoints");
   return `${waypointName(first)} → ${waypointName(last)}`;
 }
 

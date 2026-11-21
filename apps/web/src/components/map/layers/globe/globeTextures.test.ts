@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { GlobeTexture } from "./globeTextures";
 
 function createGl() {
@@ -119,7 +120,7 @@ describe("GlobeTexture", () => {
     const gl = createGl();
     const texture = new GlobeTexture("/globe/night-lights.webp", "r8");
     texture.load(() => {});
-    const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+    const signal = nth(vi.mocked(fetch).mock.calls, 0)[1]?.signal;
     texture.dispose();
     expect(signal?.aborted).toBe(true);
     await flush();

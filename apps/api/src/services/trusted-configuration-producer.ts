@@ -168,9 +168,11 @@ export async function applyTrustedConfigurationWithEvidence(
           createDurableOpsKey("configuration.inspect", options.operationKey),
           { signal: options.signal ?? ctx.signal },
         );
-        const expectedCurrentRevisionId = Object.hasOwn(options, "expectedCurrentRevisionId")
-          ? options.expectedCurrentRevisionId!
-          : previousApplied.revisionId;
+        // A given revision, including null for "none", wins over the applied one.
+        const expectedCurrentRevisionId =
+          options.expectedCurrentRevisionId !== undefined
+            ? options.expectedCurrentRevisionId
+            : previousApplied.revisionId;
         const candidate = await prepareProspectiveConfiguration({
           actorId,
           operationKey: options.operationKey,

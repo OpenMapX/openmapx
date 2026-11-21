@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { readAuthResult, redeemSystemAuth, type SystemAuthHandoff } from "./systemAuth";
 
 const HANDOFF: SystemAuthHandoff = {
@@ -48,17 +49,17 @@ describe("redeemSystemAuth", () => {
     const h = deps();
 
     await expect(redeemSystemAuth(HANDOFF, h.deps)).resolves.toBe("ok");
-    expect(h.calls[0].url).toBe("https://api.example.test/mobile-auth/exchange");
+    expect(nth(h.calls, 0).url).toBe("https://api.example.test/mobile-auth/exchange");
     // Better Auth's own verify is what actually sets the cookie.
     expect(h.verified).toEqual(["ott-value"]);
     expect(h.refreshed()).toBe(1);
-    expect(JSON.parse(String(h.calls[0].init.body))).toEqual({
+    expect(JSON.parse(String(nth(h.calls, 0).init.body))).toEqual({
       callbackCode: HANDOFF.callbackCode,
       codeVerifier: HANDOFF.codeVerifier,
       state: HANDOFF.state,
     });
-    expect(h.calls[0].init.cache).toBe("no-store");
-    expect(h.calls[0].init.credentials).toBe("include");
+    expect(nth(h.calls, 0).init.cache).toBe("no-store");
+    expect(nth(h.calls, 0).init.credentials).toBe("include");
   });
 
   it.each([

@@ -1,6 +1,7 @@
 import type { GroundMobileSession } from "@openmapx/core/navigation";
 import type { ApiClient } from "@openmapx/core/navigation/api";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { nth } from "../../testing/nth";
 import { GroundRerouteService, rerouteWaypoints } from "./GroundRerouteService";
 import { applyGroundReplacement } from "./groundReplacement";
 
@@ -86,7 +87,7 @@ describe("GroundRerouteService", () => {
     };
     const { client, calls } = fakeClient(routeAnswer());
     await service(client).request({ requestId: "bike", session: current, origin: ORIGIN });
-    expect(calls[0].params).toMatchObject({
+    expect(calls[0]?.params).toMatchObject({
       mode: "cycling",
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
@@ -112,7 +113,7 @@ describe("GroundRerouteService", () => {
     expect(outcome.requestId).toBe("r1");
     expect(outcome.sessionId).toBe("session-1");
     expect(outcome.baseRevision).toBe(42);
-    expect(calls[0].params).toMatchObject({
+    expect(calls[0]?.params).toMatchObject({
       avoidTolls: "true",
       avoidFerries: "true",
       avoidHighways: "false",
@@ -120,7 +121,7 @@ describe("GroundRerouteService", () => {
       units: "metric",
       lang: "en",
     });
-    expect(calls[0].options).toMatchObject({ timeoutMs: 15_000, signal: expect.any(AbortSignal) });
+    expect(calls[0]?.options).toMatchObject({ timeoutMs: 15_000, signal: expect.any(AbortSignal) });
   });
 
   it("follows the route the server marked active, as the browser does", async () => {
@@ -150,7 +151,7 @@ describe("GroundRerouteService", () => {
     });
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) throw new Error("Expected replacement");
-    expect(calls[0].params.waypoints).toBe("8.7,50.15;8.727,50.11");
+    expect(calls[0]?.params.waypoints).toBe("8.7,50.15;8.727,50.11");
     const next = applyGroundReplacement(current, outcome.route as never, NOW)
       .session as GroundMobileSession;
     expect(next.payload.startPackage.destinationWaypoints).toEqual([ORIGIN, [8.727, 50.11]]);
@@ -178,7 +179,7 @@ describe("GroundRerouteService", () => {
     ]);
     current.payload.progress = { alongMeters: 2500 } as never;
     const answer = routeAnswer();
-    answer.routes[0].geometry = [from, b, destination];
+    nth(answer.routes, 0).geometry = [from, b, destination];
     const { client, calls } = fakeClient(answer);
     const outcome = await service(client).request({
       requestId: "r1",
@@ -187,7 +188,7 @@ describe("GroundRerouteService", () => {
     });
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) throw new Error("Expected replacement");
-    expect(calls[0].params.waypoints).toBe("0.0175,0.002;0.01,0;0.03,0");
+    expect(calls[0]?.params.waypoints).toBe("0.0175,0.002;0.01,0;0.03,0");
     const next = applyGroundReplacement(current, outcome.route as never, NOW)
       .session as GroundMobileSession;
     expect(next.payload.startPackage.destinationWaypoints).toEqual([from, b, destination]);

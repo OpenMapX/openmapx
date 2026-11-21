@@ -1,4 +1,4 @@
-import type { TransitReachabilitySeed } from "@openmapx/core";
+import { numberAt, type TransitReachabilitySeed } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,
@@ -186,9 +186,21 @@ export interface TransitFieldLayerOptions {
   onUnsupported?: (reason: TransitFieldUnsupportedReason) => void;
 }
 
+type Quadruple = [number, number, number, number];
+
+/**
+ * A four-component GL parameter (viewport, clear colour). A lost context
+ * returns null for every parameter, so there is nothing to save or restore;
+ * this runs every frame, so it neither copies the array nor throws.
+ */
+function quadruple(values: ArrayLike<number> | null): Quadruple | null {
+  if (!values || values.length < 4) return null;
+  return [numberAt(values, 0), numberAt(values, 1), numberAt(values, 2), numberAt(values, 3)];
+}
+
 interface SavedGlState {
   framebuffer: WebGLFramebuffer | null;
-  viewport: Int32Array;
+  viewport: Quadruple | null;
   depthTest: boolean;
   blend: boolean;
   blendEquationRgb: number;
@@ -203,7 +215,7 @@ interface SavedGlState {
   activeTexture: number;
   texture2d: WebGLTexture | null;
   texture0: WebGLTexture | null;
-  clearColor: Float32Array;
+  clearColor: Quadruple | null;
   scissorTest: boolean;
   colorWriteMask: [boolean, boolean, boolean, boolean];
 }
@@ -217,10 +229,10 @@ function saveGlState(gl: WebGL2RenderingContext): SavedGlState {
     texture0 = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
     gl.activeTexture(activeTexture);
   }
-  const colorWriteMask = gl.getParameter(gl.COLOR_WRITEMASK) as boolean[];
+  const colorWriteMask = gl.getParameter(gl.COLOR_WRITEMASK) as boolean[] | null;
   return {
     framebuffer: gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null,
-    viewport: new Int32Array(gl.getParameter(gl.VIEWPORT) as Int32Array),
+    viewport: quadruple(gl.getParameter(gl.VIEWPORT) as Int32Array | null),
     depthTest: gl.isEnabled(gl.DEPTH_TEST),
     blend: gl.isEnabled(gl.BLEND),
     blendEquationRgb: gl.getParameter(gl.BLEND_EQUATION_RGB) as number,
@@ -235,20 +247,20 @@ function saveGlState(gl: WebGL2RenderingContext): SavedGlState {
     activeTexture,
     texture2d,
     texture0,
-    clearColor: new Float32Array(gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array),
+    clearColor: quadruple(gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array | null),
     scissorTest: gl.isEnabled(gl.SCISSOR_TEST),
     colorWriteMask: [
-      colorWriteMask[0] ?? true,
-      colorWriteMask[1] ?? true,
-      colorWriteMask[2] ?? true,
-      colorWriteMask[3] ?? true,
+      colorWriteMask?.[0] ?? true,
+      colorWriteMask?.[1] ?? true,
+      colorWriteMask?.[2] ?? true,
+      colorWriteMask?.[3] ?? true,
     ],
   };
 }
 
 function restoreGlState(gl: WebGL2RenderingContext, state: SavedGlState): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, state.framebuffer);
-  gl.viewport(state.viewport[0], state.viewport[1], state.viewport[2], state.viewport[3]);
+  if (state.viewport) gl.viewport(...state.viewport);
   state.depthTest ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
   state.blend ? gl.enable(gl.BLEND) : gl.disable(gl.BLEND);
   gl.blendEquationSeparate(state.blendEquationRgb, state.blendEquationAlpha);
@@ -265,7 +277,7 @@ function restoreGlState(gl: WebGL2RenderingContext, state: SavedGlState): void {
   gl.bindTexture(gl.TEXTURE_2D, state.texture0);
   gl.activeTexture(state.activeTexture);
   if (state.activeTexture !== gl.TEXTURE0) gl.bindTexture(gl.TEXTURE_2D, state.texture2d);
-  gl.clearColor(state.clearColor[0], state.clearColor[1], state.clearColor[2], state.clearColor[3]);
+  if (state.clearColor) gl.clearColor(...state.clearColor);
   state.scissorTest ? gl.enable(gl.SCISSOR_TEST) : gl.disable(gl.SCISSOR_TEST);
   gl.colorMask(...state.colorWriteMask);
 }

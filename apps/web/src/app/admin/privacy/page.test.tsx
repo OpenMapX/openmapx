@@ -19,6 +19,7 @@ vi.mock("@/components/admin/activity/activityQueries", () => ({
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", () => {
   const translators = new Map<string, ((key: string) => string) & { has: () => boolean }>();
@@ -120,9 +121,9 @@ describe("privacy admin case selection", () => {
     const caseButtons = screen.getAllByRole("button", {
       name: /^account\.privacyData\.accessAndPortability /,
     });
-    fireEvent.click(caseButtons[1]);
+    fireEvent.click(nth(caseButtons, 1));
     await waitFor(() => expect(fixture.wasCaseBDeferred()).toBe(true));
-    fireEvent.click(caseButtons[0]);
+    fireEvent.click(nth(caseButtons, 0));
     await screen.findByText(/registration-for-case-a/);
 
     await act(async () => {
@@ -151,7 +152,7 @@ describe("privacy admin case selection", () => {
     const caseButtons = screen.getAllByRole("button", {
       name: /^account\.privacyData\.accessAndPortability /,
     });
-    fireEvent.click(caseButtons[1]);
+    fireEvent.click(nth(caseButtons, 1));
     await screen.findByText(/registration-for-case-b/);
 
     const [fresh] = screen.getAllByLabelText("privacyAdmin.workflows.reasonCode");

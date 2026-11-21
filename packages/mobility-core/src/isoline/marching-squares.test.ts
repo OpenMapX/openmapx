@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { planIsochroneLattice } from "./lattice.js";
 import { traceContourRings } from "./marching-squares.js";
 
@@ -17,12 +17,26 @@ function field(fn: (column: number, row: number) => number | null): (number | nu
   return values;
 }
 
-function ringArea(ring: number[][]): number {
+function ringArea(ring: [number, number][]): number {
   let sum = 0;
-  for (let i = 0; i < ring.length - 1; i += 1) {
-    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  let previous: [number, number] | undefined;
+  for (const point of ring) {
+    if (previous) sum += previous[0] * point[1] - point[0] * previous[1];
+    previous = point;
   }
   return sum / 2;
+}
+
+function onlyRing<T>(rings: T[]): T {
+  expect(rings).toHaveLength(1);
+  const [ring] = rings;
+  assert.isDefined(ring);
+  return ring;
+}
+
+function expectClosed(ring: unknown[]): void {
+  assert.isAtLeast(ring.length, 4);
+  expect(ring[0]).toEqual(ring.at(-1));
 }
 
 const centreColumn = (LATTICE.nx - 1) / 2;
@@ -49,8 +63,7 @@ describe("traceContourRings", () => {
       LATTICE,
       600,
     );
-    expect(rings).toHaveLength(1);
-    expect(rings[0][0]).toEqual(rings[0][rings[0].length - 1]);
+    expectClosed(onlyRing(rings));
   });
 
   it("closes a contour that runs off the sampled edge instead of discarding it", () => {
@@ -61,21 +74,18 @@ describe("traceContourRings", () => {
       LATTICE,
       600,
     );
-    expect(rings).toHaveLength(1);
-    expect(rings[0][0]).toEqual(rings[0][rings[0].length - 1]);
+    expectClosed(onlyRing(rings));
   });
 
   it("traces a closed ring around a central reachable disc", () => {
-    const rings = traceContourRings(radial(), LATTICE, 300);
-    expect(rings).toHaveLength(1);
-    const ring = rings[0];
-    expect(ring[0]).toEqual(ring[ring.length - 1]);
+    const ring = onlyRing(traceContourRings(radial(), LATTICE, 300));
+    expectClosed(ring);
     expect(ring.length).toBeGreaterThan(8);
   });
 
   it("grows the ring monotonically with the threshold, which is what makes contours nest", () => {
-    const small = Math.abs(ringArea(traceContourRings(radial(), LATTICE, 200)[0]));
-    const large = Math.abs(ringArea(traceContourRings(radial(), LATTICE, 400)[0]));
+    const small = Math.abs(ringArea(onlyRing(traceContourRings(radial(), LATTICE, 200))));
+    const large = Math.abs(ringArea(onlyRing(traceContourRings(radial(), LATTICE, 400))));
     expect(large).toBeGreaterThan(small);
   });
 

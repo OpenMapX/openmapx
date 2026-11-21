@@ -9,6 +9,7 @@ import {
   RUNTIME_BUNDLES,
   writeRuntimeBundle,
 } from "./build-runtime-bundles.mjs";
+import { nth } from "./fixtures/nth.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -458,7 +459,7 @@ describe("runtime bundles", () => {
     expect(text(replaced, "main.mjs")).not.toContain("() => null");
     const assets = [...replaced.files.keys()].filter((name) => name.startsWith("assets/"));
     expect(assets).toHaveLength(1);
-    expect(replaced.files.get(assets[0] as string)?.toString()).toBe('{"embedded":true}');
+    expect(replaced.files.get(nth(assets, 0))?.toString()).toBe('{"embedded":true}');
     expect(replaced.sources).toContain("lib/src/source.bundle.ts");
     expect(replaced.sources).not.toContain("lib/src/source.ts");
   });

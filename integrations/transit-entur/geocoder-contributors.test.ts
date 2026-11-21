@@ -1,6 +1,7 @@
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "./index";
@@ -47,14 +48,14 @@ it("credits the actual autocomplete HTTP source before retaining its stop row", 
     http,
   });
   setup(ctx);
-  const result = await ctx.registered.transit[0].searchStopsByName?.("Oslo", 10);
+  const result = await nth(ctx.registered.transit, 0).searchStopsByName?.("Oslo", 10);
   expect(requested).toHaveLength(1);
-  expect(new URL(requested[0]).pathname).toBe("/geocoder/v3/autocomplete");
-  expect(new URL(requested[0]).searchParams.get("q")).toBe("Oslo");
-  expect(new URL(requested[0]).searchParams.get("layers")).toBe("stopPlace");
-  expect(new URL(requested[0]).searchParams.get("sources")).toBe("nsr");
-  expect(new URL(requested[0]).searchParams.get("countries")).toBe("no");
-  expect(new URL(requested[0]).searchParams.get("multimodal")).toBe("parent");
+  expect(new URL(nth(requested, 0)).pathname).toBe("/geocoder/v3/autocomplete");
+  expect(new URL(nth(requested, 0)).searchParams.get("q")).toBe("Oslo");
+  expect(new URL(nth(requested, 0)).searchParams.get("layers")).toBe("stopPlace");
+  expect(new URL(nth(requested, 0)).searchParams.get("sources")).toBe("nsr");
+  expect(new URL(nth(requested, 0)).searchParams.get("countries")).toBe("no");
+  expect(new URL(nth(requested, 0)).searchParams.get("multimodal")).toBe("parent");
   expect(result?.data).toHaveLength(1);
   expect(result?.data[0]).toMatchObject({
     id: "entur:NSR:StopPlace:337",
@@ -63,7 +64,7 @@ it("credits the actual autocomplete HTTP source before retaining its stop row", 
     name: "Oslo S",
     modes: ["rail"],
   });
-  expect(result?.data[0].contributors?.map((r) => r.sourceId)).toEqual([
+  expect(result?.data[0]?.contributors?.map((r) => r.sourceId)).toEqual([
     "entur-geocoder",
     "entur-geocoder-nsr",
   ]);
@@ -73,7 +74,7 @@ it("credits the actual autocomplete HTTP source before retaining its stop row", 
   const originalName = geocoder.name;
   geocoder.name = "Later manifest";
   try {
-    expect(retained?.contributors?.[0].name).toBe(originalName);
+    expect(retained?.contributors?.[0]?.name).toBe(originalName);
   } finally {
     geocoder.name = originalName;
   }
@@ -106,8 +107,8 @@ it("omits country only for an explicit empty config and uses native multimodal s
     }),
   });
   setup(ctx);
-  await ctx.registered.transit[0].searchStopsByName?.("Oslo", 10);
-  const url = new URL(requested[0]);
+  await nth(ctx.registered.transit, 0).searchStopsByName?.("Oslo", 10);
+  const url = new URL(nth(requested, 0));
   expect(url.searchParams.has("countries")).toBe(false);
   expect(url.searchParams.get("multimodal")).toBe("all");
   expect(url.searchParams.has("multiModal")).toBe(false);
@@ -137,7 +138,9 @@ it("never acquires NSR data when its supplier is denied or undeclared", async ()
     });
     ctx.getDisallowedSourceIds = async () => new Set(declared ? ["entur-geocoder-nsr"] : []);
     setup(ctx);
-    await expect(ctx.registered.transit[0].searchStopsByName?.("Oslo", 10)).rejects.toMatchObject({
+    await expect(
+      nth(ctx.registered.transit, 0).searchStopsByName?.("Oslo", 10),
+    ).rejects.toMatchObject({
       kind: "policy",
     });
     expect(request).not.toHaveBeenCalled();
@@ -153,7 +156,7 @@ it("bounds a stalled supplier policy with the transit SDK's single eight-second 
   });
   ctx.getDisallowedSourceIds = () => new Promise(() => {});
   setup(ctx);
-  const pending = ctx.registered.transit[0].searchStopsByName?.("Oslo", 10);
+  const pending = nth(ctx.registered.transit, 0).searchStopsByName?.("Oslo", 10);
   const outcome = expect(pending).rejects.toMatchObject({ kind: "timeout" });
   await vi.advanceTimersByTimeAsync(8000);
   await outcome;

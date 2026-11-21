@@ -7,7 +7,7 @@ import type { NavProgress } from "../navigation/types";
 import type { Route } from "../types/routing";
 import { useNavigationStore } from "./navigationStore";
 
-const geometry: [number, number][] = [
+const geometry: [[number, number], [number, number], [number, number]] = [
   [10, 50],
   [10.001, 50.001],
   [10.002, 50.002],

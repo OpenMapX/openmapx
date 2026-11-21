@@ -15,7 +15,8 @@ export function parseSurfaceAction(raw: string, config: DeepLinkConfig): string 
       return null;
     if ([...url.searchParams.keys()].some((k) => k !== "sessionId")) return null;
     const ids = url.searchParams.getAll("sessionId");
-    return ids.length === 1 && /^[A-Za-z0-9_-]{1,128}$/.test(ids[0]) ? ids[0] : null;
+    const [id] = ids;
+    return ids.length === 1 && id !== undefined && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : null;
   } catch {
     return null;
   }

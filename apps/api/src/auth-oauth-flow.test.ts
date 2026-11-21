@@ -13,7 +13,18 @@ const PASSWORD = "fixture-password-1234";
 type MemoryRow = Record<string, unknown>;
 
 function buildTestAuth() {
-  const database: Record<string, MemoryRow[]> = {
+  const database: Record<
+    | "user"
+    | "session"
+    | "account"
+    | "verification"
+    | "jwks"
+    | "oauthClient"
+    | "oauthAccessToken"
+    | "oauthRefreshToken"
+    | "oauthConsent",
+    MemoryRow[]
+  > = {
     user: [],
     session: [],
     account: [],

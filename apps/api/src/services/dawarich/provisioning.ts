@@ -147,12 +147,10 @@ function equalSecret(left: string, right: string): boolean {
 }
 
 function classifyCopies(values: Array<string | null>): ProvisioningSecretState {
-  const present = values.filter((value): value is string => value !== null);
-  if (present.length === 0) return "missing";
-  if (present.length !== values.length) return "conflict";
-  return present.every((value) => equalSecret(value, present[0] as string))
-    ? "consistent"
-    : "conflict";
+  const [first, ...rest] = values.filter((value): value is string => value !== null);
+  if (first === undefined) return "missing";
+  if (rest.length + 1 !== values.length) return "conflict";
+  return rest.every((value) => equalSecret(value, first)) ? "consistent" : "conflict";
 }
 
 function buildContext(input: ManagedDawarichProvisioningInput): ProvisioningContext {
@@ -648,10 +646,10 @@ export async function rotateManagedDawarichOidcSecret(
     await dependencies.getRuntimeState();
     const context = await resolveContext(input, dependencies);
     const clients = await matchingClients(dependencies, input.headers);
-    if (clients.length !== 1) {
+    const [client] = clients;
+    if (clients.length !== 1 || !client) {
       throw new ManagedDawarichProvisioningError("DAWARICH_OAUTH_CLIENT_CONFLICT");
     }
-    const client = clients[0] as ManagedOAuthClient;
     assertImmutableClientSecurity(client);
     await stageOidcRecoveryRequired(dependencies);
     const pendingGeneration = await stagePendingGeneration(dependencies);

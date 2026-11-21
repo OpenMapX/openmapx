@@ -6,7 +6,7 @@ import {
   TZ_FILL_ORDER,
 } from "@integrations/overlay-sun-time/map-layer";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import {
   anchorMapLayers,
   type LayerRegistration,
@@ -117,7 +117,7 @@ describe("planAnchorMoves", () => {
     const applied = [...layers];
     for (const move of moves) {
       const index = applied.findIndex((l) => l.id === move.id);
-      const [layer] = applied.splice(index, 1);
+      const layer = nth(applied.splice(index, 1), 0);
       const target = move.beforeId ? applied.findIndex((l) => l.id === move.beforeId) : -1;
       if (target === -1) applied.push(layer);
       else applied.splice(target, 0, layer);
@@ -199,7 +199,11 @@ function declaredSlots(): {
       if (entry.name === "layerStack.ts") continue;
       const source = readFileSync(path, "utf8");
       const declarations = [
-        ...[...source.matchAll(callPattern)].map((m) => ({ at: m.index, slot: m[1], raw: m[2] })),
+        ...[...source.matchAll(callPattern)].map((m) => ({
+          at: m.index,
+          slot: m[1],
+          raw: nth(m, 2),
+        })),
         ...[...source.matchAll(descriptorPattern)].map((m) => ({
           at: m.index,
           slot: m[1],

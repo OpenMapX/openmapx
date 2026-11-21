@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { planIsochroneLattice } from "./lattice.js";
 import { traceContourRings } from "./marching-squares.js";
 import { ringsToGeometry, simplifyRing } from "./polygons.js";
@@ -20,19 +20,29 @@ function square(cx: number, cy: number, half: number): [number, number][] {
   ];
 }
 
-function signedArea(ring: number[][]): number {
+function xy(position: GeoJSON.Position | undefined): [number, number] {
+  const [x, y] = position ?? [];
+  assert.isDefined(x);
+  assert.isDefined(y);
+  return [x, y];
+}
+
+function signedArea(ring: GeoJSON.Position[] | undefined): number {
+  assert.isDefined(ring);
   let sum = 0;
   for (let i = 0; i < ring.length - 1; i += 1) {
-    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+    const [x0, y0] = xy(ring[i]);
+    const [x1, y1] = xy(ring[i + 1]);
+    sum += x0 * y1 - x1 * y0;
   }
   return sum / 2;
 }
 
-function pointInRingLngLat(point: [number, number], ring: number[][]): boolean {
+function pointInRingLngLat(point: [number, number], ring: GeoJSON.Position[]): boolean {
   let contained = false;
   for (let i = 0, j = ring.length - 2; i < ring.length - 1; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+    const [xi, yi] = xy(ring[i]);
+    const [xj, yj] = xy(ring[j]);
     if (
       yi > point[1] !== yj > point[1] &&
       point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi
@@ -74,7 +84,7 @@ describe("ringsToGeometry", () => {
       [square(LATTICE.originX + 500, LATTICE.originY + 500, 200)],
       LATTICE,
     );
-    const [lng, lat] = (geometry as GeoJSON.Polygon).coordinates[0][0];
+    const [lng, lat] = xy((geometry as GeoJSON.Polygon).coordinates[0]?.[0]);
     expect(lng).toBeGreaterThan(13);
     expect(lng).toBeLessThan(14);
     expect(lat).toBeGreaterThan(52);
@@ -120,9 +130,14 @@ describe("simplifyRing", () => {
     for (let i = 0; i < simplified.length - 1; i += 1) {
       for (let j = i + 2; j < simplified.length - 1; j += 1) {
         if (i === 0 && j === simplified.length - 2) continue;
-        const orient = (p: number[], q: number[], r: number[]) =>
+        const orient = (p: [number, number], q: [number, number], r: [number, number]) =>
           Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
-        const [a, b, c, d] = [simplified[i], simplified[i + 1], simplified[j], simplified[j + 1]];
+        const [a, b, c, d] = [
+          xy(simplified[i]),
+          xy(simplified[i + 1]),
+          xy(simplified[j]),
+          xy(simplified[j + 1]),
+        ];
         const crosses = orient(a, b, c) !== orient(a, b, d) && orient(c, d, a) !== orient(c, d, b);
         expect(crosses).toBe(false);
       }
@@ -144,8 +159,10 @@ describe("contour nesting", () => {
     const outer = ringsToGeometry(traceContourRings(field, LATTICE, 500), LATTICE);
     const innerRing = (inner as GeoJSON.Polygon).coordinates[0];
     const outerRing = (outer as GeoJSON.Polygon).coordinates[0];
+    assert.isDefined(innerRing);
+    assert.isDefined(outerRing);
     for (const vertex of innerRing) {
-      expect(pointInRingLngLat(vertex as [number, number], outerRing)).toBe(true);
+      expect(pointInRingLngLat(xy(vertex), outerRing)).toBe(true);
     }
   });
 });

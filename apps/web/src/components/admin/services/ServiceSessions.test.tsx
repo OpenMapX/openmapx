@@ -2,7 +2,16 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { cloneElement, isValidElement, type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  cleanup,
+  createTestQueryClient,
+  fireEvent,
+  nth,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
 import { job } from "../activity/__tests__/fixtures";
 import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
@@ -131,9 +140,9 @@ describe("Compose generated consumers", () => {
     expect(writes.map((write) => JSON.parse(String(write.init.body)))).toEqual(
       [1, 2].map(() => ({ expectedCurrentRevisionId: null, confirmed: true })),
     );
-    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBeTruthy();
-    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBe(
-      new Headers(writes[1].init.headers).get("idempotency-key"),
+    expect(new Headers(nth(writes, 0).init.headers).get("idempotency-key")).toBeTruthy();
+    expect(new Headers(nth(writes, 0).init.headers).get("idempotency-key")).toBe(
+      new Headers(nth(writes, 1).init.headers).get("idempotency-key"),
     );
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringContaining("render-job")));
   });
@@ -201,8 +210,8 @@ describe("Compose generated consumers", () => {
       expect(toast).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "Compose Up" }));
       await waitFor(() => expect(writes).toHaveLength(2));
-      expect(writes[1].key).not.toBe(writes[0].key);
-      expect(writes[1].url).toBe("http://replacement.test/api/admin/compose/up");
+      expect(nth(writes, 1).key).not.toBe(nth(writes, 0).key);
+      expect(nth(writes, 1).url).toBe("http://replacement.test/api/admin/compose/up");
     },
   );
   it("rejects a non-YAML preview instead of showing its body", async () => {
@@ -231,7 +240,7 @@ describe("generated log sessions", () => {
     expect(signals).toHaveLength(1);
     expect(screen.queryByRole("dialog")).toBeNull();
     view.replace(<ServiceLogsPanel active={false} serviceId="demo" serviceName="Demo" />);
-    await waitFor(() => expect(signals[0].aborted).toBe(true));
+    await waitFor(() => expect(nth(signals, 0).aborted).toBe(true));
     expect(screen.queryByText("inline output")).toBeNull();
     view.replace(<ServiceLogsPanel active serviceId="demo" serviceName="Demo" />);
     await screen.findByText("inline output");
@@ -256,9 +265,9 @@ describe("generated log sessions", () => {
     expect(document.querySelector("pre")?.textContent).toBe("α\n\nline\nlast😀");
     expect(stream.locked).toBe(false);
     expect(calls).toHaveLength(1);
-    expect(new URL(calls[0].url).pathname).toBe("/api/admin/services/service%20%2Fone/logs");
-    expect(new URL(calls[0].url).searchParams.get("lines")).toBe("200");
-    expect(new Headers(calls[0].init.headers).get("idempotency-key")).toBeTruthy();
+    expect(new URL(nth(calls, 0).url).pathname).toBe("/api/admin/services/service%20%2Fone/logs");
+    expect(new URL(nth(calls, 0).url).searchParams.get("lines")).toBe("200");
+    expect(new Headers(nth(calls, 0).init.headers).get("idempotency-key")).toBeTruthy();
     vi.stubGlobal(
       "fetch",
       async () =>
@@ -305,7 +314,7 @@ describe("generated log sessions", () => {
       if (kind === "service") view.replace(logs("replacement"));
       if (kind === "close") view.replace(logs("service /one", false));
       if (kind === "unmount") view.unmount();
-      await waitFor(() => expect(calls[0].signal?.aborted).toBe(true));
+      await waitFor(() => expect(nth(calls, 0).signal?.aborted).toBe(true));
       expect(canceled).toBe(1);
       expect(stream.locked).toBe(false);
       if (kind === "origin" || kind === "service") {
@@ -329,8 +338,8 @@ describe("generated log sessions", () => {
     });
     expect(screen.getByText("following")).toBeInTheDocument();
     expect(screen.queryByText(/old error/)).not.toBeInTheDocument();
-    expect(new Headers(calls[1].headers).get("idempotency-key")).not.toBe(
-      new Headers(calls[0].headers).get("idempotency-key"),
+    expect(new Headers(nth(calls, 1).headers).get("idempotency-key")).not.toBe(
+      new Headers(nth(calls, 0).headers).get("idempotency-key"),
     );
   });
   it.each(["empty", "missing", "json", "wrong-media"])("handles %s body safely", async (kind) => {
@@ -701,15 +710,15 @@ describe("additional ownership and safe feedback", () => {
     await screen.findByText("current-log");
     fireEvent.click(screen.getByRole("button", { name: "Close service logs" }));
     await act(async () => {});
-    expect(calls[0].signal?.aborted).toBe(true);
+    expect(nth(calls, 0).signal?.aborted).toBe(true);
     expect(canceled).toBe(1);
     expect(document.querySelector("pre")?.textContent).toBe("");
     view.replace(logs("service /one", false));
     view.replace(logs());
     await screen.findByText("current-log");
     expect(calls).toHaveLength(2);
-    expect(new Headers(calls[1].headers).get("idempotency-key")).not.toBe(
-      new Headers(calls[0].headers).get("idempotency-key"),
+    expect(new Headers(nth(calls, 1).headers).get("idempotency-key")).not.toBe(
+      new Headers(nth(calls, 0).headers).get("idempotency-key"),
     );
   });
 });
@@ -722,9 +731,9 @@ it("retains a single log session idempotency key through StrictMode observation 
   });
   const view = mount(logs(), true);
   await waitFor(() => expect(calls).toHaveLength(2));
-  expect(calls[0].signal?.aborted).toBe(true);
-  expect(new Headers(calls[1].headers).get("idempotency-key")).toBe(
-    new Headers(calls[0].headers).get("idempotency-key"),
+  expect(nth(calls, 0).signal?.aborted).toBe(true);
+  expect(new Headers(nth(calls, 1).headers).get("idempotency-key")).toBe(
+    new Headers(nth(calls, 0).headers).get("idempotency-key"),
   );
   view.unmount();
 });
@@ -783,23 +792,23 @@ it("owns query changes, pause/resume and snapshot reload with distinct logical r
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Tail lines" }));
   fireEvent.click(await screen.findByRole("option", { name: "500" }));
   await waitFor(() => expect(calls).toHaveLength(2));
-  expect(calls[0].init.signal?.aborted).toBe(true);
-  expect(calls[1].url.searchParams.get("lines")).toBe("500");
-  expect(new Headers(calls[1].init.headers).get("idempotency-key")).not.toBe(
-    new Headers(calls[0].init.headers).get("idempotency-key"),
+  expect(nth(calls, 0).init.signal?.aborted).toBe(true);
+  expect(nth(calls, 1).url.searchParams.get("lines")).toBe("500");
+  expect(new Headers(nth(calls, 1).init.headers).get("idempotency-key")).not.toBe(
+    new Headers(nth(calls, 0).init.headers).get("idempotency-key"),
   );
   fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-  expect(calls[1].init.signal?.aborted).toBe(true);
+  expect(nth(calls, 1).init.signal?.aborted).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Resume" }));
   await waitFor(() => expect(calls).toHaveLength(3));
-  expect(new Headers(calls[2].init.headers).get("idempotency-key")).not.toBe(
-    new Headers(calls[1].init.headers).get("idempotency-key"),
+  expect(new Headers(nth(calls, 2).init.headers).get("idempotency-key")).not.toBe(
+    new Headers(nth(calls, 1).init.headers).get("idempotency-key"),
   );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Log mode" }));
   fireEvent.click(await screen.findByRole("option", { name: "Snapshot" }));
   expect(await screen.findByText("Snapshot complete.")).toBeInTheDocument();
   expect(screen.getByText("snapshot-log")).toBeInTheDocument();
-  expect(calls[2].init.signal?.aborted).toBe(true);
-  expect(calls[3].url.searchParams.get("follow")).toBe("false");
-  expect(calls[3].url.searchParams.has("maxDurationSeconds")).toBe(false);
+  expect(nth(calls, 2).init.signal?.aborted).toBe(true);
+  expect(nth(calls, 3).url.searchParams.get("follow")).toBe("false");
+  expect(nth(calls, 3).url.searchParams.has("maxDurationSeconds")).toBe(false);
 });

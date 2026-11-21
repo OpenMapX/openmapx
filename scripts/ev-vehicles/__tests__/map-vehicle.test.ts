@@ -432,7 +432,7 @@ describe("dedupeVehicles", () => {
     expect(collapsed).toBe(1);
     expect(kept).toHaveLength(1);
     // Deterministic: the lowest id wins regardless of input order.
-    expect(kept[0].id).toBe("bmw:i4:2024:i4");
+    expect(kept[0]?.id).toBe("bmw:i4:2024:i4");
   });
 
   it("ignores connector order when comparing but leaves the stored order alone", () => {
@@ -441,7 +441,7 @@ describe("dedupeVehicles", () => {
       generated({ id: "a:b:2024:y", connectors: ["ccs2", "type2"] }),
     ]);
     expect(collapsed).toBe(1);
-    expect(kept[0].connectors).toEqual(["type2", "ccs2"]);
+    expect(kept[0]?.connectors).toEqual(["type2", "ccs2"]);
   });
 
   it.each([

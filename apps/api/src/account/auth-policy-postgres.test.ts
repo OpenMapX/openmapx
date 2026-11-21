@@ -3,6 +3,7 @@ import { createEmailVerificationToken } from "better-auth/api";
 import { makeSignature } from "better-auth/crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { resolveBetterAuthSecret } from "../auth-secret";
 import {
   account,
   authPolicyApplication,
@@ -182,7 +183,7 @@ dbDescribe("account policy through installed Better Auth", () => {
     if (!factor) throw Error("No actual TOTP factor");
     const { symmetricDecrypt } = await import("better-auth/crypto");
     const totpSecret = await symmetricDecrypt({
-      key: process.env.BETTER_AUTH_SECRET!,
+      key: resolveBetterAuthSecret(),
       data: factor.secret,
     });
     await auth.api.verifyTOTP({

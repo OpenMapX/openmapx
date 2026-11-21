@@ -21,12 +21,17 @@ type EpaBandKey = keyof typeof manifestData.transcription.bands;
 
 function bands(key: EpaBandKey): BreakpointBand[] {
   return manifestData.transcription.bands[key].map(
-    ([concentrationLow, concentrationHigh, indexLow, indexHigh]) => ({
-      concentrationLow,
-      concentrationHigh,
-      indexLow,
-      indexHigh,
-    }),
+    ([concentrationLow, concentrationHigh, indexLow, indexHigh]) => {
+      if (
+        concentrationLow === undefined ||
+        concentrationHigh === undefined ||
+        indexLow === undefined ||
+        indexHigh === undefined
+      ) {
+        throw new Error(`EPA band table ${key} has a row without four values`);
+      }
+      return { concentrationLow, concentrationHigh, indexLow, indexHigh };
+    },
   );
 }
 
@@ -131,8 +136,9 @@ function hourlySlotsNewestFirst(
   return Array.from({ length: count }, (_, hoursAgo) => {
     const expectedEnd = anchor - hoursAgo * 3_600_000;
     const matches = temporal.filter(({ end }) => end === expectedEnd);
-    if (matches.length !== 1) return null;
-    const { sample } = matches[0] as (typeof matches)[number];
+    const [match] = matches;
+    if (matches.length !== 1 || !match) return null;
+    const { sample } = match;
     return sample.valid &&
       sample.unit === unit &&
       Number.isFinite(sample.value) &&

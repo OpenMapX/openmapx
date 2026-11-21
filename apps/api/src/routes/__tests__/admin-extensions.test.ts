@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mockAdminSession } from "../../test/auth.js";
+import { callArg } from "../../test/mock-calls";
 
 const fakeSession = mockAdminSession();
 vi.mock("../../utils/require-admin.js", () => ({
@@ -202,7 +203,7 @@ describe("POST /admin/extensions/install", () => {
       }),
       fakeSession.user.id,
     );
-    const auditEntry = mockWriteAuditLog.mock.calls[0]?.[0] as {
+    const auditEntry = callArg(mockWriteAuditLog, 0, 0) as {
       action: string;
       details: Record<string, unknown>;
     };

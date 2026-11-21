@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type {
   LocalizedText,
@@ -7,6 +7,7 @@ import type {
 } from "../../types/roadConditions";
 import type { RouteStep } from "../../types/routing";
 import { haversineDistance } from "../../utils/coordinates";
+import { itemAt } from "../../utils/itemAt";
 import { angularDifference, bearingBetween, routeBearingAt } from "../bearing";
 import {
   type IncidentAlert,
@@ -786,9 +787,16 @@ function randomSteps(rand: () => number, route: LngLat[]): RouteStep[] {
   }
   boundaries.push(route.length);
   const steps: RouteStep[] = [];
+  const pickRoadName = () => {
+    const name = ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)];
+    assert.isDefined(name);
+    return name;
+  };
   for (let i = 0; i < stepCount; i++) {
     const from = boundaries[i];
-    const to = Math.max(from + 2, boundaries[i + 1]);
+    const end = boundaries[i + 1];
+    assert(from !== undefined && end !== undefined);
+    const to = Math.max(from + 2, end);
     const coordinates = route.slice(from, Math.min(to, route.length));
     if (coordinates.length < 2) continue;
     steps.push({
@@ -796,7 +804,7 @@ function randomSteps(rand: () => number, route: LngLat[]): RouteStep[] {
       distance: 0,
       duration: 0,
       coordinates,
-      roadNames: rand() < 0.85 ? [ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)]] : undefined,
+      roadNames: rand() < 0.85 ? [pickRoadName()] : undefined,
     });
   }
   return steps;
@@ -815,7 +823,7 @@ function randomEvent(
   const along = (rand() - 0.2) * routeMeters * 1.3;
   const lateral = rand() < 0.5 ? (rand() - 0.5) * 30 : (rand() - 0.5) * 200;
   const hasRoads = rand() < 0.6;
-  const roadName = ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)] as string;
+  const roadName = itemAt(ROAD_NAMES, Math.floor(rand() * ROAD_NAMES.length));
   const roads = hasRoads ? [rand() < 0.5 ? { name: en(roadName) } : { ref: roadName }] : undefined;
   const direction = rand() < 0.5 ? DIRECTIONS[Math.floor(rand() * DIRECTIONS.length)] : undefined;
   const geometry: RoadConditionEvent["geometry"] = isLine
@@ -827,8 +835,8 @@ function randomEvent(
         ],
       }
     : { type: "Point", coordinates: offsetLngLat(base, along, lateral) };
-  const type = EVENT_TYPES[Math.floor(rand() * EVENT_TYPES.length)] as string;
-  const severity = SEVERITIES[Math.floor(rand() * SEVERITIES.length)] as RoadConditionSeverityLabel;
+  const type = itemAt(EVENT_TYPES, Math.floor(rand() * EVENT_TYPES.length));
+  const severity = itemAt(SEVERITIES, Math.floor(rand() * SEVERITIES.length));
   return ev(id, severity, geometry, type, {
     headline: en(`random ${id}`),
     ...(roads ? { roads } : {}),

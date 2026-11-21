@@ -2,6 +2,7 @@ import type { Place } from "@openmapx/core";
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import {
   beginPlaceResolverStaging,
@@ -52,8 +53,8 @@ describe("actual setup generations", () => {
     expect(f.ctx.registered.geocoding).toHaveLength(1);
     expect(f.ctx.registered.searchSuggestions).toHaveLength(1);
     expect(f.ctx.registered.healthChecks).toHaveLength(1);
-    expect(await f.ctx.registered.healthChecks[0]()).toMatchObject({ status: "up" });
-    const url = new URL(f.http.calls[0].url);
+    expect(await nth(f.ctx.registered.healthChecks, 0)()).toMatchObject({ status: "up" });
+    const url = new URL(nth(f.http.calls, 0).url);
     expect(url.pathname).toBe("/geocoder/v3/place");
     expect(url.searchParams.get("ids")).toBe("NSR:StopPlace:337");
   });
@@ -66,7 +67,7 @@ describe("actual setup generations", () => {
         release = resolve;
       });
     });
-    const pending = a.ctx.registered.searchSuggestions[0].searchSuggestions(
+    const pending = nth(a.ctx.registered.searchSuggestions, 0).searchSuggestions(
       { query: "Oslo", lang: "en", limit: 8 },
       CALL,
     );
@@ -77,14 +78,14 @@ describe("actual setup generations", () => {
     Object.assign(a.ctx, { manifest: { ...a.ctx.manifest, dataSources: [] } });
     release(JSON.stringify(collection()));
     const result = await pending;
-    expect(result.suggestions[0].id).toBe("nsr:StopPlace:337");
+    expect(nth(result.suggestions, 0).id).toBe("nsr:StopPlace:337");
     expect(result.attributions.map((x) => x.sourceId)).toEqual([
       "entur-geocoder",
       "entur-geocoder-nsr",
     ]);
-    expect(a.http.calls[0].url).toContain("https://a.example/geocoder/v3/autocomplete");
-    expect(new URL(a.http.calls[0].url).searchParams.get("countries")).toBe("no");
-    const skipped = await a.ctx.registered.searchSuggestions[0].searchSuggestions(
+    expect(nth(a.http.calls, 0).url).toContain("https://a.example/geocoder/v3/autocomplete");
+    expect(new URL(nth(a.http.calls, 0).url).searchParams.get("countries")).toBe("no");
+    const skipped = await nth(a.ctx.registered.searchSuggestions, 0).searchSuggestions(
       { query: "x", lang: "en", limit: 8, proximity: [13, 52] },
       CALL,
     );
@@ -132,7 +133,7 @@ describe("actual setup generations", () => {
     };
     setup(ctx);
     const caller = new AbortController();
-    const pending = ctx.registered.geocoding[0].autocomplete("Oslo", "en", undefined, {
+    const pending = nth(ctx.registered.geocoding, 0).autocomplete("Oslo", "en", undefined, {
       signal: caller.signal,
     });
     const assertion = expect(pending).rejects.toMatchObject({ name: "ProviderCancelledError" });
@@ -160,11 +161,11 @@ describe("actual setup generations", () => {
       setup(ctx);
       if (mode.startsWith("before"))
         denied = new Set([mode.endsWith("api") ? "entur-geocoder" : "entur-geocoder-nsr"]);
-      await expect(ctx.registered.geocoding[0].geocode("Oslo")).rejects.toThrow();
+      await expect(nth(ctx.registered.geocoding, 0).geocode("Oslo")).rejects.toThrow();
       if (mode === "before-api") expect(http.calls).toHaveLength(0);
       if (mode === "before-data")
-        expect(new URL(http.calls[0].url).searchParams.get("sources")).not.toContain("nsr");
-      expect(await ctx.registered.healthChecks[0]()).toMatchObject({ status: "down" });
+        expect(new URL(nth(http.calls, 0).url).searchParams.get("sources")).not.toContain("nsr");
+      expect(await nth(ctx.registered.healthChecks, 0)()).toMatchObject({ status: "down" });
     },
   );
   it.each(["policy", "body"] as const)(
@@ -179,9 +180,9 @@ describe("actual setup generations", () => {
       });
       if (mode === "policy") ctx.getDisallowedSourceIds = () => new Promise(() => {});
       setup(ctx);
-      const search = ctx.registered.geocoding[0].autocomplete("Oslo");
+      const search = nth(ctx.registered.geocoding, 0).autocomplete("Oslo");
       const assertion = expect(search).rejects.toMatchObject({ name: "ProviderTimeoutError" });
-      const health = ctx.registered.healthChecks[0]();
+      const health = nth(ctx.registered.healthChecks, 0)();
       await vi.advanceTimersByTimeAsync(4000);
       await assertion;
       expect(await health).toMatchObject({ status: "down" });
@@ -200,9 +201,9 @@ describe("actual setup generations", () => {
                   ? []
                   : [
                       {
-                        ...collection().features[0],
+                        ...nth(collection().features, 0),
                         properties: {
-                          ...collection().features[0].properties,
+                          ...nth(collection().features, 0).properties,
                           id: "NSR:StopPlace:999",
                         },
                       },
@@ -210,17 +211,17 @@ describe("actual setup generations", () => {
               ),
             );
       const f = activate({}, async () => body);
-      expect(await f.ctx.registered.healthChecks[0]()).toMatchObject({ status: "down" });
+      expect(await nth(f.ctx.registered.healthChecks, 0)()).toMatchObject({ status: "down" });
       expect(f.http.calls).toHaveLength(1);
     },
   );
   it("clears coverage only for explicit empty country and rejects alpha3", async () => {
     const f = activate({ boundaryCountry: "" });
-    await f.ctx.registered.searchSuggestions[0].searchSuggestions(
+    await nth(f.ctx.registered.searchSuggestions, 0).searchSuggestions(
       { query: "Oslo", lang: "en", limit: 8, proximity: [13, 52] },
       CALL,
     );
     expect(f.http.calls).toHaveLength(1);
-    expect(new URL(f.http.calls[0].url).searchParams.has("countries")).toBe(false);
+    expect(new URL(nth(f.http.calls, 0).url).searchParams.has("countries")).toBe(false);
   });
 });

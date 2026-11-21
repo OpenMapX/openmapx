@@ -1,5 +1,5 @@
 import { decodePolyline } from "@openmapx/core";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 describe("decodePolyline", () => {
   it("decodes a basic polyline (precision 5) to correct [lng, lat] pairs", () => {
@@ -9,7 +9,7 @@ describe("decodePolyline", () => {
     const coords = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@");
     expect(coords).toHaveLength(3);
     // GeoJSON order: [lng, lat]
-    const [lng0, lat0] = coords[0];
+    const [lng0, lat0] = coords[0] ?? [];
     expect(lat0).toBeCloseTo(38.5, 1);
     expect(lng0).toBeCloseTo(-120.2, 1);
   });
@@ -29,15 +29,20 @@ describe("decodePolyline", () => {
     const p5 = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@", 5);
     const p6 = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@", 6);
     // Precision 6 divides by 10x more, so values should be 10x smaller (in magnitude)
-    expect(Math.abs(p6[0][0])).toBeCloseTo(Math.abs(p5[0][0]) / 10, 1);
-    expect(Math.abs(p6[0][1])).toBeCloseTo(Math.abs(p5[0][1]) / 10, 1);
+    const [first5] = p5;
+    const [first6] = p6;
+    assert(first5 && first6, "both precisions decode a first point");
+    const [lng5, lat5] = first5;
+    const [lng6, lat6] = first6;
+    expect(Math.abs(lng6)).toBeCloseTo(Math.abs(lng5) / 10, 1);
+    expect(Math.abs(lat6)).toBeCloseTo(Math.abs(lat5) / 10, 1);
   });
 
   it("decodes a precision-6 string near Berlin (lat≈52.52, lng≈13.405)", () => {
     // "_cqdcBosdqX" encodes [lat=52.52, lng=13.405] at precision 6
     const coords = decodePolyline("_cqdcBosdqX", 6);
     expect(coords).toHaveLength(1);
-    const [lng, lat] = coords[0];
+    const [lng, lat] = coords[0] ?? [];
     expect(lat).toBeCloseTo(52.52, 2);
     expect(lng).toBeCloseTo(13.405, 2);
   });

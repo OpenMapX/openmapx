@@ -35,16 +35,17 @@ export async function createMigratedPostgresFixture(options: { throughMigration?
   try {
     await sql`CREATE EXTENSION IF NOT EXISTS postgis`;
     let migrationsFolder = fileURLToPath(new URL("../db/migrations", import.meta.url));
-    if (options.throughMigration !== undefined) {
+    const throughMigration = options.throughMigration;
+    if (throughMigration !== undefined) {
       const journal = JSON.parse(
         await readFile(join(migrationsFolder, "meta/_journal.json"), "utf8"),
       ) as { entries: { idx: number; tag: string }[] };
       if (
-        !Number.isInteger(options.throughMigration) ||
-        !journal.entries.some((e) => e.idx === options.throughMigration)
+        !Number.isInteger(throughMigration) ||
+        !journal.entries.some((e) => e.idx === throughMigration)
       )
         throw Error("Invalid fixture migration boundary");
-      journal.entries = journal.entries.filter((e) => e.idx <= options.throughMigration!);
+      journal.entries = journal.entries.filter((e) => e.idx <= throughMigration);
       temporaryMigrations = await mkdtemp(join(tmpdir(), "openmapx-migration-fixture-"));
       await mkdir(join(temporaryMigrations, "meta"));
       await writeFile(join(temporaryMigrations, "meta/_journal.json"), JSON.stringify(journal));

@@ -216,7 +216,8 @@ async function buildTidesResponse(
 
   const events = deriveExtrema(curveRaw);
 
-  const last = curveRaw[curveRaw.length - 1];
+  const last = curveRaw.at(-1);
+  if (!last) return null;
 
   const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),

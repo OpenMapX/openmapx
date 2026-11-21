@@ -313,10 +313,11 @@ export async function loadAllTideStations(
   const settled = await Promise.allSettled(loaders.map(([, load]) => load()));
   const stations: MergedTideStation[] = [];
   const unavailable: TideNetwork[] = [];
-  settled.forEach((result, i) => {
-    if (result.status === "fulfilled") stations.push(...result.value);
-    else unavailable.push(loaders[i][0]);
-  });
+  for (const [i, [network]] of loaders.entries()) {
+    const result = settled[i];
+    if (result?.status === "fulfilled") stations.push(...result.value);
+    else unavailable.push(network);
+  }
   return { stations, unavailable };
 }
 

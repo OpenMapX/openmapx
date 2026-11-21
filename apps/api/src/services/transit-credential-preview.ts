@@ -1,5 +1,6 @@
 /** Private immutable encrypted proposals; public intents contain no value-derived hashes. */
 import { createHash, randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import type { FeedCredentialChange } from "@openmapx/transitous-core/feed-credentials";
 import { and, eq, lt, sql } from "drizzle-orm";
@@ -129,12 +130,16 @@ export async function retainFeedCredentialPreview(
         throw new TransitCredentialConflict();
       return value.preview;
     }
-    const [{ total, actor }] = await tx
-      .select({
-        total: sql<number>`count(*)::int`,
-        actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorId} = ${input.actorId})::int`,
-      })
-      .from(transitCredentialPreview);
+    const { total, actor } = itemAt(
+      await tx
+        .select({
+          total: sql<number>`count(*)::int`,
+          actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorId} = ${input.actorId})::int`,
+        })
+        .from(transitCredentialPreview),
+      0,
+      "row from the transit credential preview count query",
+    );
     if (total >= 4096 || actor >= 100)
       throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_PREVIEW_CAPACITY");
     const previewId = randomUUID(),
@@ -208,5 +213,6 @@ export async function readRetainedFeedCredentialPreview(
     )
     .limit(2);
   if (rows.length !== 1) return undefined;
-  return { row: rows[0]!, private: decoded(rows[0]!) };
+  const row = itemAt(rows, 0);
+  return { row, private: decoded(row) };
 }

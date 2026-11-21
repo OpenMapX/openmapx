@@ -121,15 +121,15 @@ function buildFareZoneExplanation(
   t: ReturnType<typeof useTranslations>,
   zones: TransitFareZoneSummary[],
 ): { summary: string; note: string } | null {
-  if (zones.length === 0) return null;
+  const [zone, ...otherZones] = zones;
+  if (!zone) return null;
 
   const authorities = Array.from(
     new Set(
       zones.map((zone) => zone.authorityName).filter((value): value is string => Boolean(value)),
     ),
   );
-  if (zones.length === 1) {
-    const zone = zones[0];
+  if (otherZones.length === 0) {
     const zoneName = fareZoneDisplayName(zone);
     return {
       summary: zone.authorityName
@@ -139,11 +139,12 @@ function buildFareZoneExplanation(
     };
   }
 
-  if (authorities.length === 1) {
+  const [authority] = authorities;
+  if (authority !== undefined && authorities.length === 1) {
     return {
       summary: t("fareZoneMultipleAuthoritySummary", {
         count: zones.length,
-        authority: authorities[0],
+        authority,
       }),
       note: t("fareZoneBoundaryNote"),
     };
@@ -389,8 +390,10 @@ export function StopInfrastructureSection({
 
   if (!resolvedStopId && !isLoading) return null;
 
-  const modeLabel = (mode: TransportMode) =>
-    MODE_LABEL_KEYS[mode] ? t(MODE_LABEL_KEYS[mode] as string) : mode;
+  const modeLabel = (mode: TransportMode) => {
+    const key = MODE_LABEL_KEYS[mode];
+    return key ? t(key) : mode;
+  };
 
   if (isLoading) {
     return (

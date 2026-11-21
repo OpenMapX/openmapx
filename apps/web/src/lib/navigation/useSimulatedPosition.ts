@@ -48,7 +48,8 @@ export function useSimulatedPosition(active: boolean, onFix: (fix: FixInput) => 
     if (!fixes) return;
     const id = setInterval(
       () => {
-        if (idxRef.current >= fixes.length) {
+        const fix = fixes[idxRef.current];
+        if (!fix) {
           clearInterval(id);
           return;
         }
@@ -57,7 +58,8 @@ export function useSimulatedPosition(active: boolean, onFix: (fix: FixInput) => 
         // and so the faster-route check that compares it against `Date.now()` —
         // read as decades in the past. Delivery time is also what a real
         // receiver reports, so it stays honest at any playback rate.
-        onFixRef.current({ ...fixes[idxRef.current++], timestampMs: Date.now() });
+        idxRef.current += 1;
+        onFixRef.current({ ...fix, timestampMs: Date.now() });
       },
       Math.max(50, SIM_INTERVAL_MS / playbackRate),
     );

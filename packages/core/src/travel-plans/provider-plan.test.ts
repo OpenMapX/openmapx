@@ -1,6 +1,6 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { dbNavigatorExamples } from "./__fixtures__/dbNavigator";
 import { parseSharedTravelPlan } from "./index";
 import { resolveSharedTravelPlan, type TravelPlanPort } from "./resolve";
@@ -46,6 +46,8 @@ function fixture() {
       },
     ],
   };
+  const [ride] = trip.legs;
+  assert.isDefined(ride);
   const envelope: MobilityEnvelope<TripPlan> = {
     data: {
       from,
@@ -53,10 +55,7 @@ function fixture() {
       provider: "ms",
       source: "transit-motis-local",
       datasetEpoch: "epoch-1",
-      itineraries: [
-        { ...trip, id: "wrong", legs: [{ ...trip.legs[0], tripId: "ms:another" }] },
-        trip,
-      ],
+      itineraries: [{ ...trip, id: "wrong", legs: [{ ...ride, tripId: "ms:another" }] }, trip],
       nextPageToken: "ordinary-signed-next-page",
     },
     attributions: [],
@@ -99,7 +98,7 @@ function fixture() {
     plan,
     resolveTrip,
   };
-  return { shared: parsed.plan, trip, envelope, port, plan, resolveTrip };
+  return { shared: parsed.plan, trip, ride, envelope, port, plan, resolveTrip };
 }
 
 describe("shared text selects provider plans without composing their data", () => {
@@ -148,7 +147,7 @@ describe("shared text selects provider plans without composing their data", () =
       ...f.envelope,
       data: {
         ...f.envelope.data,
-        itineraries: [{ ...f.trip, legs: [{ ...f.trip.legs[0], tripId: "ms:wrong" }] }],
+        itineraries: [{ ...f.trip, legs: [{ ...f.ride, tripId: "ms:wrong" }] }],
         nextPageToken: undefined,
       },
     });

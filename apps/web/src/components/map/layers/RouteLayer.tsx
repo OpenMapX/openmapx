@@ -33,6 +33,7 @@ import { markerMapContributors } from "@/integration-api/overlay/markerMapContri
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
+import { positionBounds } from "@/lib/positionBounds";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { routeGeometryFeatures } from "./routeGeometryFeatures";
@@ -216,7 +217,13 @@ export function RouteLayer() {
     if (!map || !mapReady) return;
     const activeDuration = routes[activeRouteIndex]?.duration;
     const visible = hasWaypoints && !navigating && mode !== "transit" && mode !== "flying";
-    if (!visible || !Number.isFinite(activeDuration) || activeDuration < 0) return;
+    if (
+      !visible ||
+      activeDuration === undefined ||
+      !Number.isFinite(activeDuration) ||
+      activeDuration < 0
+    )
+      return;
 
     const pillData = routes.flatMap((route, index) => {
       if (!Number.isFinite(route.duration) || route.duration < 0) return [];
@@ -427,32 +434,16 @@ export function RouteLayer() {
     const activeGeom = routes[activeRouteIndex]?.geometry;
     if (!activeGeom || activeGeom.length < 2) return;
 
-    let minLng = activeGeom[0][0];
-    let maxLng = activeGeom[0][0];
-    let minLat = activeGeom[0][1];
-    let maxLat = activeGeom[0][1];
-    for (const [lng, lat] of activeGeom) {
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
     // EV charge-stop coordinates are inserted waypoints, so they should
     // already lie on `activeGeom` — widen the box anyway in case a stop sits
     // just off the drawn line (rounding/matching slack).
-    if (isEvMode) {
-      for (const stop of evStops) {
-        const [lng, lat] = stop.station.coordinates;
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      }
-    }
+    const stopCoords = isEvMode ? evStops.map((stop) => stop.station.coordinates) : [];
+    const bounds = positionBounds([...activeGeom, ...stopCoords]);
+    if (!bounds) return;
     fitBounds(
       [
-        [minLng, minLat],
-        [maxLng, maxLat],
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
       ],
       80,
     );
@@ -545,15 +536,15 @@ export function RouteLayer() {
     const onStopClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
       if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
-      if (!features.length) return;
-      const props = features[0].properties as {
+      const [feature] = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
+      if (!feature) return;
+      const props = feature.properties as {
         id: string;
         name: string;
         _stationContributors?: string;
         _stationFieldContributors?: string;
       };
-      const coordinates = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
+      const coordinates = (feature.geometry as { coordinates: number[] }).coordinates as LngLat;
       openChargerPlace(
         {
           id: props.id,

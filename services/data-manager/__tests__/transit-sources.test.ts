@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { createCandidateManifest } from "../src/jobs/transitous/candidate.js";
 import { resolveTransitOverlayPath } from "../src/jobs/transitous/internal.js";
 import { safeOriginUrl } from "../src/jobs/transitous/source-manifest.js";
@@ -230,7 +230,9 @@ describe("transit source lifecycle", () => {
     const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as {
       sources: Array<{ originUrl?: string }>;
     };
-    manifest.sources[0].originUrl = safeOriginUrl(rawUrl);
+    const [recorded] = manifest.sources;
+    assert.isDefined(recorded);
+    recorded.originUrl = safeOriginUrl(rawUrl);
     writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
     expect(listTransitSources({ ...fx }).sources).toContainEqual(
       expect.objectContaining({ id: "catalog:de:active-feed", lifecycle: "active" }),

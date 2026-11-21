@@ -3,6 +3,7 @@ import type { RouteHandler, UpstreamRuntime } from "@openmapx/integration-framew
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
@@ -199,12 +200,12 @@ describe("Mangrove signer through integration setup", () => {
       body: JSON.stringify({ session_token: "fixture-token" }),
       options: { redirect: "error", maxBytes: 131072, timeoutMs: 10000 },
     });
-    expect(f.http.calls[0].options).not.toHaveProperty("cache");
-    expect(f.admission.mock.calls[0][0]).toMatchObject({
+    expect(nth(f.http.calls, 0).options).not.toHaveProperty("cache");
+    expect(nth(f.admission.mock.calls, 0)[0]).toMatchObject({
       scope: "mangrove-signer",
       key: `${ORIGIN}|registered-client`,
     });
-    expect(f.admission.mock.calls[0][0]).not.toHaveProperty("policy");
+    expect(nth(f.admission.mock.calls, 0)[0]).not.toHaveProperty("policy");
   });
 
   it.each(["\n", "\r\n"])(
@@ -399,7 +400,7 @@ describe("Mangrove signer through integration setup", () => {
     review.sub = "geo:0,0?q=Changed&u=50";
     admission.resolve({ allowed: true, remaining: null });
     expect((await result).status).toBe(200);
-    expect(JSON.parse(String(f.http.calls[0].body))).toEqual({
+    expect(JSON.parse(String(nth(f.http.calls, 0).body))).toEqual({
       session_token: "fixture-token",
       review: { sub: "geo:50,6?q=Original&u=50", rating: 0 },
     });
@@ -452,7 +453,7 @@ describe("Mangrove signer through integration setup", () => {
     const result = f.call("account");
     if (stage === "http") await vi.waitFor(() => expect(f.http.calls).toHaveLength(1));
     else await reached.promise;
-    await f.shutdown[0]();
+    await nth(f.shutdown, 0)();
     expect((await result).status).toBe(503);
   });
 
@@ -483,7 +484,7 @@ describe("Mangrove signer through integration setup", () => {
     await vi.waitFor(() => expect(f.http.calls).toHaveLength(1));
     caller.abort();
     expect((await result).status).toBe(503);
-    expect(f.http.calls[0].options?.signal?.aborted).toBe(true);
+    expect(nth(f.http.calls, 0).options?.signal?.aborted).toBe(true);
     upstream.resolve(ACCOUNT);
   });
 });

@@ -57,7 +57,7 @@ function buildUstarHeader(name: string, size: number): Buffer {
   header.write("00", 263, "ascii"); // ustar version
 
   let sum = 0;
-  for (let i = 0; i < USTAR_HEADER_SIZE; i++) sum += header[i];
+  for (const byte of header.subarray(0, USTAR_HEADER_SIZE)) sum += byte;
   header.write(sum.toString(8).padStart(6, "0"), 148, "ascii");
   header[154] = 0;
   header[155] = 0x20;

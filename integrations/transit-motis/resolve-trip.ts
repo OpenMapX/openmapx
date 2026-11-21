@@ -99,8 +99,7 @@ export async function resolveMotisTrip(
       )
         continue;
       const stops = [leg.from, ...(leg.intermediateStops ?? []), leg.to];
-      for (let a = 0; a < stops.length; a++) {
-        const from = stops[a];
+      for (const [a, from] of stops.entries()) {
         if (
           from.stopId !== rawId(instance, ref.fromStopId) ||
           !sameTime(
@@ -109,8 +108,8 @@ export async function resolveMotisTrip(
           )
         )
           continue;
-        for (let b = a + 1; b < stops.length; b++) {
-          const to = stops[b];
+        for (const [offset, to] of stops.slice(a + 1).entries()) {
+          const b = a + 1 + offset;
           if (
             to.stopId !== rawId(instance, ref.toStopId) ||
             !sameTime(
@@ -140,8 +139,8 @@ export async function resolveMotisTrip(
         }
       }
     }
-    if (matches.length !== 1) return null;
-    const leg = matches[0];
+    const [leg] = matches;
+    if (matches.length !== 1 || !leg) return null;
     const previous = native.at(-1);
     if (previous)
       native.push({
@@ -203,6 +202,7 @@ export async function resolveMotisTrip(
     transit.some((leg, i) => {
       const r = refs[i];
       return (
+        !r ||
         leg.tripId !== rawId(instance, r.tripId) ||
         leg.from.stopId !== rawId(instance, r.fromStopId) ||
         leg.to.stopId !== rawId(instance, r.toStopId) ||

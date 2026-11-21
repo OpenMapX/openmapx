@@ -1,6 +1,6 @@
 import { createApiClient } from "@openmapx/core";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRateLimitTierHook, uniformErrorHandler } from "../../server-wiring";
 import { mockAdminSession } from "../../test/auth";
 import { makeCsrfGuardHook } from "../../utils/csrf";
@@ -216,8 +216,8 @@ describe("actual extension producers", () => {
     const installedResult = await sdk.listAdminInstalledExtensions(options);
     expect(installedResult.status).toBe(200);
     if (installedResult.status !== 200) throw Error("installed");
-    expect(installedResult.data.extensions[0].components[0].securityRating).toEqual(rating);
-    expect(installedResult.data.extensions[0].installedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(installedResult.data.extensions[0]?.components[0]?.securityRating).toEqual(rating);
+    expect(installedResult.data.extensions[0]?.installedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(installedResult.data.extensions[0]).not.toHaveProperty("manifest");
     expect(
       await sdk.previewAdminExtensionInstall(
@@ -395,7 +395,7 @@ describe("extension contract boundaries", () => {
     expect(list.status).toBe(200);
     if (list.status !== 200) throw Error("list");
     expect(list.data.entries[0]).not.toHaveProperty("version");
-    expect(list.data.entries[0].hasUpdate).toBe(false);
+    expect(list.data.entries[0]?.hasUpdate).toBe(false);
     const found = await sdk.getAdminExtensionCatalogEntry(entry.id, options);
     expect(found.status).toBe(200);
     if (found.status !== 200) throw Error("detail");
@@ -411,7 +411,9 @@ describe("extension contract boundaries", () => {
       hasUpdate: null,
       components: installed.components,
     });
-    expect(result.data.extensions[0].components[0]).not.toHaveProperty("securityRating");
+    const component = result.data.extensions[0]?.components[0];
+    assert.isDefined(component);
+    expect(component).not.toHaveProperty("securityRating");
     for (const [removed, critical, stale, status] of [
       [new Map(), new Map(), false, "community"],
       [new Map([[entry.id, "Delisted"]]), new Map(), false, "revoked"],

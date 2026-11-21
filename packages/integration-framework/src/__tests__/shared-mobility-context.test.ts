@@ -1,5 +1,5 @@
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchMotisRentals, buildEnturGeofencingMapContext } = vi.hoisted(() => ({
   fetchMotisRentals: vi.fn(),
@@ -220,8 +220,12 @@ describe("buildSharedMobilityMapContext", () => {
 it("captures separate MOTIS geometry and Entur branch contributors before deduplication", async () => {
   const data = snapshot();
   data.completeness.zones = false;
-  data.zones[0].sourceId = "zone-feed";
-  data.providers[0].sourceId = "network-feed";
+  const [snapshotZone] = data.zones;
+  const [network] = data.providers;
+  assert.isDefined(snapshotZone);
+  assert.isDefined(network);
+  snapshotZone.sourceId = "zone-feed";
+  network.sourceId = "network-feed";
   fetchMotisRentals.mockResolvedValue(data);
   buildEnturGeofencingMapContext.mockResolvedValue({
     geojson: {

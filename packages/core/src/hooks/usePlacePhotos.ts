@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, DETAIL_QUERY_POLICY } from "../api/queryPolicy";
+import { isDisplayablePhoto } from "../attribution/commons-metadata";
 import type { PlacePhoto } from "../types/place";
-import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 interface PhotosResponse {
   photos: PlacePhoto[];

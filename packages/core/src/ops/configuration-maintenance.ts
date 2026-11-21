@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { strictlyAscending } from "../utils/strictlyAscending";
 import { canonicalJson } from "./canonical-json";
 import { configurationMaintenanceEffectOperationSchema } from "./configuration-operation-records";
 import { coordinatorModeSchema } from "./configuration-preparation-records";
@@ -10,7 +11,7 @@ const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .max(256)
-  .refine((ids) => ids.every((id, index) => index === 0 || ids[index - 1]! < id));
+  .refine(strictlyAscending);
 
 export {
   type ProtectedConfigurationServiceId,

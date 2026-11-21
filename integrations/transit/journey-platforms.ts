@@ -71,7 +71,7 @@ export async function enrichJourneyPlatforms(
       let applied = false;
       for (const update of updates) {
         const stop = data.stops[update.stopIndex];
-        if (stop.canceled) continue;
+        if (!stop || stop.canceled) continue;
         for (const event of ["arrivalPlatform", "departurePlatform"] as const) {
           const evidence = update[event];
           if (

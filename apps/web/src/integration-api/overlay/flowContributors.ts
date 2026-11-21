@@ -25,7 +25,7 @@ function displayedFields(
       ["speed_ratio", "ratio"],
       ["los", "los"],
       ["confidence", "confidence"],
-    ]) {
+    ] as const) {
       if (present(properties[property])) displayed.push(field);
     }
   }

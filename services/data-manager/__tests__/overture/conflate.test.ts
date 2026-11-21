@@ -57,14 +57,14 @@ describe("computeLinks", () => {
     });
 
     expect(links).toHaveLength(1);
-    expect(links[0].method).toBe("spatial-name");
-    expect(links[0].gers_id).toBe("gers-1");
-    expect(links[0].osm_id).toBe(1);
-    expect(links[0].release).toBe(RELEASE);
-    expect(links[0].source_confidence).toBe(0.9);
-    expect(links[0].match_confidence).toBeGreaterThan(0.7);
-    expect(links[0].distance_m).toBeGreaterThan(0);
-    expect(links[0].evidence.signals).toContain("name-match");
+    expect(links[0]?.method).toBe("spatial-name");
+    expect(links[0]?.gers_id).toBe("gers-1");
+    expect(links[0]?.osm_id).toBe(1);
+    expect(links[0]?.release).toBe(RELEASE);
+    expect(links[0]?.source_confidence).toBe(0.9);
+    expect(links[0]?.match_confidence).toBeGreaterThan(0.7);
+    expect(links[0]?.distance_m).toBeGreaterThan(0);
+    expect(links[0]?.evidence.signals).toContain("name-match");
   });
 
   it("in-window pair (50m, name dice < 0.8): mock embedFn returns high cosine → method 'embedding'", async () => {
@@ -90,7 +90,7 @@ describe("computeLinks", () => {
 
     const embeddingLinks = links.filter((l) => l.method === "embedding");
     expect(embeddingLinks.length).toBeGreaterThan(0);
-    expect(embeddingLinks[0].gers_id).toBe("gers-2");
+    expect(embeddingLinks[0]?.gers_id).toBe("gers-2");
   });
 
   it("out-of-window pair (distance > softWindowM): no link, embedFn not called", async () => {
@@ -162,9 +162,9 @@ describe("computeLinks", () => {
 
     const osmLinks = links.filter((l) => l.osm_type === "node" && l.osm_id === 5);
     expect(osmLinks).toHaveLength(1);
-    expect(osmLinks[0].gers_id).toBe("gers-5a");
-    expect(osmLinks[0].source_confidence).toBe(0.2);
-    expect(osmLinks[0].match_confidence).toBeGreaterThan(0.7);
+    expect(osmLinks[0]?.gers_id).toBe("gers-5a");
+    expect(osmLinks[0]?.source_confidence).toBe(0.2);
+    expect(osmLinks[0]?.match_confidence).toBeGreaterThan(0.7);
   });
 
   it("is region-wide, one-to-one, and independent of input order", async () => {
@@ -191,7 +191,7 @@ describe("computeLinks", () => {
     const reverse = await computeLinks([place], [near, farther], options);
     expect(reverse).toStrictEqual(forward);
     expect(forward).toHaveLength(1);
-    expect(forward[0].osm_id).toBe(10);
+    expect(forward[0]?.osm_id).toBe(10);
   });
 
   it("keeps exact region-wide assignment when candidate scoring is paged", async () => {
@@ -219,7 +219,7 @@ describe("computeLinks", () => {
     const assigned = assignLinkRecords([...firstPage, ...secondPage]);
 
     expect(assigned).toHaveLength(1);
-    expect(assigned[0].osm_id).toBe(21);
+    expect(assigned[0]?.osm_id).toBe(21);
   });
 
   it("does not let embeddings override structured address contradictions", async () => {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { nth } from "../fixtures/nth.js";
 import {
   assessObservation,
   buildReviewedEvidence,
@@ -11,7 +12,13 @@ import {
   validReviewedEvidence,
 } from "./reviewed.js";
 
-const branch = () => REVIEWED_CASES.find((entry) => entry.id === "business/rewe-invalidenstrasse")!;
+const reviewedCase = (id: string) => {
+  const entry = REVIEWED_CASES.find((candidate) => candidate.id === id);
+  if (!entry) throw new Error(`No reviewed case ${id}`);
+  return entry;
+};
+const branch = () => reviewedCase("business/rewe-invalidenstrasse");
+const firstObservation = (value: Manifest) => nth(value.observations, 0);
 const observed = (label: string, coordinates: [number, number]) => ({
   label,
   coordinates,
@@ -52,7 +59,7 @@ const manifest = (): Manifest => ({
 describe("independently reviewed discovery observations", () => {
   it("rejects a different same-brand branch instead of accepting its name", () => {
     const result = assessObservation(branch(), {
-      ...manifest().observations[0],
+      ...firstObservation(manifest()),
       results: [observed("REWE", [13.3893156, 52.525331])],
     });
     expect(result.metrics).toMatchObject({ recall: 0, firstRank: null, wrongBranch: 1 });
@@ -60,9 +67,9 @@ describe("independently reviewed discovery observations", () => {
   });
 
   it("retains two independently expected tenants at the same mall address", () => {
-    const entry = REVIEWED_CASES.find((entry) => entry.id === "business/alexa-tenants")!;
+    const entry = reviewedCase("business/alexa-tenants");
     const observation = {
-      ...manifest().observations[0],
+      ...firstObservation(manifest()),
       caseId: entry.id,
       results: [observed("MediaMarkt", [13.41479, 52.51986])],
     };
@@ -76,10 +83,10 @@ describe("independently reviewed discovery observations", () => {
   });
 
   it("counts a missing independently verified business, not its street address, as a miss", () => {
-    const entry = REVIEWED_CASES.find((entry) => entry.id === "business/edeka-alexa")!;
+    const entry = reviewedCase("business/edeka-alexa");
     expect(
       assessObservation(entry, {
-        ...manifest().observations[0],
+        ...firstObservation(manifest()),
         caseId: entry.id,
         results: [observed("Grunerstraße", [13.41479, 52.51986])],
       }).metrics.recall,
@@ -87,8 +94,8 @@ describe("independently reviewed discovery observations", () => {
   });
 
   it("detects reappearance of a dated permanently closed business", () => {
-    const entry = REVIEWED_CASES.find((entry) => entry.id === "business/sealife-closed")!;
-    const observation = { ...manifest().observations[0], caseId: entry.id, results: [] };
+    const entry = reviewedCase("business/sealife-closed");
+    const observation = { ...firstObservation(manifest()), caseId: entry.id, results: [] };
     expect(assessObservation(entry, observation).status).toBe("passed");
     expect(
       assessObservation(entry, {
@@ -105,12 +112,12 @@ describe("independently reviewed discovery observations", () => {
   });
 
   it("keeps uncontrolled-cache timing measurable without claiming it is a warm-cache result", () => {
-    const result = assessObservation(branch(), manifest().observations[0]);
+    const result = assessObservation(branch(), firstObservation(manifest()));
     expect(result.metrics.latencyMs).toBe(500);
     expect(result.cache).toBe("uncontrolled");
     expect(
       assessObservation(branch(), {
-        ...manifest().observations[0],
+        ...firstObservation(manifest()),
         cache: "warm",
         measurements: { requests: 1, latencyMs: 60000, usefulLabels: null, overlaps: null },
       }).status,
@@ -136,18 +143,21 @@ describe("independently reviewed discovery observations", () => {
       readManifest({ ...value, observations: [...value.observations, ...value.observations] }),
     ).toThrow("manifest");
     expect(() =>
-      readManifest({ ...value, observations: [{ ...value.observations[0], caseId: "invented" }] }),
+      readManifest({
+        ...value,
+        observations: [{ ...firstObservation(value), caseId: "invented" }],
+      }),
     ).toThrow("manifest");
   });
 
   it("reports numerical rank deterioration even while both results remain within budget", () => {
     const value = readManifest(manifest());
-    const before = assessObservation(branch(), value.observations[0]);
+    const before = assessObservation(branch(), firstObservation(value));
     const after = assessObservation(branch(), {
-      ...value.observations[0],
+      ...firstObservation(value),
       results: [
         observed("Some unrelated business", [13.4, 52.52]),
-        ...value.observations[0].results,
+        ...firstObservation(value).results,
       ],
     });
     expect(compareAssessments([before], [after]).changes).toContainEqual({
@@ -161,7 +171,7 @@ describe("independently reviewed discovery observations", () => {
 
   it("retains explicit unavailable layers rather than inventing upstream or installed runtime evidence", () => {
     const result = buildReviewedEvidence(readManifest(manifest()));
-    expect(result.results[0].metrics.firstRank).toBe(1);
+    expect(result.results[0]?.metrics.firstRank).toBe(1);
     expect(result.unavailable).toContainEqual({
       caseId: "business/rewe-invalidenstrasse",
       layer: "data",
@@ -182,7 +192,7 @@ describe("independently reviewed discovery observations", () => {
     const after = buildReviewedEvidence(readManifest(changed));
     expect(compareReviewedEvidence(before, after).contextChanged).toBe(true);
     const missing = manifest();
-    missing.observations[0].results = [];
+    firstObservation(missing).results = [];
     expect(
       compareReviewedEvidence(before, buildReviewedEvidence(readManifest(missing)))
         .changedProviderInputs,
@@ -197,10 +207,10 @@ describe("independently reviewed discovery observations", () => {
     );
   });
   it("accepts explicitly closed historical listings without treating them as operating businesses", () => {
-    const entry = REVIEWED_CASES.find((entry) => entry.id === "business/sealife-closed")!;
+    const entry = reviewedCase("business/sealife-closed");
     expect(
       assessObservation(entry, {
-        ...manifest().observations[0],
+        ...firstObservation(manifest()),
         caseId: entry.id,
         results: [{ ...observed("SEA LIFE Berlin", [13.4028, 52.5203]), closed: true }],
       }).status,
@@ -210,7 +220,7 @@ describe("independently reviewed discovery observations", () => {
   it("does not fail a correct selected branch because later alternatives include other branches", () => {
     expect(
       assessObservation(branch(), {
-        ...manifest().observations[0],
+        ...firstObservation(manifest()),
         results: [
           observed("REWE", [13.3970838, 52.5319807]),
           observed("REWE", [13.3893156, 52.525331]),
@@ -220,9 +230,9 @@ describe("independently reviewed discovery observations", () => {
   });
 
   it("scores a browsing landmark anywhere in the visible set, not by arbitrary feature order", () => {
-    const entry = REVIEWED_CASES.find((entry) => entry.id === "browsing/berlin-z15")!;
+    const entry = reviewedCase("browsing/berlin-z15");
     const observation = {
-      ...manifest().observations[0],
+      ...firstObservation(manifest()),
       caseId: entry.id,
       layer: "presentation" as const,
       stage: "final-ui" as const,
@@ -238,12 +248,12 @@ describe("independently reviewed discovery observations", () => {
   it("rejects mismatched observations and fractional count measurements", () => {
     expect(() =>
       assessObservation(branch(), {
-        ...manifest().observations[0],
+        ...firstObservation(manifest()),
         caseId: "business/edeka-alexa",
       }),
     ).toThrow("case");
     const value = manifest();
-    value.observations[0].measurements.requests = 0.5;
+    firstObservation(value).measurements.requests = 0.5;
     expect(() => readManifest(value)).toThrow("manifest");
   });
 
@@ -252,7 +262,7 @@ describe("independently reviewed discovery observations", () => {
     expect(validReviewedEvidence(Object.fromEntries(Object.entries(evidence).reverse()))).toBe(
       true,
     );
-    evidence.results[0].metrics.recall = 0;
+    nth(evidence.results, 0).metrics.recall = 0;
     expect(validReviewedEvidence(evidence)).toBe(false);
   });
   it("detects the checked-in control's normalization regression while data/provider/presentation stay unchanged", () => {
@@ -277,7 +287,7 @@ describe("independently reviewed discovery observations", () => {
       expect(() =>
         readManifest({
           ...value,
-          observations: [{ ...value.observations[0], [key]: [value.observations[0][key]] }],
+          observations: [{ ...firstObservation(value), [key]: [firstObservation(value)[key]] }],
         }),
       ).toThrow("manifest");
     }
@@ -292,10 +302,10 @@ describe("independently reviewed discovery observations", () => {
   it("records query order/cache isolation and refuses unlike processing stages as a numerical comparison", () => {
     const before = buildReviewedEvidence(readManifest(manifest()));
     const value = manifest();
-    value.observations[0].layer = "normalization";
-    value.observations[0].stage = "adapted-api";
+    firstObservation(value).layer = "normalization";
+    firstObservation(value).stage = "adapted-api";
     const first = buildReviewedEvidence(readManifest(value));
-    value.observations[0].stage = "client-ranking";
+    firstObservation(value).stage = "client-ranking";
     const next = buildReviewedEvidence(readManifest(value));
     expect(compareReviewedEvidence(first, next).captureConditionsChanged).toBe(true);
     expect(compareReviewedEvidence(first, next).changes).toEqual([]);
@@ -307,7 +317,7 @@ describe("independently reviewed discovery observations", () => {
       readManifest({
         ...manifest(),
         context: { ...context, cacheIsolation: "shared" },
-        observations: [{ ...manifest().observations[0], cache: "cold" }],
+        observations: [{ ...firstObservation(manifest()), cache: "cold" }],
       }),
     ).toThrow("manifest");
   });
@@ -315,10 +325,10 @@ describe("independently reviewed discovery observations", () => {
   it("treats lost previously measured performance evidence as a regression", () => {
     const before = buildReviewedEvidence(readManifest(manifest()));
     const value = manifest();
-    value.observations[0].measurements.requests = null;
-    value.observations[0].measurements.latencyMs = null;
+    firstObservation(value).measurements.requests = null;
+    firstObservation(value).measurements.latencyMs = null;
     const after = buildReviewedEvidence(readManifest(value));
-    expect(after.results[0].status).toBe("passed");
+    expect(after.results[0]?.status).toBe("passed");
     expect(compareReviewedEvidence(before, after).regressions).toContain(
       "business/rewe-invalidenstrasse/provider",
     );

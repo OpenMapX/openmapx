@@ -2,6 +2,7 @@ import { en } from "@openmapx/i18n";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 const sessionState: { data: unknown; isPending: boolean } = { data: null, isPending: false };
 
@@ -24,13 +25,9 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 // The page is a server component; its async translator has no jsdom equivalent,
 // so it reads the same catalogue the client half renders from.
-vi.mock("next-intl/server", async () => {
-  const { en } = await import("@openmapx/i18n");
-  return {
-    getTranslations: async (namespace: string) => (key: string) =>
-      (en as unknown as Record<string, Record<string, string>>)[namespace][key],
-  };
-});
+vi.mock("next-intl/server", async () =>
+  (await import("@/test/intl")).mockNextIntlServerWithCatalog(),
+);
 
 const { MobileAuthClient } = await import("./MobileAuthClient");
 const MobileAuthPage = (await import("./page")).default;
@@ -93,14 +90,14 @@ describe("MobileAuthClient", () => {
     fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
 
     await waitFor(() => expect(replaced).toHaveLength(1));
-    const callback = new URL(replaced[0]);
+    const callback = new URL(nth(replaced, 0));
     // An App Link or Universal Link on the page's own origin, which the OS
     // routes to the app the association files name.
     expect(callback.origin).toBe("https://openmapx.test");
     expect(callback.pathname).toBe("/mobile-auth/callback");
     expect(callback.searchParams.get("code")).toBe("code-value");
     expect(callback.searchParams.get("state")).toBe(STATE);
-    expect(calls[0].url).toBe("https://api.example.test/mobile-auth/issue");
+    expect(nth(calls, 0).url).toBe("https://api.example.test/mobile-auth/issue");
     expect(replaced[0]).not.toContain("must-not-appear");
     expect(replaced[0]).not.toContain(CHALLENGE);
   });
@@ -112,12 +109,12 @@ describe("MobileAuthClient", () => {
     fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
 
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+    expect(JSON.parse(String(nth(calls, 0).init.body))).toEqual({
       purpose: "add-passkey",
       state: STATE,
       codeChallenge: CHALLENGE,
     });
-    expect(calls[0].init.cache).toBe("no-store");
+    expect(nth(calls, 0).init.cache).toBe("no-store");
   });
 
   it("offers sign-in here and returns to the same handoff afterwards", () => {
@@ -238,7 +235,7 @@ describe("MobileAuthPage query validation", () => {
     expect(view.getByText(en.mobileAuth.purposeSignIn)).toBeInTheDocument();
     fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+    expect(JSON.parse(String(nth(calls, 0).init.body))).toEqual({
       purpose: "sign-in",
       state: STATE,
       codeChallenge: CHALLENGE,

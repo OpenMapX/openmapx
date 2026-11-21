@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../../test/mock-calls";
 import {
   AMBIGUOUS_OUTCOME_TTL_SECONDS,
   createSubmissionGuard,
@@ -309,7 +310,7 @@ describe("key and value hygiene", () => {
       };
       const g = createSubmissionGuard({ secret, now, redis });
       await g.begin({ ...publish, idempotencyKey: KEY_A });
-      return set.mock.calls[0]![0];
+      return callArg(set, 0, 0);
     }
     const first = await capturedLock("one");
     expect(await capturedLock("one")).toBe(first);

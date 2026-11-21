@@ -98,12 +98,13 @@ export async function loadStations(
   if (cached?.length) return cached.map(clone);
 
   const writer = await captureCacheWriter(cache);
-  const responses = await Promise.all(types.map((t) => fetchOneType(http, t, log)));
+  const responses = await Promise.all(
+    types.map(async (type) => ({ type, stations: await fetchOneType(http, type, log) })),
+  );
   const byId = new Map<string, NoaaStation>();
 
-  for (let i = 0; i < types.length; i++) {
-    const type = types[i];
-    for (const s of responses[i]) {
+  for (const { type, stations } of responses) {
+    for (const s of stations) {
       if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng)) continue;
       const existing = byId.get(s.id);
       if (existing) {

@@ -52,13 +52,14 @@ export interface PopupCardStackItem {
 }
 
 /** Severity → badge colors, matching the marker severity ramp. */
+const UNKNOWN_SEVERITY_STYLE = { bg: "#8a8a8a", fg: "#ffffff" };
 const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   critical: { bg: "#7e0023", fg: "#ffffff" },
   major: { bg: "#cc0033", fg: "#ffffff" },
   moderate: { bg: "#ff9933", fg: "#3a2a00" },
   minor: { bg: "#ffde33", fg: "#3a2a00" },
   none: { bg: "#1a7a63", fg: "#ffffff" },
-  unknown: { bg: "#8a8a8a", fg: "#ffffff" },
+  unknown: UNKNOWN_SEVERITY_STYLE,
 };
 
 /** Humanize an enum-ish token: "road_closure" → "Road closure". */
@@ -128,7 +129,7 @@ function renderCardBody(
     // Mobilithek roadworks feed) send `severity=unknown`, and a meaningless
     // "UNKNOWN" pill is just noise. The marker still carries the unknown color.
     if (sevRaw != null && sevRaw !== "" && String(sevRaw).toLowerCase() !== "unknown") {
-      const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? SEVERITY_STYLE.unknown;
+      const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? UNKNOWN_SEVERITY_STYLE;
       const labelRaw = spec.severityLabelField ? properties[spec.severityLabelField] : undefined;
       const label =
         labelRaw == null || String(labelRaw).trim() === ""

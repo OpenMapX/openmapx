@@ -187,7 +187,7 @@ export function normalizeWebsite(input: string): string | null {
 }
 
 function isPdf(path: string): boolean {
-  return path.toLowerCase().split("?")[0].endsWith(".pdf");
+  return path.toLowerCase().replace(/\?.*/s, "").endsWith(".pdf");
 }
 
 async function fetchText(url: string, log: Logger, signal?: AbortSignal): Promise<string | null> {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   ambientCategory,
   ambientOvertureIdentityEvidence,
@@ -11,6 +11,12 @@ import {
   mergeAmbientPlaces,
   validateAmbientRegion,
 } from "./ambient-places";
+
+/** A fixture place the parser must accept. */
+function accepted<T>(place: T | null): T {
+  assert.isNotNull(place);
+  return place;
+}
 
 const osm = {
   osm_type: "node",
@@ -51,7 +57,7 @@ describe("ambient place policy", () => {
       ],
       release: "2026-10-01.0",
     };
-    const place = ambientPlaceFromOverture(row)!;
+    const place = accepted(ambientPlaceFromOverture(row));
     expect(ambientPlaceContributors(place, "de").map((r) => r.sourceId)).toEqual([
       "overture",
       "microsoft-places",
@@ -66,7 +72,10 @@ describe("ambient place policy", () => {
       "microsoft-places",
     ]);
     expect(
-      ambientPlaceContributors(ambientPlaceFromOverture({ ...row, sources_catalogue: [] })!, "de"),
+      ambientPlaceContributors(
+        accepted(ambientPlaceFromOverture({ ...row, sources_catalogue: [] })),
+        "de",
+      ),
     ).toEqual([]);
   });
   it("credits the selected taxonomy array element without absent or unmatched category fields", () => {
@@ -86,9 +95,10 @@ describe("ambient place policy", () => {
         { sourceId: "microsoft-places", name: "Selected taxonomy" },
         { sourceId: "foursquare", name: "Unmatched taxonomy" },
       ],
-    })!;
+    });
+    assert.isNotNull(place);
     expect(place.category).toBe("cafe");
-    expect(place.fieldContributors?.category.map((r) => r.sourceId)).toEqual([
+    expect(place.fieldContributors?.category?.map((r) => r.sourceId)).toEqual([
       "overture",
       "microsoft-places",
     ]);
@@ -101,12 +111,16 @@ describe("ambient place policy", () => {
         { sourceId: "overture", name: "Overture" },
         { sourceId: "microsoft-places", name: "Microsoft" },
       ],
-    })!;
-    const merged = mergeAmbientPlaces(
-      [ambientPlaceFromOsm(osm)!],
-      [o],
-      new Map([[`osm:node/${osm.osm_id}`, o.gersId!]]),
-    )[0];
+    });
+    assert.isNotNull(o);
+    assert.isDefined(o.gersId);
+    const merged = accepted(
+      mergeAmbientPlaces(
+        [accepted(ambientPlaceFromOsm(osm))],
+        [o],
+        new Map([[`osm:node/${osm.osm_id}`, o.gersId]]),
+      )[0] ?? null,
+    );
     expect(ambientPlaceContributors(merged, "en").map((r) => r.sourceId)).toEqual([
       "openstreetmap",
       "overture",
@@ -130,7 +144,7 @@ describe("ambient place policy", () => {
       ],
     };
     expect(ambientPlaceFromOverture(row)).toBeNull();
-    const p = ambientPlaceFromOsm(osm)!;
+    const p = accepted(ambientPlaceFromOsm(osm));
     const merged = mergeAmbientPlaces(
       [p],
       [],
@@ -138,6 +152,7 @@ describe("ambient place policy", () => {
       new Set(),
       new Map([[row.gers_id, ambientOvertureIdentityEvidence(row)]]),
     )[0];
+    assert.isDefined(merged);
     expect(ambientPlaceContributors(merged, "en").map((r) => r.name)).toEqual([
       "© OpenStreetMap contributors",
       "Captured historical GERS notice",
@@ -147,14 +162,18 @@ describe("ambient place policy", () => {
   it("credits only the generic source for unversioned tile features and keeps explicit empty canonical receipts", () => {
     const p = { id: "overture:unversioned", name: "Unversioned", sources: "overture" };
     expect(
-      ambientPlaceContributors(ambientPlaceFromTile(p, [6, 50])!, "en").map((r) => r.sourceId),
+      ambientPlaceContributors(accepted(ambientPlaceFromTile(p, [6, 50])), "en").map(
+        (r) => r.sourceId,
+      ),
     ).toEqual(["overture"]);
     expect(
       ambientPlaceContributors(
-        ambientPlaceFromTile(
-          { ...p, format_version: 2, _mapAttributions: "[]", field_contributors: '{"name":[]}' },
-          [6, 50],
-        )!,
+        accepted(
+          ambientPlaceFromTile(
+            { ...p, format_version: 2, _mapAttributions: "[]", field_contributors: '{"name":[]}' },
+            [6, 50],
+          ),
+        ),
         "en",
       ),
     ).toEqual([]);
@@ -165,7 +184,7 @@ describe("ambient place policy", () => {
       expect(() => ambientPlaceFromOverture(row)).toThrow(/gers-a has no valid sources catalogue/);
       expect(() => ambientOvertureIdentityEvidence(row)).toThrow(/no valid sources catalogue/);
     }
-    const p = ambientPlaceFromOsm(osm)!;
+    const p = accepted(ambientPlaceFromOsm(osm));
     expect(() => mergeAmbientPlaces([p], [], new Map([[p.id, "gers-a"]]))).toThrow(
       /gers-a has no captured attribution/,
     );
@@ -176,7 +195,7 @@ describe("ambient place policy", () => {
       [-181, 0],
       [NaN, 0],
       [0, 86],
-    ]) {
+    ] as const) {
       expect(ambientPlaceFromOsm({ ...osm, lng, lat })).toBeNull();
       expect(ambientPlaceFromOverture({ ...overture, longitude: lng, latitude: lat })).toBeNull();
     }
@@ -209,11 +228,11 @@ describe("ambient place policy", () => {
     }
   });
   it("keeps bigint identity and original/localized labels without guessing", () => {
-    const place = ambientPlaceFromOsm(osm)!;
+    const place = accepted(ambientPlaceFromOsm(osm));
     expect(place.id).toBe("osm:node/9007199254740993");
     expect(ambientPlaceToCategoryPlace(place, "en").name).toBe("Clinic");
     expect(ambientPlaceToCategoryPlace(place, "fr").name).toBe("Klinik");
-    expect(ambientPlaceFromOsm({ ...osm, name: "a".repeat(121) })!.name).toHaveLength(120);
+    expect(ambientPlaceFromOsm({ ...osm, name: "a".repeat(121) })?.name).toHaveLength(120);
   });
   it("does not turn uncategorized indexed roads or buildings into ambient destinations", () => {
     expect(
@@ -251,19 +270,19 @@ describe("ambient place policy", () => {
   it("normalizes indexed slash categories", () => {
     expect(ambientCategory("amenity/hospital")).toBe("hospital");
     expect(ambientCategory("hospitals")).toBe("hospital");
-    expect(ambientPlaceFromOsm({ ...osm, category: "amenity/hospital" })!.minZoom).toBe(13);
-    expect(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.minZoom).toBe(15);
-    expect(ambientPlaceFromOsm({ ...osm, category: "shop/books" })!.minZoom).toBe(15);
-    expect(ambientPlaceFromOsm({ ...osm, category: "tourism/artwork" })!.minZoom).toBe(16);
+    expect(ambientPlaceFromOsm({ ...osm, category: "amenity/hospital" })?.minZoom).toBe(13);
+    expect(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })?.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...osm, category: "shop/books" })?.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...osm, category: "tourism/artwork" })?.minZoom).toBe(16);
   });
   it("promotes only corroborated cultural landmarks and preserves exclusion/tenant policy", () => {
     const base = { ...osm, category: "amenity/place_of_worship" };
     const regional = { wikidata: "Q156475", heritage: "4" };
     const designated = { wikidata: "Q156475", basilica: "yes" };
-    expect(ambientPlaceFromOsm({ ...base, tags: regional })!.minZoom).toBe(15);
-    expect(ambientPlaceFromOsm({ ...base, tags: designated })!.minZoom).toBe(14);
+    expect(ambientPlaceFromOsm({ ...base, tags: regional })?.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...base, tags: designated })?.minZoom).toBe(14);
     expect(
-      ambientPlaceFromOsm({ ...base, tags: { heritage: "1", wikipedia: "de:Dom" } })!.minZoom,
+      ambientPlaceFromOsm({ ...base, tags: { heritage: "1", wikipedia: "de:Dom" } })?.minZoom,
     ).toBe(14);
     const controls: Record<string, string>[] = [
       {},
@@ -275,22 +294,22 @@ describe("ambient place policy", () => {
       { wikidata: "Q156475", heritage: "0" },
     ];
     for (const tags of controls) {
-      expect(ambientPlaceFromOsm({ ...base, tags })!.minZoom).toBe(16);
+      expect(ambientPlaceFromOsm({ ...base, tags })?.minZoom).toBe(16);
     }
-    expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, level: "1" } })!.minZoom).toBe(18);
+    expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, level: "1" } })?.minZoom).toBe(18);
     expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, access: "private" } })).toBeNull();
     expect(ambientPlaceFromOsm({ ...base, tags: { ...designated, disused: "yes" } })).toBeNull();
-    expect(ambientPlaceFromOsm({ ...base, category: "shop/books", tags: regional })!.minZoom).toBe(
+    expect(ambientPlaceFromOsm({ ...base, category: "shop/books", tags: regional })?.minZoom).toBe(
       15,
     );
     expect(
-      ambientPlaceFromOsm({ ...base, category: "amenity/bench", tags: regional })!.minZoom,
+      ambientPlaceFromOsm({ ...base, category: "amenity/bench", tags: regional })?.minZoom,
     ).toBe(16);
-    const landmark = ambientPlaceFromOsm({ ...base, tags: designated })!;
+    const landmark = accepted(ambientPlaceFromOsm({ ...base, tags: designated }));
     expect(landmark.rank).toBeGreaterThan(
-      ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.rank,
+      accepted(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })).rank,
     );
-    expect(landmark.rank).toBeLessThan(ambientPlaceFromOsm(osm)!.rank);
+    expect(landmark.rank).toBeLessThan(accepted(ambientPlaceFromOsm(osm)).rank);
   });
   it("rejects serialized, malformed and non-object policy tags", () => {
     for (const tags of [
@@ -303,9 +322,10 @@ describe("ambient place policy", () => {
     }
   });
   it("fuses only accepted links, preserves OSM location and survives excluded Overture", () => {
-    const a = ambientPlaceFromOsm(osm)!;
-    const b = ambientPlaceFromOverture(overture)!;
-    const fused = mergeAmbientPlaces([a], [b], new Map([[a.id, b.gersId!]]));
+    const a = accepted(ambientPlaceFromOsm(osm));
+    const b = accepted(ambientPlaceFromOverture(overture));
+    assert.isDefined(b.gersId);
+    const fused = mergeAmbientPlaces([a], [b], new Map([[a.id, b.gersId]]));
     expect(fused).toHaveLength(1);
     expect(fused[0]).toMatchObject({
       id: a.id,
@@ -314,7 +334,7 @@ describe("ambient place policy", () => {
       coordinates: [6.08, 50.77],
       sources: "osm,overture",
     });
-    expect(fused[0].names.de).toBe("Krankenhaus");
+    expect(fused[0]?.names.de).toBe("Krankenhaus");
     expect(mergeAmbientPlaces([a], [b], new Map())).toHaveLength(2);
     const identity = new Map([["gers-a", ambientOvertureIdentityEvidence(overture)]]);
     expect(
@@ -322,7 +342,7 @@ describe("ambient place policy", () => {
     ).toMatchObject({ gersId: "gers-a", sources: "osm" });
   });
   it("never replaces an explicit different basemap OSM identity through proximity", () => {
-    const a = ambientPlaceFromOsm(osm)!;
+    const a = accepted(ambientPlaceFromOsm(osm));
     const label = {
       key: "base/other",
       name: a.name,
@@ -335,7 +355,7 @@ describe("ambient place policy", () => {
   });
   it("matches alternate landmark representative points within ten metres conservatively", () => {
     const a = {
-      ...ambientPlaceFromOsm(osm)!,
+      ...accepted(ambientPlaceFromOsm(osm)),
       id: "osm:way/28562993",
       name: "Quirinus-Münster",
       names: {},
@@ -354,7 +374,7 @@ describe("ambient place policy", () => {
     expect(matchAmbientBasemap([a], [{ ...label, coordinates: [6.6931, 51.199] }]).size).toBe(0);
   });
   it("matches unique nearby compatible basemap labels and refuses branches and tenants", () => {
-    const a = ambientPlaceFromOsm(osm)!;
+    const a = accepted(ambientPlaceFromOsm(osm));
     const label = {
       key: "base/1",
       name: "Klinik",
@@ -371,9 +391,9 @@ describe("ambient place policy", () => {
 
 describe("accepted-link gap-fill identity", () => {
   it("keeps canonical identity when only GERS is in the regional view, and suppresses a known closed OSM match", () => {
-    const p = ambientPlaceFromOverture(overture)!;
+    const p = accepted(ambientPlaceFromOverture(overture));
     const links = new Map([["osm:node/9007199254740993", "gers-a"]]);
-    expect(mergeAmbientPlaces([], [p], links)[0].id).toBe("osm:node/9007199254740993");
+    expect(mergeAmbientPlaces([], [p], links)[0]?.id).toBe("osm:node/9007199254740993");
     expect(mergeAmbientPlaces([], [p], links, new Set(["osm:node/9007199254740993"]))).toEqual([]);
   });
 });

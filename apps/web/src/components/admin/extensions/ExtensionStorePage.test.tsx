@@ -6,6 +6,7 @@ import {
   cleanup,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   waitFor,
@@ -216,11 +217,11 @@ describe("actual extension forms and SDK ownership", () => {
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     await waitFor(() => expect(installCalls()).toHaveLength(1));
-    expect(JSON.parse(String(installCalls()[0].init.body))).toEqual({
+    expect(JSON.parse(String(nth(installCalls(), 0).init.body))).toEqual({
       manifestUrl: "https://manifest.test/a.json",
       hostPortConfirmation: "b".repeat(64),
     });
-    expect(installCalls()[0].url.origin).toBe(previewCalls()[0].url.origin);
+    expect(nth(installCalls(), 0).url.origin).toBe(nth(previewCalls(), 0).url.origin);
   });
   it.each(["input-aba", "close-reopen", "tab", "origin-aba"])(
     "retires a delayed preview across %s",
@@ -375,7 +376,7 @@ describe("actual extension forms and SDK ownership", () => {
       expect(screen.queryByText("Old preview rejected")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Confirm ports and install" }));
       await waitFor(() => expect(installCalls()).toHaveLength(1));
-      expect(JSON.parse(String(installCalls()[0].init.body))).toEqual({
+      expect(JSON.parse(String(nth(installCalls(), 0).init.body))).toEqual({
         manifestUrl: "https://manifest.test/new.json",
         hostPortConfirmation: "c".repeat(64),
       });

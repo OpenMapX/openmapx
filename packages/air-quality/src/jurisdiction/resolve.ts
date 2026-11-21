@@ -29,6 +29,7 @@ function contains(
   point: Feature<Point>,
 ): boolean {
   const [longitude, latitude] = point.geometry.coordinates;
+  if (longitude === undefined || latitude === undefined) return false;
   const bbox = feature.bbox;
   if (
     bbox &&

@@ -1,4 +1,5 @@
 import { TRANSIT_UNDO_WINDOW_MS } from "@openmapx/core/navigation";
+import { nth } from "../testing/nth";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -8,6 +9,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
   WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
@@ -27,7 +29,7 @@ afterEach(async () => {
 });
 
 describe("arriving by road", () => {
-  const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+  const DESTINATION = straightRoutePoint(-1);
 
   async function arrive(os: "ios" | "android" = "ios") {
     harness = await startForegroundHarness({ phone: createFakePhone({ os }) });
@@ -106,7 +108,7 @@ describe("arriving by transit", () => {
     return transitStartPackageFixture({
       itinerary: {
         ...itinerary,
-        endTime: itinerary.legs[1].endTime,
+        endTime: nth(itinerary.legs, 1).endTime,
         legs: itinerary.legs.slice(0, 2),
       },
     });

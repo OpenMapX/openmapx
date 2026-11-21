@@ -150,8 +150,8 @@ function checkIos(
 
   const deploymentTargets = [
     ...new Set(
-      [...generated.pbxproj.matchAll(/IPHONEOS_DEPLOYMENT_TARGET = ([^;\n]+);/g)].map((m) =>
-        m[1].trim(),
+      [...generated.pbxproj.matchAll(/IPHONEOS_DEPLOYMENT_TARGET = ([^;\n]+);/g)].flatMap(
+        ([, target]) => target?.trim() ?? [],
       ),
     ),
   ];
@@ -262,10 +262,10 @@ function checkIos(
     fail(
       "share extension privacy manifest must declare local/selected file metadata and deadline reasons",
     );
-  for (const block of generated.pbxproj.matchAll(/buildSettings = \{([\s\S]*?)\};/g)) {
+  for (const [, settings] of generated.pbxproj.matchAll(/buildSettings = \{([\s\S]*?)\};/g)) {
     if (
-      block[1].includes(`${expected.appId}.NavigationSurface`) &&
-      block[1].includes("CODE_SIGN_ENTITLEMENTS")
+      settings?.includes(`${expected.appId}.NavigationSurface`) &&
+      settings.includes("CODE_SIGN_ENTITLEMENTS")
     )
       fail("navigation extension must not receive intake group entitlements");
   }
@@ -329,6 +329,7 @@ function checkAndroid(
   const counts = new Map<string, number>();
   for (const node of permissionNodes) {
     const name = node.$["android:name"];
+    if (name === undefined) continue;
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   for (const [name, count] of counts) {
@@ -341,6 +342,7 @@ function checkAndroid(
     const name = node.$["android:name"];
     const removed = node.$["tools:node"] === "remove";
     if (
+      name !== undefined &&
       (FORBIDDEN_ANDROID_PERMISSIONS as readonly string[]).includes(name) &&
       !removed &&
       !(REQUIRED_ANDROID_PERMISSIONS as readonly string[]).includes(name)
@@ -376,6 +378,7 @@ function checkAndroid(
     const serviceCounts = new Map<string, number>();
     for (const service of services) {
       const name = service.$["android:name"];
+      if (name === undefined) continue;
       serviceCounts.set(name, (serviceCounts.get(name) ?? 0) + 1);
     }
     for (const [name, count] of serviceCounts) {
@@ -389,12 +392,13 @@ function checkAndroid(
       "intent-filter"?: unknown[];
     }>;
     const intake = activities.filter((a) => a.$["android:name"] === INTAKE_RECEIVER);
+    const [receiver] = intake;
     if (
       intake.length !== 1 ||
-      intake[0].$["android:noHistory"] !== "true" ||
-      intake[0].$["android:excludeFromRecents"] !== "true" ||
-      intake[0].$["android:taskAffinity"] !== "" ||
-      intake[0].$["android:launchMode"] !== "standard"
+      receiver?.$["android:noHistory"] !== "true" ||
+      receiver.$["android:excludeFromRecents"] !== "true" ||
+      receiver.$["android:taskAffinity"] !== "" ||
+      receiver.$["android:launchMode"] !== "standard"
     )
       fail("intake receiver must be exactly one nonhistorical activity with no task affinity");
     for (const activity of activities.filter((a) => a.$["android:name"] !== INTAKE_RECEIVER)) {
@@ -428,10 +432,9 @@ function checkAndroid(
       fail("expo-updates must stay disabled: this app ships no OTA native bundle");
     }
     for (const node of metaData) {
-      if (
-        /EAS|eas\.projectId|expo\.modules\.updates\.EXPO_UPDATE_URL/.test(node.$["android:name"])
-      ) {
-        fail(`unexpected update-service metadata ${node.$["android:name"]}`);
+      const name = node.$["android:name"];
+      if (name && /EAS|eas\.projectId|expo\.modules\.updates\.EXPO_UPDATE_URL/.test(name)) {
+        fail(`unexpected update-service metadata ${name}`);
       }
     }
   }

@@ -78,6 +78,7 @@ export async function inspectConfigurationReleaseDownloads(input: {
           : observed,
     ),
     [os, architecture] = platform.split("/");
+  if (!os || !architecture) throw Error("Release platform is unavailable or ambiguous");
   // One task per fixed image, with sequential index/platform reads inside it.
   // Promise.all retains release order regardless of registry response order.
   const tasks = CONFIGURATION_RELEASE_IMAGE_NAMES.map(async (image) => {
@@ -93,8 +94,10 @@ export async function inspectConfigurationReleaseDownloads(input: {
             (item.platform.variant === undefined ||
               (architecture === "arm64" && item.platform.variant === "v8")),
         );
-      if (matches.length !== 1) throw Error("Release platform is unavailable or ambiguous");
-      platformManifestDigest = matches[0]!.digest;
+      const [match, ...otherMatches] = matches;
+      if (!match || otherMatches.length > 0)
+        throw Error("Release platform is unavailable or ambiguous");
+      platformManifestDigest = match.digest;
       const selected = `${reference.slice(0, reference.lastIndexOf("@"))}@${platformManifestDigest}`;
       body = JSON.parse(await run(["manifest", "inspect", selected]));
     }

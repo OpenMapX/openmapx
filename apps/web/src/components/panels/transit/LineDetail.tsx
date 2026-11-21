@@ -69,7 +69,7 @@ export function LineDetail({
       const match = linkedStops.find((s) => s.provider === provider);
       if (match) return match.id;
     }
-    return linkedStops[0].id;
+    return linkedStops[0]?.id;
   }, [linkedStops, providersList, routeHint?.hintStopId]);
 
   const stopsQuery = useRouteStops(routeId, hintStopId);

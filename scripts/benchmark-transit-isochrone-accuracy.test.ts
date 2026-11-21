@@ -166,7 +166,7 @@ describe("sampled polygon agrees with its own field", () => {
     const row = Math.round((y - lattice.originY) / lattice.spacing);
     if (column < 0 || column >= lattice.nx || row < 0 || row >= lattice.ny) return false;
     const value = values[row * lattice.nx + column];
-    return value !== null && value <= threshold;
+    return value !== null && value !== undefined && value <= threshold;
   }
 
   it("classifies deep-inside and far-outside points the way the field does", () => {

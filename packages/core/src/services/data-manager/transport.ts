@@ -1,4 +1,4 @@
-import { readBoundedJsonResponse } from "../../utils/fetchJson";
+import { readBoundedJsonResponse } from "../../http/fetchJson";
 import { type DataManagerOperation, dataManagerOperations } from "./contracts";
 
 export const DATA_MANAGER_PLAINTEXT_HOSTS_ENV = "DATA_MANAGER_PLAINTEXT_HOSTS";

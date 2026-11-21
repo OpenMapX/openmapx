@@ -1,5 +1,6 @@
+import { itemAt } from "@openmapx/core/item-at";
 import type { OperationalFeedEvidence } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
   process.env.BETTER_AUTH_SECRET ||= "coverage-sites-test-secret";
@@ -81,9 +82,9 @@ describe("site operational evidence adapter", () => {
       },
       reasons: [],
     });
-    expect(freshenStream(streams[0]!, AT).freshness).toBe("current");
+    expect(freshenStream(itemAt(streams, 0), AT).freshness).toBe("current");
     // Past the feed's freshness deadline the readings no longer count.
-    expect(freshenStream(streams[1]!, new Date("2026-10-06T10:25:00.000Z")).freshness).toBe(
+    expect(freshenStream(itemAt(streams, 1), new Date("2026-10-06T10:25:00.000Z")).freshness).toBe(
       "expired",
     );
   });
@@ -186,8 +187,9 @@ describe("site operational evidence adapter", () => {
       lastSuccessfulCheckAt: "2026-10-06T10:00:00.000Z",
       reasons: ["source_partial"],
     });
-    expect(freshenStream(stream!, AT).freshness).toBe("current");
-    expect(freshenStream(stream!, new Date("2026-10-06T10:09:00.000Z")).freshness).toBe("current");
+    assert.isDefined(stream, "the feed has no stream");
+    expect(freshenStream(stream, AT).freshness).toBe("current");
+    expect(freshenStream(stream, new Date("2026-10-06T10:09:00.000Z")).freshness).toBe("current");
   });
 
   it("lets a failing on-demand feed lapse with what it last fetched", () => {
@@ -214,8 +216,9 @@ describe("site operational evidence adapter", () => {
       ),
     );
 
-    expect(stream?.attempt.outcome).toBe("failed");
-    expect(freshenStream(stream!, AT).freshness).toBe("expired");
+    assert.isDefined(stream, "the feed has no stream");
+    expect(stream.attempt.outcome).toBe("failed");
+    expect(freshenStream(stream, AT).freshness).toBe("expired");
   });
 
   it("shows a feed missing credentials as not configured, with what to do", () => {
@@ -245,7 +248,8 @@ describe("site operational evidence adapter", () => {
       },
       reasons: ["not_configured"],
     });
-    expect(freshenStream(stream!, AT).freshness).toBe("not-applicable");
+    assert.isDefined(stream, "the feed has no stream");
+    expect(freshenStream(stream, AT).freshness).toBe("not-applicable");
   });
 
   it("keeps a feed without records as one static stream that says what is known", () => {

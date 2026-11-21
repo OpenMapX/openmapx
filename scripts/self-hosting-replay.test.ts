@@ -376,7 +376,7 @@ runReplayInvocation(process.argv[1], async () => { throw new Error('unexpected w
       runReplayInvocation(output, async (invocation) => {
         expect(
           validateBuildReuse(invocation.previousReport, identities, artifacts)[0]
-            .reusedFromPreviousRun,
+            ?.reusedFromPreviousRun,
         ).toBe(true);
         invocation.writeRuns({
           identities,
@@ -393,7 +393,7 @@ runReplayInvocation(process.argv[1], async () => { throw new Error('unexpected w
     expect(summary.correctness?.equal).not.toBe(true);
     expect(runs.status).toBe("INCOMPLETE");
     expect(runs.results).toEqual([{ correctness: { equal: false } }]);
-    expect(validateBuildReuse(runs, identities, artifacts)[0].reusedFromPreviousRun).toBe(true);
+    expect(validateBuildReuse(runs, identities, artifacts)[0]?.reusedFromPreviousRun).toBe(true);
   });
 
   it("publishes complete matching reports only after asynchronous cleanup settles", async () => {

@@ -17,17 +17,16 @@ export function extractFareSummary(fare: TripFare | undefined): FareSummary | nu
       allProducts.push(...transfer.transferProducts);
     }
     for (const legOptions of transfer.legProducts) {
-      for (const options of legOptions) {
-        if (options.length > 0) {
-          allProducts.push(options[0]);
-        }
+      for (const [firstOption] of legOptions) {
+        if (firstOption) allProducts.push(firstOption);
       }
     }
   }
 
-  if (allProducts.length === 0) return null;
+  const [firstProduct] = allProducts;
+  if (!firstProduct) return null;
 
-  const currency = allProducts[0].currency;
+  const currency = firstProduct.currency;
 
   const categoryMap = new Map<string, { name: string; amount: number; isDefault: boolean }>();
   for (const p of allProducts) {
@@ -42,7 +41,9 @@ export function extractFareSummary(fare: TripFare | undefined): FareSummary | nu
   }
 
   const byCategory = Array.from(categoryMap.values());
+  // At least one product exists, so its category does too.
   const defaultCat = byCategory.find((c) => c.isDefault) ?? byCategory[0];
+  if (!defaultCat) throw new Error("A fare with products has no rider category");
 
   return {
     amount: defaultCat.amount,

@@ -155,10 +155,10 @@ integration("startup migration runner", () => {
         "Waiting for another app-api instance to finish migrating the database",
       );
       expect(finished).toBe(false);
-      const [{ exists }] = await control<{ exists: boolean }[]>`
+      const [table] = await control<{ exists: boolean }[]>`
         SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
       `;
-      expect(exists).toBe(false);
+      expect(table?.exists).toBe(false);
 
       await holder`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY.toString()}::bigint)`;
       expect((await run.done).length).toBeGreaterThan(0);
@@ -203,14 +203,14 @@ integration("startup migration runner", () => {
       `;
       expect(sessions).toHaveLength(0);
       // The whole pending batch ran in one transaction, so nothing was recorded.
-      const [{ exists }] = await control<{ exists: boolean }[]>`
+      const [recorded] = await control<{ exists: boolean }[]>`
         SELECT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations) AS exists
       `;
-      expect(exists).toBe(false);
-      const [{ locked }] = await control<{ locked: boolean }[]>`
+      expect(recorded?.exists).toBe(false);
+      const [lock] = await control<{ locked: boolean }[]>`
         SELECT pg_try_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint) AS locked
       `;
-      expect(locked).toBe(true);
+      expect(lock?.locked).toBe(true);
     } finally {
       await control.end({ timeout: 5 });
     }

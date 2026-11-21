@@ -22,7 +22,7 @@ describe("useRideQuotes", () => {
     const post = vi.spyOn(apiClient, "post").mockResolvedValue({ results: [] });
     renderHook(() => useRideQuotes({ request, providerIds: ["uber"], enabled: true }), { wrapper });
     await waitFor(() => expect(post).toHaveBeenCalled());
-    const [, body] = post.mock.calls[0];
+    const [, body] = post.mock.calls[0] ?? [];
     expect(body).toMatchObject({ pickupLat: "52.52", providerIds: ["uber"] });
   });
 
@@ -96,6 +96,6 @@ describe("refetch triggers", () => {
     // route in the key the quote would keep its fare-less first answer.
     rerender({ route: { distanceMeters: 5000, durationSeconds: 600 } });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
-    expect(post.mock.calls[1][1]).toMatchObject({ routeDistanceMeters: "5000" });
+    expect(post.mock.calls[1]?.[1]).toMatchObject({ routeDistanceMeters: "5000" });
   });
 });

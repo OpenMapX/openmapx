@@ -16,7 +16,7 @@
       "!apps/web/public/sw.js",
       "!**/*.svg",
       "!**/db/migrations",
-      "!**/__fixtures__",
+      "!**/__fixtures__/**/*.json",
       "!infra/docker/data",
       "!docs",
       "!apps/api/openapi.json",
@@ -64,6 +64,9 @@
       "preset": "recommended",
       "nursery": {
         "noFloatingPromises": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error"
       },
       "suspicious": {
         "noImportCycles": "error"
@@ -284,6 +287,19 @@
               }
             }
           }
+        }
+      }
+    },
+    {
+      "includes": ["**/__fixtures__/**"],
+      "formatter": { "enabled": false },
+      "assist": { "enabled": false },
+      "linter": {
+        "rules": {
+          "preset": "none",
+          "nursery": { "noFloatingPromises": "off" },
+          "style": { "noNonNullAssertion": "error", "noRestrictedImports": "off" },
+          "suspicious": { "noConsole": "off", "noImportCycles": "off" }
         }
       }
     }

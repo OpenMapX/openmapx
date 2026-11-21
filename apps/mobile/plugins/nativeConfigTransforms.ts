@@ -253,7 +253,7 @@ export function applyLocationServiceType(manifest: AndroidManifestLike): Android
         return {
           ...application,
           service: services.map((service) =>
-            EXPO_LOCATION_SERVICE_NAMES.includes(service.$["android:name"])
+            EXPO_LOCATION_SERVICE_NAMES.some((name) => name === service.$["android:name"])
               ? {
                   ...service,
                   $: {

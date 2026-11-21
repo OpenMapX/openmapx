@@ -27,17 +27,16 @@ export function LegAlerts({ routeId, legAlerts }: LegAlertsProps) {
   const byId = new Map<string, ServiceAlert>();
   for (const a of legAlerts ?? []) byId.set(a.id, a);
   for (const a of routeAlerts ?? []) if (!byId.has(a.id)) byId.set(a.id, a);
-  const merged = [...byId.values()];
-  if (merged.length === 0) return null;
-
-  const sorted = merged.sort(
+  const sorted = [...byId.values()].sort(
     (a, b) => SEVERITY_PRIORITY[b.severity] - SEVERITY_PRIORITY[a.severity],
   );
+  const [top] = sorted;
+  if (!top) return null;
   const hiddenCount = sorted.length - 1;
 
   return (
     <Box sx={{ mt: 0.75, mb: 0.25, display: "flex", flexDirection: "column", gap: 0.5 }}>
-      <AlertCard alert={sorted[0]} compact />
+      <AlertCard alert={top} compact />
       <AttributionStrip attributions={contributorsForRecords(sorted)} variant="inline" />
       {hiddenCount > 0 && (
         <>

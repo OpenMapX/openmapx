@@ -129,14 +129,15 @@ interface StationDetailSection {
   items?: (I18nToken | string)[];
 }
 
+const STANDARD_TRAVELER_TOKEN = token("value.travelerStandard");
 const TRAVELER_TYPE_TOKEN: Record<string, I18nToken> = {
-  COMMUTER: token("value.travelerStandard"),
+  COMMUTER: STANDARD_TRAVELER_TOKEN,
   OCCASIONAL: token("value.travelerOccasional"),
   MOBILITY_RESTRICTED: token("value.travelerMobilityRestricted"),
 };
 
 function travelerTypeLabel(type: string | undefined): I18nToken {
-  if (!type) return TRAVELER_TYPE_TOKEN.COMMUTER;
+  if (!type) return STANDARD_TRAVELER_TOKEN;
   // Unknown DB enum values pass through as a literal token so the row label
   // stays I18nToken-typed (no raw string crosses the contract) while still
   // surfacing the raw value.

@@ -25,7 +25,9 @@ function samePoint(a: Position, b: Position): boolean {
 }
 
 function openRing(ring: Position[]): Position[] {
-  return ring.length > 1 && samePoint(ring[0], ring[ring.length - 1])
+  const first = ring[0];
+  const last = ring.at(-1);
+  return ring.length > 1 && first && last && samePoint(first, last)
     ? ring.slice(0, -1)
     : ring.slice();
 }
@@ -33,24 +35,27 @@ function openRing(ring: Position[]): Position[] {
 function dedupe(ring: Position[]): Position[] {
   const result: Position[] = [];
   for (const point of ring) {
-    if (result.length === 0 || !samePoint(result[result.length - 1], point)) result.push(point);
+    const previous = result.at(-1);
+    if (!previous || !samePoint(previous, point)) result.push(point);
   }
   return openRing(result);
 }
 
 function ringArea(ring: Position[]): number {
-  return (
-    ring.reduce((area, point, index) => {
-      const next = ring[(index + 1) % ring.length];
-      return area + point[0] * next[1] - next[0] * point[1];
-    }, 0) / 2
-  );
+  let area = 0;
+  let previous = ring.at(-1);
+  for (const point of ring) {
+    if (previous) area += previous[0] * point[1] - point[0] * previous[1];
+    previous = point;
+  }
+  return area / 2;
 }
 
 function closeValidRing(ring: Position[]): Position[] | null {
   const normalized = dedupe(openRing(ring));
-  if (normalized.length < 3 || Math.abs(ringArea(normalized)) < 1e-10) return null;
-  return [...normalized, [normalized[0][0], normalized[0][1]]];
+  const [first] = normalized;
+  if (!first || normalized.length < 3 || Math.abs(ringArea(normalized)) < 1e-10) return null;
+  return [...normalized, [first[0], first[1]]];
 }
 
 function parseRing(value: unknown): Position[] | null {
@@ -119,9 +124,9 @@ function intersection(
 }
 
 function clipBoundary(ring: Position[], bbox: BoundingBox, boundary: Boundary): Position[] {
-  if (ring.length === 0) return [];
+  let previous = ring.at(-1);
+  if (!previous) return [];
   const output: Position[] = [];
-  let previous = ring[ring.length - 1];
   let previousInside = inside(previous, bbox, boundary);
   for (const current of ring) {
     const currentInside = inside(current, bbox, boundary);
@@ -165,9 +170,10 @@ export function normalizeAndClipMobilityGeometry(
   const clipped = polygons
     .map((polygon) => clipPolygon(polygon, bbox))
     .filter((polygon): polygon is Polygon => polygon !== null);
-  if (clipped.length === 0) return null;
+  const [first] = clipped;
+  if (!first) return null;
   return geometry.type === "Polygon"
-    ? { type: "Polygon", coordinates: clipped[0] }
+    ? { type: "Polygon", coordinates: first }
     : { type: "MultiPolygon", coordinates: clipped };
 }
 

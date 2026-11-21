@@ -97,6 +97,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
       owner: o.authority,
       serviceIds: ["alpha", "beta"],
     });
+    const held = lease;
     const store = await withServiceLifecycleReceiptAuthority(o.authority, () =>
       openServiceLifecycleReceipt(options(o.execution)),
     );
@@ -104,7 +105,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
     expect(seed.commit).toBe("seed_committed");
     await withConfigurationGenerationWriter(root, (writer) =>
       withVerifiedLifecycleOwnership(
-        { writer, lease: lease!, authority: o.authority },
+        { writer, lease: held, authority: o.authority },
         async (ownership) => {
           await store.checkpoint(0, { ...seed, phase: "pins_validated", sequence: 1 }, ownership);
           await expect(
@@ -160,12 +161,13 @@ it("refuses a final revision that the owned writer did not commit", async () => 
       owner: o.authority,
       serviceIds: ["alpha", "beta"],
     });
+    const held = lease;
     const store = await withServiceLifecycleReceiptAuthority(o.authority, () =>
       openServiceLifecycleReceipt(options(o.execution)),
     );
     await withConfigurationGenerationWriter(root, (writer) =>
       withVerifiedLifecycleOwnership(
-        { writer, lease: lease!, authority: o.authority },
+        { writer, lease: held, authority: o.authority },
         async (ownership) => {
           const seed = await store.read();
           await store.checkpoint(0, { ...seed, sequence: 1, phase: "pins_validated" }, ownership);
@@ -345,6 +347,7 @@ it.each([false, true])(
         owner: o.authority,
         serviceIds: ["alpha", "beta"],
       });
+      const held = lease;
       const store = await withServiceLifecycleReceiptAuthority(o.authority, () =>
         openServiceLifecycleReceipt(options(o.execution)),
       );
@@ -375,7 +378,7 @@ it.each([false, true])(
       await expect(
         withConfigurationGenerationWriter(root, (writer) =>
           withVerifiedLifecycleOwnership(
-            { writer, lease: lease!, authority: o.authority },
+            { writer, lease: held, authority: o.authority },
             async (ownership) => {
               const seed = await store.read();
               await store.checkpoint(

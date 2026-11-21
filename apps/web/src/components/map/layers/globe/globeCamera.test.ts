@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import {
   cameraPosition,
   invertMatrix,
@@ -10,18 +11,18 @@ import {
 // Perspective camera looking down -Z. Its off-axis terms represent map padding.
 const CAMERA = [2, 0, 0, 0, 0, 3, 0, 0, -0.2, 0.1, -1.01, -1, 40, -25, -500, 501];
 
-function project(matrix: ArrayLike<number>, [x, y, z]: number[]) {
-  const w = matrix[2] * x + matrix[5] * y + matrix[8] * z;
-  return [
-    (matrix[0] * x + matrix[3] * y + matrix[6] * z) / w,
-    (matrix[1] * x + matrix[4] * y + matrix[7] * z) / w,
-  ];
+type Vec3 = [number, number, number];
+
+function project(matrix: ArrayLike<number>, [x, y, z]: Vec3): [number, number] {
+  const m = (i: number) => nth(matrix, i);
+  const w = m(2) * x + m(5) * y + m(8) * z;
+  return [(m(0) * x + m(3) * y + m(6) * z) / w, (m(1) * x + m(4) * y + m(7) * z) / w];
 }
 
 describe("celestial camera", () => {
   it("keeps stars fixed during a dolly, ignoring Earth scale and camera translation", () => {
     const nearEarth = CAMERA.map((value, i) => (i < 12 ? value * 1000 : value * 17));
-    const direction = [0.1, 0.2, -1];
+    const direction: Vec3 = [0.1, 0.2, -1];
     expect(project(skyProjectionMatrix(nearEarth), direction)).toEqual(
       project(skyProjectionMatrix(CAMERA), direction),
     );
@@ -43,8 +44,8 @@ describe("celestial camera", () => {
     // Compose a 90-degree camera roll with the perspective matrix.
     const rotated = [...CAMERA];
     for (let row = 0; row < 4; row++) {
-      rotated[row] = CAMERA[4 + row];
-      rotated[4 + row] = -CAMERA[row];
+      rotated[row] = nth(CAMERA, 4 + row);
+      rotated[4 + row] = -nth(CAMERA, row);
     }
     const [x, y] = project(skyProjectionMatrix(rotated), [0.1, 0, -1]);
     expect(x).toBeCloseTo(0.2);
@@ -53,8 +54,8 @@ describe("celestial camera", () => {
     // A 90-degree tilt makes a direction formerly at the horizon face forward.
     const tilted = [...CAMERA];
     for (let row = 0; row < 4; row++) {
-      tilted[4 + row] = CAMERA[8 + row];
-      tilted[8 + row] = -CAMERA[4 + row];
+      tilted[4 + row] = nth(CAMERA, 8 + row);
+      tilted[8 + row] = -nth(CAMERA, 4 + row);
     }
     expect(project(skyProjectionMatrix(tilted), [0, -1, 0])[0]).toBeCloseTo(0.2);
   });
@@ -65,8 +66,8 @@ describe("celestial camera", () => {
       const s = Math.sin((angle * Math.PI) / 180);
       const matrix = [...CAMERA];
       for (let row = 0; row < 4; row++) {
-        matrix[row] = CAMERA[row] * c + CAMERA[8 + row] * s;
-        matrix[8 + row] = -CAMERA[row] * s + CAMERA[8 + row] * c;
+        matrix[row] = nth(CAMERA, row) * c + nth(CAMERA, 8 + row) * s;
+        matrix[8 + row] = -nth(CAMERA, row) * s + nth(CAMERA, 8 + row) * c;
       }
       return project(skyProjectionMatrix(matrix), [0.1, 0, 1]);
     };
@@ -82,7 +83,10 @@ function multiply(a: Mat4, b: Mat4): Mat4 {
   const out = new Array<number>(16).fill(0);
   for (let column = 0; column < 4; column++) {
     for (let row = 0; row < 4; row++) {
-      for (let k = 0; k < 4; k++) out[column * 4 + row] += a[k * 4 + row] * b[column * 4 + k];
+      for (let k = 0; k < 4; k++) {
+        out[column * 4 + row] =
+          nth(out, column * 4 + row) + nth(a, k * 4 + row) * nth(b, column * 4 + k);
+      }
     }
   }
   return out;
@@ -156,12 +160,15 @@ function globeMatrix(lng: number, lat: number, pitch: number, bearing: number, r
 
 /** MapLibre's own camera-position derivation, for comparison. */
 function expectedCamera(lng: number, lat: number, pitch: number, bearing: number, radius: number) {
-  const apply = (m: Mat4, [x, y, z]: number[]) => [
-    m[0] * x + m[4] * y + m[8] * z,
-    m[1] * x + m[5] * y + m[9] * z,
-    m[2] * x + m[6] * y + m[10] * z,
-  ];
-  let p = [0, 0, 1500 / radius];
+  const apply = (matrix: Mat4, [x, y, z]: Vec3): Vec3 => {
+    const m = (i: number) => nth(matrix, i);
+    return [
+      m(0) * x + m(4) * y + m(8) * z,
+      m(1) * x + m(5) * y + m(9) * z,
+      m(2) * x + m(6) * y + m(10) * z,
+    ];
+  };
+  let p: Vec3 = [0, 0, 1500 / radius];
   p = apply(rotate("x", pitch * RADIANS), p);
   p = apply(rotate("z", -bearing * RADIANS), p);
   p = [p[0], p[1], p[2] + 1];
@@ -194,8 +201,8 @@ describe("globe camera", () => {
       const camera = cameraPosition(inverse);
       const expected = expectedCamera(lng, lat, pitch, bearing, radius);
       for (let i = 0; i < 3; i++) {
-        expect(Number.isFinite(camera[i])).toBe(true);
-        expect(camera[i]).toBeCloseTo(expected[i], 4);
+        expect(Number.isFinite(nth(camera, i))).toBe(true);
+        expect(nth(camera, i)).toBeCloseTo(nth(expected, i), 4);
       }
     },
   );

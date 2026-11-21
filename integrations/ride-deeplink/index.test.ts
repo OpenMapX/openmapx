@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { setup } from "./index.js";
 
@@ -38,7 +38,7 @@ describe("ride-deeplink setup", () => {
   it("reports availability without claiming a coverage check", async () => {
     const ctx = createMockIntegrationContext({ id: "ride-deeplink", config: {} });
     setup(ctx);
-    const result = await ctx.registered.ride[0].getAvailability(request);
+    const result = await nth(ctx.registered.ride, 0).getAvailability(request);
     expect(result.data.available).toBe(true);
     expect(result.data.coverageChecked).toBe(false);
     expect(result.data.products).toEqual([]);

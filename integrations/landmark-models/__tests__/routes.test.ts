@@ -7,14 +7,16 @@ import { BARRELMAN, contextWith, fakeProvider, OPEN, testAsset } from "./provide
 
 const EIFFEL_CELL = { x: "2074", y: "1409" };
 
-async function call(
-  handler: RouteHandler,
-  params: Record<string, string> = {},
+async function call<Params extends Record<string, string>>(
+  handler: RouteHandler<Params>,
+  params: Params,
   query: Record<string, string> = {},
 ) {
   const { reply, result } = createRecordingReply();
   await handler(
-    { query, params, body: undefined, clientKey: "k", headers: {} } as Parameters<RouteHandler>[0],
+    { query, params, body: undefined, clientKey: "k", headers: {} } as Parameters<
+      RouteHandler<Params>
+    >[0],
     reply,
   );
   return result;
@@ -27,7 +29,7 @@ function routesFor(...args: Parameters<typeof contextWith>) {
 describe("landmark-models routes", () => {
   it("coverage lists occupied cells and providers with public caching when complete", async () => {
     const routes = routesFor([fakeProvider(BARRELMAN, [testAsset()])]);
-    const result = await call(routes.coverage);
+    const result = await call(routes.coverage, {});
     const body = result.body as CoverageResponse;
     expect(result.status).toBe(200);
     expect(body.complete).toBe(true);
@@ -41,14 +43,14 @@ describe("landmark-models routes", () => {
 
   it("coverage is no-store and incomplete while a provider is loading", async () => {
     const routes = routesFor([fakeProvider(BARRELMAN, [testAsset()]), fakeProvider(OPEN, null)]);
-    const result = await call(routes.coverage);
+    const result = await call(routes.coverage, {});
     expect((result.body as CoverageResponse).complete).toBe(false);
     expect(result.headers["cache-control"]).toBe("no-store");
   });
 
   it("cell answers with public max-age 86400 when r matches", async () => {
     const routes = routesFor([fakeProvider(BARRELMAN, [testAsset()])]);
-    const revision = ((await call(routes.coverage)).body as CoverageResponse).revision;
+    const revision = ((await call(routes.coverage, {})).body as CoverageResponse).revision;
     const result = await call(routes.cell, EIFFEL_CELL, { r: revision });
     expect(result.status).toBe(200);
     expect((result.body as CellResponse).assets).toHaveLength(1);
@@ -82,7 +84,7 @@ describe("landmark-models routes", () => {
 
   it("a disabled provider contributes nothing", async () => {
     const routes = routesFor([]);
-    const body = (await call(routes.coverage)).body as CoverageResponse;
+    const body = (await call(routes.coverage, {})).body as CoverageResponse;
     expect(body.occupied).toEqual([]);
     expect(body.providers).toEqual([]);
   });
@@ -92,12 +94,12 @@ describe("landmark-models routes", () => {
     const routes = routesFor([fakeProvider(BARRELMAN, [hidden])], {
       config: { hiddenAssets: `${BARRELMAN}:${hidden.providerAssetId}` },
     });
-    expect(((await call(routes.coverage)).body as CoverageResponse).occupied).toEqual([]);
+    expect(((await call(routes.coverage, {})).body as CoverageResponse).occupied).toEqual([]);
   });
 
   it("assets of a disallowed source are absent", async () => {
     const routes = routesFor([fakeProvider(BARRELMAN, [testAsset()])], { disallowed: ["src"] });
-    expect(((await call(routes.coverage)).body as CoverageResponse).occupied).toEqual([]);
+    expect(((await call(routes.coverage, {})).body as CoverageResponse).occupied).toEqual([]);
   });
 
   it("reuses the merged index while nothing changed", async () => {

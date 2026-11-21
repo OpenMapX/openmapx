@@ -74,7 +74,8 @@ export function routeStopInsertIndex(
   const along = projectWaypointAfter(route, target, fromAlongMeters).alongMeters;
   const positions = routeStopWaypointPositions(route, remaining, fromAlongMeters);
   for (let i = 1; i < remaining.length - 1; i++) {
-    if (positions[i - 1].alongMeters > along) return i;
+    const previous = positions[i - 1];
+    if (previous && previous.alongMeters > along) return i;
   }
   return remaining.length - 1;
 }
@@ -153,7 +154,7 @@ export async function evaluateRouteStopDetours(
     });
   if (results.length === 0 || waypoints.length < 2) return results;
   let baseline: Route;
-  let baselineFields: FieldContributors;
+  let baselineFields: Record<"duration" | "distance", ReturnType<typeof contributorsForField>>;
   let provider: string;
   if (input.baseline) {
     baseline = input.baseline.route;
@@ -190,6 +191,7 @@ export async function evaluateRouteStopDetours(
       checkAbort(signal);
       const index = next++;
       const result = results[index];
+      if (!result) continue;
       try {
         const response = await requestRoute({ waypoints: result.waypoints, provider, signal });
         checkAbort(signal);

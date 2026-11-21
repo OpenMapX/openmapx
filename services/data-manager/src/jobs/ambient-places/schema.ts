@@ -1,4 +1,5 @@
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
+import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 
@@ -54,8 +55,12 @@ export async function ensureAmbientSchema(sql: postgres.Sql): Promise<void> {
   if (!ready) {
     ready = cancellableTransaction(sql, async (tx) => {
       await tx.unsafe(`SET LOCAL statement_timeout='10000ms'`);
-      const [writer] = await tx.unsafe<{ locked: boolean }[]>(
-        `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
+      const writer = itemAt(
+        await tx.unsafe<{ locked: boolean }[]>(
+          `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
+        ),
+        0,
+        "row from the ambient write lock query",
       );
       if (!writer.locked) throw new AmbientPublicationBusyError();
       await tx.unsafe(ambientSchemaDDL);

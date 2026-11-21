@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { assert, beforeEach, describe, expect, it } from "vitest";
 import { transitPlanQueryKey } from "../api/transit";
 import { providerPlanSelection } from "../travel-plans/__fixtures__/providerPlan";
 import { MAX_DIRECTIONS_WAYPOINTS, useDirectionsStore } from "./directionsStore";
@@ -66,9 +66,11 @@ describe("waypoint schedules", () => {
     expect(state.tripTime).toBeNull();
     expect(state.hasScheduleConstraints()).toBe(false);
     useDirectionsStore.getState().setWaypointSchedule(0, { dwellSeconds: 600 });
-    expect(useDirectionsStore.getState().waypoints[0].schedule).toEqual({ dwellSeconds: 600 });
+    expect(useDirectionsStore.getState().waypoints[0]?.schedule).toEqual({ dwellSeconds: 600 });
     useDirectionsStore.getState().setWaypointSchedule(0, null);
-    expect(useDirectionsStore.getState().waypoints[0].schedule).toBeUndefined();
+    const [origin] = useDirectionsStore.getState().waypoints;
+    assert.isDefined(origin);
+    expect(origin.schedule).toBeUndefined();
   });
 
   it("ignores an out-of-range waypoint index", () => {
@@ -95,7 +97,7 @@ describe("waypoint schedules", () => {
     expect(useDirectionsStore.getState().applyWaypointOrder([0, 2, 1])).toBe(true);
     const after = useDirectionsStore.getState().waypoints;
     expect(after.map((wp) => wp.label)).toEqual(["A", "C", "B"]);
-    expect(after[2].schedule).toEqual({ dwellSeconds: 900 });
+    expect(after[2]?.schedule).toEqual({ dwellSeconds: 900 });
     expect(after.map((wp) => wp.type)).toEqual(["origin", "waypoint", "destination"]);
   });
 
@@ -214,7 +216,8 @@ describe("normal provider trip selection handoff", () => {
     "releases the provider reference on %s",
     (action) => {
       const result = selection();
-      const leg = result.plan.data.itineraries[0].legs[0];
+      const leg = result.plan.data.itineraries[0]?.legs[0];
+      assert.isDefined(leg);
       result.query = {
         kind: "reference",
         params: {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { expireDirectionsRoadConditionImpact } from "../road-conditions/roadConditionRouteImpact";
 import type { DirectionsResult } from "../types/routing";
-import { expireDirectionsRoadConditionImpact } from "../utils/roadConditionRouteImpact";
 
 /** Re-render once at the lease boundary so held query data cannot stay current. */
 export function useRoadConditionLease<T extends DirectionsResult>(

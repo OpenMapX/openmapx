@@ -74,9 +74,10 @@ export function openAnchoredDirectory(
   const descriptors: number[] = [];
   let path = root;
   try {
-    descriptors.push(openDirectory(root));
+    let directory = openDirectory(root);
+    descriptors.push(directory);
     for (const component of components) {
-      const parent = descriptors.at(-1) as number;
+      const parent = directory;
       const child = anchorRoot
         ? join(anchorRoot, String(parent), component)
         : join(path, component);
@@ -93,10 +94,10 @@ export function openAnchoredDirectory(
           throw new Error("Unsafe anchored directory");
         }
       }
-      descriptors.push(openDirectory(child));
+      directory = openDirectory(child);
+      descriptors.push(directory);
       path = join(path, component);
     }
-    const directory = descriptors.at(-1) as number;
     if (!fstatSync(directory).isDirectory()) throw new Error("Unsafe anchored directory");
     const entry = (name: string) => {
       assertName(name);
