@@ -143,7 +143,11 @@ describe("useCommandSources map orientation commands", () => {
 
 describe("useCommandSources globe commands", () => {
   afterEach(() => {
-    act(() => useLayerStore.setState({ globeView: false, globeLighting: true }));
+    act(() => {
+      useLayerStore.setState({ globeView: false });
+      // Through the setter, so the stored preference is reset as well.
+      useLayerStore.getState().setGlobeLighting(true);
+    });
   });
 
   it("offers day and night only with globe view and toggles it", () => {

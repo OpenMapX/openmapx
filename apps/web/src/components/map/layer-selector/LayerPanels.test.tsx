@@ -50,7 +50,9 @@ afterEach(() => {
     useMeasurementStore.getState().deactivate();
     useTravelTimeStore.getState().deactivate();
     useLayerStore.getState().setActiveLayer("default");
-    useLayerStore.setState({ globeView: false, globeLighting: true });
+    useLayerStore.setState({ globeView: false });
+    // Through the setter, so the stored preference is reset as well.
+    useLayerStore.getState().setGlobeLighting(true);
   });
 });
 

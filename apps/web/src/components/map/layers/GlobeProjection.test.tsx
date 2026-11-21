@@ -5,7 +5,6 @@ import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap } from "@/test";
 import { GlobeProjection } from "./GlobeProjection";
-import { GlobeSkyLayer } from "./globe/GlobeSkyLayer";
 
 let fake: ReturnType<typeof createFakeMap>;
 let context: { mapRef: { current: typeof fake.map }; mapReady: boolean; styleVersion: number };
@@ -22,6 +21,32 @@ const SKY_ID = "openmapx-globe-sky";
 
 vi.mock("@mui/material/styles", () => ({ useColorScheme: () => ({ mode: "dark" }) }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => context }));
+
+interface FakeSky {
+  options: Record<string, unknown>;
+  events: {
+    onContent?: (content: { milkyWay: boolean; nightLights: boolean }) => void;
+    onUnavailable?: () => void;
+  };
+  setOptions: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+}
+const skies = vi.hoisted(() => [] as FakeSky[]);
+vi.mock("./globe/GlobeSkyLayer", () => ({
+  GlobeSkyLayer: class {
+    readonly id = "openmapx-globe-sky";
+    readonly type = "custom";
+    readonly renderingMode = "2d";
+    setOptions = vi.fn();
+    dispose = vi.fn();
+    constructor(
+      public options: FakeSky["options"],
+      public events: FakeSky["events"],
+    ) {
+      skies.push(this as unknown as FakeSky);
+    }
+  },
+}));
 
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, baseLayers: [{ id: "labels", type: "symbol" }] });
@@ -44,6 +69,7 @@ beforeEach(() => {
     activeLayer: "satellite",
   });
   vi.clearAllMocks();
+  skies.length = 0;
   vi.stubGlobal(
     "matchMedia",
     vi.fn(() => ({ matches: false })),
@@ -117,9 +143,9 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(fake.state.handlers.get("style.load")?.size ?? 0).toBe(0);
   });
 
-  it("updates the sky in place when lighting or the base map changes", () => {
-    const setOptions = vi.spyOn(GlobeSkyLayer.prototype, "setOptions");
-    render(<GlobeProjection />);
+  it("updates the sky in place when lighting, the base map or the style changes", () => {
+    const { rerender } = render(<GlobeProjection />);
+    const setOptions = skies[0].setOptions;
     act(() => useLayerStore.getState().setGlobeLighting(false));
     expect(setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ lighting: false, base: "satellite", dark: true }),
@@ -128,7 +154,33 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ base: "map", themeSky: [16 / 255, 24 / 255, 40 / 255] }),
     );
+    context.styleVersion++;
+    rerender(<GlobeProjection />);
+    expect(skies).toHaveLength(1);
+    expect(skies[0].dispose).not.toHaveBeenCalled();
     expect(fake.state.counts.addLayer.get(SKY_ID)).toBe(1);
+  });
+
+  it("falls back to MapLibre's haze and the theme's background when the GPU cannot run the sky", () => {
+    fake.state.zoom = 3;
+    useLayerStore.setState({ activeLayer: "default" });
+    render(<GlobeProjection />);
+    expect(container.style.backgroundColor).toBe("rgb(2, 3, 6)");
+    act(() => skies[0].events.onUnavailable?.());
+    expect(sky["atmosphere-blend"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      0,
+      0.6,
+      5,
+      0.6,
+      8,
+      0.25,
+      11,
+      0,
+    ]);
+    expect(container.style.backgroundColor).toBe("rgb(16, 24, 40)");
   });
 
   it("hands MapLibre's haze to the custom glow below zoom 5", () => {
@@ -203,24 +255,20 @@ describe("GlobeProjection sky lifecycle", () => {
     }
   });
 
-  it("credits the sky's imagery only while it is drawn", () => {
+  it("credits exactly the imagery the sky reports drawing", () => {
     const credits = () =>
       Object.values(useMapAttributionStore.getState().byLayer)
         .flat()
         .map((entry) => JSON.stringify(entry));
-    fake.state.zoom = 3;
     const { unmount } = render(<GlobeProjection />);
+    expect(credits()).toEqual([]);
+
+    act(() => skies[0].events.onContent?.({ milkyWay: true, nightLights: true }));
     expect(credits().some((entry) => entry.includes("ESO/S. Brunier"))).toBe(true);
     expect(credits().some((entry) => entry.includes("NASA Earth Observatory"))).toBe(true);
 
-    fake.state.zoom = 7.5;
-    act(() => fake.emit("zoom"));
+    act(() => skies[0].events.onContent?.({ milkyWay: true, nightLights: false }));
     expect(credits().some((entry) => entry.includes("ESO/S. Brunier"))).toBe(true);
-    expect(credits().some((entry) => entry.includes("NASA Earth Observatory"))).toBe(false);
-
-    fake.state.zoom = 3;
-    act(() => fake.emit("zoom"));
-    act(() => useLayerStore.getState().setGlobeLighting(false));
     expect(credits().some((entry) => entry.includes("NASA Earth Observatory"))).toBe(false);
 
     act(() => useLayerStore.setState({ globeView: false }));

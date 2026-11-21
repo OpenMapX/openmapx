@@ -62,6 +62,11 @@ function createContext() {
     blendFunc: vi.fn(),
     activeTexture: vi.fn(),
     bindTexture: vi.fn(),
+    createTexture: vi.fn(() => ({})),
+    pixelStorei: vi.fn(),
+    texImage2D: vi.fn(),
+    texParameteri: vi.fn(),
+    generateMipmap: vi.fn(),
     uniform1f: vi.fn(setUniform()),
     uniform1i: vi.fn(setUniform()),
     uniform3f: vi.fn(setUniform()),
@@ -256,5 +261,76 @@ describe("GlobeSkyLayer rendering", () => {
     );
     layer.setOptions({ ...OPTIONS, lighting: false });
     expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GlobeSkyLayer textures and credits", () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("keeps its textures across a style reload in the same GL context", () => {
+    const context = createContext();
+    const gl = context as unknown as WebGL2RenderingContext;
+    const map = createMap(3) as unknown as MapLibreMap;
+    const layer = new GlobeSkyLayer(OPTIONS);
+    layer.onAdd(map, gl);
+    layer.render(gl, input());
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    layer.onRemove();
+    layer.onAdd(map, gl);
+    layer.render(gl, input());
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    // A restored context has none of the old GPU objects.
+    const restored = createContext() as unknown as WebGL2RenderingContext;
+    layer.onAdd(map, restored);
+    layer.render(restored, input());
+    expect(fetch).toHaveBeenCalledTimes(4);
+    layer.dispose();
+  });
+
+  it("reports the imagery it draws, and nothing once it stops drawing", async () => {
+    vi.mocked(fetch).mockImplementation(async () => new Response(new Blob(["image"])));
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ close: vi.fn() })),
+    );
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const onContent = vi.fn();
+    const context = createContext();
+    const gl = context as unknown as WebGL2RenderingContext;
+    const map = createMap(3);
+    const layer = new GlobeSkyLayer(OPTIONS, { onContent });
+    layer.onAdd(map as unknown as MapLibreMap, gl);
+    layer.render(gl, input());
+    await flush();
+    layer.render(gl, input());
+    expect(onContent).not.toHaveBeenCalled();
+
+    now.mockReturnValue(2000);
+    layer.render(gl, input());
+    expect(onContent).toHaveBeenLastCalledWith({ milkyWay: true, nightLights: true });
+
+    layer.setOptions({ ...OPTIONS, lighting: false });
+    layer.render(gl, input());
+    expect(onContent).toHaveBeenLastCalledWith({ milkyWay: true, nightLights: false });
+
+    map.getZoom.mockReturnValue(8);
+    layer.render(gl, input());
+    expect(onContent).toHaveBeenLastCalledWith({ milkyWay: false, nightLights: false });
+    expect(onContent).toHaveBeenCalledTimes(3);
+  });
+
+  it("tells the caller when the GPU cannot run it", () => {
+    const context = createContext();
+    context.getProgramParameter.mockReturnValue(false);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onUnavailable = vi.fn();
+    const layer = new GlobeSkyLayer(OPTIONS, { onUnavailable });
+    layer.onAdd(
+      createMap(3) as unknown as MapLibreMap,
+      context as unknown as WebGL2RenderingContext,
+    );
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
   });
 });

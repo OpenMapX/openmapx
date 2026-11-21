@@ -31,6 +31,21 @@ export interface GlobeSkyOptions {
   themeSky: readonly [number, number, number];
 }
 
+/** Which bundled imagery the layer actually drew, for crediting it. */
+export interface GlobeSkyContent {
+  milkyWay: boolean;
+  nightLights: boolean;
+}
+
+export interface GlobeSkyEvents {
+  /** Called when the drawn imagery changes, not every frame. */
+  onContent?: (content: GlobeSkyContent) => void;
+  /** Called when the GPU cannot run the layer, so the caller can fall back. */
+  onUnavailable?: () => void;
+}
+
+const NOTHING_DRAWN: GlobeSkyContent = { milkyWay: false, nightLights: false };
+
 const NIGHT_BRIGHTNESS = { satellite: 0.1, mapLight: 0.45, mapDark: 0.55 } as const;
 /** The night-lights texture's width; WebGL2 only guarantees 2048. */
 const NIGHT_LIGHTS_SIZE = 4096;
@@ -131,8 +146,12 @@ export class GlobeSkyLayer implements CustomLayerInterface {
   private readonly galactic = new Float32Array(9);
   private readonly camera = new Float32Array(3);
   private readonly skyMatrix = new Float32Array(9);
+  private content: GlobeSkyContent = NOTHING_DRAWN;
 
-  constructor(options: GlobeSkyOptions) {
+  constructor(
+    options: GlobeSkyOptions,
+    private readonly events: GlobeSkyEvents = {},
+  ) {
     this.options = options;
   }
 
@@ -143,8 +162,11 @@ export class GlobeSkyLayer implements CustomLayerInterface {
 
   onAdd(map: MapLibreMap, gl: WebGL2RenderingContext): void {
     // A full setStyle replacement in MapLibre 6 can discard a custom layer
-    // without calling onRemove. Release any previous allocation before reuse.
-    this.dispose();
+    // without calling onRemove. Release any previous programs before reuse.
+    // Textures survive a style reload in the same context; a new context
+    // (after a lost one was restored) needs them uploaded again.
+    this.disposeGl();
+    if (this.gl && this.gl !== gl) this.disposeTextures();
     this.map = map;
     this.gl = gl;
     try {
@@ -171,6 +193,7 @@ export class GlobeSkyLayer implements CustomLayerInterface {
       // The sky is decorative. A shader/allocation failure must leave the map
       // usable with its plain background, including on weaker devices.
       console.warn("Unable to render the globe sky", error);
+      this.events.onUnavailable?.();
     } finally {
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -186,9 +209,14 @@ export class GlobeSkyLayer implements CustomLayerInterface {
     const zoom = map.getZoom();
     const space = spaceAmount(zoom, transition);
     const surface = surfaceFade(zoom, transition);
-    if (space === 0 && surface === 0) return;
-    const inverse = invertMatrix(input.modelViewProjectionMatrix, this.inverse64);
-    if (!inverse) return;
+    const inverse =
+      space === 0 && surface === 0
+        ? null
+        : invertMatrix(input.modelViewProjectionMatrix, this.inverse64);
+    if (!inverse) {
+      this.report(NOTHING_DRAWN);
+      return;
+    }
     this.inverse.set(inverse);
     cameraPosition(inverse, this.camera);
     skyProjectionMatrix(input.modelViewProjectionMatrix, this.skyMatrix);
@@ -205,6 +233,7 @@ export class GlobeSkyLayer implements CustomLayerInterface {
     const lights = wantsLights ? this.bindTexture(gl, this.nightLights, NIGHT_LIGHTS_UNIT) : 0;
     if (!wantsLights) this.unbindTexture(gl, NIGHT_LIGHTS_UNIT);
     if ((galaxy > 0 && galaxy < 1) || (lights > 0 && lights < 1)) repaint();
+    this.report({ milkyWay: galaxy > 0 && space > 0, nightLights: lights > 0 && surface > 0 });
 
     // Keep MapLibre's depth test: opaque fills of the layers above are drawn
     // first and must not be painted over. Never write depth.
@@ -255,15 +284,32 @@ export class GlobeSkyLayer implements CustomLayerInterface {
   }
 
   onRemove(): void {
-    this.dispose();
+    this.disposeGl();
+    this.report(NOTHING_DRAWN);
   }
 
+  /** Release everything, including the textures, when the globe is turned off. */
   dispose(): void {
     this.disposeGl();
-    this.nightLights.dispose();
-    this.milkyWay.dispose();
+    this.disposeTextures();
     this.map = null;
     this.gl = null;
+    this.report(NOTHING_DRAWN);
+  }
+
+  private report(content: GlobeSkyContent): void {
+    if (
+      content.milkyWay === this.content.milkyWay &&
+      content.nightLights === this.content.nightLights
+    )
+      return;
+    this.content = content;
+    this.events.onContent?.(content);
+  }
+
+  private disposeTextures(): void {
+    this.nightLights.dispose();
+    this.milkyWay.dispose();
   }
 
   /** The texture's fade-in, or 0 with the unit cleared while it is not ready. */

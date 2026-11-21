@@ -37,7 +37,10 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("GlobeTexture", () => {
   it("decodes in the background and uploads a single-channel texture during a render", async () => {
@@ -98,6 +101,7 @@ describe("GlobeTexture", () => {
 
   it("gives up quietly when the image cannot be fetched", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 404 }));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     const texture = new GlobeTexture("/globe/night-lights.webp", "r8");
     const ready = vi.fn();
     texture.load(ready);
@@ -108,6 +112,7 @@ describe("GlobeTexture", () => {
     expect(ready).not.toHaveBeenCalled();
     expect(texture.blend).toBe(0);
     expect(texture.bind(createGl() as unknown as WebGL2RenderingContext, 0)).toBe(false);
+    expect(warning).toHaveBeenCalledTimes(1);
   });
 
   it("aborts an in-flight request on dispose and never uploads into a released context", async () => {

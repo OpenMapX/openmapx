@@ -14,7 +14,7 @@ export const MILKY_WAY_ATTRIBUTION: Attribution = {
     bindings: [
       {
         scope: "data",
-        subject: "ESO all-sky Milky Way panorama (eso0932a), resized",
+        subject: "ESO all-sky Milky Way panorama (eso0932a), resized, faint stars removed, dimmed",
         license: { kind: "spdx", expression: "CC-BY-4.0" },
       },
     ],
