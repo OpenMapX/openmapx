@@ -2,8 +2,8 @@
 
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -32,6 +32,7 @@ import {
   isOverlayActive,
   type OverlayStoreBase,
   registerOverlayEntry,
+  useLayerStore,
 } from "@openmapx/core";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 
@@ -80,7 +81,22 @@ function renderSelector() {
   );
 }
 
+afterEach(() => {
+  act(() => {
+    useLayerStore.setState({ globeView: false });
+    useLayerStore.getState().setGlobeLighting(true);
+  });
+});
+
 describe("DesktopQuickSelector", () => {
+  it("offers day and night next to the globe while the globe is on", () => {
+    renderSelector();
+    expect(screen.queryByText("layers.globeLighting")).toBeNull();
+    act(() => fireEvent.click(screen.getByText("layers.globeView")));
+    act(() => fireEvent.click(screen.getByText("layers.globeLighting")));
+    expect(useLayerStore.getState().globeLighting).toBe(false);
+  });
+
   it("toggles an overlay tile with an explicit 'user' origin", () => {
     renderSelector();
     expect(isOverlayActive("traffic-flow")).toBe(false);

@@ -13,9 +13,13 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
+import {
+  toggleGlobeLighting,
+  useGlobeLightingActive,
+} from "@/components/map/layers/globe/globeLighting";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { LayerPreviewTile } from "./LayerPreviewTile";
-import { globePreview } from "./layerPreviewSvgs";
+import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
 import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
@@ -54,6 +58,9 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
   );
 }
 
+/** Side by side, the globe tiles' labels wrap instead of running into each other. */
+const GLOBE_LABEL_WIDTH = 64;
+
 function GlobeTile() {
   const t = useTranslations("layers");
   const globeView = useLayerStore((s) => s.globeView);
@@ -64,8 +71,26 @@ function GlobeTile() {
       <LayerPreviewTile
         preview={globePreview}
         label={t("globeView")}
+        labelWidth={GLOBE_LABEL_WIDTH}
         selected={globeView}
         onClick={() => setGlobeView(!globeView)}
+      />
+    </Box>
+  );
+}
+
+function GlobeLightingTile() {
+  const t = useTranslations("layers");
+  const globeLighting = useGlobeLightingActive();
+
+  return (
+    <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
+      <LayerPreviewTile
+        preview={globeLightingPreview}
+        label={t("globeLighting")}
+        labelWidth={GLOBE_LABEL_WIDTH}
+        selected={globeLighting}
+        onClick={toggleGlobeLighting}
       />
     </Box>
   );
@@ -77,6 +102,7 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const { isAvailable } = useCapabilities();
   const { quickDetails } = useLayerSelectorConfig();
+  const globeView = useLayerStore((s) => s.globeView);
 
   return (
     <Paper
@@ -118,6 +144,7 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
         ))}
 
       <GlobeTile />
+      {globeView ? <GlobeLightingTile /> : null}
 
       <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
         <LayerPreviewTile
