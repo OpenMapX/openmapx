@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -343,6 +351,11 @@ describe("Docker release trust gate", () => {
             { idx: 1, tag: "0001_newest_change", when: 1794754360788 },
           ],
         }),
+      );
+      mkdirSync(join(temp, "source/scripts/ci"), { recursive: true });
+      copyFileSync(
+        resolve(import.meta.dirname, "ci/await-registry-digest.sh"),
+        join(temp, "source/scripts/ci/await-registry-digest.sh"),
       );
       mkdirSync(join(temp, "release-plan"));
       writeFileSync(

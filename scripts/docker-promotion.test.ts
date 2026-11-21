@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { assert, describe, expect, it } from "vitest";
@@ -11,6 +19,7 @@ const releaseId = `${sha}-1-2`;
 const digests = Object.fromEntries(
   apps.map((app, i) => [app, `sha256:${String(i + 1).repeat(64)}`]),
 );
+const awaitDigestScript = resolve(import.meta.dirname, "ci/await-registry-digest.sh");
 const workflow = readFileSync(
   resolve(import.meta.dirname, "../.github/workflows/docker.yml"),
   "utf8",
@@ -52,6 +61,9 @@ function promote(
       join(temp, "source/apps/api/src/db/migrations/meta/_journal.json"),
       JSON.stringify({ entries: journalEntries }),
     );
+    // The registry wait script, as the workflow checks it out beside the journal.
+    mkdirSync(join(temp, "source/scripts/ci"), { recursive: true });
+    copyFileSync(awaitDigestScript, join(temp, "source/scripts/ci/await-registry-digest.sh"));
     mkdirSync(join(temp, "release-plan"));
     writeFileSync(
       join(temp, "release-plan/release-plan.json"),
@@ -116,6 +128,7 @@ if (args[2] === "inspect" && args.includes("--format")) {
           RELEASE_MANIFEST_IMAGE: `${prefix}/release-manifest`,
           RELEASE_SHA: sha,
           RELEASE_ID: releaseId,
+          AWAIT_REGISTRY_DIGEST_DELAY_SECONDS: "0",
           FAIL_MATCH: failMatch,
           MISMATCH: String(mismatch),
           DIGESTS: JSON.stringify({ ...digests, "release-manifest": `sha256:${"8".repeat(64)}` }),

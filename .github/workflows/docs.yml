@@ -124,10 +124,6 @@ jobs:
           fi
           for tag in "$RELEASE_ID" "$RELEASE_SHA" latest; do
             docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${tag}" "${IMAGE}@${DIGEST}"
-            actual=$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{.Manifest.Digest}}')
-            if [ "$actual" != "$DIGEST" ]; then
-              echo "Published docs digest mismatch for ${tag}" >&2
-              exit 1
-            fi
+            scripts/ci/await-registry-digest.sh "${IMAGE}:${tag}" "$DIGEST"
           done
           printf '%s\n' "### Published documentation" "" "Source revision: ${RELEASE_SHA}" "" "Image: ${IMAGE}@${DIGEST}" "" "Rollback tag: ${IMAGE}:${RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
