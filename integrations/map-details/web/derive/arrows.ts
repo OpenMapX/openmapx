@@ -1,99 +1,119 @@
 import type { TileFeature } from "./decode";
-import { type Pt, pointAlong, polylineLength, type Ring, transformTemplate } from "./geometry";
+import {
+  bufferPolyline,
+  type Pt,
+  pointAlong,
+  polylineLength,
+  type Ring,
+  transformTemplate,
+} from "./geometry";
 import type { RoadPiece } from "./lanes";
 import { type CrossSection, isMotorRoad, layerOf, type PaintPolygon } from "./roads";
 
 /**
  * Turn arrows from valid `turn:lanes*` lists (spec §5.3). Glyphs are metre
- * templates 5 m long and 1.2 m wide, centred, pointing +y (forward), with +x
- * to the right of travel.
+ * templates 5 m long, pointing +y (forward), with +x to the right of travel:
+ * 1.2 m wide for straight ahead, up to 1.6 m for arrows that turn, so the
+ * shaft can curve towards the turn and end in a full-size head.
  */
 
-const rect = (u0: number, v0: number, u1: number, v1: number): Ring => [
-  [u0, v0],
-  [u1, v0],
-  [u1, v1],
-  [u0, v1],
-];
+const GLYPH_LENGTH = 5;
+const SHAFT_HALF_WIDTH = 0.15;
+const HEAD_LENGTH = 0.9;
+const HEAD_HALF_WIDTH = 0.42;
+const ARC_STEP_RAD = Math.PI / 12;
+
+/** Place rings so the glyph runs from v = −2.5 to +2.5 and is centred across. */
+function fit(rings: Ring[]): Ring[] {
+  const points = rings.flat();
+  const minU = Math.min(...points.map((p) => p[0]));
+  const maxU = Math.max(...points.map((p) => p[0]));
+  const shiftU = -(minU + maxU) / 2;
+  return rings.map((ring) => ring.map(([u, v]): Pt => [u + shiftU, v]));
+}
+
+/** A shaft from the bottom centre along `path`, ending in a head along its last direction. */
+function strokeWithHead(path: Pt[], direction: Pt): Ring[] {
+  const end = path[path.length - 1] as Pt;
+  const across: Pt = [direction[1], -direction[0]];
+  const head: Ring = [
+    [end[0] + across[0] * HEAD_HALF_WIDTH, end[1] + across[1] * HEAD_HALF_WIDTH],
+    [end[0] + direction[0] * HEAD_LENGTH, end[1] + direction[1] * HEAD_LENGTH],
+    [end[0] - across[0] * HEAD_HALF_WIDTH, end[1] - across[1] * HEAD_HALF_WIDTH],
+  ];
+  return [...bufferPolyline(path, SHAFT_HALF_WIDTH), head];
+}
+
+/**
+ * An arrow that runs straight, then turns by `degrees` (positive to the left)
+ * on an arc of `radius` metres. The straight part takes whatever length is
+ * left so the glyph is exactly 5 m long.
+ */
+function turnArrow(degrees: number, radius: number): Ring[] {
+  const theta = (Math.abs(degrees) * Math.PI) / 180;
+  const side = degrees >= 0 ? -1 : 1;
+  const build = (straight: number) => {
+    const startV = -GLYPH_LENGTH / 2;
+    const bendV = startV + straight;
+    const path: Pt[] = [
+      [0, startV],
+      [0, bendV],
+    ];
+    const steps = Math.max(1, Math.ceil(theta / ARC_STEP_RAD));
+    for (let i = 1; i <= steps && theta > 0; i++) {
+      const phi = (theta * i) / steps;
+      path.push([side * (radius - radius * Math.cos(phi)), bendV + radius * Math.sin(phi)]);
+    }
+    return strokeWithHead(path, [side * Math.sin(theta), Math.cos(theta)]);
+  };
+  const top = Math.max(
+    ...build(0)
+      .flat()
+      .map((p) => p[1]),
+  );
+  return fit(build(GLYPH_LENGTH / 2 - top));
+}
+
+/** An arrow slanted `degrees` to the left all the way, for merging into the next lane. */
+function slantedArrow(degrees: number): Ring[] {
+  const alpha = (degrees * Math.PI) / 180;
+  const direction: Pt = [-Math.sin(alpha), Math.cos(alpha)];
+  // A short straight lead keeps the foot square to the lane.
+  const lead = 0.4;
+  const build = (length: number) =>
+    strokeWithHead(
+      [
+        [0, -GLYPH_LENGTH / 2],
+        [0, -GLYPH_LENGTH / 2 + lead],
+        [direction[0] * length, -GLYPH_LENGTH / 2 + lead + direction[1] * length],
+      ],
+      direction,
+    );
+  const top = Math.max(
+    ...build(0)
+      .flat()
+      .map((p) => p[1]),
+  );
+  return fit(build((GLYPH_LENGTH / 2 - top) / direction[1]));
+}
+
 const mirror = (rings: Ring[]): Ring[] =>
   rings.map((ring) => ring.map(([u, v]): Pt => [-u, v]).reverse());
 
-const LEFT: Ring[] = [
-  rect(0.15, -2.5, 0.45, 2.35),
-  rect(-0.15, 2.05, 0.45, 2.35),
-  [
-    [-0.15, 1.9],
-    [-0.15, 2.5],
-    [-0.6, 2.2],
-  ],
-];
-const SLIGHT_LEFT: Ring[] = [
-  rect(0.15, -2.5, 0.45, 0.5),
-  [
-    [0.15, 0.5],
-    [0.45, 0.5],
-    [0.05, 1.6],
-    [-0.25, 1.6],
-  ],
-  [
-    [-0.6, 1.4],
-    [0.25, 1.7],
-    [-0.45, 2.5],
-  ],
-];
-const SHARP_LEFT: Ring[] = [
-  rect(0.15, -2.5, 0.45, 2.5),
-  [
-    [0.15, 2.5],
-    [0.15, 2.15],
-    [-0.3, 1.45],
-    [-0.3, 1.8],
-  ],
-  [
-    [-0.6, 1.0],
-    [-0.45, 1.95],
-    [-0.05, 1.45],
-  ],
-];
-const MERGE_TO_LEFT: Ring[] = [
-  [
-    [0.15, -2.5],
-    [0.45, -2.5],
-    [-0.15, 1.0],
-    [-0.45, 1.0],
-  ],
-  [
-    [-0.6, 1.0],
-    [0, 1.0],
-    [-0.3, 2.5],
-  ],
-];
+const LEFT = turnArrow(75, 0.6);
+const SLIGHT_LEFT = turnArrow(30, 1.2);
+const SHARP_LEFT = turnArrow(135, 0.4);
+const MERGE_TO_LEFT = slantedArrow(12);
 
 export const ARROW_GLYPHS: Record<string, Ring[]> = {
-  through: [
-    rect(-0.15, -2.5, 0.15, 1.0),
-    [
-      [-0.6, 1.0],
-      [0.6, 1.0],
-      [0, 2.5],
-    ],
-  ],
+  through: turnArrow(0, 1),
   left: LEFT,
   right: mirror(LEFT),
   slight_left: SLIGHT_LEFT,
   slight_right: mirror(SLIGHT_LEFT),
   sharp_left: SHARP_LEFT,
   sharp_right: mirror(SHARP_LEFT),
-  reverse: [
-    rect(0.15, -2.5, 0.45, 2.5),
-    rect(-0.45, 2.2, 0.45, 2.5),
-    rect(-0.45, 0.5, -0.15, 2.5),
-    [
-      [-0.6, 0.5],
-      [0, 0.5],
-      [-0.3, -0.3],
-    ],
-  ],
+  reverse: turnArrow(180, 0.45),
   merge_to_left: MERGE_TO_LEFT,
   merge_to_right: mirror(MERGE_TO_LEFT),
 };

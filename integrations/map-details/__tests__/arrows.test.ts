@@ -54,13 +54,14 @@ const approach = (props: Props, west = 100) => [
 ];
 
 describe("arrow glyphs", () => {
-  it("fits every glyph in 5 m × 1.2 m, centred and pointing +y", () => {
+  it("fits every glyph in 5 m (1.2 m wide straight, 1.6 m turning), reaching the front", () => {
     for (const [name, glyph] of Object.entries(ARROW_GLYPHS)) {
       const all = glyph.flat();
-      expect(Math.min(...all.map((p) => p[0])), name).toBeGreaterThanOrEqual(-0.6);
-      expect(Math.max(...all.map((p) => p[0])), name).toBeLessThanOrEqual(0.6);
-      expect(Math.min(...all.map((p) => p[1])), name).toBeGreaterThanOrEqual(-2.5);
-      expect(Math.max(...all.map((p) => p[1])), name).toBeLessThanOrEqual(2.5);
+      const half = name === "through" ? 0.6 : 0.8;
+      expect(Math.min(...all.map((p) => p[0])), name).toBeGreaterThanOrEqual(-half - 1e-9);
+      expect(Math.max(...all.map((p) => p[0])), name).toBeLessThanOrEqual(half + 1e-9);
+      expect(Math.min(...all.map((p) => p[1])), name).toBeGreaterThanOrEqual(-2.5 - 1e-9);
+      expect(Math.max(...all.map((p) => p[1])), name).toBeCloseTo(2.5, 9);
     }
     expect(Object.keys(ARROW_GLYPHS).sort()).toEqual(
       [
@@ -76,6 +77,48 @@ describe("arrow glyphs", () => {
         "merge_to_right",
       ].sort(),
     );
+  });
+
+  it("gives every arrow a full-size head pointing where the lane turns", () => {
+    /** The head is the glyph's largest triangle; its tip is the vertex farthest from the other two. */
+    const triangleArea = ([a, b, c]: Pt[]) =>
+      Math.abs(
+        ((b as Pt)[0] - (a as Pt)[0]) * ((c as Pt)[1] - (a as Pt)[1]) -
+          ((c as Pt)[0] - (a as Pt)[0]) * ((b as Pt)[1] - (a as Pt)[1]),
+      ) / 2;
+    const head = (name: string) => {
+      const triangles = (ARROW_GLYPHS[name] ?? []).filter((ring) => ring.length === 3);
+      const triangle = triangles.reduce((best, ring) =>
+        triangleArea(ring) > triangleArea(best) ? ring : best,
+      ) as Pt[];
+      const area = triangleArea(triangle);
+      const spread = (i: number) =>
+        triangle
+          .filter((_, j) => j !== i)
+          .reduce(
+            (sum, q) =>
+              sum + Math.hypot(q[0] - (triangle[i] as Pt)[0], q[1] - (triangle[i] as Pt)[1]),
+            0,
+          );
+      const tipIndex = [0, 1, 2].reduce((best, i) => (spread(i) > spread(best) ? i : best), 0);
+      const tip = triangle[tipIndex] as Pt;
+      const [b0, b1] = triangle.filter((_, j) => j !== tipIndex) as [Pt, Pt];
+      const mid: Pt = [(b0[0] + b1[0]) / 2, (b0[1] + b1[1]) / 2];
+      // Clockwise from straight ahead: negative turns left.
+      const angle = (Math.atan2(tip[0] - mid[0], tip[1] - mid[1]) * 180) / Math.PI;
+      return { area, angle };
+    };
+    for (const name of Object.keys(ARROW_GLYPHS))
+      expect(head(name).area, name).toBeGreaterThanOrEqual(0.3);
+    expect(head("through").angle).toBeCloseTo(0, 6);
+    expect(head("slight_left").angle).toBeLessThan(-15);
+    expect(head("slight_left").angle).toBeGreaterThan(-45);
+    expect(head("left").angle).toBeLessThan(-50);
+    expect(head("left").angle).toBeGreaterThan(-100);
+    expect(head("sharp_left").angle).toBeLessThan(-110);
+    expect(Math.abs(head("reverse").angle)).toBeGreaterThan(160);
+    expect(head("right").angle).toBeCloseTo(-head("left").angle, 6);
+    expect(head("merge_to_left").angle).toBeLessThan(-5);
   });
 
   it("draws the union of several values and nothing for none", () => {
