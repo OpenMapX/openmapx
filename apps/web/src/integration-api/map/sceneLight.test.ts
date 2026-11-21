@@ -43,6 +43,15 @@ function at(altitude: number, azimuth = 180, overrides: Partial<SceneLightInput>
   return computeSceneLight(input(overrides));
 }
 
+const AFTER_TWILIGHT = {
+  color: "#ffffff",
+  intensity: 0.4,
+  sunColor: "#ffffff",
+  sunIntensity: 2.2,
+  ambientColor: "#ffffff",
+  ambientIntensity: 1.4,
+  sky: { skyColor: "#88c6fc", horizonColor: "#d6e8f7", fogColor: "#ffffff" },
+};
 const DUSK = {
   color: "#e4def2",
   intensity: 0.3,
@@ -114,13 +123,14 @@ describe("computeSceneLight", () => {
   });
 
   it("hits each keyframe exactly", () => {
+    expect(at(-12)).toMatchObject({ preset: "neutral", ...AFTER_TWILIGHT });
     expect(at(-4)).toMatchObject({ preset: "dusk", ...DUSK, sunColor: DUSK.color });
     expect(at(2)).toMatchObject({ preset: "golden", ...GOLDEN, sunColor: GOLDEN.color });
-    expect(at(12)).toMatchObject({ preset: "day", ...DAY, sunColor: DAY.color });
+    expect(at(10)).toMatchObject({ preset: "day", ...DAY, sunColor: DAY.color });
   });
 
   it("interpolates between keyframes", () => {
-    const light = at(7);
+    const light = at(6);
     expect(light.intensity).toBe(0.43);
     expect(light.sunIntensity).toBe(2.3);
     expect(light.color).toBe("#fff2e3");
@@ -128,14 +138,39 @@ describe("computeSceneLight", () => {
   });
 
   it("labels the presets at the keyframe midpoints", () => {
-    expect(at(6.9).preset).toBe("golden");
+    expect(at(5.9).preset).toBe("golden");
     expect(at(-1).preset).toBe("golden");
     expect(at(-1.1).preset).toBe("dusk");
+    expect(at(-8).preset).toBe("dusk");
+    expect(at(-8.1).preset).toBe("neutral");
   });
 
   it("clamps beyond the outer keyframes", () => {
-    expect(at(-20)).toMatchObject(DUSK);
+    expect(at(-40)).toMatchObject(AFTER_TWILIGHT);
     expect(at(60)).toMatchObject(DAY);
+  });
+
+  it("returns to the daytime light once twilight ends", () => {
+    // The light theme's map colours are day colours, so the night keeps them,
+    // lit from the same direction as the fixed light.
+    const midnight = at(-30, 0);
+    expect(midnight).toMatchObject({ preset: "neutral", ...AFTER_TWILIGHT, night: false });
+    expect(midnight).toMatchObject({ azimuthDeg: 210, polarDeg: 30 });
+  });
+
+  it("hands the direction over through the zenith during deep twilight", () => {
+    // From the sun's side up to overhead, then down to the fixed direction:
+    // overhead the azimuth is invisible, so the hand-over never jumps.
+    expect(at(-4, 250)).toMatchObject({ azimuthDeg: 250, polarDeg: 45 });
+    expect(at(-6, 250)).toMatchObject({ azimuthDeg: 250, polarDeg: 22.5 });
+    expect(at(-8, 250).polarDeg).toBe(0);
+    expect(at(-10, 250)).toMatchObject({ azimuthDeg: 210, polarDeg: 15 });
+    expect(at(-12, 250)).toMatchObject({ azimuthDeg: 210, polarDeg: 30 });
+  });
+
+  it("gives full daylight from 10° so a low winter sun is not golden all day", () => {
+    expect(at(10).color).toBe(DAY.color);
+    expect(at(14.6)).toMatchObject(DAY);
   });
 
   it("clamps the polar angle", () => {
@@ -162,17 +197,20 @@ describe("computeSceneLight", () => {
   ])("never swings the light more than a few degrees a minute: %s", (_, center, day) => {
     sun.real = true;
     const start = new Date(day).getTime();
-    let previous: number | null = null;
+    // The visible direction: overhead, a change of azimuth shows nothing.
+    let previous: [number, number, number] | null = null;
     let largestStep = 0;
     for (let minute = 0; minute < 24 * 60; minute++) {
       const light = computeSceneLight(input({ center, date: new Date(start + minute * 60_000) }));
-      if (previous !== null) {
-        const step = Math.abs(((light.azimuthDeg - previous + 540) % 360) - 180);
+      const direction = sunVector(light);
+      if (previous) {
+        const cosine = previous.reduce((sum, value, i) => sum + value * (direction[i] ?? 0), 0);
+        const step = (Math.acos(Math.min(1, cosine)) * 180) / Math.PI;
         largestStep = Math.max(largestStep, step);
       }
-      previous = light.azimuthDeg;
+      previous = direction;
     }
-    expect(largestStep).toBeLessThan(10);
+    expect(largestStep).toBeLessThan(5);
   });
 
   it("normalises an azimuth that rounds to 360", () => {

@@ -286,8 +286,9 @@ model opens the building it represents.
 Buildings and landmarks are lit by one sun. With **Day and night** on (the
 default), it comes from the Sun's real direction at the map centre, so the
 shading moves through the day and turns with the map. In the light theme the
-light warms at golden hour and cools at dusk, but never turns to full night;
-the dark theme always lights the 3D view as night. On a computer, an overcast
+light warms at golden hour and cools at dusk, then returns to its daytime look
+once twilight ends, because the light theme's map colours are day colours; the
+dark theme always lights the 3D view as night. On a computer, an overcast
 sky at the map centre softens and greys the light. With **Day and night** off,
 or while the **Daylight & time zones** layer is open, a fixed light is used.
 **Day and night** appears next to the globe toggle while the globe or the 3D

@@ -27,7 +27,10 @@ interface SceneSky {
 }
 
 export interface SceneLight {
-  /** "neutral" means real-time lighting is off (or suspended) outside night. */
+  /**
+   * "neutral" means the daytime colours: real-time lighting is off (or
+   * suspended) outside night, or the light theme after twilight.
+   */
   preset: ScenePreset;
   /** Where the light comes from, in degrees clockwise from north. */
   azimuthDeg: number;
@@ -106,8 +109,22 @@ interface Keyframe {
  * The real-time light by solar altitude, interpolated between these. MapLibre
  * multiplies the light colour into every face of every building, roofs
  * included, while the ground stays untinted, so the tints stay faint.
+ *
+ * Once twilight ends the light theme returns to the daytime colours: its map
+ * colours are day colours, and a dusk tint lasting until dawn would no longer
+ * read as dusk. Full daylight starts at 10°, so a low winter sun is not golden
+ * all day.
  */
 const SCENE_KEYFRAMES: readonly Keyframe[] = [
+  {
+    altitudeDeg: -12,
+    color: "#ffffff",
+    intensity: 0.4,
+    sunIntensity: 2.2,
+    ambientColor: "#ffffff",
+    ambientIntensity: 1.4,
+    sky: LIGHT_SKY,
+  },
   {
     altitudeDeg: -4,
     color: "#e4def2",
@@ -127,7 +144,7 @@ const SCENE_KEYFRAMES: readonly Keyframe[] = [
     sky: { skyColor: "#9cc1e6", horizonColor: "#ffd8ad", fogColor: "#ffe9d2" },
   },
   {
-    altitudeDeg: 12,
+    altitudeDeg: 10,
     color: "#fffbf5",
     intensity: 0.4,
     sunIntensity: 2.2,
@@ -150,6 +167,25 @@ const MAX_POLAR = 45;
 /** Near the zenith the azimuth swings fast; it eases to the fixed direction over this band. */
 const ZENITH_EASE_START = 70;
 const ZENITH_EASE_END = 85;
+/**
+ * Below the horizon the sun has no direction worth showing, so through deep
+ * twilight the light hands over to the fixed direction the light theme keeps
+ * all night: it rises from the sun's side to straight overhead, then sets
+ * towards the fixed direction. Overhead the azimuth is invisible, so the
+ * hand-over never jumps, at dusk or at dawn.
+ */
+const TWILIGHT_START = -4;
+const TWILIGHT_MIDDLE = -8;
+const TWILIGHT_END = -12;
+
+function polarAt(altitudeDeg: number): number {
+  if (altitudeDeg >= TWILIGHT_START) return clamp(90 - altitudeDeg, MIN_POLAR, MAX_POLAR);
+  if (altitudeDeg >= TWILIGHT_MIDDLE) {
+    return (MAX_POLAR * (altitudeDeg - TWILIGHT_MIDDLE)) / (TWILIGHT_START - TWILIGHT_MIDDLE);
+  }
+  const settled = clamp((TWILIGHT_MIDDLE - altitudeDeg) / (TWILIGHT_MIDDLE - TWILIGHT_END), 0, 1);
+  return FIXED_DIRECTION.polarDeg * settled;
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -187,9 +223,10 @@ function keyframeAt(altitudeDeg: number): Omit<Keyframe, "altitudeDeg"> {
 }
 
 function presetAt(altitudeDeg: number): ScenePreset {
-  if (altitudeDeg >= 7) return "day";
+  if (altitudeDeg >= 6) return "day";
   if (altitudeDeg >= -1) return "golden";
-  return "dusk";
+  if (altitudeDeg >= -8) return "dusk";
+  return "neutral";
 }
 
 /** The fixed direction mirrored across the east-west line, for a sun that passes to the north. */
@@ -228,10 +265,13 @@ export function computeSceneLight(input: SceneLightInput): SceneLight {
 
   return {
     preset: presetAt(altitude),
-    azimuthDeg: roundAngle(
-      easedAzimuth(azimuth, altitude, center.lat, solarPosition(date).declinationDeg),
-    ),
-    polarDeg: Math.round(clamp(90 - altitude, MIN_POLAR, MAX_POLAR) * 2) / 2,
+    azimuthDeg:
+      altitude < TWILIGHT_MIDDLE
+        ? FIXED_DIRECTION.azimuthDeg
+        : roundAngle(
+            easedAzimuth(azimuth, altitude, center.lat, solarPosition(date).declinationDeg),
+          ),
+    polarDeg: Math.round(polarAt(altitude) * 2) / 2,
     color,
     intensity: round2(frame.intensity * (1 - 0.4 * k)),
     sunColor: color,
