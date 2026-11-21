@@ -19,6 +19,7 @@ const testState = (vi as unknown as { hoisted<T>(factory: () => T): T }).hoisted
     terrainAttributionName: "© MapTiler",
     terrainAttributionUrl: "https://www.maptiler.com/copyright/",
     martinBaseUrl: "",
+    streetDetailTilesUrl: "",
   },
   scheme: { mode: "light", systemMode: "light" },
   loadMaptilerStyle: vi.fn(),

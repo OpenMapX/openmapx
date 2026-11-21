@@ -16,11 +16,13 @@ describe("server map bootstrap", () => {
         maptilerConfigured: true,
         selfHostedTilesUrl: "",
         selfHostedGlyphsUrl: "",
+        streetDetailTilesUrl: "/tiles/data/street_detail.json",
       }),
     );
     vi.stubGlobal("fetch", fetcher);
     const env = await loadClientEnv();
     expect(env.basemapProvider).toBe("maptiler");
+    expect(env.streetDetailTilesUrl).toBe("/tiles/data/street_detail.json");
     expect(fetcher).toHaveBeenCalledWith(
       "http://app-api:3001/api/map-config",
       expect.objectContaining({ cache: "no-store" }),
@@ -49,5 +51,6 @@ describe("server map bootstrap", () => {
     const env = await loadClientEnv();
     expect(env.basemapProvider).toBe("selfhosted");
     expect(env.tilesUrl).toContain("/tiles/data/openmapx.json");
+    expect(env.streetDetailTilesUrl).toBe("");
   });
 });

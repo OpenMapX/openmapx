@@ -10,6 +10,8 @@ export const mapConfigSchema = z
     maptilerConfigured: z.boolean(),
     selfHostedTilesUrl: z.enum(["", "/tiles/data/openmapx.json"]),
     selfHostedGlyphsUrl: z.enum(["", "/tiles"]),
+    /** The 3D view's street detail TileJSON; empty when the tileserver does not serve it. */
+    streetDetailTilesUrl: z.enum(["", "/tiles/data/street_detail.json"]),
   })
   .strict();
 export type MapConfig = z.infer<typeof mapConfigSchema>;

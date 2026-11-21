@@ -21,5 +21,6 @@ export async function loadClientEnv(): Promise<ClientEnv> {
     maptilerConfigured: false,
     selfHostedTilesUrl: "/tiles/data/openmapx.json",
     selfHostedGlyphsUrl: "/tiles",
+    streetDetailTilesUrl: "",
   });
 }

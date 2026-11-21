@@ -23,6 +23,7 @@ function withEnv(children: ReactNode, apiUrl = "") {
     terrainAttributionName: "© MapTiler",
     terrainAttributionUrl: "https://www.maptiler.com/copyright/",
     martinBaseUrl: "",
+    streetDetailTilesUrl: "",
   };
   return <EnvProvider config={env}>{children}</EnvProvider>;
 }

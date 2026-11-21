@@ -233,6 +233,7 @@ const routes: Record<string, Route> = {
       maptilerConfigured: false,
       selfHostedTilesUrl: "",
       selfHostedGlyphsUrl: "",
+      streetDetailTilesUrl: "",
     }),
   "/api/auth/get-session": () => json(null),
   "/api/capabilities": () => json({ services: {}, features: { osmContributions: false } }),

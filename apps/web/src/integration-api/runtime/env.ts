@@ -32,6 +32,8 @@ export interface ClientEnv {
   terrainAttributionUrl: string;
   /** Martin vector-tile server base (Traefik-proxied at `/martin`); first consumer is overlay-traffic-flow. */
   martinBaseUrl: string;
+  /** Street detail TileJSON for the 3D view (relative to the page), or "" when the tileserver does not serve it. */
+  streetDetailTilesUrl: string;
 }
 
 /**
@@ -116,5 +118,7 @@ export function buildClientEnv(
         ? "https://mapterhorn.com/attribution/"
         : "https://www.maptiler.com/copyright/"),
     martinBaseUrl: url("NEXT_PUBLIC_MARTIN_URL") || (apiBase ? `${apiBase}/martin` : "/martin"),
+    // Only the tileserver probe knows whether street detail exists; never derive it from tilesUrl.
+    streetDetailTilesUrl: mapConfig?.streetDetailTilesUrl ?? "",
   };
 }
