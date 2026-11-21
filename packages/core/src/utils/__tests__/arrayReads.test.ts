@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { indexAt } from "../indexAt";
+import { itemAt } from "../itemAt";
 import { numberAt } from "../numberAt";
+
+describe("itemAt", () => {
+  it("reads present elements of arrays and array-likes", () => {
+    expect(itemAt(["a", "b"], 1)).toBe("b");
+    expect(itemAt({ length: 1, 0: null }, 0)).toBeNull();
+  });
+
+  it("throws for a missing or negative position instead of reading from the end", () => {
+    expect(() => itemAt([], 0)).toThrow("No item at position 0 of 0");
+    expect(() => itemAt(["a"], -1)).toThrow(RangeError);
+  });
+});
 
 describe("numberAt", () => {
   it("reads stored numbers and NaN outside the array", () => {

@@ -1,4 +1,4 @@
-import type { LngLat, Route } from "@openmapx/core";
+import { itemAt, type LngLat, type Route } from "@openmapx/core";
 import type { MapInsets } from "@/lib/mapObstructions";
 
 interface Point {
@@ -83,13 +83,6 @@ function clipSegment(
     if (start > end) return null;
   }
   return { start, end };
-}
-
-/** Reads a position the caller's own bounds guarantee; a miss is a bug, so it throws. */
-function itemAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new RangeError(`No item at ${index} of ${items.length}`);
-  return item;
 }
 
 interface SegmentIndex {

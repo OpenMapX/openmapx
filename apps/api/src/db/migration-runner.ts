@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
@@ -27,13 +28,6 @@ interface JournalEntry {
   when: number;
 }
 
-/** The row of a query that always returns exactly one: a bare expression or an ungrouped aggregate. */
-function singleRow<T>(rows: readonly T[], what: string): T {
-  const [row] = rows;
-  if (row === undefined) throw new Error(`The ${what} query returned no row`);
-  return row;
-}
-
 /**
  * The journal tags Drizzle's migrator will apply, by its own rule: every entry
  * newer than the newest applied migration's timestamp.
@@ -51,19 +45,20 @@ function readJournal(migrationsFolder: string): JournalEntry[] {
 
 /** The newest applied migration's timestamp, or null before the first migration. */
 async function lastAppliedAt(session: Sql): Promise<number | null> {
-  const { exists } = singleRow(
+  // A bare expression returns one row.
+  const { exists } = itemAt(
     await session<{ exists: boolean }[]>`
       SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
     `,
-    "migration table",
+    0,
   );
   if (!exists) return null;
   // An aggregate without GROUP BY returns one row, even over an empty table.
-  const { applied } = singleRow(
+  const { applied } = itemAt(
     await session<{ applied: string | null }[]>`
       SELECT max(created_at)::text AS applied FROM drizzle.__drizzle_migrations
     `,
-    "last applied migration",
+    0,
   );
   return applied === null ? null : Number(applied);
 }
@@ -142,17 +137,15 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
   progressTimer.unref();
 
   const run = async (): Promise<string[]> => {
-    const { pid } = singleRow(
-      await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`,
-      "backend pid",
-    );
+    // Both selects are bare expressions, which return one row.
+    const { pid } = itemAt(await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`, 0);
     backendPid = pid;
 
-    const { locked } = singleRow(
+    const { locked } = itemAt(
       await session<{ locked: boolean }[]>`
         SELECT pg_try_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint) AS locked
       `,
-      "advisory lock",
+      0,
     );
     if (!locked) {
       log.info({}, "Waiting for another app-api instance to finish migrating the database");

@@ -1,5 +1,6 @@
-import { assert, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { PoiSearchResult } from "../../types/category";
+import { itemAt } from "../../utils/itemAt";
 import {
   assignConflationPairs,
   type ConflationPairScore,
@@ -10,13 +11,6 @@ import {
   scoreConflationPair,
 } from "../poiConflation";
 import { fusePoiResults } from "../poiFusion";
-
-/** The item at `index`, failing the test when it is missing. */
-function itemAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  assert.isDefined(item, `no item at index ${index} of ${items.length}`);
-  return item;
-}
 
 const T: ConflationThresholds = {
   alwaysMergeM: 25,

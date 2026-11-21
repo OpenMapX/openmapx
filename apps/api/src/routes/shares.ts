@@ -1,4 +1,5 @@
 import { sharingPublicSchema } from "@openmapx/core/api-contracts";
+import { itemAt } from "@openmapx/core/item-at";
 import { httpError } from "@openmapx/integration-framework";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -111,12 +112,11 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
           // across all API processes competing for the same user's quota.
           await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
           // An ungrouped count always returns one row.
-          const [countRow] = await tx
+          const countRows = await tx
             .select({ count: sql<number>`count(*)::int` })
             .from(shareLink)
             .where(eq(shareLink.userId, userId));
-          if (countRow === undefined) throw new Error("The share count query returned no row");
-          const { count } = countRow;
+          const { count } = itemAt(countRows, 0);
           if (count >= MAX_SHARES_PER_USER) {
             throw httpError(409, "Share link limit reached — delete an existing link first");
           }

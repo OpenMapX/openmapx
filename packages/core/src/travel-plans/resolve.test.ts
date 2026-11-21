@@ -5,6 +5,7 @@ import type {
   VehicleJourney,
 } from "@openmapx/mobility-core/transit";
 import { assert, describe, expect, it, vi } from "vitest";
+import { itemAt } from "../utils/itemAt";
 import { dbNavigatorExamples } from "./__fixtures__/dbNavigator";
 import { parseSharedTravelPlan } from "./index";
 import { resolveSharedTravelPlan, type TravelPlanPort } from "./resolve";
@@ -15,13 +16,6 @@ const positions: Record<string, [number, number]> = {
   "Berlin Hbf": [13.369, 52.525],
 };
 const iso = (wall: string) => new Date(`${wall}:00+01:00`).toISOString();
-
-/** The item at `index`, failing the test when it is missing. */
-function itemAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  assert.isDefined(item, `no item at index ${index} of ${items.length}`);
-  return item;
-}
 
 function position(name: string): [number, number] {
   const at = positions[name];

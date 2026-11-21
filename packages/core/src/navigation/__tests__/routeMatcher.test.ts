@@ -1,6 +1,7 @@
 import { degreesToRadians, earthRadius, radiansToDegrees } from "@turf/helpers";
 import { assert, beforeEach, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
+import { itemAt } from "../../utils/itemAt";
 import {
   asRouteMatcher,
   inspectRouteMatcher,
@@ -23,13 +24,6 @@ function expectSameSnap(geometry: LngLat[], raw: LngLat, label: string): void {
   const oracle = snapToRoute(geometry, raw);
   const prepared = snapPreparedRoute(prepareRouteMatcher(geometry), raw);
   expect(prepared, label).toEqual(oracle);
-}
-
-/** The item at `index`; the randomized cases pick indices, so a miss fails the test. */
-function itemAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  assert.isDefined(item, `no item at index ${index} of ${items.length}`);
-  return item;
 }
 
 /** Deterministic PRNG so the randomized matrix is reproducible. */

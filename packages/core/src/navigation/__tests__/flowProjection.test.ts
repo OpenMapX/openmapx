@@ -2,6 +2,7 @@ import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../../types/roadConditions";
 import { haversineDistance } from "../../utils/coordinates";
+import { itemAt } from "../../utils/itemAt";
 import { angularDifference, bearingBetween, routeBearingAt } from "../bearing";
 import {
   type FlowOverlapCounters,
@@ -18,13 +19,6 @@ import {
   setRouteMatcherCounting,
 } from "../routeMatcher";
 import { snapToRoute } from "./support/turfSnapOracle";
-
-/** The item at `index`, failing the test when it is missing. */
-function itemAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  assert.isDefined(item, `no item at index ${index} of ${items.length}`);
-  return item;
-}
 
 /** ~111 m per 0.001° of latitude — used to build fixtures with round distances. */
 const M = 0.001 / 111.32;

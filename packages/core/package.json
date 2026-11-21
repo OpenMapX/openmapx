@@ -66,6 +66,10 @@
       "types": "./src/http/retry-after.ts",
       "default": "./src/http/retry-after.ts"
     },
+    "./item-at": {
+      "types": "./src/utils/itemAt.ts",
+      "default": "./src/utils/itemAt.ts"
+    },
     "./coordinates": {
       "types": "./src/utils/coordinates.ts",
       "default": "./src/utils/coordinates.ts"

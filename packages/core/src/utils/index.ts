@@ -75,6 +75,7 @@ export {
 } from "./gridOrientation";
 export { lerpHex } from "./hexColor";
 export { indexAt } from "./indexAt";
+export { itemAt } from "./itemAt";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { numberAt } from "./numberAt";
 export { validObservedAt } from "./observationTime";

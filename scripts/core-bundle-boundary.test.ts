@@ -66,6 +66,7 @@ const SERVER = [
   "./erasure-journal",
   "./feed-id",
   "./http/safe-download",
+  "./item-at",
   "./licenses",
   "./mobility-http-transport",
   "./ops",
