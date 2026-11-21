@@ -43,10 +43,9 @@ export function SceneLighting() {
 
   const center = useMapCenter();
   const now = useSunClock(live && (globeView || threeDActive));
-  const { data: weather } = useMapCenterWeather({
-    enabled: !isMobile && live && threeDActive,
-  });
-  const overcast = overcastFromWeather(weather?.current);
+  const weatherEnabled = !isMobile && live && threeDActive;
+  const { data: weather } = useMapCenterWeather({ enabled: weatherEnabled });
+  const overcast = useSteadyOvercast(weatherEnabled, weather?.current);
 
   // The real-time light waits for the map centre; night and the fixed light need none.
   const light = useMemo(
@@ -81,6 +80,24 @@ export function SceneLighting() {
   }, [light, mapReady, styleVersion, mapRef]);
 
   return null;
+}
+
+/**
+ * How overcast it is. Panning into a weather cell that is not cached yet
+ * leaves the query without data until it answers; the last known value holds
+ * meanwhile, so the light does not flick to clear and back.
+ */
+function useSteadyOvercast(
+  enabled: boolean,
+  current: Parameters<typeof overcastFromWeather>[0],
+): number {
+  const [last, setLast] = useState(0);
+  const latest = current ? overcastFromWeather(current) : null;
+  useEffect(() => {
+    if (latest !== null) setLast(latest);
+  }, [latest]);
+  if (!enabled) return 0;
+  return latest ?? last;
 }
 
 /** The map centre, updated only when a pan moves it far enough to matter for the sun. */

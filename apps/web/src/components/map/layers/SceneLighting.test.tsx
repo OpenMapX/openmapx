@@ -191,6 +191,19 @@ describe("SceneLighting", () => {
     expect(sun.altitudeCalls).toBeGreaterThan(calls);
   });
 
+  it("keeps the overcast light while the next cell's weather loads", () => {
+    weather.data = { current: { cloudCover: 100, weatherCode: 3 } };
+    setThreeD(true);
+    render(<SceneLighting />);
+    const overcast = useSceneLightStore.getState().light;
+    expect(overcast.intensity).toBeLessThan(0.4);
+
+    // Panning into an uncached cell leaves the query without data for a moment.
+    weather.data = undefined;
+    act(() => useLayerStore.setState({ activeLayer: "terrain" }));
+    expect(useSceneLightStore.getState().light).toBe(overcast);
+  });
+
   it("dims for an overcast sky on desktop only", () => {
     weather.data = { current: { cloudCover: 100, weatherCode: 3 } };
     setThreeD(true);

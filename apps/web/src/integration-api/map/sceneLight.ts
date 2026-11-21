@@ -1,4 +1,10 @@
-import { type CurrentWeather, lerpHex, solarAltitudeDeg, solarAzimuthDeg } from "@openmapx/core";
+import {
+  type CurrentWeather,
+  lerpHex,
+  solarAltitudeDeg,
+  solarAzimuthDeg,
+  solarPosition,
+} from "@openmapx/core";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
@@ -186,11 +192,26 @@ function presetAt(altitudeDeg: number): ScenePreset {
   return "dusk";
 }
 
-/** The sun's azimuth, eased along the shorter arc to the fixed direction near the zenith. */
-function easedAzimuth(azimuthDeg: number, altitudeDeg: number): number {
+/** The fixed direction mirrored across the east-west line, for a sun that passes to the north. */
+const NORTHERN_DIRECTION = 360 - (FIXED_DIRECTION.azimuthDeg - 180);
+
+/**
+ * Near the zenith the sun's azimuth swings through half the compass within
+ * minutes, so it eases to a steady direction on the side the sun passes:
+ * south-south-west where the sun culminates to the south, north-north-west
+ * where it culminates to the north. The sun never reaches the far side of
+ * that target while it is high, so the eased direction moves smoothly.
+ */
+function easedAzimuth(
+  azimuthDeg: number,
+  altitudeDeg: number,
+  latitudeDeg: number,
+  declinationDeg: number,
+): number {
   if (altitudeDeg <= ZENITH_EASE_START) return azimuthDeg;
+  const target = latitudeDeg >= declinationDeg ? FIXED_DIRECTION.azimuthDeg : NORTHERN_DIRECTION;
   const t = Math.min(1, (altitudeDeg - ZENITH_EASE_START) / (ZENITH_EASE_END - ZENITH_EASE_START));
-  const delta = ((FIXED_DIRECTION.azimuthDeg - azimuthDeg + 540) % 360) - 180;
+  const delta = ((target - azimuthDeg + 540) % 360) - 180;
   return azimuthDeg + delta * t;
 }
 
@@ -207,7 +228,9 @@ export function computeSceneLight(input: SceneLightInput): SceneLight {
 
   return {
     preset: presetAt(altitude),
-    azimuthDeg: roundAngle(easedAzimuth(azimuth, altitude)),
+    azimuthDeg: roundAngle(
+      easedAzimuth(azimuth, altitude, center.lat, solarPosition(date).declinationDeg),
+    ),
     polarDeg: Math.round(clamp(90 - altitude, MIN_POLAR, MAX_POLAR) * 2) / 2,
     color,
     intensity: round2(frame.intensity * (1 - 0.4 * k)),

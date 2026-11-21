@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const sun = vi.hoisted(() => ({ altitude: 30, azimuth: 180 }));
+const sun = vi.hoisted(() => ({ altitude: 30, azimuth: 180, real: false }));
 
-vi.mock("@openmapx/core", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@openmapx/core")>()),
-  solarAltitudeDeg: () => sun.altitude,
-  solarAzimuthDeg: () => sun.azimuth,
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const core = await importOriginal<typeof import("@openmapx/core")>();
+  return {
+    ...core,
+    solarAltitudeDeg: (...args: Parameters<typeof core.solarAltitudeDeg>) =>
+      sun.real ? core.solarAltitudeDeg(...args) : sun.altitude,
+    solarAzimuthDeg: (...args: Parameters<typeof core.solarAzimuthDeg>) =>
+      sun.real ? core.solarAzimuthDeg(...args) : sun.azimuth,
+  };
+});
 
 import {
   computeSceneLight,
@@ -66,6 +71,7 @@ const DAY = {
 beforeEach(() => {
   sun.altitude = 30;
   sun.azimuth = 180;
+  sun.real = false;
   useSceneLightStore.setState({ light: NEUTRAL_SCENE_LIGHT });
 });
 
@@ -146,6 +152,27 @@ describe("computeSceneLight", () => {
     expect(at(77.5, 100).azimuthDeg).toBe(155);
     expect(at(77.5, 20).azimuthDeg).toBe(295);
     expect(at(86, 20).azimuthDeg).toBe(210);
+  });
+
+  it.each([
+    ["Sydney in December", { lat: -33.87, lng: 151.21 }, "2026-12-21T00:00:00Z"],
+    ["Bangkok in June", { lat: 13.75, lng: 100.5 }, "2026-06-21T00:00:00Z"],
+    ["Johannesburg in November", { lat: -26.2, lng: 28.05 }, "2026-11-21T00:00:00Z"],
+    ["Berlin in June", { lat: 52.52, lng: 13.4 }, "2026-06-21T00:00:00Z"],
+  ])("never swings the light more than a few degrees a minute: %s", (_, center, day) => {
+    sun.real = true;
+    const start = new Date(day).getTime();
+    let previous: number | null = null;
+    let largestStep = 0;
+    for (let minute = 0; minute < 24 * 60; minute++) {
+      const light = computeSceneLight(input({ center, date: new Date(start + minute * 60_000) }));
+      if (previous !== null) {
+        const step = Math.abs(((light.azimuthDeg - previous + 540) % 360) - 180);
+        largestStep = Math.max(largestStep, step);
+      }
+      previous = light.azimuthDeg;
+    }
+    expect(largestStep).toBeLessThan(10);
   });
 
   it("normalises an azimuth that rounds to 360", () => {
