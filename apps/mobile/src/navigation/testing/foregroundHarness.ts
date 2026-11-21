@@ -36,6 +36,7 @@ import type { PermissionUi } from "../../permissions/permissionController";
 import { type Database, prepareDatabase } from "../../storage/database";
 import { SessionRepository } from "../../storage/SessionRepository";
 import { openTestDatabase } from "../../storage/testing/nodeSqliteDatabase";
+import { nth } from "../../testing/nth";
 import { resetCoordinatorCache } from "../createCoordinator";
 import {
   createForegroundNavigation,
@@ -772,9 +773,7 @@ export const STRAIGHT_ROUTE: ReadonlyArray<readonly [number, number]> = Array.fr
 
 /** The `STRAIGHT_ROUTE` point at `index`, counting back from the end for a negative one. */
 export function straightRoutePoint(index: number): readonly [number, number] {
-  const point = STRAIGHT_ROUTE.at(index);
-  if (!point) throw new RangeError(`STRAIGHT_ROUTE has no point ${index}`);
-  return point;
+  return nth(STRAIGHT_ROUTE, index);
 }
 
 export function groundStartPackage(
