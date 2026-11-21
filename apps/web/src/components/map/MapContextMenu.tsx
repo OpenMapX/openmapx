@@ -301,7 +301,8 @@ export function MapContextMenu(): React.ReactNode {
       const order = showCoordinates ? ALL_ACTIONS : ALL_ACTIONS.filter((a) => a !== "coords");
       const index = order.indexOf(current);
       const delta = event.key === "ArrowDown" ? 1 : -1;
-      focusAction(order[(index + delta + order.length) % order.length]);
+      const next = order[(index + delta + order.length) % order.length];
+      if (next) focusAction(next);
     }
   };
 

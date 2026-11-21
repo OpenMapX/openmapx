@@ -216,7 +216,13 @@ export function RouteLayer() {
     if (!map || !mapReady) return;
     const activeDuration = routes[activeRouteIndex]?.duration;
     const visible = hasWaypoints && !navigating && mode !== "transit" && mode !== "flying";
-    if (!visible || !Number.isFinite(activeDuration) || activeDuration < 0) return;
+    if (
+      !visible ||
+      activeDuration === undefined ||
+      !Number.isFinite(activeDuration) ||
+      activeDuration < 0
+    )
+      return;
 
     const pillData = routes.flatMap((route, index) => {
       if (!Number.isFinite(route.duration) || route.duration < 0) return [];
@@ -425,12 +431,11 @@ export function RouteLayer() {
     if (navigating || mode === "transit" || mode === "flying" || routes.length === 0) return;
 
     const activeGeom = routes[activeRouteIndex]?.geometry;
-    if (!activeGeom || activeGeom.length < 2) return;
+    const start = activeGeom?.[0];
+    if (!activeGeom || !start || activeGeom.length < 2) return;
 
-    let minLng = activeGeom[0][0];
-    let maxLng = activeGeom[0][0];
-    let minLat = activeGeom[0][1];
-    let maxLat = activeGeom[0][1];
+    let [minLng, minLat] = start;
+    let [maxLng, maxLat] = start;
     for (const [lng, lat] of activeGeom) {
       if (lng < minLng) minLng = lng;
       if (lng > maxLng) maxLng = lng;
@@ -545,15 +550,15 @@ export function RouteLayer() {
     const onStopClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
       if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
-      if (!features.length) return;
-      const props = features[0].properties as {
+      const [feature] = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
+      if (!feature) return;
+      const props = feature.properties as {
         id: string;
         name: string;
         _stationContributors?: string;
         _stationFieldContributors?: string;
       };
-      const coordinates = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
+      const coordinates = (feature.geometry as { coordinates: number[] }).coordinates as LngLat;
       openChargerPlace(
         {
           id: props.id,

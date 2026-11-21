@@ -57,7 +57,8 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
   useRenderedMapAttributions: vi.fn(),
 }));
-vi.mock("@openmapx/core", () => ({
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  numberAt: (await importOriginal<typeof import("@openmapx/core")>()).numberAt,
   API_ENDPOINTS: { transitLegGeometry: "/leg-geometry" },
   apiClient: { get: state.get },
   MODE_COLORS: { walking: "#757575" },

@@ -147,7 +147,28 @@ export interface ParsedDeepLink {
     origin?: LngLat;
     minutes: number[];
   };
-  overlaySettings: Record<string, string>;
+  /** Every overlay parameter, empty when the link does not carry it. */
+  overlaySettings: Record<
+    | "weather"
+    | "sat"
+    | "date"
+    | "opacity"
+    | "eq"
+    | "fire"
+    | "neDays"
+    | "neCat"
+    | "alertSev"
+    | "envSensor"
+    | "sli"
+    | "trail"
+    | "winter"
+    | "cycleAuto"
+    | "ltProviders"
+    | "ltModes"
+    | "ltCodes"
+    | "ltVehicle",
+    string
+  >;
 }
 
 export type ShareCurrentUrlResult = "shared" | "copied" | "cancelled" | "unavailable";

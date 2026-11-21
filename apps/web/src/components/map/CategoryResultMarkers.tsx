@@ -623,8 +623,9 @@ export function CategoryResultMarkers() {
     id: "category-transit-stops",
     layerIds: [TRANSIT_LAYER_ID],
     priority: TRANSIT_INTERACTION_PRIORITY,
-    onClick: ({ features }) => {
-      const props = features[0].properties as {
+    onClick: ({ features: [feature] }) => {
+      if (!feature) return;
+      const props = feature.properties as {
         id: string;
         name: string;
         lat: number;
@@ -643,10 +644,8 @@ export function CategoryResultMarkers() {
         provider: props.provider,
         platformCode: props.platformCode || undefined,
         parentStationId: props.parentStationId || undefined,
-        contributors: readCapturedContributors(features[0].properties?._recordContributors) ?? [],
-        fieldContributors: readCapturedFieldContributors(
-          features[0].properties?._fieldContributors,
-        ),
+        contributors: readCapturedContributors(feature.properties?._recordContributors) ?? [],
+        fieldContributors: readCapturedFieldContributors(feature.properties?._fieldContributors),
       };
       flyTo([stop.lng, stop.lat], 16);
       selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));

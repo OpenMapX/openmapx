@@ -1,4 +1,4 @@
-import type { LngLat } from "@openmapx/core";
+import { type LngLat, numberAt } from "@openmapx/core";
 import bearing from "@turf/bearing";
 import destination from "@turf/destination";
 import { lineString } from "@turf/helpers";
@@ -57,23 +57,29 @@ function projectY(lat: number): number {
  * the full geometry on every GPS fix.
  */
 export function buildNavRouteLine(geometry: LngLat[]): NavRouteLine | null {
-  if (geometry.length < 2) return null;
+  const [first, ...rest] = geometry;
+  if (!first || rest.length === 0) return null;
   const line = lineString(geometry);
 
   const cumulativeKm: number[] = [0];
   const mercatorCumulative: number[] = [0];
-  let prevMx = projectX(geometry[0][0]);
-  let prevMy = projectY(geometry[0][1]);
-  for (let i = 1; i < geometry.length; i++) {
+  let previous = first;
+  let totalKm = 0;
+  let mercatorTotal = 0;
+  let prevMx = projectX(first[0]);
+  let prevMy = projectY(first[1]);
+  for (const point of rest) {
     // A two-point `length()` call reduces to the same `@turf/distance` call
     // `along`/`lineSliceAlong` use per segment internally, so this table's
     // boundaries land exactly where those functions' internal walk does.
-    const segmentKm = length(lineString([geometry[i - 1], geometry[i]]), { units: "kilometers" });
-    cumulativeKm.push(cumulativeKm[i - 1] + segmentKm);
+    totalKm += length(lineString([previous, point]), { units: "kilometers" });
+    cumulativeKm.push(totalKm);
 
-    const mx = projectX(geometry[i][0]);
-    const my = projectY(geometry[i][1]);
-    mercatorCumulative.push(mercatorCumulative[i - 1] + Math.hypot(mx - prevMx, my - prevMy));
+    const mx = projectX(point[0]);
+    const my = projectY(point[1]);
+    mercatorTotal += Math.hypot(mx - prevMx, my - prevMy);
+    mercatorCumulative.push(mercatorTotal);
+    previous = point;
     prevMx = mx;
     prevMy = my;
   }
@@ -83,7 +89,7 @@ export function buildNavRouteLine(geometry: LngLat[]): NavRouteLine | null {
     lengthKm: length(line, { units: "kilometers" }),
     cumulativeKm,
     mercatorCumulative,
-    mercatorTotal: mercatorCumulative[mercatorCumulative.length - 1],
+    mercatorTotal,
   };
 }
 
@@ -131,29 +137,32 @@ export function navRouteProgressFraction(prepared: NavRouteLine, alongMeters: nu
   let high = cumulativeKm.length - 1;
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    if (cumulativeKm[mid] < alongKm) low = mid + 1;
+    if (numberAt(cumulativeKm, mid) < alongKm) low = mid + 1;
     else high = mid;
   }
   const segIdx = low - 1;
   const segStart = line.geometry.coordinates[segIdx];
   const segEnd = line.geometry.coordinates[low];
+  // The tables come from the same geometry as the line, so this cannot miss.
+  if (!segStart || !segEnd) return 0;
   // Turf interpolates backwards from the segment end. Use the full-route
   // prefix for its overshoot so rounding at long-route boundaries also agrees.
-  const overshot = alongKm - cumulativeKm[low];
+  const overshot = alongKm - numberAt(cumulativeKm, low);
   const [lng, lat] =
     overshot === 0
       ? segEnd
       : destination(segEnd, overshot, bearing(segEnd, segStart) - 180, {
           units: "kilometers",
         }).geometry.coordinates;
-  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return 0;
+  if (lng === undefined || lat === undefined || !Number.isFinite(lng) || !Number.isFinite(lat))
+    return 0;
 
   const mercatorIntoSegment = Math.hypot(
-    projectX(lng) - projectX(segStart[0]),
-    projectY(lat) - projectY(segStart[1]),
+    projectX(lng) - projectX(numberAt(segStart, 0)),
+    projectY(lat) - projectY(numberAt(segStart, 1)),
   );
 
-  const fraction = (mercatorCumulative[segIdx] + mercatorIntoSegment) / mercatorTotal;
+  const fraction = (numberAt(mercatorCumulative, segIdx) + mercatorIntoSegment) / mercatorTotal;
   if (!Number.isFinite(fraction)) return 0;
   return Math.min(Math.max(fraction, 0), 1);
 }

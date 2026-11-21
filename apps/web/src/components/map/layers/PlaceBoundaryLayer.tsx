@@ -15,6 +15,7 @@ import {
 } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { positionBounds } from "@/lib/positionBounds";
 
 const SOURCE_ID = "place-boundary-source";
 const LAYER_FILL = "place-boundary-fill";
@@ -25,20 +26,10 @@ const BOUNDARY_COLOR = "#A52714";
 
 /** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon. */
 function bboxFromGeometry(geometry: AreaGeometry): BBox {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
   const rings = geometry.type === "Polygon" ? geometry.coordinates : geometry.coordinates.flat();
-  for (const ring of rings) {
-    for (const [lng, lat] of ring) {
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-    }
-  }
-  return [west, south, east, north];
+  const bounds = positionBounds(rings.flat());
+  if (!bounds) return [Infinity, Infinity, -Infinity, -Infinity];
+  return [bounds.west, bounds.south, bounds.east, bounds.north];
 }
 
 /**

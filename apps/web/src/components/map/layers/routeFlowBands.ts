@@ -1,4 +1,4 @@
-import type { LngLat, RouteFlowSpan } from "@openmapx/core";
+import { type LngLat, numberAt, type RouteFlowSpan } from "@openmapx/core";
 import { contributorsForFields, serializeContributors } from "@openmapx/mobility-core/contributors";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
@@ -39,10 +39,13 @@ function prepareRouteLine(geometry: LngLat[]): PreparedRouteLine | null {
   const cached = preparedRoutes.get(geometry);
   if (cached) return cached;
   const kilometers = new Float64Array(geometry.length);
-  for (let i = 1; i < geometry.length; i++) {
-    kilometers[i] = kilometers[i - 1] + length(lineString([geometry[i - 1], geometry[i]]));
-  }
-  const prepared = { geometry, kilometers, totalMeters: kilometers[geometry.length - 1] * 1000 };
+  let totalKm = 0;
+  geometry.forEach((point, i) => {
+    const previous = geometry[i - 1];
+    if (previous) totalKm += length(lineString([previous, point]));
+    kilometers[i] = totalKm;
+  });
+  const prepared = { geometry, kilometers, totalMeters: totalKm * 1000 };
   preparedRoutes.set(geometry, prepared);
   return prepared;
 }
@@ -52,7 +55,7 @@ function lowerBound(distances: Float64Array, value: number): number {
   let hi = distances.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (distances[mid] < value) lo = mid + 1;
+    if (numberAt(distances, mid) < value) lo = mid + 1;
     else hi = mid;
   }
   return lo;
@@ -80,7 +83,8 @@ function sliceSpanFeature(
     const first = Math.max(0, lowerBound(kilometers, startKm) - 1);
     const last = Math.max(first + 1, lowerBound(kilometers, endKm));
     const window = lineString(geometry.slice(first, last + 1));
-    return lineSliceAlong(window, startKm - kilometers[first], endKm - kilometers[first], {
+    const firstKm = numberAt(kilometers, first);
+    return lineSliceAlong(window, startKm - firstKm, endKm - firstKm, {
       units: "kilometers",
     });
   } catch {

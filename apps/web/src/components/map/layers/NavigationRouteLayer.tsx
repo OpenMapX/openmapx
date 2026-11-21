@@ -101,7 +101,7 @@ export function NavigationRouteLayer() {
         [TRAVELED, ROUTE_COLORS.traveled, TRANSPARENT],
         [NAV_ROUTE_REMAINING_LAYER_ID, TRANSPARENT, ROUTE_COLORS.active],
         [REMAINING_CASING, TRANSPARENT, ROUTE_COLORS.casing],
-      ])
+      ] as const)
         paint[routeSegmentLayerId(id, index)] = {
           "line-gradient": ["step", ["line-progress"], before, localProgress, after],
         };

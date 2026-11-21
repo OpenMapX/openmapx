@@ -11,7 +11,7 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Tooltip from "@mui/material/Tooltip";
-import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import { numberAt, useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -112,7 +112,7 @@ export function MapControls() {
         sizes.reduce((sum, size) => sum + size, 0) + (sizes.length - 1) * 8 - (zoomShown ? 7 : 0);
       let grid = 0;
       for (let i = 0; i < sizes.length; i += 2) {
-        grid += Math.max(sizes[i], sizes[i + 1] ?? 0);
+        grid += Math.max(numberAt(sizes, i), sizes[i + 1] ?? 0);
         if (i > 0) grid += 8;
       }
       const safeBottom = safeAreaRef.current?.getBoundingClientRect().height ?? 0;
