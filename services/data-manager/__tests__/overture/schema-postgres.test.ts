@@ -12,15 +12,15 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
     try {
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await pg.sql.unsafe(
-        `INSERT INTO overture_places.conflation_state (release, region, place_count, status)
-         VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending')`,
+        `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
+         VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
       );
       await expect(
         pg.sql.unsafe(
-          `INSERT INTO overture_places.conflation_state (release, region, place_count, status)
-           VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending')`,
+          `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
+           VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "23505" });
 
       const rows = await pg.sql.unsafe<{ relname: string; persistence: string }[]>(
         `SELECT relname, relpersistence AS persistence
@@ -112,17 +112,42 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
           validated: true,
         },
       ]);
-      // A place that cannot name its sources is refused rather than stored uncredited.
+      // Places require both h3_r8 and typed SRID-4326 Point geometry; the release
+      // state row requires a JSON-array sources_catalogue so uncredited data is refused.
       await expect(
         pg.sql.unsafe(`
         INSERT INTO overture_places.places (gers_id, name, geom, release)
-        VALUES ('gers-uncredited', 'Fixture', ST_SetSRID(ST_Point(7, 51), 4326), 'fixture')
+        VALUES ('gers-no-h3', 'Fixture', ST_SetSRID(ST_Point(7, 51), 4326), 'fixture')
+      `),
+      ).rejects.toMatchObject({ code: "23502", column_name: "h3_r8" });
+      await expect(
+        pg.sql.unsafe(`
+        INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, release)
+        VALUES ('gers-srid0', 'Fixture', ST_Point(7, 51), '881f1d4887fffff', 'fixture')
+      `),
+      ).rejects.toThrow(/SRID/i);
+      await expect(
+        pg.sql.unsafe(`
+        INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, release)
+        VALUES ('gers-line', 'Fixture', ST_GeomFromText('LINESTRING(7 51, 8 52)', 4326), '881f1d4887fffff', 'fixture')
+      `),
+      ).rejects.toThrow(/Geometry type \(LineString\) does not match column type \(Point\)/i);
+      await expect(
+        pg.sql.unsafe(`
+        INSERT INTO overture_places.conflation_state (release, region, place_count, status)
+        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending')
       `),
       ).rejects.toMatchObject({ code: "23502", column_name: "sources_catalogue" });
+      await expect(
+        pg.sql.unsafe(`
+        INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
+        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending', '{}')
+      `),
+      ).rejects.toMatchObject({ code: "23514" });
       await pg.sql.unsafe(`
-        INSERT INTO overture_places.places (gers_id, name, geom, sources_catalogue, release)
-        VALUES ('gers-a', 'Fixture A', ST_SetSRID(ST_Point(7, 51), 4326), '[{"sourceId":"overture","name":"Overture Maps"}]', 'fixture'),
-               ('gers-b', 'Fixture B', ST_SetSRID(ST_Point(8, 52), 4326), '[{"sourceId":"overture","name":"Overture Maps"}]', 'fixture');
+        INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, release)
+        VALUES ('gers-a', 'Fixture A', ST_SetSRID(ST_Point(7, 51), 4326), '881f1d4887fffff', 'fixture'),
+               ('gers-b', 'Fixture B', ST_SetSRID(ST_Point(8, 52), 4326), '881f1d4887ffffe', 'fixture');
         INSERT INTO overture_places.poi_conflation_link
           (osm_type, osm_id, gers_id, match_confidence, distance_m, method, evidence, release)
         VALUES ('node', 1, 'gers-a', 1, 0, 'fixture', '{}', 'fixture'),

@@ -120,6 +120,14 @@ RUN apt-get update \
 ARG DUCKDB_VERSION=2.0.0
 ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
 ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe
+ARG DUCKDB_EXT_HTTPFS_SHA256_AMD64=ee6c7d7e60a5da1b6f6bf6156b4298b55ddce0496a5bfe628bd6ab6d47eb8e3e
+ARG DUCKDB_EXT_HTTPFS_SHA256_ARM64=f524888fc7d74cc0c6c4a8f7ed5beedac5b12e71cb426503f882c72ce6afbd43
+ARG DUCKDB_EXT_SPATIAL_SHA256_AMD64=8d4bf1ab198806f123821d52ff5131745baaa19d5e91bd6b9772db922d31a228
+ARG DUCKDB_EXT_SPATIAL_SHA256_ARM64=f0bf8e87876af932f529ce0c57015e3ee39954de9c9eb5bc05f5eb9c212f4744
+ARG DUCKDB_EXT_POSTGRES_SCANNER_SHA256_AMD64=54b3d751cafc9ffa439886b1607d0ee758dab4dc070f0171e779b95f2f3e554f
+ARG DUCKDB_EXT_POSTGRES_SCANNER_SHA256_ARM64=afe7f2bd798b61e4c2e1f96deedaa70a21d15eebc8cd9470beb923951d0ce58a
+ARG DUCKDB_EXT_H3_SHA256_AMD64=7514dc2834ca9c0af0962b796470a54c706ec69c82df4fb3cde1666045f41c2b
+ARG DUCKDB_EXT_H3_SHA256_ARM64=ec3e8124984b60c258131589ef22aaaa1877b2b2033a05a3a5901be32d01d7f4
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
@@ -135,6 +143,50 @@ RUN set -eux; \
     chmod +x /usr/local/bin/duckdb; \
     rm -rf /tmp/duckdb.tar.gz /tmp/duckdb-bin; \
     duckdb --version
+# Pre-install and checksum-pin every DuckDB extension so runtime pulls/ingests
+# never download mutable extension binaries or depend on HOME=/tmp caches.
+# DuckDB refuses local-file installs of community extensions (requiring .info
+# community metadata), so `h3` is installed from `community` and then verified
+# byte-for-byte against the SHA-256-checked copy via `cmp`.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) \
+        ext_arch=linux_amd64; \
+        sha_httpfs="$DUCKDB_EXT_HTTPFS_SHA256_AMD64"; \
+        sha_spatial="$DUCKDB_EXT_SPATIAL_SHA256_AMD64"; \
+        sha_postgres="$DUCKDB_EXT_POSTGRES_SCANNER_SHA256_AMD64"; \
+        sha_h3="$DUCKDB_EXT_H3_SHA256_AMD64" ;; \
+      aarch64|arm64) \
+        ext_arch=linux_arm64; \
+        sha_httpfs="$DUCKDB_EXT_HTTPFS_SHA256_ARM64"; \
+        sha_spatial="$DUCKDB_EXT_SPATIAL_SHA256_ARM64"; \
+        sha_postgres="$DUCKDB_EXT_POSTGRES_SCANNER_SHA256_ARM64"; \
+        sha_h3="$DUCKDB_EXT_H3_SHA256_ARM64" ;; \
+      *) echo "Unsupported arch $arch for DuckDB extensions" >&2; exit 1 ;; \
+    esac; \
+    tmp_dir=/tmp/duckdb-ext; \
+    ext_dir=/opt/duckdb/extensions; \
+    mkdir -p "$tmp_dir" "$ext_dir"; \
+    for ext in httpfs spatial postgres_scanner; do \
+      curl -fsSL "https://extensions.duckdb.org/v${DUCKDB_VERSION}/${ext_arch}/${ext}.duckdb_extension.gz" \
+        -o "${tmp_dir}/${ext}.duckdb_extension.gz"; \
+    done; \
+    curl -fsSL "https://community-extensions.duckdb.org/v${DUCKDB_VERSION}/${ext_arch}/h3.duckdb_extension.gz" \
+      -o "${tmp_dir}/h3.duckdb_extension.gz"; \
+    printf '%s  %s\n' \
+      "$sha_httpfs" "${tmp_dir}/httpfs.duckdb_extension.gz" \
+      "$sha_spatial" "${tmp_dir}/spatial.duckdb_extension.gz" \
+      "$sha_postgres" "${tmp_dir}/postgres_scanner.duckdb_extension.gz" \
+      "$sha_h3" "${tmp_dir}/h3.duckdb_extension.gz" \
+      | sha256sum -c -; \
+    gunzip "${tmp_dir}"/*.gz; \
+    duckdb -bail -c "SET extension_directories=['${ext_dir}']; INSTALL '${tmp_dir}/httpfs.duckdb_extension'; INSTALL '${tmp_dir}/spatial.duckdb_extension'; INSTALL '${tmp_dir}/postgres_scanner.duckdb_extension'; INSTALL h3 FROM community;"; \
+    cmp "${tmp_dir}/h3.duckdb_extension" "${ext_dir}/v${DUCKDB_VERSION}/${ext_arch}/h3.duckdb_extension"; \
+    rm -rf "$tmp_dir"; \
+    chmod -R a+rX /opt/duckdb; \
+    duckdb -bail -c "SET extension_directories=['${ext_dir}']; SET autoinstall_known_extensions=false; SET autoload_known_extensions=false; LOAD httpfs; LOAD spatial; LOAD postgres; LOAD h3; SELECT CASE WHEN h3_latlng_to_cell_string(52.52, 13.405, 8) = '881f1d4895fffff' THEN 'ok' ELSE error('h3 mismatch') END;"
+ENV OVERTURE_DUCKDB_EXTENSION_DIR=/opt/duckdb/extensions
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
 RUN pip3 install --no-cache-dir --require-hashes -r /tmp/transitous-requirements.txt

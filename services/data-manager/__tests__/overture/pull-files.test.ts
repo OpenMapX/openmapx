@@ -17,13 +17,15 @@ import { readOverturePullContract } from "../../src/jobs/overture/stac.js";
 const execution = vi.hoisted(() => ({
   afterCopy: undefined as undefined | ((path: string) => void),
   failValidation: false,
+  sqlStatements: [] as string[],
 }));
 // Keep filesystem writes and publication real; replace only the external DuckDB
 // process, reproducing COPY's write to the destination supplied by production SQL.
 vi.mock("../../src/jobs/overture/duckdb.js", () => ({
   runDuckDb: async (args: string[]) => {
     const sql = args.at(-1) ?? "";
-    const copyPath = sql.match(/\) TO '((?:[^']|'')+)' \(FORMAT parquet\);/)?.[1];
+    execution.sqlStatements.push(sql);
+    const copyPath = sql.match(/\) TO '((?:[^']|'')+)' \(FORMAT parquet, COMPRESSION zstd\);/)?.[1];
     if (copyPath) {
       const path = copyPath.replaceAll("''", "'");
       writeFileSync(path, "validated parquet fixture");
@@ -39,6 +41,8 @@ vi.mock("../../src/jobs/overture/duckdb.js", () => ({
             duplicate_ids: 0,
             null_geometries: 0,
             non_point_geometries: 0,
+            wrong_crs_geometries: 0,
+            invalid_points: 0,
             wrong_type_rows: 0,
           },
         ]),
@@ -55,6 +59,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   execution.afterCopy = undefined;
   execution.failValidation = false;
+  execution.sqlStatements.length = 0;
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true });
 });
 
@@ -124,6 +129,16 @@ it("publishes the validated snapshot without following a pre-created predictable
     parquetFile: "planet.parquet",
     sourcesCatalogue: expect.arrayContaining([expect.objectContaining({ sourceId: "foursquare" })]),
   });
+  for (const sql of execution.sqlStatements) {
+    expect(sql).not.toContain("INSTALL ");
+  }
+  expect(execution.sqlStatements[0]).toContain("LOAD httpfs;");
+  expect(execution.sqlStatements[0]).toContain("LOAD spatial;");
+  expect(execution.sqlStatements[0]).toContain("(FORMAT parquet, COMPRESSION zstd);");
+  const statsSql = execution.sqlStatements.find((sql) => sql.includes("AS row_count"));
+  expect(statsSql).toContain("ST_CRS(geometry) IS DISTINCT FROM 'OGC:CRS84'");
+  expect(statsSql).toContain("AS wrong_crs_geometries");
+  expect(statsSql).toContain("AS invalid_points");
 });
 
 it("keeps incomplete snapshots in a private staging directory and removes it after validation failure", async () => {

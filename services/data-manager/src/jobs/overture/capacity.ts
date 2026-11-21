@@ -7,6 +7,7 @@ import { assertValidOvertureSchema } from "./schema.js";
 const GIB = 1024 ** 3;
 const DEFAULT_RESERVE_BYTES = 5 * GIB;
 const DEFAULT_FIRST_PULL_BYTES = 2 * GIB;
+const DEFAULT_INGEST_BYTES_PER_ROW = 4 * 1024;
 export const POSTGIS_CONTAINER = "postgis";
 
 function positiveBytesFromEnv(name: string, fallback: number): number {
@@ -107,15 +108,17 @@ export function estimateOverturePullBytes(dataDir: string, regionSlug: string): 
   return Math.ceil(Math.max(firstPullBytes, previousBytes * 1.5));
 }
 
-/** Includes staging tables, post-load indexes, WAL, and temporary headroom. */
-export function estimateOvertureIngestBytes(
-  parquetBytes: number,
-  activeSchemaBytes: number,
-  capturedCatalogueBytes = 0,
-): number {
-  return Math.ceil(
-    Math.max(4 * GIB, parquetBytes * 4, activeSchemaBytes * 1.5) + capturedCatalogueBytes * 3,
+/**
+ * Admission allowance for staging tables, post-load indexes, WAL, and temporary
+ * sort headroom, sized from the exact pull-contract row count rather than
+ * compressed Parquet byte size.
+ */
+export function estimateOvertureIngestBytes(rowCount: number, activeSchemaBytes: number): number {
+  const bytesPerRow = positiveBytesFromEnv(
+    "OVERTURE_INGEST_BYTES_PER_ROW",
+    DEFAULT_INGEST_BYTES_PER_ROW,
   );
+  return Math.ceil(Math.max(4 * GIB, rowCount * bytesPerRow, activeSchemaBytes * 1.5));
 }
 
 /** Candidate/component/link workspaces are bounded separately from ingest. */

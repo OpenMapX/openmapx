@@ -207,8 +207,10 @@ async function fetchOverturePlaceByGers(
   const rows = await database.execute<OvertureDetailRow[]>(
     `
     SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses,
-           sources, sources_catalogue, release
+           sources, state.sources_catalogue, places.release
     FROM overture_places.places
+    JOIN overture_places.conflation_state AS state
+      ON state.singleton = 1 AND state.release = places.release
     WHERE gers_id = $1
     LIMIT 1
     `,

@@ -124,6 +124,13 @@ describe("poi-overture provider.search", () => {
     expect(first.provenance?.map((source) => source.sourceId)).toEqual(["overture", "foursquare"]);
     expect(nth(db.execute.mock.calls, 0)[0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
     expect(nth(db.execute.mock.calls, 0)[0]).toContain(
+      "JOIN overture_places.conflation_state AS state",
+    );
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain(
+      "ON state.singleton = 1 AND state.release = places.release",
+    );
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain("state.sources_catalogue");
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain(
       "(operating_status IS NULL OR operating_status = 'open')",
     );
     expect(nth(db.execute.mock.calls, 0)[0]).toContain("ORDER BY");

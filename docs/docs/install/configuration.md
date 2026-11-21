@@ -737,6 +737,7 @@ Schedules and switches for the regional Overture Maps Places refresh.
 | `OVERTURE_RELEASE_RETENTION`         | Number of completed local release snapshots to retain, including the active release. Applied only after fused quality validation and link publication. | Optional. Default `2`; range 1 to 12                      |
 | `OVERTURE_DISK_RESERVE_BYTES`        | Free-space safety reserve kept beyond estimated pull/ingest working space.                                                                             | Optional. Default `5368709120` (5 GiB)                    |
 | `OVERTURE_FIRST_PULL_ESTIMATE_BYTES` | Working-space estimate for the first regional pull when no earlier snapshot exists. Later pulls use prior local snapshot sizes.                        | Optional. Default `2147483648` (2 GiB)                    |
+| `OVERTURE_INGEST_BYTES_PER_ROW`      | PostGIS staging admission allowance per contracted Overture row (minimum 4 GiB or 1.5× the active schema size).                                        | Optional. Default `4096` (4 KiB)                          |
 
 The job uses Overture's official STAC catalog, skips an installed release,
 resolves exact spatially relevant Places assets, validates a local release

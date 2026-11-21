@@ -77,7 +77,9 @@ export function duckDbScriptProcessOptions(
   };
 }
 
-/** Bound buffer-manager and spill usage. The container still needs an RSS limit. */
+export const DEFAULT_DUCKDB_EXTENSION_DIR = "/opt/duckdb/extensions";
+
+/** Bound buffer-manager, spill, and pre-installed extension settings. The container still needs an RSS limit. */
 export function duckDbResourceSql(
   environment: NodeJS.ProcessEnv = process.env,
   tempDirectory = join(environment.DATA_DIR ?? tmpdir(), "overture", "duckdb-tmp"),
@@ -88,5 +90,13 @@ export function duckDbResourceSql(
       throw new Error(`${name} must be a positive bounded integer`);
     return value;
   };
-  return `SET temp_directory=${duckDbSqlLiteral(tempDirectory)}; SET memory_limit='${setting("OVERTURE_DUCKDB_MEMORY_MB", 2048, 1048576)}MiB'; SET threads=${setting("OVERTURE_DUCKDB_THREADS", 4, 64)}; SET max_temp_directory_size='${setting("OVERTURE_DUCKDB_TEMP_MB", 32768, 10485760)}MiB'; SET preserve_insertion_order=false;`;
+  const extensionDir = envString(
+    "OVERTURE_DUCKDB_EXTENSION_DIR",
+    DEFAULT_DUCKDB_EXTENSION_DIR,
+    environment,
+  );
+  if (!extensionDir.startsWith("/")) {
+    throw new Error("OVERTURE_DUCKDB_EXTENSION_DIR must be an absolute path");
+  }
+  return `SET extension_directories=[${duckDbSqlLiteral(extensionDir)}]; SET autoinstall_known_extensions=false; SET autoload_known_extensions=false; SET temp_directory=${duckDbSqlLiteral(tempDirectory)}; SET memory_limit='${setting("OVERTURE_DUCKDB_MEMORY_MB", 2048, 1048576)}MiB'; SET threads=${setting("OVERTURE_DUCKDB_THREADS", 4, 64)}; SET max_temp_directory_size='${setting("OVERTURE_DUCKDB_TEMP_MB", 32768, 10485760)}MiB'; SET preserve_insertion_order=false; SET lock_configuration=true;`;
 }

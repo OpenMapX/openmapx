@@ -93,3 +93,23 @@ it("spills DuckDB on the persistent data volume and quotes arbitrary directory n
     "temp_directory='/scratch/it''s data/overture/duckdb-tmp'",
   );
 });
+
+it("locks DuckDB to pre-installed extensions and disables runtime autoinstall", () => {
+  const sql = duck.duckDbResourceSql({});
+  expect(sql).toContain("extension_directories=['/opt/duckdb/extensions']");
+  expect(sql).not.toContain("extension_directory=");
+  expect(sql).toContain("autoinstall_known_extensions=false");
+  expect(sql).toContain("autoload_known_extensions=false");
+  expect(sql).toContain("lock_configuration=true");
+
+  const custom = duck.duckDbResourceSql({
+    OVERTURE_DUCKDB_EXTENSION_DIR: "/tmp/o'reilly/extensions",
+  });
+  expect(custom).toContain("extension_directories=['/tmp/o''reilly/extensions']");
+
+  for (const invalid of ["relative/path", "./extensions", "../extensions"]) {
+    expect(() => duck.duckDbResourceSql({ OVERTURE_DUCKDB_EXTENSION_DIR: invalid })).toThrow(
+      /absolute path/i,
+    );
+  }
+});

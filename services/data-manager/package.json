@@ -9,8 +9,7 @@
     "build": "node ../../scripts/build-runtime-bundles.mjs data-manager",
     "start": "node dist/supervisor.mjs",
     "check-types": "tsc --noEmit",
-    "bench:live-writer": "tsx scripts/bench-live-writer.ts",
-    "bench:overture-h3": "tsx scripts/bench-overture-h3.ts"
+    "bench:live-writer": "tsx scripts/bench-live-writer.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.2",

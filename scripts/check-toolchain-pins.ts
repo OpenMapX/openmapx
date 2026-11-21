@@ -205,19 +205,29 @@ export function collectToolchainPinViolations(
   }
 
   const dataManagerDockerfile = read("services/data-manager/Dockerfile");
-  for (const artifact of ["DUCKDB"] as const) {
+  const dataManagerArtifacts = [
+    "DUCKDB",
+    "DUCKDB_EXT_HTTPFS",
+    "DUCKDB_EXT_SPATIAL",
+    "DUCKDB_EXT_POSTGRES_SCANNER",
+    "DUCKDB_EXT_H3",
+  ] as const;
+  for (const artifact of dataManagerArtifacts) {
     for (const arch of ["AMD64", "ARM64"] as const) {
+      const argName = `${artifact}_SHA256_${arch}`;
       const value = dataManagerDockerfile.match(
-        new RegExp(`ARG ${artifact}_SHA256_${arch}=([a-f0-9]{64})`),
+        new RegExp(`^ARG ${argName}=([a-f0-9]{64})$`, "m"),
       )?.[1];
       if (!value || !SHA256.test(value)) {
-        errors.push(`services/data-manager/Dockerfile: ${artifact}_SHA256_${arch} is not pinned`);
+        errors.push(`services/data-manager/Dockerfile: ${argName} is not pinned`);
+      } else if (!dataManagerDockerfile.includes(`"$${argName}"`)) {
+        errors.push(`services/data-manager/Dockerfile: ${argName} is declared but never verified`);
       }
     }
   }
-  if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 1) {
+  if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 2) {
     errors.push(
-      "services/data-manager/Dockerfile: every downloaded executable must be checksummed",
+      "services/data-manager/Dockerfile: every downloaded DuckDB executable and extension must be checksummed",
     );
   }
 

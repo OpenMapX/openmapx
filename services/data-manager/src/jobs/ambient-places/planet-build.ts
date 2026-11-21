@@ -219,10 +219,12 @@ async function runPlanet(
       );
       checkpoint = await planetTransaction(connection, pid, async (tx) => {
         await tx.unsafe(`SET LOCAL statement_timeout='120000ms'`);
-        const release = manifest.sources.overture?.release ?? null;
+        const overtureSource = source.overture;
         let batch: Awaited<ReturnType<typeof planetOsmBatch>>;
-        if (checkpoint.phase === "osm") batch = await planetOsmBatch(tx, checkpoint, release);
-        else if (release !== null) batch = await planetOvertureBatch(tx, checkpoint, release);
+        if (checkpoint.phase === "osm")
+          batch = await planetOsmBatch(tx, checkpoint, overtureSource);
+        else if (overtureSource !== null)
+          batch = await planetOvertureBatch(tx, checkpoint, overtureSource);
         else throw new Error("Planet build reached its Overture phase without an Overture release");
         const next = {
           ...batch.checkpoint,

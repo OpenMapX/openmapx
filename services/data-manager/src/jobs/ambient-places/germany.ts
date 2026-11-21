@@ -37,7 +37,8 @@ interface OsmState {
   place_count: string;
 }
 type OvertureRow = AmbientOvertureRow & { sources: OvertureSourceItem[] | null; release: string };
-const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.sources_catalogue,o.release`;
+type OvertureQueryRow = Omit<OvertureRow, "sources_catalogue">;
+const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.release`;
 function eligibleOverture(row: OvertureRow): AmbientPlace | null {
   const place = ambientPlaceFromOverture(row);
   if (place)
@@ -76,6 +77,7 @@ export async function buildGermanyPlaces(
     },
   };
   let inputCount = Number(osmState.place_count);
+  let overtureSourcesCatalogue: AmbientOvertureRow["sources_catalogue"] = [];
   if (await tableExists(tx, "overture_places.places")) {
     if (!(await tableExists(tx, "overture_places.conflation_state")))
       throw new Error("Overture conflation state is missing");
@@ -86,9 +88,10 @@ export async function buildGermanyPlaces(
         status: string;
         places_published_at: Date | null;
         place_count: string;
+        sources_catalogue: AmbientOvertureRow["sources_catalogue"];
       }[]
     >(
-      `SELECT region,release,status,places_published_at,place_count::TEXT FROM overture_places.conflation_state WHERE singleton=1`,
+      `SELECT region,release,status,places_published_at,place_count::TEXT,sources_catalogue FROM overture_places.conflation_state WHERE singleton=1`,
     );
     if (!state) {
       const input = itemAt(
@@ -114,6 +117,7 @@ export async function buildGermanyPlaces(
       );
       if (releases.mismatch)
         throw new Error("Overture conflation release does not match published places");
+      overtureSourcesCatalogue = state.sources_catalogue;
       manifest.sources.overture = {
         region: state.region,
         release: state.release,
@@ -168,7 +172,7 @@ export async function buildGermanyPlaces(
     let overture: AmbientPlace[] = [];
     if (manifest.sources.overture && osm.length) {
       const eligibleIds = new Set(osm.map((p) => p.id));
-      const linked = await tx.unsafe<(OvertureRow & { osm_type: string; osm_id: string })[]>(
+      const linked = await tx.unsafe<(OvertureQueryRow & { osm_type: string; osm_id: string })[]>(
         `SELECT l.osm_type,l.osm_id::TEXT,${OVERTURE_COLUMNS}
         FROM jsonb_to_recordset($1::TEXT::JSONB) AS r(osm_type TEXT,osm_id BIGINT)
         JOIN overture_places.poi_conflation_link l USING(osm_type,osm_id) JOIN overture_places.places o USING(gers_id)
@@ -183,9 +187,10 @@ export async function buildGermanyPlaces(
         ],
       );
       overture = linked.flatMap((row) => {
-        identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
+        const enriched = { ...row, sources_catalogue: overtureSourcesCatalogue };
+        identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(enriched));
         links.set(`osm:${row.osm_type}/${row.osm_id}`, row.gers_id);
-        const p = eligibleOverture(row);
+        const p = eligibleOverture(enriched);
         return p ? [p] : [];
       });
     }
@@ -205,7 +210,7 @@ export async function buildGermanyPlaces(
     let cursor = "";
     for (;;) {
       const rows = await tx.unsafe<
-        (OvertureRow & {
+        (OvertureQueryRow & {
           osm_type: string | null;
           osm_id: string | null;
           indexed_osm_id: string | null;
@@ -222,9 +227,10 @@ export async function buildGermanyPlaces(
       );
       if (!rows.length) break;
       const places = rows.flatMap((row) => {
-        const p = ambientPlaceFromOverture(row);
+        const enriched = { ...row, sources_catalogue: overtureSourcesCatalogue };
+        const p = ambientPlaceFromOverture(enriched);
         if (!p || !inside(p)) return [];
-        eligibleOverture(row);
+        eligibleOverture(enriched);
         overtureSource.count++;
         // Existing OSM rows own policy and position, even if excluded/outside.
         if (row.indexed_osm_id !== null) return [];

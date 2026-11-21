@@ -169,8 +169,8 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
     const projectedColumns = OVERTURE_PLACE_COLUMNS.map((column) => `  ${column}`).join(",\n");
 
     const duckSql = [
-      "INSTALL httpfs; LOAD httpfs;",
-      "INSTALL spatial; LOAD spatial;",
+      "LOAD httpfs;",
+      "LOAD spatial;",
       `COPY (`,
       `  SELECT`,
       projectedColumns,
@@ -179,7 +179,7 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
       `    AND bbox.xmax >= ${bbox.west}`,
       `    AND bbox.ymin <= ${bbox.north}`,
       `    AND bbox.ymax >= ${bbox.south}`,
-      `) TO ${sqlLiteral(partialPath)} (FORMAT parquet);`,
+      `) TO ${sqlLiteral(partialPath)} (FORMAT parquet, COMPRESSION zstd);`,
     ].join("\n");
 
     opts.onProgress?.(
@@ -190,7 +190,7 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
     // This compatibility probe intentionally exercises every nested field used
     // by ingest. LIMIT 0 makes it a schema/type check without scanning rows.
     const compatibilitySql = [
-      "INSTALL spatial; LOAD spatial;",
+      "LOAD spatial;",
       `SELECT id::VARCHAR, names.primary::VARCHAR, basic_category::VARCHAR,`,
       `       taxonomy.primary::VARCHAR, taxonomy.hierarchy::VARCHAR[],`,
       `       taxonomy.alternates::VARCHAR[], ST_AsHEXWKB(geometry),`,
@@ -202,12 +202,14 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
     await runDuckDb(["-c", compatibilitySql]);
 
     const statsSql = [
-      "INSTALL spatial; LOAD spatial;",
+      "LOAD spatial;",
       `SELECT count(*)::BIGINT AS row_count,`,
       `       count(*) FILTER (WHERE id IS NULL OR trim(id) = '')::BIGINT AS invalid_ids,`,
       `       (count(*) - count(DISTINCT id))::BIGINT AS duplicate_ids,`,
       `       count(*) FILTER (WHERE geometry IS NULL)::BIGINT AS null_geometries,`,
       `       count(*) FILTER (WHERE geometry IS NOT NULL AND ST_GeometryType(geometry) <> 'POINT')::BIGINT AS non_point_geometries,`,
+      `       count(*) FILTER (WHERE geometry IS NOT NULL AND ST_CRS(geometry) IS DISTINCT FROM 'OGC:CRS84')::BIGINT AS wrong_crs_geometries,`,
+      `       count(*) FILTER (WHERE ST_IsEmpty(geometry) OR NOT (ST_X(geometry) BETWEEN -180 AND 180) OR NOT (ST_Y(geometry) BETWEEN -90 AND 90))::BIGINT AS invalid_points,`,
       `       count(*) FILTER (WHERE theme <> 'places' OR type <> 'place')::BIGINT AS wrong_type_rows`,
       `FROM read_parquet(${sqlLiteral(partialPath)});`,
     ].join("\n");
@@ -225,6 +227,8 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
       "duplicate_ids",
       "null_geometries",
       "non_point_geometries",
+      "wrong_crs_geometries",
+      "invalid_points",
       "wrong_type_rows",
     ] as const) {
       if (stats[field] !== 0) {

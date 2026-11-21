@@ -12,10 +12,13 @@ import {
 
 describe("Overture capacity preflight", () => {
   const previousReserve = process.env.OVERTURE_DISK_RESERVE_BYTES;
+  const previousBytesPerRow = process.env.OVERTURE_INGEST_BYTES_PER_ROW;
 
   afterEach(() => {
     if (previousReserve === undefined) delete process.env.OVERTURE_DISK_RESERVE_BYTES;
     else process.env.OVERTURE_DISK_RESERVE_BYTES = previousReserve;
+    if (previousBytesPerRow === undefined) delete process.env.OVERTURE_INGEST_BYTES_PER_ROW;
+    else process.env.OVERTURE_INGEST_BYTES_PER_ROW = previousBytesPerRow;
   });
 
   it("fails with an actionable working-space and reserve calculation", () => {
@@ -45,9 +48,10 @@ describe("Overture capacity preflight", () => {
     }
   });
 
-  it("budgets for the larger of parquet expansion and active-schema replacement", () => {
-    expect(estimateOvertureIngestBytes(3_000_000_000, 2_000_000_000)).toBe(12_000_000_000);
-    expect(estimateOvertureIngestBytes(1_000_000_000, 8_000_000_000)).toBe(12_000_000_000);
+  it("budgets for the larger of contracted row count, active-schema replacement, and floor", () => {
+    expect(estimateOvertureIngestBytes(100_000, 0)).toBe(4 * 1024 ** 3);
+    expect(estimateOvertureIngestBytes(3_000_000, 2_000_000_000)).toBe(3_000_000 * 4096);
+    expect(estimateOvertureIngestBytes(1_000_000, 8_000_000_000)).toBe(12_000_000_000);
   });
 
   it("pins the PostGIS container name used by the capacity probe", () => {
@@ -58,10 +62,10 @@ describe("Overture capacity preflight", () => {
     ) as { container?: { containerName?: string } };
     expect(manifest.container?.containerName).toBe(POSTGIS_CONTAINER);
   });
-  it("includes captured catalogue row storage and WAL in ingestion admission", () => {
-    expect(estimateOvertureIngestBytes(3_000_000_000, 2_000_000_000, 1_000_000_000)).toBe(
-      15_000_000_000,
-    );
+
+  it("supports overriding the per-row ingest allowance via OVERTURE_INGEST_BYTES_PER_ROW", () => {
+    process.env.OVERTURE_INGEST_BYTES_PER_ROW = "8192";
+    expect(estimateOvertureIngestBytes(2_000_000, 0)).toBe(2_000_000 * 8192);
   });
 
   it("waits for PostGIS health before startup recovery runs", () => {
