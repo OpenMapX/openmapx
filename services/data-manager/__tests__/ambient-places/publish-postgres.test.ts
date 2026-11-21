@@ -412,7 +412,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             sources: [{ property: "/phones", dataset: "Foursquare" }],
             release: "2026-10-01.0",
           });
-          expect(first.fieldContributors?.gersId).toEqual(sources_catalogue);
+          const capturedGersContributors = first.fieldContributors?.gersId;
+          assert.isDefined(capturedGersContributors);
+          expect(capturedGersContributors).toEqual(sources_catalogue);
           expect(first.name).toBe("Inside Clinic");
           expect(first.names).toEqual({});
           expect(first.category).toBe("hospital");
@@ -434,9 +436,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             `SELECT field_contributors FROM ambient_places.features WHERE generation=$1 AND id='osm:node/1'`,
             [manifest.generation],
           );
-          expect(contributorRow?.field_contributors.gersId).toEqual(
-            first.fieldContributors?.gersId,
-          );
+          assert.isDefined(contributorRow);
+          expect(contributorRow.field_contributors.gersId).toEqual(capturedGersContributors);
           await pg.sql.unsafe(`UPDATE overture_places.places SET release='2026-09-01.0'`);
           await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(
             "Regional accepted GERS identity does not match published Overture places",
