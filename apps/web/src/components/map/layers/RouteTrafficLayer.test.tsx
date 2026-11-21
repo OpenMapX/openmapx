@@ -51,17 +51,22 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
 // re-renders that don't produce a new query result. A mock that hands back a
 // fresh object every call would make the component's own span-derived memos
 // (`staticFeatures` in particular) look unstable when they are not.
-const SPANS_RESULT = {
+const SPANS_RESULT: Record<string, RouteFlowSpan[]> = {
   r0: [{ startMeters: 200, endMeters: 900, los: "queuing", confidence: "measured" }],
   r1: [{ startMeters: 200, endMeters: 900, los: "queuing", confidence: "measured" }],
 };
-const useRouteFlow = vi.fn(() => SPANS_RESULT);
+const useRouteFlow = vi.fn<typeof routeFlowHook>(() => SPANS_RESULT);
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  useRouteFlow: (...args: unknown[]) => useRouteFlow(...(args as [])),
+  useRouteFlow: (...args: Parameters<typeof routeFlowHook>) => useRouteFlow(...args),
 }));
 
-import type { NavProgress, Route } from "@openmapx/core";
+import type {
+  NavProgress,
+  Route,
+  RouteFlowSpan,
+  useRouteFlow as routeFlowHook,
+} from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_WIDTHS } from "@/lib/routeStyle";
@@ -93,7 +98,9 @@ describe("RouteTrafficLayer", () => {
     render(<RouteTrafficLayer />);
     expect(fake.state.layers.has("route-traffic-active")).toBe(true);
     expect(fake.state.layers.has("route-traffic-alt")).toBe(true);
-    const [routes, enabled] = useRouteFlow.mock.calls.at(-1) as [Array<{ id: string }>, boolean];
+    const lastCall = useRouteFlow.mock.lastCall;
+    if (!lastCall) throw new Error("useRouteFlow was not called");
+    const [routes, enabled] = lastCall;
     expect(routes.map((route) => route.id)).toEqual(["r0", "r1"]);
     expect(enabled).toBe(true);
     const source = fake.state.sources.get("route-traffic-source");
@@ -210,8 +217,7 @@ describe("RouteTrafficLayer", () => {
 
     const { rerender } = render(<RouteTrafficLayer />);
     const firstRoutesArg = useRouteFlow.mock.calls.at(-1)?.[0];
-    expect(firstRoutesArg).toBeDefined();
-    expect((firstRoutesArg as unknown[]).length).toBeGreaterThan(0);
+    expect(firstRoutesArg?.length).toBeGreaterThan(0);
     // Fresh window: an earlier test's mount may have already bumped these
     // once, which is not what this test is checking.
     fake.state.counts.setData.delete("route-traffic-source");
@@ -227,10 +233,9 @@ describe("RouteTrafficLayer", () => {
       rerender(<RouteTrafficLayer />);
     }
 
-    for (const call of useRouteFlow.mock.calls) {
-      expect(call[0]).toBe(firstRoutesArg);
-      for (const route of call[0] as Array<Record<string, unknown>>)
-        expect("alongMeters" in route).toBe(false);
+    for (const [routes] of useRouteFlow.mock.calls) {
+      expect(routes).toBe(firstRoutesArg);
+      for (const route of routes) expect("alongMeters" in route).toBe(false);
     }
     expect(fake.state.counts.setData.get("route-traffic-source")).toBeUndefined();
     // The current source is expected to update — at most once per progress

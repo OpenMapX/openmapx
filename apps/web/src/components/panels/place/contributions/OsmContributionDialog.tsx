@@ -105,12 +105,6 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
   const createNote = useCreateOsmNote(CALLER_SHOWS_ERRORS);
   const invalidate = useInvalidateAfterContribution();
 
-  // A new place means a new flow: never carry a draft across references.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on identity change only
-  useEffect(() => {
-    dispatch({ type: "reset" });
-  }, [ref_.type, ref_.id]);
-
   const account = capabilities.data;
   const accountReady =
     account?.enabled === true &&
@@ -344,7 +338,7 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
         {state.step === "reviewing" && (
           <Stack spacing={2} sx={{ py: 4, alignItems: "center" }}>
             <CircularProgress size={28} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("reviewLoading")}
             </Typography>
           </Stack>
@@ -362,7 +356,7 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
         {state.step === "conflict" && (
           <Stack spacing={2}>
             <Typography variant="subtitle1">{t("conflictTitle")}</Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("conflictBody")}
             </Typography>
             <ConflictDiff previous={state.previous} latest={state.latest} />
@@ -501,7 +495,7 @@ function ConflictDiff({
     <Stack spacing={1}>
       {rows.map((row) => (
         <Box key={row.label}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {row.label}
           </Typography>
           <Typography variant="body2">

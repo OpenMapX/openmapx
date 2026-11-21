@@ -2,12 +2,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@/test";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock("../activity/activityQueries", () => ({
   useActivityClient: () => ({ apiUrl: "http://synthetic.invalid" }),
 }));
 afterEach(cleanup);
 it("clears a saved resource through explicit reset while leaving unrelated values untouched", async () => {
-  const save = vi.fn(async () => {});
+  const save = vi.fn(async (_values: Record<string, unknown>) => {});
   render(
     <ServiceConfigForm
       serviceId="redis"

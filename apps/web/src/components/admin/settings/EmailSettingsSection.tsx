@@ -3,8 +3,14 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
+/** The provider's state as the `providerState` message's select code. */
+function providerState(selected: boolean, configured: boolean) {
+  if (selected) return "saved";
+  return configured ? "configured" : "optional";
+}
 export const EMAIL_PROVIDER_NAMES = {
   emaillabs: "EmailLabs",
   lettermint: "Lettermint",
@@ -47,6 +53,7 @@ export function EmailSettingsSection({
   configured: boolean;
   children: ReactNode;
 }) {
+  const t = useTranslations("adminSettings");
   const [expanded, setExpanded] = useState(selected);
   useEffect(() => {
     if (focused) setExpanded(true);
@@ -68,16 +75,15 @@ export function EmailSettingsSection({
         <Chip
           size="small"
           variant="outlined"
-          label={selected ? "Saved provider" : configured ? "Configured" : "Optional"}
+          label={t("providerState", { state: providerState(selected, configured) })}
           sx={{ ml: 0.75 }}
         />
       </Box>
       {description && (
         <Typography
           variant="caption"
-          color="text.secondary"
           component="p"
-          sx={{ mt: 0.75, mb: 1.5 }}
+          sx={{ color: "text.secondary", mt: 0.75, mb: 1.5 }}
         >
           {description}
         </Typography>

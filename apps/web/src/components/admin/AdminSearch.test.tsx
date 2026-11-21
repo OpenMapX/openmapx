@@ -31,7 +31,7 @@ function mount(role = "admin") {
   );
 }
 it("loads metadata only on open and navigates by keyboard without executing an operation", async () => {
-  const fetch = vi.fn(async (input: unknown) =>
+  const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
     String(input).endsWith("/settings")
       ? Response.json({
           groups: [
@@ -62,18 +62,16 @@ it("loads metadata only on open and navigates by keyboard without executing an o
   expect(fetch).not.toHaveBeenCalled();
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   const input = await screen.findByRole("combobox");
-  fireEvent.change(input, { target: { value: "SMTP host" } });
-  await screen.findByRole("option", { name: /SMTP host/ });
+  // The catalogue names a known setting; the server's English label is only a fallback.
+  fireEvent.change(input, { target: { value: "smtpHost" } });
+  await screen.findByRole("option", { name: /^Host/ });
+  expect(screen.queryByRole("option", { name: /SMTP host/ })).toBeNull();
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() =>
     expect(navigate).toHaveBeenCalledWith("/admin/settings/email?field=smtpHost"),
   );
-  expect(
-    fetch.mock.calls.every(
-      (call) => call.length === 1 || !call[1] || (call[1] as RequestInit).method !== "POST",
-    ),
-  ).toBe(true);
+  expect(fetch.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
   expect(screen.queryByText("private-host")).toBeNull();
 });
 it("offers no search or metadata requests for a non-administrator", () => {

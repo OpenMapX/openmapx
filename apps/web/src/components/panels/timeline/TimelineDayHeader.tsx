@@ -105,7 +105,7 @@ export function TimelineDayHeader({
         </Button>
       </Box>
       {timeZone !== browserTimeZone && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.75 }}>
           {t("timezoneLabel")} <span dir="ltr">{timeZone}</span>
         </Typography>
       )}

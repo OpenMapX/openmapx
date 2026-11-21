@@ -14,6 +14,7 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { PRIVACY_CASE_SECTIONS, type PrivacyCaseSection } from "@/lib/admin/adminNavigationState";
 import {
   type PrivacyAdminBinding,
@@ -42,7 +43,7 @@ function PrivacyIdentityVerification({
     <Stack spacing={2}>
       <Typography>
         {method
-          ? t("identityVerified", { method: t(`identityMethods.${method}`) })
+          ? t("identityVerified", { methodLabel: t(`identityMethods.${method}`) })
           : t("unverified")}
       </Typography>
       {detail.capabilities.verifyIdentity && (
@@ -94,6 +95,7 @@ export function PrivacyCaseView({
   const t = useTranslations("privacyAdmin"),
     w = useTranslations("privacyAdmin.workflows"),
     nav = useTranslations("adminNavigation");
+  const format = useAdminFormat();
   const client = usePrivacyCaseClient(detail, binding);
   const [expanded, setExpanded] = useState<PrivacyCaseSection | null>(section),
     [eventCount, setEventCount] = useState(100);
@@ -119,14 +121,14 @@ export function PrivacyCaseView({
           <Typography variant="h6" component="h2">
             {t("case", { id: detail.request.id.slice(0, 8) })}
           </Typography>
-          <Chip size="small" label={detail.request.state} />
+          <Chip size="small" label={t("requestState", { state: detail.request.state })} />
           <Chip size="small" label={`v${detail.request.version}`} />
           <Button size="small" onClick={onRefresh} sx={{ ml: "auto" }}>
             {t("refresh")}
           </Button>
         </Stack>
         <Typography variant="body2">
-          {nav("privacyDue", { date: new Date(detail.request.dueAt).toLocaleString() })}
+          {nav("privacyDue", { date: format.dateTime(detail.request.dueAt) })}
         </Typography>
         <Stack
           direction="row"

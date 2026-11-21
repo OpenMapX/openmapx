@@ -351,6 +351,8 @@ export * from "./getAdminIntegrationHealthHistoryParams";
 export * from "./getAdminOverview200";
 export * from "./getAdminOverview200ActiveJobsItem";
 export * from "./getAdminOverview200AttentionItem";
+export * from "./getAdminOverview200AttentionItemJob";
+export * from "./getAdminOverview200AttentionItemJobStatus";
 export * from "./getAdminOverview200AttentionItemSeverity";
 export * from "./getAdminOverview200Integrations";
 export * from "./getAdminOverview200RecentActivityItem";

@@ -13,7 +13,6 @@ import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -23,6 +22,8 @@ import {
   type FeedCredentialPreviewInput,
   feedCredentialPreviewSchema,
 } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 
 type FeedCredentialChange = FeedCredentialPreviewInput["changes"][number];
 
@@ -122,6 +123,8 @@ function TransitCredentialView({
   proposalId?: string;
   onReviewFinished?: () => void;
 }) {
+  const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const client = useMemo(
     () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
     [apiUrl],
@@ -206,10 +209,7 @@ function TransitCredentialView({
       setReviewed(next);
       sessionStorage.setItem(storageKey, JSON.stringify(next));
     } catch {
-      if (identity === epoch.current)
-        setError(
-          "Could not prepare credential changes. Refresh and enter the intended changes again.",
-        );
+      if (identity === epoch.current) setError(t("couldNotPrepareCredentialChanges"));
     } finally {
       if (identity === epoch.current) setBusy(false);
     }
@@ -227,7 +227,7 @@ function TransitCredentialView({
       Date.parse(selected.preview.expiresAt) <= Date.now()
     ) {
       invalidateReview();
-      setError("The catalog, configuration or credentials changed. Prepare a new review.");
+      setError(t("theCatalogConfigurationOrCredentials"));
       return;
     }
     setProving(false);
@@ -251,8 +251,8 @@ function TransitCredentialView({
       if (identity !== epoch.current) return;
       setSuccess(
         result.configuration.outcome === "committed" && result.configuration.followUp === "complete"
-          ? "Credential map applied to Data Manager. Validate the proposal or sync the active pins to refresh feed routing."
-          : "Credential application needs attention. Inspect the original operation in Activity.",
+          ? t("credentialMapAppliedToData")
+          : t("credentialApplicationNeedsAttentionInspect"),
       );
       setReviewed(null);
       try {
@@ -269,9 +269,7 @@ function TransitCredentialView({
       ]);
     } catch {
       if (identity === epoch.current) {
-        setError(
-          "Credential application did not complete. Inspect Activity before preparing another change.",
-        );
+        setError(t("credentialApplicationDidNotComplete"));
         setReviewed(null);
         try {
           sessionStorage.removeItem(storageKey);
@@ -301,18 +299,11 @@ function TransitCredentialView({
   return (
     <Paper id="feed-credentials" variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        <Typography variant="h6">Transit feed credentials</Typography>
-        <Typography variant="body2">
-          Values stay masked. Blank inputs keep the existing value; deletion is a separate,
-          confirmed action. Changes use the selected catalog pins. Validation requires credentials
-          only for its selected countries and enabled sources.
-        </Typography>
+        <Typography variant="h6">{t("transitFeedCredentials")}</Typography>
+        <Typography variant="body2">{t("valuesStayMaskedBlankInputs")}</Typography>
         {query.isLoading && <CircularProgress size={24} />}
         {query.isError && (
-          <Alert severity="error">
-            Feed credential inspection is unavailable. Refresh after restoring instance
-            connectivity.
-          </Alert>
+          <Alert severity="error">{t("feedCredentialInspectionIsUnavailable")}</Alert>
         )}
         {data && (
           <>
@@ -320,28 +311,23 @@ function TransitCredentialView({
               <Chip
                 label={
                   data.owner === "vault"
-                    ? "Vault"
+                    ? t("vault")
                     : data.owner === "unset"
-                      ? "Not configured"
+                      ? t("notConfigured")
                       : data.owner === "file"
-                        ? "Host file"
-                        : "Host environment"
+                        ? t("hostFile")
+                        : t("hostEnvironment")
                 }
               />
               <Button size="small" onClick={() => void query.refetch()} disabled={busy}>
-                Refresh
+                {t("refresh")}
               </Button>
             </Stack>
             {!data.editable && (
-              <Alert severity="info">
-                {data.reason ?? "Manage these credentials on the host."}
-              </Alert>
+              <Alert severity="info">{data.reason ?? t("manageTheseCredentialsOnThe")}</Alert>
             )}
             {data.pendingApplication && (
-              <Alert severity="warning">
-                Saved credentials have not been verified in the running Data Manager mount. Inspect
-                Activity for the original application.
-              </Alert>
+              <Alert severity="warning">{t("savedCredentialsHaveNotBeen")}</Alert>
             )}
             {error && <Alert severity="error">{error}</Alert>}
             {success && <Alert severity="success">{success}</Alert>}
@@ -349,12 +335,12 @@ function TransitCredentialView({
               <Table size="small" sx={{ minWidth: 680 }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Key</TableCell>
-                    <TableCell>Status</TableCell>
+                    <TableCell>{t("key")}</TableCell>
+                    <TableCell>{t("status")}</TableCell>
                     {data.editable && (
                       <>
-                        <TableCell>New value</TableCell>
-                        <TableCell>Action</TableCell>
+                        <TableCell>{t("newValue")}</TableCell>
+                        <TableCell>{t("action")}</TableCell>
                       </>
                     )}
                   </TableRow>
@@ -365,11 +351,16 @@ function TransitCredentialView({
                       <TableCell sx={{ overflowWrap: "anywhere" }}>{entry.key}</TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={1}>
-                          <Chip size="small" label={entry.configured ? "Configured" : "Empty"} />
-                          {entry.required && <Chip size="small" label="Required" />}
-                          {entry.orphaned && <Chip size="small" color="warning" label="Orphaned" />}
+                          <Chip
+                            size="small"
+                            label={entry.configured ? t("configured") : t("empty")}
+                          />
+                          {entry.required && <Chip size="small" label={t("required")} />}
+                          {entry.orphaned && (
+                            <Chip size="small" color="warning" label={t("orphaned")} />
+                          )}
                           {deletions.includes(entry.key) && (
-                            <Chip size="small" label="Delete selected" />
+                            <Chip size="small" label={t("deleteSelected")} />
                           )}
                         </Stack>
                       </TableCell>
@@ -381,7 +372,9 @@ function TransitCredentialView({
                               type="password"
                               autoComplete="off"
                               slotProps={{
-                                htmlInput: { "aria-label": `New value for ${entry.key}` },
+                                htmlInput: {
+                                  "aria-label": t("newValueForKey", { key: entry.key }),
+                                },
                               }}
                               value={Object.hasOwn(drafts, entry.key) ? drafts[entry.key] : ""}
                               disabled={busy}
@@ -400,11 +393,11 @@ function TransitCredentialView({
                           <TableCell>
                             <Button
                               size="small"
-                              aria-label={`Delete ${entry.key}`}
+                              aria-label={t("deleteKey", { key: entry.key })}
                               disabled={busy}
                               onClick={() => setDeleting(entry.key)}
                             >
-                              Delete
+                              {t("delete")}
                             </Button>
                           </TableCell>
                         </>
@@ -414,16 +407,17 @@ function TransitCredentialView({
                 </TableBody>
               </Table>
             </Box>
-            <TablePagination
-              component="div"
+            <AdminTablePagination
               count={entries.length}
               page={effectivePage}
               rowsPerPage={25}
               rowsPerPageOptions={[25]}
               onPageChange={(_event, next) => setPage(next)}
+              onRowsPerPageChange={() => {}}
+              hideSinglePage={false}
             />
             {changes.length > 100 && (
-              <Alert severity="warning">Review at most 100 key changes at a time.</Alert>
+              <Alert severity="warning">{t("reviewKeyLimit", { limit: 100 })}</Alert>
             )}
             {data.editable && (
               <Button
@@ -431,7 +425,7 @@ function TransitCredentialView({
                 disabled={busy || !changes.length || changes.length > 100}
                 onClick={() => void preview()}
               >
-                Review credential changes
+                {t("reviewCredentialChanges")}
               </Button>
             )}
           </>
@@ -439,12 +433,12 @@ function TransitCredentialView({
         {reviewed && (
           <Alert severity={stale ? "warning" : "info"}>
             {stale
-              ? "The catalog, configuration or credentials changed. Prepare a new review."
-              : `Review ${reviewed.preview.changes.length} key changes. Existing unselected values are preserved.`}
+              ? t("theCatalogConfigurationOrCredentials")
+              : t("reviewKeyChanges", { count: reviewed.preview.changes.length })}
             <Stack spacing={1} sx={{ mt: 1 }}>
               {reviewed.preview.changes.map((change) => (
                 <Typography variant="body2" key={change.key}>
-                  {change.action === "delete" ? "Delete" : "Set"}: {change.key}
+                  {t("credentialChange", { action: change.action, key: change.key })}
                 </Typography>
               ))}
               <Stack direction="row" spacing={1}>
@@ -455,10 +449,10 @@ function TransitCredentialView({
                     onReviewFinished?.();
                   }}
                 >
-                  Cancel review
+                  {t("cancelReview")}
                 </Button>
                 <Button disabled={busy || Boolean(stale)} onClick={() => setProving(true)}>
-                  Confirm administrator sign-in and apply
+                  {t("confirmAdministratorSignInAnd")}
                 </Button>
               </Stack>
             </Stack>
@@ -466,14 +460,12 @@ function TransitCredentialView({
         )}
         {deleting && (
           <Dialog open onClose={() => setDeleting(null)}>
-            <DialogTitle>Delete feed credential?</DialogTitle>
+            <DialogTitle>{t("deleteFeedCredential")}</DialogTitle>
             <DialogContent>
-              <Typography>
-                {deleting} will be removed from the managed map. Other keys will be preserved.
-              </Typography>
+              <Typography>{t("deletingWillBeRemovedFrom", { deleting })}</Typography>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setDeleting(null)}>Cancel</Button>
+              <Button onClick={() => setDeleting(null)}>{tCommon("cancel")}</Button>
               <Button
                 onClick={() => {
                   invalidateReview();
@@ -486,7 +478,7 @@ function TransitCredentialView({
                   setDeleting(null);
                 }}
               >
-                Confirm deletion
+                {t("confirmDeletion")}
               </Button>
             </DialogActions>
           </Dialog>

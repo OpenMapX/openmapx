@@ -33,6 +33,7 @@ import {
 } from "@openmapx/core/api-admin-sdk";
 import type { AdminSetting, AdminSettingsGroup } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AdminDraftContext } from "@/lib/admin/AdminDraftProvider";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
@@ -95,45 +96,46 @@ export interface SettingsEditorText {
   loadFailed: string;
 }
 
-const DEFAULT_TEXT: SettingsEditorText = {
-  envOverrides: "env overrides",
-  envOverrideHelp: (envVar) =>
-    `Overridden by environment variable ${envVar}. Change the env var to update this value.`,
-  envSecretValue: "(set by environment variable)",
-  showSecret: "Show",
-  hideSecret: "Hide",
-  databaseSource: "Source: database",
-  save: (label) => `Save ${label}`,
-  saved: (label) => `${label} settings saved`,
-  saveFailed: "Failed to save",
-  invalidJson: "Enter valid JSON.",
-  sendTestEmail: "Send Test Email",
-  testEmailSent: "Test email sent",
-  testEmailFailed: "Failed to send test email",
-  loadFailed: "Failed to load settings",
-};
+/** The settings editor's own wording, for pages that do not pass theirs. */
+function useDefaultEditorText(): SettingsEditorText {
+  const t = useTranslations("adminSettings");
+  return useMemo(
+    () => ({
+      envOverrides: t("editor.envOverrides"),
+      envOverrideHelp: (envVar) => t("editor.envOverrideHelp", { envVar }),
+      envSecretValue: t("editor.envSecretValue"),
+      showSecret: t("editor.showSecret"),
+      hideSecret: t("editor.hideSecret"),
+      databaseSource: t("editor.databaseSource"),
+      save: (label) => t("editor.save", { label }),
+      saved: (label) => t("editor.saved", { label }),
+      saveFailed: t("editor.saveFailed"),
+      invalidJson: t("editor.invalidJson"),
+      sendTestEmail: t("editor.sendTestEmail"),
+      testEmailSent: t("editor.testEmailSent"),
+      testEmailFailed: t("editor.testEmailFailed"),
+      loadFailed: t("editor.loadFailed"),
+    }),
+    [t],
+  );
+}
 
 // Subgroup display metadata. Keys must match the `subgroup` field on the
 // matching SettingDef in apps/api/src/routes/admin-settings.ts.
-const SUBGROUP_META: Record<string, { label: string; description?: string }> = {
-  common: {
-    label: "Common",
-    description: "Shared by every email provider below.",
-  },
-  emaillabs: {
-    label: "EmailLabs (priority 1)",
-    description: "Used when all three fields are set. Polish EU provider, 9k emails/mo free.",
-  },
-  lettermint: {
-    label: "Lettermint (priority 2)",
-    description:
-      "Used when EmailLabs is unconfigured and this token is set. Dutch EU provider, 300 emails/mo free.",
-  },
-  smtp: {
-    label: "SMTP (priority 3, fallback)",
-    description: "Used when neither EmailLabs nor Lettermint is configured. Any SMTP provider.",
-  },
-};
+const SUBGROUP_IDS = ["common", "emaillabs", "lettermint", "smtp"] as const;
+function useDefaultSubgroupMeta(): Record<string, { label: string; description?: string }> {
+  const t = useTranslations("adminSettings");
+  return useMemo(
+    () =>
+      Object.fromEntries(
+        SUBGROUP_IDS.map((id) => [
+          id,
+          { label: t(`subgroups.${id}.label`), description: t(`subgroups.${id}.description`) },
+        ]),
+      ),
+    [t],
+  );
+}
 
 function groupBySubgroup(settings: ResolvedSetting[]): SettingsSection[] {
   const sections: SettingsSection[] = [];
@@ -402,7 +404,7 @@ function SettingsGroupPanel({
   defaultExpanded,
   focusKey,
   flat = false,
-  subgroupMeta = SUBGROUP_META,
+  subgroupMeta: subgroupMetaProp,
   text,
 }: {
   group: SettingsGroup;
@@ -417,6 +419,10 @@ function SettingsGroupPanel({
   subgroupMeta?: Record<string, { label: string; description?: string }>;
   text: SettingsEditorText;
 }) {
+  const t = useTranslations("adminSettings");
+  const tShared = useTranslations("adminShared");
+  const defaultSubgroupMeta = useDefaultSubgroupMeta();
+  const subgroupMeta = subgroupMetaProp ?? defaultSubgroupMeta;
   const { apiUrl, client } = useActivityClient();
   const owner = useAdminMutationOwner(client, group.id);
   const qc = useQueryClient();
@@ -503,12 +509,7 @@ function SettingsGroupPanel({
       {focusKey &&
         group.settings.some(
           (setting) => setting.key === focusKey && !isVisible(setting, renderedValues),
-        ) && (
-          <Alert severity="info">
-            This setting is hidden by the current policy or provider selection. Change that
-            selection only if you intend to change the effective configuration.
-          </Alert>
-        )}
+        ) && <Alert severity="info">{t("hiddenSetting")}</Alert>}
       <Stack
         sx={{
           gap: 2.5,
@@ -522,19 +523,20 @@ function SettingsGroupPanel({
                 onClick={() => draft.keepEdits(group.settings.map((setting) => setting.key))}
                 disabled={save.isPending}
               >
-                Keep my edits
+                {tShared("keepMyEdits")}
               </Button>
             }
           >
-            Saved values changed for {conflicts.join(", ")}. Review or discard your edits before
-            saving.
+            {tShared("savedValuesChangedForConflicts", {
+              settingLabels: conflicts
+                .map((key) => group.settings.find((setting) => setting.key === key)?.label ?? key)
+                .join(", "),
+            })}
           </Alert>
         )}
         {emailGroup && (
-          <Typography variant="body2" color="text.secondary">
-            Saved provider: {EMAIL_PROVIDER_NAMES[emailProvider]}. Priority: EmailLabs → Lettermint
-            → SMTP. Other configured providers remain available as fallbacks; send a test message to
-            check delivery.
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            {t("savedEmailProvider", { provider: EMAIL_PROVIDER_NAMES[emailProvider] })}
           </Typography>
         )}
         {groupBySubgroup(visibleSettings).map((section) => (
@@ -674,7 +676,7 @@ function SettingsGroupPanel({
                 setInvalidKeys(new Set());
               }}
             >
-              Discard
+              {tShared("discard")}
             </Button>
           )}
           {extra}
@@ -719,7 +721,7 @@ function SettingsGroupPanel({
           <Stack sx={{ gap: 0.25 }}>
             <Typography sx={{ fontWeight: 600 }}>{group.label}</Typography>
             {description && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {description}
               </Typography>
             )}
@@ -775,7 +777,7 @@ export function SystemSettings({
   showTransfer = true,
   settingText,
   subgroupMeta,
-  text = DEFAULT_TEXT,
+  text: textProp,
   onSettingsSaved,
   focusKey,
   flatSections = false,
@@ -790,6 +792,9 @@ export function SystemSettings({
   focusKey?: string;
   flatSections?: boolean;
 } = {}) {
+  const t = useTranslations("adminSettings");
+  const defaultText = useDefaultEditorText();
+  const text = textProp ?? defaultText;
   const { apiUrl, client } = useActivityClient();
   const draftStore = useContext(AdminDraftContext);
   const [toast, setToast] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
@@ -872,9 +877,9 @@ export function SystemSettings({
     return draftStore && draftStore.scopeKey === null ? (
       <Alert
         severity="warning"
-        action={<Button onClick={() => window.location.reload()}>Reload</Button>}
+        action={<Button onClick={() => window.location.reload()}>{t("reload")}</Button>}
       >
-        Administrator access changed. Reload to confirm the current account and permissions.
+        {t("accessChanged")}
       </Alert>
     ) : (
       <Alert severity="error">{text.loadFailed}</Alert>
@@ -887,7 +892,7 @@ export function SystemSettings({
         gap: 1.5,
       }}
     >
-      {showHeader && <AdminPageHeader title="Settings" subtitle="Operator configuration" />}
+      {showHeader && <AdminPageHeader title={t("title")} subtitle={t("subtitle")} />}
       {(!sections || sections.some((section) => section.groupId === "auth")) &&
         data.groups.some((group) => group.id === "auth") && (
           <AuthPolicySettings focusKey={focusKey} />
@@ -934,12 +939,10 @@ export function SystemSettings({
 
 /** Transfer utilities intentionally fetch no settings values until an operator exports. */
 export function SettingsTransfer() {
+  const t = useTranslations("adminSettings");
   return (
     <Stack sx={{ gap: 2, maxWidth: 900 }}>
-      <AdminPageHeader
-        title="Configuration transfer"
-        subtitle="Export this instance's configuration or migrate it from another instance"
-      />
+      <AdminPageHeader title={t("transfer.title")} subtitle={t("transfer.subtitle")} />
       <ConfigurationMigrationPanel />
     </Stack>
   );

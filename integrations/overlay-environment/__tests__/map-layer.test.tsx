@@ -167,10 +167,10 @@ it("credits only the rendered captured station receipt and keeps it during a fai
   });
   const collection = fake.state.sources.get("opensensemap-env")?.data as GeoJSON.FeatureCollection;
   expect(collection.features[0].properties?._mapAttributions).toContain("sensor-community");
-  act(() => fake.emit("click", { features: collection.features }));
+  fake.setRenderedFeatures("env-circle-layer", collection.features as never);
+  act(() => fake.emit("click", { point: { x: 0, y: 0 } }));
   expect(popupHtml).toContain("Data © custom station publisher");
   expect(popupHtml).not.toContain("openSenseMap");
-  fake.setRenderedFeatures("env-circle-layer", collection.features as never);
   const html = () =>
     Object.values(useMapAttributionStore.getState().byLayer)
       .flat()

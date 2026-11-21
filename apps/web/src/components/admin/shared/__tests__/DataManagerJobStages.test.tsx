@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DataManagerJobStages } from "../DataManagerJobStages";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 describe("DataManagerJobStages", () => {
   it("renders structured stage errors safely and formats durations", () => {
@@ -20,10 +22,28 @@ describe("DataManagerJobStages", () => {
       />,
     );
 
-    expect(html).toContain("motis import");
+    expect(html).toContain("MOTIS import");
     expect(html).toContain("Transactional import failed");
-    expect(html).toContain("1m 1s");
+    expect(html).toContain("1 min 1 sec");
     expect(html).not.toContain("long stack");
+  });
+
+  it("shows a stage this build does not know by its code", () => {
+    const html = renderToStaticMarkup(
+      <DataManagerJobStages
+        stages={[
+          {
+            id: "stage-future",
+            stage: "future-stage",
+            status: "ok",
+            durationMs: 10,
+            message: null,
+            error: null,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("future-stage");
   });
 
   it("explains which validation archives caused a partial result", () => {

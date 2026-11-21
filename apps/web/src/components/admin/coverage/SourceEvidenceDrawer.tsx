@@ -19,9 +19,10 @@ import type {
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type CoverageRequestError, useCoverageSource } from "@/lib/admin/coverageHooks";
 import { CompactAlert } from "../shared/CompactAlert";
-import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
+import { CoverageStatus } from "./CoverageStatus";
 
 export function SourceEvidenceDrawer({
   source,
@@ -76,8 +77,7 @@ export function SourceEvidenceDrawer({
             {displayedSource && (
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ overflowWrap: "anywhere" }}
+                sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
               >
                 {displayedSource.key}
               </Typography>
@@ -88,7 +88,9 @@ export function SourceEvidenceDrawer({
           </IconButton>
         </Stack>
 
-        {query.isLoading && <Typography color="text.secondary">{t("common.loading")}</Typography>}
+        {query.isLoading && (
+          <Typography sx={{ color: "text.secondary" }}>{t("common.loading")}</Typography>
+        )}
         {query.isError && (
           <CompactAlert severity="error">
             {snapshotExpired ? t("snapshot.expired") : t("sourceDrawer.loadError")}
@@ -108,7 +110,10 @@ function SourceEvidenceBody({
   assessment: UsageAssessment;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
   const source = data.source;
+  const countOrUnknown = (value: number | null | undefined) =>
+    value == null ? t("common.unknown") : format.number(value);
   return (
     <Stack spacing={2}>
       {data.warnings.length > 0 && (
@@ -120,7 +125,7 @@ function SourceEvidenceBody({
       <Section title={t("sourceDrawer.identity")}>
         <Detail
           label={t("sourceDrawer.owner")}
-          value={`${source.owner.kind}: ${source.owner.id}`}
+          value={t("sourceDrawer.ownerValue", { kind: source.owner.kind, id: source.owner.id })}
         />
         <Detail label={t("sourceDrawer.sourceId")} value={source.sourceId} />
         <Detail label={t("sourceDrawer.domain")} value={t(`domain.${source.domain}`)} />
@@ -163,10 +168,15 @@ function SourceEvidenceBody({
           <Detail label={t("sourceDrawer.bounds")} value={source.region.bounds.join(", ")} />
         )}
         {data.evidence.count && (
-          <Detail
-            label={t("sourceDrawer.count")}
-            value={`${data.evidence.count.value.toLocaleString()} ${data.evidence.count.unit} (${data.evidence.count.scope})`}
-          />
+          <>
+            <Detail
+              label={t("sourceDrawer.count")}
+              value={format.number(data.evidence.count.value)}
+            />
+            {/* The unit and what is counted are written by the evidence producer. */}
+            <Detail label={t("sourceDrawer.countUnit")} value={data.evidence.count.unit} />
+            <Detail label={t("sourceDrawer.countScope")} value={data.evidence.count.scope} />
+          </>
         )}
       </Section>
 
@@ -175,15 +185,15 @@ function SourceEvidenceBody({
           <Detail label={t("roadConditions.status")} value={data.evidence.roadConditions.status} />
           <Detail
             label={t("roadConditions.changed")}
-            value={String(data.evidence.roadConditions.changedCount ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.changedCount)}
           />
           <Detail
             label={t("roadConditions.rejected")}
-            value={String(data.evidence.roadConditions.rejectedCount ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.rejectedCount)}
           />
           <Detail
             label={t("roadConditions.failures")}
-            value={String(data.evidence.roadConditions.consecutiveFailures ?? t("common.unknown"))}
+            value={countOrUnknown(data.evidence.roadConditions.consecutiveFailures)}
           />
           <Detail
             label={t("roadConditions.graph")}
@@ -217,7 +227,10 @@ function SourceEvidenceBody({
             <BindingReasons reasons={data.evidence.roadConditions.bindingReasons} />
           )}
           {data.evidence.roadConditions.action && (
-            <CompactAlert severity="info">{data.evidence.roadConditions.action}</CompactAlert>
+            <CompactAlert severity="info">
+              {/* biome-ignore lint/plugin/noRawCodeCopy: the road-condition source writes this recommended action as text, not a code */}
+              {data.evidence.roadConditions.action}
+            </CompactAlert>
           )}
         </Section>
       )}
@@ -231,21 +244,21 @@ function SourceEvidenceBody({
         />
         <Detail
           label={t("sourceDrawer.lastAttempt")}
-          value={`${formatCoverageDate(source.lastAttemptAt)} · ${t(`attempt.${source.latestAttempt.outcome}`)}`}
+          value={`${format.timestamp(source.lastAttemptAt)} · ${t(`attempt.${source.latestAttempt.outcome}`)}`}
         />
         <Detail
           label={t("sourceDrawer.lastCheck")}
-          value={formatCoverageDate(source.lastSuccessfulCheckAt)}
+          value={format.timestamp(source.lastSuccessfulCheckAt)}
         />
         <Detail
           label={t("sourceDrawer.lastPublished")}
-          value={formatCoverageDate(source.lastPublishedAt)}
+          value={format.timestamp(source.lastPublishedAt)}
         />
         <Detail
           label={t("sourceDrawer.upstreamAsOf")}
-          value={formatCoverageDate(source.upstreamAsOf)}
+          value={format.timestamp(source.upstreamAsOf)}
         />
-        <Detail label={t("sourceDrawer.expiresAt")} value={formatCoverageDate(source.expiresAt)} />
+        <Detail label={t("sourceDrawer.expiresAt")} value={format.timestamp(source.expiresAt)} />
         <Detail
           label={t("sourceDrawer.policy")}
           value={`${data.evidence.policy.basis} · ${data.evidence.policy.provenance}`}
@@ -260,11 +273,11 @@ function SourceEvidenceBody({
           />
           <Detail
             label={t("sourceDrawer.lastCheck")}
-            value={formatCoverageDate(data.runtime.observedAt)}
+            value={format.timestamp(data.runtime.observedAt)}
           />
           <Detail
             label={t("sourceDrawer.expiresAt")}
-            value={formatCoverageDate(data.runtime.validUntil)}
+            value={format.timestamp(data.runtime.validUntil)}
           />
         </Section>
       )}
@@ -287,7 +300,7 @@ function SourceEvidenceBody({
           {data.recentAttempts.map((attempt) => (
             <ListItem key={`${attempt.key}:${attempt.at ?? "none"}`} disableGutters>
               <ListItemText
-                primary={`${formatCoverageDate(attempt.at)} · ${t(`attempt.${attempt.outcome}`)}`}
+                primary={`${format.timestamp(attempt.at)} · ${t(`attempt.${attempt.outcome}`)}`}
                 secondary={attempt.message ?? undefined}
               />
             </ListItem>
@@ -305,7 +318,7 @@ function SourceEvidenceBody({
           }
         />
         {data.rights.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("rights.missing")}
           </Typography>
         )}
@@ -348,7 +361,7 @@ function SourceEvidenceBody({
             />
             <Detail
               label={t("rights.reviewedAt")}
-              value={right.reviewedAt ? formatCoverageDate(right.reviewedAt) : t("common.unknown")}
+              value={right.reviewedAt ? format.timestamp(right.reviewedAt) : t("common.unknown")}
             />
             <Detail
               label={t("rights.origin")}
@@ -418,7 +431,7 @@ function BindingReasons({
   const road = useTranslations("roadConditions");
   return (
     <Stack spacing={0.5}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("roadConditions.bindingReasons")}
       </Typography>
       {reasons.length === 0 ? (
@@ -456,7 +469,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: "baseline" }}>
-      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 125, flexShrink: 0 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", minWidth: 125, flexShrink: 0 }}>
         {label}
       </Typography>
       <Typography component="div" variant="body2" sx={{ overflowWrap: "anywhere" }}>

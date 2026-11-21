@@ -5,6 +5,8 @@ import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
 import { AdminOperationCard } from "../AdminOperationCard";
 import type { AdminOperationContract } from "../adminOperationsApi";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
 }));

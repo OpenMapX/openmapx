@@ -190,7 +190,6 @@ describe("OSM contribution entry placement", () => {
     expect(airQualityProps).toHaveBeenLastCalledWith({
       lat: 52.5,
       lng: 13.4,
-      enabled: true,
       countryCode: "DE",
       subdivisionCode: "DE-BE",
     });

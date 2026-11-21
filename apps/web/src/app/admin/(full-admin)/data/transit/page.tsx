@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { TransitWorkspace } from "@/components/admin/transit/TransitWorkspace";
-export const metadata: Metadata = { title: "Transit — Admin — OpenMapX" };
+import { adminPageMetadata } from "@/lib/admin/adminPageMetadata";
+export function generateMetadata(): Promise<Metadata> {
+  return adminPageMetadata("transit");
+}
 export default function Page() {
   return <TransitWorkspace />;
 }

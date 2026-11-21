@@ -40,7 +40,6 @@ import {
 interface Props {
   lat: number;
   lng: number;
-  enabled?: boolean;
   countryCode?: string;
   subdivisionCode?: string;
 }
@@ -113,7 +112,7 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
   const t = useTranslations();
   return (
     <Stack spacing={0.5} sx={{ mt: 1 }}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("airQuality.provider")}: {evidence.providerId}
       </Typography>
       {evidence.sources.map((source) => {
@@ -122,7 +121,7 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
         return (
           <Box key={source.sourceId}>
             {source.owner && (
-              <Typography variant="caption" component="div" color="text.secondary">
+              <Typography variant="caption" component="div" sx={{ color: "text.secondary" }}>
                 {t("airQuality.owner")}: {source.owner}
               </Typography>
             )}
@@ -168,7 +167,7 @@ function EvidenceContext({ evidence }: { evidence: AirQualityEvidence }) {
     .filter((value): value is number => value !== null);
   return (
     <Stack spacing={0.35} sx={{ mt: 0.75 }}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t(spatialLabelKey(evidence.spatial.kind))}
         {evidence.spatial.name ? ` · ${evidence.spatial.name}` : ""}
         {evidence.spatial.distanceMeters !== null
@@ -177,13 +176,13 @@ function EvidenceContext({ evidence }: { evidence: AirQualityEvidence }) {
         {classKey ? ` · ${t(classKey)}` : ""}
       </Typography>
       {timestamp && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {evidence.forecastFor ? t("airQuality.forecastFor") : t("airQuality.observedAt")}:{" "}
           {format.dateTime(new Date(timestamp), { dateStyle: "medium", timeStyle: "short" })}
         </Typography>
       )}
       {evidence.validUntil && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("airQuality.validUntil")}:{" "}
           {format.dateTime(new Date(evidence.validUntil), {
             dateStyle: "medium",
@@ -192,7 +191,7 @@ function EvidenceContext({ evidence }: { evidence: AirQualityEvidence }) {
         </Typography>
       )}
       {index && index.dominantPollutants.length > 0 && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("airQuality.dominantPollutants")}:{" "}
           {dominantPollutantKeys(index.dominantPollutants)
             .map((key) => t(key))
@@ -241,7 +240,7 @@ function EvidenceCard({ evidence }: { evidence: AirQualityEvidence }) {
         {t(basisLabelKey(evidence.basis))}
       </Typography>
       <Typography variant="body2">{t(provenance.labelKey)}</Typography>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t(qualityPresentation(evidence.qualityStatus).labelKey)} ·{" "}
         {t(freshnessPresentation(evidence.freshness).labelKey)}
       </Typography>
@@ -285,7 +284,7 @@ function Headline({ response }: { response: AirQualityCurrentResponse }) {
             {pollutantPresentation(raw.pollutant).symbol}: {raw.value} {unitDisplay(raw.unit)}
           </Typography>
         )}
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("airQuality.noQualifyingLocalIndex")}
         </Typography>
         <Typography variant="body2">
@@ -336,7 +335,7 @@ function Headline({ response }: { response: AirQualityCurrentResponse }) {
         {t(standardLabelKey(selected.index.standardId))}
       </Typography>
       <Typography variant="body2">{t(provenance.labelKey)}</Typography>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t(qualityPresentation(selected.index.qualityStatus).labelKey)} ·{" "}
         {t(freshnessPresentation(selected.evidence.freshness).labelKey)}
       </Typography>
@@ -373,7 +372,12 @@ function Comparison({ response }: { response: AirQualityCurrentResponse }) {
         <>
           <Typography variant="body2">{t("airQuality.comparison.unavailable")}</Typography>
           {missing.map((requirement) => (
-            <Typography key={requirement} variant="caption" component="div" color="text.secondary">
+            <Typography
+              key={requirement}
+              variant="caption"
+              component="div"
+              sx={{ color: "text.secondary" }}
+            >
               {t(missingRequirementPresentation(requirement).labelKey)}
             </Typography>
           ))}
@@ -448,7 +452,7 @@ function ForecastContent({ response }: { response: AirQualityForecastResponse })
                         ? `${pollutantPresentation(raw.pollutant).symbol}: ${raw.value} ${unitDisplay(raw.unit)}`
                         : t("airQuality.unavailable")}
                   </Typography>
-                  <Typography variant="caption" component="div" color="text.secondary">
+                  <Typography variant="caption" component="div" sx={{ color: "text.secondary" }}>
                     {t(
                       provenancePresentation({
                         basis: item.basis,
@@ -462,7 +466,7 @@ function ForecastContent({ response }: { response: AirQualityForecastResponse })
                     {t(freshnessPresentation(item.freshness).labelKey)}
                   </Typography>
                   {!itemIndex && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {t("airQuality.noQualifyingLocalIndex")}
                     </Typography>
                   )}
@@ -478,18 +482,17 @@ function ForecastContent({ response }: { response: AirQualityForecastResponse })
   );
 }
 
-export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivisionCode }: Props) {
+export function PlaceAirQuality({ lat, lng, countryCode, subdivisionCode }: Props) {
   const t = useTranslations();
   const [comparisonStandard, setComparisonStandard] = useState<AirQualityStandardId | undefined>();
   const [forecastOpen, setForecastOpen] = useState(false);
   const current = useAirQuality(lat, lng, {
-    enabled,
     countryCode,
     subdivisionCode,
     comparisonStandard,
   });
   const forecast = useAirQualityForecast(lat, lng, {
-    enabled: enabled && forecastOpen,
+    enabled: forecastOpen,
     hours: 48,
     countryCode,
     subdivisionCode,
@@ -509,7 +512,7 @@ export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivi
   const response = current.data;
   if (!response || response.evidence.length === 0) {
     return (
-      <Typography role="status" variant="body2" color="text.secondary" sx={{ py: 1 }}>
+      <Typography role="status" variant="body2" sx={{ color: "text.secondary", py: 1 }}>
         {t("airQuality.unavailable")}
       </Typography>
     );
@@ -597,7 +600,7 @@ export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivi
           {forecast.data && <ForecastContent response={forecast.data} />}
         </Box>
       )}
-      <Typography variant="caption" component="p" color="text.secondary" sx={{ mt: 1.5 }}>
+      <Typography variant="caption" component="p" sx={{ color: "text.secondary", mt: 1.5 }}>
         {t("airQuality.informationalOnly")}
       </Typography>
     </Box>

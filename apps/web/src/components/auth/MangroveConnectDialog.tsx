@@ -69,7 +69,7 @@ export function MangroveConnectDialog({
       <DialogTitle>{t("mangroveConnectTitle")}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("mangroveConnectIntro")}
           </Typography>
           {unavailable && (
@@ -133,7 +133,7 @@ export function MangroveConnectDialog({
             slotProps={{ htmlInput: { maxLength: 253 } }}
             helperText={t("mangroveBlueskyHandleHelp")}
           />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("mangroveSignerCustody")}
           </Typography>
           <Divider />
@@ -148,7 +148,7 @@ export function MangroveConnectDialog({
           >
             {t("mangroveUseLocal")}
           </Button>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("mangroveLocalExplanation")}
           </Typography>
         </Stack>

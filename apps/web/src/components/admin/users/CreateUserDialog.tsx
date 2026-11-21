@@ -14,9 +14,11 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import type { AccountProvisioningResult } from "@openmapx/core/api-contracts";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { useAdminToast } from "../shared/AdminToast";
 import { AccountMailStatus } from "./AccountMailStatus";
 
@@ -31,6 +33,9 @@ export function CreateUserDialog(props: Props) {
   );
 }
 function CreateUserForm({ open, onClose }: Props) {
+  const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
+  const errorText = useAccountErrorText();
   const toast = useAdminToast(),
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
@@ -44,9 +49,9 @@ function CreateUserForm({ open, onClose }: Props) {
       onSuccess: (value) => {
         setCreated(value);
         setPassword("");
-        toast("Account created");
+        toast(t("accountCreated"));
       },
-      onError: (error) => toast(error.message, "error"),
+      onError: (error) => toast(errorText(error), "error"),
     }),
     edit = (run: () => void) => {
       key.current = null;
@@ -61,21 +66,21 @@ function CreateUserForm({ open, onClose }: Props) {
       name.trim() && email.trim() && (!password || password.length >= 8) && password.length <= 128;
   return (
     <Dialog open={open} onClose={close} maxWidth="xs" fullWidth>
-      <DialogTitle>Create User</DialogTitle>
+      <DialogTitle>{t("createUser")}</DialogTitle>
       <DialogContent>
         {created ? (
           <Stack sx={{ gap: 2, pt: 1 }}>
-            <Alert severity="success">Account created. Email verification is separate.</Alert>
+            <Alert severity="success">{t("accountCreatedEmailVerificationIs")}</Alert>
             <AccountMailStatus userId={created.userId} initial={created} />
             <Button component={Link} href={`/admin/users/${created.userId}`}>
-              View account and recovery actions
+              {t("viewAccountAndRecoveryActions")}
             </Button>
           </Stack>
         ) : (
           <Stack sx={{ gap: 2, pt: 1 }}>
             <TextField
               disabled={create.isPending}
-              label="Full Name"
+              label={t("fullName")}
               value={name}
               onChange={(e) => edit(() => setName(e.target.value))}
               size="small"
@@ -85,7 +90,7 @@ function CreateUserForm({ open, onClose }: Props) {
             />
             <TextField
               disabled={create.isPending}
-              label="Email"
+              label={t("email")}
               type="email"
               value={email}
               onChange={(e) => edit(() => setEmail(e.target.value))}
@@ -95,7 +100,7 @@ function CreateUserForm({ open, onClose }: Props) {
             />
             <TextField
               disabled={create.isPending}
-              label="Password"
+              label={t("password")}
               type="password"
               autoComplete="new-password"
               value={password}
@@ -103,18 +108,18 @@ function CreateUserForm({ open, onClose }: Props) {
               size="small"
               fullWidth
               slotProps={{ htmlInput: { maxLength: 128 } }}
-              helperText="Optional. Leave empty to send a one-use password setup link. The instance password policy applies."
+              helperText={t("optionalLeaveEmptyToSend")}
             />
             <FormControl size="small" fullWidth>
-              <InputLabel>Role</InputLabel>
+              <InputLabel>{t("role")}</InputLabel>
               <Select
                 disabled={create.isPending}
                 value={role}
-                label="Role"
+                label={t("role")}
                 onChange={(e) => edit(() => setRole(e.target.value as typeof role))}
               >
-                <MenuItem value="user">User</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
+                <MenuItem value="user">{t("user")}</MenuItem>
+                <MenuItem value="admin">{t("admin")}</MenuItem>
               </Select>
             </FormControl>
             <FormControlLabel
@@ -126,20 +131,15 @@ function CreateUserForm({ open, onClose }: Props) {
                   size="small"
                 />
               }
-              label="Send welcome email"
+              label={t("sendWelcomeEmail")}
             />
-            {!password && (
-              <Alert severity="info">
-                Without an initial password, a setup invitation is required. Verification and
-                password setup are sent separately.
-              </Alert>
-            )}
-            {create.error && <Alert severity="error">{create.error.message}</Alert>}
+            {!password && <Alert severity="info">{t("withoutAnInitialPasswordA")}</Alert>}
+            {create.error && <Alert severity="error">{errorText(create.error)}</Alert>}
           </Stack>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={close}>{created ? "Done" : "Cancel"}</Button>
+        <Button onClick={close}>{created ? tCommon("done") : tCommon("cancel")}</Button>
         {!created && (
           <Button
             variant="contained"
@@ -155,7 +155,7 @@ function CreateUserForm({ open, onClose }: Props) {
               );
             }}
           >
-            Create
+            {t("create")}
           </Button>
         )}
       </DialogActions>

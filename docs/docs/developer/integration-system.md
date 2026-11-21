@@ -1314,13 +1314,58 @@ Installation needs a parsed stylesheet, not loaded tiles. Do not gate it, or
 asynchronous image completion, on `isStyleLoaded()` or an idle event: an
 unrelated pending source or continuous animation would leave the overlay
 missing. Fence asynchronous completions by the current effect, map and source
-identity. Layer-scoped event listeners tolerate a layer that does not exist yet,
-so bind interactions to the overlay's visibility rather than to installation.
+identity.
+
+The four primitives in order of preference: `useMapLayerGroup` whenever the
+sources can be written as data, which covers GeoJSON and vector tile sources,
+brand or icon images through the descriptor's `images` loaders, and paint that
+follows selection or focus; `useStyleSyncedLayer` for a single attributed raster;
+`subscribeStyleLoaded` only when the layer must sit relative to a basemap layer,
+is a custom layer, or changes every frame; plain imperative code only for the
+basemap, terrain and globe, and for standalone maps without a `MapContext`.
 
 A physical map click has one owner. Every map click handler, layer-scoped or
 not, starts with `getMapClickOwner(event)` from
 `@/integration-api/map/mapClickOwnership` and leaves an owned click alone; an
 active picker or tool takes its point with `claimMapClick(event, owner)`.
+
+Overlays answer clicks and hover with `useMapOverlayInteraction` from
+`@/integration-api/map/useMapOverlayInteraction`:
+
+```tsx
+useMapOverlayInteraction({
+  id: "my-overlay",
+  layerIds: [CIRCLE_LAYER_ID],
+  priority: 50,
+  enabled: layerVisible,
+  onClick: ({ event, features }) => popup.show(buildPopup(features[0], event.lngLat)),
+  onHover: (features) => setHovered(features?.[0]?.id ?? null),
+});
+```
+
+All registrations on a map share one click listener and one pointer listener.
+Where layers of several overlays overlap, the registration with the highest
+`priority` that has a rendered feature under the pointer gets the click, the
+hover and the pointer cursor; between equal priorities, the registration made
+first wins. `onHover` runs on every pointer move, with the features when its
+overlay owns the hover and with `null` otherwise. The arbiter checks click
+ownership, adds the layers to the interactive registry that the plain-map click
+handler skips, and looks layers up at event time, so a registration survives
+style changes and may start before its layers exist. Without `onClick` an
+overlay only shows the pointer cursor, for features that another handler opens,
+and its layers stay out of the registry. `useMapOverlayPopup(open)` from the
+same module opens an overlay's popup in place of any other overlay's popup and
+closes it when `open` turns false or the overlay unmounts.
+
+Priorities in use: area and line overlays 10 to 20, point overlays 50, moving
+live-transit vehicles 60, and road-condition incidents and markers 100 to 110.
+Results the user asked for take 200 to 203: data-source results 200, category
+results 201, the stops a transit category draws in place of its pins 202, and
+route search results 203. The open saved list takes 210. Give a new
+overlay a priority of its own rather than relying on registration order. A
+static test rejects pointer listeners and cursor writes in integrations and
+shared integration components outside this pipeline; the measurement and
+travel-time tools, which own the map while active, are its only exceptions.
 
 MapLibre mounts DOM markers inside the map's event container, so a click on a
 marker is also a map click at that point. Unclaimed, the plain-map handler drops

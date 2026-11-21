@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import config from "../app.config";
+import { CAR_PERMISSIONS } from "../plugins/carConfigTransforms";
 import {
   ANDROID_PERMISSIONS,
   diffPermissionSurface,
@@ -17,12 +19,9 @@ const registry = JSON.parse(
 ) as { practices: { id: string }[] };
 
 const practiceIds = new Set(registry.practices.map((practice) => practice.id));
-const appConfig = readFileSync(resolve(import.meta.dirname, "../app.config.ts"), "utf8");
 // Android Auto's car-app permissions are added by its config plugin, not app.config.ts.
-const carConfig = readFileSync(
-  resolve(import.meta.dirname, "../plugins/carConfigTransforms.ts"),
-  "utf8",
-);
+const declaredAndroid = [...(config.android?.permissions ?? []), ...CAR_PERMISSIONS];
+const blockedAndroid = config.android?.blockedPermissions ?? [];
 
 describe("every permission is justified", () => {
   it.each([...IOS_USAGE_DESCRIPTION_KEYS, ...IOS_BACKGROUND_MODES, ...ANDROID_PERMISSIONS])(
@@ -72,44 +71,38 @@ describe("the permitted surface is minimal", () => {
 });
 
 describe("the app config matches the permitted surface", () => {
-  it.each(ANDROID_PERMISSIONS.map((entry) => entry.id))("declares %s", (id) => {
-    expect(id.startsWith("androidx.car.app.") ? carConfig : appConfig).toContain(id);
-  });
-
-  it("requests no permission the surface does not name", () => {
-    const declared = [...appConfig.matchAll(/"(android\.permission\.[A-Z_]+)"/g)].map(
-      (match) => match[1],
+  it("declares exactly the permitted Android permissions", () => {
+    expect([...declaredAndroid].sort()).toEqual(
+      ANDROID_PERMISSIONS.map((entry) => entry.id).sort(),
     );
-    const permitted = new Set(expectedPermissionSurface().androidPermissions);
-    // Everything else in the config must be in `blockedPermissions`, not in
-    // `permissions` — the test reads both, so an entry appearing in neither list
-    // is what this catches.
-    const blockedSection = appConfig.slice(appConfig.indexOf("blockedPermissions"));
-    for (const id of declared) {
-      if (permitted.has(id)) continue;
-      expect({ id, blocked: blockedSection.includes(id) }).toEqual({ id, blocked: true });
-    }
   });
 
-  it("blocks the capabilities that would otherwise arrive by default", () => {
-    for (const id of [
-      "com.google.android.c2dm.permission.RECEIVE",
-      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
-      "android.permission.CAMERA",
-      "android.permission.QUERY_ALL_PACKAGES",
-    ]) {
-      expect(appConfig).toContain(id);
-    }
+  it("blocks the capabilities that would otherwise arrive by default, and none it declares", () => {
+    expect(blockedAndroid).toEqual(
+      expect.arrayContaining([
+        "com.google.android.c2dm.permission.RECEIVE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.CAMERA",
+        "android.permission.QUERY_ALL_PACKAGES",
+      ]),
+    );
+    expect(blockedAndroid.filter((id) => declaredAndroid.includes(id))).toEqual([]);
+  });
+
+  it("declares the permitted iOS background modes", () => {
+    expect(config.ios?.infoPlist?.UIBackgroundModes).toEqual(
+      expectedPermissionSurface().iosBackgroundModes,
+    );
   });
 
   it("declares no tablet support", () => {
     // Phone is the supported first-release form factor and the store metadata
     // claims nothing else.
-    expect(appConfig).toContain("supportsTablet: false");
+    expect(config.ios?.supportsTablet).toBe(false);
   });
 
   it("declares encryption as exempt", () => {
-    expect(appConfig).toContain("usesNonExemptEncryption: false");
+    expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
   });
 });
 

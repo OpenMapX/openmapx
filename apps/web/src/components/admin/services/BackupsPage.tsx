@@ -32,13 +32,15 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { AdminServiceBackup } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationKey, useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -61,6 +63,9 @@ export function BackupsPage() {
   return <BackupsView key={apiUrl} />;
 }
 function BackupsView() {
+  const t = useTranslations("adminServices");
+  const format = useAdminFormat();
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient();
   const register = useServiceJobRegistration();
   const showToast = useAdminToast();
@@ -109,13 +114,12 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(`Backup create queued (${result.jobId})`);
+          showToast(t("backupCreateQueued", { jobId: result.jobId }));
           setCreateName("");
         }
         createIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Backup create failed", "error");
+        if (execution.active) showToast(adminErrorText(error, t("backupCreateFailed")), "error");
         throw error;
       }
     },
@@ -138,15 +142,14 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(`Restore queued for ${payload.name} (${result.jobId})`);
+          showToast(t("restoreQueued", { name: payload.name, jobId: result.jobId }));
           setRestoreTarget(null);
           setRestoreServiceIds("");
           setRestoreStopRunning(false);
         }
         restoreIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Restore failed", "error");
+        if (execution.active) showToast(adminErrorText(error, t("restoreFailed")), "error");
         throw error;
       }
     },
@@ -164,13 +167,12 @@ function BackupsView() {
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
-          showToast(`Delete queued for ${name} (${result.jobId})`);
+          showToast(t("deleteQueued", { name, jobId: result.jobId }));
           setDeleteTarget(null);
         }
         deleteIntent.complete(key);
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Delete failed", "error");
+        if (execution.active) showToast(adminErrorText(error, t("deleteFailed")), "error");
         throw error;
       }
     },
@@ -196,10 +198,10 @@ function BackupsView() {
       }}
     >
       <AdminPageHeader
-        title="Backups"
-        subtitle="Create, restore, and delete service-volume backups"
+        title={t("backups")}
+        subtitle={t("createRestoreAndDeleteService")}
         actions={
-          <Tooltip title="Refresh">
+          <Tooltip title={t("refresh")}>
             <span>
               <IconButton onClick={() => refetch()} disabled={isFetching || isLoading}>
                 <RefreshIcon fontSize="small" />
@@ -217,11 +219,11 @@ function BackupsView() {
           }}
         >
           <TextField
-            label="Backup name (optional)"
+            label={t("backupNameOptional")}
             size="small"
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
-            placeholder="e.g. pre-upgrade-2026-04-21"
+            placeholder={t("backupLabelExample")}
             sx={{ minWidth: { xs: "100%", sm: 320 } }}
           />
           <Button
@@ -230,7 +232,7 @@ function BackupsView() {
             onClick={() => createMutation.mutate(createName)}
             disabled={createMutation.isPending}
           >
-            {createMutation.isPending ? "Queueing…" : "Create backup"}
+            {createMutation.isPending ? t("queueing") : t("createBackup")}
           </Button>
           <Button
             component={Link}
@@ -242,7 +244,7 @@ function BackupsView() {
             size="small"
             variant="outlined"
           >
-            Open activity
+            {t("openActivityLink")}
           </Button>
         </Stack>
         <Typography
@@ -253,10 +255,10 @@ function BackupsView() {
             display: "block",
           }}
         >
-          Allowed: letters, numbers, dot, dash, underscore.
+          {t("allowedLettersNumbersDotDash")}
         </Typography>
       </Paper>
-      {data && <Typography variant="caption">Backup storage: {data.root}</Typography>}
+      {data && <Typography variant="caption">{t("backupStorage", { path: data.root })}</Typography>}
       <BackupPruneControls />
       {isLoading && (
         <Box
@@ -269,7 +271,7 @@ function BackupsView() {
           <CircularProgress />
         </Box>
       )}
-      {isError && <Alert severity="error">Failed to load backups.</Alert>}
+      {isError && <Alert severity="error">{t("failedToLoadBackups")}</Alert>}
       {!!data?.warnings.length && (
         <Alert severity="warning">
           {data.warnings.map((warning) => (
@@ -287,16 +289,16 @@ function BackupsView() {
                 <TableSearchField
                   value={query}
                   onChange={setQuery}
-                  placeholder="Search backups by name…"
+                  placeholder={t("searchBackupsByName")}
                 />
                 <FormControl size="small" sx={{ minWidth: 150 }}>
                   <Select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
                   >
-                    <MenuItem value="all">All backups</MenuItem>
-                    <MenuItem value="valid">Valid</MenuItem>
-                    <MenuItem value="corrupt">Corrupt</MenuItem>
+                    <MenuItem value="all">{t("allBackups")}</MenuItem>
+                    <MenuItem value="valid">{t("valid")}</MenuItem>
+                    <MenuItem value="corrupt">{t("corrupt")}</MenuItem>
                   </Select>
                 </FormControl>
               </TableToolbar>
@@ -308,13 +310,13 @@ function BackupsView() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Created</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Services</TableCell>
-                  <TableCell>Volumes</TableCell>
-                  <TableCell>Size</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t("name")}</TableCell>
+                  <TableCell>{t("created")}</TableCell>
+                  <TableCell>{t("version")}</TableCell>
+                  <TableCell>{t("services")}</TableCell>
+                  <TableCell>{t("volumes")}</TableCell>
+                  <TableCell>{t("size")}</TableCell>
+                  <TableCell align="right">{t("actions")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -323,8 +325,8 @@ function BackupsView() {
                     colSpan={7}
                     message={
                       sortedBackups.length === 0
-                        ? "No backups found yet."
-                        : "No backups match your search or filter."
+                        ? t("noBackupsFoundYet")
+                        : t("noBackupsMatchYourSearch")
                     }
                   />
                 ) : (
@@ -350,10 +352,12 @@ function BackupsView() {
                           </Typography>
                           {backup.corrupt && (
                             <Tooltip
-                              title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
+                              title={t("cannotBeRestored", {
+                                reason: backup.corruptReason ?? "",
+                              })}
                             >
                               <Chip
-                                label="corrupt"
+                                label={t("corruptChip")}
                                 size="small"
                                 color="warning"
                                 variant="outlined"
@@ -363,19 +367,27 @@ function BackupsView() {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        {new Date(backup.createdAt).toLocaleString()}
+                        {format.dateTime(backup.createdAt)}
                         {backup.expiresAt && (
                           <Typography variant="caption" sx={{ display: "block" }}>
-                            Expires {new Date(backup.expiresAt).toLocaleString()}
+                            {t("expiresAt", {
+                              expiresAt: format.dateTime(backup.expiresAt),
+                            })}
                           </Typography>
                         )}
                       </TableCell>
                       <TableCell>
                         {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
                       </TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.serviceCount}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.volumeCount}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.number(backup.serviceCount)}
+                      </TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.number(backup.volumeCount)}
+                      </TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : format.bytes(backup.totalBytes)}
+                      </TableCell>
                       <TableCell align="right">
                         <Stack
                           direction="row"
@@ -387,17 +399,17 @@ function BackupsView() {
                           <Tooltip
                             title={
                               backup.corrupt
-                                ? "Corrupt backup — cannot be restored"
+                                ? t("corruptBackupCannotBeRestored")
                                 : backup.expiresAt && Date.parse(backup.expiresAt) < Date.now()
-                                  ? "Expired backup — cannot be restored"
-                                  : "Restore backup"
+                                  ? t("expiredBackupCannotBeRestored")
+                                  : t("restoreBackup")
                             }
                           >
                             <span>
                               <IconButton
                                 size="small"
                                 color="primary"
-                                aria-label="Restore backup"
+                                aria-label={t("restoreBackup")}
                                 onClick={() => {
                                   restoreMutation.reset();
                                   setDialogGeneration((n) => n + 1);
@@ -414,12 +426,12 @@ function BackupsView() {
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Delete backup">
+                          <Tooltip title={t("deleteBackup")}>
                             <span>
                               <IconButton
                                 size="small"
                                 color="error"
-                                aria-label="Delete backup"
+                                aria-label={t("deleteBackup")}
                                 onClick={() => {
                                   deleteMutation.reset();
                                   setDialogGeneration((n) => n + 1);
@@ -441,7 +453,7 @@ function BackupsView() {
         </AdminTableSurface>
       )}
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Restore Backup</DialogTitle>
+        <DialogTitle>{t("restoreBackupTitle")}</DialogTitle>
         <DialogContent>
           <Stack
             sx={{
@@ -449,19 +461,20 @@ function BackupsView() {
               pt: 0.5,
             }}
           >
-            <Alert severity="warning">
-              Restoring overwrites current service data for selected targets.
-            </Alert>
+            <Alert severity="warning">{t("restoringOverwritesCurrentServiceData")}</Alert>
             <Typography variant="body2">
-              Backup: <strong>{restoreTarget?.name}</strong>
+              {t.rich("restoreTarget", {
+                name: restoreTarget?.name ?? "",
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })}
             </Typography>
             <TextField
-              label="Service IDs (optional)"
+              label={t("serviceIdsOptional")}
               placeholder="valhalla, osrm, motis"
               size="small"
               value={restoreServiceIds}
               onChange={(e) => setRestoreServiceIds(e.target.value)}
-              helperText="Comma-separated list. Leave empty to restore all services from this backup."
+              helperText={t("commaSeparatedListLeaveEmpty")}
               fullWidth
             />
             <FormControlLabel
@@ -471,7 +484,7 @@ function BackupsView() {
                   onChange={(e) => setRestoreStopRunning(e.target.checked)}
                 />
               }
-              label="Stop currently running target services before restore"
+              label={t("stopCurrentlyRunningTargetServices")}
             />
           </Stack>
         </DialogContent>
@@ -484,7 +497,7 @@ function BackupsView() {
             }}
             disabled={restoreMutation.isPending}
           >
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
@@ -499,23 +512,26 @@ function BackupsView() {
               });
             }}
           >
-            {restoreMutation.isPending ? "Queueing..." : "Restore"}
+            {restoreMutation.isPending ? t("queueing") : t("restore")}
           </Button>
         </DialogActions>
       </Dialog>
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Delete Backup</DialogTitle>
+        <DialogTitle>{t("deleteBackupTitle")}</DialogTitle>
         <DialogContent>
           <Alert severity="error" variant="outlined" sx={{ mb: 1.5 }}>
-            This cannot be undone.
+            {t("thisCannotBeUndone")}
           </Alert>
           <Typography variant="body2">
-            Delete backup <strong>{deleteTarget?.name}</strong>?
+            {t.rich("deleteBackupName", {
+              name: deleteTarget?.name ?? "",
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             color="error"
@@ -523,7 +539,7 @@ function BackupsView() {
             disabled={deleteMutation.isPending || !deleteTarget}
             onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.name)}
           >
-            {deleteMutation.isPending ? "Queueing..." : "Delete"}
+            {deleteMutation.isPending ? t("queueing") : t("delete")}
           </Button>
         </DialogActions>
       </Dialog>

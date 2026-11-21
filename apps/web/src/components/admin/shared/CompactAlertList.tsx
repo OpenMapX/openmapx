@@ -2,6 +2,7 @@ import type { AlertColor } from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { CompactAlert } from "./CompactAlert";
 
@@ -26,6 +27,8 @@ export function CompactAlertList({
   onExpandedChange,
   collapsedItemCount = 3,
 }: CompactAlertListProps) {
+  const t = useTranslations("adminShared");
+  const tCommon = useTranslations("common");
   const visibleItems = expanded ? items : items.slice(0, collapsedItemCount);
   const hiddenItemCount = items.length - collapsedItemCount;
 
@@ -51,7 +54,7 @@ export function CompactAlertList({
           onClick={() => onExpandedChange(!expanded)}
           sx={{ alignSelf: "flex-start" }}
         >
-          {expanded ? "Show less" : `Show ${hiddenItemCount} more`}
+          {expanded ? tCommon("showLess") : t("showMore", { count: hiddenItemCount })}
         </Button>
       )}
     </Stack>

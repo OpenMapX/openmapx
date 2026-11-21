@@ -74,7 +74,7 @@ export function CrowdApproachPrompt() {
           <Typography variant="body2" noWrap>
             {localizedTextFor(nearest.headline, locale) || t("approachStillThere")}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("approachPrompt")}
           </Typography>
         </Box>

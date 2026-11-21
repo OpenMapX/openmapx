@@ -4,6 +4,7 @@ import Stack from "@mui/material/Stack";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
@@ -25,6 +26,7 @@ export function TransitWorkspace() {
   return <TransitView key={`${apiUrl}:${actorId}`} apiUrl={apiUrl} actorId={actorId} />;
 }
 function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
+  const t = useTranslations("adminTransit");
   const { params, update } = useAdminQueryState();
   const raw = params.get("tab");
   const tab = TABS.find((value) => value === raw) ?? "sources";
@@ -48,16 +50,13 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
   }, [tab, proposalFinished]);
   return (
     <Stack sx={{ gap: 2 }}>
-      <AdminPageHeader
-        title="Transit"
-        subtitle="Sources, reviewed catalog pins, credentials and pipeline health"
-      />
+      <AdminPageHeader title={t("transit")} subtitle={t("sourcesReviewedCatalogPinsCredentials")} />
       <Tabs
         value={tab}
         onChange={(_, value: string) => update({ tab: value })}
         variant="scrollable"
         scrollButtons="auto"
-        aria-label="Transit sections"
+        aria-label={t("transitSections")}
       >
         {TABS.map((value) => (
           <Tab
@@ -65,7 +64,7 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
             value={value}
             id={`transit-tab-${value}`}
             aria-controls={`transit-panel-${value}`}
-            label={value[0].toUpperCase() + value.slice(1)}
+            label={t("transitTab", { tab: value })}
           />
         ))}
       </Tabs>
@@ -92,11 +91,12 @@ export function TransitMobilityView() {
   return <MobilityView />;
 }
 function MobilityView() {
+  const t = useTranslations("adminTransit");
   const { client, apiUrl } = useActivityClient();
   const query = useQuery({ ...serviceAdminQueries(client, apiUrl).data(), refetchInterval: 30000 });
   return (
     <Stack sx={{ gap: 2 }}>
-      {query.isError && <Alert severity="error">MOTIS evidence is unavailable.</Alert>}
+      {query.isError && <Alert severity="error">{t("motisEvidenceIsUnavailable")}</Alert>}
       {query.data && <MotisTransitousSection status={query.data.motisTransitous} />}
       <SharedMobilitySourcesSection apiUrl={apiUrl} />
     </Stack>

@@ -4,17 +4,12 @@ import {
   isMobileSessionExpired,
   MOBILE_PROTOCOL_MAX,
   type MobileNavigationSession,
-  mergeTransitRefresh,
   type NativeSnapshot,
   type NativeToWebPayload,
   type NativeToWebType,
   onRerouteFailed,
   onRerouteSucceeded,
-  prepareTransitProgress,
   recordRerouteSuccess,
-  refreshTransitCaptures,
-  transitProgressFromTick,
-  transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import type { SendOutcome } from "../bridge/nativeBridge";
@@ -25,14 +20,13 @@ import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import { type CoastOrigin, canCoast } from "./ground/GroundCoastingScheduler";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
-import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
+import type { ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { profileForSession } from "./sessionProfile";
 import { applySettingsPatch } from "./sessionSettings";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
-import { onRefreshFailed, onRefreshSucceeded } from "./transit/refreshState";
 import type { RefreshOutcome } from "./transit/TransitRefreshService";
 
 /**
@@ -398,9 +392,8 @@ export class NavigationCoordinator {
     now: number,
   ): Promise<CommandResponse> {
     const { repository, processors, newSessionId } = this.deps;
-    const kind = command.payload.startPackage.kind;
-    const processor = processors.get(kind);
-    if (!processor) return errorResponse("mode-unsupported");
+    const { startPackage } = command.payload;
+    if (!processors.supports(startPackage.kind)) return errorResponse("mode-unsupported");
 
     const existing = await repository.loadActive(now);
     if (existing && !this.isTerminal(existing) && !isMobileSessionExpired(existing, now)) {
@@ -411,12 +404,17 @@ export class NavigationCoordinator {
       await this.endSession(existing, "stopped", now, "command");
     }
 
-    const prepared = processor.prepare(command.payload.startPackage as never, {
+    const context = {
       sessionId: newSessionId(),
       nowMs: now,
       // Upgraded to `background` only once the user has actually granted it.
       permissionMode: "foreground-only",
-    });
+    } as const;
+    const prepared =
+      startPackage.kind === "ground"
+        ? processors.get("ground")?.prepare(startPackage, context)
+        : processors.get("transit")?.prepare(startPackage, context);
+    if (!prepared) return errorResponse("mode-unsupported");
     if (!prepared.ok) return errorResponse(prepared.code);
 
     const created = await repository.createPreparing(prepared.session);
@@ -529,17 +527,19 @@ export class NavigationCoordinator {
       return errorResponse("revision-conflict");
     if (current.status !== "active") return errorResponse("invalid-state");
 
-    const processor = this.deps.processors.get(current.kind);
-    if (!processor) return errorResponse("mode-unsupported");
+    if (!this.deps.processors.supports(current.kind)) return errorResponse("mode-unsupported");
     if (command.payload.startPackage.kind !== current.kind) {
       // Switching mode mid-session is a new session, not a replacement.
       return errorResponse("mode-mismatch");
     }
 
-    const outcome = processor.replace(current as never, command.payload.startPackage, now);
-    if ("ok" in outcome && outcome.ok === false) return errorResponse(outcome.code);
+    const outcome = this.deps.processors.withProcessor(current, (processor, session) =>
+      processor.replace(session, command.payload.startPackage, now),
+    );
+    if (!outcome) return errorResponse("mode-unsupported");
+    if ("ok" in outcome) return errorResponse(outcome.code);
 
-    const committed = await this.commit(current, outcome as ProcessorMutation, now);
+    const committed = await this.commit(current, outcome, now);
     if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
 
@@ -566,9 +566,9 @@ export class NavigationCoordinator {
     const processor = this.deps.processors.get("transit");
     if (!processor?.repairTransitWalk) return errorResponse("mode-unsupported");
     const result = processor.repairTransitWalk(
-      current as never,
+      current,
       command.payload.legIndex,
-      command.payload.route as never,
+      command.payload.route,
       now,
     );
     if ("ok" in result) return errorResponse(result.code);
@@ -605,7 +605,7 @@ export class NavigationCoordinator {
     const processor = this.deps.processors.get("transit");
     if (!processor?.transitAction) return errorResponse("mode-unsupported");
     const outcome = processor.transitAction(
-      current as never,
+      current,
       { type: action.type, legIndex: action.legIndex },
       now,
     );
@@ -817,7 +817,7 @@ export class NavigationCoordinator {
         if (!processor) return;
         const committed = await this.commit(
           session,
-          (processor as AnyNavigationProcessor).processFixes(session as never, [fix], now),
+          processor.processFixes(session, [fix], now),
           now,
         );
         if (committed.ok) await this.deps.effects.run(committed.effects);
@@ -861,8 +861,7 @@ export class NavigationCoordinator {
       return;
     }
 
-    const processor = processors.get(session.kind);
-    if (!processor) return;
+    if (!processors.supports(session.kind)) return;
     // A batch is the one input a backgrounded Android app still receives, so it
     // also carries a connectivity change no timer could deliver.
     const current = await this.applyConnectivity(session, now);
@@ -885,13 +884,12 @@ export class NavigationCoordinator {
     // transit rider underground produces no fix for twenty minutes, and the
     // engine still has to update freshness without inferring movement. Ground has no such tick, so
     // an empty batch there really is nothing.
-    if (accepted.length === 0 && !processor.needsScheduleTicks) return;
-
-    const mutation = (processor as AnyNavigationProcessor).processFixes(
-      current as never,
-      accepted,
-      now,
+    const mutation = processors.withProcessor(current, (processor, active) =>
+      accepted.length === 0 && !processor.needsScheduleTicks
+        ? null
+        : processor.processFixes(active, accepted, now),
     );
+    if (!mutation) return;
     const committed = await this.commit(current, mutation, now);
     if (committed.ok) {
       await this.deps.effects.run(committed.effects);
@@ -941,17 +939,19 @@ export class NavigationCoordinator {
       session.status !== "active"
     )
       return session;
-    const processor = this.deps.processors.get(session.kind);
-    if (!processor) return session;
+    const { processors } = this.deps;
+    if (!processors.supports(session.kind)) return session;
     this.deps.diagnostics.record("network.transition", {
       from: session.connectivity,
       to: confirmed,
       confirmed: true,
     });
-    const marked = { ...session, connectivity: confirmed } as MobileNavigationSession;
+    const marked: MobileNavigationSession = { ...session, connectivity: confirmed };
     const restored =
       confirmed === "online"
-        ? await (processor as AnyNavigationProcessor).onConnectivityRestored(marked as never, now)
+        ? await processors.withProcessor(marked, (processor, restoring) =>
+            processor.onConnectivityRestored(restoring, now),
+          )
         : null;
     const mutation: ProcessorMutation = restored ?? {
       session: { ...marked, revision: session.revision + 1, updatedAtMs: now },
@@ -1005,9 +1005,8 @@ export class NavigationCoordinator {
     let mutation: ProcessorMutation | null = null;
     if (outcome.ok) {
       const processor = processors.get("ground");
-      const replaced = processor?.replace(session as never, outcome.route, now);
-      if (replaced && !("ok" in replaced && replaced.ok === false)) {
-        const applied = replaced as ProcessorMutation;
+      const applied = processor?.replace(session, outcome.route, now);
+      if (applied && !("ok" in applied)) {
         const next = applied.session;
         mutation =
           next.kind === "ground"
@@ -1048,6 +1047,11 @@ export class NavigationCoordinator {
     if (committed.ok) await this.deps.effects.run(committed.effects);
   }
 
+  /**
+   * Applies an itinerary refresh answer. Like a reroute it ran outside the
+   * queue, so only an answer for the trip still running is passed on; the
+   * transit processor drops one its session no longer waits for.
+   */
   async applyTransitRefresh(outcome: RefreshOutcome): Promise<void> {
     await this.queue.run(async () => {
       const now = this.deps.clock();
@@ -1058,102 +1062,9 @@ export class NavigationCoordinator {
         session.sessionId !== outcome.sessionId
       )
         return;
-      const refresh = session.payload.refresh;
-      if (
-        refresh.status !== "in-flight" ||
-        refresh.generation !== outcome.generation ||
-        refresh.requestId !== outcome.requestId
-      )
-        return;
-      const parsed = outcome.ok
-        ? transitStartPackageSchema.safeParse({
-            ...session.payload.startPackage,
-            itinerary: outcome.itinerary,
-          })
-        : null;
-      const merged = parsed?.success
-        ? mergeTransitRefresh(
-            session.payload.startPackage.itinerary as never,
-            parsed.data.itinerary as never,
-            session.payload.tickState.currentLegIndex,
-            session.payload.tickState.walkRevision ?? 0,
-          )
-        : null;
-      const same = !!merged;
-      if (merged && parsed?.success) parsed.data.itinerary = merged.itinerary as never;
-      const payload =
-        same && parsed?.success
-          ? {
-              ...session.payload,
-              startPackage: parsed.data,
-              navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
-              refreshToken:
-                outcome.ok && outcome.capturesOnly
-                  ? session.payload.refreshToken
-                  : typeof parsed.data.itinerary.refreshToken === "string"
-                    ? parsed.data.itinerary.refreshToken
-                    : null,
-              refresh: onRefreshSucceeded(refresh, now),
-            }
-          : {
-              ...session.payload,
-              refresh: onRefreshFailed(
-                refresh,
-                outcome.ok
-                  ? "rejected"
-                  : outcome.failure === "unreachable"
-                    ? "retryable"
-                    : outcome.failure,
-                now,
-                !!session.payload.refreshToken,
-              ),
-            };
-      // A terminal itinerary chain must not prevent the same owner polling journey evidence.
-      if (payload.refresh.status === "broken") payload.refreshToken = null;
-      if (same && outcome.ok) {
-        const captured = {
-          ...payload.startPackage,
-          captures: refreshTransitCaptures(
-            session.payload.startPackage.captures,
-            (
-              session.payload.startPackage.itinerary as unknown as {
-                legs: import("@openmapx/core/navigation/api").BuildTransitPackageInput["itinerary"]["legs"];
-              }
-            ).legs,
-            outcome.journeys as never,
-            now,
-          ),
-        };
-        const checkedCapture = transitStartPackageSchema.safeParse(captured);
-        if (checkedCapture.success) payload.startPackage = checkedCapture.data;
-      }
-      if (merged?.resetWalk) {
-        payload.tickState = {
-          ...payload.tickState,
-          currentWalkStepIndex: 0,
-          reachedStepEnd: false,
-          distanceToNextStepMeters: undefined,
-          walkRevision: (payload.tickState.walkRevision ?? 0) + 1,
-        };
-        payload.progress = transitProgressFromTick(
-          {
-            ...payload.tickState,
-            ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
-          },
-          prepareTransitProgress(merged.itinerary),
-        ) as unknown as Record<string, unknown>;
-      }
-      const committed = await this.commit(
-        session,
-        {
-          session: { ...session, revision: session.revision + 1, updatedAtMs: now, payload },
-          effects: [
-            { kind: "reconcile-alerts", sessionId: session.sessionId },
-            { kind: "publish-snapshot", immediate: true },
-          ],
-        },
-        now,
-      );
+      const mutation = this.deps.processors.get("transit")?.applyRefresh?.(session, outcome, now);
+      if (!mutation) return;
+      const committed = await this.commit(session, mutation, now);
       if (committed.ok) await this.deps.effects.run(committed.effects);
     });
   }

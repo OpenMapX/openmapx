@@ -122,10 +122,11 @@ describe("activation", () => {
     session.mockReturnValue({ data: null } as never);
     const view = renderEntry("node/12");
     await userEvent.click(screen.getByTestId("osm-contribution-entry"));
-    view.rerender(<OsmContributionEntry osmId="way/42" />);
+    // The place card keys the entry by place, as PlaceOverviewTab does.
+    view.rerender(<OsmContributionEntry key="way/42" osmId="way/42" />);
     expect(screen.queryByTestId("auth-dialog")).toBeNull();
     session.mockReturnValue({ data: { user: { id: "u1" } } });
-    view.rerender(<OsmContributionEntry osmId="way/42" />);
+    view.rerender(<OsmContributionEntry key="way/42" osmId="way/42" />);
     expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
   });
 

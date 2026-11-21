@@ -56,10 +56,16 @@ describe("LineDetail stop list", () => {
     // The unplaced row says why it cannot be opened; placed rows do not.
     expect(within(thun).getByText("stopNotPlaced")).toBeInTheDocument();
     expect(screen.getAllByText("stopNotPlaced")).toHaveLength(1);
-    // Muted but readable: secondary text, not the disabled shade.
+    // Non-current stops share the secondary shade; the italic caption marks the unplaced one.
     const { secondary } = createTheme().palette.text;
     expect(within(thun).getByText("Thun")).toHaveStyle({ color: secondary });
-    expect(within(thun).getByText("stopNotPlaced")).toHaveStyle({ color: secondary });
+    expect(within(screen.getByRole("button", { name: /Spiez/ })).getByText("Spiez")).toHaveStyle({
+      color: secondary,
+    });
+    expect(within(thun).getByText("stopNotPlaced")).toHaveStyle({
+      color: secondary,
+      fontStyle: "italic",
+    });
 
     fireEvent.click(thun);
     expect(onSelectStop).not.toHaveBeenCalled();

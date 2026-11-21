@@ -1,0 +1,49 @@
+language js
+
+// Contract codes such as a job's `status`, a transfer's `state` or a bulk
+// `action` are English identifiers. Rendered as they are, they show the code
+// in every language. This plugin reports a code field read straight into the
+// screen: as an expression child, as a prop that shows text, or inside a
+// template that becomes one. Pass the code to an ICU select or a label helper
+// instead; the message catalogue check rejects plain code arguments there.
+// `reason` is not listed: servers often send it as written text. A field
+// that holds text rather than a code takes a biome-ignore comment that says so.
+
+pattern code_field() {
+  r"(?:status|state|action|cleanup|direction|kind|mode|source|phase|outcome|policySource|basis|readiness|provenance|ownership)"
+}
+
+pattern raw_code() {
+  or {
+    JsStaticMemberExpression(member=$member) where { $member <: code_field() },
+    JsComputedMemberExpression(member=$member) where {
+      $member <: r"[\"'](?:status|state|action|source)[\"']"
+    }
+  }
+}
+
+pattern raw_code_value() {
+  or {
+    raw_code(),
+    JsConditionalExpression(consequent=raw_code()),
+    JsConditionalExpression(alternate=raw_code()),
+    JsLogicalExpression(right=raw_code()),
+    JsTemplateExpression(elements=$elements) where {
+      $elements <: some JsTemplateElement(expression=raw_code())
+    }
+  }
+}
+
+// Props that show text, as in noLiteralCopy.
+pattern shown_prop() {
+  r"(?:(?:[\w-]*[a-z0-9])?(?:Label|Title|Text|Placeholder|Description|Message|Caption|Heading|Tooltip|Hint)|label|title|subtitle|text|placeholder|description|message|caption|heading|tooltip|hint|aria-(?:label|description|valuetext|roledescription)|alt|primary|secondary|headerName)"
+}
+
+or {
+  JsxExpressionChild(expression=raw_code_value()),
+  JsxAttribute(name=$name, initializer=JsxAttributeInitializerClause(value=JsxExpressionAttributeValue(expression=raw_code_value()))) where {
+    $name <: shown_prop()
+  }
+} as $raw where {
+  register_diagnostic(span=$raw, message="This shows a contract code as it is. Word it through an ICU select or a label helper.")
+}

@@ -1,8 +1,6 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
 import LocalTaxiIcon from "@mui/icons-material/LocalTaxi";
-import RemoveIcon from "@mui/icons-material/Remove";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
@@ -28,6 +26,7 @@ import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import { DateTimeField } from "@/components/ui/DateTimeField";
+import { Stepper } from "@/components/ui/Stepper";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
@@ -108,68 +107,11 @@ function ProviderChip({
     >
       <Typography
         variant="caption"
-        sx={{ fontWeight: 500 }}
-        color={selected ? BRAND : "text.primary"}
+        sx={{ color: selected ? BRAND : "text.primary", fontWeight: 500 }}
       >
         {provider.name}
       </Typography>
     </ClickableRow>
-  );
-}
-
-function PaxStepper({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const btnSx = {
-    border: "1px solid",
-    borderColor: "divider",
-    bgcolor: "background.paper",
-    borderRadius: "50%",
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    color: "text.primary",
-    "&:hover": { borderColor: BRAND, color: BRAND },
-    "&:disabled": { opacity: 0.4, cursor: "default" },
-  } as const;
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <Typography variant="body2">{label}</Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`-${label}`}
-          disabled={value <= 1}
-          onClick={() => onChange(value - 1)}
-          sx={btnSx}
-        >
-          <RemoveIcon sx={{ fontSize: 16 }} />
-        </Box>
-        <Typography variant="body2" sx={{ minWidth: 16, textAlign: "center", fontWeight: 600 }}>
-          {value}
-        </Typography>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`+${label}`}
-          disabled={value >= 8}
-          onClick={() => onChange(value + 1)}
-          sx={btnSx}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-        </Box>
-      </Box>
-    </Box>
   );
 }
 
@@ -310,7 +252,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   if (!origin || !destination) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("chooseRidePoints")}
         </Typography>
       </Box>
@@ -328,7 +270,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   if (providers.length === 0) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("rideNoProviders")}
         </Typography>
       </Box>
@@ -364,7 +306,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
         </Typography>
       )}
 
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.4 }}>
         {t("rideDisclaimer")}
       </Typography>
 
@@ -419,9 +361,11 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
         <SectionLabel>{t("ridePassengers")}</SectionLabel>
-        <PaxStepper
+        <Stepper
           label={t("ridePassengers")}
           value={passengers}
+          min={1}
+          max={8}
           onChange={(v) => {
             touch();
             setPassengers(v);
@@ -446,7 +390,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
             variant="inline"
           />
           {bookingRules?.priorNoticeMinutesMin !== undefined && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("ridePrebookNotice", { minutes: bookingRules.priorNoticeMinutesMin })}
             </Typography>
           )}
@@ -457,7 +401,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
         <>
           {!detailProvider.availability.coverageChecked && (
             <>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {t("rideCoverageUnknown", { provider: detailProvider.name })}
               </Typography>
               {!allowsPrebook && (
@@ -470,7 +414,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
           )}
 
           {!detailProvider.handoffCarriesCoordinates && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
               {t("rideNoCoordinates", { provider: detailProvider.name })}
             </Typography>
           )}
@@ -544,7 +488,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
             {t("rideRefreshQuotes")}
           </Box>
         ) : (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("rideQuoteExpiresIn", { seconds: secondsLeft ?? 0 })}
           </Typography>
         ))}

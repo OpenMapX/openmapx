@@ -1,3 +1,5 @@
+import type { AdminTranslator } from "@/lib/admin/adminTranslator";
+
 export type JobStatusColor = "default" | "primary" | "success" | "error" | "warning" | "info";
 
 const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
@@ -19,22 +21,26 @@ export function jobStatusColor(status: string): JobStatusColor {
   return JOB_STATUS_COLOR[status] ?? "default";
 }
 
-const JOB_STATUS_DESCRIPTION: Record<string, string> = {
-  queued: "Waiting to start.",
-  running: "Currently in progress.",
-  success: "Completed successfully.",
-  ok: "Completed successfully.",
-  failed: "Stopped because the job failed.",
-  error: "Stopped because this stage failed.",
-  canceled: "Canceled before completion.",
-  partial:
-    "Completed with warnings: one or more stages only partially succeeded. Open the job details to review them.",
-  interrupted: "Stopped before completion, usually because the data manager restarted.",
-  skipped: "Skipped because this stage was disabled or not required.",
+/** The catalogue key describing each job or stage status that has a description. */
+const JOB_STATUS_DESCRIPTION_KEY: Record<string, string> = {
+  queued: "jobQueued",
+  running: "jobRunning",
+  success: "jobSucceeded",
+  ok: "jobSucceeded",
+  failed: "jobFailed",
+  error: "jobStageFailed",
+  canceled: "jobCanceled",
+  partial: "jobPartial",
+  interrupted: "jobInterrupted",
+  skipped: "jobSkipped",
 };
 
-export function jobStatusDescription(status: string): string | null {
-  return JOB_STATUS_DESCRIPTION[status] ?? null;
+export function jobStatusDescription(
+  status: string,
+  t: AdminTranslator<"adminShared">,
+): string | null {
+  const key = JOB_STATUS_DESCRIPTION_KEY[status];
+  return key ? t(key) : null;
 }
 
 /**

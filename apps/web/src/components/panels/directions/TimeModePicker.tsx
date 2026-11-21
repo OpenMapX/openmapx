@@ -56,8 +56,7 @@ export function TimeModePicker({
           >
             <Typography
               variant="caption"
-              color={timeMode === m ? "#fff" : "text.primary"}
-              sx={{ fontWeight: 500 }}
+              sx={{ color: timeMode === m ? "#fff" : "text.primary", fontWeight: 500 }}
             >
               {m === "now" ? t("departNow") : m === "depart" ? t("departAt") : t("arriveBy")}
             </Typography>

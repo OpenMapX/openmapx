@@ -160,7 +160,67 @@
     },
     {
       "includes": ["apps/web/src/**", "integrations/**", "!**/*.test.tsx"],
-      "plugins": ["./scripts/biome-plugins/noClickableLayoutElement.grit"]
+      "plugins": [
+        "./scripts/biome-plugins/noClickableLayoutElement.grit",
+        "./scripts/biome-plugins/noTypographyColorProp.grit"
+      ]
+    },
+    {
+      "includes": [
+        "apps/web/src/components/admin/**",
+        "apps/web/src/app/admin/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/__tests__/**",
+        "!**/*.test-support.ts",
+        "!**/*.test-support.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noJsxLiterals": {
+              "level": "error",
+              "options": {
+                "allowedStrings": [
+                  "·",
+                  "—",
+                  "–",
+                  "…",
+                  "(",
+                  ")",
+                  ":",
+                  "/",
+                  "%",
+                  ".",
+                  ",",
+                  "v",
+                  "+",
+                  "×",
+                  "→"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "plugins": [
+        "./scripts/biome-plugins/noLiteralCopy.grit",
+        "./scripts/biome-plugins/noRawCodeCopy.grit"
+      ]
+    },
+    {
+      "includes": [
+        "apps/web/src/lib/admin/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/__tests__/**",
+        "!**/*.test-support.ts",
+        "!**/*.test-support.tsx"
+      ],
+      "plugins": [
+        "./scripts/biome-plugins/noLiteralCopy.grit",
+        "./scripts/biome-plugins/noRawCodeCopy.grit"
+      ]
     },
     {
       "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],

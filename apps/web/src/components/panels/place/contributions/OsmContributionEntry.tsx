@@ -36,13 +36,6 @@ export function OsmContributionEntry({ osmId }: Props) {
   const ref = useMemo(() => parseOsmElementId(osmId), [osmId]);
   const refKey = ref ? `${ref.type}/${ref.id}` : null;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new place cancels the previous flow
-  useEffect(() => {
-    setPendingRef(null);
-    setAuthOpen(false);
-    setEditorOpen(false);
-  }, [refKey]);
-
   useEffect(() => {
     if (pendingRef && pendingRef === refKey && session?.user && osmContributionsEnabled) {
       setPendingRef(null);
@@ -104,8 +97,9 @@ export function OsmContributionEntry({ osmId }: Props) {
         onAuthenticated={() => setAuthOpen(false)}
         callbackPath={callbackPath}
       />
+      {/* A new place means a new flow: the key never carries a draft across references. */}
       {editorOpen && session?.user && (
-        <OsmContributionDialog open ref_={ref} onClose={closeEditor} />
+        <OsmContributionDialog key={refKey} open ref_={ref} onClose={closeEditor} />
       )}
     </>
   );

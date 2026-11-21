@@ -1,0 +1,50 @@
+name: Browser journeys
+
+# Four user journeys in headless Chrome against the production web build, with
+# every API, tile and glyph request answered by a local fixture server
+# (apps/web/e2e). They cover what jsdom cannot: WebGL rendering, the map style
+# swap that destroys app layers, and real navigation. Deliberately outside pull
+# request CI and not a required check: a nightly run and manual dispatch keep
+# PR time unchanged, and a failure reaches maintainers as scheduled-run mail.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  journeys:
+    name: browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
+
+      - name: Build the web app
+        run: pnpm --filter web build
+
+      # The runner's preinstalled Google Chrome is used (channel "chrome"), so
+      # no browser is downloaded. WebGL2 comes from SwiftShader; the first
+      # journey fails if it does not initialise.
+      - name: Run the journeys
+        run: pnpm --filter web test:e2e
+
+      - name: Upload traces and report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-journeys
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

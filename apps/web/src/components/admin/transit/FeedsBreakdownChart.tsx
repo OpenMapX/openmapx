@@ -5,6 +5,7 @@ import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import type { TransitStateSummary } from "@/lib/admin/transitHooks";
 
 /**
@@ -83,6 +84,8 @@ function Bar({
 }
 
 export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
+  const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
   const regionEntries = Object.entries(state.feeds.byRegion).sort((a, b) => b[1] - a[1]);
   const remainingRegionCount = regionEntries
     .slice(MAX_REGION_BARS)
@@ -90,7 +93,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
   const visibleRegionEntries = [
     ...regionEntries.slice(0, MAX_REGION_BARS),
     ...(remainingRegionCount > 0
-      ? [["Other regions", remainingRegionCount] as [string, number]]
+      ? [[t("otherRegions"), remainingRegionCount] as [string, number]]
       : []),
   ];
   const statusEntries = Object.entries(state.feeds.byStatus).sort((a, b) => b[1] - a[1]);
@@ -113,10 +116,10 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
             fontWeight: 700,
           }}
         >
-          Feeds breakdown
+          {t("feedsBreakdown")}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Chip size="small" variant="outlined" label={`${state.feedCount} total`} />
+        <Chip size="small" variant="outlined" label={t("feedTotal", { count: state.feedCount })} />
       </Stack>
       <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -128,7 +131,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               mb: 1,
             }}
           >
-            By region · {regionEntries.length} total
+            {t("byRegionTotal", { count: regionEntries.length })}
           </Typography>
           {regionEntries.length === 0 ? (
             <Typography
@@ -137,7 +140,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
                 color: "text.secondary",
               }}
             >
-              No feeds yet.
+              {t("noFeedsYet")}
             </Typography>
           ) : (
             <Stack spacing={0.5}>
@@ -156,7 +159,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               mb: 1,
             }}
           >
-            By status
+            {t("byStatus")}
           </Typography>
           {statusEntries.length === 0 ? (
             <Typography
@@ -165,14 +168,14 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
                 color: "text.secondary",
               }}
             >
-              No feeds yet.
+              {t("noFeedsYet")}
             </Typography>
           ) : (
             <Stack spacing={0.5}>
               {statusEntries.map(([status, count]) => (
                 <Bar
                   key={status}
-                  label={status}
+                  label={tShared("jobStatusLabel", { status })}
                   value={count}
                   max={maxStatus}
                   color={colorFor(status)}

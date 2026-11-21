@@ -11,6 +11,7 @@ import {
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 const clients: ReturnType<typeof createTestQueryClient>[] = [];
 function client() {
   const result = createTestQueryClient();
@@ -217,7 +218,7 @@ describe("integration query boundaries and reload observation", () => {
       }
     };
     const pendingRead = runRead();
-    const rejected = expect(pendingRead).rejects.toThrow("Integration request failed");
+    const rejected = expect(pendingRead).rejects.toMatchObject({ detail: null });
     await vi.advanceTimersByTimeAsync(29_999);
     expect(requests[0].init.signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -292,7 +293,7 @@ describe("integration query boundaries and reload observation", () => {
     expect(malformedRequests).toHaveLength(1);
     expect(malformed).toBeInstanceOf(Error);
     if (!(malformed instanceof Error)) throw new Error("Expected contract failure");
-    expect(malformed.message).toBe("Integration request failed");
+    expect(malformed).toMatchObject({ name: "AdminRequestError", detail: null });
     expect(malformed.cause).toMatchObject({ name: "ApiContractError", status: 200 });
     expect(malformed.message).not.toContain("synthetic-private-payload");
     expect(qc.getQueryData(["admin", "integrations", apiUrl, "list"])).toBeUndefined();
@@ -314,9 +315,9 @@ describe("integration query boundaries and reload observation", () => {
       qc.setDefaultOptions({ queries: { retry: false }, mutations: { retry: 2, retryDelay: 1 } });
       const { result } = renderHookWithQuery(() => useIntegrationReload(), { queryClient: qc });
       await act(async () => {
-        await expect(result.current.mutateAsync()).rejects.toThrow(
-          status === 403 ? "Reload denied" : "Integration request failed",
-        );
+        await expect(result.current.mutateAsync()).rejects.toMatchObject({
+          detail: status === 403 ? "Reload denied" : null,
+        });
       });
       expect(requests).toHaveLength(1);
       expect(qc.getQueryCache().findAll({ queryKey: ["admin", "jobs"] })).toHaveLength(0);

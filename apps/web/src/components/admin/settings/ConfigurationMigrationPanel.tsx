@@ -19,19 +19,27 @@ import {
   configurationMigrationPreviewSchema,
 } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { useActivityClient } from "../activity/activityQueries";
+import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
 import { CredentialTransferDialog } from "./CredentialTransferDialog";
 import { discardStoredPreview } from "./credential-preview-storage";
 
 import { downloadMigrationJson } from "./migration-json-download";
 export function ConfigurationMigrationPanel() {
+  const t = useTranslations("adminSettings.migration");
+  const sourceLabel = useConfigSourceLabel();
   const { actorId } = useAccountAdmin();
+  const format = useAdminFormat();
   const { client, apiUrl } = useActivityClient(),
     [preview, setPreview] = useState<ConfigurationMigrationPreview | null>(null),
-    [error, setError] = useState(""),
+    [failure, setFailure] = useState<"sessionUnavailable" | "notSettled" | "fileTooLarge" | null>(
+      null,
+    ),
     [result, setResult] = useState<{
       outcome: string;
       steps: Array<{ scope: string; id: string; status: string }>;
@@ -73,7 +81,7 @@ export function ConfigurationMigrationPanel() {
       discardStoredPreview(storageKey);
     }
     setResult(null);
-    if (!apiUrl || !actorId) setError("Administrator session unavailable");
+    if (!apiUrl || !actorId) setFailure("sessionUnavailable");
     return () => {
       epoch.current++;
       controller.current?.abort();
@@ -98,12 +106,11 @@ export function ConfigurationMigrationPanel() {
       owner = epoch.current;
     controller.current = current;
     setBusy(true);
-    setError("");
+    setFailure(null);
     try {
       await action(current.signal);
     } catch {
-      if (owner === epoch.current && !current.signal.aborted)
-        setError("Migration did not settle. Inspect Activity before submitting another operation.");
+      if (owner === epoch.current && !current.signal.aborted) setFailure("notSettled");
     } finally {
       if (owner === epoch.current) setBusy(false);
     }
@@ -141,22 +148,16 @@ export function ConfigurationMigrationPanel() {
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        <Typography variant="h6">Configuration migration</Typography>
-        <Typography>
-          Export portable database configuration. Host overrides, credentials and bootstrap secrets
-          require separate preparation. Authentication settings are staged for explicit policy
-          Apply. A file may contain up to 1,000 fields, 512 change groups and 128 keys per group.
-          The full resulting configuration, including retained values, must fit 512 KiB.
-        </Typography>
-        {error && <Alert severity="error">{error}</Alert>}
-        {inventory.isError && (
-          <Alert severity="error">Configuration inventory is unavailable.</Alert>
-        )}
+        <Typography variant="h6">{t("title")}</Typography>
+        <Typography>{t("intro", { fields: 1000, groups: 512, keys: 128 })}</Typography>
+        {failure && <Alert severity="error">{t(failure)}</Alert>}
+        {inventory.isError && <Alert severity="error">{t("inventoryUnavailable")}</Alert>}
         {inventory.data && (
           <Typography>
-            {inventory.data.fields.filter((f) => f.included).length} portable fields;{" "}
-            {inventory.data.document.prerequisites.length} prerequisites. Review every omission
-            before applying.
+            {t("inventorySummary", {
+              fields: inventory.data.fields.filter((f) => f.included).length,
+              prerequisites: inventory.data.document.prerequisites.length,
+            })}
           </Typography>
         )}
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -178,10 +179,10 @@ export function ConfigurationMigrationPanel() {
               })
             }
           >
-            Export configuration
+            {t("export")}
           </Button>
           <Button component="label" disabled={busy}>
-            Review configuration file
+            {t("review")}
             <input
               type="file"
               hidden
@@ -192,7 +193,7 @@ export function ConfigurationMigrationPanel() {
                 setPreview(null);
                 if (!file) return;
                 if (file.size > 1048576) {
-                  setError("Configuration file must be at most 1 MiB.");
+                  setFailure("fileTooLarge");
                   return;
                 }
                 void run(async (signal) => {
@@ -212,19 +213,24 @@ export function ConfigurationMigrationPanel() {
               }}
             />
           </Button>
-          <Button onClick={() => setCredentials(true)}>Protected credential transfer</Button>
+          <Button onClick={() => setCredentials(true)}>{t("credentialTransfer")}</Button>
         </Stack>
         {preview && (
           <>
             <Typography>
-              {preview.changes.length} selected changes. Preview expires{" "}
-              {new Date(preview.expiresAt).toLocaleTimeString()}.
+              {t("previewSummary", {
+                count: preview.changes.length,
+                time: format.time(preview.expiresAt),
+              })}
             </Typography>
             {preview.prerequisites.map((p) => (
               <Alert key={`${p.scope}:${p.id}:${p.key}:${p.reason}:${p.source}`} severity="info">
-                {p.scope}/{p.id}
-                {p.key ? `/${p.key}` : ""}: {p.reason} (
-                {p.source === "config.json" ? "file" : p.source})
+                {t("prerequisite", {
+                  scope: p.scope,
+                  target: p.key ? `${p.id}/${p.key}` : p.id,
+                  reason: p.reason,
+                  sourceLabel: sourceLabel(p.source),
+                })}
               </Alert>
             ))}
             {preview.denials.map((d) => (
@@ -235,24 +241,17 @@ export function ConfigurationMigrationPanel() {
             {preview.platform && (
               <>
                 <Alert severity="warning">
-                  Platform origin: {preview.platform.oldOrigin} → {preview.platform.newOrigin}.
-                  Services and login consumers activate under the same guarded migration.
+                  {t("platformOrigin", {
+                    oldOrigin: preview.platform.oldOrigin,
+                    newOrigin: preview.platform.newOrigin,
+                  })}
                 </Alert>
                 {Object.entries(preview.platform.requiredConfirmation)
                   .filter(([, required]) => required)
                   .map(([key]) => (
                     <FormControlLabel
                       key={key}
-                      label={
-                        {
-                          domain: "I reviewed the new public origin",
-                          dnsTls: "DNS and TLS are ready",
-                          oauth: "OAuth callback URLs are ready",
-                          passkeys: "I reviewed passkey recovery",
-                          alternateLogin:
-                            "I have an alternate supported password login and second factor",
-                        }[key]
-                      }
+                      label={t("confirmation", { key })}
                       control={
                         <Checkbox
                           checked={platformConfirmations[key as keyof typeof platformConfirmations]}
@@ -281,14 +280,18 @@ export function ConfigurationMigrationPanel() {
                 else void apply();
               }}
             >
-              Apply reviewed configuration
+              {t("apply")}
             </Button>
           </>
         )}
         {result && (
           <Alert severity={result.outcome === "applied" ? "success" : "warning"}>
-            Migration outcome: {result.outcome}.{" "}
-            {result.steps.map((s) => `${s.scope}/${s.id}: ${s.status}`).join("; ")}
+            {t("outcome", {
+              outcome: result.outcome,
+              steps: result.steps
+                .map((s) => t("step", { target: `${s.scope}/${s.id}`, status: s.status }))
+                .join("; "),
+            })}
           </Alert>
         )}
         {platformReauth && preview?.platform && (

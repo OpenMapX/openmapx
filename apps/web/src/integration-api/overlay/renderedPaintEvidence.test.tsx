@@ -1,5 +1,5 @@
 import type { MapGeoJSONFeature, Map as MapLibreMap } from "maplibre-gl";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, renderHook } from "@/test";
 import { useMapAttributionStore } from "./mapAttributionStore";
 import { useRenderedMapAttributions } from "./useRenderedMapAttributions";
@@ -34,7 +34,7 @@ interface PaintTile {
   ready: boolean;
   image: { width: number; height: number; data: Uint8Array };
   atlas: Record<string, { tlbr: [number, number, number, number] }>;
-  query: ReturnType<typeof vi.fn>;
+  query: Mock<() => void>;
 }
 let retained: Map<string, PaintTile>;
 let coordinates: string[];
@@ -50,7 +50,7 @@ function tile(records: MapGeoJSONFeature[], gradients: Record<string, number[]> 
     ready: false,
     image: { width: 1, height: 1, data: new Uint8Array([255, 0, 0, 255]) },
     atlas: {},
-    query: vi.fn(),
+    query: vi.fn<() => void>(),
   };
 }
 function bridge() {

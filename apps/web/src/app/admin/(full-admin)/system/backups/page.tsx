@@ -2,7 +2,10 @@ import Stack from "@mui/material/Stack";
 import type { Metadata } from "next";
 import { BackupsPage } from "@/components/admin/services/BackupsPage";
 import { PlatformConfiguration } from "@/components/admin/settings/PlatformConfiguration";
-export const metadata: Metadata = { title: "Backups — Admin — OpenMapX" };
+import { adminPageMetadata } from "@/lib/admin/adminPageMetadata";
+export function generateMetadata(): Promise<Metadata> {
+  return adminPageMetadata("backups");
+}
 export default function Page() {
   return (
     <Stack sx={{ gap: 2 }}>

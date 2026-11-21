@@ -3,6 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@/test";
 import { DataInventorySection } from "./DataInventorySection";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 afterEach(cleanup);
 const osm: AdminServiceData["osm"] = {
   items: [

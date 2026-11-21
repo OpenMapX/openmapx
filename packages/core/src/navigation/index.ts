@@ -164,6 +164,7 @@ export {
   enforceAggregateBounds,
   type GroundNavigationStartPackage,
   groundStartPackageSchema,
+  lngLatSchema,
   MAX_LEGS,
   MAX_MESSAGE_BYTES,
   MAX_TOTAL_COORDINATES,
@@ -413,7 +414,7 @@ export {
   walkLegStepProgress,
   walkStepInfo,
 } from "./transitWalk";
-export { repairTransitWalk } from "./transitWalkRepair";
+export { repairTransitWalk, type WalkRoute, type WalkRouteStep } from "./transitWalkRepair";
 export type {
   CameraMode,
   CueTier,

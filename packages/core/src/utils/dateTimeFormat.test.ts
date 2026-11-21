@@ -33,6 +33,16 @@ describe("formatClockTime", () => {
     );
   });
 
+  it("adds seconds on request and keeps the time format preference", () => {
+    const at = "2025-01-31T13:05:09Z";
+    expect(
+      formatClockTime(at, { locale: "en-US", timeFormat: "24h", timeZone: "UTC", seconds: true }),
+    ).toBe("13:05:09");
+    expect(
+      formatClockTime(at, { locale: "de-DE", timeFormat: "12h", timeZone: "UTC", seconds: true }),
+    ).toMatch(/^01:05:09\s?PM$/);
+  });
+
   it("returns an empty string for invalid input", () => {
     expect(formatClockTime("not-a-date")).toBe("");
     expect(formatClockTime("")).toBe("");

@@ -80,8 +80,13 @@ export function DepartureRow({
               <Typography
                 component="span"
                 variant="caption"
-                color="text.secondary"
-                sx={{ display: "inline-flex", alignItems: "center", gap: 0.25, minWidth: 0 }}
+                sx={{
+                  color: "text.secondary",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.25,
+                  minWidth: 0,
+                }}
               >
                 <PlaceOutlinedIcon aria-hidden sx={{ fontSize: 14, flexShrink: 0 }} />
                 <Box component="span" sx={VISUALLY_HIDDEN}>

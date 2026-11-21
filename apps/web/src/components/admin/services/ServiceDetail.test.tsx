@@ -2,6 +2,8 @@ import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const availableActions = Object.fromEntries(
   SERVICE_ACTIONS.map((action) => [
     action,

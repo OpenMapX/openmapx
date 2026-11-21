@@ -1,13 +1,11 @@
 "use client";
 
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
   renderWildfirePopupModel,
@@ -89,7 +87,7 @@ export function usePolygonLayerLifecycle({
   popupModel,
   translate,
 }: PolygonLayerLifecycleOptions): void {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef } = useMap();
   const popupLease = useRef<WildfirePopupLease>({});
 
   useMapLayerGroup(
@@ -118,14 +116,15 @@ export function usePolygonLayerLifecycle({
     return () => popupController.close(lease);
   }, [active, popupController]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !active) return;
-
-    const onClick = (event: MapLayerMouseEvent) => {
-      if (getMapClickOwner(event)) return;
-      const feature = event.features?.[0];
-      if (!feature) return;
+  useMapOverlayInteraction({
+    id: `overlay-wildfires-${fillId}`,
+    layerIds: [fillId, lineId],
+    priority: 20,
+    enabled: active,
+    onClick: ({ event, features }) => {
+      const map = mapRef.current;
+      const feature = features[0];
+      if (!map || !feature) return;
       const model = popupModel(feature.properties as Record<string, unknown>);
       if (!model) return;
       popupController.open(
@@ -139,28 +138,6 @@ export function usePolygonLayerLifecycle({
           .setHTML(renderWildfirePopupModel(model, translate))
           .addTo(map),
       );
-    };
-    const onMouseEnter = () => {
-      map.getCanvasContainer().style.cursor = "pointer";
-    };
-    const onMouseLeave = () => {
-      map.getCanvasContainer().style.cursor = "";
-    };
-
-    for (const layerId of [fillId, lineId]) {
-      INTERACTIVE_LAYER_IDS.add(layerId);
-      map.on("click", layerId, onClick);
-      map.on("mouseenter", layerId, onMouseEnter);
-      map.on("mouseleave", layerId, onMouseLeave);
-    }
-    return () => {
-      for (const layerId of [fillId, lineId]) {
-        map.off("click", layerId, onClick);
-        map.off("mouseenter", layerId, onMouseEnter);
-        map.off("mouseleave", layerId, onMouseLeave);
-        INTERACTIVE_LAYER_IDS.delete(layerId);
-      }
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [active, fillId, lineId, mapReady, mapRef, popupController, popupModel, translate]);
+    },
+  });
 }

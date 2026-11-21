@@ -12,15 +12,17 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
+import { useJobStageLabel } from "@/components/admin/shared/jobStageLabel";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type TransitStateSummary,
   useRestartMotis,
@@ -45,6 +47,9 @@ function SummaryMetric({ label, children }: { label: string; children: ReactNode
 }
 
 function RunningJobDetail({ jobId }: { jobId: string }) {
+  const t = useTranslations("adminTransit");
+  const tShared = useTranslations("adminShared");
+  const stageLabel = useJobStageLabel();
   const { data, isLoading } = useTransitJobDetail(jobId);
 
   if (isLoading) {
@@ -77,16 +82,23 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
         }}
       >
         <Chip
-          label={`Job ${jobId.slice(0, 8)}`}
+          label={t("jobLabel", { jobId: jobId.slice(0, 8) })}
           size="small"
           variant="outlined"
           sx={{ fontFamily: "monospace" }}
         />
-        <Chip label={`${stages.length} stage(s) recorded`} size="small" variant="outlined" />
+        <Chip
+          label={t("stagesRecorded", { count: stages.length })}
+          size="small"
+          variant="outlined"
+        />
         {latest && (
           <JobStatusChip
             status={latest.status}
-            label={`stage: ${latest.stage} (${latest.status})`}
+            label={t("latestStage", {
+              stageLabel: stageLabel(latest.stage),
+              statusLabel: tShared("jobStatusLabel", { status: latest.status }),
+            })}
             variant="filled"
           />
         )}
@@ -96,6 +108,8 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 }
 
 export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const [syncReview, setSyncReview] = useState(false);
   const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
@@ -109,12 +123,8 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
 
   const onRestart = () => {
     restartMutation.mutate(undefined, {
-      onSuccess: () => showToast("MOTIS restart triggered", "success"),
-      onError: (err) =>
-        showToast(
-          adminErrorMessage(err, err instanceof Error ? err.message : "Failed to restart MOTIS"),
-          "error",
-        ),
+      onSuccess: () => showToast(t("motisRestartTriggered"), "success"),
+      onError: (err) => showToast(adminErrorText(err, t("failedToRestartMotis")), "error"),
     });
   };
 
@@ -127,7 +137,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           onQueued={(jobId) => {
             setQueuedJobId(jobId);
             setSyncReview(false);
-            showToast(`Sync queued (${jobId.slice(0, 8)}…)`, "success");
+            showToast(t("syncQueued", { jobId: jobId.slice(0, 8) }), "success");
             void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
           }}
         />
@@ -152,7 +162,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             fontWeight: 700,
           }}
         >
-          {inflight ? "Sync in progress" : "Pipeline idle"}
+          {inflight ? t("syncInProgress") : t("pipelineIdle")}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {!inflight && (
@@ -164,7 +174,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               onClick={onRestart}
               disabled={restartMutation.isPending}
             >
-              Restart MOTIS
+              {t("restartMotis")}
             </Button>
             <Button
               size="small"
@@ -173,7 +183,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               onClick={onSync}
               disabled={syncReview}
             >
-              Run sync now
+              {t("runSyncNow")}
             </Button>
           </Stack>
         )}
@@ -186,8 +196,10 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               color: "text.secondary",
             }}
           >
-            Started {formatTransitAdminTimestamp(inflight.startedAt)} ·{" "}
-            {durationSecs(inflight.startedAt)}s elapsed
+            {t("startedElapsed", {
+              startedAt: format.timestamp(inflight.startedAt),
+              elapsed: format.duration(durationSecs(inflight.startedAt) * 1000),
+            })}
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />
         </Stack>
@@ -200,21 +212,21 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             flexWrap: "wrap",
           }}
         >
-          <SummaryMetric label="Last sync">
-            <Typography variant="body2">{formatTransitAdminTimestamp(state.lastSyncAt)}</Typography>
+          <SummaryMetric label={t("lastSync")}>
+            <Typography variant="body2">{format.timestamp(state.lastSyncAt)}</Typography>
           </SummaryMetric>
-          <SummaryMetric label="Last status">
+          <SummaryMetric label={t("lastStatus")}>
             <JobStatusChip status={state.lastSyncStatus} />
           </SummaryMetric>
-          <SummaryMetric label="Total feeds tracked">
-            <Typography variant="body2">{state.feedCount}</Typography>
+          <SummaryMetric label={t("totalFeedsTracked")}>
+            <Typography variant="body2">{format.number(state.feedCount)}</Typography>
           </SummaryMetric>
         </Stack>
       )}
       {queuedJobId && <AdminJobLink id={queuedJobId} source="data-manager" />}
       {state.lastSyncStatus === "failed" && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          Last sync run failed. Inspect the job detail below for the failing stage.
+          {t("lastSyncRunFailedInspect")}
         </Alert>
       )}
     </Paper>

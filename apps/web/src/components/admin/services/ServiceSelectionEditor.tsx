@@ -16,8 +16,10 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useServiceSelection, useServiceSelectionSave, useServicesList } from "@/hooks/useServices";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminJobLink } from "../activity/AdminJobLink";
@@ -34,6 +36,8 @@ export function ServiceSelectionEditor() {
   return <SelectionEditor key={apiUrl} />;
 }
 function SelectionEditor() {
+  const t = useTranslations("adminServices");
+  const tCommon = useTranslations("common");
   const selection = useServiceSelection();
   const services = useServicesList();
   const save = useServiceSelectionSave();
@@ -59,40 +63,39 @@ function SelectionEditor() {
       if ("jobId" in result) setAccepted(String(result.jobId));
       toast(
         "jobId" in result
-          ? `Queued service selection (${result.jobId})`
-          : "Service selection saved",
+          ? t("serviceSelectionQueued", { jobId: String(result.jobId) })
+          : t("serviceSelectionSaved"),
       );
     } catch (error) {
-      if (owner.active) toast(error instanceof Error ? error.message : "Save failed", "error");
+      if (owner.active) toast(adminErrorText(error, t("saveFailed")), "error");
     }
   }
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack sx={{ gap: 1.5 }}>
         <Typography component="h2" variant="subtitle1" sx={{ fontWeight: 650 }}>
-          Service selection
+          {t("serviceSelection")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Persistent roots determine enabled services and their dependencies. Removing a root can
-          keep it enabled as another root's dependency. Inventory checkboxes select temporary action
-          targets.
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
+          {t("persistentRootsDetermineEnabledServices")}
         </Typography>
         {locked && (
           <Alert severity="warning">
-            Selection is controlled by {selection.data?.envVarName}. Remove that host override
-            before editing the selection file.
+            {t("selectionControlledByHost", {
+              envVar: selection.data?.envVarName ?? "",
+            })}
           </Alert>
         )}
         {selection.isError && (
           <Alert
             severity="error"
-            action={<Button onClick={() => void selection.refetch()}>Retry</Button>}
+            action={<Button onClick={() => void selection.refetch()}>{tCommon("retry")}</Button>}
           >
-            Failed to load service selection
+            {t("failedToLoadServiceSelection")}
           </Alert>
         )}
         <TextField
-          label="Selected root service IDs"
+          label={t("selectedRootServiceIds")}
           size="small"
           fullWidth
           value={draft.values.roots ?? baseline}
@@ -103,26 +106,26 @@ function SelectionEditor() {
         {draft.conflicts.length > 0 && (
           <Alert
             severity="warning"
-            action={<Button onClick={() => draft.keepEdits()}>Keep my edits</Button>}
+            action={<Button onClick={() => draft.keepEdits()}>{t("keepMyEdits")}</Button>}
           >
-            Saved service roots changed. Review or discard your edits before saving.
+            {t("savedServiceRootsChangedReview")}
           </Alert>
         )}
         <Stack direction="row" sx={{ gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
           <Chip
             size="small"
             variant="outlined"
-            label={`Requested: ${selection.data?.requestedIds.length ?? 0}`}
+            label={t("requestedValue", { value: selection.data?.requestedIds.length ?? 0 })}
           />
           <Chip
             size="small"
             variant="outlined"
-            label={`Effective: ${selection.data?.effectiveIds.length ?? 0}`}
+            label={t("effectiveValue", { value: selection.data?.effectiveIds.length ?? 0 })}
           />
           <Chip
             size="small"
             variant="outlined"
-            label={`Source: ${selection.data?.source ?? "unknown"}`}
+            label={t("sourceValue", { value: selection.data?.source ?? t("sourceUnknown") })}
           />
           <Button
             variant="contained"
@@ -133,11 +136,11 @@ function SelectionEditor() {
               void persist(parseRoots(submitted), submitted);
             }}
           >
-            Save Selection
+            {t("saveSelection")}
           </Button>
           {draft.dirty && (
             <Button size="small" disabled={save.isPending} onClick={() => draft.discard()}>
-              Discard
+              {t("discard")}
             </Button>
           )}
         </Stack>
@@ -146,25 +149,21 @@ function SelectionEditor() {
         )}
         {!!selection.data?.missingIds.length && (
           <Alert severity="error">
-            Missing service IDs: {selection.data.missingIds.join(", ")}
+            {t("missingServiceIds", { missingIds: selection.data.missingIds.join(", ") })}
           </Alert>
         )}
         {accepted && <AdminJobLink id={accepted} source="application" />}
         <Accordion disableGutters variant="outlined">
-          <AccordionSummary>Services and root controls</AccordionSummary>
+          <AccordionSummary>{t("servicesAndRootControls")}</AccordionSummary>
           <AccordionDetails sx={{ p: 0 }}>
-            {services.isError && (
-              <Alert severity="error">
-                Service membership could not be loaded. The root editor remains available.
-              </Alert>
-            )}
+            {services.isError && <Alert severity="error">{t("serviceMembershipCouldNotBe")}</Alert>}
             <TableContainer sx={{ maxHeight: 360 }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Service</TableCell>
-                    <TableCell>Membership</TableCell>
-                    <TableCell>Root control</TableCell>
+                    <TableCell>{t("service")}</TableCell>
+                    <TableCell>{t("membership")}</TableCell>
+                    <TableCell>{t("rootControl")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -172,9 +171,9 @@ function SelectionEditor() {
                     const root = selection.data?.selectedRoots.includes(service.id);
                     const dependency = service.enabled && !root;
                     const reason = dependency
-                      ? "Required by a selected root. Edit the roots to remove that dependency."
+                      ? t("requiredByASelectedRoot")
                       : draft.dirty
-                        ? "Save or discard root edits before changing one service."
+                        ? t("saveOrDiscardRootEdits")
                         : undefined;
                     return (
                       <TableRow key={service.id}>
@@ -188,14 +187,13 @@ function SelectionEditor() {
                           </Button>
                           <Typography
                             variant="caption"
-                            color="text.secondary"
-                            sx={{ display: "block" }}
+                            sx={{ color: "text.secondary", display: "block" }}
                           >
                             {service.id}
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          {root ? "Root" : dependency ? "Required dependency" : "Disabled"}
+                          {root ? t("root") : dependency ? t("requiredDependency") : t("disabled")}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -212,10 +210,10 @@ function SelectionEditor() {
                             }}
                           >
                             {root
-                              ? `Remove ${service.id} root`
+                              ? t("removeIdRoot", { id: service.id })
                               : dependency
-                                ? "Required dependency"
-                                : `Enable ${service.id}`}
+                                ? t("requiredDependency")
+                                : t("enableId", { id: service.id })}
                           </Button>
                         </TableCell>
                       </TableRow>

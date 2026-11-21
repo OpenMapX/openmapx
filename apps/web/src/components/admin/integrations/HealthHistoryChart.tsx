@@ -8,6 +8,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import {
   CartesianGrid,
@@ -18,6 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 
 type HealthBucket =
@@ -25,14 +27,11 @@ type HealthBucket =
 
 type HoursWindow = 24 | 168;
 
-/** Format an ISO-ish bucket timestamp for the X axis: HH:00 for 24h, weekday for 7d. */
-function formatBucketLabel(hour: string, hours: HoursWindow): string {
+/** Format a bucket timestamp for the X axis: the hour for 24h, the weekday for 7d. */
+function formatBucketLabel(hour: string, hours: HoursWindow, format: AdminFormatters): string {
   const d = new Date(hour);
   if (Number.isNaN(d.getTime())) return hour;
-  if (hours === 24) {
-    return `${String(d.getHours()).padStart(2, "0")}:00`;
-  }
-  return d.toLocaleDateString(undefined, { weekday: "short" });
+  return hours === 24 ? format.time(d) : format.weekday(d);
 }
 
 function HealthTooltip({
@@ -44,9 +43,12 @@ function HealthTooltip({
   payload?: Array<{ payload: HealthBucket }>;
   hours: HoursWindow;
 }) {
+  const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   if (!active || !payload?.[0]) return null;
   const bucket = payload[0].payload;
-  const responseTime = bucket.avgResponseTime != null ? `${bucket.avgResponseTime} ms` : "—";
+  const responseTime =
+    bucket.avgResponseTime != null ? format.duration(bucket.avgResponseTime) : "—";
 
   return (
     <Box
@@ -61,16 +63,16 @@ function HealthTooltip({
       }}
     >
       <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
-        {formatBucketLabel(bucket.hour, hours)}
+        {formatBucketLabel(bucket.hour, hours, format)}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Uptime: {bucket.uptimePercent}%
+        {t("uptimePercent", { percent: format.percent(bucket.uptimePercent / 100) })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Avg response: {responseTime}
+        {t("averageResponse", { responseTime })}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        Checks: {bucket.healthy}/{bucket.total}
+        {t("checksHealthyTotal", { healthy: bucket.healthy, total: bucket.total })}
       </Typography>
     </Box>
   );
@@ -81,6 +83,8 @@ interface HealthHistoryChartProps {
 }
 
 export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
+  const t = useTranslations("adminIntegrations");
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const [hours, setHours] = useState<HoursWindow>(24);
 
@@ -94,7 +98,7 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
         sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
       >
         <Typography variant="subtitle2" sx={{ color: "text.secondary" }}>
-          Uptime over time
+          {t("uptimeOverTime")}
         </Typography>
         <ToggleButtonGroup
           size="small"
@@ -103,23 +107,23 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
           onChange={(_, value: HoursWindow | null) => {
             if (value != null) setHours(value);
           }}
-          aria-label="Health history time window"
+          aria-label={t("healthHistoryTimeWindow")}
         >
-          <ToggleButton value={24} aria-label="Last 24 hours">
-            24h
+          <ToggleButton value={24} aria-label={t("last24Hours")}>
+            {t("window24h")}
           </ToggleButton>
-          <ToggleButton value={168} aria-label="Last 7 days">
-            7d
+          <ToggleButton value={168} aria-label={t("last7Days")}>
+            {t("window7d")}
           </ToggleButton>
         </ToggleButtonGroup>
       </Stack>
       {isError ? (
-        <Alert severity="error">Failed to load health history</Alert>
+        <Alert severity="error">{t("failedToLoadHealthHistory")}</Alert>
       ) : isLoading ? (
         <Skeleton variant="rounded" height={220} />
       ) : buckets.length === 0 ? (
         <Typography variant="body2" sx={{ color: "text.secondary", py: 4, textAlign: "center" }}>
-          No health history yet
+          {t("noHealthHistoryYet")}
         </Typography>
       ) : (
         <Box sx={{ width: "100%", height: 220, minWidth: 0 }}>
@@ -128,7 +132,7 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
               <CartesianGrid horizontal vertical={false} strokeDasharray="3 3" stroke="#E0E0E0" />
               <XAxis
                 dataKey="hour"
-                tickFormatter={(value: string) => formatBucketLabel(value, hours)}
+                tickFormatter={(value: string) => formatBucketLabel(value, hours, format)}
                 tick={{ fontSize: 10, fill: "#999" }}
                 axisLine={false}
                 tickLine={false}

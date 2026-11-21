@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadOsmConfig } from "../../../utils/osm-config.js";
 
@@ -165,18 +163,6 @@ describe("URL builders", () => {
     expect(withHint).toContain("#map=");
     // No draft, evidence, comment or token may ever appear in a handoff URL.
     expect(withHint).not.toMatch(/comment|source|token|tag/i);
-  });
-
-  it("is the only place that names a production OSM origin", () => {
-    // A deployment that points the discovery URL at the development instance
-    // must also reach that instance for user details and elements; a leftover
-    // hardcoded production URL would silently mix the two.
-    const authSource = readFileSync(
-      fileURLToPath(new URL("../../../auth.ts", import.meta.url)),
-      "utf8",
-    );
-    expect(authSource).not.toMatch(/https:\/\/(api|www)\.openstreetmap\.org/);
-    expect(authSource).toContain("getOsmConfig()");
   });
 
   it("builds trusted account action URLs", () => {

@@ -13,14 +13,12 @@ import {
   readCapturedContributors,
   withFeatureContributors,
 } from "@openmapx/mobility-core/contributors";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -255,14 +253,13 @@ export function AirportsOverlay() {
   // Click → open place panel via the coordinate scheme. The reverse-geocode
   // chain will resolve the aerodrome, and `knowledge-ourairports` will
   // re-attach the full runway / frequency / navaid record.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  useMapOverlayInteraction({
+    id: "overlay-ourairports",
+    layerIds: [CIRCLE_LAYER_ID],
+    priority: 50,
+    enabled: layerVisible,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number | undefined>;
       // These layers render Point features; narrowing beats a cast, which
@@ -292,24 +289,8 @@ export function AirportsOverlay() {
       // — match the SearchBar's selection flow so the place panel actually
       // renders when the user clicks a marker.
       useSidebarStore.getState().openSidebar(PANEL.PLACE);
-    };
-
-    const onMouseMove = (ev: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(CIRCLE_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(ev.point, { layers: [CIRCLE_LAYER_ID] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", CIRCLE_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(CIRCLE_LAYER_ID);
-    return () => {
-      map.off("click", CIRCLE_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible]);
+    },
+  });
 
   return null;
 }

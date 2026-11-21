@@ -8,6 +8,8 @@ import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceLogsDrawer, ServiceLogsPanel } from "./ServiceLogsDrawer";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "http://admin.test";
 const toast = vi.fn();
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
@@ -265,7 +267,7 @@ describe("generated log sessions", () => {
         }),
     );
     view.replace(logs("large"));
-    await screen.findByText("1000 lines");
+    await screen.findByText("1,000 lines");
     const lines = document.querySelector("pre")?.textContent?.split("\n");
     expect(lines).toHaveLength(1000);
     expect(lines?.[0]).toBe("line-5");

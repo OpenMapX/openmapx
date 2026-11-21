@@ -159,12 +159,17 @@ function successFor(url: string): Response {
   } as Response;
 }
 
-function delegatedHandler(event: string, layerId: string) {
-  const call = fake.state.listenerCalls.find(
-    (entry) => entry.method === "on" && entry.event === event && entry.layerId === layerId,
+/** Puts the event's features under the pointer on `layerId` and clicks the map there. */
+function clickLayer(
+  layerId: string,
+  event: { lngLat: { lng: number; lat: number }; features: MapGeoJSONFeature[] },
+) {
+  fake.setRenderedFeatures(
+    layerId,
+    event.features.map((feature) => ({ ...feature, layer: { id: layerId } }) as MapGeoJSONFeature),
   );
-  if (!call) throw new Error(`Missing ${event} handler for ${layerId}`);
-  return call.handler;
+  fake.emit("click", { point: { x: 0, y: 0 }, lngLat: event.lngLat });
+  fake.setRenderedFeatures(layerId, []);
 }
 
 let fake: FakeMap;
@@ -301,10 +306,7 @@ describe("wildfire perimeter layers", () => {
     );
 
     act(() => {
-      delegatedHandler(
-        "click",
-        NIFC_FILL,
-      )({
+      clickLayer(NIFC_FILL, {
         lngLat: { lng: 8.5, lat: 50.5 },
         features: [NIFC_COLLECTION.features[0] as unknown as MapGeoJSONFeature],
       });
@@ -316,10 +318,7 @@ describe("wildfire perimeter layers", () => {
     expect(nifcPopup?.html).not.toContain("[effisBurnedAreaCaveat]");
 
     act(() => {
-      delegatedHandler(
-        "click",
-        EFFIS_LINE,
-      )({
+      clickLayer(EFFIS_LINE, {
         lngLat: { lng: 8.5, lat: 50.5 },
         features: [EFFIS_COLLECTION.features[0] as unknown as MapGeoJSONFeature],
       });
@@ -355,13 +354,14 @@ describe("wildfire perimeter layers", () => {
 
     for (const layerId of [NIFC_FILL, NIFC_LINE, EFFIS_FILL, EFFIS_LINE]) {
       expect(INTERACTIVE_LAYER_IDS.has(layerId)).toBe(true);
-      expect(delegatedHandler("click", layerId)).toBeTypeOf("function");
-      expect(delegatedHandler("mouseenter", layerId)).toBeTypeOf("function");
-      expect(delegatedHandler("mouseleave", layerId)).toBeTypeOf("function");
     }
-    act(() => delegatedHandler("mouseenter", NIFC_LINE)({}));
+    fake.setRenderedFeatures(NIFC_LINE, [
+      { ...NIFC_COLLECTION.features[0], layer: { id: NIFC_LINE } } as unknown as MapGeoJSONFeature,
+    ]);
+    act(() => fake.emit("mousemove", { point: { x: 0, y: 0 } }));
     expect(fake.state.canvas.style.cursor).toBe("pointer");
-    act(() => delegatedHandler("mouseleave", NIFC_LINE)({}));
+    fake.setRenderedFeatures(NIFC_LINE, []);
+    act(() => fake.emit("mousemove", { point: { x: 0, y: 0 } }));
     expect(fake.state.canvas.style.cursor).toBe("");
 
     unmount();

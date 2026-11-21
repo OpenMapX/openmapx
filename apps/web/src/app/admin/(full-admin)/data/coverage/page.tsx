@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { CoveragePage } from "@/components/admin/coverage/CoveragePage";
-export const metadata: Metadata = { title: "Coverage & freshness — Admin — OpenMapX" };
+import { adminPageMetadata } from "@/lib/admin/adminPageMetadata";
+export function generateMetadata(): Promise<Metadata> {
+  return adminPageMetadata("coverage");
+}
 export default function Page() {
   return <CoveragePage />;
 }

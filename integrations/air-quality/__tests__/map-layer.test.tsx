@@ -247,6 +247,7 @@ describe("canonical air-quality monitor layer", () => {
 
   it("removes sources, layers, popup, pointer state, listeners, and attribution when hidden", () => {
     render(<AirQualityLayer />);
+    fake.setRenderedFeatures(MONITOR_LAYER_ID, [FEATURE]);
     act(() => fake.emit("click", { features: [FEATURE] }));
 
     act(() => useAirQualityStore.getState().setLayerVisible(false));

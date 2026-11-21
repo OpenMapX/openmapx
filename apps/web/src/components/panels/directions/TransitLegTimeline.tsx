@@ -436,7 +436,7 @@ export function TransitLegTimeline({
                           <Typography
                             key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}
                             variant="caption"
-                            color="text.secondary"
+                            sx={{ color: "text.secondary" }}
                           >
                             {label}
                           </Typography>

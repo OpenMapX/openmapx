@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import de from "../locales/de.json";
 import en from "../locales/en.json";
-import { extractICUVariables, flattenKeys } from "./check-translations";
+import { extractICUVariables, flattenKeys, translatorNamespaces } from "./check-translations";
 
 // Pure helpers from the translation health checker. flattenKeys + extractICUVariables
 // are the primitives every other check composes from (key parity, ICU placeholder
@@ -128,5 +128,26 @@ describe("road-condition classification catalog", () => {
     expect(Object.keys(messages.roadConditions.kind)).toEqual(expect.arrayContaining(kinds));
     expect(Object.keys(messages.roadConditions.type)).toEqual(expect.arrayContaining(types));
     expect(Object.keys(messages.navigation.incidentType)).toEqual(expect.arrayContaining(types));
+  });
+});
+
+describe("translatorNamespaces (translator variable → namespace)", () => {
+  it("recognises client, server and headless translators", () => {
+    const source = `
+      const t = useTranslations("adminUsers");
+      const tm = await getTranslations("adminPages");
+      const tn = await getTranslations({ locale, namespace: "adminShared" });
+      const th = createTranslator(options, "privacyAdmin");
+    `;
+    expect(Object.fromEntries(translatorNamespaces(source))).toEqual({
+      t: "adminUsers",
+      tm: "adminPages",
+      tn: "adminShared",
+      th: "privacyAdmin",
+    });
+  });
+
+  it("ignores translators without a literal namespace", () => {
+    expect(translatorNamespaces("const t = await getTranslations();").size).toBe(0);
   });
 });

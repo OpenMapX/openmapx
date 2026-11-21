@@ -67907,6 +67907,26 @@
                           },
                           "target": {
                             "type": "string"
+                          },
+                          "job": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "failed",
+                                  "interrupted"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "status"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [

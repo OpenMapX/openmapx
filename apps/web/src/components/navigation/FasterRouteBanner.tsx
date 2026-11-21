@@ -92,7 +92,7 @@ export function FasterRouteBanner() {
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {t("fasterRouteTitle")} · {t("fasterRouteSaving", { saving: savedText })}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {proposal.route.summary
             ? `${t("fasterRouteVia", { road: proposal.route.summary })} · `
             : ""}

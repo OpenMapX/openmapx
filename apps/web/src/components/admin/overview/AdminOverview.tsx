@@ -24,15 +24,19 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { useAuditActionLabel } from "../shared/auditActionLabel";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
+import { useJobTypeLabel } from "../shared/jobTypeLabel";
 
 type AttentionItem = import("@openmapx/core/api-contracts").AdminOverview["attention"][number];
 
@@ -79,19 +83,20 @@ function StatCard({
 }
 
 function HealthBadge({ status }: { status: "pass" | "degraded" | "down" }) {
+  const t = useTranslations("adminOverview");
   const map = {
     pass: {
-      label: "All Systems Operational",
+      label: t("allSystemsOperational"),
       color: "success" as const,
       icon: <CheckCircleOutlineIcon fontSize="small" />,
     },
     degraded: {
-      label: "Degraded",
+      label: t("degraded"),
       color: "warning" as const,
       icon: <WarningAmberIcon fontSize="small" />,
     },
     down: {
-      label: "Major Outage",
+      label: t("majorOutage"),
       color: "error" as const,
       icon: <ErrorOutlineIcon fontSize="small" />,
     },
@@ -101,6 +106,8 @@ function HealthBadge({ status }: { status: "pass" | "degraded" | "down" }) {
     <Chip icon={info.icon} label={info.label} color={info.color} size="small" variant="outlined" />
   );
 }
+
+const ATTENTION_TYPES = new Set(["health_check_failed", "service_unhealthy"]);
 
 function attentionHref(item: AttentionItem): string {
   if (item.type === "missing_credentials" || item.type === "health_check_failed") {
@@ -114,6 +121,11 @@ function attentionHref(item: AttentionItem): string {
 // Main
 
 export function AdminOverview() {
+  const t = useTranslations("adminOverview");
+  const tShared = useTranslations("adminShared");
+  const auditActionLabel = useAuditActionLabel();
+  const jobTypeLabel = useJobTypeLabel();
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
@@ -130,9 +142,9 @@ export function AdminOverview() {
       try {
         await admin.healthSweep();
         void admin.refresh();
-        if (owner.active) showToast("Health checks complete");
+        if (owner.active) showToast(t("healthChecksComplete"));
       } catch (err) {
-        if (owner.active) showToast("Health check sweep failed", "error");
+        if (owner.active) showToast(t("healthCheckSweepFailed"), "error");
         throw err;
       }
     },
@@ -147,7 +159,7 @@ export function AdminOverview() {
           gap: 3,
         }}
       >
-        <AdminPageHeader title="Overview" />
+        <AdminPageHeader title={t("overview")} />
         <Grid container spacing={2}>
           {[1, 2, 3, 4, 5].map((i) => (
             <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
@@ -162,7 +174,7 @@ export function AdminOverview() {
   if (!data) {
     return (
       <CompactAlert severity="error" variant="outlined">
-        Failed to load overview data.
+        {t("failedToLoadOverviewData")}
       </CompactAlert>
     );
   }
@@ -175,6 +187,17 @@ export function AdminOverview() {
     0,
   );
   const generalAttention = data.attention.filter((item) => item.type !== "missing_credentials");
+  const integrationNames = new Map(credentials.map((entry) => [entry.integrationId, entry.name]));
+  /** Known attention codes are worded here; the server's English stays for codes added later. */
+  const attentionMessage = (item: AttentionItem) =>
+    item.job
+      ? t("jobAttention", { status: item.job.status, jobLabel: jobTypeLabel(item.job.type) })
+      : ATTENTION_TYPES.has(item.type)
+        ? t("attention", {
+            type: item.type,
+            target: integrationNames.get(item.target ?? "") ?? item.target ?? "",
+          })
+        : item.message;
 
   return (
     <Stack
@@ -184,8 +207,8 @@ export function AdminOverview() {
     >
       {/* Header */}
       <AdminPageHeader
-        title="Overview"
-        subtitle="System health and recent operations"
+        title={t("overview")}
+        subtitle={t("systemHealthAndRecentOperations")}
         actions={
           <>
             <HealthBadge status={data.systemHealth.status} />
@@ -195,7 +218,7 @@ export function AdminOverview() {
               onClick={() => healthSweep.mutate()}
               disabled={isBusy}
             >
-              {healthSweep.isPending ? "Running…" : "Health checks"}
+              {healthSweep.isPending ? t("running") : t("healthChecks")}
             </Button>
             <Button
               variant="outlined"
@@ -203,16 +226,16 @@ export function AdminOverview() {
               onClick={() =>
                 reloadMutation.mutate(undefined, {
                   onSuccess: () => {
-                    if (owner.active) showToast("Reload job queued", "info");
+                    if (owner.active) showToast(t("reloadJobQueued"), "info");
                   },
                   onError: () => {
-                    if (owner.active) showToast("Reload failed", "error");
+                    if (owner.active) showToast(t("reloadFailed"), "error");
                   },
                 })
               }
               disabled={isBusy}
             >
-              {reloadMutation.isPending ? "Reloading…" : "Reload"}
+              {reloadMutation.isPending ? t("reloading") : t("reload")}
             </Button>
           </>
         }
@@ -228,15 +251,15 @@ export function AdminOverview() {
               fontWeight: 600,
             }}
           >
-            Needs Attention
+            {t("needsAttention")}
           </Typography>
           <CompactAlertList
             items={generalAttention.map((item) => ({
               id: `${item.type}-${item.message}`,
               severity: item.severity,
-              message: item.message,
+              message: attentionMessage(item),
               href: attentionHref(item),
-              actionLabel: "View",
+              actionLabel: t("view"),
             }))}
             expanded={attentionExpanded}
             onExpandedChange={setAttentionExpanded}
@@ -245,7 +268,7 @@ export function AdminOverview() {
       )}
       {credentialsOverview.isError && (
         <CompactAlert severity="error" variant="outlined">
-          Failed to load credentials summary.
+          {t("failedToLoadCredentialsSummary")}
         </CompactAlert>
       )}
       {credentials.length > 0 && (
@@ -257,26 +280,31 @@ export function AdminOverview() {
               fontWeight: 600,
             }}
           >
-            Credentials Overview
+            {t("credentialsOverview")}
           </Typography>
           {!credentialsOverview.data?.secretsConfigured && (
             <CompactAlert severity="warning" variant="outlined" sx={{ mb: 1.25 }}>
-              Credentials vault is not configured. Set <code>OPENMAPX_SECRETS_KEY</code> to enable
-              secure storage in the admin UI.
+              {t.rich("credentialsVaultNotConfigured", {
+                variable: "OPENMAPX_SECRETS_KEY",
+                code: (chunks) => <code>{chunks}</code>,
+              })}
             </CompactAlert>
           )}
           {missingCredentialIntegrations.length === 0 ? (
             <CompactAlert severity="success" variant="outlined">
-              No missing integration credentials detected.
+              {t("noMissingIntegrationCredentialsDetected")}
             </CompactAlert>
           ) : (
             <CompactAlertList
               items={missingCredentialIntegrations.map((entry) => ({
                 id: entry.integrationId,
                 severity: "warning",
-                message: `${entry.name}: ${entry.missingCredentials} missing credential${entry.missingCredentials === 1 ? "" : "s"}`,
+                message: t("missingCredentials", {
+                  name: entry.name,
+                  missingCredentials: entry.missingCredentials,
+                }),
                 href: `/admin/integrations/${entry.integrationId}`,
-                actionLabel: "Open",
+                actionLabel: t("open"),
               }))}
               expanded={credentialsExpanded}
               onExpandedChange={setCredentialsExpanded}
@@ -296,7 +324,7 @@ export function AdminOverview() {
               fontWeight: 600,
             }}
           >
-            Recent Activity
+            {t("recentActivity")}
           </Typography>
           {data.recentActivity.length === 0 ? (
             <Typography
@@ -305,7 +333,7 @@ export function AdminOverview() {
                 color: "text.secondary",
               }}
             >
-              No recent activity.
+              {t("noRecentActivity")}
             </Typography>
           ) : (
             <Stack
@@ -333,15 +361,10 @@ export function AdminOverview() {
                       fontFamily: "monospace",
                     }}
                   >
-                    {new Date(entry.createdAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {format.dateTime(entry.createdAt)}
                   </Typography>
                   <Chip
-                    label={entry.action}
+                    label={auditActionLabel(entry.action)}
                     size="small"
                     variant="outlined"
                     sx={{ fontSize: 11, height: 20 }}
@@ -363,7 +386,7 @@ export function AdminOverview() {
             </Stack>
           )}
           <Button component={Link} href="/admin/activity" size="small" sx={{ mt: 1 }}>
-            View All Activity
+            {t("viewAllActivity")}
           </Button>
         </Grid>
 
@@ -376,7 +399,7 @@ export function AdminOverview() {
               fontWeight: 600,
             }}
           >
-            Jobs
+            {t("jobs")}
           </Typography>
           {data.activeJobs.length === 0 ? (
             <Typography
@@ -385,7 +408,7 @@ export function AdminOverview() {
                 color: "text.secondary",
               }}
             >
-              No recent jobs.
+              {t("noRecentJobs")}
             </Typography>
           ) : (
             <Stack
@@ -406,7 +429,7 @@ export function AdminOverview() {
                   }}
                 >
                   <Chip
-                    label={job.status}
+                    label={tShared("jobStatusLabel", { status: job.status })}
                     size="small"
                     color={jobStatusColor(job.status)}
                     variant="outlined"
@@ -419,10 +442,10 @@ export function AdminOverview() {
                     noWrap
                     sx={{ flex: 1 }}
                   >
-                    {job.type}
+                    {jobTypeLabel(job.type)}
                   </Typography>
                   {job.status === "running" && job.progress != null && (
-                    <Tooltip title={`${job.progress}%`}>
+                    <Tooltip title={format.percent(job.progress / 100)}>
                       <CircularProgress size={16} variant="determinate" value={job.progress} />
                     </Tooltip>
                   )}
@@ -432,17 +455,14 @@ export function AdminOverview() {
                       color: "text.secondary",
                     }}
                   >
-                    {new Date(job.finishedAt ?? job.createdAt).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {format.time(job.finishedAt ?? job.createdAt)}
                   </Typography>
                 </Stack>
               ))}
             </Stack>
           )}
           <Button component={Link} href="/admin/activity" size="small" sx={{ mt: 1 }}>
-            View All Jobs
+            {t("viewAllJobs")}
           </Button>
         </Grid>
       </Grid>
@@ -450,21 +470,20 @@ export function AdminOverview() {
       {/* Summary cards */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/status">
+          <StatCard title={t("systemHealth")} icon={<CheckCircleOutlineIcon />} href="/status">
             <Typography
               variant="h5"
-              color={
-                data.systemHealth.status === "pass"
-                  ? "success.main"
-                  : data.systemHealth.status === "degraded"
-                    ? "warning.main"
-                    : "error.main"
-              }
               sx={{
+                color:
+                  data.systemHealth.status === "pass"
+                    ? "success.main"
+                    : data.systemHealth.status === "degraded"
+                      ? "warning.main"
+                      : "error.main",
                 fontWeight: 700,
               }}
             >
-              {data.systemHealth.status === "pass" ? "OK" : data.systemHealth.unhealthyCount}
+              {data.systemHealth.status === "pass" ? t("ok") : data.systemHealth.unhealthyCount}
             </Typography>
             <Typography
               variant="body2"
@@ -473,21 +492,23 @@ export function AdminOverview() {
               }}
             >
               {data.systemHealth.status === "pass"
-                ? "All systems operational"
-                : `${data.systemHealth.unhealthyCount} unhealthy`}
+                ? t("allSystemsOperationalStatus")
+                : t("unhealthyCount", {
+                    count: data.systemHealth.unhealthyCount,
+                  })}
             </Typography>
           </StatCard>
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Users" icon={<GroupIcon />} href="/admin/users">
+          <StatCard title={t("users")} icon={<GroupIcon />} href="/admin/users">
             <Typography
               variant="h5"
               sx={{
                 fontWeight: 700,
               }}
             >
-              {data.users.total}
+              {format.number(data.users.total)}
             </Typography>
             <Stack
               direction="row"
@@ -498,14 +519,14 @@ export function AdminOverview() {
               }}
             >
               <Chip
-                label={`${data.users.active24h} active`}
+                label={t("activeCount", { count: data.users.active24h })}
                 size="small"
                 color="success"
                 variant="outlined"
               />
               {data.users.banned > 0 && (
                 <Chip
-                  label={`${data.users.banned} banned`}
+                  label={t("bannedCount", { count: data.users.banned })}
                   size="small"
                   color="error"
                   variant="outlined"
@@ -516,14 +537,14 @@ export function AdminOverview() {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Integrations" icon={<ExtensionIcon />} href="/admin/integrations">
+          <StatCard title={t("integrations")} icon={<ExtensionIcon />} href="/admin/integrations">
             <Typography
               variant="h5"
               sx={{
                 fontWeight: 700,
               }}
             >
-              {data.integrations.total}
+              {format.number(data.integrations.total)}
             </Typography>
             <Stack
               direction="row"
@@ -534,14 +555,14 @@ export function AdminOverview() {
               }}
             >
               <Chip
-                label={`${data.integrations.enabled} enabled`}
+                label={t("enabledCount", { count: data.integrations.enabled })}
                 size="small"
                 color="success"
                 variant="outlined"
               />
               {data.integrations.unhealthy > 0 && (
                 <Chip
-                  label={`${data.integrations.unhealthy} unhealthy`}
+                  label={t("unhealthyCount", { count: data.integrations.unhealthy })}
                   size="small"
                   color="error"
                   variant="outlined"
@@ -549,7 +570,7 @@ export function AdminOverview() {
               )}
               {data.integrations.unconfigured > 0 && (
                 <Chip
-                  label={`${data.integrations.unconfigured} unconfigured`}
+                  label={t("unconfiguredCount", { count: data.integrations.unconfigured })}
                   size="small"
                   color="warning"
                   variant="outlined"
@@ -561,7 +582,7 @@ export function AdminOverview() {
 
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           {data.services ? (
-            <StatCard title="Services" icon={<DnsIcon />} href="/admin/system/services">
+            <StatCard title={t("services")} icon={<DnsIcon />} href="/admin/system/services">
               <Typography
                 variant="h5"
                 sx={{
@@ -579,15 +600,19 @@ export function AdminOverview() {
                 }}
               >
                 <Chip
-                  label={`${data.services.running} running`}
+                  label={t("runningCount", { count: data.services.running })}
                   size="small"
                   color="success"
                   variant="outlined"
                 />
-                <Chip label={`${data.services.stopped} stopped`} size="small" variant="outlined" />
+                <Chip
+                  label={t("stoppedCount", { count: data.services.stopped })}
+                  size="small"
+                  variant="outlined"
+                />
                 {data.services.unhealthy > 0 && (
                   <Chip
-                    label={`${data.services.unhealthy} unhealthy`}
+                    label={t("unhealthyCount", { count: data.services.unhealthy })}
                     size="small"
                     color="error"
                     variant="outlined"
@@ -596,7 +621,7 @@ export function AdminOverview() {
               </Stack>
             </StatCard>
           ) : (
-            <StatCard title="Services" icon={<DnsIcon />} href="/status">
+            <StatCard title={t("services")} icon={<DnsIcon />} href="/status">
               <Typography
                 variant="h5"
                 sx={{
@@ -604,7 +629,7 @@ export function AdminOverview() {
                   color: "text.secondary",
                 }}
               >
-                N/A
+                {t("notApplicable")}
               </Typography>
               <Typography
                 variant="body2"
@@ -612,18 +637,18 @@ export function AdminOverview() {
                   color: "text.secondary",
                 }}
               >
-                Cloud deployment
+                {t("cloudDeployment")}
               </Typography>
             </StatCard>
           )}
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
+          <StatCard title={t("credentials")} icon={<KeyIcon />} href="/admin/integrations">
             <Typography
               variant="h5"
-              color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
               sx={{
+                color: totalMissingCredentials > 0 ? "warning.main" : "success.main",
                 fontWeight: 700,
               }}
             >
@@ -638,15 +663,15 @@ export function AdminOverview() {
               }}
             >
               <Chip
-                label={`${credentials.length} integration${credentials.length === 1 ? "" : "s"}`}
+                label={t("integrationsCount", { count: credentials.length })}
                 size="small"
                 variant="outlined"
               />
               <Chip
                 label={
                   totalMissingCredentials > 0
-                    ? `${missingCredentialIntegrations.length} missing`
-                    : "all configured"
+                    ? t("missingCount", { count: missingCredentialIntegrations.length })
+                    : t("allConfigured")
                 }
                 size="small"
                 color={totalMissingCredentials > 0 ? "warning" : "success"}

@@ -1,11 +1,9 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import EditIcon from "@mui/icons-material/Edit";
 import FlightTakeoffIcon from "@mui/icons-material/FlightTakeoff";
-import RemoveIcon from "@mui/icons-material/Remove";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
@@ -31,6 +29,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { ClickableRow } from "@/components/ui/ClickableRow";
+import { Stepper } from "@/components/ui/Stepper";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 type T = ReturnType<typeof useTranslations>;
@@ -51,6 +50,12 @@ function addDays(d: Date, days: number): Date {
   const next = new Date(d);
   next.setDate(next.getDate() + days);
   return next;
+}
+
+/** An airport the reader picked, and the directions point it was picked for. */
+interface AirportChoice {
+  pointKey: string;
+  airport: FlightEndpoint;
 }
 
 function hitToEndpoint(hit: AirportSearchHit): FlightEndpoint | null {
@@ -119,7 +124,7 @@ function AirportField({
         ) : loading ? (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.75 }}>
             <CircularProgress size={14} sx={{ color: "text.disabled" }} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("nearestAirport")}…
             </Typography>
           </Box>
@@ -140,8 +145,8 @@ function AirportField({
               </Typography>
               <Typography
                 variant="caption"
-                color="text.secondary"
                 sx={{
+                  color: "text.secondary",
                   display: "block",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -174,7 +179,7 @@ function AirportField({
             </Box>
           </Box>
         ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 0.75 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", py: 0.75 }}>
             {t("noAirportNearby")}
           </Typography>
         )}
@@ -219,8 +224,12 @@ function AirportField({
               </Typography>
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                sx={{
+                  color: "text.secondary",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
               >
                 {m.name}
                 {m.municipality ? ` · ${m.municipality}` : ""}
@@ -229,77 +238,6 @@ function AirportField({
           ))}
         </Box>
       )}
-    </Box>
-  );
-}
-
-function PaxStepper({
-  label,
-  value,
-  min,
-  onChange,
-  dim,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  onChange: (v: number) => void;
-  dim?: boolean;
-}) {
-  const btnSx = {
-    border: "1px solid",
-    borderColor: "divider",
-    bgcolor: "background.paper",
-    borderRadius: "50%",
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    color: "text.primary",
-    "&:hover": { borderColor: BRAND, color: BRAND },
-    "&:disabled": {
-      opacity: 0.4,
-      cursor: "default",
-      "&:hover": { borderColor: "divider", color: "text.primary" },
-    },
-  } as const;
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        opacity: dim ? 0.5 : 1,
-      }}
-    >
-      <Typography variant="body2">{label}</Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`-${label}`}
-          disabled={value <= min}
-          onClick={() => onChange(Math.max(min, value - 1))}
-          sx={btnSx}
-        >
-          <RemoveIcon sx={{ fontSize: 16 }} />
-        </Box>
-        <Typography variant="body2" sx={{ minWidth: 16, textAlign: "center", fontWeight: 600 }}>
-          {value}
-        </Typography>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`+${label}`}
-          disabled={value >= 9}
-          onClick={() => onChange(Math.min(9, value + 1))}
-          sx={btnSx}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-        </Box>
-      </Box>
     </Box>
   );
 }
@@ -334,9 +272,6 @@ export function FlightPanel() {
   const setFlightEndpoints = useFlightStore((s) => s.setEndpoints);
   const clearFlightEndpoints = useFlightStore((s) => s.clear);
   const cabinSelectId = useId();
-
-  const [fromAirport, setFromAirport] = useState<FlightEndpoint | null>(null);
-  const [toAirport, setToAirport] = useState<FlightEndpoint | null>(null);
 
   const [roundTrip, setRoundTrip] = useState(true);
   const [departDate, setDepartDate] = useState(() => ymd(addDays(new Date(), 7)));
@@ -374,28 +309,28 @@ export function FlightPanel() {
     if (!caps.directOnly) ignoredFields.push(t("directOnly"));
   }
 
-  // Reset the chosen airport when the underlying directions point changes, so a
-  // fresh nearest-airport prefill kicks in.
+  // Each end shows the reader's pick for the current directions point, else the
+  // nearest scheduled-service airport. A new point drops the earlier pick.
   const originKey = origin ? `${origin[0]},${origin[1]}` : "";
   const destKey = destination ? `${destination[0]},${destination[1]}` : "";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset keyed on coords
-  useEffect(() => setFromAirport(null), [originKey]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset keyed on coords
-  useEffect(() => setToAirport(null), [destKey]);
-
-  // Prefill from the nearest scheduled-service airport once resolved.
-  useEffect(() => {
-    if (!fromAirport && nearestFrom.data?.matches?.[0]) {
-      const ep = hitToEndpoint(nearestFrom.data.matches[0]);
-      if (ep) setFromAirport(ep);
-    }
-  }, [fromAirport, nearestFrom.data]);
-  useEffect(() => {
-    if (!toAirport && nearestTo.data?.matches?.[0]) {
-      const ep = hitToEndpoint(nearestTo.data.matches[0]);
-      if (ep) setToAirport(ep);
-    }
-  }, [toAirport, nearestTo.data]);
+  const [fromChoice, setFromChoice] = useState<AirportChoice | null>(null);
+  const [toChoice, setToChoice] = useState<AirportChoice | null>(null);
+  const nearestFromHit = nearestFrom.data?.matches?.[0];
+  const nearestToHit = nearestTo.data?.matches?.[0];
+  const nearestFromAirport = useMemo(
+    () => (nearestFromHit ? hitToEndpoint(nearestFromHit) : null),
+    [nearestFromHit],
+  );
+  const nearestToAirport = useMemo(
+    () => (nearestToHit ? hitToEndpoint(nearestToHit) : null),
+    [nearestToHit],
+  );
+  const fromAirport = fromChoice?.pointKey === originKey ? fromChoice.airport : nearestFromAirport;
+  const toAirport = toChoice?.pointKey === destKey ? toChoice.airport : nearestToAirport;
+  const setFromAirport = (airport: FlightEndpoint | null) =>
+    setFromChoice(airport ? { pointKey: originKey, airport } : null);
+  const setToAirport = (airport: FlightEndpoint | null) =>
+    setToChoice(airport ? { pointKey: destKey, airport } : null);
 
   // Default the provider to the backend-configured default.
   useEffect(() => {
@@ -455,7 +390,7 @@ export function FlightPanel() {
   if (!origin || !destination) {
     return (
       <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("chooseFlightPoints")}
         </Typography>
       </Box>
@@ -464,7 +399,7 @@ export function FlightPanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.4 }}>
         {t("flightDisclaimer")}
       </Typography>
 
@@ -522,8 +457,7 @@ export function FlightPanel() {
           >
             <Typography
               variant="caption"
-              sx={{ fontWeight: 500 }}
-              color={roundTrip === val ? BRAND : "text.primary"}
+              sx={{ color: roundTrip === val ? BRAND : "text.primary", fontWeight: 500 }}
             >
               {t(key)}
             </Typography>
@@ -566,21 +500,24 @@ export function FlightPanel() {
       {/* Passengers */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
         <SectionLabel>{t("passengers")}</SectionLabel>
-        <PaxStepper
+        <Stepper
+          max={9}
           label={t("adults")}
           value={adults}
           min={1}
           onChange={setAdults}
           dim={!supports("adults")}
         />
-        <PaxStepper
+        <Stepper
+          max={9}
           label={t("childrenPax")}
           value={children}
           min={0}
           onChange={setChildren}
           dim={!supports("children")}
         />
-        <PaxStepper
+        <Stepper
+          max={9}
           label={t("infants")}
           value={infants}
           min={0}
@@ -661,8 +598,7 @@ export function FlightPanel() {
               >
                 <Typography
                   variant="caption"
-                  sx={{ fontWeight: 500 }}
-                  color={selected ? BRAND : "text.primary"}
+                  sx={{ color: selected ? BRAND : "text.primary", fontWeight: 500 }}
                 >
                   {p.name}
                 </Typography>
@@ -671,7 +607,7 @@ export function FlightPanel() {
           })}
         </Box>
         {ignoredFields.length > 0 && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("flightIgnores", {
               provider: provider?.name ?? "",
               fields: ignoredFields.join(", "),

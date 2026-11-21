@@ -40,7 +40,7 @@ describe("useWatchPosition", () => {
   });
 
   it("passes the exact high-accuracy options — a safety contract, not a tuning knob (see useWatchPosition.ts)", () => {
-    const watchPosition = vi.fn(() => 1);
+    const watchPosition = vi.fn<Geolocation["watchPosition"]>(() => 1);
     vi.stubGlobal("navigator", { geolocation: { watchPosition, clearWatch: vi.fn() } });
 
     renderHook(() => useWatchPosition(true, vi.fn()));

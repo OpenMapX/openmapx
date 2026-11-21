@@ -27,157 +27,29 @@ import {
   unwrapAdminResponse,
 } from "@openmapx/core/api-admin-sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Menu from "@/components/ui/Menu";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
+import { useAuditActionLabel } from "../shared/auditActionLabel";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
 import { useActivityClient } from "./activityQueries";
-
-// Grouped catalogue of every action emitted by `writeAuditLog` across the
-// admin API. Keep this in sync with the call sites under
-// `apps/api/src/routes/admin*.ts`.
-const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, label: string]> }> = [
-  {
-    label: "Integrations",
-    actions: [
-      ["integration.config.update", "Config Updated"],
-      ["integration.enabled", "Enabled"],
-      ["integration.disabled", "Disabled"],
-      ["integration.reload", "Reload"],
-      ["integration.reload.all", "Reload All"],
-    ],
-  },
-  {
-    label: "Credentials",
-    actions: [
-      ["credential.set", "Credential Set"],
-      ["credential.delete", "Credential Deleted"],
-    ],
-  },
-  {
-    label: "Services",
-    actions: [
-      ["service.start", "Started"],
-      ["service.stop", "Stopped"],
-      ["service.restart", "Restarted"],
-      ["service.bulk.start", "Bulk Start"],
-      ["service.bulk.stop", "Bulk Stop"],
-      ["service.bulk.restart", "Bulk Restart"],
-      ["service.bulk.update", "Bulk Update"],
-      ["service.bulk.build", "Bulk Build"],
-      ["service.selection.update", "Selection Updated"],
-      ["service.config.update", "Config Updated"],
-      ["service.health_check", "Health Check"],
-    ],
-  },
-  {
-    label: "Data",
-    actions: [
-      ["data.download-osm", "Download OSM"],
-      ["data.download-gtfs", "Download GTFS"],
-      ["data.download-fonts", "Download Map Glyphs"],
-      ["data.update", "Update"],
-      ["data.convert-overpass", "Convert Overpass"],
-      ["data.link", "Link"],
-      ["data.clean", "Clean"],
-      ["data.generate-api-keys", "Generate API Keys"],
-      ["data.overture-sync", "Sync Overture"],
-      ["data.overture-conflate", "Resume Overture Links"],
-    ],
-  },
-  {
-    label: "Backups",
-    actions: [
-      ["backup.create", "Create"],
-      ["backup.restore", "Restore"],
-      ["backup.delete", "Delete"],
-    ],
-  },
-  {
-    label: "Settings",
-    actions: [
-      ["settings.update", "Updated"],
-      ["settings.test_email", "Test Email"],
-    ],
-  },
-  {
-    label: "Service Store",
-    actions: [
-      ["store.install", "Install"],
-      ["store.update", "Update"],
-      ["store.remove", "Remove"],
-      ["store.refresh_catalog", "Refresh Catalog"],
-      ["store.add_source", "Add Source"],
-      ["store.remove_source", "Remove Source"],
-    ],
-  },
-  {
-    label: "Jobs",
-    actions: [["job.cancel", "Canceled"]],
-  },
-  {
-    label: "System",
-    actions: [
-      ["system.update.check", "Check Updates"],
-      ["system.update.apply", "Update OpenMapX"],
-      ["system.diagnostics.run", "Deep Diagnostics"],
-      ["transit.lock.bump", "Bump Transitous Pin"],
-    ],
-  },
-  {
-    label: "Users",
-    actions: [
-      ["user.create", "Created"],
-      ["user.delete", "Deleted"],
-      ["user.role.change", "Role Changed"],
-      ["user.ban", "Banned"],
-      ["user.unban", "Unbanned"],
-      ["user.impersonate", "Impersonated"],
-      ["user.password.set", "Password Set"],
-      ["user.session.revoke", "Session Revoked"],
-      ["user.sessions.revoke_all", "All Sessions Revoked"],
-    ],
-  },
-];
-
-const ACTION_LABELS: Record<string, string> = Object.fromEntries(
-  ACTION_GROUPS.flatMap((g) => g.actions),
-);
-
-const TARGET_TYPES = [
-  "integration",
-  "credential",
-  "service",
-  "data",
-  "backup",
-  "settings",
-  "store",
-  "job",
-  "user",
-];
-
-const DESTRUCTIVE_ACTIONS = new Set([
-  "credential.delete",
-  "service.stop",
-  "service.bulk.stop",
-  "backup.delete",
-  "store.remove",
-  "store.remove_source",
-  "job.cancel",
-  "user.delete",
-  "user.ban",
-  "user.session.revoke",
-  "user.sessions.revoke_all",
-]);
+import {
+  AUDIT_ACTION_GROUPS,
+  AUDIT_TARGET_TYPES,
+  DESTRUCTIVE_AUDIT_ACTIONS,
+  KNOWN_AUDIT_ACTIONS,
+} from "./auditCatalog";
 
 function ActionChip({ action }: { action: string }) {
+  const actionLabel = useAuditActionLabel();
   const category = action.split(".")[0] ?? "";
-  const isDestructive = DESTRUCTIVE_ACTIONS.has(action);
+  const isDestructive = DESTRUCTIVE_AUDIT_ACTIONS.has(action);
   const isAuth = category === "user" || category === "credential";
   // Destructive → error; auth/credential mutations → warning;
   // every other write → primary; unknown actions → default.
@@ -185,12 +57,12 @@ function ActionChip({ action }: { action: string }) {
     ? "error"
     : isAuth
       ? "warning"
-      : ACTION_LABELS[action]
+      : KNOWN_AUDIT_ACTIONS.has(action)
         ? "primary"
         : "default";
   return (
     <Chip
-      label={ACTION_LABELS[action] ?? action}
+      label={actionLabel(action)}
       size="small"
       color={color as "error" | "primary" | "warning" | "default"}
       variant="outlined"
@@ -199,6 +71,8 @@ function ActionChip({ action }: { action: string }) {
 }
 
 export function AuditLog() {
+  const t = useTranslations("adminActivity.audit");
+  const actionLabel = useAuditActionLabel();
   const { apiUrl, client } = useActivityClient();
   const dtf = useDateTimeFormat();
   const queryClient = useQueryClient();
@@ -252,6 +126,10 @@ export function AuditLog() {
     a.remove();
   }
 
+  /** Select keys hold no `-` or `.`, so `data-manager-job` is selected as `data_manager_job`. */
+  const targetTypeLabel = (type: string) =>
+    t("targetTypeOption", { type: type.replaceAll(/[.-]/g, "_") });
+
   return (
     <AdminTableSurface
       toolbar={
@@ -264,21 +142,23 @@ export function AuditLog() {
           }}
         >
           <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Action</InputLabel>
+            <InputLabel>{t("action")}</InputLabel>
             <Select
               value={actionFilter}
-              label="Action"
+              label={t("action")}
               onChange={(e) => {
                 setActionFilter(e.target.value);
                 setPage(0);
               }}
             >
-              <MenuItem value="">All actions</MenuItem>
-              {ACTION_GROUPS.flatMap((group) => [
-                <ListSubheader key={`hdr-${group.label}`}>{group.label}</ListSubheader>,
-                ...group.actions.map(([action, label]) => (
+              <MenuItem value="">{t("allActions")}</MenuItem>
+              {AUDIT_ACTION_GROUPS.flatMap((group) => [
+                <ListSubheader key={`hdr-${group.group}`}>
+                  {t("actionGroup", { group: group.group })}
+                </ListSubheader>,
+                ...group.actions.map((action) => (
                   <MenuItem key={action} value={action}>
-                    {label}
+                    {actionLabel(action)}
                   </MenuItem>
                 )),
               ])}
@@ -286,19 +166,19 @@ export function AuditLog() {
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Target type</InputLabel>
+            <InputLabel>{t("targetType")}</InputLabel>
             <Select
               value={targetTypeFilter}
-              label="Target type"
+              label={t("targetType")}
               onChange={(e) => {
                 setTargetTypeFilter(e.target.value);
                 setPage(0);
               }}
             >
-              <MenuItem value="">All types</MenuItem>
-              {TARGET_TYPES.map((t) => (
-                <MenuItem key={t} value={t}>
-                  {t}
+              <MenuItem value="">{t("allTypes")}</MenuItem>
+              {AUDIT_TARGET_TYPES.map((type) => (
+                <MenuItem key={type} value={type}>
+                  {targetTypeLabel(type)}
                 </MenuItem>
               ))}
             </Select>
@@ -306,7 +186,7 @@ export function AuditLog() {
 
           <TextField
             size="small"
-            placeholder="Search by target ID…"
+            placeholder={t("searchTarget")}
             value={targetSearch}
             onChange={(e) => {
               setTargetSearch(e.target.value);
@@ -315,11 +195,11 @@ export function AuditLog() {
             sx={{ minWidth: 200 }}
           />
 
-          {hasFilters && <Chip label="Clear filters" size="small" onDelete={resetFilters} />}
+          {hasFilters && <Chip label={t("clearFilters")} size="small" onDelete={resetFilters} />}
 
           <Box sx={{ flexGrow: 1 }} />
 
-          <Chip label={`${data?.total ?? 0} events`} size="small" variant="outlined" />
+          <Chip label={t("events", { count: data?.total ?? 0 })} size="small" variant="outlined" />
 
           <Button
             size="small"
@@ -327,14 +207,14 @@ export function AuditLog() {
             startIcon={<DownloadIcon fontSize="small" />}
             onClick={(e) => setExportAnchor(e.currentTarget)}
           >
-            Export
+            {t("export")}
           </Button>
           <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
-            <MenuItem onClick={() => handleExport("csv")}>Export as CSV</MenuItem>
-            <MenuItem onClick={() => handleExport("json")}>Export as JSON</MenuItem>
+            <MenuItem onClick={() => handleExport("csv")}>{t("exportCsv")}</MenuItem>
+            <MenuItem onClick={() => handleExport("json")}>{t("exportJson")}</MenuItem>
           </Menu>
 
-          <Tooltip title="Refresh">
+          <Tooltip title={t("refresh")}>
             <IconButton
               size="small"
               onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin", "audit"] })}
@@ -350,11 +230,11 @@ export function AuditLog() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Action</TableCell>
-              <TableCell>Target</TableCell>
-              <TableCell>Actor</TableCell>
-              <TableCell>Details</TableCell>
-              <TableCell>When</TableCell>
+              <TableCell>{t("action")}</TableCell>
+              <TableCell>{t("target")}</TableCell>
+              <TableCell>{t("actor")}</TableCell>
+              <TableCell>{t("details")}</TableCell>
+              <TableCell>{t("when")}</TableCell>
             </TableRow>
           </TableHead>
           {isLoading ? (
@@ -369,7 +249,7 @@ export function AuditLog() {
                       color: "text.secondary",
                     }}
                   >
-                    No audit events found
+                    {t("empty")}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -391,7 +271,7 @@ export function AuditLog() {
                               color: "text.secondary",
                             }}
                           >
-                            {entry.targetType}
+                            {targetTypeLabel(entry.targetType)}
                           </Typography>
                         )}
                         <Typography

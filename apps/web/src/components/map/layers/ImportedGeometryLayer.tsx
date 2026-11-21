@@ -2,18 +2,16 @@
 
 import type { ImportedGeometry } from "@openmapx/core";
 import { geoJsonBBox, useImportedGeometryStore } from "@openmapx/core";
-import { useEffect, useRef } from "react";
-import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
-import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";
 const LINE = "imported-geometry-line";
 const POINT = "imported-geometry-point";
-const LAYERS = [POINT, LINE, FILL];
 // Purple — distinct from the route (blue) and admin-boundary (red) overlays.
 const COLOR = "#7c3aed";
 
@@ -22,101 +20,79 @@ const COLOR = "#7c3aed";
  * points, in a distinct purple. Fits the map to the import once per file.
  */
 export function ImportedGeometryLayer() {
-  const publish = useRef(createGeoJsonSourcePublisher()).current;
-  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
+  const { mapReady, fitBounds } = useMap();
   const imported = useImportedGeometryStore((s) => s.imported);
-  // The import this layer has already framed the camera to. Keyed on the
-  // imported object identity so a style/theme reload (which re-runs this effect
-  // to re-add the layers) doesn't yank the camera back and discard the user's pan.
+  // The import this layer has already framed the camera to, so a style reload
+  // never yanks the camera back and discards the user's pan.
   const fittedRef = useRef<ImportedGeometry | null>(null);
 
   useRenderedMapAttributions("imported-geometry", [FILL, LINE, POINT], Boolean(imported));
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+  const group = useMemo<MapLayerGroup | null>(
+    () =>
+      imported
+        ? {
+            sources: { [SOURCE]: { type: "geojson", data: imported.geojson } },
+            layers: [
+              {
+                id: FILL,
+                type: "fill",
+                source: SOURCE,
+                filter: ["==", "$type", "Polygon"],
+                paint: { "fill-color": COLOR, "fill-opacity": 0.12 },
+                slot: "area-overlays",
+                order: 11,
+              },
+              {
+                id: LINE,
+                type: "line",
+                source: SOURCE,
+                filter: ["in", "$type", "LineString", "Polygon"],
+                layout: { "line-join": "round", "line-cap": "round" },
+                paint: { "line-color": COLOR, "line-width": 3, "line-opacity": 0.9 },
+                slot: "overlay-lines",
+                order: 15,
+              },
+              {
+                id: POINT,
+                type: "circle",
+                source: SOURCE,
+                filter: ["==", "$type", "Point"],
+                paint: {
+                  "circle-radius": 5,
+                  "circle-color": COLOR,
+                  "circle-stroke-color": "#ffffff",
+                  "circle-stroke-width": 2,
+                },
+                slot: "overlay-points",
+                order: 16,
+              },
+            ],
+          }
+        : null,
+    [imported],
+  );
+  useMapLayerGroup(group);
 
-    if (!imported) {
-      removeSlottedLayers(map, LAYERS, [SOURCE]);
-      fittedRef.current = null;
+  // Frame each imported file once.
+  useEffect(() => {
+    if (!mapReady || !imported) {
+      if (!imported) fittedRef.current = null;
       return;
     }
-
-    const apply = () => {
-      publish(map, SOURCE, imported.geojson);
-      if (!map.getLayer(FILL)) {
-        addLayerInSlot(
-          map,
-          {
-            id: FILL,
-            type: "fill",
-            source: SOURCE,
-            filter: ["==", "$type", "Polygon"],
-            paint: { "fill-color": COLOR, "fill-opacity": 0.12 },
-          },
-          "area-overlays",
-          11,
-        );
-      }
-      if (!map.getLayer(LINE)) {
-        addLayerInSlot(
-          map,
-          {
-            id: LINE,
-            type: "line",
-            source: SOURCE,
-            filter: ["in", "$type", "LineString", "Polygon"],
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: { "line-color": COLOR, "line-width": 3, "line-opacity": 0.9 },
-          },
-          "overlay-lines",
-          15,
-        );
-      }
-      if (!map.getLayer(POINT)) {
-        addLayerInSlot(
-          map,
-          {
-            id: POINT,
-            type: "circle",
-            source: SOURCE,
-            filter: ["==", "$type", "Point"],
-            paint: {
-              "circle-radius": 5,
-              "circle-color": COLOR,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 2,
-            },
-          },
-          "overlay-points",
-          16,
-        );
-      }
-      // Fit only the first time we show this file — not on later style reloads.
-      if (fittedRef.current !== imported) {
-        fittedRef.current = imported;
-        const box = geoJsonBBox(imported.geojson);
-        if (box) {
-          fitBounds(
-            [
-              [box[0], box[1]],
-              [box[2], box[3]],
-            ],
-            60,
-          );
-        }
-      }
-    };
-
-    // Re-add after a style/theme swap (which wipes all sources). The shared
-    // subscription also retries once at idle when styledata fires mid-load.
-    const unsubscribe = subscribeStyleLoaded(map, apply);
-    return () => {
-      unsubscribe();
-      removeSlottedLayers(map, LAYERS, [SOURCE]);
-    };
-  }, [publish, imported, mapReady, styleVersion, mapRef, fitBounds]);
+    if (fittedRef.current === imported) return;
+    fittedRef.current = imported;
+    const box = geoJsonBBox(imported.geojson);
+    if (box) {
+      fitBounds(
+        [
+          [box[0], box[1]],
+          [box[2], box[3]],
+        ],
+        60,
+      );
+    }
+  }, [imported, mapReady, fitBounds]);
 
   return null;
 }

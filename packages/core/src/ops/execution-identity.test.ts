@@ -15,19 +15,18 @@ const base = {
   admittedAt,
 };
 describe("immutable execution admission", () => {
-  it("retains long per-kind budgets without the old CLI/observer clamps", () => {
-    expect(OPS_KIND_POLICIES["service.build"].timeoutMs).toBe(12 * 3600_000);
-    expect(OPS_KIND_POLICIES["services.buildAll"].timeoutMs).toBe(24 * 3600_000);
-    expect(opsExecutionBudget("system.update").processMs).toBe(48 * 3600_000);
-    expect(opsExecutionBudget("artifactTransfer.import")).toEqual({
-      processMs: 72 * 3600_000,
-      settlementMs: 30_000,
-    });
-    expect(opsExecutionBudget("catalog.validate").processMs).toBe(72 * 3600_000);
-    expect(opsExecutionBudget("platform.config.apply").processMs).toBe(3600_000);
-    expect(
-      normalizeExecutionAdmission({ ...base, kind: "artifactTransfer.import" }).deadlineAt,
-    ).toBe(admittedAt + 72 * 3600_000);
+  it("defaults each admission's deadline to its kind's own budget, capped by the deployment", () => {
+    const kinds = Object.entries(OPS_KIND_POLICIES);
+    expect(kinds.length).toBeGreaterThan(0);
+    for (const [kind, policy] of kinds) {
+      expect(opsExecutionBudget(kind)).toEqual({
+        processMs: policy.timeoutMs,
+        settlementMs: 30_000,
+      });
+      expect(normalizeExecutionAdmission({ ...base, kind }).deadlineAt).toBe(
+        admittedAt + policy.timeoutMs,
+      );
+    }
     expect(
       normalizeExecutionAdmission({
         ...base,
@@ -39,7 +38,7 @@ describe("immutable execution admission", () => {
   });
   it("normalizes from original admission, body, deadline and parent, never today's clock", () => {
     const first = normalizeExecutionAdmission(base);
-    expect(first.deadlineAt).toBe(admittedAt + 12 * 3600_000);
+    expect(first.deadlineAt).toBe(admittedAt + opsExecutionBudget("service.build").processMs);
     expect(normalizeExecutionAdmission(base)).toEqual(first);
     expect(
       normalizeExecutionAdmission({ ...base, requestedDeadlineAt: first.deadlineAt + 1 }),

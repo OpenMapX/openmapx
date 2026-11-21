@@ -28,17 +28,8 @@ import {
 export const AdminDraftContext = createContext<AdminDraftStore | null>(null);
 type RequestExit = (message: string, reason?: AdminDraftDiscardReason) => Promise<boolean>;
 const ExitContext = createContext<RequestExit | null>(null);
-const DEFAULT_COPY = {
-  title: "Discard unsaved administration changes?",
-  ordinary: "Ordinary drafts will be discarded. Stay to review your work first.",
-  reauthentication: "The reviewed reauthentication continuation will be retained.",
-  stay: "Stay",
-  discard: "Discard and continue",
-};
-export function AdminDraftProvider({
-  children,
-  copy = DEFAULT_COPY,
-}: PropsWithChildren<{ copy?: typeof DEFAULT_COPY }>) {
+export function AdminDraftProvider({ children }: PropsWithChildren) {
+  const t = useTranslations("adminDrafts");
   const [store] = useState(() => new AdminDraftStore());
   const [reason, setReason] = useState<string | null>(null);
   const pending = useRef<{
@@ -83,19 +74,19 @@ export function AdminDraftProvider({
           onClose={() => choose(false)}
           aria-labelledby="admin-draft-exit-title"
         >
-          <DialogTitle id="admin-draft-exit-title">{copy.title}</DialogTitle>
+          <DialogTitle id="admin-draft-exit-title">{t("title")}</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              {reason} {copy.ordinary}{" "}
-              {pending.current?.reason === "reauthentication" && copy.reauthentication}
+              {reason} {t("ordinary")}{" "}
+              {pending.current?.reason === "reauthentication" && t("reauthentication")}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => choose(false)} autoFocus>
-              {copy.stay}
+              {t("stay")}
             </Button>
             <Button color="warning" onClick={() => choose(true)}>
-              {copy.discard}
+              {t("discard")}
             </Button>
           </DialogActions>
         </Dialog>
@@ -115,16 +106,8 @@ function AuthorityObserver() {
 }
 /** Must stay outside SessionAuthorityBoundary, including its pending refresh gate. */
 export function AdminDraftRoot({ children }: PropsWithChildren) {
-  const t = useTranslations("adminDrafts");
-  const copy = {
-    title: t("title"),
-    ordinary: t("ordinary"),
-    reauthentication: t("reauthentication"),
-    stay: t("stay"),
-    discard: t("discard"),
-  };
   return (
-    <AdminDraftProvider copy={copy}>
+    <AdminDraftProvider>
       <AuthorityObserver />
       {children}
     </AdminDraftProvider>

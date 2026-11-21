@@ -301,18 +301,18 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
           {t(copy.key, "values" in copy ? copy.values : undefined)}
         </Typography>
         {poi.detour?.kind === "network" && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("rsPlanDetourDistance", {
               distance: formatOverviewDistance(poi.detour.meters, units),
             })}
           </Typography>
         )}
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 1 }}>
           {t(entrance ? "rsDetourEntrance" : "rsDetourCoordinate")}
         </Typography>
         <AttributionStrip attributions={credits} variant="plain" provenanceDisplay="details" />
         {atLimit && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
             {t("rsPlanStopLimit")}
           </Typography>
         )}
@@ -412,7 +412,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
         <Box sx={{ px: 2, pt: 1.5 }} role="status" aria-live="polite">
           {search.isSearching ? (
             <>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
                 {t("rsPlanSearching")}
               </Typography>
               <LinearProgress
@@ -427,19 +427,19 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
               {t("rsPlanFailed")}
             </Typography>
           ) : (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("rsPlanCount", { count: search.results.length })}
             </Typography>
           )}
           {search.capped && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
               {t("rsPlanCapped", {
                 distance: formatRoundDistance(search.searchedMeters, units, locale),
               })}
             </Typography>
           )}
           {search.truncated && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
               {t("rsPlanTruncated")}
             </Typography>
           )}

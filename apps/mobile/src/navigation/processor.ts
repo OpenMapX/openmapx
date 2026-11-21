@@ -2,8 +2,16 @@ import type {
   FixInput,
   MobileNavigationSession,
   NavigationStartPackage,
+  WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import type { ScheduledAlertInput, SessionEffect } from "../storage/SessionRepository";
+import type { RefreshOutcome } from "./transit/TransitRefreshService";
+
+/** A walking route for a transit leg, as the page sent it and the bridge validated it. */
+export type WalkRepairRoute = Extract<
+  WebToNativeMessage,
+  { type: "transit.walk-route" }
+>["payload"]["route"];
 
 /**
  * The mode boundary.
@@ -71,7 +79,7 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
   repairTransitWalk?(
     session: Extract<MobileNavigationSession, { kind: K }>,
     legIndex: number,
-    route: import("@openmapx/core/navigation").Route,
+    route: WalkRepairRoute,
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string };
   transitAction?(
@@ -79,6 +87,15 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
     action: import("@openmapx/core/navigation").TransitRiderAction,
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string };
+  /**
+   * Applies the answer to an itinerary refresh, or returns null when the
+   * session is no longer waiting on that request.
+   */
+  applyRefresh?(
+    session: Extract<MobileNavigationSession, { kind: K }>,
+    outcome: RefreshOutcome,
+    nowMs: number,
+  ): ProcessorMutation | null;
   /** A confirmed offline-to-online transition; may refresh or replan. */
   onConnectivityRestored(
     session: Extract<MobileNavigationSession, { kind: K }>,
@@ -86,7 +103,11 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
   ): Promise<ProcessorMutation | null>;
 }
 
+export type ProcessorKind = "ground" | "transit";
+
 export type AnyNavigationProcessor = NavigationProcessor<"ground"> | NavigationProcessor<"transit">;
+
+type SessionOf<K extends ProcessorKind> = Extract<MobileNavigationSession, { kind: K }>;
 
 /**
  * Which modes this build can actually run.
@@ -96,17 +117,40 @@ export type AnyNavigationProcessor = NavigationProcessor<"ground"> | NavigationP
  * strand the user mid-journey.
  */
 export class ProcessorRegistry {
-  private readonly processors = new Map<string, AnyNavigationProcessor>();
+  private readonly processors: { [K in ProcessorKind]?: NavigationProcessor<K> } = {};
 
   register(processor: AnyNavigationProcessor): void {
-    this.processors.set(processor.kind, processor);
+    if (processor.kind === "ground") this.processors.ground = processor;
+    else this.processors.transit = processor;
   }
 
-  get(kind: "ground" | "transit"): AnyNavigationProcessor | null {
-    return this.processors.get(kind) ?? null;
+  /**
+   * The processor for one mode. There is deliberately no signature for a kind
+   * that could be either mode: its processor would accept either session.
+   */
+  get(kind: "ground"): NavigationProcessor<"ground"> | null;
+  get(kind: "transit"): NavigationProcessor<"transit"> | null;
+  get(kind: ProcessorKind): AnyNavigationProcessor | null {
+    return this.processors[kind] ?? null;
   }
 
-  supports(kind: "ground" | "transit"): boolean {
-    return this.processors.has(kind);
+  supports(kind: ProcessorKind): boolean {
+    return this.processors[kind] !== undefined;
+  }
+
+  /**
+   * Runs `fn` with the processor for the session's mode and the session typed
+   * for it, or returns null when this build has no processor for that mode.
+   */
+  withProcessor<R>(
+    session: MobileNavigationSession,
+    fn: <K extends ProcessorKind>(processor: NavigationProcessor<K>, session: SessionOf<K>) => R,
+  ): R | null {
+    if (session.kind === "ground") {
+      const ground = this.processors.ground;
+      return ground ? fn(ground, session) : null;
+    }
+    const transit = this.processors.transit;
+    return transit ? fn(transit, session) : null;
   }
 }

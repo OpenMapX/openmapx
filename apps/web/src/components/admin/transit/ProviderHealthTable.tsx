@@ -14,20 +14,22 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
+import { useTranslations } from "next-intl";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { useClientPagination } from "@/components/admin/shared/tableHooks";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import {
   type ProviderHealthEntry,
   useProviderHealth,
   useResetProvider,
 } from "@/lib/admin/transitHooks";
 
-function formatPercent(rate: number | null): string {
+function formatRate(rate: number | null, format: AdminFormatters): string {
   if (rate === null || !Number.isFinite(rate)) return "—";
-  return `${(rate * 100).toFixed(0)}%`;
+  return format.percent(rate);
 }
 
 function failureRateColor(rate: number | null): "default" | "success" | "warning" | "error" {
@@ -37,39 +39,47 @@ function failureRateColor(rate: number | null): "default" | "success" | "warning
   return "success";
 }
 
-function formatClock(at: string | null | undefined): string | null {
+function formatClock(at: string | null | undefined, format: AdminFormatters): string | null {
   if (!at) return null;
   const time = new Date(at);
-  return Number.isFinite(time.getTime()) ? time.toLocaleTimeString() : null;
+  return Number.isFinite(time.getTime()) ? format.time(time) : null;
 }
 
 function StateChip({ provider }: { provider: ProviderHealthEntry }) {
-  const retryAt = formatClock(provider.retryAt);
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
+  const retryAt = formatClock(provider.retryAt, format);
   switch (provider.state) {
     case "healthy":
-      return <Chip size="small" color="success" variant="outlined" label="healthy" />;
+      return <Chip size="small" color="success" variant="outlined" label={t("healthy")} />;
     case "degraded":
       return (
-        <Tooltip title="Recent counted failures; requests still reach this provider">
-          <Chip size="small" color="warning" variant="outlined" label="degraded" />
+        <Tooltip title={t("recentCountedFailuresRequestsStill")}>
+          <Chip size="small" color="warning" variant="outlined" label={t("degraded")} />
         </Tooltip>
       );
     case "open":
       return (
-        <Tooltip title="Circuit open; requests skip this provider until the cooldown ends">
-          <Chip size="small" color="error" label={retryAt ? `open until ${retryAt}` : "open"} />
+        <Tooltip title={t("circuitOpenRequestsSkipThis")}>
+          <Chip
+            size="small"
+            color="error"
+            label={retryAt ? t("openUntil", { retryAt }) : t("circuitOpen")}
+          />
         </Tooltip>
       );
     case "half-open":
       return (
-        <Tooltip title="Cooldown ended; the next request is a trial probe">
-          <Chip size="small" color="warning" label="half-open" />
+        <Tooltip title={t("cooldownEndedTheNextRequest")}>
+          <Chip size="small" color="warning" label={t("halfOpen")} />
         </Tooltip>
       );
   }
 }
 
 export function ProviderHealthTable() {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useProviderHealth();
   const resetMutation = useResetProvider();
@@ -78,22 +88,16 @@ export function ProviderHealthTable() {
 
   const onReset = (providerId: string) => {
     resetMutation.mutate(providerId, {
-      onSuccess: () => showToast(`Provider "${providerId}" reset`, "success"),
+      onSuccess: () => showToast(t("providerReset", { providerId }), "success"),
       onError: (err) =>
-        showToast(
-          adminErrorMessage(
-            err,
-            err instanceof Error ? err.message : `Failed to reset ${providerId}`,
-          ),
-          "error",
-        ),
+        showToast(adminErrorText(err, t("providerResetFailed", { providerId })), "error"),
     });
   };
 
   return (
     <AdminTableSurface
-      title="Provider health"
-      description="Sliding-window failure rate · EMA latency · circuit state"
+      title={t("providerHealth")}
+      description={t("slidingWindowFailureRateEma")}
       pagination={<AdminTablePagination {...paginationProps} />}
     >
       {isLoading ? (
@@ -108,7 +112,7 @@ export function ProviderHealthTable() {
         </Box>
       ) : isError ? (
         <Typography variant="body2" color="error">
-          Failed to load provider health.
+          {t("failedToLoadProviderHealth")}
         </Typography>
       ) : !data || data.providers.length === 0 ? (
         <Typography
@@ -117,20 +121,19 @@ export function ProviderHealthTable() {
             color: "text.secondary",
           }}
         >
-          No providers recorded yet. Health tracking populates on the first request to each
-          provider.
+          {t("noProvidersRecordedYetHealth")}
         </Typography>
       ) : (
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Provider</TableCell>
-                <TableCell align="right">OK</TableCell>
-                <TableCell align="right">Fail</TableCell>
-                <TableCell align="right">Window fail %</TableCell>
-                <TableCell align="right">EMA latency</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>{t("provider")}</TableCell>
+                <TableCell align="right">{t("ok")}</TableCell>
+                <TableCell align="right">{t("fail")}</TableCell>
+                <TableCell align="right">{t("windowFail")}</TableCell>
+                <TableCell align="right">{t("emaLatency")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
                 <TableCell align="right" />
               </TableRow>
             </TableHead>
@@ -162,24 +165,24 @@ export function ProviderHealthTable() {
                                 cursor: "help",
                               }}
                             >
-                              last error: {lastError}
+                              {t("lastError", { error: lastError })}
                             </Typography>
                           </Tooltip>
                         )}
                       </Stack>
                     </TableCell>
-                    <TableCell align="right">{p.successCount.toLocaleString()}</TableCell>
-                    <TableCell align="right">{p.failureCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{format.number(p.successCount)}</TableCell>
+                    <TableCell align="right">{format.number(p.failureCount)}</TableCell>
                     <TableCell align="right">
                       <Chip
                         size="small"
                         variant="outlined"
                         color={failureRateColor(p.windowFailureRate)}
-                        label={formatPercent(p.windowFailureRate)}
+                        label={formatRate(p.windowFailureRate, format)}
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {Number.isFinite(p.emaLatencyMs) ? `${Math.round(p.emaLatencyMs)} ms` : "—"}
+                      {Number.isFinite(p.emaLatencyMs) ? format.duration(p.emaLatencyMs) : "—"}
                     </TableCell>
                     <TableCell>
                       <StateChip provider={p} />
@@ -191,7 +194,7 @@ export function ProviderHealthTable() {
                         onClick={() => onReset(p.id)}
                         disabled={resetMutation.isPending}
                       >
-                        Reset
+                        {t("reset")}
                       </Button>
                     </TableCell>
                   </TableRow>

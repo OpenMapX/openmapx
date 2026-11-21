@@ -97,6 +97,7 @@ vi.mock("@/lib/offlineAreas", () => ({
 }));
 
 vi.mock("maplibre-gl", () => {
+  type Listener = (event?: unknown) => void;
   const instances: FakeMap[] = [];
   const options: Array<{
     center: [number, number];
@@ -149,14 +150,14 @@ vi.mock("maplibre-gl", () => {
     getPitch = () => 44;
     isStyleLoaded = () => this.styleLoaded;
     off = vi.fn();
-    on = vi.fn(() => {
+    on = vi.fn((_event: string, _listener: Listener) => {
       onCallCount += 1;
       if (!setupError || onCallCount !== setupErrorOnCall) return;
       const error = setupError;
       setupError = undefined;
       throw error;
     });
-    once = vi.fn();
+    once = vi.fn((_event: string, _listener: Listener) => {});
     addControl = vi.fn();
     removeControl = vi.fn();
     canvas = document.createElement("canvas");
@@ -166,21 +167,16 @@ vi.mock("maplibre-gl", () => {
       this.canvas.dispatchEvent(new Event("webglcontextlost"));
     });
     emitError(error: Error, data: Record<string, unknown> = {}) {
-      const listener = this.on.mock.calls.find(([event]: unknown[]) => event === "error")?.[1] as
-        | ((event: unknown) => void)
-        | undefined;
+      const listener = this.on.mock.calls.find(([event]) => event === "error")?.[1];
       listener?.({ error, style: this.style, ...data });
     }
     emitStyleLoad() {
       this.style._loaded = true;
       this.styleLoaded = true;
       for (const [event, listener] of this.on.mock.calls) {
-        if (event === "style.load") (listener as () => void)();
+        if (event === "style.load") listener();
       }
-      const listener = this.once.mock.calls.find(
-        ([event]: unknown[]) => event === "style.load",
-      )?.[1] as (() => void) | undefined;
-      listener?.();
+      this.once.mock.calls.find(([event]) => event === "style.load")?.[1]();
     }
   }
   return {

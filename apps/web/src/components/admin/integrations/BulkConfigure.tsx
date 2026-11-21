@@ -25,11 +25,15 @@ import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { hasVaultCredential, useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { SetCredentialDialog } from "./SetCredentialDialog";
@@ -42,6 +46,7 @@ type EnvVarIntegration =
   import("@openmapx/core/api-contracts").AdminIntegrationEnvVars["integrations"][number];
 
 export function BulkConfigure() {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
 
   const integrationsQuery = useQuery(admin.queries.list());
@@ -79,16 +84,19 @@ export function BulkConfigure() {
       }}
     >
       <AdminPageHeader
-        title="Bulk configure integrations"
-        subtitle="Review editable configuration and credentials across providers"
+        title={t("bulkConfigureIntegrations")}
+        subtitle={t("reviewEditableConfigurationAndCredentials")}
         backHref="/admin/integrations"
-        backLabel="Back to integrations"
+        backLabel={t("backToIntegrations")}
         actions={
           <>
-            <Chip label={`${sortedIntegrations.length} total`} variant="outlined" />
+            <Chip
+              label={t("totalCount", { count: sortedIntegrations.length })}
+              variant="outlined"
+            />
             {unconfiguredCount > 0 && (
               <Chip
-                label={`${unconfiguredCount} unconfigured`}
+                label={t("unconfiguredCount", { count: unconfiguredCount })}
                 color="warning"
                 variant="outlined"
               />
@@ -102,14 +110,15 @@ export function BulkConfigure() {
           color: "text.secondary",
         }}
       >
-        Configure all integrations on a single page — each panel exposes the same form fields and
-        credentials as its per-integration page. The env-var catalogue at the bottom lists every
-        override key ready to paste into <code>infra/docker/.env</code>.
+        {t.rich("bulkConfigureIntro", {
+          file: "infra/docker/.env",
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </Typography>
       {integrationsQuery.isLoading && <Skeleton variant="rounded" height={200} />}
       {integrationsQuery.isError && (
         <Alert severity="error" variant="outlined">
-          Failed to load integrations.
+          {t("integrationsLoadFailed")}
         </Alert>
       )}
       {sortedIntegrations.map((entry) => (
@@ -125,6 +134,7 @@ export function BulkConfigure() {
 }
 
 function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
+  const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const [open, setOpen] = useState(false);
 
@@ -176,10 +186,10 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
             {entry.id}
           </Typography>
           {!entry.configured && (
-            <Chip label="unconfigured" size="small" color="warning" variant="outlined" />
+            <Chip label={t("unconfiguredChip")} size="small" color="warning" variant="outlined" />
           )}
           {!entry.enabled && (
-            <Chip label="disabled" size="small" color="default" variant="outlined" />
+            <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
           )}
         </Stack>
       </AccordionSummary>
@@ -189,7 +199,7 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
             panel. Errors and resolved data render normally. */}
         {detailQuery.isError && (
           <Alert severity="error" variant="outlined">
-            Failed to load configuration for {entry.id}.
+            {t("failedToLoadConfigurationFor", { id: entry.id })}
           </Alert>
         )}
         {detailQuery.data && <IntegrationPanel data={detailQuery.data} />}
@@ -210,6 +220,7 @@ function hasEditableConfigFields(schema: Record<string, unknown> | undefined): b
 }
 
 function IntegrationPanel({ data }: { data: IntegrationDetail }) {
+  const t = useTranslations("adminIntegrations");
   const secretCredentials = data.credentialStatus;
   // Only render the Configuration block if ConfigSchemaForm would actually
   // produce inputs. Otherwise it falls back to a "No editable configuration
@@ -219,7 +230,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
   if (!showConfig && data.credentialStatus.length === 0) {
     return (
       <Alert severity="info" variant="outlined">
-        This integration has no configurable fields or credentials.
+        {t("thisIntegrationHasNoConfigurable")}
       </Alert>
     );
   }
@@ -239,7 +250,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
               color: "text.secondary",
             }}
           >
-            Configuration
+            {t("configuration")}
           </Typography>
           <ConfigSchemaForm
             integrationId={data.id}
@@ -259,7 +270,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
               color: "text.secondary",
             }}
           >
-            Credentials
+            {t("credentials")}
           </Typography>
           <CredentialsTable
             integrationId={data.id}
@@ -284,6 +295,9 @@ function CredentialsTable({
   configurationRevision?: string;
   credentials: CredentialStatus[];
 }) {
+  const t = useTranslations("adminIntegrations");
+  const sourceLabel = useConfigSourceLabel();
+  const format = useAdminFormat();
   const admin = useIntegrationAdmin();
   const showToast = useAdminToast();
   const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
@@ -303,12 +317,12 @@ function CredentialsTable({
         if (owner.active)
           showToast(
             applied.runtime === "applied"
-              ? "Credential deleted and active"
-              : "Credential removal saved; provider activation is pending or failed",
+              ? t("credentialDeletedAndActive")
+              : t("credentialRemovalSavedProviderActivation"),
             applied.runtime === "applied" ? "success" : "info",
           );
       } catch (err) {
-        if (owner.active) showToast(err instanceof Error ? err.message : "Delete failed", "error");
+        if (owner.active) showToast(adminErrorText(err, t("deleteFailed")), "error");
         throw err;
       }
     },
@@ -318,17 +332,19 @@ function CredentialsTable({
     <>
       {!secretsConfigured && (
         <Alert severity="warning" variant="outlined" sx={{ mb: 1 }}>
-          Vault not configured — set <code>OPENMAPX_SECRETS_KEY</code> to enable storing credentials
-          in the admin panel. You can still set them via environment variables.
+          {t.rich("vaultNotConfiguredEnvFallback", {
+            variable: "OPENMAPX_SECRETS_KEY",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
       <TableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Credential</TableCell>
-              <TableCell>Source</TableCell>
-              <TableCell align="right">Action</TableCell>
+              <TableCell>{t("credential")}</TableCell>
+              <TableCell>{t("source")}</TableCell>
+              <TableCell align="right">{t("action")}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -371,7 +387,7 @@ function CredentialsTable({
                 </TableCell>
                 <TableCell>
                   <Chip
-                    label={cred.source}
+                    label={sourceLabel(cred.source)}
                     size="small"
                     color={
                       cred.source === "missing"
@@ -385,8 +401,14 @@ function CredentialsTable({
                   />
                   {cred.updatedAt && (
                     <Typography variant="caption" sx={{ display: "block" }}>
-                      Vault updated {new Date(cred.updatedAt).toLocaleDateString()}
-                      {cred.updatedBy ? ` by ${cred.updatedBy}` : ""}
+                      {cred.updatedBy
+                        ? t("vaultUpdatedBy", {
+                            updatedAt: format.date(cred.updatedAt),
+                            updatedBy: cred.updatedBy,
+                          })
+                        : t("vaultUpdated", {
+                            updatedAt: format.date(cred.updatedAt),
+                          })}
                     </Typography>
                   )}
                 </TableCell>
@@ -409,10 +431,10 @@ function CredentialsTable({
                         ["env", "config.json"].includes(cred.source)
                       }
                     >
-                      {hasVaultCredential(cred) ? "Rotate" : "Set"}
+                      {hasVaultCredential(cred) ? t("rotate") : t("set")}
                     </Button>
                     {hasVaultCredential(cred) && (
-                      <Tooltip title="Delete from vault">
+                      <Tooltip title={t("deleteFromVault")}>
                         <IconButton
                           size="small"
                           color="error"
@@ -460,6 +482,7 @@ function EnvVarReferenceSection({
   error: boolean;
   integrations: EnvVarIntegration[];
 }) {
+  const t = useTranslations("adminIntegrations");
   const showToast = useAdminToast();
 
   const allBlock = useMemo(() => buildEnvBlock(integrations, () => true), [integrations]);
@@ -473,23 +496,23 @@ function EnvVarReferenceSection({
 
   async function copy(text: string, label: string) {
     if (!text) {
-      showToast(`Nothing to copy (${label})`, "error");
+      showToast(t("nothingToCopyLabel", { label }), "error");
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      showToast(`Copied ${label}`);
+      showToast(t("copiedLabel", { label }));
     } catch {
-      showToast("Copy failed — select and copy manually", "error");
+      showToast(t("copyFailedSelectAndCopy"), "error");
     }
   }
 
   async function copyOne(line: string) {
     try {
       await navigator.clipboard.writeText(line);
-      showToast("Copied");
+      showToast(t("copied"));
     } catch {
-      showToast("Copy failed", "error");
+      showToast(t("copyFailed"), "error");
     }
   }
 
@@ -504,7 +527,7 @@ function EnvVarReferenceSection({
           flexWrap: "wrap",
         }}
       >
-        <Typography variant="h6">Environment Variables</Typography>
+        <Typography variant="h6">{t("environmentVariables")}</Typography>
         <Box
           sx={{
             flex: 1,
@@ -514,28 +537,28 @@ function EnvVarReferenceSection({
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(configBlock, "config env vars")}
+          onClick={() => copy(configBlock, t("configEnvVars"))}
           disabled={loading || error || !hasConfigVars}
         >
-          Copy config
+          {t("copyConfig")}
         </Button>
         <Button
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(credentialBlock, "credential env vars")}
+          onClick={() => copy(credentialBlock, t("credentialEnvVars"))}
           disabled={loading || error || !hasCredentialVars}
         >
-          Copy credentials
+          {t("copyCredentials")}
         </Button>
         <Button
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={() => copy(allBlock, "env-var catalogue")}
+          onClick={() => copy(allBlock, t("envVarCatalogue"))}
           disabled={loading || error || integrations.length === 0}
         >
-          Copy all
+          {t("copyAll")}
         </Button>
       </Stack>
       <Typography
@@ -545,15 +568,16 @@ function EnvVarReferenceSection({
           color: "text.secondary",
         }}
       >
-        Every integration field can be set via host env using the pattern{" "}
-        <code>INTEGRATION_&lt;ID&gt;_&lt;KEY&gt;</code>. Env always wins over admin-stored values.
-        Paste any subset of the lines below into <code>infra/docker/.env</code> and fill in the
-        right-hand side.
+        {t.rich("envVarCatalogueIntro", {
+          pattern: "INTEGRATION_<ID>_<KEY>",
+          file: "infra/docker/.env",
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </Typography>
       {loading && <Skeleton variant="rounded" height={200} sx={{ mt: 1 }} />}
       {error && (
         <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
-          Failed to load env-var catalogue.
+          {t("failedToLoadEnvVar")}
         </Alert>
       )}
       {!loading && !error && (
@@ -590,7 +614,9 @@ function EnvVarReferenceSection({
                 >
                   {entry.id}
                 </Typography>
-                {!entry.enabled && <Chip label="disabled" size="small" variant="outlined" />}
+                {!entry.enabled && (
+                  <Chip label={t("disabledChip")} size="small" variant="outlined" />
+                )}
               </Stack>
               <Stack
                 component="pre"
@@ -622,9 +648,14 @@ function EnvVarReferenceSection({
                         {line}
                       </Box>
                       {v.present && (
-                        <Chip label="set" size="small" color="success" variant="outlined" />
+                        <Chip
+                          label={t("setChip")}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                        />
                       )}
-                      <Tooltip title="Copy line">
+                      <Tooltip title={t("copyLine")}>
                         <IconButton size="small" onClick={() => copyOne(line)}>
                           <ContentCopyIcon fontSize="inherit" />
                         </IconButton>

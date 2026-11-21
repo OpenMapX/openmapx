@@ -19,7 +19,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe("useNavigationVoice", () => {
   it("speaks text via speechSynthesis", () => {
     const order: string[] = [];
-    const speak = vi.fn(() => order.push("speak"));
+    const speak = vi.fn((_utterance: FakeUtterance) => {
+      order.push("speak");
+    });
     vi.stubGlobal("window", {
       speechSynthesis: { speak, cancel: () => order.push("cancel") },
       SpeechSynthesisUtterance: FakeUtterance,
@@ -28,9 +30,9 @@ describe("useNavigationVoice", () => {
     const { result } = renderHook(() => useNavigationVoice("de"));
     result.current("Turn right");
     expect(speak).toHaveBeenCalledTimes(1);
-    const utterance = speak.mock.calls[0][0] as FakeUtterance;
-    expect(utterance.text).toBe("Turn right");
-    expect(utterance.lang).toBe("de");
+    const utterance = speak.mock.calls[0]?.[0];
+    expect(utterance?.text).toBe("Turn right");
+    expect(utterance?.lang).toBe("de");
     expect(order).toEqual(["cancel", "speak"]);
   });
 

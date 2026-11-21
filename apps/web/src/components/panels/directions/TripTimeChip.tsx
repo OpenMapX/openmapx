@@ -42,7 +42,7 @@ export function TripTimeChip({ mode, value, open, onToggle }: TripTimeChipProps)
       }}
     >
       <ScheduleIcon sx={{ fontSize: 18, color: timed ? BRAND : "text.primary" }} />
-      <Typography variant="body2" color={timed ? BRAND : "text.primary"} sx={{ fontWeight: 500 }}>
+      <Typography variant="body2" sx={{ color: timed ? BRAND : "text.primary", fontWeight: 500 }}>
         {label}
       </Typography>
       <ExpandMoreIcon sx={{ fontSize: 18, color: timed ? BRAND : "text.primary" }} />

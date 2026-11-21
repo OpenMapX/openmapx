@@ -118,12 +118,17 @@ function response(body: unknown, ok = true): Response {
   return { ok, status: ok ? 200 : 503, json: async () => body } as Response;
 }
 
-function delegatedHandler(event: string, layerId: string) {
-  const call = fake.state.listenerCalls.find(
-    (entry) => entry.method === "on" && entry.event === event && entry.layerId === layerId,
+/** Puts the event's features under the pointer on `layerId` and clicks the map there. */
+function clickLayer(
+  layerId: string,
+  event: { lngLat: { lng: number; lat: number }; features: MapGeoJSONFeature[] },
+) {
+  fake.setRenderedFeatures(
+    layerId,
+    event.features.map((feature) => ({ ...feature, layer: { id: layerId } }) as MapGeoJSONFeature),
   );
-  if (!call) throw new Error(`Missing ${event} handler for ${layerId}`);
-  return call.handler;
+  fake.emit("click", { point: { x: 0, y: 0 }, lngLat: event.lngLat });
+  fake.setRenderedFeatures(layerId, []);
 }
 
 let fake: FakeMap;
@@ -410,10 +415,7 @@ describe("NoaaSmokeLayer", () => {
 
     const feature = smokeCollection().features[0] as unknown as MapGeoJSONFeature;
     act(() => {
-      delegatedHandler(
-        "click",
-        NOAA_SMOKE_FILL,
-      )({ features: [feature], lngLat: { lng: 8, lat: 50 } });
+      clickLayer(NOAA_SMOKE_FILL, { features: [feature], lngLat: { lng: 8, lat: 50 } });
     });
 
     expect(controller.open).toHaveBeenCalledTimes(1);
@@ -462,7 +464,7 @@ describe("NoaaSmokeLayer", () => {
       featureCount: null,
     });
     expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
-    for (const event of ["styledata", "click", "mouseenter", "mouseleave"]) {
+    for (const event of ["styledata", "click", "mousemove"]) {
       const ons = fake.state.listenerCalls.filter(
         (call) => call.method === "on" && call.event === event,
       );

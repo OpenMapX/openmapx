@@ -7,17 +7,12 @@ import {
   readCapturedContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import type {
-  FilterSpecification,
-  MapLayerMouseEvent,
-  Map as MapLibreMap,
-  MapMouseEvent,
-} from "maplibre-gl";
-import { useEffect, useRef } from "react";
-import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
+import type { FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useStreetLevelProviders } from "./useStreetLevelProviders";
@@ -71,17 +66,114 @@ function panoFilter(coverage: MvtCoverage, wantPano: boolean): FilterSpecificati
   ) as FilterSpecification;
 }
 
-/** Remove one provider's coverage layers and its tile source, by source id. */
-function removeCoverage(map: MapLibreMap, sourceId: string): void {
-  removeSlottedLayers(
-    map,
-    ["grid", "sequences", "pictures", "pictures-pano"].map((suffix) => `${sourceId}-${suffix}`),
-    [sourceId],
-  );
+/** The contributors each layer of one tile source generation was captured with. */
+interface CoverageSnapshot {
+  tileUrl: string;
+  layers: Record<string, readonly Attribution[]>;
 }
 
+function coverageSnapshot(
+  provider: StreetLevelCapabilities,
+  coverage: MvtCoverage,
+  tileUrl: string,
+) {
+  const ids = coverageLayerIds(provider.id);
+  const pictures = coverage.layerContributors?.[coverage.layers.pictures] ?? [];
+  return {
+    tileUrl,
+    layers: {
+      [ids.sequences]: snapshotContributors(
+        coverage.layerContributors?.[coverage.layers.sequences] ?? [],
+      ),
+      [ids.pictures]: snapshotContributors(pictures),
+      [ids.picturesPano]: snapshotContributors(pictures),
+      [ids.grid]: snapshotContributors(
+        coverage.layerContributors?.[coverage.layers.grid ?? ""] ?? [],
+      ),
+    },
+  };
+}
+
+function coverageLayers(provider: StreetLevelCapabilities, coverage: MvtCoverage): SlottedLayer[] {
+  const source = coverageSourceId(provider.id);
+  const ids = coverageLayerIds(provider.id);
+  const layers: SlottedLayer[] = [];
+  if (coverage.layers.grid) {
+    layers.push({
+      id: ids.grid,
+      type: "circle",
+      source,
+      minzoom: coverage.minzoom,
+      "source-layer": coverage.layers.grid,
+      maxzoom: 7,
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["get", "coef"], 0, 2, 1, 12],
+        "circle-color": provider.color,
+        "circle-opacity": 0.5,
+      },
+      slot: "overlay-points",
+      order: 11,
+    });
+  }
+  const pano = panoFilter(coverage, true);
+  const flat = panoFilter(coverage, false);
+  layers.push(
+    {
+      id: ids.sequences,
+      type: "line",
+      source,
+      minzoom: coverage.minzoom,
+      "source-layer": coverage.layers.sequences,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": provider.color,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 14, 4],
+        "line-opacity": 0.85,
+      },
+      slot: "overlay-lines",
+      order: 11,
+    },
+    {
+      id: ids.pictures,
+      type: "circle",
+      source,
+      minzoom: coverage.minzoom,
+      "source-layer": coverage.layers.pictures,
+      ...(flat ? { filter: flat } : {}),
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3, 14, 6],
+        "circle-color": provider.color,
+        "circle-stroke-color": "#fff",
+        "circle-stroke-width": 1,
+      },
+      slot: "overlay-points",
+      order: 12,
+    },
+    {
+      id: ids.picturesPano,
+      type: "circle",
+      source,
+      minzoom: coverage.minzoom,
+      "source-layer": coverage.layers.pictures,
+      ...(pano ? { filter: pano } : {}),
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 5, 14, 10],
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-color": provider.color,
+        "circle-stroke-width": 2,
+      },
+      slot: "overlay-points",
+      order: 13,
+    },
+  );
+  return layers;
+}
+
+/** Picture dots are points, so they win over line and area overlays beneath them. */
+const PICTURE_INTERACTION_PRIORITY = 50;
+
 export function StreetLevelCoverageLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef } = useMap();
   const currentMap = mapRef.current;
   const { apiUrl } = useEnv();
   const { providers } = useStreetLevelProviders();
@@ -90,245 +182,95 @@ export function StreetLevelCoverageLayer() {
 
   useOverlayExclusion("street-level-imagery", layerVisible);
 
-  // Each map/source generation owns its captured capabilities. Metadata refresh
-  // cannot relabel tile bytes already retained by MapLibre.
-  const snapshots = useRef(
-    new WeakMap<
-      MapLibreMap,
-      Map<string, { tileUrl: string; layers: Record<string, readonly Attribution[]> }>
-    >(),
+  // Each map and tile source generation keeps the capabilities it was created
+  // with: a metadata refresh cannot relabel tile bytes MapLibre already holds.
+  const snapshots = useRef(new WeakMap<MapLibreMap, Map<string, CoverageSnapshot>>());
+
+  const coverageSources = useMemo(
+    () =>
+      layerVisible
+        ? providers.flatMap((provider) => {
+            const coverage = provider.coverage;
+            if (coverage.kind !== "mvt") return [];
+            const sourceId = coverageSourceId(provider.id);
+            return [
+              { provider, coverage, sourceId, tileUrl: `${apiUrl}${coverage.tileUrlTemplate}` },
+            ];
+          })
+        : [],
+    [layerVisible, providers, apiUrl],
   );
+
+  // Recorded after commit and before the group effect below puts the sources
+  // on the map, so every tile drawn from a source finds its snapshot.
+  useEffect(() => {
+    if (!currentMap) return;
+    let retained = snapshots.current.get(currentMap);
+    if (!retained) {
+      retained = new Map();
+      snapshots.current.set(currentMap, retained);
+    }
+    const wanted = new Set<string>();
+    for (const { provider, coverage, sourceId, tileUrl } of coverageSources) {
+      wanted.add(sourceId);
+      if (retained.get(sourceId)?.tileUrl !== tileUrl) {
+        retained.set(sourceId, coverageSnapshot(provider, coverage, tileUrl));
+      }
+    }
+    for (const sourceId of retained.keys()) {
+      if (!wanted.has(sourceId)) retained.delete(sourceId);
+    }
+  }, [currentMap, coverageSources]);
+
+  const group = useMemo<MapLayerGroup | null>(() => {
+    if (!layerVisible) return null;
+    const sources: MapLayerGroup["sources"] = {};
+    const layers: SlottedLayer[] = [];
+    for (const { provider, coverage, sourceId, tileUrl } of coverageSources) {
+      sources[sourceId] = {
+        type: "vector",
+        tiles: [tileUrl],
+        minzoom: coverage.minzoom,
+        maxzoom: coverage.maxzoom,
+      };
+      layers.push(...coverageLayers(provider, coverage));
+    }
+    return { sources, layers };
+  }, [layerVisible, coverageSources]);
+  useMapLayerGroup(group);
+
   const layerIds = providers.flatMap((provider) => Object.values(coverageLayerIds(provider.id)));
   useRenderedMapAttributions("street-level-coverage", layerIds, layerVisible, {
     resolveFeatureContributors: (feature) => {
-      const map = currentMap;
       const native =
         readCapturedContributors(feature.properties?._mapAttributions) ??
         readCapturedContributors(feature.properties?.contributors);
       if (native !== undefined) return native;
-      return map
-        ? (snapshots.current.get(map)?.get(feature.source ?? feature.layer.source)?.layers[
+      return currentMap
+        ? (snapshots.current.get(currentMap)?.get(feature.source ?? feature.layer.source)?.layers[
             feature.layer.id
           ] ?? [])
         : [];
     },
   });
 
-  useEffect(
-    () => () => {
-      if (!currentMap) return;
-      const retained = snapshots.current.get(currentMap);
-      for (const sourceId of retained?.keys() ?? []) removeCoverage(currentMap, sourceId);
-      snapshots.current.delete(currentMap);
-    },
-    [currentMap],
-  );
-
-  useEffect(() => {
-    void styleVersion;
-    const map = currentMap;
-    if (!map || !mapReady) return;
-
-    let retained = snapshots.current.get(map);
-    if (!retained) {
-      retained = new Map();
-      snapshots.current.set(map, retained);
-    }
-    const sourceSnapshots = retained;
-    const removeProvider = (sourceId: string) => {
-      removeCoverage(map, sourceId);
-      sourceSnapshots.delete(sourceId);
-    };
-    const syncLayers = () => {
-      const selected = new Set(providers.map((provider) => coverageSourceId(provider.id)));
-      for (const id of sourceSnapshots.keys())
-        if (!layerVisible || !selected.has(id)) removeProvider(id);
-      if (!layerVisible) {
-        for (const provider of providers) removeCoverage(map, coverageSourceId(provider.id));
-        return;
-      }
-
-      for (const provider of providers) {
-        const coverage = provider.coverage;
-        if (coverage.kind !== "mvt") continue;
-
-        const sourceId = coverageSourceId(provider.id);
-        const ids = coverageLayerIds(provider.id);
-
-        const tileUrl = `${apiUrl}${coverage.tileUrlTemplate}`;
-        if (
-          sourceSnapshots.get(sourceId)?.tileUrl !== undefined &&
-          sourceSnapshots.get(sourceId)?.tileUrl !== tileUrl
-        )
-          removeProvider(sourceId);
-        if (!sourceSnapshots.has(sourceId)) {
-          sourceSnapshots.set(sourceId, {
-            tileUrl,
-            layers: {
-              [ids.sequences]: snapshotContributors(
-                coverage.layerContributors?.[coverage.layers.sequences] ?? [],
-              ),
-              [ids.pictures]: snapshotContributors(
-                coverage.layerContributors?.[coverage.layers.pictures] ?? [],
-              ),
-              [ids.picturesPano]: snapshotContributors(
-                coverage.layerContributors?.[coverage.layers.pictures] ?? [],
-              ),
-              [ids.grid]: snapshotContributors(
-                coverage.layerContributors?.[coverage.layers.grid ?? ""] ?? [],
-              ),
-            },
-          });
-        }
-        if (!map.getSource(sourceId)) {
-          map.addSource(sourceId, {
-            type: "vector",
-            tiles: [tileUrl],
-            minzoom: coverage.minzoom,
-            maxzoom: coverage.maxzoom,
-          });
-        }
-
-        if (coverage.layers.grid && !map.getLayer(ids.grid)) {
-          addLayerInSlot(
-            map,
-            {
-              id: ids.grid,
-              type: "circle",
-              source: sourceId,
-              minzoom: coverage.minzoom,
-              "source-layer": coverage.layers.grid,
-              maxzoom: 7,
-              paint: {
-                "circle-radius": ["interpolate", ["linear"], ["get", "coef"], 0, 2, 1, 12],
-                "circle-color": provider.color,
-                "circle-opacity": 0.5,
-              },
-            },
-            "overlay-points",
-            11,
-          );
-        }
-
-        if (!map.getLayer(ids.sequences)) {
-          addLayerInSlot(
-            map,
-            {
-              id: ids.sequences,
-              type: "line",
-              source: sourceId,
-              minzoom: coverage.minzoom,
-              "source-layer": coverage.layers.sequences,
-              layout: { "line-cap": "round", "line-join": "round" },
-              paint: {
-                "line-color": provider.color,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 14, 4],
-                "line-opacity": 0.85,
-              },
-            },
-            "overlay-lines",
-            11,
-          );
-        }
-
-        if (!map.getLayer(ids.pictures)) {
-          addLayerInSlot(
-            map,
-            {
-              id: ids.pictures,
-              type: "circle",
-              source: sourceId,
-              minzoom: coverage.minzoom,
-              "source-layer": coverage.layers.pictures,
-              filter: panoFilter(coverage, false),
-              paint: {
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3, 14, 6],
-                "circle-color": provider.color,
-                "circle-stroke-color": "#fff",
-                "circle-stroke-width": 1,
-              },
-            },
-            "overlay-points",
-            12,
-          );
-        }
-
-        if (!map.getLayer(ids.picturesPano)) {
-          addLayerInSlot(
-            map,
-            {
-              id: ids.picturesPano,
-              type: "circle",
-              source: sourceId,
-              minzoom: coverage.minzoom,
-              "source-layer": coverage.layers.pictures,
-              filter: panoFilter(coverage, true),
-              paint: {
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 5, 14, 10],
-                "circle-color": "rgba(0,0,0,0)",
-                "circle-stroke-color": provider.color,
-                "circle-stroke-width": 2,
-              },
-            },
-            "overlay-points",
-            13,
-          );
-        }
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayers();
-      return;
-    }
-
-    return subscribeStyleLoaded(map, syncLayers);
-  }, [mapReady, styleVersion, currentMap, layerVisible, providers, apiUrl]);
-
-  useEffect(() => {
-    void styleVersion;
-    const map = currentMap;
-    if (!map || !mapReady || !layerVisible) return;
-
-    // Bind unconditionally rather than filtering by `map.getLayer(id)` here:
-    // layer creation waits for the style to be parsed, so an existence check at
-    // effect time could attach nothing and leave the dots permanently
-    // unclickable. MapLibre resolves the layer list at event time and ignores
-    // ids that don't exist yet.
-    const interactive = pictureLayerIds(providers);
-    if (interactive.length === 0) return;
-
-    const byLayer = providerIdByLayer(providers);
-
-    // One delegated handler over all provider layers, so a click where two
-    // providers' dots overlap resolves to the topmost feature instead of
-    // firing once per layer and letting the last one win.
-    const handleClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const feature = e.features?.[0];
+  // One registration over every provider's dots, so where two providers overlap
+  // the topmost dot opens rather than one per layer.
+  const byLayer = useMemo(() => providerIdByLayer(providers), [providers]);
+  useMapOverlayInteraction({
+    id: "street-level-coverage",
+    layerIds: pictureLayerIds(providers),
+    priority: PICTURE_INTERACTION_PRIORITY,
+    enabled: layerVisible,
+    onClick: ({ features }) => {
+      const feature = features[0];
       const imageId = feature?.properties?.id;
       const providerId = byLayer.get(feature?.layer?.id ?? "");
       if (imageId != null && providerId) {
         requestImageLoad({ providerId, imageId: String(imageId) });
       }
-    };
-
-    const handleMouseMove = (e: MapMouseEvent) => {
-      const present = interactive.filter((id) => !!map.getLayer(id));
-      if (present.length === 0) return;
-      const hits = map.queryRenderedFeatures(e.point, { layers: present });
-      map.getCanvasContainer().style.cursor = hits.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", interactive, handleClick);
-    map.on("mousemove", handleMouseMove);
-
-    return () => {
-      map.off("click", interactive, handleClick);
-      map.off("mousemove", handleMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [mapReady, styleVersion, currentMap, layerVisible, providers, requestImageLoad]);
+    },
+  });
 
   return null;
 }

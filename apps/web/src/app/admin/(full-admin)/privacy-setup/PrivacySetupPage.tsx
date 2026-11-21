@@ -115,7 +115,7 @@ export function PrivacySetupPage() {
         <Typography component="h2" variant="subtitle1">
           {t("steps.notifications.title")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
           {t("notificationsOwner")}
         </Typography>
         <Button component={Link} href="/admin/settings/email">

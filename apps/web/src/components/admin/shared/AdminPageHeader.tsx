@@ -3,6 +3,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
 interface AdminPageHeaderProps {
@@ -22,8 +23,9 @@ export function AdminPageHeader({
   actions,
   badges,
   backHref,
-  backLabel = "Back",
+  backLabel,
 }: AdminPageHeaderProps) {
+  const tCommon = useTranslations("common");
   return (
     <Stack
       component="header"
@@ -37,7 +39,7 @@ export function AdminPageHeader({
     >
       <Stack direction="row" sx={{ gap: 1, alignItems: "center", minWidth: 0 }}>
         {backHref && (
-          <IconButton component={Link} href={backHref} aria-label={backLabel}>
+          <IconButton component={Link} href={backHref} aria-label={backLabel ?? tCommon("back")}>
             <ArrowBackIcon fontSize="small" />
           </IconButton>
         )}

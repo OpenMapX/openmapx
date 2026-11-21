@@ -41,7 +41,7 @@ export function OsmNoteForm({ context, note, onChange, onSubmit }: Props) {
     <Stack spacing={2}>
       <Typography variant="subtitle1">{t("noteTitle")}</Typography>
       <Alert severity="info">{t("noteDisclosure")}</Alert>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         {t("noteNotFeedback")}
       </Typography>
 

@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@/test";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 import {
   AdminDraftProvider,
   useAdminDraftAuthority,

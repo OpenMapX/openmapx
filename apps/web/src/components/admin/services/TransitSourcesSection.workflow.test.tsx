@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TransitSourcesSection } from "./TransitSourcesSection";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const clients: QueryClient[] = [];
 const source = {
   id: "catalog:de:vbb",

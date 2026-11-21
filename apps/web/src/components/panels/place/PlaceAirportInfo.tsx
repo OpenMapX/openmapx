@@ -272,8 +272,7 @@ function FactCell({ label, value, muted }: { label: string; value: string; muted
       </Typography>
       <Typography
         variant="body2"
-        color={muted ? "text.secondary" : "text.primary"}
-        sx={{ wordBreak: "break-word" }}
+        sx={{ color: muted ? "text.secondary" : "text.primary", wordBreak: "break-word" }}
       >
         {value}
       </Typography>

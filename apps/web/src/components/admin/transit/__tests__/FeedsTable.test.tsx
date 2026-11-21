@@ -6,6 +6,8 @@ import type {
   TransitStateSummary,
 } from "@/lib/admin/transitHooks";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const useTransitFeedsMock = vi.fn();
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({

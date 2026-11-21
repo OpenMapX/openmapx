@@ -630,31 +630,19 @@ describe("HotspotLayer", () => {
     expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
   });
 
-  it("registers its click and hover listeners once and removes them all on unmount", () => {
+  it("answers clicks and hover through the shared pipeline and leaves nothing behind on unmount", () => {
     vi.stubGlobal("fetch", routeFetch());
     const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
 
     for (const layerId of [CIRCLE_LAYER_ID, DENSITY_LAYER_ID]) {
-      for (const event of ["click", "mouseenter", "mouseleave"]) {
-        expect(
-          fake.state.listenerCalls.filter(
-            (call) => call.method === "on" && call.event === event && call.layerId === layerId,
-          ),
-        ).toHaveLength(1);
-      }
       expect(INTERACTIVE_LAYER_IDS.has(layerId)).toBe(true);
     }
+    expect(fake.state.handlers.get("click")?.size).toBe(1);
+    expect(fake.state.handlers.get("mousemove")?.size).toBe(1);
 
     unmount();
-    const onCalls = fake.state.listenerCalls.filter((call) => call.method === "on");
-    for (const registration of onCalls) {
-      expect(fake.state.listenerCalls).toContainEqual({
-        method: "off",
-        event: registration.event,
-        layerId: registration.layerId,
-        handler: registration.handler,
-      });
-    }
+    expect(fake.state.handlers.get("click")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("mousemove")?.size ?? 0).toBe(0);
     expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(false);
     expect(INTERACTIVE_LAYER_IDS.has(DENSITY_LAYER_ID)).toBe(false);
   });
@@ -678,12 +666,7 @@ describe("HotspotLayer", () => {
       geometry: { type: "Point", coordinates: [8, 50] },
     } as unknown as MapGeoJSONFeature;
 
-    const click = fake.state.listenerCalls.find(
-      (call) => call.method === "on" && call.event === "click" && call.layerId === CIRCLE_LAYER_ID,
-    );
-    act(() => {
-      (click?.handler as (e: unknown) => void)({ features: [feature] });
-    });
+    clickLayer(CIRCLE_LAYER_ID, feature);
 
     const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
     expect(popup?.html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;");
@@ -702,12 +685,7 @@ describe("HotspotLayer", () => {
       geometry: { type: "Point", coordinates: [-120.25, 38.25] },
     } as unknown as MapGeoJSONFeature;
 
-    const click = fake.state.listenerCalls.find(
-      (call) => call.method === "on" && call.event === "click" && call.layerId === DENSITY_LAYER_ID,
-    );
-    act(() => {
-      (click?.handler as (e: unknown) => void)({ features: [cell] });
-    });
+    clickLayer(DENSITY_LAYER_ID, cell);
 
     const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
     expect(popup?.html).toContain(">3</span>");
@@ -715,6 +693,14 @@ describe("HotspotLayer", () => {
     expect(popup?.html).toContain("totalFirePower: 21.5 MW");
   });
 });
+
+/** Puts `feature` under the pointer on `layerId` and clicks the map there. */
+function clickLayer(layerId: string, feature: MapGeoJSONFeature) {
+  fake.setRenderedFeatures(layerId, [{ ...feature, layer: { id: layerId } } as MapGeoJSONFeature]);
+  act(() => {
+    fake.emit("click", { point: { x: 0, y: 0 }, lngLat: { lng: 8, lat: 50 } });
+  });
+}
 
 function published<T extends { features: { properties: object }[] }>(data: T) {
   return {

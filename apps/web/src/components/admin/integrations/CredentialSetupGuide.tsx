@@ -13,6 +13,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { safeHref } from "@openmapx/core";
 import type { CredentialSetup } from "@openmapx/integration-framework";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 interface CredentialSetupGuideProps {
@@ -41,6 +42,7 @@ export function CredentialSetupGuide({
   setup,
   defaultExpanded = false,
 }: CredentialSetupGuideProps) {
+  const t = useTranslations("adminIntegrations");
   const hasSteps = !!setup.steps?.length;
   const [open, setOpen] = useState(defaultExpanded);
 
@@ -85,7 +87,7 @@ export function CredentialSetupGuide({
             startIcon={<OpenInNewIcon />}
             sx={{ textTransform: "none" }}
           >
-            {setup.urlLabel ?? "Get API key"}
+            {setup.urlLabel ?? t("getApiKey")}
           </Button>
         )}
         {setup.email && (
@@ -97,7 +99,7 @@ export function CredentialSetupGuide({
             startIcon={<EmailIcon />}
             sx={{ textTransform: "none" }}
           >
-            Email request
+            {t("emailRequest")}
           </Button>
         )}
         {setup.cost && <Chip label={setup.cost} size="small" color="success" variant="outlined" />}
@@ -117,7 +119,7 @@ export function CredentialSetupGuide({
             }
             sx={{ textTransform: "none" }}
           >
-            How to get this key
+            {t("howToGetThisKey")}
           </Button>
         )}
       </Stack>

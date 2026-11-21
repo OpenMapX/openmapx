@@ -5,15 +5,9 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { AccountMailOutcome, AccountProvisioningResult } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 
-const labels: Record<AccountMailOutcome, string> = {
-  not_requested: "Not requested",
-  queued: "Queued",
-  sent: "Accepted by mail service",
-  failed: "Mail handoff failed",
-  unknown: "Outcome unknown — check with the recipient before resending",
-};
 export function AccountMailStatus({
   userId,
   initial,
@@ -21,6 +15,14 @@ export function AccountMailStatus({
   userId: string;
   initial?: AccountProvisioningResult;
 }) {
+  const t = useTranslations("adminUsers");
+  const labels: Record<AccountMailOutcome, string> = {
+    not_requested: t("mailNotRequested"),
+    queued: t("mailQueued"),
+    sent: t("mailSent"),
+    failed: t("mailFailed"),
+    unknown: t("mailUnknown"),
+  };
   const scope = useAccountAdmin(),
     query = useQuery({
       queryKey: scope.keys.delivery(userId),
@@ -38,35 +40,30 @@ export function AccountMailStatus({
     latest = query.data?.latest ?? initial;
   return (
     <Stack sx={{ gap: 1 }}>
-      <Typography variant="subtitle2">Latest administrative mail request</Typography>
+      <Typography variant="subtitle2">{t("latestAdministrativeMailRequest")}</Typography>
       {query.isError && (
         <Alert
           severity="error"
-          action={<Button onClick={() => void query.refetch()}>Refresh</Button>}
+          action={<Button onClick={() => void query.refetch()}>{t("refresh")}</Button>}
         >
-          Delivery status could not be refreshed.
+          {t("deliveryStatusCouldNotBe")}
         </Alert>
       )}
       {latest ? (
         <>
           <Typography variant="body2">
-            Verification email: {labels[latest.verificationDelivery]}
+            {t("verificationEmailStatus", { statusLabel: labels[latest.verificationDelivery] })}
           </Typography>
           <Typography variant="body2">
-            Password setup: {labels[latest.passwordSetupDelivery]}
+            {t("passwordSetupStatus", { statusLabel: labels[latest.passwordSetupDelivery] })}
           </Typography>
         </>
       ) : (
         <Typography variant="body2">
-          {query.isPending
-            ? "Checking delivery status…"
-            : "No administrative mail request recorded."}
+          {query.isPending ? t("checkingDeliveryStatus") : t("noAdministrativeMailRequestRecorded")}
         </Typography>
       )}
-      <Typography variant="caption">
-        Acceptance by the mail service does not confirm recipient delivery. An unknown send is never
-        retried automatically.
-      </Typography>
+      <Typography variant="caption">{t("acceptanceByTheMailService")}</Typography>
     </Stack>
   );
 }

@@ -10,10 +10,12 @@ import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
 import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -26,6 +28,7 @@ export function ComposePreview() {
 }
 
 function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
+  const t = useTranslations("adminServices");
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
@@ -40,7 +43,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
   const renderOnly = useMutation({
     retry: false,
     mutationFn: async () => {
-      if (!renderIntent) throw Error("Refresh and confirm the configuration preview");
+      if (!renderIntent) throw new AdminDisplayError(t("refreshAndConfirmTheConfiguration"));
       const execution = owner;
       try {
         const result = await serviceOrThrow(
@@ -54,16 +57,11 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           setRenderIntent(null);
-          showToast(
-            `Configuration generation queued (${result.jobId}); container application remains pending.`,
-          );
+          showToast(t("configurationGenerationQueued", { jobId: result.jobId }));
         }
       } catch (error) {
         if (execution.active)
-          showToast(
-            error instanceof Error ? error.message : "Configuration generation failed",
-            "error",
-          );
+          showToast(adminErrorText(error, t("configurationGenerationFailed")), "error");
         throw error;
       }
     },
@@ -80,15 +78,13 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         const result = await serviceOrThrow(
           sdk.startAdminCompose({ "idempotency-key": idempotencyKey }, undefined, { client }),
         );
-        if (!result.ok) throw new Error("Compose up failed");
+        if (!result.ok) throw new AdminDisplayError(t("composeUpFailed"));
         composeUpIntent.current = null;
         void invalidateServiceAdministration(queryClient, apiUrl, effect);
-        if (execution.active)
-          showToast("Stack started. Use guarded Apply/Update for Data Manager or agent changes.");
+        if (execution.active) showToast(t("stackStartedUseGuardedApply"));
         return result;
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Compose up failed", "error");
+        if (execution.active) showToast(adminErrorText(error, t("composeUpFailed")), "error");
         throw error;
       }
     },
@@ -108,16 +104,16 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
   }
 
   if (error) {
-    return <Alert severity="error">{error.message}</Alert>;
+    return <Alert severity="error">{adminErrorText(error, t("serviceRequestFailed"))}</Alert>;
   }
 
   return (
     <Box>
       <ConfirmDialog
         open={renderIntent !== null}
-        title="Generate configuration only"
-        message="This commits configuration and prepared hardlinks. It does not start or restart containers. A nonempty hardlink plan requires Data Manager to already be running; otherwise generation is refused."
-        confirmLabel="Generate only"
+        title={t("generateConfigurationOnly")}
+        message={t("thisCommitsConfigurationAndPrepared")}
+        confirmLabel={t("generateOnly")}
         loading={renderOnly.isPending}
         onConfirm={() => renderOnly.mutate()}
         onCancel={() => setRenderIntent(null)}
@@ -130,7 +126,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
           mb: 2,
         }}
       >
-        Generated docker-compose preview
+        {t("generatedDockerComposePreview")}
       </Typography>
       <Typography
         variant="body2"
@@ -139,8 +135,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
           mb: 2,
         }}
       >
-        This is the docker-compose YAML that would be written to disk for the currently enabled
-        services. It is regenerated on each request.
+        {t("thisIsTheDockerCompose")}
       </Typography>
       <Stack
         direction="row"
@@ -165,43 +160,42 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
               });
           }}
         >
-          Generate configuration
+          {t("generateConfiguration")}
         </Button>
         <Button
           variant="contained"
           onClick={() => composeUp.mutate()}
           disabled={composeUp.isPending || renderOnly.isPending}
         >
-          {composeUp.isPending ? "Starting..." : "Compose Up"}
+          {composeUp.isPending ? t("starting") : t("composeUp")}
         </Button>
       </Stack>
       <Alert severity="info" sx={{ mb: 2 }}>
-        Compose Up starts the selected stack and applies ordinary services. It preserves existing
-        Data Manager and operations-agent containers. Apply or update Data Manager from its service
-        page; apply agent changes through System → Deployment or Updates.
+        {t("composeUpStartsTheSelected")}
       </Alert>
       <Alert severity="info" sx={{ mb: 2 }}>
-        Full shutdown stops this panel and its operations agent. From the instance checkout on the
-        host, run{" "}
-        <Typography component="code" sx={{ userSelect: "all" }}>
-          pnpm openmapx compose down
-        </Typography>
-        . Volumes are retained. Use individual service controls and Activity logs for routine
-        administration.
+        {t.rich("fullShutdown", {
+          command: "pnpm openmapx compose down",
+          code: (chunks) => (
+            <Typography component="code" sx={{ userSelect: "all" }}>
+              {chunks}
+            </Typography>
+          ),
+        })}
         <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: "wrap" }}>
           <Button
             size="small"
             onClick={async () => {
               try {
-                if (!navigator.clipboard) throw Error("Clipboard unavailable");
+                if (!navigator.clipboard) throw new AdminDisplayError(t("clipboardUnavailable"));
                 await navigator.clipboard.writeText("pnpm openmapx compose down");
-                if (owner.active) showToast("Copied host shutdown command");
+                if (owner.active) showToast(t("copiedHostShutdownCommand"));
               } catch {
-                if (owner.active) showToast("Select and copy the displayed command", "error");
+                if (owner.active) showToast(t("selectAndCopyTheDisplayed"), "error");
               }
             }}
           >
-            Copy shutdown command
+            {t("copyShutdownCommand")}
           </Button>
           <Button
             component="a"
@@ -210,7 +204,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
             rel="noopener noreferrer"
             size="small"
           >
-            Shutdown and recovery guidance
+            {t("shutdownAndRecoveryGuidance")}
           </Button>
           <Button
             component={Link}
@@ -221,7 +215,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
             }
             size="small"
           >
-            Open Activity
+            {t("openActivity")}
           </Button>
         </Stack>
       </Alert>

@@ -522,6 +522,18 @@ independent image scans and the native ops-agent image test remain required. Cod
 existing required producer and cancellation policy; stale manual scans must not
 cancel current main's scan. No live ruleset change is part of this rollout.
 
+## Browser journeys outside pull request CI
+
+`browser-journeys.yml` builds the web app and runs its Playwright journeys
+(`apps/web/e2e`) in headless Google Chrome with SwiftShader WebGL2, against a
+local fixture server instead of a real API. It runs nightly and on manual
+dispatch only: no pull request or push trigger and not a required check, so PR
+and main validation time are unchanged. It does not reuse the main build's Turbo
+cache; one `pnpm --filter web build` keeps the job independent of `ci.yml`.
+On failure it uploads the Playwright traces and report. Locally, run
+`pnpm --filter web test:e2e` after a production build; see
+[Contributing: Quality bar](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#quality-bar).
+
 ## Qualification status
 
 The November 6 investigation measured successful PR p50 13.45m before the native

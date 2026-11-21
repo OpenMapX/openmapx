@@ -59,7 +59,7 @@ export function OsmContributionReview({ preview, draft, accountName, dispatch }:
         <Stack spacing={1}>
           {preview.changes.map((change) => (
             <Box key={`${change.field}-${change.label}`}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
                 {change.label}
               </Typography>
               <Typography variant="body2">
@@ -196,7 +196,7 @@ function TagLine({ icon, label, text }: { icon: ReactNode; label: string; text: 
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
       {icon}
-      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 72 }}>
+      <Typography variant="caption" sx={{ color: "text.secondary", minWidth: 72 }}>
         {label}
       </Typography>
       <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>

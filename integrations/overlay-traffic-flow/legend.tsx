@@ -45,10 +45,10 @@ export function TrafficFlowLegend() {
           ))}
         </Box>
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.4 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {ts("fast")}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {ts("slow")}
           </Typography>
         </Box>

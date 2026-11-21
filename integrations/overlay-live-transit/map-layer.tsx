@@ -11,13 +11,12 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
-import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
+import type { GeoJSONFeatureDiff, GeoJSONSourceDiff } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import type { MapOverlayInteractionEvent } from "@/integration-api/map/mapInteractionArbiter";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import {
   loadTransitVehicleMarkers,
@@ -26,6 +25,7 @@ import {
 } from "@/integration-api/map/transitMarkers";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -566,9 +566,8 @@ export function LiveTransitLayer() {
   const debouncedFetchSnapshot = useDebouncedCallback(fetchSnapshot, 250);
 
   const handleClick = useCallback(
-    (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const feature = e.features?.[0];
+    ({ features }: MapOverlayInteractionEvent) => {
+      const feature = features[0];
       if (!feature) return;
       const map = mapRef.current;
       if (!map) return;
@@ -700,28 +699,14 @@ export function LiveTransitLayer() {
     selectVehicle,
   ]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const handleMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const handleMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-
-    map.on("click", ICON_LAYER, handleClick);
-    map.on("mouseenter", ICON_LAYER, handleMouseEnter);
-    map.on("mouseleave", ICON_LAYER, handleMouseLeave);
-    INTERACTIVE_LAYER_IDS.add(ICON_LAYER);
-    return () => {
-      map.off("click", ICON_LAYER, handleClick);
-      map.off("mouseenter", ICON_LAYER, handleMouseEnter);
-      map.off("mouseleave", ICON_LAYER, handleMouseLeave);
-      INTERACTIVE_LAYER_IDS.delete(ICON_LAYER);
-    };
-  }, [handleClick, layerVisible, mapReady, mapRef]);
+  // Moving vehicles sit above the static stops and stations other overlays draw.
+  useMapOverlayInteraction({
+    id: "overlay-live-transit",
+    layerIds: [ICON_LAYER],
+    priority: 60,
+    enabled: layerVisible,
+    onClick: handleClick,
+  });
 
   // A recreated source starts empty; the data bridge republishes the full
   // collection into it before any further diff, so the last published features

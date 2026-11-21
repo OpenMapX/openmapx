@@ -7,12 +7,16 @@ import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
  * transaction-wrapping fix can prove it preserved them.
  *
  * Only the public `installExtension` is exercised; every host mutation
- * (docker/compose/filesystem/registry) and the db client are mocked.
+ * (docker/compose/filesystem/registry) and the db client are mocked. The
+ * extension workflow is the real one, so its step cursor, resume and input
+ * checks run as in production against an in-memory job row.
  */
 
+import { canonicalJson } from "@openmapx/core/ops";
 import type { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createDbMock, type DbMock } from "../../test/db.js";
+import { adminJob } from "../../db/schema";
+import { createDbMock, type DbMock, makeQueryChain } from "../../test/db.js";
 
 const dbMock: DbMock = createDbMock();
 
@@ -80,47 +84,6 @@ vi.mock("../community-repositories", () => ({
   removeServiceRepository: vi.fn(),
 }));
 
-// Business orchestration fixture only. Authenticated cursor/SQL ownership are
-// exercised independently by extension-workflow tests, not weakened here.
-vi.mock("../extension-workflow", () => {
-  const cursors = new WeakMap<object, Map<string, unknown>>();
-  return {
-    openExtensionWorkflow: vi.fn(async (ctx: object) => {
-      if (!cursors.has(ctx)) cursors.set(ctx, new Map());
-      return ctx;
-    }),
-    hasExtensionPublications: vi.fn((ctx: object) =>
-      [...(cursors.get(ctx)?.keys() ?? [])].some(
-        (name) => name.startsWith("repository.publish:") || name.startsWith("integration.publish:"),
-      ),
-    ),
-    completedExtensionStep: vi.fn((ctx: object, name: string) => cursors.get(ctx)?.get(name)),
-    extensionStep: vi.fn(
-      async (ctx: object, name: string, _input: unknown, work: () => Promise<unknown>) => {
-        const cursor = cursors.get(ctx)!;
-        if (cursor.has(name)) return cursor.get(name);
-        const result = await work();
-        cursor.set(name, result ?? null);
-        return result;
-      },
-    ),
-    extensionDatabaseStep: vi.fn(
-      async (
-        ctx: object,
-        name: string,
-        _input: unknown,
-        work: (tx: unknown) => Promise<unknown>,
-      ) => {
-        const cursor = cursors.get(ctx)!;
-        if (cursor.has(name)) return cursor.get(name);
-        const result = await (dbMock.db.transaction as (fn: typeof work) => Promise<unknown>)(work);
-        cursor.set(name, result ?? null);
-        return result;
-      },
-    ),
-  };
-});
-
 vi.mock("../extension-recovery", () => ({
   withExtensionChangeLock: vi.fn((work: () => Promise<unknown>) => work()),
   recoverInterruptedExtensionChanges: vi.fn().mockResolvedValue(undefined),
@@ -179,16 +142,72 @@ const SVC_TWO_DEF = {
   enabled: false,
 } as never;
 
-function makeCtx(): JobContext {
-  return {
-    jobId: "job-1",
+const JOB_ID = "00000000-0000-4000-8000-000000000001";
+let currentJob: JobContext | undefined;
+
+/**
+ * A job context for the real extension workflow. Like the job runner,
+ * `checkpoint` keeps `checkpointResult` equal to the job row's saved
+ * checkpoint, so a second context given the same `checkpointResult` resumes
+ * the job.
+ */
+function makeCtx(jobType = "extension.install"): JobContext {
+  const ctx: JobContext = {
+    jobId: JOB_ID,
+    jobType,
+    execution: { owner: "test-runner", version: 1 },
+    checkpointResult: null,
     payload: {},
     signal: new AbortController().signal,
     log: vi.fn().mockResolvedValue(undefined),
     setProgress: vi.fn().mockResolvedValue(undefined),
-    checkpoint: vi.fn().mockResolvedValue(undefined),
+    checkpoint: vi.fn(async (result: Record<string, unknown>) => {
+      ctx.checkpointResult = result;
+    }),
   };
+  currentJob = ctx;
+  return ctx;
 }
+
+/**
+ * The bookkeeping transaction's view of the database: the workflow's locked
+ * read of the job row returns the current job's saved checkpoint and its
+ * checkpoint update succeeds, while every other query reaches the
+ * queue-driven database mock.
+ */
+const jobRowDatabase = new Proxy(dbMock.db, {
+  get(target, property, receiver) {
+    if (property === "select")
+      return (...fields: unknown[]) => ({
+        from: (table: unknown) =>
+          table === adminJob
+            ? makeQueryChain(
+                currentJob
+                  ? [
+                      {
+                        type: currentJob.jobType,
+                        payload: currentJob.payload,
+                        result: currentJob.checkpointResult ?? null,
+                        protocol: { execution: currentJob.execution },
+                      },
+                    ]
+                  : [],
+              )
+            : (target.select as (...args: unknown[]) => { from: (table: unknown) => unknown })(
+                ...fields,
+              ).from(table),
+      });
+    if (property === "update")
+      return (table: unknown) =>
+        table === adminJob
+          ? makeQueryChain([{ id: currentJob?.jobId }])
+          : (target.update as (table: unknown) => unknown)(table);
+    return Reflect.get(target, property, receiver);
+  },
+});
+dbMock.db.transaction.mockImplementation(async (work: (tx: unknown) => unknown) =>
+  work(jobRowDatabase),
+);
 
 const MANIFEST = {
   id: "bundle-x",
@@ -729,6 +748,57 @@ describe("installExtension", () => {
     );
   });
 
+  describe("resuming an interrupted install", () => {
+    /** The first attempt commits bookkeeping, then the agent cannot settle. */
+    async function interruptedCheckpoint() {
+      settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
+      const first = makeCtx();
+      await expect(
+        installExtension(first, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+      ).rejects.toMatchObject({ reason: "recovery_required" });
+      expect(first.checkpoint).toHaveBeenCalled();
+      vi.clearAllMocks();
+      return first.checkpointResult as Record<string, unknown>;
+    }
+
+    /** The saved checkpoint with one recorded step's input fingerprint replaced. */
+    function withRecordedInput(checkpoint: Record<string, unknown>, prefix: string) {
+      const saved = checkpoint._extensionWorkflow as { body: string };
+      const state = JSON.parse(saved.body) as { steps: Record<string, { input: string }> };
+      const name = Object.keys(state.steps).find((step) => step.startsWith(prefix));
+      if (!name) throw new Error(`The saved job records no ${prefix} step`);
+      state.steps[name].input = "0".repeat(64);
+      return { ...checkpoint, _extensionWorkflow: { body: canonicalJson(state) } };
+    }
+
+    it("finishes from the saved steps without repeating them", async () => {
+      const checkpoint = await interruptedCheckpoint();
+      const resumed = makeCtx();
+      resumed.checkpointResult = checkpoint;
+
+      await expect(
+        installExtension(resumed, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+      ).resolves.toEqual({ id: "bundle-x", components: 1 });
+      expect(publishIntegrationMock).not.toHaveBeenCalled();
+      expect(dbMock.db.transaction).not.toHaveBeenCalled();
+      expect(settleIntegrationMock.mock.calls.map(([request]) => request.outcome)).toEqual([
+        "commit",
+      ]);
+    });
+
+    it("refuses a step the saved job recorded with another input", async () => {
+      const checkpoint = await interruptedCheckpoint();
+      const resumed = makeCtx();
+      resumed.checkpointResult = withRecordedInput(checkpoint, "integration.settle:");
+
+      await expect(
+        installExtension(resumed, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+      ).rejects.toMatchObject({ reason: "recovery_required" });
+      expect(settleIntegrationMock).not.toHaveBeenCalled();
+      expect(publishIntegrationMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("commits each repository transaction only after the bookkeeping transaction", async () => {
     await installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" });
 
@@ -1121,7 +1191,7 @@ describe("removeExtension", () => {
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
     dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toEqual({
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toEqual({
       id: "bundle-x",
       removed: 1,
     });
@@ -1148,7 +1218,7 @@ describe("removeExtension", () => {
     dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
     removeRepositoryMock.mockRejectedValueOnce(new Error("busy"));
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).rejects.toThrow("busy");
 
     expect(dbMock.db.delete).not.toHaveBeenCalled();
     expect(renderMock).not.toHaveBeenCalled();
@@ -1167,7 +1237,7 @@ describe("removeExtension", () => {
     } as never);
     removeRepositoryMock.mockResolvedValueOnce({ repository: REPO_ONE, removed: false });
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toMatchObject({
       id: "bundle-x",
     });
 
@@ -1179,7 +1249,7 @@ describe("removeExtension", () => {
     dbMock.queueSelect([{ id: "bundle-x" }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toEqual({
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toEqual({
       id: "bundle-x",
       removed: 1,
     });
@@ -1201,7 +1271,7 @@ describe("removeExtension", () => {
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
     removeIntegrationMock.mockRejectedValueOnce(new Error("busy"));
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).rejects.toThrow("busy");
 
     expect(dbMock.db.delete).not.toHaveBeenCalled();
   });
@@ -1213,7 +1283,7 @@ describe("removeExtension", () => {
       installedSnapshot([{ integrationId: "intg-one", extensionId: null }]),
     );
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toMatchObject({
       id: "bundle-x",
     });
 
@@ -1226,7 +1296,7 @@ describe("removeExtension", () => {
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
     composeMock.mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" });
 
-    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow(
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).rejects.toThrow(
       "Failed to remove community service runtime svc-one",
     );
 

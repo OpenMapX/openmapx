@@ -214,21 +214,22 @@ function DetailRow({
   );
 }
 
-function ExpandableDetailRow({
+/**
+ * A detail row that opens to show more. It owns whether it is open, and mounts
+ * its content only while open, so a section fetches nothing until it is read.
+ */
+function ExpandableSection({
   icon,
   label,
-  expanded,
-  onToggle,
   children,
   contentInset = true,
 }: {
   icon: ReactNode;
   label: ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
   children: ReactNode;
   contentInset?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <Box
       sx={{
@@ -239,7 +240,7 @@ function ExpandableDetailRow({
         component="button"
         type="button"
         aria-expanded={expanded}
-        onClick={onToggle}
+        onClick={() => setExpanded((value) => !value)}
         sx={{
           width: "100%",
           boxSizing: "border-box",
@@ -329,13 +330,6 @@ export function PlaceOverviewTab({
   const shortCode = shortenPlusCode(plusCode);
   const city = place.city ?? null;
   const shortCodeDisplay = city ? `${shortCode} ${city}` : null;
-  const [hoursExpanded, setHoursExpanded] = useState(false);
-  const [weatherExpanded, setWeatherExpanded] = useState(false);
-  const [conditionsExpanded, setConditionsExpanded] = useState(false);
-  const [airQualityExpanded, setAirQualityExpanded] = useState(false);
-  const [sunTimesExpanded, setSunTimesExpanded] = useState(false);
-  const [tidesExpanded, setTidesExpanded] = useState(false);
-  const [marineExpanded, setMarineExpanded] = useState(false);
   // Fetch unconditionally — the route 204s for inland users (most users),
   // which is cheap, and lets us hide the row entirely instead of rendering
   // a "Tides" row that expands to nothing.
@@ -494,10 +488,8 @@ export function PlaceOverviewTab({
   const conditionRows = (
     <>
       {/* Weather (expandable). A cloud, not the sun of the Conditions row that groups it. */}
-      <ExpandableDetailRow
+      <ExpandableSection
         icon={<WbCloudyOutlinedIcon sx={{ fontSize: 22 }} />}
-        expanded={weatherExpanded}
-        onToggle={() => setWeatherExpanded((v) => !v)}
         label={
           <Typography
             variant="body2"
@@ -509,18 +501,12 @@ export function PlaceOverviewTab({
           </Typography>
         }
       >
-        <PlaceWeather
-          lat={place.coordinates[1]}
-          lng={place.coordinates[0]}
-          enabled={weatherExpanded}
-        />
-      </ExpandableDetailRow>
+        <PlaceWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
+      </ExpandableSection>
 
       {/* Canonical air quality (expandable, lazy). */}
-      <ExpandableDetailRow
+      <ExpandableSection
         icon={<AirIcon sx={{ fontSize: 22 }} />}
-        expanded={airQualityExpanded}
-        onToggle={() => setAirQualityExpanded((value) => !value)}
         label={
           <Typography
             variant="body2"
@@ -535,17 +521,14 @@ export function PlaceOverviewTab({
         <PlaceAirQuality
           lat={place.coordinates[1]}
           lng={place.coordinates[0]}
-          enabled={airQualityExpanded}
           countryCode={airQualityCountryCode}
           subdivisionCode={airQualitySubdivisionCode}
         />
-      </ExpandableDetailRow>
+      </ExpandableSection>
 
       {/* Sunrise & sunset (expandable) */}
-      <ExpandableDetailRow
+      <ExpandableSection
         icon={<WbTwilightIcon sx={{ fontSize: 22 }} />}
-        expanded={sunTimesExpanded}
-        onToggle={() => setSunTimesExpanded((v) => !v)}
         label={
           <Typography
             variant="body2"
@@ -557,19 +540,13 @@ export function PlaceOverviewTab({
           </Typography>
         }
       >
-        <PlaceSunTimes
-          lat={place.coordinates[1]}
-          lng={place.coordinates[0]}
-          enabled={sunTimesExpanded}
-        />
-      </ExpandableDetailRow>
+        <PlaceSunTimes lat={place.coordinates[1]} lng={place.coordinates[0]} />
+      </ExpandableSection>
 
       {/* Tides (expandable) — hidden when no NOAA tide station is within range. */}
       {tidesData && (
-        <ExpandableDetailRow
+        <ExpandableSection
           icon={<WavesIcon sx={{ fontSize: 22 }} />}
-          expanded={tidesExpanded}
-          onToggle={() => setTidesExpanded((v) => !v)}
           label={
             <Typography
               variant="body2"
@@ -582,16 +559,14 @@ export function PlaceOverviewTab({
           }
         >
           <PlaceTidesContent data={tidesData} />
-        </ExpandableDetailRow>
+        </ExpandableSection>
       )}
 
       {/* Marine weather (expandable) — hidden for inland points (204). A boat,
         so it doesn't repeat the waves of the Tides row above it. */}
       {marineData && (
-        <ExpandableDetailRow
+        <ExpandableSection
           icon={<SailingOutlinedIcon sx={{ fontSize: 22 }} />}
-          expanded={marineExpanded}
-          onToggle={() => setMarineExpanded((v) => !v)}
           label={
             <Typography
               variant="body2"
@@ -604,7 +579,7 @@ export function PlaceOverviewTab({
           }
         >
           <PlaceMarineWeatherContent data={marineData} />
-        </ExpandableDetailRow>
+        </ExpandableSection>
       )}
     </>
   );
@@ -741,18 +716,16 @@ export function PlaceOverviewTab({
             hours &&
             (hours.isUnknown ? (
               place.openingHours || hours.text || hours.comment ? (
-                <ExpandableDetailRow
+                <ExpandableSection
                   icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
-                  expanded={hoursExpanded}
-                  onToggle={() => setHoursExpanded((v) => !v)}
                   label={
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 500 }}>
                       {ohText.state(hours)}
                     </Typography>
                   }
                 >
                   <Box sx={{ mt: 1, mb: 1 }}>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {tHours("reportedHours")}
                     </Typography>
                     <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
@@ -760,19 +733,17 @@ export function PlaceOverviewTab({
                     </Typography>
                     {hoursSourceContext}
                   </Box>
-                </ExpandableDetailRow>
+                </ExpandableSection>
               ) : (
                 <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {ohText.state(hours)}
                   </Typography>
                 </DetailRow>
               )
             ) : hours.weekSchedule ? (
-              <ExpandableDetailRow
+              <ExpandableSection
                 icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
-                expanded={hoursExpanded}
-                onToggle={() => setHoursExpanded((v) => !v)}
                 label={
                   <>
                     <Typography
@@ -805,8 +776,8 @@ export function PlaceOverviewTab({
                     <Box key={entry.weekday} sx={{ display: "flex", gap: 2, py: 0.4 }}>
                       <Typography
                         variant="body2"
-                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
+                          color: entry.isToday ? "text.primary" : "text.secondary",
                           fontWeight: entry.isToday ? 600 : 400,
                           width: 96,
                           flexShrink: 0,
@@ -816,8 +787,8 @@ export function PlaceOverviewTab({
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
+                          color: entry.isToday ? "text.primary" : "text.secondary",
                           fontWeight: entry.isToday ? 600 : 400,
                         }}
                       >
@@ -827,7 +798,7 @@ export function PlaceOverviewTab({
                   ))}
                 </Box>
                 {hoursSourceContext}
-              </ExpandableDetailRow>
+              </ExpandableSection>
             ) : (
               <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
                 <Typography
@@ -1015,10 +986,8 @@ export function PlaceOverviewTab({
           </ClickableRow>
 
           {showGroupedConditions ? (
-            <ExpandableDetailRow
+            <ExpandableSection
               icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
-              expanded={conditionsExpanded}
-              onToggle={() => setConditionsExpanded((expanded) => !expanded)}
               label={
                 <Typography component="span" variant="body2">
                   {t("conditions")}
@@ -1027,7 +996,7 @@ export function PlaceOverviewTab({
               contentInset={false}
             >
               {conditionRows}
-            </ExpandableDetailRow>
+            </ExpandableSection>
           ) : (
             conditionRows
           )}
@@ -1115,7 +1084,8 @@ export function PlaceOverviewTab({
       {/* Contribute a correction back to OpenStreetMap. Only the canonical OSM
           reference is passed: every editable value comes from a live server
           read, never from this merged/enriched place record. */}
-      <OsmContributionEntry osmId={place.ids?.osm} />
+      {/* A new place cancels the previous place's sign-in or editing flow. */}
+      <OsmContributionEntry key={place.ids?.osm ?? ""} osmId={place.ids?.osm} />
       {overviewAttributions.length > 0 && (
         <SectionAttribution attributions={overviewAttributions} inset />
       )}

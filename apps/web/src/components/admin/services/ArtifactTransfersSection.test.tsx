@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@/test";
 import { ArtifactTransfersSection } from "./ArtifactTransfersSection";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const fixture = vi.hoisted(() => ({ url: "http://artifact.test" }));
 vi.mock("../activity/activityQueries", () => ({
   useActivityClient: () => {

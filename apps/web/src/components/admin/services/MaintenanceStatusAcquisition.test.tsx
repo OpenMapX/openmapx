@@ -45,7 +45,8 @@ describe("maintenance status contracts", () => {
       Response.json({}, { status: 404 }),
     );
     view(Component);
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Failed to load|contract/i);
+    // The contract diagnostic is English, so the reader sees the section's own message.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Status unavailable");
   });
   it.each([
     [

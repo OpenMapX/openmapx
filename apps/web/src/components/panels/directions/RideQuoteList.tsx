@@ -41,7 +41,7 @@ export function RideQuoteList({
 
   if (quotes.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         {t("rideNoQuotes", { provider: providerName })}
       </Typography>
     );
@@ -50,7 +50,7 @@ export function RideQuoteList({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {expired && (
-        <Typography variant="caption" color="warning.main">
+        <Typography variant="caption" sx={{ color: "warning.main" }}>
           {t("rideQuoteExpired")}
         </Typography>
       )}
@@ -91,17 +91,17 @@ export function RideQuoteList({
               {quote.product.name}
             </Typography>
             {quote.pickupEtaSeconds !== undefined && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
                 {t("rideEta", { duration: formatDuration(quote.pickupEtaSeconds, locale) })}
               </Typography>
             )}
             {quote.fare?.basis === "estimated" && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
                 {t("rideFareEstimated")}
               </Typography>
             )}
             {quote.disclaimer && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
                 {quote.disclaimer}
               </Typography>
             )}

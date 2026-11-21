@@ -12,7 +12,7 @@ export {
   type RenderedFeatureFields,
   renderedFeature,
 } from "./fakeMap";
-export { mockNextIntl, renderWithIntl } from "./intl";
+export { mockNextIntl, mockNextIntlWithCatalog, renderWithIntl } from "./intl";
 export {
   createQueryWrapper,
   createTestQueryClient,

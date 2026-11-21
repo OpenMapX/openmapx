@@ -207,7 +207,7 @@ export function WaypointScheduleDialog({
                 width: 96,
               }}
             />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {t("scheduleDwellMinutes")}
             </Typography>
           </Box>
@@ -218,7 +218,7 @@ export function WaypointScheduleDialog({
           )}
         </Box>
 
-        <Typography id="schedule-zone-hint" variant="caption" color="text.secondary">
+        <Typography id="schedule-zone-hint" variant="caption" sx={{ color: "text.secondary" }}>
           {zoneHint}
         </Typography>
       </DialogContent>

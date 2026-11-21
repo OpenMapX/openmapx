@@ -57,7 +57,7 @@ export function WalkingHandoffCard({ route, isLoading, onStartWalking, disabled 
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {t("walkToDestination")}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {formatDuration(route.duration, locale)} · {formatOverviewDistance(route.distance, units)}
         </Typography>
       </Box>

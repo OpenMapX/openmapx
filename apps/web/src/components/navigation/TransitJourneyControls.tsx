@@ -135,8 +135,7 @@ export function TransitJourneyControls({
             )}
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ display: "block", lineHeight: 1.4 }}
+              sx={{ color: "text.secondary", display: "block", lineHeight: 1.4 }}
             >
               {t(
                 ride.realtime && liveDeparture
@@ -150,22 +149,22 @@ export function TransitJourneyControls({
         </Box>
       )}
       {walkRepair && walkRepair !== "idle" && (
-        <Typography variant="caption" color="text.secondary" role="status">
+        <Typography variant="caption" sx={{ color: "text.secondary" }} role="status">
           {t(`transitWalkRepair.${walkRepair}`)}
         </Typography>
       )}
       {departurePassed && (
-        <Typography variant="body2" color="warning.main" role="status">
+        <Typography variant="body2" sx={{ color: "warning.main" }} role="status">
           {t("departurePassed")}
         </Typography>
       )}
       {boardedNudge && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("boardPrompt")}
         </Typography>
       )}
       {alightNudge && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("alightPrompt")}
         </Typography>
       )}

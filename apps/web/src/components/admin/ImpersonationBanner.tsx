@@ -5,9 +5,11 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import { authClient, useSession } from "@openmapx/core";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 
 export function ImpersonationBanner() {
+  const t = useTranslations("impersonation");
   const { data: session } = useSession();
   const router = useRouter();
   const [stopping, setStopping] = useState(false);
@@ -56,11 +58,15 @@ export function ImpersonationBanner() {
             onClick={stopImpersonating}
             sx={{ whiteSpace: "nowrap" }}
           >
-            Stop Impersonating
+            {t("stopImpersonating")}
           </Button>
         }
       >
-        Impersonating <strong>{session.user.name}</strong> ({session.user.email})
+        {t.rich("impersonating", {
+          name: session.user.name,
+          email: session.user.email,
+          strong: (chunks) => <strong>{chunks}</strong>,
+        })}
       </Alert>
       {/* Spacer to push page content below the fixed banner */}
       <div style={{ height: "calc(48px + var(--omx-safe-top))" }} />

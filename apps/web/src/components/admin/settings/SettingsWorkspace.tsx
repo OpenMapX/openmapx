@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { SETTINGS_TOPICS } from "@/lib/admin/adminNavigation";
+import { useSettingText } from "@/lib/admin/useSettingText";
 import { useAdminNavigationAccess } from "../shared/AdminNavigationContext";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { SystemSettings } from "./SystemSettings";
@@ -22,6 +23,7 @@ export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[n
   const { selfHosted } = useAdminNavigationAccess();
   const params = useSearchParams();
   const field = params.get("field");
+  const settingText = useSettingText();
   return (
     <Stack sx={{ gap: 2, maxWidth: 800 }}>
       <AdminPageHeader
@@ -47,6 +49,7 @@ export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[n
         key={topic}
         showHeader={false}
         showTransfer={false}
+        settingText={settingText}
         focusKey={field && /^[a-zA-Z0-9_-]{1,128}$/.test(field) ? field : undefined}
         sections={[
           {

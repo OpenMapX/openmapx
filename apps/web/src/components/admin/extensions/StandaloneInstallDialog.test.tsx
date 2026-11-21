@@ -6,6 +6,8 @@ import { deferred } from "@/test/extensionAdmin";
 import { job } from "../activity/__tests__/fixtures";
 import { StandaloneInstallDialog } from "./StandaloneInstallDialog";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "https://admin.example";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const queries: ReturnType<typeof createTestQueryClient>[] = [];

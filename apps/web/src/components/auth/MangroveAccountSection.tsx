@@ -28,7 +28,7 @@ export function MangroveAccountSection() {
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
             Mangrove Reviews
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("mangroveSharedIntro")}
           </Typography>
           {signer.status === "error" && (

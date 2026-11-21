@@ -7,13 +7,15 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceData } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 
 type MotisTransitousStatus = AdminServiceData["motisTransitous"];
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+/** ICU select keys cannot hold hyphens, so `self-hosted` is selected as `self_hosted`. */
+function selectKey(value: string): string {
+  return value.replaceAll("-", "_");
 }
 function motisProxyModeColor(
   mode: MotisTransitousStatus["feedProxyMode"],
@@ -25,6 +27,8 @@ function motisProxyModeColor(
 }
 
 export function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack
@@ -42,13 +46,11 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
             fontWeight: 600,
           }}
         >
-          MOTIS Transitous Parity
+          {t("motisTransitousParity")}
         </Typography>
       </Stack>
       {!status.configFound ? (
-        <Alert severity="warning">
-          No MOTIS config found yet. Sync transit sources and build MOTIS data.
-        </Alert>
+        <Alert severity="warning">{t("noMotisConfigFoundYet")}</Alert>
       ) : (
         <Stack spacing={1.5}>
           <Stack
@@ -59,38 +61,43 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
               flexWrap: "wrap",
             }}
           >
-            <Chip label={`${status.datasetCount} schedule dataset(s)`} size="small" />
-            <Chip label={`${status.realtimeFeedCount} realtime feed(s)`} size="small" />
-            <Chip label={`${status.gbfsFeedCount} GBFS feed(s)`} size="small" />
-            <Chip label={`${status.feedProxyUrlCount} proxied URL(s)`} size="small" />
+            <Chip label={t("scheduleDatasets", { count: status.datasetCount })} size="small" />
+            <Chip label={t("realtimeFeeds", { count: status.realtimeFeedCount })} size="small" />
+            <Chip label={t("gbfsFeeds", { count: status.gbfsFeedCount })} size="small" />
+            <Chip label={t("proxiedUrls", { count: status.feedProxyUrlCount })} size="small" />
             <Chip
-              label={`Feed proxy: ${status.feedProxyMode}`}
+              label={t("feedProxyMode", { mode: selectKey(status.feedProxyMode) })}
               color={motisProxyModeColor(status.feedProxyMode)}
               size="small"
             />
             <Chip
-              label={`Capabilities: ${status.capabilityState}`}
+              label={t("capabilityState", { state: status.capabilityState })}
               color={status.capabilityState === "healthy" ? "success" : "error"}
               size="small"
             />
-            <Chip label={`${status.rentalProviderCount} rental provider(s)`} size="small" />
             <Chip
-              label={`Profile: ${status.operationsProfile}`}
+              label={t("rentalProviders", { count: status.rentalProviderCount })}
+              size="small"
+            />
+            <Chip
+              label={t("operationsProfile", { profile: selectKey(status.operationsProfile) })}
               color={status.operationsProfile === "planet" ? "warning" : "default"}
               size="small"
             />
             <Chip
-              label={`Slot: ${status.activeSlot ?? "legacy"}`}
+              label={
+                status.activeSlot ? t("activeSlot", { slot: status.activeSlot }) : t("legacySlot")
+              }
               color={status.activeSlot ? "success" : "default"}
               size="small"
             />
             <Chip
-              label={`Preflight: ${status.preflightState}`}
+              label={t("preflightState", { state: status.preflightState })}
               color={status.preflightState === "passed" ? "success" : "warning"}
               size="small"
             />
             <Chip
-              label={`Pinned GBFS: ${status.gbfsCatalog.state}`}
+              label={t("pinnedGbfsState", { state: status.gbfsCatalog.state })}
               color={status.gbfsCatalog.state === "active" ? "success" : "default"}
               size="small"
             />
@@ -101,52 +108,60 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
               color: "text.secondary",
             }}
           >
-            Proxy artifacts: config {status.feedProxyConfigFound ? "present" : "missing"} · vars{" "}
-            {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
-            feed endpoint(s) · GBFS proxy {status.gbfsProxyUrl ?? "not configured"}
+            {t("proxyArtifacts", {
+              config: String(status.feedProxyConfigFound),
+              vars: String(status.feedProxyVarsFound),
+              count: status.feedProxyFeedCount,
+              gbfsProxy: status.gbfsProxyUrl ?? t("notConfigured"),
+            })}
           </Typography>
           {status.gbfsCatalog.state === "active" && (
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Registry {status.gbfsCatalog.commit?.slice(0, 12)} ·{" "}
-              {status.gbfsCatalog.registryAdded} added · {status.gbfsCatalog.transitousPreferred}{" "}
-              Transitous-preferred duplicate(s) · {status.gbfsCatalog.quarantined} quarantined ·{" "}
-              {status.gbfsCatalog.validationFailed} validation failure(s)
+              {t("gbfsRegistry", {
+                commit: status.gbfsCatalog.commit?.slice(0, 12) ?? "",
+                added: status.gbfsCatalog.registryAdded,
+                transitousPreferred: status.gbfsCatalog.transitousPreferred,
+                quarantined: status.gbfsCatalog.quarantined,
+                validationFailed: status.gbfsCatalog.validationFailed,
+              })}
             </Typography>
           )}
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            Active epoch {status.activeEpoch ?? "unknown"} · candidate{" "}
-            {status.candidateEpoch ?? "none"} · tested{" "}
-            {status.testedAt ? formatDate(status.testedAt) : "never"} · rollback{" "}
-            {status.rollbackAvailable ? "available" : "unavailable"}
+            {t("epochs", {
+              active: status.activeEpoch ?? t("unknownValue"),
+              candidate: status.candidateEpoch ?? t("noneValue"),
+              tested: status.testedAt ? format.dateTime(status.testedAt) : t("neverTested"),
+              rollback: String(status.rollbackAvailable),
+            })}
           </Typography>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            Capacity:{" "}
-            {status.preflightRequiredDiskBytes != null
-              ? `${formatBytes(status.preflightRequiredDiskBytes)} required`
-              : "not estimated"}{" "}
-            ·{" "}
-            {status.preflightFreeDiskBytes != null
-              ? `${formatBytes(status.preflightFreeDiskBytes)} free`
-              : "free disk unknown"}{" "}
-            · previous healthy slot {status.previousHealthySlot ?? "none"}
-            {status.pinProposalPending ? " · pin proposal awaiting review" : ""}
+            {t("capacity", {
+              required:
+                status.preflightRequiredDiskBytes != null
+                  ? t("diskRequired", { bytes: format.bytes(status.preflightRequiredDiskBytes) })
+                  : t("notEstimated"),
+              free:
+                status.preflightFreeDiskBytes != null
+                  ? t("diskFree", { bytes: format.bytes(status.preflightFreeDiskBytes) })
+                  : t("freeDiskUnknown"),
+              previousSlot: status.previousHealthySlot ?? t("noneValue"),
+              pinProposal: String(status.pinProposalPending === true),
+            })}
           </Typography>
-          <Alert severity="info">
-            Crowdsource sidecars are disabled pending authoritative provenance, protocol, license,
-            privacy-controller, moderation, and deletion approval.
-          </Alert>
+          <Alert severity="info">{t("crowdsourceSidecarsAreDisabledPending")}</Alert>
           {status.capabilityState !== "healthy" && (
             <Alert severity="error">
-              Promoted MOTIS capability evidence is {status.capabilityState}.
               {status.capabilityError
-                ? ` ${status.capabilityError}`
-                : " Re-run the transactional import before trusting configured counts."}
+                ? t("capabilityEvidenceError", {
+                    state: status.capabilityState,
+                    error: status.capabilityError,
+                  })
+                : t("capabilityEvidenceRerun", { state: status.capabilityState })}
             </Alert>
           )}
           {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
             <Alert severity={status.feedProxyMode === "mixed" ? "warning" : "error"}>
-              MOTIS config still references Transitous cloud feed-proxy URLs. Rebuild MOTIS data to
-              switch fully to self-hosted proxy URLs.
+              {t("motisConfigStillReferencesTransitous")}
             </Alert>
           )}
         </Stack>
@@ -156,6 +171,7 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
 }
 
 export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminTransit");
   const { client } = useActivityClient();
   const sources = useQuery({
     ...serviceAdminQueries(client, apiUrl).sharedMobility(),
@@ -166,13 +182,12 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-        Shared mobility sources
+        {t("sharedMobilitySources")}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Every request queries MOTIS and all direct sources. Decisions contain category-level
-        operational state only; no coordinates or vehicle IDs are recorded.
+      <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+        {t("everyRequestQueriesMotisAnd")}
       </Typography>
-      {sources.isError && <Alert severity="error">Failed to load shared mobility sources.</Alert>}
+      {sources.isError && <Alert severity="error">{t("failedToLoadSharedMobility")}</Alert>}
       <Stack spacing={1.5}>
         {(["bike", "scooter", "car"] as const).map((category) => {
           const record = data?.decisions.find((decision) => decision.category === category);
@@ -183,15 +198,17 @@ export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
               spacing={1}
               sx={{ alignItems: { sm: "center" } }}
             >
-              <Typography sx={{ minWidth: 80, textTransform: "capitalize" }}>{category}</Typography>
+              <Typography sx={{ minWidth: 80 }}>{t("mobilityCategory", { category })}</Typography>
               <Chip
                 size="small"
-                label={record ? `MOTIS ${record.decision.local}` : "no data"}
+                label={record ? t("motisLocal", { local: record.decision.local }) : t("noData")}
                 color={record ? (record.decision.partial ? "warning" : "success") : "default"}
               />
               {record && (
-                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                  queried {record.decision.calledAdapters.join(", ") || "MOTIS only"}
+                <Typography variant="caption" sx={{ color: "text.secondary", flex: 1 }}>
+                  {record.decision.calledAdapters.length
+                    ? t("queriedAdapters", { adapters: record.decision.calledAdapters.join(", ") })
+                    : t("queriedMotisOnly")}
                 </Typography>
               )}
             </Stack>
