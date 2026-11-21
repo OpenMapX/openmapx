@@ -289,7 +289,7 @@ describe("scanLicenses", () => {
     writeFileSync(
       join(root, "package.json"),
       JSON.stringify({
-        name: "web",
+        name: "@openmapx/web",
         private: true,
         dependencies: {
           "@openmapx/core": "workspace:*",

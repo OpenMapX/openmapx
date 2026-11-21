@@ -112,8 +112,8 @@ and glyph request answered by a local fixture server, and fail on any page or
 console error, including a map layer missing after a style change:
 
 ```bash
-pnpm --filter web build
-pnpm --filter web test:e2e
+pnpm --filter @openmapx/web build
+pnpm --filter @openmapx/web test:e2e
 ```
 
 The fixture server listens on `127.0.0.1:3001`, the API address a build without

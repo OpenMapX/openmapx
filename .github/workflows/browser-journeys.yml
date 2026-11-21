@@ -30,13 +30,13 @@ jobs:
       - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form
 
       - name: Build the web app
-        run: pnpm --filter web build
+        run: pnpm --filter @openmapx/web build
 
       # The runner's preinstalled Google Chrome is used (channel "chrome"), so
       # no browser is downloaded. WebGL2 comes from SwiftShader; the first
       # journey fails if it does not initialise.
       - name: Run the journeys
-        run: pnpm --filter web test:e2e
+        run: pnpm --filter @openmapx/web test:e2e
 
       - name: Upload traces and report
         if: failure()

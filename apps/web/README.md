@@ -11,7 +11,7 @@ Follow the [development setup guide](../../docs/docs/developer/development-setup
 from the repository root. It covers the database and cache, environment files,
 schema initialization, and both application processes.
 
-To run only this app, use `pnpm --filter web dev`. The web app defaults to
+To run only this app, use `pnpm --filter @openmapx/web dev`. The web app defaults to
 `NEXT_PUBLIC_API_URL=http://localhost:3001`; see `.env.example` for map style,
 tile, traffic, and legal-page settings. MapTiler credentials are configured in
 the API environment, not exposed to browser JavaScript.
@@ -36,12 +36,12 @@ Built-in integration frontends are imported from the repository-level
 pnpm lint
 pnpm check-types
 pnpm test --project web
-pnpm --filter web build
+pnpm --filter @openmapx/web build
 ```
 
 The production build uses Next.js standalone output and then builds the service
 worker and copies static assets into the standalone tree. Start that output with
-`pnpm --filter web start`.
+`pnpm --filter @openmapx/web start`.
 
 ## PWA cache boundary
 
