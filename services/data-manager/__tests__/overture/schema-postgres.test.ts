@@ -123,9 +123,9 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
       await expect(
         pg.sql.unsafe(`
         INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, release)
-        VALUES ('gers-srid0', 'Fixture', ST_Point(7, 51), '881f1d4887fffff', 'fixture')
+        VALUES ('gers-srid3857', 'Fixture', ST_SetSRID(ST_Point(7, 51), 3857), '881f1d4887fffff', 'fixture')
       `),
-      ).rejects.toThrow(/SRID/i);
+      ).rejects.toThrow(/Geometry SRID \(3857\) does not match column SRID \(4326\)/i);
       await expect(
         pg.sql.unsafe(`
         INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, release)

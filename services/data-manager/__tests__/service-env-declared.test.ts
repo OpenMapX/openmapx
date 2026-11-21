@@ -54,6 +54,9 @@ const INTENTIONALLY_UNDECLARED = new Set([
   // Set by services/data-manager/Dockerfile. Declaring it here would overwrite
   // it with an empty string and disable the production hard-fail in src/auth.ts.
   "NODE_ENV",
+  // Set by services/data-manager/Dockerfile to the read-only pre-installed
+  // DuckDB extensions directory; only overridden for host-side development runs.
+  "OVERTURE_DUCKDB_EXTENSION_DIR",
   // Compatibility-only path fallback; new deployments expose API_KEYS_PATH.
   "TRANSITOUS_API_KEYS_FILE",
 ]);
