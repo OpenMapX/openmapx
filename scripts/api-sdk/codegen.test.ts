@@ -3,15 +3,14 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-const requireFromCore = createRequire(new URL("../../packages/core/package.json", import.meta.url));
-const { build }: typeof import("esbuild") = requireFromCore("esbuild");
-const ts: typeof import("typescript") = requireFromCore("typescript");
-
 import { nth } from "../fixtures/nth.ts";
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
 import { adminOperationBindings, createCodegenConfig, selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
+
+const requireFromCore = createRequire(new URL("../../packages/core/package.json", import.meta.url));
+const { build }: typeof import("esbuild") = requireFromCore("esbuild");
+const ts: typeof import("typescript") = requireFromCore("typescript");
 
 function generatedConsumerDiagnostics(files: { filename: string; content: string }[]) {
   const base = new URL("../../packages/core", import.meta.url).pathname;
