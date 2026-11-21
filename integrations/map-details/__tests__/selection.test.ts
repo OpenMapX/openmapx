@@ -31,6 +31,11 @@ describe("visible cells", () => {
     expect(cells).toHaveLength(12);
   });
 
+  it("lists a world-wide view without enumerating every cell", () => {
+    const cells = visibleCells([-180, -85, 180, 85], 17);
+    expect(cells).toHaveLength(400);
+  });
+
   it("caps the count at 400 cells nearest the view centre", () => {
     const cells = visibleCells(
       [lngOf(CELL.x - 40), latOf(CELL.y + 40), lngOf(CELL.x + 40), latOf(CELL.y - 40)],

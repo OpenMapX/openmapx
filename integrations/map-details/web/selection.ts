@@ -28,8 +28,13 @@ export function visibleCells(
   const y1 = Math.floor(latToY(south)) + 1;
   const cx = (x0 + x1 + 1) / 2;
   const cy = (y0 + y1 + 1) / 2;
+  // Enumerate at most a window around the centre big enough for the cap: a wide
+  // view (a steep tilt, or the whole world) would otherwise list millions of cells.
+  const half = Math.ceil(Math.sqrt(MAX_CELLS) / 2) + 1;
   const cells: Array<{ x: number; y: number }> = [];
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) cells.push({ x, y });
+  for (let x = Math.max(x0, Math.floor(cx) - half); x <= Math.min(x1, Math.floor(cx) + half); x++)
+    for (let y = Math.max(y0, Math.floor(cy) - half); y <= Math.min(y1, Math.floor(cy) + half); y++)
+      cells.push({ x, y });
   if (cells.length <= MAX_CELLS) return cells;
   return cells
     .map((cell) => ({ cell, d: Math.hypot(cell.x + 0.5 - cx, cell.y + 0.5 - cy) }))

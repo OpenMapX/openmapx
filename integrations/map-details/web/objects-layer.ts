@@ -84,6 +84,7 @@ export class MapDetailsObjectsLayer implements CustomLayerInterface {
   private readonly terrain = new Map<string, Terrain>();
   private satellite = false;
   private palette: Palette = "day";
+  private mappedDrawn = false;
 
   constructor(private readonly options: { lighting: ObjectLighting; onUnsupported(): void }) {
     this.scene.add(this.ambient, this.sun);
@@ -102,6 +103,11 @@ export class MapDetailsObjectsLayer implements CustomLayerInterface {
 
   ambientIntensity(): number {
     return this.ambient.intensity;
+  }
+
+  /** Whether the current instances include an OpenStreetMap object (not only planted trees). */
+  drewMapped(): boolean {
+    return this.mappedDrawn;
   }
 
   /** New instances around `origin` ([lng, lat]); repaints. */
@@ -206,6 +212,7 @@ export class MapDetailsObjectsLayer implements CustomLayerInterface {
   private layout(): void {
     for (const mesh of this.meshes.values()) mesh.count = 0;
     this.shadows.count = 0;
+    this.mappedDrawn = false;
     const { selection, origin } = this;
     if (!selection || !origin) return;
     const matrix = new Float32Array(16);
@@ -261,6 +268,7 @@ export class MapDetailsObjectsLayer implements CustomLayerInterface {
           mesh.instanceMatrix.array.set(matrix, n * 16);
           const shade = 1 + (jitter as number);
           mesh.setColorAt(n, tint.setRGB(shade, shade, shade));
+          if (mapped === 1) this.mappedDrawn = true;
           if (tree) shadowRows.push([px, py, pz, (crown as number) * SHADOW_PER_CROWN * cell.k]);
           n++;
         }

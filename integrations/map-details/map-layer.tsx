@@ -12,6 +12,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useMapDetailsActive } from "./activation";
+import { useMapDetailsObjects } from "./objects";
 import { applyBasemapAdjustments, type BasemapRestore } from "./web/basemap-adjustments";
 import { ensurePaintProtocol, PAINT_SOURCE_ID, PAINT_TEMPLATE } from "./web/paint-protocol";
 import {
@@ -154,17 +155,29 @@ export function MapDetailsLayer(): null {
   }, [map, active, scheme, hasSource]);
 
   const registry = useIntegrationRegistry();
-  const attribution = useMemo(() => {
+  const contributors = useMemo(() => {
     const source = registry.findDataSource(DATA_SOURCE_ID);
-    const contributors = snapshotContributors(source ? [dataSourceToAttribution(source)] : []);
-    return { layerContributors: { [PAINT_LAYER_ID]: contributors } };
+    return snapshotContributors(source ? [dataSourceToAttribution(source)] : []);
   }, [registry]);
+  const attribution = useMemo(
+    () => ({ layerContributors: { [PAINT_LAYER_ID]: contributors } }),
+    [contributors],
+  );
   useRenderedMapAttributions(
     "map-details-paint",
     [PAINT_LAYER_ID],
     paintVisible && hasSource,
     attribution,
   );
+
+  useMapDetailsObjects({
+    map,
+    active,
+    client,
+    streetTemplate: hasSource ? template : null,
+    satellite,
+    contributors,
+  });
 
   return null;
 }

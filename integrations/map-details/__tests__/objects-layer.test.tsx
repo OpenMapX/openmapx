@@ -182,6 +182,17 @@ describe("MapDetailsObjectsLayer", () => {
     expect(mesh(layer, "broadleaf|near").count).toBe(1);
   });
 
+  it("knows whether it draws OpenStreetMap objects or only planted trees", () => {
+    const { layer } = setup();
+    expect(layer.drewMapped()).toBe(false);
+    layer.setInstances(selection(selected("broadleaf", [[10, 10, 0]])), ORIGIN);
+    expect(layer.drewMapped()).toBe(false);
+    layer.setInstances(selection(selected("lamp_arm", [[10, 10, 1]])), ORIGIN);
+    expect(layer.drewMapped()).toBe(true);
+    layer.setTerrain(CELL.key, "pending");
+    expect(layer.drewMapped()).toBe(false);
+  });
+
   it("switches to the night palette with an ambient floor", () => {
     const { layer } = setup();
     layer.setInstances(selection(selected("signal", [[10, 10, 1]])), ORIGIN);

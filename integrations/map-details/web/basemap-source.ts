@@ -6,8 +6,9 @@
  */
 
 interface StyleLike {
-  layers?: Array<{ source?: unknown; "source-layer"?: unknown }>;
+  layers?: readonly object[];
 }
+type LayerLike = { source?: unknown; "source-layer"?: unknown };
 
 const DEFAULT_MAXZOOM = 14;
 
@@ -20,7 +21,7 @@ export function findForestSource(
   style: StyleLike | undefined,
   getSource: (id: string) => unknown,
 ): { templates: string[]; maxzoom: number } | null {
-  const layer = style?.layers?.find(
+  const layer = (style?.layers as readonly LayerLike[] | undefined)?.find(
     (entry) => entry["source-layer"] === "landcover" && typeof entry.source === "string",
   );
   if (!layer) return null;
