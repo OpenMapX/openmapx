@@ -65,8 +65,8 @@ node --import tsx/esm src/jobs/overture/eval/run.ts \
 The harness loads OSM POIs and Overture places from the DB, sweeps 54 threshold
 combinations (3 × 3 × 3 × 2), and prints a table ranked by F1. The sweep calls
 the real `conflate()` from `packages/core`; `confidenceFloor` is applied as a
-pre-filter on Overture rows (dropping low-confidence and permanently-closed
-places) before conflation — it is **not** a conflation threshold.
+pre-filter on Overture rows (dropping low-confidence and non-open
+places, keeping open and unspecified operating status) before conflation — it is **not** a conflation threshold.
 
 Pick the top row whose precision ≥ 0.95 (low false-positive rate matters most
 for the augment-only strategy).

@@ -114,7 +114,11 @@ function overtureRowToPoiSearchResult(
   requestedCategory?: CategoryId,
   lang?: string,
 ): PoiSearchResult {
-  const localized = selectOvertureName(row.names, row.name || row.gers_id, lang);
+  const localized = selectOvertureName(
+    row.names,
+    cleanOvertureString(row.name) ?? row.gers_id,
+    lang,
+  );
   const address = selectOvertureAddress(row.addresses);
   const brandSelection = normalizeBrand(row.brand, lang);
   const brand = brandSelection?.brand;
@@ -335,7 +339,11 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToPlace(row: OvertureRow, lang?: string) {
-  const localized = selectOvertureName(row.names, row.name || row.gers_id, lang);
+  const localized = selectOvertureName(
+    row.names,
+    cleanOvertureString(row.name) ?? row.gers_id,
+    lang,
+  );
   const address = selectOvertureAddress(row.addresses);
   const brandSelection = normalizeBrand(row.brand, lang);
   const brand = brandSelection?.brand;

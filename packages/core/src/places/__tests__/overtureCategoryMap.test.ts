@@ -23,10 +23,7 @@ describe("Overture category interoperability bridge", () => {
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("restaurants");
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("cafes");
     expect(OVERTURE_COMMERCIAL_CATEGORIES).not.toContain("drinking_water");
-    expect(openMapXCategoryToOvertureConcepts("restaurants")).toEqual([
-      "restaurant",
-      "fast_food_restaurant",
-    ]);
+    expect(openMapXCategoryToOvertureConcepts("restaurants")).toEqual(["restaurant"]);
     expect(openMapXCategoryToOvertureConcepts("cafes")).toEqual([
       "cafe",
       "coffee_shop",
@@ -109,15 +106,26 @@ describe("Overture category interoperability bridge", () => {
     expect(overtureTaxonomyToOpenMapX({ primary: "beauty_salon" })).toBe("hairdressers");
     expect(overtureTaxonomyToOpenMapX({ primary: "fitness_studio" })).toBe("gyms");
     expect(overtureTaxonomyToOpenMapX({ primary: "tea_room" })).toBe("cafes");
-    expect(overtureTaxonomyToOpenMapX({ primary: "fast_food_restaurant" })).toBe("restaurants");
     expect(overtureTaxonomyToOpenMapX({ primary: "beer_garden" })).toBe("bars");
-    expect(overtureTaxonomyToOpenMapX({ primary: "bed_and_breakfast" })).toBe("hotels");
     expect(overtureTaxonomyToOpenMapX({ primary: "optometry" })).toBe("opticians");
     expect(overtureTaxonomyToOpenMapX({ primary: "veterinary_care" })).toBe("veterinarians");
     expect(overtureTaxonomyToOpenMapX({ primary: "bank_or_credit_union" })).toBe("banks");
     expect(overtureTaxonomyToOpenMapX({ primary: "patisserie_cake_shop" })).toBe("bakeries");
     expect(overtureTaxonomyToOpenMapX({ primary: "department_store" })).toBe("shopping_malls");
     expect(overtureTaxonomyToOpenMapX({ primary: "nightlife_venue" })).toBe("nightlife");
+    // Broad medical specialties parent stays out of doctors (contains tattoo_removal, etc.).
+    expect(
+      overtureTaxonomyToOpenMapX({
+        primary: "tattoo_removal",
+        hierarchy: [
+          "health_care",
+          "outpatient_care_facility",
+          "specialized_health_care",
+          "medical_skin_care",
+          "tattoo_removal",
+        ],
+      }),
+    ).toBeUndefined();
     // Pre-Sep 2026 terms still resolve for older snapshots.
     expect(overtureTaxonomyToOpenMapX({ primary: "dentist" })).toBe("dentists");
     expect(overtureTaxonomyToOpenMapX({ primary: "doctor" })).toBe("doctors");

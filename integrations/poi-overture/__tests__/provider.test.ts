@@ -187,6 +187,17 @@ describe("poi-overture provider.search", () => {
       "pinmeto",
     ]);
     expect(item.fieldContributors?.email).toBeUndefined();
+
+    // Invisible-only row.name falls back to gers_id rather than keeping raw marks.
+    const invisibleDb = makeFakeDb([{ ...dirtyRow, name: "\u200E\u0085", names: null }]);
+    const invisibleCtx = createMockIntegrationContext({ db: invisibleDb });
+    setup(invisibleCtx);
+    const invisibleProvider = nth(invisibleCtx.registered.poiSearch, 0) as PoiSearchProvider;
+    const invisibleResult = nth(
+      (await toOutcome(invisibleProvider.search("cafes", BBOX))).results,
+      0,
+    );
+    expect(invisibleResult.name).toBe(dirtyRow.gers_id);
   });
 
   it("returns [] for non-commercial category that has no Overture leaves", async () => {

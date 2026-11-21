@@ -135,8 +135,8 @@ async function queryFusedCase(
     ),
     sql.unsafe<FusedOvertureRow[]>(
       `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng,
-              (SELECT BTRIM(v) FROM unnest(phones) AS v WHERE BTRIM(v) <> '' LIMIT 1) AS phone,
-              (SELECT BTRIM(v) FROM unnest(websites) AS v WHERE BTRIM(v) <> '' LIMIT 1) AS website,
+              (SELECT BTRIM(v) FROM unnest(phones) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS phone,
+              (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               NULLIF(BTRIM(addresses->0->>'freeform'), '') AS address
        FROM "${schema}".places
        WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)

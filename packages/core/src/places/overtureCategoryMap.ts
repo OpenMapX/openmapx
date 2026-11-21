@@ -5,11 +5,11 @@
 // delegated to the hierarchy shipped on every Overture place, so new or renamed
 // leaves do not require a generated catalog in this repository.
 const categoryConcepts: Record<string, string[]> = {
-  restaurants: ["restaurant", "fast_food_restaurant"],
+  restaurants: ["restaurant"],
   cafes: ["cafe", "coffee_shop", "tea_room", "tea_house"],
   bars: ["bar", "pub", "beer_garden"],
-  hotels: ["hotel", "hostel", "bed_and_breakfast", "guest_house"],
-  supermarkets: ["grocery_store", "supermarket"],
+  hotels: ["hotel"],
+  supermarkets: ["supermarket", "grocery_store"],
   banks: ["bank", "credit_union", "bank_or_credit_union"],
   fuel: ["gas_station"],
   shopping_malls: ["shopping_mall", "department_store"],
@@ -20,7 +20,7 @@ const categoryConcepts: Record<string, string[]> = {
   gyms: ["gym", "fitness_studio", "fitness_center"],
   hairdressers: ["hair_salon", "barber", "barber_shop", "beauty_salon"],
   laundromats: ["laundromat", "laundry_service"],
-  opticians: ["eyewear_store", "optometry", "optician"],
+  opticians: ["optician", "eyewear_store", "optometry"],
   car_rental: ["car_rental_service", "car_rental"],
   car_repair: [
     "automotive_repair",
@@ -35,7 +35,6 @@ const categoryConcepts: Record<string, string[]> = {
   doctors: [
     "doctors_office",
     "primary_care_or_general_clinic",
-    "specialized_health_care",
     "pediatric_clinic",
     "urgent_care_clinic",
     "walk_in_clinic",

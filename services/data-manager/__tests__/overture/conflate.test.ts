@@ -312,5 +312,5 @@ it("filters conflation candidates to open/null operating_status and skips empty 
   const placeQuery = executedQueries.find((q) => q.includes('FROM "overture_places".places'));
   expect(placeQuery).toBeDefined();
   expect(placeQuery).toContain("(operating_status IS NULL OR operating_status = 'open')");
-  expect(placeQuery).toContain("unnest(websites)");
+  expect(placeQuery).toContain("unnest(websites) WITH ORDINALITY");
 });

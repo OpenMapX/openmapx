@@ -130,8 +130,15 @@ describe("Overture string, contact, and address sanitization", () => {
     } = await import("../overtureSource");
 
     expect(cleanOvertureString("  \u200E+34 951 51 92 20\u200F ")).toBe("+34 951 51 92 20");
-    expect(cleanOvertureString("\bCafe\nBerlin")).toBe("Cafe Berlin");
-    expect(cleanOvertureString(" \t\u200E ")).toBeUndefined();
+    expect(cleanOvertureString("\bCafe\r\n\tBerlin\u2028Mitte\u061C\u0085")).toBe(
+      "Cafe Berlin Mitte",
+    );
+    expect(cleanOvertureString(" \t\u200E\u061C\u2028 ")).toBeUndefined();
+    expect(selectOvertureName(null, "\u200E\u0085")).toEqual({
+      name: "",
+      variants: undefined,
+      property: "/names/primary",
+    });
 
     expect(selectFirstOvertureString(["", "   ", "\u200E+34 951 51 92 20"], "/phones")).toEqual({
       value: "+34 951 51 92 20",

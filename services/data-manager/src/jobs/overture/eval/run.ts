@@ -87,7 +87,7 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
       NULLIF(BTRIM(addresses->0->>'postcode'), '') AS postcode,
       brand->>'wikidata' AS wikidata,
       phones,
-      (SELECT BTRIM(v) FROM unnest(websites) AS v WHERE BTRIM(v) <> '' LIMIT 1) AS website,
+      (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
       confidence,
       operating_status
     FROM overture_places.places

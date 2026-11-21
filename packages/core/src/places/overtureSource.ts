@@ -185,7 +185,8 @@ export interface OvertureAddressItem {
 function isDroppedControlOrBidi(codePoint: number): boolean {
   return (
     codePoint <= 0x1f ||
-    codePoint === 0x7f ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0x061c ||
     codePoint === 0x200e ||
     codePoint === 0x200f ||
     (codePoint >= 0x202a && codePoint <= 0x202e) ||
@@ -194,9 +195,9 @@ function isDroppedControlOrBidi(codePoint: number): boolean {
 }
 
 /**
- * Cleans an upstream Overture string by converting ASCII line/tab separators to
- * spaces, dropping other ASCII control characters and Unicode bidi marks, and
- * trimming whitespace. Returns undefined when no printable content remains.
+ * Cleans an upstream Overture string by converting line/tab separators to
+ * spaces, dropping other C0/C1 control characters and Unicode bidi marks, and
+ * collapsing surrounding/repeated whitespace. Returns undefined when blank.
  */
 export function cleanOvertureString(value: string | null | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -204,15 +205,15 @@ export function cleanOvertureString(value: string | null | undefined): string | 
   for (const ch of value) {
     const cp = ch.codePointAt(0);
     if (cp === undefined) continue;
-    if (cp === 0x09 || cp === 0x0a || cp === 0x0d) {
+    if (cp === 0x09 || cp === 0x0a || cp === 0x0d || cp === 0x2028 || cp === 0x2029) {
       cleaned += " ";
       continue;
     }
     if (isDroppedControlOrBidi(cp)) continue;
     cleaned += ch;
   }
-  const trimmed = cleaned.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  const normalized = cleaned.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 /** Picks the first non-empty cleaned string alongside its original JSON Pointer. */
@@ -305,7 +306,7 @@ export function selectOvertureName(
       cleanedEntries.find(([tag]) => tag.toLowerCase().split("-")[0] === base))
     : undefined;
   const primary = cleanOvertureString(names?.primary);
-  const name = selected?.[1] || primary || cleanOvertureString(fallback) || fallback;
+  const name = selected?.[1] || primary || cleanOvertureString(fallback) || "";
   return {
     name,
     variants: cleanedEntries.length > 0 ? Object.fromEntries(cleanedEntries) : undefined,
