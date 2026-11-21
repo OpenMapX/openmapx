@@ -5,11 +5,12 @@
  * `RangeError`, because a miss means the caller's invariant is broken. A
  * negative position throws too rather than counting from the end, so a failed
  * search such as `findIndex` returning -1 cannot read the last element.
+ * `what` names the element in that error, such as the query a row came from.
  */
-export function itemAt<T>(items: ArrayLike<T>, index: number): T {
+export function itemAt<T>(items: ArrayLike<T>, index: number, what = "item"): T {
   const item = items[index];
   if (item === undefined) {
-    throw new RangeError(`No item at position ${index} of ${items.length}`);
+    throw new RangeError(`No ${what} at position ${index} of ${items.length}`);
   }
   return item;
 }

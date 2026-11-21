@@ -13,6 +13,12 @@ describe("itemAt", () => {
     expect(() => itemAt([], 0)).toThrow("No item at position 0 of 0");
     expect(() => itemAt(["a"], -1)).toThrow(RangeError);
   });
+
+  it("names what is missing when the caller says what the element is", () => {
+    expect(() => itemAt([], 0, "migration table row")).toThrow(
+      "No migration table row at position 0 of 0",
+    );
+  });
 });
 
 describe("numberAt", () => {

@@ -51,6 +51,7 @@ async function lastAppliedAt(session: Sql): Promise<number | null> {
       SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
     `,
     0,
+    "row from the migration table query",
   );
   if (!exists) return null;
   // An aggregate without GROUP BY returns one row, even over an empty table.
@@ -59,6 +60,7 @@ async function lastAppliedAt(session: Sql): Promise<number | null> {
       SELECT max(created_at)::text AS applied FROM drizzle.__drizzle_migrations
     `,
     0,
+    "row from the last applied migration query",
   );
   return applied === null ? null : Number(applied);
 }
@@ -138,7 +140,11 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
 
   const run = async (): Promise<string[]> => {
     // Both selects are bare expressions, which return one row.
-    const { pid } = itemAt(await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`, 0);
+    const { pid } = itemAt(
+      await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`,
+      0,
+      "row from the backend pid query",
+    );
     backendPid = pid;
 
     const { locked } = itemAt(
@@ -146,6 +152,7 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
         SELECT pg_try_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint) AS locked
       `,
       0,
+      "row from the migration lock query",
     );
     if (!locked) {
       log.info({}, "Waiting for another app-api instance to finish migrating the database");
