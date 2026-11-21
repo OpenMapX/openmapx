@@ -161,7 +161,7 @@ describe("community repository store", () => {
     expect(broken.problems).toEqual(
       expect.arrayContaining([
         expect.stringContaining("must pin its container image by sha256 digest"),
-        'Service id "postgis" is already used by another service',
+        'a/service.json: Service id "postgis" belongs to a built-in service',
       ]),
     );
     // Nothing was installed and no staging clone remains.

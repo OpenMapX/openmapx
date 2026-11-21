@@ -1,12 +1,13 @@
 import { assertTrustedConfigurationSchema } from "./configuration-schema";
 import { validateServiceManifest } from "./manifest-schema";
+import { RELEASE_BUILT_IN_SERVICE_IDS } from "./release-authority-inventory";
 import type { ServiceManifest } from "./types";
 
 const COMMUNITY_SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /**
  * Why a community service manifest would be rejected, beyond the third-party
- * manifest schema: a plain service id, a community quality label, an image
+ * manifest schema: a plain service id that no built-in service uses, a community quality label, an image
  * pinned by digest, and a configuration schema the trusted renderer accepts.
  * The operations agent applies these rules before it installs a repository and
  * whenever it reads its community store; the API applies them again to the
@@ -20,6 +21,11 @@ export function communityServiceManifestProblems(raw: unknown): string[] {
   const problems: string[] = [];
   if (!COMMUNITY_SERVICE_ID.test(manifest.id)) {
     problems.push(`Service id "${manifest.id}" may only use lowercase letters, digits and hyphens`);
+  }
+  // The registry keeps the built-in service of an ID, so a community service
+  // sharing it would never run.
+  if ((RELEASE_BUILT_IN_SERVICE_IDS as readonly string[]).includes(manifest.id)) {
+    problems.push(`Service id "${manifest.id}" belongs to a built-in service`);
   }
   // Both labels get the same sandbox; the schema already refuses "built-in" here.
   if (manifest.quality !== "community" && manifest.quality !== "community-verified") {

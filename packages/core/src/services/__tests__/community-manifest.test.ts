@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { communityServiceManifestProblems } from "../community-manifest";
+import { CORE_SERVICE_ID } from "../core-service-ids";
 import { ServiceRegistry } from "../registry";
 import type { ServiceManifest } from "../types";
 
@@ -53,6 +54,16 @@ describe("communityServiceManifestProblems", () => {
       /privileged/,
     ],
     ["an id outside the plain service-id form", { id: "Maps_Tiles" }, /^id: /],
+    [
+      "the id of a built-in service",
+      { id: "traefik" },
+      /^Service id "traefik" belongs to a built-in service$/,
+    ],
+    [
+      "the id of the built-in API",
+      { id: CORE_SERVICE_ID.api },
+      /^Service id "[a-z-]+" belongs to a built-in service$/,
+    ],
   ])("rejects %s", (_label, overrides, problem) => {
     expect(communityServiceManifestProblems(manifest(overrides))).toEqual(
       expect.arrayContaining([expect.stringMatching(problem)]),
