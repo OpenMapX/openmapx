@@ -279,6 +279,13 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
     throw new PredictedTrafficInputError(cause);
   });
   const { wellFormed: profiles, malformed } = splitMalformedProfiles(fetchedProfiles);
+  // A feed with nothing usable is a broken feed, not a quiet one: an empty
+  // bake would rebuild nothing and report success.
+  if (malformed > 0 && profiles.length === 0) {
+    throw new Error(
+      `bake-predicted: all ${malformed} profiles from ${deps.openConditionsUrl}/segments/profiles.json lack a full week of hourly speeds`,
+    );
+  }
   if (malformed > 0) {
     deps.logger?.warn("bake-predicted: skipped profiles without a full week of hourly speeds", {
       segments: fetchedProfiles.length,

@@ -315,6 +315,23 @@ describe("bakePredicted", () => {
     expect(csv).toBe(`0/3196/10,100,90,${expectedBase64(80, 100)}\n`);
   });
 
+  it("fails before refreshing or baking when every profile lacks a full week", async () => {
+    await expect(
+      bakePredicted(
+        makeDeps({
+          fetchProfiles: async () => [
+            { ...profileFor("1"), hourly: Array<number>(24).fill(80) },
+            { ...profileFor("2"), hourly: Array<number>(167).fill(80) },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(
+      "bake-predicted: all 2 profiles from http://openconditions.local/segments/profiles.json lack a full week of hourly speeds",
+    );
+    expect(refreshWaysCalls).toHaveLength(0);
+    expect(opsCalls).toHaveLength(0);
+  });
+
   it("warns when the rate falls below fifty percent", async () => {
     // Four resolvable ways; only one has an edge in the profile's direction.
     const waysToEdges = new Map<number, WayEdge[]>([
