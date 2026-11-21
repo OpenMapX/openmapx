@@ -1,7 +1,7 @@
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { OPS_KIND_POLICIES, OPS_OPERATION_KINDS } from "../packages/core/src/ops/contract";
 
 const root = join(__dirname, "..");
@@ -160,8 +160,15 @@ function readdirRecursive(directory: string): string[] {
   return files;
 }
 
+/** The file and optional symbol of a `path#symbol` source id; the test fails on an id without a file. */
+function sourceIdParts(sourceId: string): [relativePath: string, symbol: string | undefined] {
+  const [relativePath, symbol] = sourceId.split("#");
+  assert(relativePath, `${sourceId} names no source file`);
+  return [relativePath, symbol];
+}
+
 function sourceSymbolExists(sourceId: string): boolean {
-  const [relativePath = "", symbol] = sourceId.split("#");
+  const [relativePath, symbol] = sourceIdParts(sourceId);
   const path = join(root, relativePath);
   if (!statExists(path)) return false;
   if (!symbol) return true;
@@ -190,7 +197,7 @@ function sourceSymbolExists(sourceId: string): boolean {
 }
 
 function readLiteralUnion(sourceId: string): string[] {
-  const [relativePath = "", symbol] = sourceId.split("#");
+  const [relativePath, symbol] = sourceIdParts(sourceId);
   const path = join(root, relativePath);
   const source = ts.createSourceFile(
     path,

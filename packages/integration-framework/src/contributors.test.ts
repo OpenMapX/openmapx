@@ -104,8 +104,9 @@ describe("portable companion contributor contract", () => {
     const receipts = parseContributors(
       String.raw`[{"sourceId":"community-feed","name":"Feed","attributionText":"© <a href=\"https://publisher.example/\" onclick=\"run()\">Publisher</a> <img src=x onerror=run()> &amp; <a href=\"javascript:run()\">contributors</a>"}]`,
     );
-    expect(receipts).toBeDefined();
-    expect(sanitizeAttributionHtml(receipts?.[0]?.attributionText ?? "")).toBe(
+    const attributionText = receipts?.[0]?.attributionText;
+    assert.isDefined(attributionText, "the receipt keeps its attribution text");
+    expect(sanitizeAttributionHtml(attributionText)).toBe(
       '© <a href="https://publisher.example/" target="_blank" rel="noopener noreferrer">Publisher</a>  &amp; contributors',
     );
   });
