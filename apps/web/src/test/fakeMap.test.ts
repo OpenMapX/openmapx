@@ -1,7 +1,7 @@
+import { nth } from "@openmapx/integration-framework/testing/nth";
 import { Evented } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import { createFakeMap } from "./fakeMap";
-import { nth } from "./nth";
 
 describe("fake map light", () => {
   it("refuses a light while the style is not loaded", () => {

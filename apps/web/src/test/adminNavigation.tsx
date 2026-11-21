@@ -1,7 +1,7 @@
 /** Unit-only Next navigation adapter. Browser history acceptance is verified separately. */
+import { nth } from "@openmapx/integration-framework/testing/nth";
 import { useSyncExternalStore } from "react";
 import { afterEach } from "vitest";
-import { nth } from "./nth";
 
 let entries = ["/admin"],
   index = 0;

@@ -1,6 +1,7 @@
 // Shared web test toolkit. (setup.ts is the jsdom project's setupFile and is
 // not re-exported here.)
 
+export { nth } from "@openmapx/integration-framework/testing/nth";
 export * from "@testing-library/react";
 export { default as userEvent } from "@testing-library/user-event";
 export { type CapturedConsoleErrors, captureConsoleErrors } from "./consoleErrors";
@@ -13,7 +14,6 @@ export {
   renderedFeature,
 } from "./fakeMap";
 export { mockNextIntl, mockNextIntlWithCatalog, renderWithIntl } from "./intl";
-export { nth } from "./nth";
 export {
   createQueryWrapper,
   createTestQueryClient,

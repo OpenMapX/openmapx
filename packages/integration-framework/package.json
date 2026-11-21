@@ -44,6 +44,10 @@
       "types": "./src/testing/index.ts",
       "default": "./src/testing/index.ts"
     },
+    "./testing/nth": {
+      "types": "./src/testing/nth.ts",
+      "default": "./src/testing/nth.ts"
+    },
     "./test/shared-mobility-provider": {
       "types": "./src/testing/shared-mobility-provider.ts",
       "default": "./src/testing/shared-mobility-provider.ts"
