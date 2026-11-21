@@ -1,5 +1,4 @@
 import z from "zod/v4";
-import { uncachedResponseHeadersSchema } from "../../../services/data-manager/contracts/headers";
 import {
   type AdminOperation,
   adminCommonResponses,
@@ -8,6 +7,9 @@ import {
   httpErrorSchema,
   adminTimestampSchema as timestamp,
 } from "../admin";
+
+const uncachedResponseHeadersSchema = z.object({ "cache-control": z.literal("no-store") });
+
 /**
  * Persistent observations from getState/getAll, not the half-open lease-acquiring
  * getSnapshot view. `state` is what the next request meets: an open circuit whose

@@ -14,7 +14,7 @@ now require an administrator session, as the reset route already did. Nothing in
 OpenMapX used the token for these reads; data-manager never called them.
 
 The admin **Transit → Provider health** table uses the new paths and looks the
-same.
+same. Each reset is now recorded in the activity log as "Provider health reset".
 
 ## Who is affected
 

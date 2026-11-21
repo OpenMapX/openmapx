@@ -2,7 +2,7 @@
   "id": "data-manager",
   "name": "Data Manager",
   "version": "1.0.0",
-  "description": "Data pipeline. Downloads OSM extracts and map fonts, keeps the transit catalog and builds MOTIS candidates, builds the PostGIS place and search indexes, feeds live and predicted traffic to Valhalla, prepares offline map packages and reports data coverage.",
+  "description": "Data pipeline. Downloads OSM extracts and map fonts, records the dataset inventory and hardlinks shared artifacts into consumer services, keeps the transit catalog and builds MOTIS candidates, builds the PostGIS place and search indexes, feeds live and predicted traffic to Valhalla, prepares offline map packages and reports data coverage.",
   "license": "AGPL-3.0-or-later",
   "quality": "built-in",
   "communityNetworkAccess": ["openconditions-ingest"],
