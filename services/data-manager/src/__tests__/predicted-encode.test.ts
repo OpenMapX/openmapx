@@ -17,20 +17,20 @@ describe("roundHalfAwayFromZero", () => {
   });
 });
 
+// The fixture generator repeats `hourly_day` for all seven days of the week.
+const rushWeek: number[] = Array.from({ length: 7 }, () => fixtures.rush.hourly_day).flat();
+
 describe("expandHourlyToBuckets", () => {
   it("expands 168 hourly values into 2016 five-minute buckets", () => {
-    const buckets = expandHourlyToBuckets(fixtures.rush.hourly_day, fixtures.rush.freeFlow);
+    expect(rushWeek).toHaveLength(168);
+    const buckets = expandHourlyToBuckets(rushWeek, fixtures.rush.freeFlow);
     expect(buckets).toHaveLength(2016);
+    expect(buckets).toEqual(fixtures.rush.buckets2016);
   });
 
   it("repeats each hourly value across its 12 five-minute buckets (Sunday-first)", () => {
-    // hourly_day is one day repeated for all 7 days in the fixture generator;
     // Monday 08:00 -> index 288*1 + 12*8 = 384, hourly_day[8] = 45.
-    const hourly = Array<number | null>(168).fill(0);
-    for (let d = 0; d < 7; d++) {
-      for (const [h, speed] of fixtures.rush.hourly_day.entries()) hourly[24 * d + h] = speed;
-    }
-    const buckets = expandHourlyToBuckets(hourly, fixtures.rush.freeFlow);
+    const buckets = expandHourlyToBuckets(rushWeek, fixtures.rush.freeFlow);
     expect(buckets[384]).toBe(45);
     // whole hour block (12 buckets) shares the same value
     for (let k = 0; k < 12; k++) expect(buckets[384 + k]).toBe(45);

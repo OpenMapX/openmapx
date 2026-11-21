@@ -278,6 +278,43 @@ describe("bakePredicted", () => {
     expect(result.matchRatePct).toBe(100);
   });
 
+  it("skips and counts profiles without a full week of hourly speeds", async () => {
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [1, [edgeAt(10)]],
+      [2, [edgeAt(11)]],
+      [3, [edgeAt(12)]],
+    ]);
+    const warn = vi.fn();
+    const result = await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => [
+          profileFor("1"),
+          { ...profileFor("2"), hourly: Array<number>(24).fill(80) },
+          { ...profileFor("3"), hourly: Array<number>(169).fill(80) },
+        ],
+        loadWaysToEdges: async () => waysToEdges,
+        logger: { info: () => {}, warn },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      segments: 3,
+      malformed: 2,
+      resolvable: 1,
+      matched: 1,
+      rows: 1,
+      matchRatePct: 100,
+      coverageRatePct: 100,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "bake-predicted: skipped profiles without a full week of hourly speeds",
+      { segments: 3, malformed: 2 },
+    );
+    const csv = readFileSync(join(csvDir, "0/003/196.csv"), "utf8");
+    expect(csv).toBe(`0/3196/10,100,90,${expectedBase64(80, 100)}\n`);
+  });
+
   it("warns when the rate falls below fifty percent", async () => {
     // Four resolvable ways; only one has an edge in the profile's direction.
     const waysToEdges = new Map<number, WayEdge[]>([

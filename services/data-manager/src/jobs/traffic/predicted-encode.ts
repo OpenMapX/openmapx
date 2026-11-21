@@ -20,6 +20,8 @@ const BUCKETS_PER_HOUR = 12;
 const HOURS_PER_DAY = 24;
 /** Days per week. */
 const DAYS_PER_WEEK = 7;
+/** Hourly speeds in one weekly profile: 7 days x 24 hours. */
+export const HOURS_PER_WEEK = HOURS_PER_DAY * DAYS_PER_WEEK;
 /** Valhalla clamps predicted speeds to this range; out-of-range inputs are clamped, never rejected. */
 const MIN_SPEED_KPH = 5;
 const MAX_SPEED_KPH = 140;
@@ -37,10 +39,13 @@ export function roundHalfAwayFromZero(x: number): number {
 
 /**
  * Expands 168 hourly speeds (Sunday-first, `hourly[24*day + hour]`) into the
- * 2016 five-minute buckets Valhalla's DCT-II encoder expects. A `null` hour,
- * or one past the end of a shorter profile, falls back to `freeFlowKph`. Every value is clamped to `[5, 140]` km/h —
- * Valhalla only warns on out-of-range predicted speeds, it never re-clamps
- * them itself, so clamping happens here before encoding.
+ * 2016 five-minute buckets Valhalla's DCT-II encoder expects. A `null` hour
+ * falls back to `freeFlowKph`. The bake skips profiles that are not exactly
+ * one week of hours long before they reach this function; an hour past the end
+ * of a shorter one is still treated as `null` rather than encoded as NaN.
+ * Every value is clamped to `[5, 140]` km/h — Valhalla only warns on
+ * out-of-range predicted speeds, it never re-clamps them itself, so clamping
+ * happens here before encoding.
  */
 export function expandHourlyToBuckets(
   hourly: readonly (number | null)[],
