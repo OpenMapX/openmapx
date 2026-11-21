@@ -428,6 +428,13 @@ export async function getAdminPlatformConfigurationRequest<T>(
 ): Promise<T> {
   return getAdminPlatformConfigurationBound<T>(url, options);
 }
+const getAdminProviderHealthBound = bindAdminOperation("getAdminProviderHealth");
+export async function getAdminProviderHealthRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminProviderHealthBound<T>(url, options);
+}
 const getAdminServiceBound = bindAdminOperation("getAdminService");
 export async function getAdminServiceRequest<T>(
   url: string,
@@ -536,20 +543,6 @@ export async function getApiDataManagerOvertureStatusRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return getApiDataManagerOvertureStatusBound<T>(url, options);
-}
-const getApiDataManagerProvidersBound = bindAdminOperation("getApiDataManagerProviders");
-export async function getApiDataManagerProvidersRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return getApiDataManagerProvidersBound<T>(url, options);
-}
-const getApiDataManagerProvidersIdBound = bindAdminOperation("getApiDataManagerProvidersId");
-export async function getApiDataManagerProvidersIdRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return getApiDataManagerProvidersIdBound<T>(url, options);
 }
 const getApiDataManagerRoadConditionsPolicyBound = bindAdminOperation(
   "getApiDataManagerRoadConditionsPolicy",
@@ -753,6 +746,13 @@ export async function listAdminOperationsRequest<T>(
 ): Promise<T> {
   return listAdminOperationsBound<T>(url, options);
 }
+const listAdminProviderHealthBound = bindAdminOperation("listAdminProviderHealth");
+export async function listAdminProviderHealthRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminProviderHealthBound<T>(url, options);
+}
 const listAdminServiceBackupsBound = bindAdminOperation("listAdminServiceBackups");
 export async function listAdminServiceBackupsRequest<T>(
   url: string,
@@ -835,15 +835,6 @@ export async function postApiAdminAmbientPlacesRollbackRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return postApiAdminAmbientPlacesRollbackBound<T>(url, options);
-}
-const postApiDataManagerProvidersIdResetBound = bindAdminOperation(
-  "postApiDataManagerProvidersIdReset",
-);
-export async function postApiDataManagerProvidersIdResetRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return postApiDataManagerProvidersIdResetBound<T>(url, options);
 }
 const postApiDataManagerTransitBumpTransitousRefBound = bindAdminOperation(
   "postApiDataManagerTransitBumpTransitousRef",
@@ -1053,6 +1044,13 @@ export async function renderAdminComposeConfigurationRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return renderAdminComposeConfigurationBound<T>(url, options);
+}
+const resetAdminProviderHealthBound = bindAdminOperation("resetAdminProviderHealth");
+export async function resetAdminProviderHealthRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return resetAdminProviderHealthBound<T>(url, options);
 }
 const resolvePrivacyAdminTaskBound = bindAdminOperation("resolvePrivacyAdminTask");
 export async function resolvePrivacyAdminTaskRequest<T>(

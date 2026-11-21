@@ -23,10 +23,8 @@ import type { StageFn, StageResult } from "./types.js";
  * the (re)start is issued. On a failure to (re)start the container the stage
  * returns `status: "error"` with a short message so operators can diagnose.
  *
- * The data-manager container intentionally has the host docker socket mounted
- * (see app-api bind mount for the same `@docker-socket` pattern). When running
- * outside a container — local dev, tests with a mock runner — the runner just
- * receives the same args.
+ * Neither data-manager nor the API holds the Docker socket: the restart is a
+ * typed operation that the operations agent performs.
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();

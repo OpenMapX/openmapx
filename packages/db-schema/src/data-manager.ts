@@ -17,7 +17,8 @@ import {
  * `data_manager` Postgres schema — owned by the `services/data-manager`
  * container. The `apps/api` Drizzle config generates and applies the
  * migrations because the migration toolchain currently lives there; the
- * data-manager binary connects to the same database and inserts rows.
+ * data-manager binary connects to the same database, writes its job and feed
+ * rows, and also creates and owns the PostGIS index schemas it builds.
  */
 export const dataManager = pgSchema("data_manager");
 

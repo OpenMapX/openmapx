@@ -200,7 +200,7 @@ guidance.
 From the repository root, filter the development task to the web and API:
 
 ```bash
-pnpm dev --filter=web --filter=@openmapx/api
+pnpm dev --filter=@openmapx/web --filter=@openmapx/api
 ```
 
 This starts web on `3000` and API on `3001`. Bare `pnpm dev` also selects

@@ -529,9 +529,9 @@ cancel current main's scan. No live ruleset change is part of this rollout.
 local fixture server instead of a real API. It runs nightly and on manual
 dispatch only: no pull request or push trigger and not a required check, so PR
 and main validation time are unchanged. It does not reuse the main build's Turbo
-cache; one `pnpm --filter web build` keeps the job independent of `ci.yml`.
+cache; one `pnpm --filter @openmapx/web build` keeps the job independent of `ci.yml`.
 On failure it uploads the Playwright traces and report. Locally, run
-`pnpm --filter web test:e2e` after a production build; see
+`pnpm --filter @openmapx/web test:e2e` after a production build; see
 [Contributing: Quality bar](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#quality-bar).
 
 ## Qualification status

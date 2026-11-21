@@ -137,11 +137,11 @@ failures before interpreting an empty health table as healthy providers.
 After fixing a credential or endpoint, **Reset** clears that provider's window
 and cooldown. Resetting does not repair the provider; verify a real request.
 
-| Method | API path                                | Access                                          |
-| ------ | --------------------------------------- | ----------------------------------------------- |
-| GET    | `/api/data-manager/providers`           | Administrator or Data Manager service token     |
-| GET    | `/api/data-manager/providers/:id`       | Administrator or Data Manager service token     |
-| POST   | `/api/data-manager/providers/:id/reset` | Administrator; service token alone cannot reset |
+| Method | API path                         | Access        |
+| ------ | -------------------------------- | ------------- |
+| GET    | `/api/admin/providers`           | Administrator |
+| GET    | `/api/admin/providers/:id`       | Administrator |
+| POST   | `/api/admin/providers/:id/reset` | Administrator |
 
 Provider records use `provider:health:<providerId>` keys. Prefer the admin view
 or read API to direct Redis editing, which can bypass the circuit's atomic
@@ -216,7 +216,7 @@ finish or diagnose a container that won't come up. Full coverage is in
 
 ### Application logs
 
-Open **Activity → Application Logs** for the API gateway and integration log stream. It renders the API's structured (pino) log stream with a console-style view:
+Open **Activity → Application Logs** for the API and integration log stream. It renders the API's structured (pino) log stream with a console-style view:
 timestamp, level, source, and message, with any structured metadata appended.
 
 Filter by **level** (a minimum level; `warn` includes warnings and higher levels), by **source** (the emitting subsystem), and by **time range**, plus a

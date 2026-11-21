@@ -81,7 +81,10 @@ resolves integration requirements against the service registry.
 The data-manager service owns the
 `/data` tree: it downloads OSM extracts, GTFS feeds (via Transitous), and glyph
 fonts (`tile-fonts`), prepares artifacts for enabled engines, and uses hardlinks where
-appropriate so services can share files without copying them. Map styles and sprites are statically
+appropriate so services can share files without copying them. It also builds
+the PostGIS place and search indexes (Overture places, the OSM search index,
+notable and ambient places), feeds live and predicted traffic to Valhalla,
+prepares offline map packages and reports data coverage. Map styles and sprites are statically
 bundled directly into the `app-web` frontend. The private **ops-agent** broker
 keeps Docker socket and host lifecycle authority out of application containers. Some integrations call external APIs for traffic, street-level imagery,
 or regional transit. Provider requests normally pass through the API. Browser

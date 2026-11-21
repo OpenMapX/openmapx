@@ -5,7 +5,7 @@ const webPort = 4311;
 const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
 
 /**
- * Browser journeys against the production build (`pnpm --filter web build`).
+ * Browser journeys against the production build (`pnpm --filter @openmapx/web build`).
  *
  * The app runs from its standalone output with every API, tile and glyph origin
  * pointed at a local fixture server, so nothing leaves the machine. MapLibre

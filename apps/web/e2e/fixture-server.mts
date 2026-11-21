@@ -123,7 +123,7 @@ function solidPng([red, green, blue]: readonly [number, number, number]): Uint8A
 
 /**
  * The fixture API. It answers on the origin the production build falls back to
- * when no API URL was baked in, so any `pnpm --filter web build` can be tested.
+ * when no API URL was baked in, so any `pnpm --filter @openmapx/web build` can be tested.
  * Unknown paths answer 404 and are logged, so a missing fixture shows up in the
  * run output instead of hiding behind a retry.
  */

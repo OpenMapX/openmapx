@@ -125,23 +125,6 @@ import type {
   GetApiDataManagerOvertureStatus415,
   GetApiDataManagerOvertureStatus429,
   GetApiDataManagerOvertureStatus500,
-  GetApiDataManagerProviders200,
-  GetApiDataManagerProviders400,
-  GetApiDataManagerProviders401,
-  GetApiDataManagerProviders403,
-  GetApiDataManagerProviders413,
-  GetApiDataManagerProviders415,
-  GetApiDataManagerProviders429,
-  GetApiDataManagerProviders500,
-  GetApiDataManagerProvidersId200,
-  GetApiDataManagerProvidersId400,
-  GetApiDataManagerProvidersId401,
-  GetApiDataManagerProvidersId403,
-  GetApiDataManagerProvidersId404,
-  GetApiDataManagerProvidersId413,
-  GetApiDataManagerProvidersId415,
-  GetApiDataManagerProvidersId429,
-  GetApiDataManagerProvidersId500,
   GetApiDataManagerRoadConditionsPolicy200,
   GetApiDataManagerRoadConditionsPolicy400,
   GetApiDataManagerRoadConditionsPolicy401,
@@ -278,15 +261,6 @@ import type {
   PostApiAdminAmbientPlacesRollback429,
   PostApiAdminAmbientPlacesRollback500,
   PostApiAdminAmbientPlacesRollback503,
-  PostApiDataManagerProvidersIdReset200,
-  PostApiDataManagerProvidersIdReset400,
-  PostApiDataManagerProvidersIdReset401,
-  PostApiDataManagerProvidersIdReset403,
-  PostApiDataManagerProvidersIdReset413,
-  PostApiDataManagerProvidersIdReset415,
-  PostApiDataManagerProvidersIdReset429,
-  PostApiDataManagerProvidersIdReset500,
-  PostApiDataManagerProvidersIdReset503,
   PostApiDataManagerTransitBumpTransitousRef200,
   PostApiDataManagerTransitBumpTransitousRef400,
   PostApiDataManagerTransitBumpTransitousRef401,
@@ -416,8 +390,6 @@ import {
   getApiDataManagerNotablePlacesStatusRequest,
   getApiDataManagerOvertureRecoveryRequest,
   getApiDataManagerOvertureStatusRequest,
-  getApiDataManagerProvidersIdRequest,
-  getApiDataManagerProvidersRequest,
   getApiDataManagerRoadConditionsPolicyRequest,
   getApiDataManagerSearchIndexStatusRequest,
   getApiDataManagerTransitCatalogRequest,
@@ -432,7 +404,6 @@ import {
   postApiAdminAmbientPlacesEnabledRequest,
   postApiAdminAmbientPlacesResumeRequest,
   postApiAdminAmbientPlacesRollbackRequest,
-  postApiDataManagerProvidersIdResetRequest,
   postApiDataManagerTransitBumpTransitousRefRequest,
   postApiDataManagerTransitRestartMotisRequest,
   postApiDataManagerTransitSourcesRequest,
@@ -2352,247 +2323,6 @@ export const getApiDataManagerOvertureStatus = async (
     {
       ...options,
       method: "GET",
-    },
-  );
-};
-
-export type getApiDataManagerProvidersResponse200 = {
-  data: GetApiDataManagerProviders200;
-  status: 200;
-};
-
-export type getApiDataManagerProvidersResponse400 = {
-  data: GetApiDataManagerProviders400;
-  status: 400;
-};
-
-export type getApiDataManagerProvidersResponse401 = {
-  data: GetApiDataManagerProviders401;
-  status: 401;
-};
-
-export type getApiDataManagerProvidersResponse403 = {
-  data: GetApiDataManagerProviders403;
-  status: 403;
-};
-
-export type getApiDataManagerProvidersResponse413 = {
-  data: GetApiDataManagerProviders413;
-  status: 413;
-};
-
-export type getApiDataManagerProvidersResponse415 = {
-  data: GetApiDataManagerProviders415;
-  status: 415;
-};
-
-export type getApiDataManagerProvidersResponse429 = {
-  data: GetApiDataManagerProviders429;
-  status: 429;
-};
-
-export type getApiDataManagerProvidersResponse500 = {
-  data: GetApiDataManagerProviders500;
-  status: 500;
-};
-
-export type getApiDataManagerProvidersResponseSuccess = getApiDataManagerProvidersResponse200 & {
-  headers: Headers;
-};
-export type getApiDataManagerProvidersResponseError = (
-  | getApiDataManagerProvidersResponse400
-  | getApiDataManagerProvidersResponse401
-  | getApiDataManagerProvidersResponse403
-  | getApiDataManagerProvidersResponse413
-  | getApiDataManagerProvidersResponse415
-  | getApiDataManagerProvidersResponse429
-  | getApiDataManagerProvidersResponse500
-) & {
-  headers: Headers;
-};
-
-export type getApiDataManagerProvidersResponse =
-  | getApiDataManagerProvidersResponseSuccess
-  | getApiDataManagerProvidersResponseError;
-
-export const getGetApiDataManagerProvidersUrl = () => {
-  return `/api/data-manager/providers`;
-};
-
-export const getApiDataManagerProviders = async (
-  options?: Parameters<typeof getApiDataManagerProvidersRequest>[1],
-): Promise<getApiDataManagerProvidersResponse> => {
-  return getApiDataManagerProvidersRequest<getApiDataManagerProvidersResponse>(
-    getGetApiDataManagerProvidersUrl(),
-    {
-      ...options,
-      method: "GET",
-    },
-  );
-};
-
-export type getApiDataManagerProvidersIdResponse200 = {
-  data: GetApiDataManagerProvidersId200;
-  status: 200;
-};
-
-export type getApiDataManagerProvidersIdResponse400 = {
-  data: GetApiDataManagerProvidersId400;
-  status: 400;
-};
-
-export type getApiDataManagerProvidersIdResponse401 = {
-  data: GetApiDataManagerProvidersId401;
-  status: 401;
-};
-
-export type getApiDataManagerProvidersIdResponse403 = {
-  data: GetApiDataManagerProvidersId403;
-  status: 403;
-};
-
-export type getApiDataManagerProvidersIdResponse404 = {
-  data: GetApiDataManagerProvidersId404;
-  status: 404;
-};
-
-export type getApiDataManagerProvidersIdResponse413 = {
-  data: GetApiDataManagerProvidersId413;
-  status: 413;
-};
-
-export type getApiDataManagerProvidersIdResponse415 = {
-  data: GetApiDataManagerProvidersId415;
-  status: 415;
-};
-
-export type getApiDataManagerProvidersIdResponse429 = {
-  data: GetApiDataManagerProvidersId429;
-  status: 429;
-};
-
-export type getApiDataManagerProvidersIdResponse500 = {
-  data: GetApiDataManagerProvidersId500;
-  status: 500;
-};
-
-export type getApiDataManagerProvidersIdResponseSuccess =
-  getApiDataManagerProvidersIdResponse200 & {
-    headers: Headers;
-  };
-export type getApiDataManagerProvidersIdResponseError = (
-  | getApiDataManagerProvidersIdResponse400
-  | getApiDataManagerProvidersIdResponse401
-  | getApiDataManagerProvidersIdResponse403
-  | getApiDataManagerProvidersIdResponse404
-  | getApiDataManagerProvidersIdResponse413
-  | getApiDataManagerProvidersIdResponse415
-  | getApiDataManagerProvidersIdResponse429
-  | getApiDataManagerProvidersIdResponse500
-) & {
-  headers: Headers;
-};
-
-export type getApiDataManagerProvidersIdResponse =
-  | getApiDataManagerProvidersIdResponseSuccess
-  | getApiDataManagerProvidersIdResponseError;
-
-export const getGetApiDataManagerProvidersIdUrl = (id: string) => {
-  return `/api/data-manager/providers/${encodeURIComponent(String(id))}`;
-};
-
-export const getApiDataManagerProvidersId = async (
-  id: string,
-  options?: Parameters<typeof getApiDataManagerProvidersIdRequest>[1],
-): Promise<getApiDataManagerProvidersIdResponse> => {
-  return getApiDataManagerProvidersIdRequest<getApiDataManagerProvidersIdResponse>(
-    getGetApiDataManagerProvidersIdUrl(id),
-    {
-      ...options,
-      method: "GET",
-    },
-  );
-};
-
-export type postApiDataManagerProvidersIdResetResponse200 = {
-  data: PostApiDataManagerProvidersIdReset200;
-  status: 200;
-};
-
-export type postApiDataManagerProvidersIdResetResponse400 = {
-  data: PostApiDataManagerProvidersIdReset400;
-  status: 400;
-};
-
-export type postApiDataManagerProvidersIdResetResponse401 = {
-  data: PostApiDataManagerProvidersIdReset401;
-  status: 401;
-};
-
-export type postApiDataManagerProvidersIdResetResponse403 = {
-  data: PostApiDataManagerProvidersIdReset403;
-  status: 403;
-};
-
-export type postApiDataManagerProvidersIdResetResponse413 = {
-  data: PostApiDataManagerProvidersIdReset413;
-  status: 413;
-};
-
-export type postApiDataManagerProvidersIdResetResponse415 = {
-  data: PostApiDataManagerProvidersIdReset415;
-  status: 415;
-};
-
-export type postApiDataManagerProvidersIdResetResponse429 = {
-  data: PostApiDataManagerProvidersIdReset429;
-  status: 429;
-};
-
-export type postApiDataManagerProvidersIdResetResponse500 = {
-  data: PostApiDataManagerProvidersIdReset500;
-  status: 500;
-};
-
-export type postApiDataManagerProvidersIdResetResponse503 = {
-  data: PostApiDataManagerProvidersIdReset503;
-  status: 503;
-};
-
-export type postApiDataManagerProvidersIdResetResponseSuccess =
-  postApiDataManagerProvidersIdResetResponse200 & {
-    headers: Headers;
-  };
-export type postApiDataManagerProvidersIdResetResponseError = (
-  | postApiDataManagerProvidersIdResetResponse400
-  | postApiDataManagerProvidersIdResetResponse401
-  | postApiDataManagerProvidersIdResetResponse403
-  | postApiDataManagerProvidersIdResetResponse413
-  | postApiDataManagerProvidersIdResetResponse415
-  | postApiDataManagerProvidersIdResetResponse429
-  | postApiDataManagerProvidersIdResetResponse500
-  | postApiDataManagerProvidersIdResetResponse503
-) & {
-  headers: Headers;
-};
-
-export type postApiDataManagerProvidersIdResetResponse =
-  | postApiDataManagerProvidersIdResetResponseSuccess
-  | postApiDataManagerProvidersIdResetResponseError;
-
-export const getPostApiDataManagerProvidersIdResetUrl = (id: string) => {
-  return `/api/data-manager/providers/${encodeURIComponent(String(id))}/reset`;
-};
-
-export const postApiDataManagerProvidersIdReset = async (
-  id: string,
-  options?: Parameters<typeof postApiDataManagerProvidersIdResetRequest>[1],
-): Promise<postApiDataManagerProvidersIdResetResponse> => {
-  return postApiDataManagerProvidersIdResetRequest<postApiDataManagerProvidersIdResetResponse>(
-    getPostApiDataManagerProvidersIdResetUrl(id),
-    {
-      ...options,
-      method: "POST",
     },
   );
 };

@@ -32,7 +32,7 @@ pnpm openmapx services list
 
 ```
 ID            Version  Quality   Provides                            Enabled
-data-manager  1.0.0    built-in  osm-data,gtfs-data,tile-asset-data  yes
+data-manager  1.0.0    built-in                                      yes
 nominatim     1.0.0    built-in  geocoder                            no
 photon        1.0.0    built-in  geocoder                            no
 postgis       1.0.0    built-in  database                            yes

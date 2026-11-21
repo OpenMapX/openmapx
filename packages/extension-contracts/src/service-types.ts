@@ -176,10 +176,9 @@ export interface ServiceContainer {
   /**
    * Pin the compose container to a fixed name (rendered as `container_name`)
    * instead of the compose-derived `<project>-<service>-<n>`. Required for
-   * services the data-manager addresses by bare name over the docker CLI —
-   * `docker exec motis-staging`, `docker restart motis`,
-   * `docker exec motis-feed-proxy nginx -s reload`. Without it those calls
-   * fail with "No such container". Use sparingly: a fixed name prevents
+   * services the operations agent addresses by bare name over the docker CLI,
+   * such as `docker exec motis-feed-proxy nginx -s reload`. Without it those
+   * calls fail with "No such container". Use sparingly: a fixed name prevents
    * scaling that service and collides if two compose projects run on one host.
    */
   containerName?: string;

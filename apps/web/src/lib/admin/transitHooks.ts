@@ -20,10 +20,11 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
 /**
  * React Query hooks for the /admin/data/transit page.
  *
- * All endpoints live under `/api/data-manager/*` on the BFF and are documented
- * in apps/api/src/routes/data-manager.ts. The BFF owns session/service
- * authorization; browser requests send credentials so the admin session
- * cookie travels with the request.
+ * Transit endpoints live under `/api/data-manager/*` on the API
+ * (apps/api/src/routes/data-manager.ts); provider health lives under
+ * `/api/admin/providers*` (apps/api/src/routes/admin-provider-health.ts). The
+ * API owns authorization; browser requests send credentials so the admin
+ * session cookie travels with the request.
  *
  * Refetch cadences are intentionally tiered:
  *   - state: 30s (lock + counts are slow-moving)
@@ -114,7 +115,7 @@ export function useProviderHealth() {
   const client = useAdminClient();
   return useQuery({
     queryKey: ["admin", "transit", "providers"],
-    queryFn: ({ signal }) => adminOrThrow(sdk.getApiDataManagerProviders({ client, signal })),
+    queryFn: ({ signal }) => adminOrThrow(sdk.listAdminProviderHealth({ client, signal })),
     refetchInterval: 30_000,
   });
 }
@@ -158,7 +159,7 @@ export function useResetProvider() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (providerId: string) =>
-      adminOrThrow(sdk.postApiDataManagerProvidersIdReset(providerId, { client })),
+      adminOrThrow(sdk.resetAdminProviderHealth(providerId, { client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "providers"] });
     },

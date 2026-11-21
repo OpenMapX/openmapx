@@ -32,6 +32,7 @@ import {
   getAdminDawarichRequest,
   getAdminDeploymentRequest,
   getAdminPlatformConfigurationRequest,
+  getAdminProviderHealthRequest,
   getAdminServiceConfigRequest,
   getAdminServiceCredentialsRequest,
   getAdminServiceDataRequest,
@@ -47,6 +48,7 @@ import {
   listAdminCoverageRegionsRequest,
   listAdminLogsRequest,
   listAdminOperationsRequest,
+  listAdminProviderHealthRequest,
   listAdminServiceBackupsRequest,
   listAdminServicePresetsRequest,
   listAdminServicesRequest,
@@ -58,6 +60,7 @@ import {
   pruneAdminServiceBackupsRequest,
   pullAdminServiceImagesRequest,
   renderAdminComposeConfigurationRequest,
+  resetAdminProviderHealthRequest,
   restoreAdminServiceBackupRequest,
   rotateAdminDawarichOidcSecretRequest,
   runAdminOperationRequest,
@@ -328,6 +331,15 @@ import type {
   GetAdminPlatformConfiguration429,
   GetAdminPlatformConfiguration500,
   GetAdminPlatformConfiguration503,
+  GetAdminProviderHealth200,
+  GetAdminProviderHealth400,
+  GetAdminProviderHealth401,
+  GetAdminProviderHealth403,
+  GetAdminProviderHealth404,
+  GetAdminProviderHealth413,
+  GetAdminProviderHealth415,
+  GetAdminProviderHealth429,
+  GetAdminProviderHealth500,
   GetAdminService200,
   GetAdminService400,
   GetAdminService401,
@@ -475,6 +487,14 @@ import type {
   ListAdminOperations415,
   ListAdminOperations429,
   ListAdminOperations500,
+  ListAdminProviderHealth200,
+  ListAdminProviderHealth400,
+  ListAdminProviderHealth401,
+  ListAdminProviderHealth403,
+  ListAdminProviderHealth413,
+  ListAdminProviderHealth415,
+  ListAdminProviderHealth429,
+  ListAdminProviderHealth500,
   ListAdminServiceBackups200,
   ListAdminServiceBackups400,
   ListAdminServiceBackups401,
@@ -593,6 +613,15 @@ import type {
   RenderAdminComposeConfiguration503,
   RenderAdminComposeConfigurationBody,
   RenderAdminComposeConfigurationHeaders,
+  ResetAdminProviderHealth200,
+  ResetAdminProviderHealth400,
+  ResetAdminProviderHealth401,
+  ResetAdminProviderHealth403,
+  ResetAdminProviderHealth413,
+  ResetAdminProviderHealth415,
+  ResetAdminProviderHealth429,
+  ResetAdminProviderHealth500,
+  ResetAdminProviderHealth503,
   RestoreAdminServiceBackup200,
   RestoreAdminServiceBackup400,
   RestoreAdminServiceBackup401,
@@ -4271,6 +4300,245 @@ export const previewAdminPlatformConfiguration = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(previewAdminPlatformConfigurationBody),
+    },
+  );
+};
+
+export type listAdminProviderHealthResponse200 = {
+  data: ListAdminProviderHealth200;
+  status: 200;
+};
+
+export type listAdminProviderHealthResponse400 = {
+  data: ListAdminProviderHealth400;
+  status: 400;
+};
+
+export type listAdminProviderHealthResponse401 = {
+  data: ListAdminProviderHealth401;
+  status: 401;
+};
+
+export type listAdminProviderHealthResponse403 = {
+  data: ListAdminProviderHealth403;
+  status: 403;
+};
+
+export type listAdminProviderHealthResponse413 = {
+  data: ListAdminProviderHealth413;
+  status: 413;
+};
+
+export type listAdminProviderHealthResponse415 = {
+  data: ListAdminProviderHealth415;
+  status: 415;
+};
+
+export type listAdminProviderHealthResponse429 = {
+  data: ListAdminProviderHealth429;
+  status: 429;
+};
+
+export type listAdminProviderHealthResponse500 = {
+  data: ListAdminProviderHealth500;
+  status: 500;
+};
+
+export type listAdminProviderHealthResponseSuccess = listAdminProviderHealthResponse200 & {
+  headers: Headers;
+};
+export type listAdminProviderHealthResponseError = (
+  | listAdminProviderHealthResponse400
+  | listAdminProviderHealthResponse401
+  | listAdminProviderHealthResponse403
+  | listAdminProviderHealthResponse413
+  | listAdminProviderHealthResponse415
+  | listAdminProviderHealthResponse429
+  | listAdminProviderHealthResponse500
+) & {
+  headers: Headers;
+};
+
+export type listAdminProviderHealthResponse =
+  | listAdminProviderHealthResponseSuccess
+  | listAdminProviderHealthResponseError;
+
+export const getListAdminProviderHealthUrl = () => {
+  return `/api/admin/providers`;
+};
+
+export const listAdminProviderHealth = async (
+  options?: Parameters<typeof listAdminProviderHealthRequest>[1],
+): Promise<listAdminProviderHealthResponse> => {
+  return listAdminProviderHealthRequest<listAdminProviderHealthResponse>(
+    getListAdminProviderHealthUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getAdminProviderHealthResponse200 = {
+  data: GetAdminProviderHealth200;
+  status: 200;
+};
+
+export type getAdminProviderHealthResponse400 = {
+  data: GetAdminProviderHealth400;
+  status: 400;
+};
+
+export type getAdminProviderHealthResponse401 = {
+  data: GetAdminProviderHealth401;
+  status: 401;
+};
+
+export type getAdminProviderHealthResponse403 = {
+  data: GetAdminProviderHealth403;
+  status: 403;
+};
+
+export type getAdminProviderHealthResponse404 = {
+  data: GetAdminProviderHealth404;
+  status: 404;
+};
+
+export type getAdminProviderHealthResponse413 = {
+  data: GetAdminProviderHealth413;
+  status: 413;
+};
+
+export type getAdminProviderHealthResponse415 = {
+  data: GetAdminProviderHealth415;
+  status: 415;
+};
+
+export type getAdminProviderHealthResponse429 = {
+  data: GetAdminProviderHealth429;
+  status: 429;
+};
+
+export type getAdminProviderHealthResponse500 = {
+  data: GetAdminProviderHealth500;
+  status: 500;
+};
+
+export type getAdminProviderHealthResponseSuccess = getAdminProviderHealthResponse200 & {
+  headers: Headers;
+};
+export type getAdminProviderHealthResponseError = (
+  | getAdminProviderHealthResponse400
+  | getAdminProviderHealthResponse401
+  | getAdminProviderHealthResponse403
+  | getAdminProviderHealthResponse404
+  | getAdminProviderHealthResponse413
+  | getAdminProviderHealthResponse415
+  | getAdminProviderHealthResponse429
+  | getAdminProviderHealthResponse500
+) & {
+  headers: Headers;
+};
+
+export type getAdminProviderHealthResponse =
+  | getAdminProviderHealthResponseSuccess
+  | getAdminProviderHealthResponseError;
+
+export const getGetAdminProviderHealthUrl = (id: string) => {
+  return `/api/admin/providers/${encodeURIComponent(String(id))}`;
+};
+
+export const getAdminProviderHealth = async (
+  id: string,
+  options?: Parameters<typeof getAdminProviderHealthRequest>[1],
+): Promise<getAdminProviderHealthResponse> => {
+  return getAdminProviderHealthRequest<getAdminProviderHealthResponse>(
+    getGetAdminProviderHealthUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type resetAdminProviderHealthResponse200 = {
+  data: ResetAdminProviderHealth200;
+  status: 200;
+};
+
+export type resetAdminProviderHealthResponse400 = {
+  data: ResetAdminProviderHealth400;
+  status: 400;
+};
+
+export type resetAdminProviderHealthResponse401 = {
+  data: ResetAdminProviderHealth401;
+  status: 401;
+};
+
+export type resetAdminProviderHealthResponse403 = {
+  data: ResetAdminProviderHealth403;
+  status: 403;
+};
+
+export type resetAdminProviderHealthResponse413 = {
+  data: ResetAdminProviderHealth413;
+  status: 413;
+};
+
+export type resetAdminProviderHealthResponse415 = {
+  data: ResetAdminProviderHealth415;
+  status: 415;
+};
+
+export type resetAdminProviderHealthResponse429 = {
+  data: ResetAdminProviderHealth429;
+  status: 429;
+};
+
+export type resetAdminProviderHealthResponse500 = {
+  data: ResetAdminProviderHealth500;
+  status: 500;
+};
+
+export type resetAdminProviderHealthResponse503 = {
+  data: ResetAdminProviderHealth503;
+  status: 503;
+};
+
+export type resetAdminProviderHealthResponseSuccess = resetAdminProviderHealthResponse200 & {
+  headers: Headers;
+};
+export type resetAdminProviderHealthResponseError = (
+  | resetAdminProviderHealthResponse400
+  | resetAdminProviderHealthResponse401
+  | resetAdminProviderHealthResponse403
+  | resetAdminProviderHealthResponse413
+  | resetAdminProviderHealthResponse415
+  | resetAdminProviderHealthResponse429
+  | resetAdminProviderHealthResponse500
+  | resetAdminProviderHealthResponse503
+) & {
+  headers: Headers;
+};
+
+export type resetAdminProviderHealthResponse =
+  | resetAdminProviderHealthResponseSuccess
+  | resetAdminProviderHealthResponseError;
+
+export const getResetAdminProviderHealthUrl = (id: string) => {
+  return `/api/admin/providers/${encodeURIComponent(String(id))}/reset`;
+};
+
+export const resetAdminProviderHealth = async (
+  id: string,
+  options?: Parameters<typeof resetAdminProviderHealthRequest>[1],
+): Promise<resetAdminProviderHealthResponse> => {
+  return resetAdminProviderHealthRequest<resetAdminProviderHealthResponse>(
+    getResetAdminProviderHealthUrl(id),
+    {
+      ...options,
+      method: "POST",
     },
   );
 };

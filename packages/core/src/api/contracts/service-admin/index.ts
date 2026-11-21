@@ -8,12 +8,14 @@ export * from "./release-controls";
 import { auditAdminOperations } from "./audit";
 import { cacheAdminOperations } from "./cache";
 import { coverageAdminOperations } from "./coverage";
+import { providerHealthAdminOperations } from "./provider-health";
 import { settingsAdminOperations } from "./settings";
 import { systemAdminOperations } from "./system";
 
 export * from "./audit";
 export * from "./cache";
 export * from "./coverage";
+export * from "./provider-health";
 export * from "./settings";
 export * from "./system";
 
@@ -103,6 +105,7 @@ export const serviceAdminOperations = {
   ...releaseControlAdminOperations,
   ...backupMaintenanceAdminOperations,
   ...cacheAdminOperations,
+  ...providerHealthAdminOperations,
   ...settingsAdminOperations,
   ...auditAdminOperations,
   ...systemAdminOperations,

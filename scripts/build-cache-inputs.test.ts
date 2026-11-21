@@ -30,7 +30,9 @@ describe("service-worker identity cache isolation", () => {
       writeFileSync(probe, "export const value = 1;\n");
       const first = graph("same-deployment");
       writeFileSync(probe, "export const value = 2;\n");
-      expect(graph("same-deployment").get("web#build:app")).not.toBe(first.get("web#build:app"));
+      expect(graph("same-deployment").get("@openmapx/web#build:app")).not.toBe(
+        first.get("@openmapx/web#build:app"),
+      );
     } finally {
       rmSync(probe, { force: true });
     }
@@ -38,12 +40,14 @@ describe("service-worker identity cache isolation", () => {
   it("changes deployment output hashes without invalidating Next compilation or unrelated package builds", () => {
     const first = graph("deployment-one"),
       second = graph("deployment-two");
-    expect(first.get("web#build:app")).toBeTruthy();
-    expect(first.get("web#build:app")).toBe(second.get("web#build:app"));
-    expect(first.get("web#build:deploy")).toBeTruthy();
-    expect(first.get("web#build:deploy")).not.toBe(second.get("web#build:deploy"));
+    expect(first.get("@openmapx/web#build:app")).toBeTruthy();
+    expect(first.get("@openmapx/web#build:app")).toBe(second.get("@openmapx/web#build:app"));
+    expect(first.get("@openmapx/web#build:deploy")).toBeTruthy();
+    expect(first.get("@openmapx/web#build:deploy")).not.toBe(
+      second.get("@openmapx/web#build:deploy"),
+    );
     const others = [...first.keys()].filter(
-      (key) => key.endsWith("#build") && !key.startsWith("web#"),
+      (key) => key.endsWith("#build") && !key.startsWith("@openmapx/web#"),
     );
     expect(others.length).toBeGreaterThan(0);
     for (const key of others) expect(first.get(key), key).toBe(second.get(key));
@@ -54,7 +58,9 @@ describe("web type-check cache inputs", () => {
   it("invalidates the web type check for integration sources it compiles from outside the workspace", () => {
     const probe = resolve(root, "integrations/ci-cache-input-probe.tsx");
     const hash = () =>
-      graph("same-deployment", ["check-types", "--filter=web"]).get("web#check-types");
+      graph("same-deployment", ["check-types", "--filter=@openmapx/web"]).get(
+        "@openmapx/web#check-types",
+      );
     try {
       writeFileSync(probe, "export const value = 1;\n");
       const first = hash();

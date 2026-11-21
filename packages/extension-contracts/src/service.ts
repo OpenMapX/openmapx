@@ -221,7 +221,7 @@ const producesSchema = z.object({
 // Matches a fully-substituted Docker Compose variable reference:
 // `${VAR}`, `${VAR:-default}`, `${VAR:?error message}`, or `$VAR`. Bind mount
 // sources/targets that use this form are passed through to the Compose parser
-// at stack-up time — app-api uses this for its host-path-agreeing mount pair
+// at stack-up time — ops-agent uses this for its host-path-agreeing mount pairs
 // so the operator can set OPENMAPX_HOST_DIR in `.env` without re-rendering
 // the manifest. The `:?…` error-on-unset form is allowed to contain spaces
 // inside the braces so operators get a readable message instead of a cryptic

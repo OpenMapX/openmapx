@@ -1,4 +1,4 @@
-/** BFF/generated-SDK transport/auth proof. DM HTTP is an I/O fixture, not a signed host authority. */
+/** API/generated-SDK transport/auth proof. DM HTTP is an I/O fixture, not a signed host authority. */
 import { createHash, randomUUID } from "node:crypto";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";

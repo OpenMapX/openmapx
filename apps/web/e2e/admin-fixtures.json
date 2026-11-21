@@ -1373,7 +1373,7 @@
       {
         "id": "app-api",
         "name": "API",
-        "image": "ghcr.io/openmapx/app-api:2026.11.1",
+        "image": "ghcr.io/openmapx/api:2026.11.1",
         "containerState": "running",
         "runningImageId": "sha256:1a2b3c4d5e6f",
         "localImageId": "sha256:1a2b3c4d5e6f",

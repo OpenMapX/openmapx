@@ -10,8 +10,9 @@
  *
  * Service manifests can come from third-party community/extension repos, so a
  * key name is untrusted input. Without a shape guard a key such as `../../x`
- * escapes the generated-secrets directory and writes an arbitrary file on the
- * host checkout, which the app-api container bind-mounts read-write.
+ * escapes the generated-secrets directory and writes an arbitrary file
+ * elsewhere in the host checkout, where the configuration renderer runs with
+ * write access.
  *
  * The accepted shape is the union of the three key conventions already in use:
  * SCREAMING_SNAKE service keys (`NY_511_API_KEY`), camelCase integration keys

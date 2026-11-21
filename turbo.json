@@ -23,11 +23,11 @@
       "cache": false,
       "persistent": true
     },
-    "web#build": {
+    "@openmapx/web#build": {
       "cache": false,
       "env": ["SW_BUILD_ID"]
     },
-    "web#build:app": {
+    "@openmapx/web#build:app": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/integrations/**"],
       "outputs": [
@@ -38,7 +38,7 @@
         "src/generated/open-source-licenses.json"
       ]
     },
-    "web#build:deploy": {
+    "@openmapx/web#build:deploy": {
       "dependsOn": ["build:app"],
       "env": ["SW_BUILD_ID"],
       "cache": false
