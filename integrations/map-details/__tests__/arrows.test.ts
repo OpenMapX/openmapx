@@ -86,6 +86,8 @@ describe("arrow glyphs", () => {
     expect(glyphUnion(["none"])).toEqual([]);
     expect(glyphUnion([])).toEqual([]);
     expect(glyphUnion(["unknown"])).toEqual([]);
+    // Mapped values are untrusted: never reach Object.prototype.
+    expect(glyphUnion(["constructor", "__proto__", "toString", "hasOwnProperty"])).toEqual([]);
   });
 });
 

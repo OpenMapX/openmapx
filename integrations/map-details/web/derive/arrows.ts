@@ -100,7 +100,10 @@ export const ARROW_GLYPHS: Record<string, Ring[]> = {
 
 /** The union of the glyphs of a lane's turn values; `none`, empty and unknown values draw nothing. */
 export function glyphUnion(values: string[]): Ring[] {
-  return values.flatMap((value) => ARROW_GLYPHS[value] ?? []);
+  // Turn values come from OSM: look them up among the table's own keys only.
+  return values.flatMap((value) =>
+    Object.hasOwn(ARROW_GLYPHS, value) ? (ARROW_GLYPHS[value] ?? []) : [],
+  );
 }
 
 const ARROW_HALF_LENGTH = 2.5;
