@@ -2,7 +2,7 @@
 
 import type { LngLat } from "@openmapx/core";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface FakeMarkerShape {
   element: HTMLElement;
@@ -77,8 +77,11 @@ function setUp(points: Array<[LngLat, string]>) {
   const s = useDirectionsStore.getState();
   s.close();
   s.open();
-  s.setWaypoint(0, points[0][0], points[0][1]);
-  s.setWaypoint(1, points[points.length - 1][0], points[points.length - 1][1]);
+  const first = points[0];
+  const last = points.at(-1);
+  assert(first && last, "a start and an end waypoint");
+  s.setWaypoint(0, first[0], first[1]);
+  s.setWaypoint(1, last[0], last[1]);
   points.slice(1, -1).forEach(([coords, label], k) => {
     useDirectionsStore.getState().insertWaypoint(k + 1, coords, label);
   });
@@ -90,7 +93,9 @@ const live = () => fake.markers.filter((m) => !m.removed);
 const markerAt = (c: LngLat) => {
   const found = live().filter((m) => m.lngLat[0] === c[0] && m.lngLat[1] === c[1]);
   expect(found).toHaveLength(1);
-  return found[0];
+  const [marker] = found;
+  assert.isDefined(marker);
+  return marker;
 };
 
 const byId = (id: string) => useDirectionsStore.getState().waypoints.find((w) => w.id === id);
@@ -150,7 +155,7 @@ describe("WaypointMarkers", () => {
       useDirectionsStore.getState().insertWaypoint(1, B, "B");
     });
     await waitFor(() => expect(live()).toHaveLength(3));
-    const b = useDirectionsStore.getState().waypoints[1].id;
+    const b = useDirectionsStore.getState().waypoints[1]?.id;
 
     drag(markerAt(C), DROP);
     expect(byId(c)?.coords).toEqual(DROP);
