@@ -60,7 +60,7 @@ const IMAGE_MEDIA_TYPE = /^image\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
  * list of types, a type that is not an image, and SVG, which can carry script.
  */
 function servableImageType(header: string | null): string | null {
-  const essence = (header ?? "").split(";")[0].trim().toLowerCase();
+  const essence = (header ?? "").replace(/;.*/s, "").trim().toLowerCase();
   if (!IMAGE_MEDIA_TYPE.test(essence) || essence === "image/svg+xml") return null;
   return essence;
 }
@@ -186,11 +186,11 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         // instance or bucket that holds the file, which no allowlist can know.
         const panoramaxRedirect = panoramaxRedirectPolicy(parsed);
         if (parsed.hostname === "photos.app.goo.gl" || parsed.hostname === "photos.google.com") {
-          const resolved = await resolveGooglePhotosLink(url);
-          if (resolved.length === 0) {
+          const [resolvedUrl] = await resolveGooglePhotosLink(url);
+          if (resolvedUrl === undefined) {
             return reply.status(404).send({ error: "Could not resolve Google Photos link" });
           }
-          imageUrl = resolved[0];
+          imageUrl = resolvedUrl;
           resolvedGooglePhotos = true;
           // The resolver is a dependency, not an allowlist bypass. Validate its
           // initial output independently before the first socket is opened.

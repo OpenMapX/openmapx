@@ -19,7 +19,10 @@ function simplifyCoords(coords: [number, number][], maxPoints: number): [number,
   const step = (coords.length - 1) / (maxPoints - 1);
   const result: [number, number][] = [];
   for (let i = 0; i < maxPoints; i++) {
-    result.push(coords[Math.round(i * step)]);
+    const point = coords[Math.round(i * step)];
+    // The step spreads maxPoints samples over the array's own indices.
+    if (point === undefined) throw new RangeError("Sampled coordinate outside the route");
+    result.push(point);
   }
   return result;
 }

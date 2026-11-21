@@ -27,6 +27,13 @@ interface JournalEntry {
   when: number;
 }
 
+/** The row of a query that always returns exactly one: a bare expression or an ungrouped aggregate. */
+function singleRow<T>(rows: readonly T[], what: string): T {
+  const [row] = rows;
+  if (row === undefined) throw new Error(`The ${what} query returned no row`);
+  return row;
+}
+
 /**
  * The journal tags Drizzle's migrator will apply, by its own rule: every entry
  * newer than the newest applied migration's timestamp.
@@ -44,13 +51,20 @@ function readJournal(migrationsFolder: string): JournalEntry[] {
 
 /** The newest applied migration's timestamp, or null before the first migration. */
 async function lastAppliedAt(session: Sql): Promise<number | null> {
-  const [{ exists }] = await session<{ exists: boolean }[]>`
-    SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
-  `;
+  const { exists } = singleRow(
+    await session<{ exists: boolean }[]>`
+      SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
+    `,
+    "migration table",
+  );
   if (!exists) return null;
-  const [{ applied }] = await session<{ applied: string | null }[]>`
-    SELECT max(created_at)::text AS applied FROM drizzle.__drizzle_migrations
-  `;
+  // An aggregate without GROUP BY returns one row, even over an empty table.
+  const { applied } = singleRow(
+    await session<{ applied: string | null }[]>`
+      SELECT max(created_at)::text AS applied FROM drizzle.__drizzle_migrations
+    `,
+    "last applied migration",
+  );
   return applied === null ? null : Number(applied);
 }
 
@@ -128,12 +142,18 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
   progressTimer.unref();
 
   const run = async (): Promise<string[]> => {
-    const [{ pid }] = await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+    const { pid } = singleRow(
+      await session<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`,
+      "backend pid",
+    );
     backendPid = pid;
 
-    const [{ locked }] = await session<{ locked: boolean }[]>`
-      SELECT pg_try_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint) AS locked
-    `;
+    const { locked } = singleRow(
+      await session<{ locked: boolean }[]>`
+        SELECT pg_try_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint) AS locked
+      `,
+      "advisory lock",
+    );
     if (!locked) {
       log.info({}, "Waiting for another app-api instance to finish migrating the database");
       await session`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint)`;

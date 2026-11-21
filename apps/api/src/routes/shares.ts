@@ -110,10 +110,13 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
           // Lock the owner even when no shares exist; serialize count and insert
           // across all API processes competing for the same user's quota.
           await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
-          const [{ count }] = await tx
+          // An ungrouped count always returns one row.
+          const [countRow] = await tx
             .select({ count: sql<number>`count(*)::int` })
             .from(shareLink)
             .where(eq(shareLink.userId, userId));
+          if (countRow === undefined) throw new Error("The share count query returned no row");
+          const { count } = countRow;
           if (count >= MAX_SHARES_PER_USER) {
             throw httpError(409, "Share link limit reached — delete an existing link first");
           }
