@@ -1,12 +1,10 @@
 "use client";
 
-import { useColorScheme } from "@mui/material/styles";
 import {
   type BuildingReplacement,
   createPlace,
   PANEL,
   useBuildingReplacementStore,
-  useLayerStore,
   useNavigationStore,
   usePlaceStore,
   useSidebarStore,
@@ -20,6 +18,7 @@ import {
   getMapClickOwner,
   registerCustomMapHitTester,
 } from "@/integration-api/map/mapClickOwnership";
+import { useSceneLight } from "@/integration-api/map/sceneLight";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
@@ -28,6 +27,7 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { areaOfInterest } from "./web/area";
 import { acceptableHull, derivedHull, toReplacement } from "./web/footprint";
 import { groundHeight, mapTerrainProbe } from "./web/grounding";
+import { lightingOf } from "./web/lighting";
 import { type Candidate, LandmarkCatalogue } from "./web/loader";
 import type { LandmarkScene, PlacedModel } from "./web/scene";
 
@@ -96,10 +96,7 @@ export function LandmarkModelsLayer(): null {
   const selected = useOverlayLayerVisible("3d-buildings");
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const maskingAvailable = useBuildingReplacementStore((s) => s.maskingAvailable);
-  const baseLayer = useLayerStore((s) => s.activeLayer);
-  // The app themes through MUI colour schemes, so `palette.mode` stays "light".
-  const { mode, systemMode } = useColorScheme();
-  const dark = (mode === "system" ? systemMode : mode) === "dark";
+  const light = useSceneLight((l) => l);
   const [cameraReady, setCameraReady] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [scene, setScene] = useState<LandmarkScene | null>(null);
@@ -211,10 +208,12 @@ export function LandmarkModelsLayer(): null {
     };
   }, [map, mapReady, styleVersion, scene, active]);
 
-  // Night shading follows the dark theme, except over imagery.
+  // The shared scene light decides the light direction and colour, and night.
   useEffect(() => {
-    scene?.layer.setNight(dark && baseLayer !== "satellite");
-  }, [scene, dark, baseLayer]);
+    if (!scene) return;
+    scene.layer.setLighting(lightingOf(light));
+    scene.layer.setNight(light.night);
+  }, [scene, light]);
 
   // Load the landmarks around the view and place the resident models.
   useEffect(() => {

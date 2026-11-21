@@ -1,6 +1,15 @@
 import { MercatorCoordinate } from "maplibre-gl";
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
+import {
+  AmbientLight,
+  BoxGeometry,
+  DirectionalLight,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  type Scene,
+} from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NEUTRAL_SCENE_LIGHT, sunVector } from "@/integration-api/map/sceneLight";
 
 const fake = vi.hoisted(() => {
   const state = { fail: false, renderers: [] as FakeRenderer[] };
@@ -75,6 +84,14 @@ function placed(assetId: string, lngLat: [number, number] = ANCHOR): PlacedModel
 
 function renderArgs(projectionTransition = 0) {
   return { defaultProjectionData: { mainMatrix: mainMatrix(), projectionTransition } } as never;
+}
+
+function lightsOf(layer: LandmarkModelLayer) {
+  const children = (layer as unknown as { scene: Scene }).scene.children;
+  return {
+    sun: children.find((child) => child instanceof DirectionalLight) as DirectionalLight,
+    ambient: children.find((child) => child instanceof AmbientLight) as AmbientLight,
+  };
 }
 
 afterEach(() => {
@@ -177,6 +194,49 @@ describe("LandmarkModelLayer", () => {
     layer.render({} as WebGL2RenderingContext, renderArgs());
     expect(layer.pick({ x: 400, y: 300 })).toBe("tower");
     expect(layer.pick({ x: 5, y: 5 })).toBeNull();
+  });
+
+  it("starts from the shared neutral sun", () => {
+    const { sun, ambient } = lightsOf(new LandmarkModelLayer({ onUnsupported: vi.fn() }));
+    const [x, y, z] = sunVector(NEUTRAL_SCENE_LIGHT);
+    expect(sun.position.x).toBeCloseTo(x, 6);
+    expect(sun.position.y).toBeCloseTo(y, 6);
+    expect(sun.position.z).toBeCloseTo(z, 6);
+    expect(sun.color.getHexString()).toBe("fff4df");
+    expect(sun.intensity).toBe(2.2);
+    expect(ambient.intensity).toBe(1.4);
+  });
+
+  it("updates its lights from the scene light and repaints only on change", () => {
+    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
+    layer.onAdd(map as never, {} as WebGL2RenderingContext);
+    const lighting = {
+      direction: [0, 0, 1] as [number, number, number],
+      color: "#ffc58c",
+      intensity: 2.4,
+      ambientColor: "#ffe2c4",
+      ambientIntensity: 1.2,
+    };
+    layer.setLighting(lighting);
+    const { sun, ambient } = lightsOf(layer);
+    expect(sun.color.getHexString()).toBe("ffc58c");
+    expect(sun.intensity).toBe(2.4);
+    expect(sun.position.toArray()).toEqual([0, 0, 1]);
+    expect(ambient.color.getHexString()).toBe("ffe2c4");
+    expect(ambient.intensity).toBe(1.2);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+    layer.setLighting({ ...lighting });
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+  });
+
+  it("repaints for a night change only when it changes", () => {
+    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
+    layer.onAdd(map as never, {} as WebGL2RenderingContext);
+    layer.setNight(true);
+    layer.setNight(true);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
   });
 
   it("setNight switches every placed model", () => {
