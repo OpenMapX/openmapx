@@ -2,7 +2,7 @@ import {
   captureReviewProviderContributors,
   type IntegrationContext,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import type { ReviewProvider } from "@openmapx/integration-reviews/types";
 import { contributorKey, contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,7 +69,7 @@ function registeredProvider(): { provider: ReviewProvider; ctx: IntegrationConte
     manifest: structuredClone(manifest) as unknown as IntegrationContext["manifest"],
   });
   setup(ctx);
-  const [provider] = ctx.registered.review as ReviewProvider[];
+  const provider = nth(ctx.registered.review as ReviewProvider[], 0);
   return { provider: captureReviewProviderContributors(ctx, provider), ctx };
 }
 
@@ -82,7 +82,7 @@ describe("Mangrove review licence credits", () => {
     mockedGetReviews.mockResolvedValue({
       reviews: [wire({ signature: "sa", license: "CC-BY-SA-4.0" })],
     });
-    const [review] = await registeredProvider().provider.getReviews(SUBJECT);
+    const review = nth(await registeredProvider().provider.getReviews(SUBJECT), 0);
 
     expect(review.metadata?.license).toBe("CC-BY-SA-4.0");
     expect(review.contributors).toEqual([
@@ -122,7 +122,7 @@ describe("Mangrove review licence credits", () => {
     const credits = contributorsForRecords(reviews);
 
     expect(credits).toHaveLength(1);
-    expect(credits[0].licensing?.bindings.map((binding) => binding.license)).toEqual([
+    expect(nth(credits, 0).licensing?.bindings.map((binding) => binding.license)).toEqual([
       {
         kind: "spdx",
         expression: "CC-BY-4.0",
@@ -162,7 +162,7 @@ describe("Mangrove review licence credits", () => {
         }),
       ],
     });
-    const [review] = await registeredProvider().provider.getReviews(SUBJECT);
+    const review = nth(await registeredProvider().provider.getReviews(SUBJECT), 0);
 
     expect(review.id).toBe("original");
     expect(review.metadata?.license).toBe("CC-BY-SA-4.0");
@@ -202,6 +202,6 @@ describe("Mangrove review licence credits", () => {
     source.name = "Changed supplier";
     pending.resolve({ reviews: [wire({ signature: "sa", license: "CC-BY-SA-4.0" })] });
 
-    expect((await read)[0].contributors?.[0]?.name).toBe("Mangrove.reviews");
+    expect(nth(await read, 0).contributors?.[0]?.name).toBe("Mangrove.reviews");
   });
 });

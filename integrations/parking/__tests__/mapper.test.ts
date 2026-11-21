@@ -476,10 +476,10 @@ describe("mapParkingSiteToDetail", () => {
       ["Up to 1 month (Monthly ticket, Public transport season ticket)", "CHF 100.00"],
     ]);
     // The reader's locale places the symbol and the decimal separator.
-    expect(text(pricing?.rows?.[0][1], "de")).toBe("2,00 €");
-    expect(text(pricing?.rows?.[6][1], "de")).toBe("1,50 CHF pro Stunde");
-    expect(text(pricing?.rows?.[2][0], "de")).toBe("Bis 1 Monat (P-Card)");
-    expect(text(pricing?.rows?.[4][1], "de")).toMatch(/pro Stunde \(abgerechnet je 30\s?Min/);
+    expect(text(pricing?.rows?.[0]?.[1], "de")).toBe("2,00 €");
+    expect(text(pricing?.rows?.[6]?.[1], "de")).toBe("1,50 CHF pro Stunde");
+    expect(text(pricing?.rows?.[2]?.[0], "de")).toBe("Bis 1 Monat (P-Card)");
+    expect(text(pricing?.rows?.[4]?.[1], "de")).toMatch(/pro Stunde \(abgerechnet je 30\s?Min/);
   });
 
   it("without rate rows the pricing shows the tariff text, else free or paid", () => {

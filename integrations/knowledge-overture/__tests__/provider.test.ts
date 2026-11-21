@@ -155,8 +155,8 @@ describe("knowledge-overture provider lookup", () => {
 
       expect(result?.externalIds?.gers).toBe("overture-abc-123");
       expect(db.execute).toHaveBeenCalledTimes(1);
-      expect(db.execute.mock.calls[0][0]).toContain("WHERE gers_id = $1");
-      expect(db.execute.mock.calls[0][1]).toEqual(["overture-abc-123"]);
+      expect(db.execute.mock.calls[0]?.[0]).toContain("WHERE gers_id = $1");
+      expect(db.execute.mock.calls[0]?.[1]).toEqual(["overture-abc-123"]);
     },
   );
 

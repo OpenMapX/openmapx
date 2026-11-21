@@ -13,7 +13,7 @@ const leg = (mode: string, start: string, end: string, extra = {}) =>
     ...(mode === "WALK" ? {} : { routeShortName: mode, tripId: mode }),
     ...extra,
   }) as Leg;
-const chain = [
+const chain: [Leg, Leg, Leg] = [
   leg("WALK", "20:50", "20:51"),
   leg("REGIONAL_RAIL", "20:51", "21:44"),
   leg("WALK", "21:44", "21:45"),

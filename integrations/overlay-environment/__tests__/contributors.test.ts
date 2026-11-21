@@ -55,7 +55,7 @@ it("captures only the retained station supplier before dedupe and cache", async 
     reply as never,
   );
   expect(body).toHaveLength(1);
-  expect(body[0].contributors?.map((a) => a.sourceId)).toEqual(["opensensemap"]);
+  expect(body[0]?.contributors?.map((a) => a.sourceId)).toEqual(["opensensemap"]);
   expect(cacheSet.mock.calls[0]?.[1]).toEqual(body);
 });
 it("UV has no Sensor.Community contribution", async () => {
@@ -95,7 +95,7 @@ it("UV has no Sensor.Community contribution", async () => {
     { query: { south: "50", west: "5", north: "52", east: "7", sensor: "uv" } } as never,
     reply as never,
   );
-  expect(body[0].contributors?.map((a) => a.sourceId)).toEqual(["opensensemap"]);
+  expect(body[0]?.contributors?.map((a) => a.sourceId)).toEqual(["opensensemap"]);
 });
 
 /** Read the real registered route with controlled upstream bytes. */

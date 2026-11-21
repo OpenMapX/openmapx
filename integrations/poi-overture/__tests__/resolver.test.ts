@@ -55,21 +55,21 @@ describe("overture place resolver", () => {
     if (!resolver) throw new Error("The Overture place resolver is not registered");
     const de = await resolver(GERS_ID, { lang: "de-DE" });
     expect(de?.brand?.name).toBe("Deutsche Marke");
-    expect(de?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+    expect(de?.fieldContributors?.["brand.name"]?.map((r) => r.sourceId)).toEqual([
       "overture",
       "microsoft-places",
     ]);
-    expect(de?.fieldContributors?.["brand.wikidata"].map((r) => r.sourceId)).toEqual([
+    expect(de?.fieldContributors?.["brand.wikidata"]?.map((r) => r.sourceId)).toEqual([
       "overture",
       "foursquare",
     ]);
-    expect(de?.fieldContributors?.["osmTags.brand"].map((r) => r.sourceId)).toEqual([
+    expect(de?.fieldContributors?.["osmTags.brand"]?.map((r) => r.sourceId)).toEqual([
       "overture",
       "microsoft-places",
     ]);
     const fallback = await resolver(GERS_ID, { lang: "fr" });
     expect(fallback?.brand?.name).toBe("English Brand");
-    expect(fallback?.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+    expect(fallback?.fieldContributors?.["brand.name"]?.map((r) => r.sourceId)).toEqual([
       "overture",
       "meta-places",
     ]);

@@ -1,4 +1,5 @@
 import type { RouteStep } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 // A walk from Alexanderplatz to Museum Island, Berlin, where sidewalks and the
 // paths across the square are mapped as unnamed ways: Valhalla's route, the
@@ -18,7 +19,7 @@ import {
 
 const valhalla = valhallaHarness();
 
-const leg = fixture.trip.legs[0];
+const leg = nth(fixture.trip.legs, 0);
 const summary = (steps: RouteStep[]) =>
   steps.map((step) => [step.instruction, Math.round(step.distance)]);
 
@@ -26,8 +27,8 @@ function guide(lang: string, { edges = true, names = true } = {}) {
   const route = transformTrip(fixture.trip as never, "walking");
   const plan = planWalkingLeg(
     leg.maneuvers,
-    route.legs[0].steps,
-    route.legs[0].geometry,
+    nth(route.legs, 0).steps,
+    nth(route.legs, 0).geometry,
     edges ? fixture.edges : undefined,
   );
   const lookups = nameLookups(plan);
@@ -104,9 +105,9 @@ describe("walking guidance on an unnamed sidewalk network", () => {
     expect(total(steps, "distance")).toBeCloseTo(total(original.steps, "distance"), 6);
     expect(total(steps, "duration")).toBeCloseTo(total(original.steps, "duration"), 6);
     for (let i = 1; i < steps.length; i++) {
-      expect(steps[i].coordinates[0]).toEqual(steps[i - 1].coordinates.at(-1));
+      expect(nth(steps, i).coordinates[0]).toEqual(nth(steps, i - 1).coordinates.at(-1));
     }
-    expect(steps[0].coordinates[0]).toEqual(original.geometry[0]);
+    expect(nth(steps, 0).coordinates[0]).toEqual(original.geometry[0]);
     expect(steps.at(-1)?.coordinates.at(-1)).toEqual(original.geometry.at(-1));
   });
 

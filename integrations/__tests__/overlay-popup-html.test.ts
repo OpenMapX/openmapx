@@ -67,8 +67,10 @@ function collectSourceFiles(dir: string): string[] {
 
 function relativeImports(fileName: string, source: string): string[] {
   const resolved: string[] = [];
-  for (const match of source.matchAll(/(?:from|import)\s*["'](\.[^"']*)["']/g)) {
-    const target = resolveModule(fileName, match[1]);
+  for (const [, specifier] of source.matchAll(/(?:from|import)\s*["'](\.[^"']*)["']/g)) {
+    // The capture group is required, so every match has it.
+    if (specifier === undefined) continue;
+    const target = resolveModule(fileName, specifier);
     if (target) resolved.push(target);
   }
   return resolved;
@@ -119,7 +121,10 @@ function findUnsafeAnchorOffenders(files: string[]): string[] {
     if (EXEMPT.has(path.relative(INTEGRATIONS_DIR, file))) return [];
     const offenders: string[] = [];
     for (const match of source.matchAll(/href\s*=\s*["']\$\{([^}]*)\}/g)) {
-      const expression = match[1].trim();
+      const [, interpolated] = match;
+      // The capture group is required, so every match has it.
+      if (interpolated === undefined) continue;
+      const expression = interpolated.trim();
       if (expression.startsWith("sanitizeUrl(") || hasSanitizedBinding(source, expression))
         continue;
       offenders.push(

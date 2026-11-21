@@ -2,6 +2,7 @@ import { ProviderRetiredError, type RideProvider } from "@openmapx/integration-f
 import {
   createMockIntegrationContext,
   installHostCapabilities,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createRideOrchestrator, redactUrlsInReason } from "./orchestrator.js";
@@ -271,14 +272,14 @@ describe("getQuotes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T12:00:00.000Z"));
     const o = createRideOrchestrator(ctxWith([quoting("a", true)]));
-    const [result] = await o.getQuotes(request, ["a"]);
-    expect(result.quotes[0].expiresAt).toBe("2026-08-09T12:00:45.000Z");
+    const result = nth(await o.getQuotes(request, ["a"]), 0);
+    expect(nth(result.quotes, 0).expiresAt).toBe("2026-08-09T12:00:45.000Z");
     vi.useRealTimers();
   });
 
   it("returns an empty quote list for a provider without the quote capability", async () => {
     const o = createRideOrchestrator(ctxWith([makeProvider({ id: "linkonly" })]));
-    const [result] = await o.getQuotes(request, ["linkonly"]);
+    const result = nth(await o.getQuotes(request, ["linkonly"]), 0);
     expect(result.quotes).toEqual([]);
   });
 });
@@ -304,9 +305,10 @@ describe("quote contributor ownership", () => {
           };
         },
       });
-      const [result] = await createRideOrchestrator(ctxWith([provider])).getQuotes(request, [
-        "supplier",
-      ]);
+      const result = nth(
+        await createRideOrchestrator(ctxWith([provider])).getQuotes(request, ["supplier"]),
+        0,
+      );
       expect(result.quotes).toEqual([]);
       expect(result.attributions).toEqual([]);
     },
@@ -335,11 +337,12 @@ describe("quote contributor ownership", () => {
         freshness,
       }),
     });
-    const [result] = await createRideOrchestrator(ctxWith([provider])).getQuotes(request, [
-      "supplier",
-    ]);
-    expect(result.quotes[0].contributors).toEqual([a]);
-    expect(result.quotes[1].contributors).toEqual([]);
+    const result = nth(
+      await createRideOrchestrator(ctxWith([provider])).getQuotes(request, ["supplier"]),
+      0,
+    );
+    expect(nth(result.quotes, 0).contributors).toEqual([a]);
+    expect(nth(result.quotes, 1).contributors).toEqual([]);
     expect(result.attributions).toEqual([a]);
   });
 });
@@ -375,7 +378,7 @@ describe("availability contributor ownership", () => {
           { sourceId: "feed", name: "Booking rules supplier", attributionText: "Captured notice" },
         ],
       );
-      expect((await orchestrator.getQuotes(request, ["supplier"]))[0].attributions).toEqual([]);
+      expect(nth(await orchestrator.getQuotes(request, ["supplier"]), 0).attributions).toEqual([]);
     },
   );
 });

@@ -28,9 +28,9 @@ describe("orchestrator preset: dispatch", () => {
     expect(provider.search).toHaveBeenCalled();
     // The orchestrator translates "preset:<id>" to the "__preset__" sentinel before
     // dispatching, so providers see a stable category string regardless of preset id.
-    expect(calls[0].category).toBe("__preset__");
-    const opts = calls[0].opts as { osmTags?: Record<string, string> };
-    expect(opts.osmTags).toEqual({ amenity: "ice_cream" });
+    expect(calls[0]?.category).toBe("__preset__");
+    const opts = calls[0]?.opts as { osmTags?: Record<string, string> } | undefined;
+    expect(opts?.osmTags).toEqual({ amenity: "ice_cream" });
   });
 
   it("returns 400-shaped error for unknown preset id", async () => {

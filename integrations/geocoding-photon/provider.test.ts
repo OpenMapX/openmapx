@@ -354,7 +354,7 @@ it.each(["geocode", "reverseGeocode", "autocomplete"] as const)(
           : await requiredAutocomplete("Köln");
     const row = Array.isArray(result) ? result[0] : result;
     expect(row?.sourceIds).toEqual(["photon"]);
-    expect(new URL(String(mockFetch.mock.calls[0][0])).hostname).toBe("photon.test");
+    expect(new URL(String(mockFetch.mock.calls[0]?.[0])).hostname).toBe("photon.test");
   },
 );
 it("keeps the same acquired endpoint for supplemental native-name data", async () => {
@@ -398,8 +398,8 @@ it("keeps the same acquired endpoint for supplemental native-name data", async (
     "photon.test",
     "photon.test",
   ]);
-  expect(result.searchMatch?.value).toBe("Köln");
-  expect(result.sourceIds).toEqual(["photon"]);
+  expect(result?.searchMatch?.value).toBe("Köln");
+  expect(result?.sourceIds).toEqual(["photon"]);
 });
 
 describe("Photon features that cannot be shown", () => {

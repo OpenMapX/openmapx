@@ -70,7 +70,7 @@ describe("parseCommunautoStations", () => {
     });
 
     expect(stations).toHaveLength(1);
-    expect(stations[0].id).toBe("ca-communauto/90/1");
+    expect(stations[0]?.id).toBe("ca-communauto/90/1");
   });
 
   it("handles an empty or absent stations array", () => {

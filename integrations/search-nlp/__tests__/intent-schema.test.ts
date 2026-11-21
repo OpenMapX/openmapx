@@ -94,7 +94,7 @@ describe("SearchIntentWireSchema", () => {
 
   it("normalizes null/default fields into the compact domain shape", () => {
     const intent = normalizeSearchIntent(validWire);
-    expect(intent.filter.selectors[0].tags[0]).toEqual({ key: "amenity", value: "cafe" });
+    expect(intent.filter.selectors[0]?.tags[0]).toEqual({ key: "amenity", value: "cafe" });
     expect(intent.filter.exclude).toEqual([{ key: "brand", op: "exists" }]);
     expect(intent.filter.elementTypes).toBeUndefined();
     expect(intent.spatial_constraint).toEqual({

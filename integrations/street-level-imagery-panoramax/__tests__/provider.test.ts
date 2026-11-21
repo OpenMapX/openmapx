@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { formatLicensing } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { type StacItem, stacItemToImage, stacLinksToStreetLevelLinks } from "../provider";
@@ -305,7 +306,7 @@ describe("searchImages", () => {
       limit: 20,
     });
     expect(results).toEqual([]);
-    const url = String(fetchMock.mock.calls[0][0]);
+    const url = String(nth(fetchMock.mock.calls, 0)[0]);
     const parsed = new URL(url);
     expect(parsed.origin + parsed.pathname).toBe("https://example.test/api/search");
     expect(parsed.searchParams.get("place_position")).toBe("6.676,51.179");
@@ -327,7 +328,7 @@ describe("searchImages", () => {
       tileUrlTemplate: "/tiles/{z}/{x}/{y}",
     });
     await provider.searchImages({ lngLat: [6.676, 51.179], radiusM: 400 });
-    const parsed = new URL(String(fetchMock.mock.calls[0][0]));
+    const parsed = new URL(String(nth(fetchMock.mock.calls, 0)[0]));
     expect(parsed.searchParams.get("bbox")).toBeTruthy();
     expect(parsed.searchParams.get("place_position")).toBeNull();
     vi.unstubAllGlobals();
@@ -350,7 +351,7 @@ describe("searchImages", () => {
       lookingAt: [6.676, 51.179],
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(new URL(String(fetchMock.mock.calls[1][0])).searchParams.get("bbox")).toBeTruthy();
+    expect(new URL(String(nth(fetchMock.mock.calls, 1)[0])).searchParams.get("bbox")).toBeTruthy();
     vi.unstubAllGlobals();
   });
 
@@ -380,8 +381,8 @@ describe("searchImages", () => {
     });
     const results = await provider.searchImages({ lngLat: [6.676, 51.179], radiusM: 400 });
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("item-1");
-    expect(results[0].author).toBe("motocultrice");
+    expect(results[0]?.id).toBe("item-1");
+    expect(results[0]?.author).toBe("motocultrice");
     expect(provider.capabilities().search).toEqual({
       heading: false,
       capturedAfter: true,

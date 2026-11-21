@@ -48,7 +48,7 @@ describe("geocoding orchestrator served-provider tagging", () => {
     );
     const results = await getGeocodingProvider(ctx).geocode("q");
     expect(results).toHaveLength(1);
-    expect(results[0].provider).toBe("geocoding-photon");
+    expect(results[0]?.provider).toBe("geocoding-photon");
   });
 
   it("tags autocomplete suggestions with the serving integration id", async () => {
@@ -119,7 +119,7 @@ it("captures only selected backend credits before cache and does not mutate prov
   } as unknown as IntegrationContext;
   const [captured] = await getGeocodingProvider(ctx).geocode("q");
   selected.name = "Changed catalogue";
-  expect(captured.contributors?.map((receipt) => receipt.name)).toEqual(["Captured selected"]);
+  expect(captured?.contributors?.map((receipt) => receipt.name)).toEqual(["Captured selected"]);
   expect(raw.provider).toBeUndefined();
   expect(raw.contributors).toBeUndefined();
 });
@@ -152,5 +152,5 @@ it("captures geocoder metadata before the selected backend request resolves", as
   const pending = getGeocodingProvider(ctx).geocode("q");
   source.name = "Changed catalogue";
   finish([{ ...result("row"), sourceIds: ["selected"] }]);
-  expect((await pending)[0].contributors?.[0].name).toBe("Original acquired notice");
+  expect((await pending)[0]?.contributors?.[0]?.name).toBe("Original acquired notice");
 });

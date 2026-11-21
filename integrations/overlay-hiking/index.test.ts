@@ -13,6 +13,7 @@ import {
   fakeHttpClient,
   httpStatus,
   type MockIntegrationContext,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { bboxToMercator, latToMercatorY, lngToMercatorX } from "./coord-transform.js";
@@ -137,7 +138,7 @@ describe("fetchRouteGeometry", () => {
 
     expect(fc.type).toBe("FeatureCollection");
     expect(fc.features).toHaveLength(1);
-    const f = fc.features[0];
+    const f = nth(fc.features, 0);
     // lat/lon swapped to GeoJSON [lon, lat].
     expect(f.geometry.coordinates).toEqual([
       [6.0, 45.0],
@@ -166,11 +167,11 @@ describe("fetchRouteGeometry", () => {
 
     const fc = await fetchRouteGeometry(7);
     expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].geometry.coordinates).toEqual([
+    expect(nth(fc.features, 0).geometry.coordinates).toEqual([
       [20, 10],
       [21, 11],
     ]);
-    expect(fc.features[0].properties).toEqual({ sac_scale: "", surface: "", highway: "" });
+    expect(nth(fc.features, 0).properties).toEqual({ sac_scale: "", surface: "", highway: "" });
   });
 });
 
@@ -260,20 +261,20 @@ describe("/hiking/shelters route", () => {
     expect(result.status).toBe(200);
     expect(body.type).toBe("FeatureCollection");
     expect(body.features).toHaveLength(2);
-    expect(body.features[0].geometry).toEqual({ type: "Point", coordinates: [6.82, 45.85] });
+    expect(nth(body.features, 0).geometry).toEqual({ type: "Point", coordinates: [6.82, 45.85] });
     expect(
-      JSON.parse(String(body.features[0].properties._mapAttributions)).map(
+      JSON.parse(String(nth(body.features, 0).properties._mapAttributions)).map(
         (a: { sourceId: string }) => a.sourceId,
       ),
     ).toEqual(["refuges-info"]);
-    expect(body.features[0].properties).toMatchObject({
+    expect(nth(body.features, 0).properties).toMatchObject({
       id: 555,
       name: "Refuge du Goûter",
       type: "refuge",
       altitude: 3835,
       capacity: 120,
     });
-    expect(body.features[1].properties).toMatchObject({
+    expect(nth(body.features, 1).properties).toMatchObject({
       type: "cabane",
       altitude: 2000,
       capacity: 8,

@@ -1,5 +1,6 @@
 import type { TemporalCapabilities } from "@openmapx/core";
 import type { TripPlanRequest } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
@@ -112,11 +113,11 @@ describe("planTransitChain", () => {
     expect(calls[0]).toMatchObject({ from: COLOGNE, to: BONN });
     // Segment one arrives 40 min after departure, dwells 30 min, so segment two
     // is asked for 70 min after the anchor.
-    expect(Date.parse(calls[1].departureTime as string)).toBe(
-      Date.parse(calls[0].departureTime as string) + 40 * 60_000 + 30 * 60_000,
+    expect(Date.parse(nth(calls, 1).departureTime as string)).toBe(
+      Date.parse(nth(calls, 0).departureTime as string) + 40 * 60_000 + 30 * 60_000,
     );
     expect(plan.segments).toHaveLength(2);
-    expect(plan.segments[0].boardingWaitSeconds).toBe(600);
+    expect(nth(plan.segments, 0).boardingWaitSeconds).toBe(600);
     expect(plan.warnings).toEqual([]);
   });
 
@@ -171,7 +172,7 @@ describe("planTransitChain", () => {
       capabilities: CAPABILITIES,
     });
 
-    expect(plan.segments[0].delaySeconds).toBe(360);
+    expect(nth(plan.segments, 0).delaySeconds).toBe(360);
   });
 
   it("warns when a chosen leg is cancelled", async () => {
@@ -380,7 +381,7 @@ describe("backward actual transit times", () => {
           itinerary("2026-09-01T09:00:00Z", "2026-09-01T09:55:00Z"),
         ]),
     });
-    expect(plan.segments[0].itinerary.endTime).toBe("2026-09-01T09:55:00Z");
+    expect(nth(plan.segments, 0).itinerary.endTime).toBe("2026-09-01T09:55:00Z");
   });
 
   it("uses the stricter final waypoint deadline for requests and violations", async () => {
@@ -392,7 +393,9 @@ describe("backward actual transit times", () => {
       schedules: [{ timeZone: "UTC" }, { timeZone: "UTC", arriveBy: "2026-09-01T09:45" }],
       planTrip,
     });
-    expect(planTrip.mock.calls[0][0]).toMatchObject({ arrivalTime: "2026-09-01T09:45:00.000Z" });
+    expect(nth(planTrip.mock.calls, 0)[0]).toMatchObject({
+      arrivalTime: "2026-09-01T09:45:00.000Z",
+    });
     expect(plan.schedule.violations.filter((v) => v.kind === "late-arrival")).toEqual([
       {
         kind: "late-arrival",
@@ -438,7 +441,7 @@ describe("backward actual transit times", () => {
       anchor: { kind: "arriveBy", wallClock: "2026-09-01T12:00" },
       planTrip,
     });
-    expect(planTrip.mock.calls[1][0].arrivalTime).toBe("2026-09-01T10:50:00.000Z");
+    expect(nth(planTrip.mock.calls, 1)[0].arrivalTime).toBe("2026-09-01T10:50:00.000Z");
     expect(plan.schedule.stops[1]).toMatchObject({
       arrival: "2026-09-01T10:55:00+00:00",
       departure: "2026-09-01T11:00:00+00:00",
@@ -484,7 +487,7 @@ describe("backward actual transit times", () => {
       waitSeconds: 0,
       departure: "2026-09-01T10:00:00+00:00",
     });
-    expect(plan.schedule.stops[0].arrival).toBeUndefined();
+    expect(nth(plan.schedule.stops, 0).arrival).toBeUndefined();
     expect(plan.schedule.totalDwellSeconds).toBe(0);
     expect(plan.warnings).toContainEqual({
       kind: "missed-connection",
@@ -506,7 +509,7 @@ describe("backward actual transit times", () => {
     });
     expect(plan.schedule.totalTravelSeconds).toBe(0);
     expect(plan.schedule.departure).toBe("2026-09-01T10:00:00+00:00");
-    expect(plan.segments[0].alternatives).toEqual([]);
+    expect(nth(plan.segments, 0).alternatives).toEqual([]);
   });
 
   it("returns a destination-only diagnostic when every interval is invalid", async () => {
@@ -580,11 +583,11 @@ describe("chain contributor receipts", () => {
       planTrip,
     });
     expect(plan.contributors?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
-    expect(plan.segments[0].contributors?.map((x) => x.sourceId)).toEqual(["feed-a"]);
-    expect(plan.segments[0].alternatives[0].contributors).toEqual([b]);
-    expect(plan.segments[1].fieldContributors?.boardingWaitSeconds?.map((x) => x.sourceId)).toEqual(
-      ["feed-c", "feed-a"],
-    );
+    expect(nth(plan.segments, 0).contributors?.map((x) => x.sourceId)).toEqual(["feed-a"]);
+    expect(nth(nth(plan.segments, 0).alternatives, 0).contributors).toEqual([b]);
+    expect(
+      nth(plan.segments, 1).fieldContributors?.boardingWaitSeconds?.map((x) => x.sourceId),
+    ).toEqual(["feed-c", "feed-a"]);
     expect(plan.fieldContributors?.schedule?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
     expect(selectedA).not.toHaveProperty("fieldContributors");
   });

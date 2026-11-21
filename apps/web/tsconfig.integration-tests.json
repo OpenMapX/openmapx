@@ -2,8 +2,6 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.integrations.json",
   "compilerOptions": {
-    // The integration tests are not converted to checked indexed access yet.
-    "noUncheckedIndexedAccess": false,
     "tsBuildInfoFile": "./integration-tests.tsbuildinfo",
     // Backend tests exercise the same ES2024 library surface as the backends
     // themselves (see apps/api/tsconfig.integrations.json); the frontend tests

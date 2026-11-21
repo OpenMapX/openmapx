@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { latticePointAt } from "@openmapx/mobility-core/isoline";
 import { TRANSIT_WALK_PROFILE } from "@openmapx/mobility-core/transit-reachability";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +92,7 @@ describe("sampleMotisTravelTimeField", () => {
       maxSamples: 64,
       deadlineMs: 60_000,
     });
-    const { body } = oneToManyIntermodalPost.mock.calls[0][0];
+    const { body } = nth(oneToManyIntermodalPost.mock.calls, 0)[0];
     expect(body.pedestrianProfile).toBe(TRANSIT_WALK_PROFILE.pedestrianProfile);
     expect(body.pedestrianSpeed).toBe(TRANSIT_WALK_PROFILE.speedMetresPerSecond);
     expect(body.maxPostTransitTime).toBe(TRANSIT_WALK_PROFILE.egressSeconds);

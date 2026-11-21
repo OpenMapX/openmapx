@@ -1,4 +1,5 @@
 import { isI18nToken, resolveToken, sharedStrings } from "@openmapx/integration-framework/strings";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import { describe, expect, it } from "vitest";
 import { comparisonGrade, mapFuelStationToDetail, mapFuelStationToResult } from "../mapper.js";
@@ -175,7 +176,7 @@ describe("mapFuelStationToResult", () => {
       ["sp100", "SP100"],
       ["b20", "B20"],
       ["b30", "B30"],
-    ]) {
+    ] as const) {
       const summary = mapFuelStationToResult(
         makeStation({ products: [product({ grade, price: eur(1.899) })] }),
       ).summary;
@@ -374,7 +375,7 @@ describe("mapFuelStationToDetail", () => {
         ],
       }),
     );
-    const rows = detail.sections[0].rows ?? [];
+    const rows = nth(detail.sections, 0).rows ?? [];
     expect(rows.map((row) => [row[0], row[2]])).toEqual([
       [
         { $t: "fuel.diesel" },
@@ -416,19 +417,20 @@ describe("mapFuelStationToDetail", () => {
     });
 
     expect(mapFuelStationToResult(station).sortValues).toEqual({ diesel: 1.659 });
-    const rows = mapFuelStationToDetail(station).sections[0].rows ?? [];
+    const rows = nth(mapFuelStationToDetail(station).sections, 0).rows ?? [];
     expect(rows.map(([label]) => label)).toEqual([
       { $t: "fuel.diesel" },
       { $t: "fuelHgv", values: { grade: { $t: "fuel.diesel" } } },
     ]);
-    expect(text(rows[1][0], "en")).toBe("Diesel (HGV)");
-    expect(text(rows[1][0], "de")).toBe("Diesel (Lkw)");
+    const labels = rows.map(([label]) => label);
+    expect(text(nth(labels, 1), "en")).toBe("Diesel (HGV)");
+    expect(text(nth(labels, 1), "de")).toBe("Diesel (Lkw)");
   });
 
   it("names every grade of the vocabulary in the price table, and an unknown one by its code", () => {
     for (const grade of OC_FUEL_GRADES) {
       const [label] =
-        mapFuelStationToDetail(makeStation({ products: [product({ grade })] })).sections[0]
+        nth(mapFuelStationToDetail(makeStation({ products: [product({ grade })] })).sections, 0)
           .rows?.[0] ?? [];
       for (const locale of ["en", "de"]) {
         const shown = text(label, locale);
@@ -438,17 +440,18 @@ describe("mapFuelStationToDetail", () => {
         expect(shown, `${grade} ${locale}`).not.toContain("fuel.");
       }
     }
-    const rows =
-      mapFuelStationToDetail(
-        makeStation({
-          products: [
-            product({ grade: "new_fuel" }),
-            product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
-          ],
-        }),
-      ).sections[0].rows ?? [];
-    expect(text(rows[0][0], "de")).toBe("NEW FUEL");
-    expect(text(rows[1][0], "en")).toBe("NEW FUEL (HGV)");
+    const { sections } = mapFuelStationToDetail(
+      makeStation({
+        products: [
+          product({ grade: "new_fuel" }),
+          product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
+        ],
+      }),
+    );
+    const rows = nth(sections, 0).rows ?? [];
+    const labels = rows.map(([label]) => label);
+    expect(text(nth(labels, 0), "de")).toBe("NEW FUEL");
+    expect(text(nth(labels, 1), "en")).toBe("NEW FUEL (HGV)");
   });
 
   it("lists payment, lorry access and amenities in the reader's language", () => {

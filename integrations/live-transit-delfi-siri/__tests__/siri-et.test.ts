@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { loadJsonFixture } from "@openmapx/integration-framework/testing";
+import { loadJsonFixture, nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import { describe, expect, it } from "vitest";
 import { motisPlaceToJourneyStop } from "../../transit-motis/adapter";
@@ -31,7 +31,7 @@ const fixture = loadJsonFixture<RecordedTrip>(
   import.meta.dirname,
   "../../transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json",
 );
-const leg = fixture.legs[0];
+const leg = nth(fixture.legs, 0);
 const instance = createMotisInstance({
   baseUrl: "http://motis.test",
   prefix: "mo:",
@@ -69,11 +69,11 @@ describe("streamed SIRI passenger assignments", () => {
       "3",
       "5 A-C",
     ]);
-    expect(updates[7].departurePlatform).toMatchObject({
+    expect(nth(updates, 7).departurePlatform).toMatchObject({
       kind: "correction",
       recordedAt: "2026-11-06T18:30:58.165Z",
     });
-    expect(updates[26].arrivalPlatform?.code).toBe("8");
+    expect(nth(updates, 26).arrivalPlatform?.code).toBe("8");
   });
   it.each([
     "wrong-date",
@@ -86,14 +86,14 @@ describe("streamed SIRI passenger assignments", () => {
     "cancelled",
   ])("rejects %s rather than guessing a platform", async (reason) => {
     const feed = await parseSiriEt(stream(xml), now);
-    const record = feed.journeys[0];
+    const record = nth(feed.journeys, 0);
     if (reason === "wrong-date") record.serviceDate = "2026-11-07";
     if (reason === "wrong-line") record.lineName = "RE9";
-    if (reason === "shifted-event") record.calls[0].ad = (record.calls[0].ad ?? 0) + 60;
-    if (reason === "wrong-stop") record.calls[0].root = "de:05334:1646";
+    if (reason === "shifted-event") nth(record.calls, 0).ad = (nth(record.calls, 0).ad ?? 0) + 60;
+    if (reason === "wrong-stop") nth(record.calls, 0).root = "de:05334:1646";
     if (reason === "incomplete") record.complete = false;
     if (reason === "duplicate") feed.journeys.push(structuredClone(record));
-    if (reason === "extra") record.calls[0].extra = true;
+    if (reason === "extra") nth(record.calls, 0).extra = true;
     if (reason === "cancelled") record.cancelled = true;
     expect(matchJourneyPlatforms(journey, feed.journeys, now)).toEqual([]);
   });
@@ -112,44 +112,51 @@ describe("streamed SIRI passenger assignments", () => {
   it("does not overwrite a known realtime MOTIS platform with old assignments", async () => {
     const feed = await parseSiriEt(stream(xml), now);
     const current = structuredClone(journey);
-    current.stops[0].platform = "9";
-    current.stops[0].scheduledPlatform = "2";
-    expect(matchJourneyPlatforms(current, feed.journeys, now)[0].departurePlatform).toBeUndefined();
+    nth(current.stops, 0).platform = "9";
+    nth(current.stops, 0).scheduledPlatform = "2";
+    expect(
+      nth(matchJourneyPlatforms(current, feed.journeys, now), 0).departurePlatform,
+    ).toBeUndefined();
   });
 });
 
 it("separates fresh platform-only realtime changes from corrections and preserves sectors", async () => {
   const feed = await parseSiriEt(stream(xml), now);
-  const record = feed.journeys[0];
+  const record = nth(feed.journeys, 0);
   record.recordedAt = new Date(now - 60_000).toISOString();
-  record.calls[0].ed = record.calls[0].ad;
-  record.calls[0].dp = "4 A-C";
+  nth(record.calls, 0).ed = nth(record.calls, 0).ad;
+  nth(record.calls, 0).dp = "4 A-C";
   const current = structuredClone(journey);
-  current.stops[0].platform = "2";
-  current.stops[0].scheduledPlatform = "2";
-  expect(matchJourneyPlatforms(current, feed.journeys, now)[0].departurePlatform).toMatchObject({
+  nth(current.stops, 0).platform = "2";
+  nth(current.stops, 0).scheduledPlatform = "2";
+  expect(
+    nth(matchJourneyPlatforms(current, feed.journeys, now), 0).departurePlatform,
+  ).toMatchObject({
     code: "4 A-C",
     scheduledCode: "2",
     kind: "realtime",
   });
-  current.stops[0].platform = "9";
-  expect(matchJourneyPlatforms(current, feed.journeys, now)[0].departurePlatform).toBeUndefined();
+  nth(current.stops, 0).platform = "9";
+  expect(
+    nth(matchJourneyPlatforms(current, feed.journeys, now), 0).departurePlatform,
+  ).toBeUndefined();
 });
 it("matches repeated stations by complete ordered event occurrence, rejecting counter direction", async () => {
   const feed = await parseSiriEt(stream(xml), now);
   const loop = structuredClone(journey);
-  loop.stops[2].stopId = loop.stops[0].stopId;
-  feed.journeys[0].calls[2].root = feed.journeys[0].calls[0].root;
+  nth(loop.stops, 2).stopId = nth(loop.stops, 0).stopId;
+  const { calls } = nth(feed.journeys, 0);
+  nth(calls, 2).root = nth(calls, 0).root;
   expect(matchJourneyPlatforms(loop, feed.journeys, now)).toHaveLength(27);
-  feed.journeys[0].calls.reverse();
+  calls.reverse();
   expect(matchJourneyPlatforms(loop, feed.journeys, now)).toEqual([]);
 });
 it("requires a MOTIS timestamp for every supplied aimed event and rejects neighboring trains", async () => {
   const feed = await parseSiriEt(stream(xml), now);
   const current = structuredClone(journey);
-  current.stops[1].scheduledArrival = undefined;
+  nth(current.stops, 1).scheduledArrival = undefined;
   expect(matchJourneyPlatforms(current, feed.journeys, now)).toEqual([]);
-  feed.journeys[0].trainNumber = "26841";
+  nth(feed.journeys, 0).trainNumber = "26841";
   expect(matchJourneyPlatforms(journey, feed.journeys, now)).toEqual([]);
 });
 it.each([
@@ -166,7 +173,8 @@ it("reads CDATA passenger fields and rejects excessive nesting", async () => {
     "<ns0:DeparturePlatformName>2</ns0:DeparturePlatformName>",
     "<ns0:DeparturePlatformName><![CDATA[2]]></ns0:DeparturePlatformName>",
   );
-  expect((await parseSiriEt(stream(cdata), now)).journeys[0].calls[0].dp).toBe("2");
+  const [parsed] = (await parseSiriEt(stream(cdata), now)).journeys;
+  expect(parsed?.calls[0]?.dp).toBe("2");
   await expect(
     parseSiriEt(
       stream(xml.replace("<ServiceDelivery>", `<ServiceDelivery>${"<Nested>".repeat(40)}`)),
@@ -204,9 +212,9 @@ it("drops records with overlong source timestamps and extra journeys", async () 
 it("keeps sector refinement a schedule assignment", async () => {
   const feed = await parseSiriEt(stream(xml), now);
   const current = structuredClone(journey);
-  current.stops[8].platform = "5";
-  current.stops[8].scheduledPlatform = "5";
-  expect(matchJourneyPlatforms(current, feed.journeys, now)[8].departurePlatform?.kind).toBe(
+  nth(current.stops, 8).platform = "5";
+  nth(current.stops, 8).scheduledPlatform = "5";
+  expect(nth(matchJourneyPlatforms(current, feed.journeys, now), 8).departurePlatform?.kind).toBe(
     "schedule",
   );
 });

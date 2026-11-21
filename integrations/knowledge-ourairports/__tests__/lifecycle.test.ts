@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 
 const loader = vi.hoisted(() => ({
@@ -32,7 +32,7 @@ describe("knowledge OurAirports lifecycle", () => {
     expect(oldHandlers).toHaveLength(1);
     expect(newHandlers).toHaveLength(1);
 
-    void oldHandlers[0]();
+    void nth(oldHandlers, 0)();
     expect(loader.releases[0]).toHaveBeenCalledTimes(1);
     expect(loader.releases[1]).not.toHaveBeenCalled();
     expect(loader.stopBackgroundLoad).not.toHaveBeenCalled();
@@ -51,7 +51,7 @@ describe("knowledge OurAirports lifecycle", () => {
     expect(() => setup(ctx)).toThrow("injected provider registration failure");
     expect(shutdownHandlers).toHaveLength(1);
 
-    await shutdownHandlers[0]();
+    await nth(shutdownHandlers, 0)();
     expect(release).toHaveBeenCalledTimes(1);
   });
 });

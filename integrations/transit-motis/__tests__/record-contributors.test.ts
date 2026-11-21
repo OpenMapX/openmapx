@@ -43,7 +43,9 @@ describe("MOTIS per-record acquisition", () => {
       { id: "ms:unknown_3", contributors: [] },
     ]);
     a.name = "Changed registry";
-    expect((out.data[0] as { contributors?: (typeof a)[] }).contributors?.[0].name).toBe("A");
+    expect(
+      (out.data[0] as { contributors?: (typeof a)[] } | undefined)?.contributors?.[0]?.name,
+    ).toBe("A");
     a.name = "A";
   });
 });

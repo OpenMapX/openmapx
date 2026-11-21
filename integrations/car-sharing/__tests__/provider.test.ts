@@ -5,6 +5,7 @@ import {
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { describe, expect, it, vi } from "vitest";
 
@@ -62,10 +63,10 @@ describe("carSharingProvider.search", () => {
 
     await carSharingProvider.search(makeBbox());
 
-    const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
+    const dedupCall = nth(vi.mocked(dedupStations).mock.calls, 0)[0] as SharedMobilityStation[];
     expect(dedupCall).toHaveLength(2);
-    expect(dedupCall[0].id).toBe("mo1");
-    expect(dedupCall[1].id).toBe("gbfs1");
+    expect(dedupCall[0]?.id).toBe("mo1");
+    expect(dedupCall[1]?.id).toBe("gbfs1");
   });
 
   it("vehicles from GBFS + MOTIS added after stations", async () => {
@@ -122,7 +123,7 @@ describe("carSharingProvider.search", () => {
     const results = (await carSharingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("gbfs1");
+    expect(results[0]?.id).toBe("gbfs1");
   });
 
   it("all sources fail → returns empty array", async () => {

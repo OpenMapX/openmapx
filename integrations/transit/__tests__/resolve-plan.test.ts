@@ -1,4 +1,5 @@
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -50,8 +51,8 @@ function fixture(healthy = true, cacheResolution = false) {
         source: "ms",
         instance: "ms",
         datasetEpoch: "E",
-        startTime: input.reference.legs[0].scheduledDeparture,
-        endTime: input.reference.legs[0].scheduledArrival,
+        startTime: nth(input.reference.legs, 0).scheduledDeparture,
+        endTime: nth(input.reference.legs, 0).scheduledArrival,
         duration: 3180,
         transfers: 0,
         walkDistance: 0,
@@ -62,10 +63,10 @@ function fixture(healthy = true, cacheResolution = false) {
             from,
             to,
             tripId: "ms:trip",
-            startTime: input.reference.legs[0].scheduledDeparture,
-            endTime: input.reference.legs[0].scheduledArrival,
-            scheduledStartTime: input.reference.legs[0].scheduledDeparture,
-            scheduledEndTime: input.reference.legs[0].scheduledArrival,
+            startTime: nth(input.reference.legs, 0).scheduledDeparture,
+            endTime: nth(input.reference.legs, 0).scheduledArrival,
+            scheduledStartTime: nth(input.reference.legs, 0).scheduledDeparture,
+            scheduledEndTime: nth(input.reference.legs, 0).scheduledArrival,
             geometry: {
               type: "LineString",
               coordinates: [
@@ -193,7 +194,7 @@ describe("exact provider-reference plan route", () => {
     expect(reply.statusCode).toBe(200);
     expect(reply.headers["Cache-Control"]).toBe("no-store");
     const body = JSON.parse(JSON.stringify(reply.body)) as MobilityEnvelope<TripPlan>;
-    const itinerary = body.data.itineraries[0];
+    const itinerary = nth(body.data.itineraries, 0);
     expect(itinerary).toMatchObject({
       id: "native-id",
       fare: { source: "provider", transfers: [] },
@@ -212,12 +213,14 @@ describe("exact provider-reference plan route", () => {
     async (kind) => {
       const f = fixture();
       const body = structuredClone(input);
-      if (kind === "coordinates") Object.assign(body.reference.legs[0], { fromLat: 0 });
-      if (kind === "mixed-prefix") body.reference.legs[0].toStopId = "mo:b";
+      if (kind === "coordinates") Object.assign(nth(body.reference.legs, 0), { fromLat: 0 });
+      if (kind === "mixed-prefix") nth(body.reference.legs, 0).toStopId = "mo:b";
       if (kind === "too-many")
-        body.reference.legs = Array.from({ length: 9 }, () => ({ ...input.reference.legs[0] }));
+        body.reference.legs = Array.from({ length: 9 }, () => ({
+          ...nth(input.reference.legs, 0),
+        }));
       if (kind === "invalid-time")
-        body.reference.legs[0].scheduledDeparture = "2026-02-30T20:18:00Z";
+        nth(body.reference.legs, 0).scheduledDeparture = "2026-02-30T20:18:00Z";
       expect((await f.request("/plan/resolve", body)).statusCode).toBe(400);
       expect(f.resolved).not.toHaveBeenCalled();
     },
@@ -244,13 +247,13 @@ describe("exact provider-reference plan route", () => {
 it("caches acquisition briefly without sharing refresh handles or bypassing current health", async () => {
   const f = fixture(true, true);
   const a = await f.request("/plan/resolve", input);
-  const aToken = (a.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  const aToken = nth((a.body as MobilityEnvelope<TripPlan>).data.itineraries, 0).refreshToken;
   const b = await f.request("/plan/resolve", input);
-  const bToken = (b.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  const bToken = nth((b.body as MobilityEnvelope<TripPlan>).data.itineraries, 0).refreshToken;
   expect(f.resolved).toHaveBeenCalledTimes(1);
   expect(aToken).toEqual(expect.any(String));
   expect(bToken).not.toBe(aToken);
-  expect((a.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken).toBe(aToken);
+  expect(nth((a.body as MobilityEnvelope<TripPlan>).data.itineraries, 0).refreshToken).toBe(aToken);
   f.setHealthy(false);
   expect((await f.request("/plan/resolve", input)).statusCode).toBe(503);
   expect(f.resolved).toHaveBeenCalledTimes(1);
@@ -263,7 +266,7 @@ it("caches acquisition briefly without sharing refresh handles or bypassing curr
 it("retains and replays exact-reference refreshes across a temporary source failure", async () => {
   const f = fixture();
   const initial = await f.request("/plan/resolve", input);
-  const token = (initial.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  const token = nth((initial.body as MobilityEnvelope<TripPlan>).data.itineraries, 0).refreshToken;
   f.setHealthy(false);
   const unavailable = await f.request("/plan/refresh", { token });
   expect(unavailable.statusCode).toBe(503);
@@ -281,7 +284,7 @@ it("retains and replays exact-reference refreshes across a temporary source fail
 it("ends a policy-disabled exact-reference refresh without searching for another train", async () => {
   const f = fixture();
   const initial = await f.request("/plan/resolve", input);
-  const token = (initial.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  const token = nth((initial.body as MobilityEnvelope<TripPlan>).data.itineraries, 0).refreshToken;
   f.disallowed.add("test-source");
   expect((await f.request("/plan/refresh", { token })).statusCode).toBe(409);
   expect(f.resolved).toHaveBeenCalledTimes(1);

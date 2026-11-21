@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
@@ -6,7 +6,7 @@ describe("OSM alias index health", () => {
   it("is unconfigured without PostGIS", async () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
-    await expect(ctx.registered.healthChecks[0]()).resolves.toMatchObject({
+    await expect(nth(ctx.registered.healthChecks, 0)()).resolves.toMatchObject({
       status: "unconfigured",
     });
   });
@@ -20,7 +20,7 @@ describe("OSM alias index health", () => {
       ]);
     const ctx = createMockIntegrationContext({ db: { execute } });
     setup(ctx);
-    await expect(ctx.registered.healthChecks[0]()).resolves.toMatchObject({
+    await expect(nth(ctx.registered.healthChecks, 0)()).resolves.toMatchObject({
       status: "up",
       error: expect.stringContaining("stale"),
     });

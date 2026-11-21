@@ -23,6 +23,7 @@ import {
   fakeHttpClient,
   httpStatus,
   type MockIntegrationContext,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { parseHarbourJsonp, setup } from "./index.js";
@@ -38,8 +39,8 @@ describe("parseHarbourJsonp", () => {
 
     expect(features).toHaveLength(2);
     // Geometry is [lng, lat]; the JSONP arg order is (id, lng, lat, ...).
-    expect(features[0].geometry.coordinates).toEqual([9.95, 53.55]);
-    expect(features[0].properties).toMatchObject({
+    expect(nth(features, 0).geometry.coordinates).toEqual([9.95, 53.55]);
+    expect(nth(features, 0).properties).toMatchObject({
       id: 101,
       name: "Hamburg",
       lng: 9.95,
@@ -48,15 +49,15 @@ describe("parseHarbourJsonp", () => {
       type: "port",
       wikiUrl: "https://wiki/Hamburg",
     });
-    expect(features[1].properties).toMatchObject({ category: 4, type: "marina" });
+    expect(nth(features, 1).properties).toMatchObject({ category: 4, type: "marina" });
     // Empty wikiUrl becomes undefined.
-    expect(features[1].properties.wikiUrl).toBeUndefined();
+    expect(nth(features, 1).properties.wikiUrl).toBeUndefined();
   });
 
   it("falls back to 'harbour' type for unknown categories and a synthetic name", () => {
     const features = parseHarbourJsonp("putHarbourMarker(7, 1.0, 2.0, '', '', 9);");
-    expect(features[0].properties.type).toBe("harbour");
-    expect(features[0].properties.name).toBe("Harbour 7");
+    expect(nth(features, 0).properties.type).toBe("harbour");
+    expect(nth(features, 0).properties.name).toBe("Harbour 7");
   });
 
   it("ignores malformed lines", () => {
@@ -117,7 +118,7 @@ describe("nautical routes", () => {
         features: Array<{ geometry: { coordinates: number[] } }>;
       };
       expect(body.type).toBe("FeatureCollection");
-      expect(body.features[0].geometry.coordinates).toEqual([9.95, 53.55]);
+      expect(nth(body.features, 0).geometry.coordinates).toEqual([9.95, 53.55]);
       expect(http.calls[0]?.method).toBe("getText");
       expect(http.calls[0]?.url).toBe(
         "https://harbour.openseamap.org/getHarbours.php?b=53&t=54&l=9&r=10&zoom=10",
@@ -165,7 +166,7 @@ describe("nautical routes", () => {
         reply,
       );
       const body = result.body as { features: { properties: { _mapAttributions: string } }[] };
-      expect(JSON.parse(body.features[0].properties._mapAttributions)).toEqual([]);
+      expect(JSON.parse(nth(body.features, 0).properties._mapAttributions)).toEqual([]);
     });
 
     it("assembles merged GeoJSON with [lng,lat] order, primaryType ranking and capability flags", async () => {
@@ -346,7 +347,7 @@ describe("nautical routes", () => {
       const keys = stationKeys();
       expect(keys).toHaveLength(1);
       expect(keys[0]).toMatch(/^stations:bbox-merged-contributors-v1/);
-      expect(cache.ttls.get(keys[0])).toBe(7 * 24 * 60 * 60);
+      expect(cache.ttls.get(nth(keys, 0))).toBe(7 * 24 * 60 * 60);
     });
   });
 });

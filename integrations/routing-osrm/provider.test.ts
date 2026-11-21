@@ -1,4 +1,5 @@
 import { withRoutingContributors } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   joinSegmentSpeedLimits,
@@ -77,7 +78,7 @@ describe("transformOsrmStep", () => {
       active: "right",
     });
     // Invalid lane without a valid_indication carries no `active`.
-    expect(s.lanes?.[0].active).toBeUndefined();
+    expect(nth(s.lanes ?? [], 0).active).toBeUndefined();
   });
 
   it("carries speed limit in km/h", () => {
@@ -283,7 +284,7 @@ describe("osrmRouteSegmentSpeedLimits", () => {
   it("falls back to per-step annotation when the leg has none", () => {
     const route = {
       ...baseRoute,
-      legs: [{ ...baseRoute.legs[0], annotation: undefined, steps: [threeCoordStep] }],
+      legs: [{ ...nth(baseRoute.legs, 0), annotation: undefined, steps: [threeCoordStep] }],
     };
     expect(osrmRouteSegmentSpeedLimits(route)).toEqual([50, 70]);
   });
@@ -291,7 +292,7 @@ describe("osrmRouteSegmentSpeedLimits", () => {
   it("returns undefined when neither leg nor step annotation is present", () => {
     const route = {
       ...baseRoute,
-      legs: [{ ...baseRoute.legs[0], annotation: undefined, steps: [] }],
+      legs: [{ ...nth(baseRoute.legs, 0), annotation: undefined, steps: [] }],
     };
     expect(osrmRouteSegmentSpeedLimits(route)).toBeUndefined();
   });
@@ -383,8 +384,8 @@ describe("osrmService requests", () => {
       expect(requestedUrl?.searchParams.get("steps")).toBe("true");
       expect(requestedUrl?.searchParams.get("geometries")).toBe("geojson");
       expect(requestedUrl?.searchParams.get("overview")).toBe("full");
-      expect(result.routes[0].steps?.[0].speedLimit).toBe(50);
-      expect(result.routes[0].segmentSpeedLimits).toEqual([50]);
+      expect(result.routes[0]?.steps?.[0]?.speedLimit).toBe(50);
+      expect(result.routes[0]?.segmentSpeedLimits).toEqual([50]);
     },
   );
 });

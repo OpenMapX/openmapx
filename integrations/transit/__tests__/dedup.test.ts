@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,13 +23,16 @@ const stop = (id: string, lat: number, lng: number, name = "Central Market", pro
 function legacy(stops: TransitStop[], priority: (provider: string) => number = () => 10) {
   const sorted = [...stops].sort((a, b) => priority(a.provider) - priority(b.provider));
   const parents = sorted.map((_, i) => i);
-  const root = (i: number): number => (parents[i] === i ? i : root(parents[i]));
+  const root = (i: number): number => {
+    const parent = nth(parents, i);
+    return parent === i ? i : root(parent);
+  };
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
-      if (haversineMeters(sorted[i].lat, sorted[i].lng, sorted[j].lat, sorted[j].lng) > 300)
-        continue;
-      if (diceSimilarity(normalizeName(sorted[i].name), normalizeName(sorted[j].name)) < 0.5)
-        continue;
+      const left = nth(sorted, i);
+      const right = nth(sorted, j);
+      if (haversineMeters(left.lat, left.lng, right.lat, right.lng) > 300) continue;
+      if (diceSimilarity(normalizeName(left.name), normalizeName(right.name)) < 0.5) continue;
       const a = root(i),
         b = root(j);
       parents[Math.max(a, b)] = Math.min(a, b);

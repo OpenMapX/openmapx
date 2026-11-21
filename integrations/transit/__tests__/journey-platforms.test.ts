@@ -58,7 +58,7 @@ describe("journey passenger-platform enrichment", () => {
     const f = context();
     const result = await enrichJourneyPlatforms({ ctx: f.ctx as IntegrationContext, timed }, base);
     expect(result.data?.stops[0]).toMatchObject({ platform: "3", scheduledPlatform: "3" });
-    expect(base.data.stops[0].platform).toBe("78");
+    expect(base.data.stops[0]?.platform).toBe("78");
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["baseline", "siri"]);
     expect(result.data?.id).toBe("mo:trip");
   });

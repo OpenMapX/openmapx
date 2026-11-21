@@ -98,7 +98,14 @@ describe("names that link a place's stops", () => {
 
 /** A stop `meters` north of (lat, lng): 0.001° of latitude is about 111 m. */
 function stopAt(id: string, name: string, lat: number, lng: number, meters = 100): TransitStop {
-  return { id, provider: id.split(":")[0], name, lat: lat + meters / 111_000, lng, modes: ["bus"] };
+  return {
+    id,
+    provider: id.replace(/:.*/, ""),
+    name,
+    lat: lat + meters / 111_000,
+    lng,
+    modes: ["bus"],
+  };
 }
 
 async function linkedNames(place: { lat: number; lng: number; name: string }, names: string[]) {

@@ -5,6 +5,7 @@ import {
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { describe, expect, it, vi } from "vitest";
 
@@ -58,7 +59,7 @@ describe("scooterSharingProvider.search", () => {
 
     await scooterSharingProvider.search(makeBbox());
 
-    const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
+    const dedupCall = nth(vi.mocked(dedupStations).mock.calls, 0)[0] as SharedMobilityStation[];
     expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(dedupCall).toHaveLength(3);
     expect(dedupCall.map((station) => station.id)).toEqual(["mo1", "gbfs1", "nrw1"]);
@@ -119,7 +120,7 @@ describe("scooterSharingProvider.search", () => {
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("felyx-v1-solo");
+    expect(results[0]?.id).toBe("felyx-v1-solo");
   });
 
   it("all sources fail → returns empty array", async () => {
@@ -148,7 +149,7 @@ describe("scooterSharingProvider.search", () => {
       expect.any(Object),
       "other",
     );
-    const formFactors = vi.mocked(fetchGbfsData).mock.calls[0][1] as Set<string>;
+    const formFactors = nth(vi.mocked(fetchGbfsData).mock.calls, 0)[1] as Set<string>;
     expect(formFactors.has("scooter_standing")).toBe(true);
     expect(formFactors.has("scooter_seated")).toBe(true);
     expect(formFactors.has("moped")).toBe(true);

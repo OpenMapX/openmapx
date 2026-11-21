@@ -94,8 +94,8 @@ describe("resolveFeeds", () => {
     const feeds = await catalog.resolveFeeds();
     const matches = feeds.filter((f) => f.id === "freebee-miami-beach");
     expect(matches).toHaveLength(1);
-    expect(matches[0].name).toBe("Our Freebee");
-    expect(matches[0].origin).toBe("operator");
+    expect(matches[0]?.name).toBe("Our Freebee");
+    expect(matches[0]?.origin).toBe("operator");
   });
 
   it("survives a cache outage, still resolving feeds from the live registry", async () => {

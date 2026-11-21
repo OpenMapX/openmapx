@@ -456,9 +456,9 @@ describe("POST /flow-along-route", () => {
         },
       ],
     })) as { body: { routes: Array<{ id: string; spans: Array<{ los: string }> }> } };
-    const spans = body.routes[0].spans;
-    expect(spans.length).toBeGreaterThan(0);
-    expect(spans[0].los).toBe("heavy");
+    const spans = body.routes[0]?.spans;
+    expect(spans?.length).toBeGreaterThan(0);
+    expect(spans?.[0]?.los).toBe("heavy");
   });
 
   it("degrades only the route whose own processing fails, leaving a healthy route in the same request intact", async () => {

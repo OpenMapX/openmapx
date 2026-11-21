@@ -1,4 +1,5 @@
 import type { DirectionsResult, RoutingOptions, TravelMode } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedProvider } from "../orchestrator.js";
 import { NoScheduleProviderError, runSchedulePlan } from "../schedule-plan.js";
@@ -61,13 +62,13 @@ const APPROXIMATE = {
 function resultOf(waypoints: [number, number][]): DirectionsResult {
   const legs = waypoints
     .slice(1)
-    .map((point, index) => routeOf(3600, waypoints[index], point).legs[0]);
+    .map((point, index) => nth(routeOf(3600, nth(waypoints, index), point).legs, 0));
   return {
     waypoints,
     activeRouteIndex: 0,
     routes: [
       {
-        ...routeOf(3600 * legs.length, waypoints[0], waypoints[waypoints.length - 1]),
+        ...routeOf(3600 * legs.length, nth(waypoints, 0), nth(waypoints, -1)),
         geometry: waypoints,
         legs,
       },
@@ -91,7 +92,7 @@ describe("retained schedule provider metadata", () => {
       timeDependentTravel: "emulated",
     } as const;
     const primary = vi.fn<GetRoute>(async (waypoints) => {
-      if (waypoints[0][0] === BONN[0]) throw new Error("leg unavailable");
+      if (nth(waypoints, 0)[0] === BONN[0]) throw new Error("leg unavailable");
       return resultOf(waypoints);
     });
     const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
@@ -108,7 +109,7 @@ describe("retained schedule provider metadata", () => {
 
   it("warns once for each actual approximate contributor across repeated legs", async () => {
     const first = vi.fn<GetRoute>(async (waypoints) => {
-      if (waypoints[0][0] !== COLOGNE[0]) throw new Error("leg unavailable");
+      if (nth(waypoints, 0)[0] !== COLOGNE[0]) throw new Error("leg unavailable");
       return resultOf(waypoints);
     });
     const second = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
@@ -123,7 +124,7 @@ describe("retained schedule provider metadata", () => {
         provider({ id: "osrm-b", temporal: APPROXIMATE }, second),
       ],
     );
-    expect(result.routes[0].legs).toHaveLength(3);
+    expect(nth(result.routes, 0).legs).toHaveLength(3);
     expect(
       result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
     ).toEqual([
@@ -137,7 +138,7 @@ describe("retained schedule provider metadata", () => {
 
   it("preserves the last-served provider label for a backward mixed chain", async () => {
     const primary = vi.fn<GetRoute>(async (waypoints) => {
-      if (waypoints[0][0] === COLOGNE[0]) throw new Error("leg unavailable");
+      if (nth(waypoints, 0)[0] === COLOGNE[0]) throw new Error("leg unavailable");
       return resultOf(waypoints);
     });
     const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
@@ -155,7 +156,7 @@ describe("retained schedule provider metadata", () => {
     expect(result.provider).toBe("osrm");
     expect(result.temporal).toEqual(APPROXIMATE);
     expect(result.fidelity).toBe("approximate");
-    expect(result.routes[0].legs).toHaveLength(2);
+    expect(nth(result.routes, 0).legs).toHaveLength(2);
   });
   it.each([false, true])(
     "does not downgrade a native result for an unused approximate backup (windows: %s)",
@@ -215,7 +216,7 @@ describe("retained schedule provider metadata", () => {
 
   it("aggregates mixed retained legs and warns only for the approximate contributor", async () => {
     const primary = vi.fn<GetRoute>(async (waypoints) => {
-      if (waypoints[0][0] === BONN[0]) throw new Error("leg unavailable");
+      if (nth(waypoints, 0)[0] === BONN[0]) throw new Error("leg unavailable");
       return resultOf(waypoints);
     });
     const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
@@ -223,7 +224,7 @@ describe("retained schedule provider metadata", () => {
       provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
       provider({ id: "osrm", temporal: APPROXIMATE }, backup),
     ]);
-    expect(result.routes[0].legs).toHaveLength(2);
+    expect(nth(result.routes, 0).legs).toHaveLength(2);
     expect(result.fidelity).toBe("approximate");
     expect(result.temporal).toEqual(APPROXIMATE);
     expect(
@@ -239,7 +240,7 @@ describe("retained schedule provider metadata", () => {
     const backup = vi.fn<GetRoute>(async (waypoints) => ({
       waypoints,
       activeRouteIndex: 0,
-      routes: [routeOf(3600, waypoints[0], waypoints[waypoints.length - 1])],
+      routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, -1))],
     }));
     const result = await runSchedulePlan(
       parseScheduleRequest({
@@ -254,7 +255,7 @@ describe("retained schedule provider metadata", () => {
     );
     expect(primary).toHaveBeenCalledTimes(3);
     expect(backup).toHaveBeenCalledTimes(1);
-    expect(result.routes[0].legs).toHaveLength(2);
+    expect(nth(result.routes, 0).legs).toHaveLength(2);
     expect(result.provider).toBe("valhalla");
     expect(result.fidelity).toBe("exact");
     expect(result.temporal).toEqual(NATIVE_DWELL);
@@ -280,7 +281,7 @@ describe("retained schedule provider metadata", () => {
               arriveBy: "2026-09-01T18:00",
             });
       const primary = vi.fn<GetRoute>(async (waypoints) => {
-        if (waypoints[0][0] === (direction === "forward" ? BONN[0] : COLOGNE[0]))
+        if (nth(waypoints, 0)[0] === (direction === "forward" ? BONN[0] : COLOGNE[0]))
           throw new Error("unreachable");
         return resultOf(waypoints);
       });
@@ -291,7 +292,7 @@ describe("retained schedule provider metadata", () => {
         provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
         provider({ id: "osrm", temporal: APPROXIMATE }, backup),
       ]);
-      expect(result.routes[0].legs).toHaveLength(1);
+      expect(nth(result.routes, 0).legs).toHaveLength(1);
       expect(result.schedule.violations).toContainEqual({
         kind: "unreachable",
         fromIndex: direction === "forward" ? 1 : 0,
@@ -348,8 +349,8 @@ describe("runSchedulePlan", () => {
     );
 
     expect(getRoute).toHaveBeenCalledTimes(1);
-    expect(getRoute.mock.calls[0][2]?.dwellSeconds).toEqual([0, 1800, 0]);
-    expect(result.schedule.stops[1].departure).toBe("2026-09-01T10:30:00+02:00");
+    expect(nth(getRoute.mock.calls, 0)[2]?.dwellSeconds).toEqual([0, 1800, 0]);
+    expect(nth(result.schedule.stops, 1).departure).toBe("2026-09-01T10:30:00+02:00");
     expect(result.schedule.arrival).toBe("2026-09-01T11:30:00+02:00");
     expect(result.fidelity).toBe("exact");
     expect(result.warnings).toEqual([]);
@@ -361,7 +362,7 @@ describe("runSchedulePlan", () => {
       calls.push({ waypoints, departAt: options?.departAt });
       return {
         waypoints,
-        routes: [routeOf(3600, waypoints[0], waypoints[1])],
+        routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, 1))],
         activeRouteIndex: 0,
       };
     });
@@ -376,13 +377,13 @@ describe("runSchedulePlan", () => {
 
     expect(getRoute).toHaveBeenCalledTimes(2);
     expect(calls[0]).toMatchObject({ departAt: "2026-09-01T09:00" });
-    expect(calls[0].waypoints).toEqual([COLOGNE, BONN]);
+    expect(nth(calls, 0).waypoints).toEqual([COLOGNE, BONN]);
     expect(calls[1]).toMatchObject({ departAt: "2026-09-01T12:00" });
-    expect(calls[1].waypoints).toEqual([BONN, AACHEN]);
-    expect(result.schedule.stops[1].waitSeconds).toBe(2 * 3600);
+    expect(nth(calls, 1).waypoints).toEqual([BONN, AACHEN]);
+    expect(nth(result.schedule.stops, 1).waitSeconds).toBe(2 * 3600);
     expect(result.routes).toHaveLength(1);
-    expect(result.routes[0].legs).toHaveLength(2);
-    expect(result.routes[0].duration).toBe(7200);
+    expect(nth(result.routes, 0).legs).toHaveLength(2);
+    expect(nth(result.routes, 0).duration).toBe(7200);
   });
 
   it("pins arrivals instead of departures on a backward solve", async () => {
@@ -391,7 +392,7 @@ describe("runSchedulePlan", () => {
       arrivals.push(options?.arriveBy);
       return {
         waypoints,
-        routes: [routeOf(3600, waypoints[0], waypoints[1])],
+        routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, 1))],
         activeRouteIndex: 0,
       };
     });
@@ -409,7 +410,7 @@ describe("runSchedulePlan", () => {
   it("labels an OSRM-served schedule approximate and warns", async () => {
     const getRoute = vi.fn<GetRoute>(async (waypoints) => ({
       waypoints,
-      routes: [routeOf(3600, waypoints[0], waypoints[1])],
+      routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, 1))],
       activeRouteIndex: 0,
     }));
     const result = await runSchedulePlan(
@@ -429,16 +430,16 @@ describe("runSchedulePlan", () => {
   it("falls through to the next provider for a failing leg and warns", async () => {
     const failing = vi.fn<GetRoute>(async (waypoints) => {
       // Compare by value: parseScheduleRequest rebuilds the coordinate arrays.
-      if (waypoints[0][0] === BONN[0]) throw new Error("engine down");
+      if (nth(waypoints, 0)[0] === BONN[0]) throw new Error("engine down");
       return {
         waypoints,
-        routes: [routeOf(3600, waypoints[0], waypoints[1])],
+        routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, 1))],
         activeRouteIndex: 0,
       };
     });
     const backup = vi.fn<GetRoute>(async (waypoints) => ({
       waypoints,
-      routes: [routeOf(5400, waypoints[0], waypoints[1])],
+      routes: [routeOf(5400, nth(waypoints, 0), nth(waypoints, 1))],
       activeRouteIndex: 0,
     }));
     const result = await runSchedulePlan(
@@ -482,7 +483,7 @@ describe("runSchedulePlan", () => {
   it("warns when dwell was requested at an endpoint", async () => {
     const getRoute = vi.fn<GetRoute>(async (waypoints) => ({
       waypoints,
-      routes: [routeOf(3600, waypoints[0], waypoints[1])],
+      routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, 1))],
       activeRouteIndex: 0,
     }));
     const result = await runSchedulePlan(
@@ -521,7 +522,7 @@ describe("runSchedulePlan", () => {
     const getRoute = vi.fn<GetRoute>(async (waypoints) => ({
       waypoints,
       // A single leg for a three-waypoint request: the engine collapsed the trip.
-      routes: [routeOf(3600, waypoints[0], waypoints[waypoints.length - 1])],
+      routes: [routeOf(3600, nth(waypoints, 0), nth(waypoints, -1))],
       activeRouteIndex: 0,
     }));
     const result = await runSchedulePlan(
@@ -533,7 +534,7 @@ describe("runSchedulePlan", () => {
     );
     // One rejected single call, then one call per leg.
     expect(getRoute).toHaveBeenCalledTimes(3);
-    expect(result.routes[0].legs).toHaveLength(2);
+    expect(nth(result.routes, 0).legs).toHaveLength(2);
   });
 });
 
@@ -545,18 +546,18 @@ describe("retained scheduled route contributor snapshots", () => {
       attributionText: `${sourceId} notice`,
     });
     const first = provider({ id: "a", temporal: NATIVE_DWELL }, async (waypoints) => {
-      if (waypoints[0][0] === BONN[0]) throw new Error("fallback");
+      if (nth(waypoints, 0)[0] === BONN[0]) throw new Error("fallback");
       const result = resultOf(waypoints);
-      result.routes[0].contributors = [receipt("a")];
+      nth(result.routes, 0).contributors = [receipt("a")];
       return result;
     });
     const second = provider({ id: "b", temporal: NATIVE_DWELL }, async (waypoints) => {
       const result = resultOf(waypoints);
-      result.routes[0].contributors = [receipt("b")];
+      nth(result.routes, 0).contributors = [receipt("b")];
       return result;
     });
     const result = await runSchedulePlan(windowedRequest(), [first, second]);
     expect(result.provider).toBe("b");
-    expect(result.routes[0].contributors).toEqual([receipt("a"), receipt("b")]);
+    expect(nth(result.routes, 0).contributors).toEqual([receipt("a"), receipt("b")]);
   });
 });

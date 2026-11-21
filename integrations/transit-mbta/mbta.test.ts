@@ -3,6 +3,7 @@ import { integrationManifestSchema } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index";
@@ -54,16 +55,16 @@ function fixture(
     http,
     shared,
     shutdown,
-    provider: Object.assign(mock.registered.transit[0], {
-      getStopsNearby: required(mock.registered.transit[0].getStopsNearby),
-      getStop: required(mock.registered.transit[0].getStop),
-      getDepartures: required(mock.registered.transit[0].getDepartures),
-      getVehiclePositions: required(mock.registered.transit[0].getVehiclePositions),
-      getFacilities: required(mock.registered.transit[0].getFacilities),
-      getAlertsForStop: required(mock.registered.transit[0].getAlertsForStop),
-      getAlertsForRoute: required(mock.registered.transit[0].getAlertsForRoute),
+    provider: Object.assign(nth(mock.registered.transit, 0), {
+      getStopsNearby: required(nth(mock.registered.transit, 0).getStopsNearby),
+      getStop: required(nth(mock.registered.transit, 0).getStop),
+      getDepartures: required(nth(mock.registered.transit, 0).getDepartures),
+      getVehiclePositions: required(nth(mock.registered.transit, 0).getVehiclePositions),
+      getFacilities: required(nth(mock.registered.transit, 0).getFacilities),
+      getAlertsForStop: required(nth(mock.registered.transit, 0).getAlertsForStop),
+      getAlertsForRoute: required(nth(mock.registered.transit, 0).getAlertsForRoute),
     }),
-    health: mock.registered.healthChecks[0],
+    health: nth(mock.registered.healthChecks, 0),
     deny: (id = "mbta") => {
       denied = new Set([id]);
     },
@@ -99,11 +100,11 @@ describe("MBTA complete host-owned integration", () => {
     }));
     const result = await f.provider.getStopsNearby(42.36, -71.06, 1000);
     expect(result.data.map((s) => s.id)).toEqual(["mb:70067", "mb:east-inside", "mb:north-inside"]);
-    expect(Number(new URL(f.http.calls[0].url).searchParams.get("filter[radius]"))).toBeLessThan(
-      0.02,
-    );
-    expect(f.http.calls[0].url).not.toContain("api_key");
-    expect(result.data[0].contributors?.[0].sourceId).toBe("mbta");
+    expect(
+      Number(new URL(nth(f.http.calls, 0).url).searchParams.get("filter[radius]")),
+    ).toBeLessThan(0.02);
+    expect(nth(f.http.calls, 0).url).not.toContain("api_key");
+    expect(nth(result.data, 0).contributors?.[0]?.sourceId).toBe("mbta");
   });
   it("looks up stops and exposes only the existing seven methods", async () => {
     const f = fixture("fixture-key", () => ({ data: stop() }));
@@ -156,7 +157,7 @@ describe("MBTA complete host-owned integration", () => {
       platform: "A",
       delaySeconds: 120,
     });
-    expect(new URL(f.http.calls[0].url).searchParams.get("include")).toBe(
+    expect(new URL(nth(f.http.calls, 0).url).searchParams.get("include")).toBe(
       "route,schedule,trip,stop",
     );
   });
@@ -231,8 +232,8 @@ describe("MBTA complete host-owned integration", () => {
       activePeriods: [{ start: "2026-10-22T12:00:00Z", end: undefined }],
     });
     expect(byRoute.data).toEqual(byStop.data);
-    expect(new URL(f.http.calls[0].url).searchParams.get("filter[stop]")).toBe("70067");
-    expect(new URL(f.http.calls[1].url).searchParams.get("filter[route]")).toBe("Red");
+    expect(new URL(nth(f.http.calls, 0).url).searchParams.get("filter[stop]")).toBe("70067");
+    expect(new URL(nth(f.http.calls, 1).url).searchParams.get("filter[route]")).toBe("Red");
   });
   it("requires a key consistently for all seven methods and health", async () => {
     const f = fixture("");
@@ -256,9 +257,9 @@ describe("MBTA complete host-owned integration", () => {
     await a.provider.getStop("70067");
     await b.provider.getStop("70067");
     await same.provider.getStop("70067");
-    expect(a.http.calls[0].options?.headers?.["x-api-key"]).toBe("first");
-    expect(b.http.calls[0].options?.headers?.["x-api-key"]).toBe("second");
-    const identity = (f: typeof a) => f.shared.admitSharedRequest.mock.calls[0][0].key;
+    expect(nth(a.http.calls, 0).options?.headers?.["x-api-key"]).toBe("first");
+    expect(nth(b.http.calls, 0).options?.headers?.["x-api-key"]).toBe("second");
+    const identity = (f: typeof a) => nth(f.shared.admitSharedRequest.mock.calls, 0)[0].key;
     expect(identity(a)).toBe(identity(same));
     expect(identity(a)).not.toBe(identity(b));
   });
@@ -327,7 +328,7 @@ describe("MBTA complete host-owned integration", () => {
     const f = fixture();
     expect(await f.health()).toMatchObject({ status: "up" });
     expect(f.shared.admitSharedRequest).toHaveBeenCalledTimes(1);
-    expect(f.http.calls[0].options?.headers?.["x-api-key"]).toBe("fixture-key");
+    expect(nth(f.http.calls, 0).options?.headers?.["x-api-key"]).toBe("fixture-key");
   });
 });
 

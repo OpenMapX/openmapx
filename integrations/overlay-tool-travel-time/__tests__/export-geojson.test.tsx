@@ -1,6 +1,7 @@
 // A DOM helper, not a component: the .tsx extension is what routes this file
 // into the root config's jsdom project for `integrations/**`.
 import { describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { exportTransitIsochrone, transitIsochroneFilename } from "../export-geojson";
 
 const COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -48,8 +49,9 @@ describe("exportTransitIsochrone", () => {
     exportTransitIsochrone(withMeta, "x.geojson");
 
     expect(captured).toHaveLength(1);
-    expect(captured[0].type).toBe("application/geo+json");
-    const parsed = JSON.parse(await captured[0].text());
+    const file = nth(captured, 0);
+    expect(file.type).toBe("application/geo+json");
+    const parsed = JSON.parse(await file.text());
     expect(parsed.openmapx.accuracy).toBe("sampled");
 
     click.mockRestore();

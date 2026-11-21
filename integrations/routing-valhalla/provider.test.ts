@@ -1,4 +1,5 @@
 import type { RoutingOptions } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { valhallaHarness } from "./__tests__/valhalla-http.js";
 import {
@@ -278,14 +279,14 @@ describe("transformTrip motorway flag and bearings", () => {
   };
 
   it("maps highway and bearings on the motorway maneuver", () => {
-    const step = transformTrip(trip, "driving").steps[0];
+    const step = nth(transformTrip(trip, "driving").steps, 0);
     expect(step.motorway).toBe(true);
     expect(step.bearingBefore).toBeUndefined();
     expect(step.bearingAfter).toBe(298);
   });
 
   it("keeps the exit maneuver unflagged and carries its bearings", () => {
-    const step = transformTrip(trip, "driving").steps[1];
+    const step = nth(transformTrip(trip, "driving").steps, 1);
     expect(step.motorway).toBeUndefined();
     expect(step.bearingBefore).toBe(283);
     expect(step.bearingAfter).toBe(300);

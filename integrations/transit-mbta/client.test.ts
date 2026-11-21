@@ -1,5 +1,5 @@
 import type { SharedRequestPolicy, UpstreamRuntime } from "@openmapx/integration-framework";
-import { fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { fakeHttpClient, nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMbtaClient } from "./client";
 import {
@@ -48,7 +48,7 @@ describe("MBTA host transport", () => {
   it("uses generated requests, header credentials, version and bounded JSON:API host acquisition", async () => {
     const f = fixture();
     expect(await apiWebStopControllerIndex({}, { client: f.client })).toEqual({ data: [] });
-    const call = f.http.calls[0];
+    const call = nth(f.http.calls, 0);
     expect(call.method).toBe("getResponse");
     expect(call.url).toBe("https://api-v3.mbta.com/stops");
     expect(call.options).toMatchObject({
@@ -62,11 +62,11 @@ describe("MBTA host transport", () => {
       timeoutMs: 8000,
       contentTypes: ["application/vnd.api+json"],
     });
-    expect(f.shared.admitSharedRequest.mock.calls[0][0]).toMatchObject({
+    expect(nth(f.shared.admitSharedRequest.mock.calls, 0)[0]).toMatchObject({
       scope: "https://api-v3.mbta.com",
       policy: { limit: 1000, durationMs: 60000, minIntervalMs: 60 },
     });
-    expect(f.shared.admitSharedRequest.mock.calls[0][0].key).not.toContain("fixture-key");
+    expect(nth(f.shared.admitSharedRequest.mock.calls, 0)[0].key).not.toContain("fixture-key");
   });
   it("validates included data and null relationships without inventing missing resource identities", async () => {
     const f = fixture({
@@ -81,8 +81,8 @@ describe("MBTA host transport", () => {
       included: [{ type: "route", id: "Red", attributes: { type: 1, color: "DA291C" } }],
     });
     const parsed = await f.client.request("/predictions", Predictions);
-    expect(parsed.included?.[0].attributes).toMatchObject({ color: "DA291C" });
-    expect(parsed.data[0].relationships?.schedule?.data).toBeNull();
+    expect(parsed.included?.[0]?.attributes).toMatchObject({ color: "DA291C" });
+    expect(nth(parsed.data, 0).relationships?.schedule?.data).toBeNull();
     await expect(fixture({ data: [{}] }).client.request("/stops", Stops)).rejects.toMatchObject({
       kind: "payload",
     });
@@ -113,7 +113,7 @@ describe("MBTA host transport", () => {
   it("encodes stop identifiers exactly once", async () => {
     const f = fixture({ data: { type: "stop", id: "a/b" } });
     await apiWebStopControllerShow("a/b", {}, { client: f.client });
-    expect(f.http.calls[0].url).toContain("/stops/a%2Fb");
+    expect(nth(f.http.calls, 0).url).toContain("/stops/a%2Fb");
   });
   it.each([undefined, ""])("does not acquire anonymously with key %s", async (apiKey) => {
     const f = fixture();

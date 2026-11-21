@@ -133,8 +133,8 @@ describe("MdbClient", () => {
 
     const feeds = await client.listGtfsFeeds();
     expect(feeds).toHaveLength(217);
-    expect(feeds[0].id).toBe("mdb-0");
-    expect(feeds[216].id).toBe("mdb-216");
+    expect(feeds[0]?.id).toBe("mdb-0");
+    expect(feeds[216]?.id).toBe("mdb-216");
   });
 
   it("returns the cached feed list when ctx.cache has a hit", async () => {

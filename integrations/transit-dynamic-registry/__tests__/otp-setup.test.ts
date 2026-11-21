@@ -3,6 +3,7 @@ import {
   fakeHttpClient as baseFakeHttpClient,
   createMockIntegrationContext,
   installHostCapabilities,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import * as freshness from "@openmapx/mobility-core/freshness";
 import { describe, expect, it, vi } from "vitest";
@@ -76,9 +77,9 @@ describe("real dynamic OTP setup acquisition", () => {
     installHostCapabilities(ctx, { upstreamRuntime: shared() });
     await setup(ctx);
     try {
-      const result = await ctx.registered.transit[0].searchStopsByName!("Public", 10);
+      const result = await nth(ctx.registered.transit, 0).searchStopsByName!("Public", 10);
       expect(http.calls).toHaveLength(1);
-      expect(http.calls[0].url).toBe(
+      expect(nth(http.calls, 0).url).toBe(
         "https://api.peatus.ee/routing/v1/routers/estonia/index/graphql",
       );
       expect(result.data[0]).toMatchObject({
@@ -107,8 +108,8 @@ describe("real dynamic OTP setup acquisition", () => {
     const entries = manager.snapshotEntries();
     original.options.endpoint = "https://evil.test";
     expect(entries).toHaveLength(1);
-    expect(entries[0].options.endpoint).toBe(entry.options.endpoint);
-    expect(Object.isFrozen(entries[0].options)).toBe(true);
+    expect(nth(entries, 0).options.endpoint).toBe(entry.options.endpoint);
+    expect(Object.isFrozen(nth(entries, 0).options)).toBe(true);
   });
 });
 
@@ -122,7 +123,7 @@ describe("final setup publication fence", () => {
     ctx.getDisallowedSourceIds = async () => new Set(++checks >= 5 ? ["peatus"] : []);
     await setup(ctx);
     try {
-      await expect(ctx.registered.transit[0].searchStopsByName!("Public", 1)).rejects.toThrow(
+      await expect(nth(ctx.registered.transit, 0).searchStopsByName!("Public", 1)).rejects.toThrow(
         "OTP source denied",
       );
     } finally {
@@ -145,8 +146,8 @@ describe("captured registry generation", () => {
     await setup(ctx);
     original.options.endpoint = "https://changed.test";
     try {
-      await ctx.registered.transit[0].searchStopsByName?.("X", 1);
-      expect(search.mock.calls[0][0]).toMatchObject({
+      await nth(ctx.registered.transit, 0).searchStopsByName?.("X", 1);
+      expect(nth(search.mock.calls, 0)[0]).toMatchObject({
         options: { endpoint: "https://hafas.test/mgate", auth: { type: "fixture" } },
         timezone: entry.timezone,
         coverage: entry.coverage,
@@ -169,9 +170,9 @@ describe("captured registry generation", () => {
     await replacement.initialize();
     registry.replaceWith(replacement);
     try {
-      const result = await ctx.registered.transit[0].searchStopsByName?.("Public", 1);
-      expect(result?.attributions[0].name).toBe("Peatus");
-      expect(http.calls[0].url).toBe(
+      const result = await nth(ctx.registered.transit, 0).searchStopsByName?.("Public", 1);
+      expect(result?.attributions[0]?.name).toBe("Peatus");
+      expect(nth(http.calls, 0).url).toBe(
         "https://api.peatus.ee/routing/v1/routers/estonia/index/graphql",
       );
     } finally {
@@ -195,9 +196,9 @@ describe("captured registry generation", () => {
       return new Set();
     };
     await setup(ctx);
-    const pending = ctx.registered.transit[0].searchStopsByName!("Public", 1);
+    const pending = nth(ctx.registered.transit, 0).searchStopsByName!("Public", 1);
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-    await shutdown[0]();
+    await nth(shutdown, 0)();
     await expect(pending).rejects.toThrow("OTP request cancelled");
     finish();
     registry.stopRefresh();
@@ -238,7 +239,7 @@ describe("retirement in the publishing continuation", () => {
               const retire = (left: number): void => {
                 if (left === 0) {
                   retired = true;
-                  void shutdown[0]();
+                  void nth(shutdown, 0)();
                 } else queueMicrotask(() => retire(left - 1));
               };
               retire(depth);
@@ -246,7 +247,7 @@ describe("retirement in the publishing continuation", () => {
             return new Set();
           };
           await setup(ctx);
-          const provider = ctx.registered.transit[0];
+          const provider = nth(ctx.registered.transit, 0);
           try {
             if (surface === "nearby") await provider.getStopsNearby?.(58, 25, 500);
             else if (surface === "departures") await provider.getDepartures?.("peatus:EE:1", 10);
@@ -256,7 +257,7 @@ describe("retirement in the publishing continuation", () => {
           }
           await new Promise((resolve) => setImmediate(resolve));
           if (wrappedAfterRetire) badDepths.push(depth);
-          await shutdown[0]();
+          await nth(shutdown, 0)();
           registry.stopRefresh();
         }
         expect(badDepths).toEqual([]);

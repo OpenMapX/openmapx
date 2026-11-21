@@ -4,6 +4,7 @@ import {
   createSiteOrchestrator,
   type IntegrationContext,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { ChargingSite, EnergyTariff } from "@openmapx/mobility-core/ev-charging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stubClosureExclusions } from "./__tests__/support/closure-exclusion-stub.js";
@@ -164,18 +165,18 @@ describe("runEvPlan", () => {
       avoidClosures: false,
     });
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
-    expect(result.stops[0].station.id).toBe(SITE_ID);
-    expect(result.stops[0].attributions).toEqual([
+    expect(nth(result.stops, 0).station.id).toBe(SITE_ID);
+    expect(nth(result.stops, 0).attributions).toEqual([
       { sourceId: "ocm-charging", name: "Open Charge Map" },
     ]);
-    expect(result.stops[0].availability).toEqual({
+    expect(nth(result.stops, 0).availability).toEqual({
       available: 1,
       total: 1,
       updatedAt: "2026-10-05T08:00:00Z",
     });
     // getRoute called twice: base + re-route with inserted waypoint
     expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(2);
-    const rerouteWps = ctx._valhalla.getRoute.mock.calls[1][0];
+    const rerouteWps = nth(ctx._valhalla.getRoute.mock.calls, 1)[0];
     expect(rerouteWps.length).toBe(3); // origin + charger + dest
   });
 
@@ -232,8 +233,8 @@ describe("runEvPlan", () => {
 
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
     expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(2);
-    const baseOpts = ctx._valhalla.getRoute.mock.calls[0][2];
-    const rerouteOpts = ctx._valhalla.getRoute.mock.calls[1][2];
+    const baseOpts = nth(ctx._valhalla.getRoute.mock.calls, 0)[2];
+    const rerouteOpts = nth(ctx._valhalla.getRoute.mock.calls, 1)[2];
     expect(baseOpts.excludeLocations).toEqual([closurePoint]);
     expect(baseOpts.excludeLocations.length).toBeGreaterThan(0);
     // Same exclusions threaded into BOTH the base route and the re-route.
@@ -302,7 +303,7 @@ describe("runEvPlan", () => {
       });
     };
     const member = await plan({ ...energyTariff("m", 0.29), type: "profile_cheap" });
-    expect(member.stops[0].contractTariff).toBe(true);
+    expect(nth(member.stops, 0).contractTariff).toBe(true);
     const adHoc = await plan({ ...energyTariff("a", 0.59), type: "ad_hoc" });
     expect(adHoc.stops[0]).not.toHaveProperty("contractTariff");
     const untyped = await plan(energyTariff("u", 0.59));
@@ -416,7 +417,7 @@ describe("runEvPlan", () => {
       homeCurrency: "EUR",
     });
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
-    expect(result.stops[0].estimatedCost?.currency).toBe("CHF");
+    expect(nth(result.stops, 0).estimatedCost?.currency).toBe("CHF");
     expect(result.totals.estimatedCost?.currency).toBe("EUR");
     expect(result.totals.estimatedCost?.amount).toBeGreaterThan(0);
     expect(result.totals.estimatedCost?.otherCurrencies).toContainEqual(
@@ -527,7 +528,7 @@ describe("runEvPlan", () => {
       avoidClosures: false,
     });
     expect(provider.searchSites).toHaveBeenCalled();
-    const [bbox, query] = provider.searchSites.mock.calls[0];
+    const [bbox, query] = nth(provider.searchSites.mock.calls, 0);
     expect(bbox).toHaveLength(4);
     expect(query).toEqual({ excludedSourceIds: ["ocm-charging"], maxSites: 8000 });
     expect(result.stops).toHaveLength(0);
@@ -657,7 +658,7 @@ describe("runEvPlan", () => {
       socStartPct: 40,
       avoidClosures: false,
     });
-    expect(result.stops[0]?.attributions).toEqual([
+    expect(nth(result.stops, 0)?.attributions).toEqual([
       {
         sourceId: "nl-ndw-charging",
         name: "NDW",
@@ -757,8 +758,12 @@ describe("runEvPlan", () => {
       socStartPct: 40,
       avoidClosures: false,
     });
-    expect(result.stops[0].tariffPrice).toEqual({ amount: 0.39, currency: "EUR", unit: "kWh" });
-    expect(result.stops[0].estimatedCost).toEqual({
+    expect(nth(result.stops, 0).tariffPrice).toEqual({
+      amount: 0.39,
+      currency: "EUR",
+      unit: "kWh",
+    });
+    expect(nth(result.stops, 0).estimatedCost).toEqual({
       amount: expect.any(Number),
       currency: "EUR",
     });
@@ -798,8 +803,8 @@ describe("runEvPlan", () => {
         avoidClosures: false,
       });
     };
-    expect((await plan("2026-10-05T20:00")).stops[0].tariffPrice?.amount).toBe(0.29);
-    expect((await plan("2026-10-05T08:00")).stops[0].tariffPrice?.amount).toBe(0.59);
+    expect(nth((await plan("2026-10-05T20:00")).stops, 0).tariffPrice?.amount).toBe(0.29);
+    expect(nth((await plan("2026-10-05T08:00")).stops, 0).tariffPrice?.amount).toBe(0.59);
   });
 });
 
@@ -827,10 +832,10 @@ it("carries the selected charger acquisition receipt into the stop and station p
       avoidClosures: false,
     },
   );
-  expect(result.stops[0].contributors).toEqual([receipt]);
-  expect(result.stops[0].station.contributors).toEqual([receipt]);
+  expect(nth(result.stops, 0).contributors).toEqual([receipt]);
+  expect(nth(result.stops, 0).station.contributors).toEqual([receipt]);
   receipt.attributionText = "Changed metadata";
-  expect(result.stops[0].contributors?.[0].attributionText).toBe("Original mandatory notice");
+  expect(nth(result.stops, 0).contributors?.[0]?.attributionText).toBe("Original mandatory notice");
 });
 
 it("projects selected connector receipts without borrowing an unused connector supplier", async () => {
@@ -848,7 +853,8 @@ it("projects selected connector receipts without borrowing an unused connector s
       "evses.0.connectors.1": [d],
     },
   });
-  site.evses[0].connectors.push({ ...site.evses[0].connectors[0], key: "e1/2", maxPowerKw: 10 });
+  const { connectors } = nth(site.evses, 0);
+  connectors.push({ ...nth(connectors, 0), key: "e1/2", maxPowerKw: 10 });
   const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
   const result = await runEvPlan(
     ctx as unknown as IntegrationContext,
@@ -863,9 +869,9 @@ it("projects selected connector receipts without borrowing an unused connector s
       avoidClosures: false,
     },
   );
-  expect(result.stops[0].fieldContributors?.powerKw).toEqual([c]);
-  expect(result.stops[0].station.contributors).toEqual([a]);
-  expect(result.stops[0].contributors).not.toContainEqual(d);
+  expect(nth(result.stops, 0).fieldContributors?.powerKw).toEqual([c]);
+  expect(nth(result.stops, 0).station.contributors).toEqual([a]);
+  expect(nth(result.stops, 0).contributors).not.toContainEqual(d);
 });
 
 it("keeps planned model and total receipts from the base acquisition after rerouting", async () => {
@@ -913,10 +919,10 @@ it("keeps planned model and total receipts from the base acquisition after rerou
     },
   );
   expect(result.stops.length).toBeGreaterThan(0);
-  expect(result.routes[0].contributors).toEqual([final]);
-  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(base);
-  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(matrix);
-  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(final);
+  expect(nth(result.routes, 0).contributors).toEqual([final]);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).toContainEqual(base);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).toContainEqual(matrix);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).not.toContainEqual(final);
   expect(result.totals.fieldContributors?.energyKwh).toEqual([base]);
   expect(result.totals.fieldContributors?.driveSeconds).toEqual([final]);
   expect(result.totals.fieldContributors?.estimatedCost).toContainEqual(base);
@@ -939,10 +945,11 @@ it.each([false, true])(
         "evses.0.connectors": [unused],
       },
     });
-    if (!own) site.evses[0].status = undefined;
-    site.evses[0].connectors[0].status = "available";
-    site.evses[0].connectors.push({
-      ...site.evses[0].connectors[0],
+    const evse = nth(site.evses, 0);
+    if (!own) evse.status = undefined;
+    nth(evse.connectors, 0).status = "available";
+    evse.connectors.push({
+      ...nth(evse.connectors, 0),
       key: "e1/2",
       status: "available",
       stale: true,
@@ -961,8 +968,8 @@ it.each([false, true])(
         avoidClosures: false,
       },
     );
-    expect(result.stops[0].availability?.available).toBe(1);
-    expect(result.stops[0].fieldContributors?.availability).toEqual([status]);
+    expect(nth(result.stops, 0).availability?.available).toBe(1);
+    expect(nth(result.stops, 0).fieldContributors?.availability).toEqual([status]);
   },
 );
 
@@ -1003,8 +1010,8 @@ it("keeps only selected approach matrix receipts in modeled values and exact ene
       avoidClosures: false,
     },
   );
-  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(used);
-  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(unused);
-  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(distance);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).toContainEqual(used);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).not.toContainEqual(unused);
+  expect(nth(result.stops, 0).fieldContributors?.arriveSocPct).not.toContainEqual(distance);
   expect(result.totals.fieldContributors.energyKwh).toEqual([geometry]);
 });

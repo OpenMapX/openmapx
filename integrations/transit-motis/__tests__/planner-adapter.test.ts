@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -77,7 +78,7 @@ describe("MOTIS planner request mapping", () => {
       },
     });
 
-    const query = planMock.mock.calls[0][0].query;
+    const query = nth(planMock.mock.calls, 0)[0].query;
     expect(query).toMatchObject({
       maxTransfers: 2,
       minTransferTime: 3,
@@ -113,7 +114,7 @@ describe("MOTIS planner request mapping", () => {
     await planTrip(instance, 1, 2, 3, 4, "2026-07-15", "10:00:00", false, 3, {
       transferBuffer: preset,
     });
-    const query = planMock.mock.calls[0][0].query;
+    const query = nth(planMock.mock.calls, 0)[0].query;
     expect(query.minTransferTime).toBe(min);
     expect(query.additionalTransferTime).toBe(additional);
   });
@@ -350,7 +351,7 @@ it("shows RE1 26839 without a ticket filter and preserves a selectable Eurostar 
     transfers: 0,
     regionalOnly: true,
   });
-  expect(replacement.legs[1].tripId).toContain("3469151921");
-  expect(replacement.legs[1].geometry.coordinates.length).toBeGreaterThan(2);
+  expect(nth(replacement.legs, 1).tripId).toContain("3469151921");
+  expect(nth(replacement.legs, 1).geometry.coordinates.length).toBeGreaterThan(2);
   expect(replacement).not.toHaveProperty("id");
 });

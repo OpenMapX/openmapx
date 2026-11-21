@@ -138,5 +138,5 @@ it("narrows network feature credits to drawable route snapshots", () => {
     { id: "b", contributors: [b], shortName: "B", longName: "", mode: "rail", operatorName: "" },
   ]);
   expect(features).toHaveLength(1);
-  expect(JSON.parse(String(features[0].properties?._mapAttributions))).toEqual([a]);
+  expect(JSON.parse(String(features[0]?.properties?._mapAttributions))).toEqual([a]);
 });

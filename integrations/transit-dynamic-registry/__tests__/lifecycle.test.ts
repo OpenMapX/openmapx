@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 
 const registryMock = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ describe("dynamic transit registry lifecycle", () => {
     expect(oldHandlers).toHaveLength(1);
     expect(newHandlers).toHaveLength(1);
 
-    await oldHandlers[0]();
+    await nth(oldHandlers, 0)();
     expect(registryMock.releases[0]).toHaveBeenCalledTimes(1);
     expect(registryMock.releases[1]).not.toHaveBeenCalled();
     expect(registryMock.stopRefresh).not.toHaveBeenCalled();

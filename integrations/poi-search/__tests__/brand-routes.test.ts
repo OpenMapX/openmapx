@@ -1,6 +1,7 @@
 import { getBrandByQid, suggestBrands } from "@openmapx/brands";
 import { brandToFilter, validateOverpassFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
@@ -162,7 +163,7 @@ describe("GET /brand/:qid route", () => {
     if (!suggestHandler) throw new Error("handler not registered");
     const suggestReply = makeReply();
     await suggestHandler({ query: { q: "starbucks", country: "us" }, params: {} }, suggestReply);
-    const qid = (suggestReply.payload as { matches: Array<{ qid: string }> }).matches[0].qid;
+    const qid = nth((suggestReply.payload as { matches: Array<{ qid: string }> }).matches, 0).qid;
 
     const handler = ctx.routes.get("/brand/:qid");
     if (!handler) throw new Error("handler not registered");
@@ -196,7 +197,7 @@ describe("brand catalog behind the routes", () => {
 
 describe("GET /brand/:qid/logo-attribution per-file receipt", () => {
   it("returns the complete exact-file credit DTO using host HTTP", async () => {
-    const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+    const entry = getBrandByQid(nth(suggestBrands("starbucks", "us", 1), 0).qid);
     if (!entry) throw new Error("known catalog brand missing");
     const ctx = makeCtx();
     const get = vi.fn(async () => ({
@@ -247,7 +248,7 @@ describe("GET /brand/:qid/logo-attribution per-file receipt", () => {
     );
   });
   it("does not cache or advertise an incomplete file as a successful logo", async () => {
-    const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+    const entry = getBrandByQid(nth(suggestBrands("starbucks", "us", 1), 0).qid);
     if (!entry) throw new Error("known catalog brand missing");
     const ctx = makeCtx();
     Object.assign(ctx, { http: { get: async () => ({ query: { pages: {} } }) } });
@@ -287,14 +288,17 @@ describe("brand catalogue field receipts", () => {
     source.name = "Later catalogue name";
     pending.resolve();
     await task;
-    const row = (
-      reply.payload as {
-        matches: Array<{
-          contributors: Array<{ sourceId: string; name: string }>;
-          fieldContributors: Record<string, unknown>;
-        }>;
-      }
-    ).matches[0];
+    const row = nth(
+      (
+        reply.payload as {
+          matches: Array<{
+            contributors: Array<{ sourceId: string; name: string }>;
+            fieldContributors: Record<string, unknown>;
+          }>;
+        }
+      ).matches,
+      0,
+    );
     expect(row.contributors).toContainEqual(
       expect.objectContaining({ sourceId: "name-suggestion-index", name: originalName }),
     );
@@ -307,7 +311,7 @@ describe("brand catalogue field receipts", () => {
 });
 
 it("preserves an explicitly empty catalogue receipt rather than borrowing current manifest credit", async () => {
-  const entry = getBrandByQid(suggestBrands("starbucks", "us", 1)[0].qid);
+  const entry = getBrandByQid(nth(suggestBrands("starbucks", "us", 1), 0).qid);
   if (!entry) throw new Error("known catalog brand missing");
   const old = entry.contributors;
   const oldFields = entry.fieldContributors;

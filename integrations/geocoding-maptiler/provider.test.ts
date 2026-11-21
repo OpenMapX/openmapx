@@ -4,6 +4,7 @@ import {
   type FakeHttpClient,
   fakeHttpClient,
   httpStatus,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
@@ -63,7 +64,7 @@ describe("MapTiler geocoding provider", () => {
         ],
       }),
     );
-    const [result] = await maptilerGeocodingService.autocomplete("Shop");
+    const result = nth(await maptilerGeocodingService.autocomplete("Shop"), 0);
     expect(result.address).toContain("1 Main St");
     expect(result.addressEvidence?.components).toEqual({ road: "Main St", house_number: "1" });
   });
@@ -371,8 +372,8 @@ describe("MapTiler geocoding provider", () => {
           ],
         }),
       );
-      const [forward] = await maptilerGeocodingService.geocode("Cafe");
-      const [autocomplete] = await maptilerGeocodingService.autocomplete("Cafe");
+      const forward = nth(await maptilerGeocodingService.geocode("Cafe"), 0);
+      const autocomplete = nth(await maptilerGeocodingService.autocomplete("Cafe"), 0);
       for (const result of [forward, autocomplete]) {
         expect(result.address).toBeUndefined();
         expect(result.addressEvidence).toEqual({
@@ -409,7 +410,7 @@ describe("MapTiler geocoding provider", () => {
         ],
       }),
     );
-    const [result] = await maptilerGeocodingService.autocomplete("Cafe");
+    const result = nth(await maptilerGeocodingService.autocomplete("Cafe"), 0);
     expect(result.addressEvidence).toEqual({
       components: {},
       source: "geocoding-maptiler",
@@ -455,7 +456,7 @@ describe("MapTiler geocoding provider", () => {
       }),
     );
 
-    const [result] = await maptilerGeocodingService.autocomplete("Köln");
+    const result = nth(await maptilerGeocodingService.autocomplete("Köln"), 0);
 
     expect(result).toMatchObject({
       id: "maptiler:poi.123",
@@ -683,7 +684,7 @@ describe("address primary labels", () => {
       context: [{ id: "country.1", text: "Country", country_code: country }],
     };
     mockFetch.mockResolvedValueOnce(mockOk({ features: [feature] }));
-    const [result] = await maptilerGeocodingService.autocomplete(text);
+    const result = nth(await maptilerGeocodingService.autocomplete(text), 0);
     expect(result.label).toBe(expected);
     expect(result.sublabel).toBe(feature.place_name);
     expect(result.addressEvidence?.components).toEqual({
@@ -708,7 +709,7 @@ describe("address primary labels", () => {
         ],
       }),
     );
-    expect((await maptilerGeocodingService.autocomplete("Cafe"))[0].label).toBe("Cafe 66");
+    expect(nth(await maptilerGeocodingService.autocomplete("Cafe"), 0).label).toBe("Cafe 66");
   });
 });
 

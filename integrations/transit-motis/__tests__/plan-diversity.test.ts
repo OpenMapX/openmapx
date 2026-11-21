@@ -1,4 +1,5 @@
 import type { Itinerary, PlanResponse } from "@motis-project/motis-client";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { diversifyPlan, regionalModes } from "../plan-diversity.js";
 
@@ -74,7 +75,7 @@ describe("MOTIS regional diversity", () => {
       preTransitRentalProviders: ["x"],
     } as never;
     await diversifyPlan(constraints, run, options);
-    expect(run.mock.calls[1][0]).toMatchObject({
+    expect(nth(run.mock.calls, 1)[0]).toMatchObject({
       arriveBy: true,
       pedestrianProfile: "WHEELCHAIR",
       requireBikeTransport: true,
@@ -83,8 +84,8 @@ describe("MOTIS regional diversity", () => {
       preTransitRentalProviders: ["x"],
       minTransferTime: 3,
     });
-    expect(run.mock.calls[1][0].directModes).toBeUndefined();
-    expect(run.mock.calls[1][1]).toBeInstanceOf(AbortSignal);
+    expect(nth(run.mock.calls, 1)[0].directModes).toBeUndefined();
+    expect(nth(run.mock.calls, 1)[1]).toBeInstanceOf(AbortSignal);
   });
   it.each([false, true])(
     "does not supplement disabled or local-only results (%s)",
@@ -129,7 +130,7 @@ describe("MOTIS regional diversity", () => {
       options,
     );
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].pageCursor).toBe("R-more");
+    expect(nth(run.mock.calls, 0)[0].pageCursor).toBe("R-more");
     run.mockReset().mockResolvedValue({ data: page([]) });
     await diversifyPlan({ ...query, pageCursor: third!.data.previousPageCursor }, run, options);
     expect(run.mock.calls.map((c) => c[0].pageCursor)).toEqual(["P-back", "R-return"]);
@@ -144,7 +145,7 @@ describe("MOTIS regional diversity", () => {
     const run = vi.fn().mockResolvedValue({ data: page([ice]) });
     await diversifyPlan({ ...query, pageCursor: "LATER|42" }, run, options);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].pageCursor).toBe("LATER|42");
+    expect(nth(run.mock.calls, 0)[0].pageCursor).toBe("LATER|42");
   });
 });
 

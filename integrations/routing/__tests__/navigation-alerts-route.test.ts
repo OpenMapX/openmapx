@@ -7,7 +7,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   overpassQuerySafe: (...args: unknown[]) => overpassQuerySafe(...args),
 }));
 
-import { createFencedMemoryCache } from "@openmapx/integration-framework/testing";
+import { createFencedMemoryCache, nth } from "@openmapx/integration-framework/testing";
 import kaarst from "../__fixtures__/kaarst-maubisstrasse-alerts.json";
 import {
   createRoutingHandlerEnvironment,
@@ -60,7 +60,7 @@ describe("GET /navigation/alerts", () => {
     expect(Object.keys(reply.body as object)).toEqual(["alerts"]);
     expect(body.alerts.map((alert) => alert.id)).toContain("stop:8557831413");
     expect(body.alerts.every((alert) => alert.roads.length > 0)).toBe(true);
-    expect(overpassQuerySafe.mock.calls[0][0]).toContain('way(bn.alerts)["highway"]');
+    expect(nth(overpassQuerySafe.mock.calls, 0)[0]).toContain('way(bn.alerts)["highway"]');
     expect(stored).toEqual([
       { key: expect.stringMatching(/^cache:nav:alerts:v2/), ttl: 86_400, cached: true },
     ]);
@@ -74,7 +74,7 @@ describe("GET /navigation/alerts", () => {
       { query: { bbox: "51.22612,6.61249,51.23288,6.62501" } },
       createRoutingTestReply(),
     );
-    expect(overpassQuerySafe.mock.calls[0][0]).toContain(
+    expect(nth(overpassQuerySafe.mock.calls, 0)[0]).toContain(
       'node["highway"="stop"](51.226,6.612,51.233,6.626)',
     );
   });

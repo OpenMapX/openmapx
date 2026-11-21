@@ -1,5 +1,5 @@
 import type { HttpResponse, UpstreamRuntime } from "@openmapx/integration-framework";
-import { fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { fakeHttpClient, nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOtpGraphQlAdapter } from "../otp-graphql";
 import { OTP_PROFILES, publicOtpPolicy, resolveOtpProfile } from "../otp-profiles";
@@ -176,12 +176,14 @@ describe("generated dynamic OTP acquisition", () => {
         expect(JSON.stringify(call)).not.toContain("untrusted-catalog-key");
       }
       if (family === "digitransit")
-        expect(f.http.calls[0].options?.headers).toHaveProperty(
+        expect(nth(f.http.calls, 0).options?.headers).toHaveProperty(
           "digitransit-subscription-key",
           "operator-secret",
         );
       else
-        expect(f.http.calls[0].options?.headers).not.toHaveProperty("digitransit-subscription-key");
+        expect(nth(f.http.calls, 0).options?.headers).not.toHaveProperty(
+          "digitransit-subscription-key",
+        );
     },
   );
   it.each([
@@ -225,9 +227,10 @@ describe("generated dynamic OTP acquisition", () => {
       data: { stop: { gtfsId: "feed:1", stoptimesWithoutPatterns: [c] } },
     });
     const { departures: result } = await f.adapter.getDepartures(f.entry, "peatus:feed:1", 10);
-    expect(result[0].expectedAt).toBeUndefined();
-    expect(result[0].delaySeconds).toBeUndefined();
-    expect(result[0].canceled).toBe(false);
+    const departure = nth(result, 0);
+    expect(departure.expectedAt).toBeUndefined();
+    expect(departure.delaySeconds).toBeUndefined();
+    expect(departure.canceled).toBe(false);
     const empty = fixture("trufi", { data: { quay: { id: "feed:1", estimatedCalls: [] } } });
     expect((await empty.adapter.getDepartures(empty.entry, "trufi:feed:1", 10)).departures).toEqual(
       [],
@@ -329,7 +332,7 @@ describe("generated dynamic OTP acquisition", () => {
     const identities = f.admit.mock.calls.map((call) => call[0]);
     expect(new Set(identities.map((x) => JSON.stringify(x))).size).toBe(1);
     expect(JSON.stringify(identities)).not.toContain("same");
-    await publicOtpPolicy(keyed[0], "other", f.runtime).beforeRequest(signal);
+    await publicOtpPolicy(nth(keyed, 0), "other", f.runtime).beforeRequest(signal);
     expect(f.admit.mock.calls.at(-1)![0]).not.toEqual(identities[0]);
     expect(() =>
       resolveOtpProfile({

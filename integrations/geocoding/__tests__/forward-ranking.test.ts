@@ -4,6 +4,7 @@ import {
   createNoopLogger,
   createPassthroughCache,
   fakeHttpClient,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,7 +71,7 @@ function harness(cache = new Map<string, unknown>()) {
       header: vi.fn(),
       type: vi.fn(),
     });
-    return send.mock.calls[0][0] as SearchResult[];
+    return nth(send.mock.calls, 0)[0] as SearchResult[];
   };
   return { call, cache, loads };
 }
@@ -80,7 +81,7 @@ describe("forward geocoding station ranking", () => {
     "ranks the actual railway station ahead of taxi, cafe, signal box and platforms for %s",
     async (query) => {
       const result = await harness().call(query);
-      expect(result[0].id).toBe(STATION);
+      expect(nth(result, 0).id).toBe(STATION);
       expect(result.every((r) => r.provider === "geocoding-maptiler")).toBe(true);
       expect(new Set(result.map((r) => r.id)).size).toBe(result.length);
     },
@@ -95,7 +96,7 @@ describe("forward geocoding station ranking", () => {
       expect(warm).toEqual(cold);
       expect(loads).toHaveLength(1);
       expect(cold).toHaveLength(18);
-      expect(cold[0].id).toBe(STATION);
+      expect(nth(cold, 0).id).toBe(STATION);
       answers.push(cold);
     }
     expect(answers[0]).toEqual(answers[1]);
@@ -172,14 +173,14 @@ describe("forward geocoding station ranking", () => {
     };
     const cache = new Map<string, unknown>([["cache:geocode:669e28ebd7636077", [cachedResult]]]);
     const result = await harness(cache).call("Hauptbahnhof Neuss");
-    expect(result[0].id).toBe(STATION);
-    expect(result[0].id).not.toBe(cachedResult.id);
+    expect(nth(result, 0).id).toBe(STATION);
+    expect(nth(result, 0).id).not.toBe(cachedResult.id);
   });
 
   it("preserves provider order for an ordinary POI query whose desired candidate is absent", async () => {
     const result = await harness().call("Neuss Marktplatz");
-    expect(result[0].id).toBe("maptiler:poi.32334704");
-    expect(result[0].confidence).toBe(0.74);
+    expect(nth(result, 0).id).toBe("maptiler:poi.32334704");
+    expect(nth(result, 0).confidence).toBe(0.74);
   });
 
   it.each(["Taxi Neuss Hbf", "Parking Neuss Hauptbahnhof", "Am Hauptbahnhof 8 Neuss", "Berlin"])(

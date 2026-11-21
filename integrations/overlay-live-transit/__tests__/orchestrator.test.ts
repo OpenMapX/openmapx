@@ -111,5 +111,5 @@ it("captures serving vehicle receipts before observed replacements discard estim
   } as never);
   const out = await orchestrator.getVehicles([0, 0, 1, 1]);
   expect(out).toHaveLength(1);
-  expect(out[0].contributors).toEqual([b]);
+  expect(out[0]?.contributors).toEqual([b]);
 });

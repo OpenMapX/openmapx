@@ -2,6 +2,7 @@ import {
   createNavigationSessionSnapshot,
   parseNavigationSessionSnapshot,
 } from "@openmapx/core/navigation";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { concatenateRoutes } from "../route-concat.js";
 import type { Route, RouteStep } from "../types.js";
@@ -369,8 +370,8 @@ it("preserves all required notices and field receipts when retained legs overlap
   expect(joined.sourceIds).toEqual(["a", "b"]);
   expect(joined.geometry).toHaveLength(3);
   a.attributionText = "changed";
-  expect(joined.contributors?.[0].attributionText).toBe("A notice");
-  expect(joined.fieldContributors?.geometry[0].attributionText).toBe("A notice");
+  expect(joined.contributors?.[0]?.attributionText).toBe("A notice");
+  expect(joined.fieldContributors?.geometry?.[0]?.attributionText).toBe("A notice");
 });
 
 it("copies scalar receipts from the retained value and drops absent output fields", () => {
@@ -461,7 +462,7 @@ it("retains uniform field ownership beside a partial route and preserves spatial
   expect(restored?.route.geometryContributors).toEqual(joined.geometryContributors);
   expect(restored?.route.fieldContributors).toEqual(joined.fieldContributors);
   a.attributionText = "later mutation";
-  expect(restored?.route.geometryContributors?.[0].contributors?.[0].attributionText).toBe(
+  expect(restored?.route.geometryContributors?.[0]?.contributors?.[0]?.attributionText).toBe(
     "A required",
   );
 });
@@ -476,7 +477,7 @@ it("keeps canonical empty child authority over a parent's stale detailed tree", 
     contributors: [a],
     fieldContributors: { legs: [a], "legs.0.summary": [a] },
   });
-  first.legs[0].contributors = [];
+  nth(first.legs, 0).contributors = [];
   const second = route({
     geometry: [
       [1, 0],

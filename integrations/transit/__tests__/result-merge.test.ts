@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import { describe, expect, it, vi } from "vitest";
@@ -48,7 +49,7 @@ describe("transit result merging", () => {
     const dedupAndOrder = vi.fn(() => ordered);
     const input = [attribution("second"), attribution("first")];
 
-    expect(mergeAttributions({ dedupAndOrder }, [input[0]], [input[1]])).toEqual(input);
+    expect(mergeAttributions({ dedupAndOrder }, [nth(input, 0)], [nth(input, 1)])).toEqual(input);
     expect(dedupAndOrder).not.toHaveBeenCalled();
   });
 

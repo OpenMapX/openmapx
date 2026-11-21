@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 
 const loader = vi.hoisted(() => ({
@@ -23,7 +23,7 @@ describe("OurAirports overlay lifecycle", () => {
     setup(ctx);
 
     expect(shutdownHandlers).toHaveLength(1);
-    void shutdownHandlers[0]();
+    void nth(shutdownHandlers, 0)();
     expect(loader.release).toHaveBeenCalledTimes(1);
   });
 });

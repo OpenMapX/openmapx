@@ -1,7 +1,7 @@
 import type { LngLat } from "@openmapx/core";
 import { weatherCodeToDescription } from "@openmapx/core";
 import type { WeatherProvider } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseMetSymbol, SYMBOL_TO_WMO, setup } from "./index.js";
 
@@ -158,7 +158,7 @@ describe("MET Norway weather provider", () => {
 
   it("falls back to the next_6_hours symbol without reporting its 6-hour total as current", async () => {
     const data = sampleResponse();
-    delete (data.properties.timeseries[0].data as Record<string, unknown>).next_1_hours;
+    delete (nth(data.properties.timeseries, 0).data as Record<string, unknown>).next_1_hours;
     mockFetch.mockResolvedValueOnce(mockOk(data));
 
     const res = await getProvider().getCurrentWeather(COORDS);
@@ -168,7 +168,7 @@ describe("MET Norway weather provider", () => {
 
   it("classifies the forecast cloud cover when the symbol is unknown or absent", async () => {
     const unknown = sampleResponse();
-    unknown.properties.timeseries[0].data.next_1_hours = {
+    nth(unknown.properties.timeseries, 0).data.next_1_hours = {
       summary: { symbol_code: "unlisted_day" },
       details: { precipitation_amount: 0, probability_of_precipitation: 0 },
     };
@@ -177,17 +177,17 @@ describe("MET Norway weather provider", () => {
     expect((await getProvider().getCurrentWeather(COORDS)).current.weatherCode).toBe(0);
 
     const absent = sampleResponse();
-    const first = absent.properties.timeseries[0].data as Record<string, unknown>;
+    const first = nth(absent.properties.timeseries, 0).data as Record<string, unknown>;
     delete first.next_1_hours;
     delete first.next_6_hours;
-    absent.properties.timeseries[0].data.instant.details.cloud_area_fraction = 50;
+    nth(absent.properties.timeseries, 0).data.instant.details.cloud_area_fraction = 50;
     mockFetch.mockResolvedValueOnce(mockOk(absent));
     expect((await getProvider().getCurrentWeather(COORDS)).current.weatherCode).toBe(2);
   });
 
   it("strips _night suffix and reports isDay false", async () => {
     const data = sampleResponse();
-    data.properties.timeseries[0].data.next_1_hours = {
+    nth(data.properties.timeseries, 0).data.next_1_hours = {
       summary: { symbol_code: "partlycloudy_night" },
       details: { precipitation_amount: 0, probability_of_precipitation: 0 },
     };
@@ -437,7 +437,7 @@ describe("MET Norway weather provider", () => {
 
   it("reads polar-twilight symbols as the base symbol at night", async () => {
     const data = sampleResponse();
-    data.properties.timeseries[0].data.next_1_hours = {
+    nth(data.properties.timeseries, 0).data.next_1_hours = {
       summary: { symbol_code: "partlycloudy_polartwilight" },
       details: { precipitation_amount: 0, probability_of_precipitation: 0 },
     };

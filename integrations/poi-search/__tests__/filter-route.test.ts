@@ -1,5 +1,6 @@
 import { OverpassTimeoutError, OverpassUnavailableError } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 
@@ -109,20 +110,26 @@ describe("POST /filter route", () => {
     await handler(request, open);
     expect(
       (open.payload as { results: Array<{ openingHoursInfo: { status: { isOpen: boolean } } }> })
-        .results[0].openingHoursInfo.status.isOpen,
+        .results[0]?.openingHoursInfo.status.isOpen,
     ).toBe(true);
     vi.setSystemTime(new Date("2026-09-26T18:00:00Z"));
     const closed = makeReply();
     await handler(request, closed);
-    const info = (
-      closed.payload as {
-        results: Array<{ openingHoursInfo: { status: { isOpen: boolean; isUnknown?: boolean } } }>;
-      }
-    ).results[0].openingHoursInfo;
+    const info = nth(
+      (
+        closed.payload as {
+          results: Array<{
+            openingHoursInfo: { status: { isOpen: boolean; isUnknown?: boolean } };
+          }>;
+        }
+      ).results,
+      0,
+    ).openingHoursInfo;
     expect(info.status).toMatchObject({ isOpen: false });
     expect(info.status.isUnknown).toBeFalsy();
     expect(
-      (cached as { results: Array<{ openingHoursInfo?: unknown }> }).results[0].openingHoursInfo,
+      nth((cached as { results: Array<{ openingHoursInfo?: unknown }> }).results, 0)
+        .openingHoursInfo,
     ).toBeUndefined();
   });
   it("200 with { results, partial } for a valid filter + bbox", async () => {
