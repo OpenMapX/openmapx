@@ -1,7 +1,8 @@
+import { cameraMatrix, type MercatorOrigin, mercatorOrigin, objectMatrix } from "@openmapx/core";
 import { nth } from "@openmapx/integration-framework/testing";
 import { MercatorCoordinate } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { cameraMatrix, GLB_TO_SCENE, objectMatrix, unprojectRay } from "../web/frame";
+import { GLB_TO_SCENE, unprojectRay } from "../web/frame";
 
 type Vec3 = [number, number, number];
 type Vec4 = [number, number, number, number];
@@ -63,8 +64,8 @@ function expectedClip(east: number, up: number, south: number): Vec3 {
   return divide(multiply(MAIN, [anchor.x + east * s, anchor.y + south * s, up * s, 1]));
 }
 
-function actualClip(origin: MercatorCoordinate, vertex: Vec3): Vec3 {
-  const full = compose(cameraMatrix(MAIN, origin), objectMatrix(ANCHOR, 0, origin));
+function actualClip(origin: MercatorOrigin, vertex: Vec3): Vec3 {
+  const full = compose(cameraMatrix(MAIN, origin), objectMatrix(ANCHOR, 0, origin, GLB_TO_SCENE));
   return divide(multiply(full, [...vertex, 1]));
 }
 
@@ -75,29 +76,28 @@ function close(a: Vec3, b: Vec3) {
 
 describe("landmark model frame", () => {
   it("maps a vertex 10 m east, 20 m up and 30 m south to the expected clip coordinate", () => {
-    const origin = MercatorCoordinate.fromLngLat(ANCHOR);
+    const origin = mercatorOrigin(...ANCHOR);
     close(actualClip(origin, [10, 20, 30]), expectedClip(10, 20, 30));
   });
 
   it("the clip coordinate is origin-independent", () => {
-    const near = MercatorCoordinate.fromLngLat(ANCHOR);
-    const far = MercatorCoordinate.fromLngLat([2.3075, 48.8644]);
+    const near = mercatorOrigin(...ANCHOR);
+    const far = mercatorOrigin(2.3075, 48.8644);
     close(actualClip(far, [10, 20, 30]), actualClip(near, [10, 20, 30]));
   });
 
   it("object matrices are proper rotations", () => {
-    const origin = MercatorCoordinate.fromLngLat([2.3075, 48.8644]);
-    const det = determinant3(objectMatrix(ANCHOR, 5, origin));
+    const origin = mercatorOrigin(2.3075, 48.8644);
+    const det = determinant3(objectMatrix(ANCHOR, 5, origin, GLB_TO_SCENE));
     const k =
-      MercatorCoordinate.fromLngLat(ANCHOR).meterInMercatorCoordinateUnits() /
-      origin.meterInMercatorCoordinateUnits();
+      MercatorCoordinate.fromLngLat(ANCHOR).meterInMercatorCoordinateUnits() / origin.metersToUnits;
     expect(det).toBeGreaterThan(0);
     expect(det).toBeCloseTo(k ** 3, 12);
     expect(determinant3(GLB_TO_SCENE)).toBe(1);
   });
 
   it("unprojectRay passes through the projected point", () => {
-    const origin = MercatorCoordinate.fromLngLat(ANCHOR);
+    const origin = mercatorOrigin(...ANCHOR);
     const camera = cameraMatrix(MAIN, origin);
     const scenePoint: Vec4 = [12, -7, 25, 1];
     const [nx, ny] = divide(multiply(camera, scenePoint));

@@ -1,10 +1,9 @@
-import { itemAt } from "@openmapx/core";
+import { cameraMatrix, itemAt, mercatorOrigin, objectMatrix } from "@openmapx/core";
 import type { Attribution } from "@openmapx/integration-framework";
-import {
-  type CustomLayerInterface,
-  type CustomRenderMethodInput,
-  type Map as MaplibreMap,
-  MercatorCoordinate,
+import type {
+  CustomLayerInterface,
+  CustomRenderMethodInput,
+  Map as MaplibreMap,
 } from "maplibre-gl";
 import {
   AmbientLight,
@@ -22,7 +21,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { cameraMatrix, objectMatrix, unprojectRay } from "./frame";
+import { GLB_TO_SCENE, unprojectRay } from "./frame";
 import type { LoadedModel } from "./models";
 
 export const LANDMARK_LAYER_ID = "openmapx-landmark-models";
@@ -215,7 +214,7 @@ export class LandmarkModelLayer implements CustomLayerInterface {
       return;
     }
     const center = map.getCenter();
-    const origin = MercatorCoordinate.fromLngLat([center.lng, center.lat]);
+    const origin = mercatorOrigin(center.lng, center.lat);
     const camera = cameraMatrix(projection.mainMatrix, origin);
     this.lastCamera = camera;
     this.camera.projectionMatrix.fromArray(camera);
@@ -224,7 +223,7 @@ export class LandmarkModelLayer implements CustomLayerInterface {
     for (const placed of this.placed) {
       const root = placed.model.scene;
       root.matrix.fromArray(
-        objectMatrix(placed.anchor, placed.groundM + placed.elevationM, origin),
+        objectMatrix(placed.anchor, placed.groundM + placed.elevationM, origin, GLB_TO_SCENE),
       );
       root.matrixWorldNeedsUpdate = true;
       const planes = placed.clipBelowGround

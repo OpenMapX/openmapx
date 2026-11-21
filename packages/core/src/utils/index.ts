@@ -77,6 +77,18 @@ export { lerpHex } from "./hexColor";
 export { indexAt } from "./indexAt";
 export { itemAt } from "./itemAt";
 export { formatAddress, legalConfig } from "./legalConfig";
+export {
+  cameraMatrix,
+  EARTH_CIRCUMFERENCE_M,
+  instanceMatrix,
+  type Matrix4,
+  type MercatorOrigin,
+  mercatorOrigin,
+  multiply4,
+  objectMatrix,
+  scaling4,
+  translation4,
+} from "./mercatorFrame";
 export { numberAt } from "./numberAt";
 export { validObservedAt } from "./observationTime";
 export {
@@ -129,6 +141,12 @@ export {
   clusterSpatialItems,
   type SpatialClusteringOptions,
 } from "./spatialClustering";
+export {
+  bilinear,
+  sampleTerrainGrid,
+  type TerrainProbe,
+  type TerrainSample,
+} from "./terrainProbe";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export {

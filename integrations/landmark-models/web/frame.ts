@@ -1,5 +1,4 @@
 import { numberAt } from "@openmapx/core";
-import { MercatorCoordinate } from "maplibre-gl";
 
 /**
  * Landmark GLBs use X east, Y up, Z south, in metres, with the origin on the
@@ -13,58 +12,6 @@ import { MercatorCoordinate } from "maplibre-gl";
 export const GLB_TO_SCENE: readonly number[] = [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1];
 
 type Matrix = Float64Array;
-
-function multiply(a: ArrayLike<number>, b: ArrayLike<number>): Matrix {
-  const out = new Float64Array(16);
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) sum += numberAt(a, k * 4 + row) * numberAt(b, col * 4 + k);
-      out[col * 4 + row] = sum;
-    }
-  }
-  return out;
-}
-
-function translation(x: number, y: number, z: number): Matrix {
-  return new Float64Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]);
-}
-
-function scaling(x: number, y: number, z: number): Matrix {
-  return new Float64Array([x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]);
-}
-
-/**
- * The three.js camera's projection: MapLibre's `mainMatrix` (mercator 0..1 to
- * clip space), moved to the origin and scaled from scene metres, composed in
- * float64 so street-level precision survives the upload as float32.
- */
-export function cameraMatrix(mainMatrix: ArrayLike<number>, origin: MercatorCoordinate): Matrix {
-  const s = origin.meterInMercatorCoordinateUnits();
-  return multiply(multiply(mainMatrix, translation(origin.x, origin.y, 0)), scaling(s, -s, s));
-}
-
-/**
- * Place a model in scene space. `baseM` is the height of the model's ground
- * above sea level. The uniform scale corrects the mercator scale between the
- * anchor's and the origin's latitude.
- */
-export function objectMatrix(
-  anchor: readonly [number, number],
-  baseM: number,
-  origin: MercatorCoordinate,
-): Matrix {
-  const at = MercatorCoordinate.fromLngLat([anchor[0], anchor[1]]);
-  const s = origin.meterInMercatorCoordinateUnits();
-  const k = at.meterInMercatorCoordinateUnits() / s;
-  return multiply(
-    multiply(
-      translation((at.x - origin.x) / s, -(at.y - origin.y) / s, baseM * k),
-      scaling(k, k, k),
-    ),
-    GLB_TO_SCENE,
-  );
-}
 
 /**
  * Inverse of a column-major 4×4 matrix (gl-matrix's cofactor expansion), or
