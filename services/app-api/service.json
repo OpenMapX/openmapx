@@ -2,7 +2,7 @@
   "id": "app-api",
   "name": "OpenMapX API",
   "version": "1.0.0",
-  "description": "Fastify BFF gateway. Proxies external services and registers integrations.",
+  "description": "The OpenMapX application server: public, account, admin and integration API. The web app, native clients and data-manager call it directly.",
   "license": "AGPL-3.0-or-later",
   "quality": "built-in",
   "privateNetworks": ["dawarich-ingress"],

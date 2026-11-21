@@ -31,9 +31,10 @@ export const WELL_KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   "database",
   "cache",
   "proxy",
-  // Source-data delivery — data-manager exposes these as service-role
-  // capabilities ("I'm the kind of service that delivers OSM/GTFS/tile
-  // assets"). The corresponding produces TYPES (the actual on-disk format)
+  // Source-data delivery — service-role capabilities a service may declare
+  // ("I'm the kind of service that delivers OSM/GTFS/tile assets"). No
+  // built-in service declares or requires them today; the built-in
+  // data-manager delivers data through `produces:`. The corresponding produces TYPES (the actual on-disk format)
   // live in WELL_KNOWN_DATA_TYPES below: `osm-data` covers `osm-pbf` /
   // `osm-pbf-bz2`; `gtfs-data` covers `gtfs`; `tile-asset-data` covers
   // `tile-fonts`.

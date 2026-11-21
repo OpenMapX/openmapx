@@ -2,7 +2,7 @@
   "id": "redis",
   "name": "Valkey (Redis-compatible)",
   "version": "1.0.0",
-  "description": "Valkey 8 — cache and session store.",
+  "description": "Valkey — cache and session store.",
   "license": "BSD-3-Clause",
   "quality": "built-in",
   "homepage": "https://valkey.io/",

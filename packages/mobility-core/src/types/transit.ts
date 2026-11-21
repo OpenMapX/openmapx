@@ -526,7 +526,7 @@ export interface TripPlan extends ContributingRecord {
   source?: string;
   instance?: string;
   datasetEpoch?: string;
-  /** Provider-native cursors are internal and must be replaced by signed BFF tokens. */
+  /** Provider-native cursors are internal and must be replaced by signed API tokens. */
   previousPageCursor?: string;
   nextPageCursor?: string;
   previousPageToken?: string;

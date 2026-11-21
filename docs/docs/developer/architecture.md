@@ -34,14 +34,17 @@ the native mobile app has separate Jest/native checks. The Node and pnpm version
 openmapx/
 ├── apps/
 │   ├── web/                  Next.js 16 frontend (MapLibre GL JS, MUI 9)
-│   ├── api/                  Fastify 5 BFF + integration host + admin API
+│   ├── api/                  Fastify 5 application server + integration host + admin API
 │   ├── ops-agent/            private typed operations broker
 │   ├── transitous-runner/    isolated Transitous preparation runner
 │   └── mobile/               Expo native host for the map and navigation
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
 ├── services/                 built-in service plugins (service.json each)
-│   ├── data-manager/         data preparation, publication and supervision
+│   ├── app-api/              manifest for the api image
+│   ├── app-web/              manifest for the web image
+│   ├── data-manager/         data pipeline: source code and manifest
+│   ├── transitous-runner/    manifest for the Transitous runner
 │   └── ops-agent/            private deployment manifest for the operations broker
 ├── infra/docker/             generated output + operator configuration/state
 └── docs/                     this documentation site
@@ -63,11 +66,11 @@ process. Their executable behavior belongs in separate service containers.
 
 ### Applications
 
-| App              | Stack                                                                                   | Responsibility                                                                                                                                                                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`       | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state.   |
-| `apps/api`       | Fastify 5                                                                               | The backend-for-frontend (BFF) gateway. It is _also_ the integration host: it discovers and configures integrations, runs trusted built-ins, hosts declarative community artifacts, resolves service requirements, enforces admin access, and runs background jobs. |
-| `apps/ops-agent` | Fastify 5                                                                               | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment.                                                                                                |
+| App              | Stack                                                                                   | Responsibility                                                                                                                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`       | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state.                                                                  |
+| `apps/api`       | Fastify 5                                                                               | The application server behind `/api`, called directly by the web app, native clients and data-manager. It is _also_ the integration host: it discovers and configures integrations, runs trusted built-ins, hosts declarative community artifacts, resolves service requirements, enforces admin access, and runs background jobs. |
+| `apps/ops-agent` | Fastify 5                                                                               | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment.                                                                                                                                                               |
 
 The web app calls the API for routing and other provider operations. The API
 reaches bound engines over the Docker network or uses configured external
@@ -234,8 +237,10 @@ and asynchronous jobs:
   exposes their HTTP routes through a single dispatcher (more on this below).
 - The **service registry**, which validates `service.json` manifests and answers
   "what's installed, what does it provide, what URL is it on."
-- The job runner executes service lifecycle operations, data preparation, and
-  community installs off the request path. The admin UI polls its progress.
+- The job runner tracks service lifecycle operations, data preparation, and
+  community installs in the same process but off the request path. It hands
+  host effects to the operations agent and data work to data-manager. The admin
+  UI polls its progress.
 
 A global `onRequest` hook applies tiered, IP-keyed rate limits. It classifies
 each request by the route template Fastify matched, not the raw URL, so an
@@ -261,6 +266,13 @@ failed job preserves the prior live dataset. Shared artifacts are _hardlinked_
 into consumer directories so several engines can use one multi-gigabyte file without another full copy on the same filesystem. The compose renderer plans those links from each service's
 `consumes:`/`produces:` declarations; `data-manager` applies the plan. See
 [Managing services](../install/managing-services.md) for the operator workflow.
+
+Beyond downloads and transit, data-manager builds the PostGIS place and search
+indexes (Overture places, the OSM search index, notable and ambient places),
+runs the live and predicted traffic loops that feed Valhalla, generates and
+serves offline map packages, and reports data coverage. Every host effect it
+needs, such as restarting MOTIS or reloading the feed proxy, is a typed
+operation the operations agent performs; data-manager holds no Docker socket.
 
 ## The capability model
 

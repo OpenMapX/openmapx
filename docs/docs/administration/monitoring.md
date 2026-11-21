@@ -216,7 +216,7 @@ finish or diagnose a container that won't come up. Full coverage is in
 
 ### Application logs
 
-Open **Activity → Application Logs** for the API gateway and integration log stream. It renders the API's structured (pino) log stream with a console-style view:
+Open **Activity → Application Logs** for the API and integration log stream. It renders the API's structured (pino) log stream with a console-style view:
 timestamp, level, source, and message, with any structured metadata appended.
 
 Filter by **level** (a minimum level; `warn` includes warnings and higher levels), by **source** (the emitting subsystem), and by **time range**, plus a

@@ -1,5 +1,5 @@
 /**
- * Thin fetch wrapper for the OpenMapX API gateway (`apps/api`).
+ * Thin fetch wrapper for the OpenMapX API (`apps/api`).
  * All frontend data fetching goes through this client — never directly
  * to Pelias / OSRM / Valhalla.
  */

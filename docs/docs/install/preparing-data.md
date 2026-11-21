@@ -18,6 +18,10 @@ are not enabled.
 
 The data-manager owns `infra/docker/data/`, mounted as `/data`. It downloads
 source files, records dataset inventory, and applies hardlinks to consumer paths.
+It also runs the transit pipeline, builds the PostGIS place and search indexes,
+feeds live and predicted traffic to Valhalla, prepares offline map packages and
+reports data coverage. Host effects such as restarting MOTIS go through the
+operations agent.
 Transit source/job/promotion metadata lives in PostgreSQL; compiled timetable
 rows live in MOTIS artifacts.
 

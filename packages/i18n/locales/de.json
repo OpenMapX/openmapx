@@ -6924,7 +6924,7 @@
     "transitousSyncFeedStateJob": "Transitous-Synchronisierung · Feed-Zustand · Auftragsverlauf · Zustand der Anbieter",
     "refreshAll": "Alles aktualisieren",
     "refreshPipeline": "Pipeline aktualisieren",
-    "failedToLoadTransitPipeline": "Der Zustand der ÖPNV-Pipeline konnte nicht geladen werden. Prüfen Sie die Protokolle von BFF und Datenmanager.",
+    "failedToLoadTransitPipeline": "Der Zustand der ÖPNV-Pipeline konnte nicht geladen werden. Prüfen Sie die Protokolle von API und Datenmanager.",
     "feedsBreakdown": "Aufschlüsselung der Feeds",
     "feedTotal": "{count, number} insgesamt",
     "byRegionTotal": "Nach Region · {count, number} insgesamt",

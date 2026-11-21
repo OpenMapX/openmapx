@@ -56,8 +56,8 @@ OpenMapX is experimental and its contracts are still evolving. Fixes land on act
 
 In scope:
 
-- `apps/web` (Next.js frontend / BFF, including the admin panel)
-- `apps/api` (Fastify API gateway, including the admin API routes)
+- `apps/web` (Next.js frontend, including the admin panel)
+- `apps/api` (Fastify application server: public, account, admin and integration API)
 - `packages/cli` (`openmapx` CLI) and the published `@openmapx/*` packages
 - First-party integrations under `integrations/` and services under `services/`
   (the manifests and any first-party daemon code such as `data-manager`)

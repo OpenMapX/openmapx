@@ -6924,7 +6924,7 @@
     "transitousSyncFeedStateJob": "Transitous sync · feed state · job history · provider health",
     "refreshAll": "Refresh all",
     "refreshPipeline": "Refresh pipeline",
-    "failedToLoadTransitPipeline": "Failed to load transit pipeline state. Check the BFF + data-manager logs.",
+    "failedToLoadTransitPipeline": "Failed to load transit pipeline state. Check the API and data-manager logs.",
     "feedsBreakdown": "Feeds breakdown",
     "feedTotal": "{count, number} total",
     "byRegionTotal": "By region · {count, number} total",
