@@ -55,7 +55,13 @@ vi.mock("@/lib/map", async (importOriginal) => {
   const style = {
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },
-    layers: [] as Array<{ id: string; type: string; source?: string; "source-layer"?: string }>,
+    layers: [] as Array<{
+      id: string;
+      type: string;
+      source?: string;
+      "source-layer"?: string;
+      layout?: Record<string, unknown>;
+    }>,
   };
   let stylePromise = Promise.resolve(style);
   const test = {
@@ -139,7 +145,17 @@ vi.mock("maplibre-gl", () => {
       const style = input as { layers: Array<{ id: string }> };
       nth(options, instances.indexOf(this)).style = style;
     });
+    getLayersOrder = () => this.getStyle()?.layers.map((layer) => layer.id) ?? [];
     getLayer = (id: string) => this.getStyle()?.layers.find((layer) => layer.id === id);
+    getLayoutProperty = (id: string, name: string) => {
+      const layer = this.getLayer(id) as { layout?: Record<string, unknown> } | undefined;
+      return layer?.layout?.[name];
+    };
+    setLayoutProperty = vi.fn((id: string, name: string, value: unknown) => {
+      const layer = this.getLayer(id) as { layout?: Record<string, unknown> } | undefined;
+      if (!layer) return;
+      layer.layout = { ...(layer.layout ?? {}), [name]: value };
+    });
     getSource = () => undefined;
 
     getCenter = () => {
@@ -239,6 +255,7 @@ const maplibreTest = (
         cameraReads: number;
         emitError(error: Error, data?: Record<string, unknown>): void;
         emitStyleLoad(): void;
+        getLayoutProperty(id: string, name: string): unknown;
         isStyleLoaded(): boolean;
         setStyle: ReturnType<typeof vi.fn>;
         jumpTo: ReturnType<typeof vi.fn>;
@@ -266,7 +283,13 @@ const mapStyleTest = (
       failStyleOnce(error: Error): () => void;
       reset(): void;
       setStyleLayers(
-        layers: Array<{ id: string; type: string; source?: string; "source-layer"?: string }>,
+        layers: Array<{
+          id: string;
+          type: string;
+          source?: string;
+          "source-layer"?: string;
+          layout?: Record<string, unknown>;
+        }>,
       ): void;
     };
   }
@@ -814,4 +837,77 @@ it("keeps the installed generation during pending or rejected reloads and ignore
   expect(nth(maplibreTest.options, 0).style).toBe(latest);
   reset();
   view.unmount();
+});
+
+it("applies bilingual labels on the main map, reacts to showLocalScript, and disables them on the car surface", async () => {
+  maplibreTest.reset();
+  mapStyleTest.reset();
+  useSettingsStore.setState({ showLocalScript: true });
+  const mapContextTest = (
+    mapContext as unknown as { __test: { mapReady: boolean; mapRef: { current: unknown } } }
+  ).__test;
+  mapContextTest.mapReady = false;
+  mapStyleTest.setStyleLayers([
+    {
+      id: "place-city-capital",
+      type: "symbol",
+      source: "openmaptiles",
+      layout: { "text-field": "{name:latin}\n{name:nonlatin}" },
+    },
+  ]);
+  vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+  const view = render(<MapCanvas />);
+  await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+  const map = nth(maplibreTest.instances, 0);
+  // Mirror MapContext flipping mapReady once the map finishes initializing.
+  mapContextTest.mapReady = true;
+  view.rerender(<MapCanvas />);
+  const bilingualField = map.getLayoutProperty("place-city-capital", "text-field") as unknown[];
+  expect(Array.isArray(bilingualField) && bilingualField[0] === "let").toBe(true);
+
+  act(() => {
+    useSettingsStore.setState({ showLocalScript: false });
+  });
+  expect(map.getLayoutProperty("place-city-capital", "text-field")).toEqual([
+    "coalesce",
+    ["get", "name:en"],
+    ["get", "name:latin"],
+    ["get", "name_en"],
+    ["get", "name"],
+  ]);
+
+  // Re-enable showLocalScript, then mount the car surface: labels must stay single-language.
+  act(() => {
+    useSettingsStore.setState({ showLocalScript: true });
+  });
+  expect((map.getLayoutProperty("place-city-capital", "text-field") as unknown[])[0]).toBe("let");
+
+  view.unmount();
+  mapContextTest.mapReady = false;
+  mapStyleTest.setStyleLayers([
+    {
+      id: "place-city-capital",
+      type: "symbol",
+      source: "openmaptiles",
+      layout: { "text-field": "{name:latin}\n{name:nonlatin}" },
+    },
+  ]);
+
+  const carView = render(<MapCanvas carSurface />);
+  await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
+  const carMap = nth(maplibreTest.instances, 1);
+  mapContextTest.mapReady = true;
+  carView.rerender(<MapCanvas carSurface />);
+  expect(carMap.getLayoutProperty("place-city-capital", "text-field")).toEqual([
+    "coalesce",
+    ["get", "name:en"],
+    ["get", "name:latin"],
+    ["get", "name_en"],
+    ["get", "name"],
+  ]);
+
+  carView.unmount();
+  mapContextTest.mapReady = false;
+  useSettingsStore.setState({ showLocalScript: true });
 });

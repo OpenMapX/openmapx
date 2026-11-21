@@ -335,4 +335,22 @@ describe("TransitStopLabels", () => {
       expect(map.querySourceFeatures).toHaveBeenCalledTimes(2);
     },
   );
+
+  it("uses the shared label fallback chain for regional locales and name:latin", async () => {
+    context.locale = "de-AT";
+    context.mapRef.current = fakeMap([
+      poi(1, { class: "bus", name: "東京駅", "name:de": "Bahnhof Tokio", rank: 1 }, [139.7, 35.6]),
+      poi(
+        2,
+        { class: "bus", name: "琴浦町", "name:latin": "Kotoura", name_de: "琴浦町", rank: 2 },
+        [133.7, 35.5],
+      ),
+    ]);
+    render(<TransitStopLabels />);
+    await nextFrame();
+    expect(labelledNames()).toEqual([
+      ["Bahnhof Tokio", false],
+      ["Kotoura", false],
+    ]);
+  });
 });

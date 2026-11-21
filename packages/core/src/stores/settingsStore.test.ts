@@ -99,4 +99,18 @@ describe("useSettingsStore", () => {
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().touchZoomButtons).toBe(true);
   });
+
+  it("showLocalScript defaults on and persists false across hydrate", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().showLocalScript).toBe(true);
+
+    useSettingsStore.getState().setShowLocalScript(false);
+    expect(useSettingsStore.getState().showLocalScript).toBe(false);
+    expect(storage.getString("openmapx:mapLocalScript")).toBe("false");
+    useSettingsStore.setState({ showLocalScript: true });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().showLocalScript).toBe(false);
+  });
 });

@@ -9,6 +9,7 @@ import {
   OSM_ATTRIBUTION,
 } from "./baseMapAttributions";
 import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
+import { buildScriptFontFaces } from "./scriptFontFaces";
 
 export { MAPTILER_ATTRIBUTION, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_ATTRIBUTION, OSM_ATTRIBUTION };
 
@@ -143,6 +144,7 @@ export async function loadOpenMapXStyle(
       ? "https://tiles.openfreemap.org/fonts"
       : apiRoute(env, "/api/maptiler/fonts");
   style.glyphs = `${glyphBase}/{fontstack}/{range}.pbf`;
+  style["font-faces"] = buildScriptFontFaces(window.location.origin);
 
   return offlinePackages
     ? resolveOfflinePackageStyle(style, offlinePackages, { apiBaseUrl: env.apiUrl })

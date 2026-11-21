@@ -1,3 +1,4 @@
+import { useSettingsStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { act, render, screen } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
@@ -9,6 +10,7 @@ import { SharedMapView } from "./SharedMapView";
 let fake = createFakeMap();
 const env = { styleProvider: "openmapx" };
 const remove = vi.fn();
+vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => env }));
 vi.mock("@mui/material/styles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@mui/material/styles")>()),
@@ -197,4 +199,41 @@ it("installs initial shared content and restores it without waiting for tiles", 
   expect(fake.map.getLayer("shared-points-layer")).toBeDefined();
   view.unmount();
   expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);
+});
+
+it("localizes standalone map labels and updates live when showLocalScript toggles", async () => {
+  useSettingsStore.setState({ showLocalScript: true });
+  fake = createFakeMap({
+    baseLayers: [
+      {
+        id: "place-city-capital",
+        type: "symbol",
+        source: "openmaptiles",
+        layout: { "text-field": "{name:latin}\n{name:nonlatin}" },
+      },
+    ],
+  });
+  const view = render(<SharedMapView points={[{ lat: 35.68, lng: 139.76 }]} />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const initialField = fake.map.getLayoutProperty("place-city-capital", "text-field") as unknown[];
+  expect(initialField[0]).toBe("let");
+
+  act(() => {
+    useSettingsStore.setState({ showLocalScript: false });
+  });
+  expect(fake.map.getLayoutProperty("place-city-capital", "text-field")).toEqual([
+    "coalesce",
+    ["get", "name:en"],
+    ["get", "name:latin"],
+    ["get", "name_en"],
+    ["get", "name"],
+  ]);
+  expect(remove).not.toHaveBeenCalled();
+
+  view.unmount();
+  useSettingsStore.setState({ showLocalScript: true });
 });

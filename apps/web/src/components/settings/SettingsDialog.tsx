@@ -66,6 +66,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setTouchZoomButtons = useSettingsStore((s) => s.setTouchZoomButtons);
   const rememberMapView = useSettingsStore((s) => s.rememberMapView);
   const setRememberMapView = useSettingsStore((s) => s.setRememberMapView);
+  const showLocalScript = useSettingsStore((s) => s.showLocalScript);
+  const setShowLocalScript = useSettingsStore((s) => s.setShowLocalScript);
   const coarsePointer = useMediaQuery("(pointer: coarse)", { noSsr: true });
   const fullScreen = useFullScreenOnMobile();
   const [navSettingsOpen, setNavSettingsOpen] = useState(false);
@@ -115,6 +117,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             description={ts("rememberMapViewHint")}
             checked={rememberMapView}
             onChange={setRememberMapView}
+          />
+          <SwitchRow
+            label={ts("showLocalScript")}
+            description={ts("showLocalScriptHint")}
+            checked={showLocalScript}
+            onChange={setShowLocalScript}
           />
         </Section>
 

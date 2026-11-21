@@ -7,6 +7,7 @@ import {
   appShellCacheNames,
   CLEARABLE_TILE_CACHES,
   handleNetworkOnlyNavigation,
+  isBundledScriptFontPath,
   isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
   isNetworkOnlyApiPath,
@@ -76,6 +77,13 @@ describe("service-worker cache names", () => {
     expect(
       offlineGlyphVersionFromPath("/api/offline/packages/assets/maptiler/style-v1"),
     ).toBeUndefined();
+  });
+
+  it("matches bundled script fallback WOFF2 paths and rejects traversal or other paths", () => {
+    expect(isBundledScriptFontPath("/fonts/scripts/NotoSansTifinagh-Regular.woff2")).toBe(true);
+    expect(isBundledScriptFontPath("/fonts/MaterialIcons-Regular.woff2")).toBe(false);
+    expect(isBundledScriptFontPath("/fonts/scripts/../MaterialIcons-Regular.woff2")).toBe(false);
+    expect(isBundledScriptFontPath("/fonts/scripts/NotoSansTifinagh-Regular.ttf")).toBe(false);
   });
 });
 

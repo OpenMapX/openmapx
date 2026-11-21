@@ -36,6 +36,11 @@ describe("hosted vector assets", () => {
       });
       expect(style.glyphs).toBe("https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf");
       expect(style.sprite).toContain("/styles/sprite");
+      expect(Object.keys(style["font-faces"] as Record<string, unknown>)).toEqual([
+        "Noto Sans Regular",
+        "Noto Sans Bold",
+        "Noto Sans Italic",
+      ]);
       expect(baseMapVectorCredits(env).map((credit) => credit.sourceId)).toEqual([
         "openstreetmap",
         "openmaptiles",

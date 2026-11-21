@@ -11,6 +11,7 @@ import {
   readLastMapView,
   useMapStore,
   useNavigationStore,
+  useSettingsStore,
   writeLastMapView,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
@@ -92,6 +93,7 @@ export function MapCanvas({
   const { mapRef, mapReady, notifyMapReady, notifyStyleReload } = useMap();
   const env = useEnv();
   const locale = useLocale();
+  const showLocalScript = useSettingsStore((s) => s.showLocalScript);
   const t = useTranslations("map");
   const tCommon = useTranslations("common");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -429,13 +431,16 @@ export function MapCanvas({
       });
   }, [env, mapStyle, variant, mapRef, mapReady]);
 
-  // Update map label language when locale changes
+  // Update map label language and local-script display when locale or settings change
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    return subscribeStyleLoaded(map, () => localizeMapLabels(map, locale));
-  }, [locale, mapRef, mapReady]);
+    const bilingual = !carSurface && showLocalScript;
+    return subscribeStyleLoaded(map, () =>
+      localizeMapLabels(map, locale, { showLocalScript: bilingual }),
+    );
+  }, [carSurface, locale, mapReady, mapRef, showLocalScript]);
 
   // Outer div owns the absolute positioning.
   // MapLibre gets the inner div so its .maplibregl-map class (position: relative)

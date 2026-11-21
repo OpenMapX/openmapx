@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { resolveLabelName } from "./localizeTextField";
 import {
   STOP_LABEL_LAYER_ID,
   STOP_LABEL_SOURCE_ID,
@@ -23,9 +24,7 @@ const REFRESH_INTERVAL_MS = 250;
 const STATION_SUBCLASSES = new Set(["station", "halt", "subway"]);
 
 function displayedName(properties: MapGeoJSONFeature["properties"], locale: string) {
-  const localized = properties[`name:${locale}`];
-  if (typeof localized === "string" && localized) return localized;
-  return typeof properties.name === "string" && properties.name ? properties.name : null;
+  return resolveLabelName(properties, locale);
 }
 
 function onGround(properties: MapGeoJSONFeature["properties"]) {

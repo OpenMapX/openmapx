@@ -45,6 +45,18 @@ describe("mapStylePoiTarget", () => {
       featureId: "45320222",
     });
   });
+
+  it("prefers name:latin over server-filled non-Latin underscore fallbacks and resolves regional locales", () => {
+    const map = makeHitMap({
+      "poi-label": [
+        pointFeature({ name: "琴浦町", "name:latin": "Kotoura", name_de: "琴浦町" }, { id: 99 }),
+      ],
+    });
+    expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set(), "de-AT")).toMatchObject({
+      name: "Kotoura",
+      featureId: "99",
+    });
+  });
   it("discovers only basemap POI symbol layers", () => {
     const map = {
       getStyle: () => ({

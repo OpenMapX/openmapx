@@ -26,6 +26,7 @@ import {
 import { createNavigationRuntimeRoute } from "./lib/serviceWorkerNavigation";
 import {
   APP_SHELL_CACHE_PREFIX,
+  isBundledScriptFontPath,
   isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
   isNetworkOnlyApiPath,
@@ -38,6 +39,7 @@ import {
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
   responseAllowsStorage,
+  SCRIPT_FONT_CACHE,
   STATIC_OFFLINE_FALLBACK_URL,
   STREET_LEVEL_IMAGERY_TILE_CACHE,
   VECTOR_TILE_CACHE,
@@ -144,7 +146,20 @@ async function matchOfflineGlyph(request: Request): Promise<Response | null> {
   // NEXT_PUBLIC_API_URL does not strand an otherwise valid offline package.
   url.protocol = self.location.protocol;
   url.host = self.location.host;
-  return (await cache.match(url.toString(), { ignoreSearch: false })) ?? null;
+  const pinned = await cache.match(url.toString(), { ignoreSearch: false });
+  if (pinned) return pinned;
+
+  // Packages downloaded before bundled script fallback fonts were added do not
+  // carry those WOFF2 files in their package cache; fall back to the runtime
+  // script-font cache so previously loaded fonts still serve offline without
+  // invalidating existing packages.
+  if (isBundledScriptFontPath(url.pathname)) {
+    url.searchParams.delete("offlineGlyphs");
+    const scriptCache = await caches.open(SCRIPT_FONT_CACHE);
+    const cachedScriptFont = await scriptCache.match(url.toString(), { ignoreSearch: false });
+    if (cachedScriptFont) return cachedScriptFont;
+  }
+  return null;
 }
 
 function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {
@@ -248,6 +263,19 @@ const serwist = new Serwist({
           offlineGlyphVersionFromPath(url.pathname) !== undefined,
         handler: async ({ request }: { request: Request }) =>
           (await matchOfflineGlyph(request)) ?? fetch(request),
+      },
+
+      // Self-hosted Noto Sans script fallback WOFF2 files referenced by MapLibre
+      // `font-faces` (versioned with `?v=` in scriptFontFaces.ts). Kept in a
+      // dedicated CacheFirst bucket so Serwist's short-lived default font cache
+      // does not evict them prematurely.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          url.origin === self.location.origin && isBundledScriptFontPath(url.pathname),
+        handler: new CacheFirst({
+          cacheName: SCRIPT_FONT_CACHE,
+          plugins: [new ExpirationPlugin({ maxEntries: 32, maxAgeSeconds: 365 * 24 * 60 * 60 })],
+        }),
       },
 
       // MapTiler tiles / style / sprite / glyphs via API proxy — runtime SWR.

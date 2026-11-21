@@ -1,11 +1,15 @@
 "use client";
 
 import { useColorScheme } from "@mui/material/styles";
+import { useSettingsStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
+import { useLocale } from "next-intl";
 import { type DependencyList, type RefObject, useCallback, useEffect, useRef } from "react";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
+import { localizeMapLabels } from "./localizeTextField";
 
 export type StandaloneMapStyle = string | maplibregl.StyleSpecification;
 
@@ -38,6 +42,10 @@ export function useStandaloneMap(
   deps: DependencyList,
 ): RefObject<maplibregl.Map | null> {
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const locale = useLocale();
+  const showLocalScript = useSettingsStore((s) => s.showLocalScript);
+  const labelPrefsRef = useRef({ locale, showLocalScript });
+  labelPrefsRef.current = { locale, showLocalScript };
 
   useEffect(() => {
     const definition = define();
@@ -45,6 +53,7 @@ export function useStandaloneMap(
     let destroyed = false;
     let map: maplibregl.Map | undefined;
     let cleanup: (() => void) | undefined;
+    let unsubscribeLabels: (() => void) | undefined;
 
     const init = async () => {
       const runtime = await loadMapLibreRuntime();
@@ -60,7 +69,13 @@ export function useStandaloneMap(
         style,
       });
       mapRef.current = map;
-      cleanup = definition.setup?.(map);
+      const liveMap = map;
+      unsubscribeLabels = subscribeStyleLoaded(liveMap, () =>
+        localizeMapLabels(liveMap, labelPrefsRef.current.locale, {
+          showLocalScript: labelPrefsRef.current.showLocalScript,
+        }),
+      );
+      cleanup = definition.setup?.(liveMap);
     };
 
     // A failed style fetch leaves the container empty rather than raising an
@@ -69,12 +84,19 @@ export function useStandaloneMap(
 
     return () => {
       destroyed = true;
+      unsubscribeLabels?.();
       cleanup?.();
       map?.remove();
       mapRef.current = null;
     };
     // biome-ignore lint/correctness/useExhaustiveDependencies: the caller supplies the dependencies of `define`, mirroring useEffect
   }, deps);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.getStyle()) return;
+    localizeMapLabels(map, locale, { showLocalScript });
+  }, [locale, showLocalScript]);
 
   return mapRef;
 }

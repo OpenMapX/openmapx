@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { useSettingsStore } from "@openmapx/core";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = (vi as unknown as { hoisted<T>(factory: () => T): T }).hoisted(() => ({
@@ -25,6 +26,8 @@ const testState = (vi as unknown as { hoisted<T>(factory: () => T): T }).hoisted
   loadMaptilerStyle: vi.fn(),
   loadOpenMapXStyle: vi.fn(),
 }));
+
+vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
 vi.mock("@mui/material/styles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@mui/material/styles")>()),
@@ -55,6 +58,23 @@ vi.mock("maplibre-gl", () => {
   class FakeMap {
     flyTo = vi.fn();
     remove = vi.fn();
+    on = vi.fn();
+    off = vi.fn();
+    layout = new Map<string, Record<string, unknown>>([
+      ["place-city-capital", { "text-field": "{name:latin}\n{name:nonlatin}" }],
+    ]);
+    getStyle = vi.fn(() => ({ layers: [{ id: "place-city-capital", type: "symbol" }] }));
+    getLayersOrder = vi.fn(() => ["place-city-capital"]);
+    getLayer = vi.fn((id: string) =>
+      id === "place-city-capital"
+        ? { id: "place-city-capital", type: "symbol", source: "openmaptiles" }
+        : undefined,
+    );
+    getLayoutProperty = vi.fn((id: string, prop: string) => this.layout.get(id)?.[prop]);
+    setLayoutProperty = vi.fn((id: string, prop: string, value: unknown) => {
+      const current = this.layout.get(id) ?? {};
+      this.layout.set(id, { ...current, [prop]: value });
+    });
     options: Record<string, unknown>;
 
     constructor(options: Record<string, unknown>) {
@@ -94,6 +114,9 @@ const maplibreTest = (
         options: Record<string, unknown>;
         flyTo: ReturnType<typeof vi.fn>;
         remove: ReturnType<typeof vi.fn>;
+        on: ReturnType<typeof vi.fn>;
+        off: ReturnType<typeof vi.fn>;
+        getLayoutProperty: (id: string, prop: string) => unknown;
       }>;
       markers: Array<{ setLngLat: ReturnType<typeof vi.fn> }>;
     };
@@ -174,6 +197,34 @@ describe("LocationMinimap", () => {
     await waitFor(() => expect(maplibreTest.maps).toHaveLength(3));
     expect(maplibreTest.maps[1]?.remove).toHaveBeenCalledTimes(1);
     expect(testState.loadMaptilerStyle).toHaveBeenCalledWith("streets-v2-dark", testState.env);
+  });
+
+  it("re-localizes an already-loaded minimap on showLocalScript toggle and removes style listeners on unmount", async () => {
+    useSettingsStore.setState({ showLocalScript: true });
+    const view = render(<LocationMinimap lng={139.76} lat={35.68} />);
+    await waitFor(() => expect(maplibreTest.maps).toHaveLength(1));
+    const map = maplibreTest.maps[0];
+    expect(map).toBeDefined();
+
+    const initialField = map?.getLayoutProperty("place-city-capital", "text-field") as unknown[];
+    expect(initialField[0]).toBe("let");
+
+    act(() => {
+      useSettingsStore.setState({ showLocalScript: false });
+    });
+    expect(map?.getLayoutProperty("place-city-capital", "text-field")).toEqual([
+      "coalesce",
+      ["get", "name:en"],
+      ["get", "name:latin"],
+      ["get", "name_en"],
+      ["get", "name"],
+    ]);
+    expect(maplibreTest.maps).toHaveLength(1);
+
+    view.unmount();
+    expect(map?.off).toHaveBeenCalledWith("styledata", expect.any(Function));
+    expect(map?.off).toHaveBeenCalledWith("styledataloading", expect.any(Function));
+    useSettingsStore.setState({ showLocalScript: true });
   });
 });
 
