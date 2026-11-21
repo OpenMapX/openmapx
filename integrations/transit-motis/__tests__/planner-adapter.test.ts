@@ -1,6 +1,6 @@
 import { nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { planMock } = vi.hoisted(() => ({ planMock: vi.fn() }));
 vi.mock("@motis-project/motis-client", async (importOriginal) => ({
@@ -332,19 +332,23 @@ it("shows RE1 26839 without a ticket filter and preserves a selectable Eurostar 
     3,
     { regionalAlternatives: true },
   );
-  const re1 = result!.itineraries.find((it) => it.legs.some((l) => l.tripShortName === "026839"))!;
+  assert.exists(result);
+  const re1 = result.itineraries.find((it) => it.legs.some((l) => l.tripShortName === "026839"));
+  assert.isDefined(re1);
   expect(re1).toMatchObject({
     startTime: "2026-11-06T20:50:00Z",
     endTime: "2026-11-06T21:45:00Z",
     regionalOnly: true,
   });
   expect(
-    result!.itineraries.filter((it) => it.legs.some((l) => l.route?.shortName === "RE9")),
+    result.itineraries.filter((it) => it.legs.some((l) => l.route?.shortName === "RE9")),
   ).toHaveLength(1);
-  const eurostar = result!.itineraries.find((it) =>
+  const eurostar = result.itineraries.find((it) =>
     it.legs.some((l) => l.tripShortName === "9477" || l.route?.shortName.includes("9477")),
-  )!;
-  const replacement = composeTransitAlternative(eurostar, 1, 1)!;
+  );
+  assert.isDefined(eurostar);
+  const replacement = composeTransitAlternative(eurostar, 1, 1);
+  assert.exists(replacement);
   expect(replacement).toMatchObject({
     startTime: re1.startTime,
     endTime: re1.endTime,

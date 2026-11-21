@@ -1,7 +1,7 @@
 import { toPoiSearchOutcome } from "@openmapx/core";
 import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/integration-poi-search/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Providers may answer with a bare array or an outcome; normalize either. */
 async function toOutcome(pending: Promise<PoiSearchReturn>) {
@@ -247,7 +247,8 @@ describe("canonical accepted-link identity", () => {
 
 it("captures exact localized-name and contact suppliers before the database read settles", async () => {
   const manifest = structuredClone((await import("../manifest.json")).default);
-  const nameSource = manifest.dataSources.find((source) => source.sourceId === "microsoft-places")!;
+  const nameSource = manifest.dataSources.find((source) => source.sourceId === "microsoft-places");
+  assert.isDefined(nameSource);
   const originalName = nameSource.name;
   const sources_catalogue = manifest.dataSources.map((source) => ({
     sourceId: source.sourceId,

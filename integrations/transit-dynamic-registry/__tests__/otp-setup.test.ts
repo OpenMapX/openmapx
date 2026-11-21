@@ -6,7 +6,7 @@ import {
   nth,
 } from "@openmapx/integration-framework/testing";
 import * as freshness from "@openmapx/mobility-core/freshness";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import type { RegistryEntry } from "../registry-types";
 
 const hafasSpy = vi.hoisted(() => ({ searchByName: vi.fn() }));
@@ -63,6 +63,13 @@ const stop = {
   platformCode: null,
   parentStation: null,
 };
+/** The registered transit provider's stop search; the test fails if it offers none. */
+function stopSearch(ctx: ReturnType<typeof createMockIntegrationContext>) {
+  const provider = nth(ctx.registered.transit, 0);
+  const search = provider.searchStopsByName;
+  assert.isDefined(search, "the registered transit provider has no stop search");
+  return search.bind(provider);
+}
 function shared() {
   return {
     admitSharedRequest: vi.fn(async () => ({ allowed: true, remaining: null })),
@@ -77,7 +84,7 @@ describe("real dynamic OTP setup acquisition", () => {
     installHostCapabilities(ctx, { upstreamRuntime: shared() });
     await setup(ctx);
     try {
-      const result = await nth(ctx.registered.transit, 0).searchStopsByName!("Public", 10);
+      const result = await stopSearch(ctx)("Public", 10);
       expect(http.calls).toHaveLength(1);
       expect(nth(http.calls, 0).url).toBe(
         "https://api.peatus.ee/routing/v1/routers/estonia/index/graphql",
@@ -123,9 +130,7 @@ describe("final setup publication fence", () => {
     ctx.getDisallowedSourceIds = async () => new Set(++checks >= 5 ? ["peatus"] : []);
     await setup(ctx);
     try {
-      await expect(nth(ctx.registered.transit, 0).searchStopsByName!("Public", 1)).rejects.toThrow(
-        "OTP source denied",
-      );
+      await expect(stopSearch(ctx)("Public", 1)).rejects.toThrow("OTP source denied");
     } finally {
       registry.stopRefresh();
     }
@@ -196,7 +201,7 @@ describe("captured registry generation", () => {
       return new Set();
     };
     await setup(ctx);
-    const pending = nth(ctx.registered.transit, 0).searchStopsByName!("Public", 1);
+    const pending = stopSearch(ctx)("Public", 1);
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
     await nth(shutdown, 0)();
     await expect(pending).rejects.toThrow("OTP request cancelled");

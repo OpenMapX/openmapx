@@ -2,7 +2,7 @@ import type { IntegrationContext, TransitProvider } from "@openmapx/integration-
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
 type Handler = (
@@ -223,7 +223,8 @@ it("opts public point-to-point planning into regional alternatives", async () =>
 
 it("rejects malformed anchored departure times before provider acquisition", async () => {
   const handlers = routes([]);
-  const handler = handlers.get("GET /stops/:id/departures")!;
+  const handler = handlers.get("GET /stops/:id/departures");
+  assert.isDefined(handler);
   for (const time of [
     "tomorrow",
     "2026-02-31T10:00:00Z",
@@ -238,7 +239,8 @@ it("rejects malformed anchored departure times before provider acquisition", asy
 it("canonicalizes anchored time and returns no-store; current-only providers return 501", async () => {
   const p = answering();
   p.getDeparturesAt = vi.fn(async () => withAttribution([], [], freshnessNow()));
-  const handler = routes([p]).get("GET /stops/:id/departures")!;
+  const handler = routes([p]).get("GET /stops/:id/departures");
+  assert.isDefined(handler);
   const r = reply();
   await handler(
     { query: { time: "2026-11-06T20:17:00Z", minutes: "5" }, params: { id: "a:central" } },

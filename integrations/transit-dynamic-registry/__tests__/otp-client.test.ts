@@ -1,6 +1,6 @@
 import type { HttpResponse, UpstreamRuntime } from "@openmapx/integration-framework";
 import { fakeHttpClient, nth } from "@openmapx/integration-framework/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createOtpGraphQlAdapter } from "../otp-graphql";
 import { OTP_PROFILES, publicOtpPolicy, resolveOtpProfile } from "../otp-profiles";
 import type { RegistryEntry } from "../registry-types";
@@ -62,8 +62,15 @@ function tmCall() {
     },
   };
 }
+/** The adapter's stop search; every OTP adapter offers one, so the test fails without it. */
+function searchOf(adapter: ReturnType<typeof createOtpGraphQlAdapter>) {
+  const search = adapter.searchByName;
+  assert.isDefined(search, "the OTP adapter has no stop search");
+  return search.bind(adapter);
+}
 function fixture(family = "peatus", response?: unknown) {
-  const profile = OTP_PROFILES.find((p) => p.family === family)!;
+  const profile = OTP_PROFILES.find((p) => p.family === family);
+  assert.isDefined(profile, `no OTP profile for ${family}`);
   const entry: RegistryEntry = {
     id: profile.id,
     slug: family,
@@ -141,7 +148,7 @@ describe("generated dynamic OTP acquisition", () => {
       expect(await f.adapter.getStopsNearby(f.entry, 48, 9, 500)).toMatchObject([
         { id: family + ":feed:1", name: "Stop", lat: 48, lng: 9 },
       ]);
-      expect(await f.adapter.searchByName!(f.entry, "Stop", 1)).toHaveLength(1);
+      expect(await searchOf(f.adapter)(f.entry, "Stop", 1)).toHaveLength(1);
       const { departures } = await f.adapter.getDepartures(f.entry, f.entry.prefix + "feed:1", 10);
       expect(departures).toMatchObject([
         {
@@ -206,8 +213,8 @@ describe("generated dynamic OTP acquisition", () => {
       Array.isArray(body.data.stops) &&
       body.data.stops.length === 0
     )
-      expect(await f.adapter.searchByName!(f.entry, "X", 10)).toEqual([]);
-    else await expect(f.adapter.searchByName!(f.entry, "X", 10)).rejects.toThrow(/^OTP /);
+      expect(await searchOf(f.adapter)(f.entry, "X", 10)).toEqual([]);
+    else await expect(searchOf(f.adapter)(f.entry, "X", 10)).rejects.toThrow(/^OTP /);
   });
   it.each([
     null,
@@ -256,21 +263,21 @@ describe("generated dynamic OTP acquisition", () => {
         kind === "unconfigured"
           ? createOtpGraphQlAdapter({ ...f.options, digitransitApiKey: undefined })
           : f.adapter;
-      await expect(adapter.searchByName!(f.entry, "X", 1)).rejects.toThrow(/^OTP /);
+      await expect(searchOf(adapter)(f.entry, "X", 1)).rejects.toThrow(/^OTP /);
       expect(f.http.calls).toHaveLength(0);
     },
   );
   it("does not acquire after denial and fences policy revocation after response", async () => {
     const f = fixture();
     f.deny();
-    await expect(f.adapter.searchByName!(f.entry, "X", 1)).rejects.toThrow("OTP source denied");
+    await expect(searchOf(f.adapter)(f.entry, "X", 1)).rejects.toThrow("OTP source denied");
     expect(f.http.calls).toHaveLength(0);
     const g = fixture();
     vi.spyOn(g.http, "postText").mockImplementation(async () => {
       g.deny();
       return { status: 200, headers: {}, body: JSON.stringify({ data: { stops: [] } }) };
     });
-    await expect(g.adapter.searchByName!(g.entry, "X", 1)).rejects.toThrow("OTP source denied");
+    await expect(searchOf(g.adapter)(g.entry, "X", 1)).rejects.toThrow("OTP source denied");
   });
   it("retires an uncooperative request and rejects its late success", async () => {
     const f = fixture();
@@ -281,7 +288,7 @@ describe("generated dynamic OTP acquisition", () => {
           finish = resolve;
         }),
     );
-    const pending = f.adapter.searchByName!(f.entry, "X", 1);
+    const pending = searchOf(f.adapter)(f.entry, "X", 1);
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
     f.generation.abort();
     await expect(pending).rejects.toThrow("OTP request cancelled");
@@ -295,20 +302,16 @@ describe("generated dynamic OTP acquisition", () => {
       retryAfterMs: null,
     }));
     const missing = createOtpGraphQlAdapter({ ...f.options, upstreamRuntime: undefined });
-    await expect(missing.searchByName!(f.entry, "X", 1)).rejects.toThrow(
-      "OTP upstream unavailable",
-    );
+    await expect(searchOf(missing)(f.entry, "X", 1)).rejects.toThrow("OTP upstream unavailable");
     expect(f.http.calls).toHaveLength(0);
     const adapter = createOtpGraphQlAdapter({
       ...f.options,
       upstreamRuntime: { ...f.runtime, admitSharedRequest: denied },
     });
-    await expect(adapter.searchByName!(f.entry, "X", 1)).rejects.toThrow(
-      "OTP upstream unavailable",
-    );
+    await expect(searchOf(adapter)(f.entry, "X", 1)).rejects.toThrow("OTP upstream unavailable");
     expect(f.http.calls).toHaveLength(0);
     const g = fixture("peatus", { status: 429, headers: { "retry-after": "37" }, body: {} });
-    await expect(g.adapter.searchByName!(g.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
+    await expect(searchOf(g.adapter)(g.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
     expect(g.defer).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "https://api.peatus.ee", key: "anonymous", delayMs: 37000 }),
     );
@@ -320,7 +323,7 @@ describe("generated dynamic OTP acquisition", () => {
       },
       body: {},
     });
-    await expect(d.adapter.searchByName!(d.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
+    await expect(searchOf(d.adapter)(d.entry, "X", 1)).rejects.toThrow("OTP upstream cooldown");
     // An HTTP date is measured from the server's own Date header.
     expect(d.defer).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 45000 }));
   });
@@ -333,7 +336,7 @@ describe("generated dynamic OTP acquisition", () => {
     expect(new Set(identities.map((x) => JSON.stringify(x))).size).toBe(1);
     expect(JSON.stringify(identities)).not.toContain("same");
     await publicOtpPolicy(nth(keyed, 0), "other", f.runtime).beforeRequest(signal);
-    expect(f.admit.mock.calls.at(-1)![0]).not.toEqual(identities[0]);
+    expect(nth(f.admit.mock.calls, -1)[0]).not.toEqual(identities[0]);
     expect(() =>
       resolveOtpProfile({
         ...f.entry,

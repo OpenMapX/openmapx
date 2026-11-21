@@ -1,5 +1,6 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { wikimediaProvider } from "./provider.js";
 
 // The Wikimedia provider resolves the OSM `wikimedia_commons` tag (File:/
@@ -387,7 +388,9 @@ describe("Wikimedia photo provider — geosearch", () => {
     const photos = await wikimediaProvider.search({ lat: 48.8584, lng: 2.2945 });
 
     expect(photos).toHaveLength(1);
-    expect(formatLicensing(photos[0]!.licensing!)).toBe("CC-BY-SA-4.0");
+    const { licensing } = nth(photos, 0);
+    assert.isDefined(licensing);
+    expect(formatLicensing(licensing)).toBe("CC-BY-SA-4.0");
     const geoUrl = String(mockFetch.mock.calls[0]?.[0]);
     expect(geoUrl).toContain("ggscoord=48.8584%7C2.2945");
     expect(geoUrl).toContain("ggsradius=500");

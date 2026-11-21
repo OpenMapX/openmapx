@@ -1,6 +1,6 @@
 import { nth } from "@openmapx/integration-framework/testing";
 import { formatLicensing } from "@openmapx/mobility-core/licensing";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { type StacItem, stacItemToImage, stacLinksToStreetLevelLinks } from "../provider";
 
 const ITEM: StacItem = {
@@ -174,7 +174,9 @@ describe("stacItemToImage", () => {
   });
 
   it("normalises the SPDX licence for display", () => {
-    expect(formatLicensing(stacItemToImage(ITEM, "panoramax").licensing!)).toBe("CC-BY-SA-4.0");
+    const { licensing } = stacItemToImage(ITEM, "panoramax");
+    assert.isDefined(licensing);
+    expect(formatLicensing(licensing)).toBe("CC-BY-SA-4.0");
   });
 
   it("maps the capture timestamp and author", () => {

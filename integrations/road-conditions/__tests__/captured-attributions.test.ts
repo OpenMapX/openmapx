@@ -1,7 +1,8 @@
 import { projectEventsToRoute, roadConditionFeatureToEvent } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { roadConditionAttributions } from "../attributions";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "../display";
 import { aggregateRoadConditions } from "../orchestrator";
@@ -81,8 +82,8 @@ describe("captured incident receipts", () => {
       attribution: { provider: "" },
     });
     const event = roadConditionFeatureToEvent({ geometry, properties });
-    expect(event).not.toBeNull();
-    expect(roadConditionAttributions([event!])).toEqual([]);
+    assert.isNotNull(event);
+    expect(roadConditionAttributions([event])).toEqual([]);
   });
   it("retains native full and empty receipts when copied to navigation alerts", () => {
     for (const contributors of [[receipt], []]) {
@@ -117,7 +118,7 @@ describe("captured incident receipts", () => {
         Date.now(),
         roadConditionAttributions,
       );
-      expect(JSON.parse(features[0]!.properties!._mapAttributions)).toEqual(expected);
+      expect(JSON.parse(nth(features, 0).properties?._mapAttributions)).toEqual(expected);
     }
   });
 
