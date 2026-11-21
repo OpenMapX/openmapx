@@ -43,7 +43,10 @@ Zoomed out, the globe sits in dark space with stars and the Milky Way, and a
 blue atmosphere glows around it. **Day and night**, on by default and shown next
 to the globe toggle while the globe is on, lights the globe from the Sun's real position:
 the night side darkens, a warm band marks the twilight, and the Sun appears in the
-sky. With satellite imagery the night side also shows city lights. Labels, routes
+sky. With satellite imagery the night side also shows city lights. The
+**Daylight & time zones** layer draws its own day and night for a time you can
+choose, so the two never show together: opening it pauses the globe's lighting
+until you close it, and choosing **Day and night** closes it. Labels, routes
 and overlays are never darkened. The lighting fades out between zoom 5 and 7, and
 the space background gives way to the usual sky by zoom 8. The
 Milky Way (ESO/S. Brunier, CC BY 4.0) and city lights (NASA Black Marble 2016, a

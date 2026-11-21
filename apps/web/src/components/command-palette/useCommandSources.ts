@@ -26,6 +26,10 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
+import {
+  toggleGlobeLighting,
+  useGlobeLightingActive,
+} from "@/components/map/layers/globe/globeLighting";
 import { localeNames, locales } from "@/i18n/config";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { shareCurrentUrl } from "@/lib/deepLink";
@@ -74,7 +78,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
-  const globeLighting = useLayerStore((s) => s.globeLighting);
+  const globeLighting = useGlobeLightingActive();
 
   return useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -126,8 +130,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         iconKey: "globe-lighting",
         isActive: () => globeLighting,
         run: () => {
-          const current = useLayerStore.getState().globeLighting;
-          useLayerStore.getState().setGlobeLighting(!current);
+          toggleGlobeLighting();
           return false;
         },
       });

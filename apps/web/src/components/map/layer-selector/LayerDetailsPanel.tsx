@@ -10,6 +10,10 @@ import Typography from "@mui/material/Typography";
 import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import {
+  toggleGlobeLighting,
+  useGlobeLightingActive,
+} from "@/components/map/layers/globe/globeLighting";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { LayerDetailsTile } from "./LayerDetailsTile";
 import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
@@ -98,8 +102,7 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
   const setGlobeView = useLayerStore((s) => s.setGlobeView);
-  const globeLighting = useLayerStore((s) => s.globeLighting);
-  const setGlobeLighting = useLayerStore((s) => s.setGlobeLighting);
+  const globeLighting = useGlobeLightingActive();
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
   const { isAvailable } = useCapabilities();
@@ -200,7 +203,7 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
           item={{ preview: globeLightingPreview, selected: globeLighting }}
           label={t("globeLighting")}
           labelWidth={labelWidth}
-          onClick={() => setGlobeLighting(!globeLighting)}
+          onClick={toggleGlobeLighting}
         />
       ) : null}
     </TileGrid>

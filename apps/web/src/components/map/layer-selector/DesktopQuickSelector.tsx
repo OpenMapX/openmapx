@@ -13,6 +13,10 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
+import {
+  toggleGlobeLighting,
+  useGlobeLightingActive,
+} from "@/components/map/layers/globe/globeLighting";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
@@ -77,8 +81,7 @@ function GlobeTile() {
 
 function GlobeLightingTile() {
   const t = useTranslations("layers");
-  const globeLighting = useLayerStore((s) => s.globeLighting);
-  const setGlobeLighting = useLayerStore((s) => s.setGlobeLighting);
+  const globeLighting = useGlobeLightingActive();
 
   return (
     <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
@@ -87,7 +90,7 @@ function GlobeLightingTile() {
         label={t("globeLighting")}
         labelWidth={GLOBE_LABEL_WIDTH}
         selected={globeLighting}
-        onClick={() => setGlobeLighting(!globeLighting)}
+        onClick={toggleGlobeLighting}
       />
     </Box>
   );

@@ -11,6 +11,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { type GlobeSkyContent, GlobeSkyLayer, type GlobeSkyOptions } from "./globe/GlobeSkyLayer";
 import { MILKY_WAY_ATTRIBUTION, NIGHT_LIGHTS_ATTRIBUTION } from "./globe/globeCredits";
+import { useGlobeLightingActive } from "./globe/globeLighting";
 
 type SkySpecification = Parameters<maplibregl.Map["setSky"]>[0];
 
@@ -143,7 +144,7 @@ export function GlobeProjection() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const globeView = useLayerStore((s) => s.globeView);
   const globeCameraBehavior = useLayerStore((s) => s.globeCameraBehavior);
-  const globeLighting = useLayerStore((s) => s.globeLighting);
+  const globeLighting = useGlobeLightingActive();
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const { mode, systemMode } = useColorScheme();
   const isDark = (mode === "system" ? systemMode : mode) === "dark";

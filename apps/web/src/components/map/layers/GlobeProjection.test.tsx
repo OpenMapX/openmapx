@@ -1,4 +1,11 @@
-import { useLayerStore } from "@openmapx/core";
+import {
+  createOverlayStore,
+  getRegisteredOverlayStore,
+  type OverlayStoreBase,
+  registerOverlayEntry,
+  runOverlayTransaction,
+  useLayerStore,
+} from "@openmapx/core";
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
@@ -159,6 +166,29 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(skies).toHaveLength(1);
     expect(skies[0].dispose).not.toHaveBeenCalled();
     expect(fake.state.counts.addLayer.get(SKY_ID)).toBe(1);
+  });
+
+  it("suspends day and night while the Daylight & time zones overlay is open", () => {
+    createOverlayStore({ overlayId: "sun-time", extra: {} });
+    registerOverlayEntry({
+      id: "sun-time",
+      getState: () => getRegisteredOverlayStore("sun-time")?.getState() as OverlayStoreBase,
+      useActive: () => false,
+      excludes: [],
+    });
+    render(<GlobeProjection />);
+    act(() => {
+      runOverlayTransaction("sun-time", { panelOpen: true }, { kind: "user" });
+    });
+    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lighting: false }),
+    );
+    act(() => {
+      runOverlayTransaction("sun-time", { panelOpen: false }, { kind: "user" });
+    });
+    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lighting: true }),
+    );
   });
 
   it("falls back to MapLibre's haze and the theme's background when the GPU cannot run the sky", () => {
