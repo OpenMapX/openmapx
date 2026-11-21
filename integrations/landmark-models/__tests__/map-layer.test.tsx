@@ -51,7 +51,11 @@ const sceneMock = vi.hoisted(() => {
   const state = {
     created: 0,
     options: undefined as
-      | { onUnsupported(): void; onFrame(drawn: readonly string[]): void }
+      | {
+          lighting: { direction: number[]; color: string };
+          onUnsupported(): void;
+          onFrame(drawn: readonly string[]): void;
+        }
       | undefined,
     drawn: [] as string[],
     pick: null as string | null,
@@ -479,6 +483,18 @@ describe("LandmarkModelsLayer", () => {
     act(() => sceneMock.options?.onFrame(["landmark-models-open-landmarks:arc"]));
     sceneMock.drawn = ["landmark-models-open-landmarks:arc"];
     expect(hooks.attributionOptions?.resolveCustomContributors?.()).toEqual([RECEIPT]);
+  });
+
+  it("creates the models' lights from the current scene light", async () => {
+    useSceneLightStore
+      .getState()
+      .publish({ ...NEUTRAL_SCENE_LIGHT, azimuthDeg: 120, sunColor: "#ffe8d0" });
+    render(<LandmarkModelsLayer />);
+    await activate();
+    expect(sceneMock.options?.lighting).toMatchObject({
+      direction: sunVector({ azimuthDeg: 120, polarDeg: NEUTRAL_SCENE_LIGHT.polarDeg }),
+      color: "#ffe8d0",
+    });
   });
 
   it("takes night and light from the scene light", async () => {

@@ -21,9 +21,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { NEUTRAL_SCENE_LIGHT } from "@/integration-api/map/sceneLight";
 import { cameraMatrix, objectMatrix, unprojectRay } from "./frame";
-import { lightingOf, type ModelLighting } from "./lighting";
 import type { LoadedModel } from "./models";
 
 export const LANDMARK_LAYER_ID = "openmapx-landmark-models";
@@ -39,6 +37,16 @@ export interface PlacedModel {
   /** Clip everything below groundM (sunken models on a flat map). */
   clipBelowGround: boolean;
   receipts: readonly Attribution[];
+}
+
+/** The three.js side of the shared scene light. */
+export interface ModelLighting {
+  /** Towards the light, in scene space (x east, y north, z up). */
+  direction: [number, number, number];
+  color: string;
+  intensity: number;
+  ambientColor: string;
+  ambientIntensity: number;
 }
 
 /** Below this the globe has fully blended to the flat map at street zoom. */
@@ -82,12 +90,14 @@ export class LandmarkModelLayer implements CustomLayerInterface {
 
   constructor(
     private readonly options: {
+      /** The scene light to start from; `setLighting` follows its changes. */
+      lighting: ModelLighting;
       onUnsupported(): void;
       onFrame?(drawn: readonly string[]): void;
     },
   ) {
     this.scene.add(this.ambient, this.sun);
-    this.applyLighting(lightingOf(NEUTRAL_SCENE_LIGHT));
+    this.applyLighting(options.lighting);
   }
 
   /**

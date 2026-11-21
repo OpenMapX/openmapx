@@ -86,6 +86,15 @@ function renderArgs(projectionTransition = 0) {
   return { defaultProjectionData: { mainMatrix: mainMatrix(), projectionTransition } } as never;
 }
 
+/** What the map layer passes for the initial neutral scene light. */
+const NEUTRAL_LIGHTING = {
+  direction: sunVector(NEUTRAL_SCENE_LIGHT),
+  color: NEUTRAL_SCENE_LIGHT.sunColor,
+  intensity: NEUTRAL_SCENE_LIGHT.sunIntensity,
+  ambientColor: NEUTRAL_SCENE_LIGHT.ambientColor,
+  ambientIntensity: NEUTRAL_SCENE_LIGHT.ambientIntensity,
+};
+
 function lightsOf(layer: LandmarkModelLayer) {
   const children = (layer as unknown as { scene: Scene }).scene.children;
   return {
@@ -101,7 +110,7 @@ afterEach(() => {
 
 describe("LandmarkModelLayer", () => {
   it("object matrices never flip the front face", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     const model = placed("a");
     layer.setPlaced([model]);
@@ -110,7 +119,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("onAdd reuses the renderer for the same GL context and replaces it for a new one", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     const gl = {} as WebGL2RenderingContext;
     layer.onAdd(fakeMap(), gl);
     layer.onRemove();
@@ -127,7 +136,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("repaints only when the placement changes", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
     layer.onAdd(map as never, {} as WebGL2RenderingContext);
     const model = placed("a");
@@ -142,7 +151,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("render resets GL state before and after drawing", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("a")]);
     layer.render({} as WebGL2RenderingContext, renderArgs());
@@ -159,7 +168,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("skips frames while the globe transition is active", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("a")]);
     layer.render({} as WebGL2RenderingContext, renderArgs(0.5));
@@ -169,7 +178,11 @@ describe("LandmarkModelLayer", () => {
 
   it("reports frustum-intersecting asset ids as drawn", () => {
     const onFrame = vi.fn();
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn(), onFrame });
+    const layer = new LandmarkModelLayer({
+      lighting: NEUTRAL_LIGHTING,
+      onUnsupported: vi.fn(),
+      onFrame,
+    });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("near"), placed("far", [2.32, 48.87])]);
     layer.render({} as WebGL2RenderingContext, renderArgs());
@@ -180,7 +193,7 @@ describe("LandmarkModelLayer", () => {
   it("calls onUnsupported once when the renderer cannot be created", () => {
     fake.state.fail = true;
     const onUnsupported = vi.fn();
-    const layer = new LandmarkModelLayer({ onUnsupported });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.render({} as WebGL2RenderingContext, renderArgs());
@@ -188,7 +201,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("pick returns the asset under the point", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("tower")]);
     layer.render({} as WebGL2RenderingContext, renderArgs());
@@ -197,7 +210,9 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("starts from the shared neutral sun", () => {
-    const { sun, ambient } = lightsOf(new LandmarkModelLayer({ onUnsupported: vi.fn() }));
+    const { sun, ambient } = lightsOf(
+      new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() }),
+    );
     const [x, y, z] = sunVector(NEUTRAL_SCENE_LIGHT);
     expect(sun.position.x).toBeCloseTo(x, 6);
     expect(sun.position.y).toBeCloseTo(y, 6);
@@ -208,7 +223,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("updates its lights from the scene light and repaints only on change", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
     layer.onAdd(map as never, {} as WebGL2RenderingContext);
     const lighting = {
@@ -231,7 +246,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("repaints for a night change only when it changes", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
     layer.onAdd(map as never, {} as WebGL2RenderingContext);
     layer.setNight(true);
@@ -240,7 +255,7 @@ describe("LandmarkModelLayer", () => {
   });
 
   it("setNight switches every placed model", () => {
-    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const layer = new LandmarkModelLayer({ lighting: NEUTRAL_LIGHTING, onUnsupported: vi.fn() });
     const model = placed("a");
     layer.setPlaced([model]);
     layer.setNight(true);

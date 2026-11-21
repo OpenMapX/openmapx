@@ -1,7 +1,7 @@
-import { LandmarkModelLayer, type PlacedModel } from "./model-layer";
+import { LandmarkModelLayer, type ModelLighting, type PlacedModel } from "./model-layer";
 import { type LoadedModel, type Lod, ModelStore } from "./models";
 
-export type { LoadedModel, Lod, PlacedModel };
+export type { LoadedModel, Lod, ModelLighting, PlacedModel };
 
 export interface LandmarkScene {
   layer: LandmarkModelLayer;
@@ -16,11 +16,13 @@ export interface LandmarkScene {
  */
 export function createLandmarkScene(options: {
   apiUrl: string;
+  lighting: ModelLighting;
   onUnsupported(): void;
   onFrame(drawn: readonly string[]): void;
 }): LandmarkScene {
   const models = new ModelStore({ apiUrl: options.apiUrl });
   const layer = new LandmarkModelLayer({
+    lighting: options.lighting,
     onUnsupported: options.onUnsupported,
     onFrame: options.onFrame,
   });
