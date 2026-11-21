@@ -3,7 +3,7 @@
   "name": "Data Manager",
   "version": "1.0.0",
   "description": "Downloads and shares source data (OSM PBFs, GTFS feeds, tile assets) with consumer services.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "quality": "built-in",
   "communityNetworkAccess": ["openconditions-ingest"],
   "subjectData": {

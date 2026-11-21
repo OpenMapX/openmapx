@@ -3,7 +3,7 @@
   "name": "OpenMapX Web",
   "version": "1.0.0",
   "description": "Next.js 16 frontend. MapLibre + MUI.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "quality": "built-in",
   "subjectData": {
     "storesPersonalData": false,

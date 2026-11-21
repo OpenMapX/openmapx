@@ -3,7 +3,7 @@
   "name": "OpenMapX API",
   "version": "1.0.0",
   "description": "Fastify BFF gateway. Proxies external services and registers integrations.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "quality": "built-in",
   "privateNetworks": ["dawarich-ingress"],
   "communityNetworkAccess": ["openconditions-ingest", "openconditions-contributions-api"],
