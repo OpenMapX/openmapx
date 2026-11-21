@@ -35,8 +35,10 @@ const notices = scanLicenses({
   rootPackageJsonPaths,
   // OpenMapX workspace packages aren't third-party deps with their own license
   // obligation; the integration source files have their own MIT notice in the
-  // repo root. Drop them from the public-facing list.
-  skipNamePrefixes: ["@openmapx/", "@integrations/", "@better-auth/passkey", "web", "api"],
+  // repo root. Drop them from the public-facing list. Prefixes must stay
+  // scoped: a bare word such as "web" would also drop third-party packages
+  // like web-streams-polyfill.
+  skipNamePrefixes: ["@openmapx/", "@integrations/", "@better-auth/passkey"],
 });
 
 // Vendored map style. apps/web/public/styles/openmapx-{streets,dark}.json are a

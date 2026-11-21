@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -282,5 +282,51 @@ describe("scanLicenses", () => {
         licenseText: "ISC License Body",
       },
     ]);
+  });
+
+  it("skips linked workspace packages and scoped prefixes but keeps third-party packages with similar names", () => {
+    const root = makeFixtureRoot();
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "web",
+        private: true,
+        dependencies: {
+          "@openmapx/core": "workspace:*",
+          "web-streams-polyfill": "3.3.3",
+          "workspace-lib": "workspace:*",
+        },
+      }),
+    );
+
+    const scopedDir = join(root, "node_modules", "@openmapx", "core");
+    mkdirSync(scopedDir, { recursive: true });
+    writeFileSync(
+      join(scopedDir, "package.json"),
+      JSON.stringify({ name: "@openmapx/core", version: "0.0.0", license: "AGPL-3.0-or-later" }),
+    );
+
+    const polyfillDir = join(root, "node_modules", "web-streams-polyfill");
+    mkdirSync(polyfillDir, { recursive: true });
+    writeFileSync(
+      join(polyfillDir, "package.json"),
+      JSON.stringify({ name: "web-streams-polyfill", version: "3.3.3", license: "MIT" }),
+    );
+
+    // pnpm links workspace packages into node_modules; their real path is outside it.
+    const workspaceDir = join(root, "packages", "workspace-lib");
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(
+      join(workspaceDir, "package.json"),
+      JSON.stringify({ name: "workspace-lib", version: "1.0.0", license: "AGPL-3.0-or-later" }),
+    );
+    symlinkSync(workspaceDir, join(root, "node_modules", "workspace-lib"), "dir");
+
+    const notices = scanLicenses({
+      rootPackageJsonPaths: [join(root, "package.json")],
+      skipNamePrefixes: ["@openmapx/"],
+    });
+
+    expect(notices.map((notice) => notice.name)).toEqual(["web-streams-polyfill"]);
   });
 });
