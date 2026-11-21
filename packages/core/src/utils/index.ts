@@ -31,7 +31,7 @@ export {
   downsampleLTTB,
 } from "./elevation";
 export { ConfigurationError } from "./errors";
-export { escapeHtml, isSafeHttpUrl, safeHref, sanitizeUrl } from "./format";
+export { beforeFirst, escapeHtml, isSafeHttpUrl, safeHref, sanitizeUrl } from "./format";
 export {
   formatArea,
   formatDuration,

@@ -1,4 +1,4 @@
-import { useSettingsStore } from "@openmapx/core";
+import { beforeFirst, useSettingsStore } from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
 import { shellFeatureBoundary } from "../mobile/mobileShellEnvironment";
 import { hasCapability } from "../platformCapabilities";
@@ -40,7 +40,7 @@ export function selectVoice<T extends { name: string; lang: string }>(
     if (named) return named;
   }
   const wanted = locale.toLowerCase();
-  const base = wanted.replace(/-.*/, "");
+  const base = beforeFirst(wanted, "-");
   return (
     voices.find((v) => v.lang?.toLowerCase() === wanted) ??
     voices.find((v) => v.lang?.toLowerCase().startsWith(base))

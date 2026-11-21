@@ -58,23 +58,14 @@ export function replacementsForTile(
   return all.filter((replacement) => overlaps(bounds, replacement.bbox));
 }
 
-function toTilePixel(
-  [lng, lat]: readonly [number, number],
-  tile: TileCoordinate,
-  extent: number,
-): Pair {
+function toTilePixel(lng: number, lat: number, tile: TileCoordinate, extent: number): Pair {
   const n = 2 ** tile.z;
   return [(lngToX(lng, n) - tile.x) * extent, (latToY(lat, n) - tile.y) * extent];
 }
 
-/** A footprint position in tile pixels; one without two coordinates lands on NaN. */
-function positionToTilePixel(point: readonly number[], tile: TileCoordinate, extent: number): Pair {
-  return toTilePixel([numberAt(point, 0), numberAt(point, 1)], tile, extent);
-}
-
 function boundsToPixels(bbox: Readonly<Bounds>, tile: TileCoordinate, extent: number): Bounds {
-  const [x0, y0] = toTilePixel([bbox[0], bbox[3]], tile, extent);
-  const [x1, y1] = toTilePixel([bbox[2], bbox[1]], tile, extent);
+  const [x0, y0] = toTilePixel(bbox[0], bbox[3], tile, extent);
+  const [x1, y1] = toTilePixel(bbox[2], bbox[1], tile, extent);
   return [x0, y0, x1, y1];
 }
 
@@ -169,8 +160,11 @@ export function rewriteBuildingTile(
   const masks = replacements
     .flatMap((replacement) => (replacement.footprint ? [replacement.footprint] : []))
     .map((footprint) => {
+      // A footprint position without two coordinates lands on NaN.
       const geometry = footprint.coordinates.map((polygon) =>
-        polygon.map((ring) => ring.map((point) => positionToTilePixel(point, tile, extent))),
+        polygon.map((ring) =>
+          ring.map((point) => toTilePixel(numberAt(point, 0), numberAt(point, 1), tile, extent)),
+        ),
       );
       return { geometry, bounds: polygonBounds(geometry.flat()) };
     })

@@ -33,6 +33,7 @@ import { markerMapContributors } from "@/integration-api/overlay/markerMapContri
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
+import { positionBounds } from "@/lib/positionBounds";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { routeGeometryFeatures } from "./routeGeometryFeatures";
@@ -431,33 +432,18 @@ export function RouteLayer() {
     if (navigating || mode === "transit" || mode === "flying" || routes.length === 0) return;
 
     const activeGeom = routes[activeRouteIndex]?.geometry;
-    const start = activeGeom?.[0];
-    if (!activeGeom || !start || activeGeom.length < 2) return;
+    if (!activeGeom || activeGeom.length < 2) return;
 
-    let [minLng, minLat] = start;
-    let [maxLng, maxLat] = start;
-    for (const [lng, lat] of activeGeom) {
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
     // EV charge-stop coordinates are inserted waypoints, so they should
     // already lie on `activeGeom` — widen the box anyway in case a stop sits
     // just off the drawn line (rounding/matching slack).
-    if (isEvMode) {
-      for (const stop of evStops) {
-        const [lng, lat] = stop.station.coordinates;
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      }
-    }
+    const stopCoords = isEvMode ? evStops.map((stop) => stop.station.coordinates) : [];
+    const bounds = positionBounds([...activeGeom, ...stopCoords]);
+    if (!bounds) return;
     fitBounds(
       [
-        [minLng, minLat],
-        [maxLng, maxLat],
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
       ],
       80,
     );

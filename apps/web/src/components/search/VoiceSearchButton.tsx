@@ -4,6 +4,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import Alert from "@mui/material/Alert";
 import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
+import { beforeFirst } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
@@ -59,7 +60,7 @@ function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
  */
 function speechLang(locale: string): string {
   const nav = typeof navigator !== "undefined" ? navigator.language : "";
-  if (nav.includes("-") && nav.replace(/-.*/, "").toLowerCase() === locale.toLowerCase()) {
+  if (nav.includes("-") && beforeFirst(nav, "-").toLowerCase() === locale.toLowerCase()) {
     return nav;
   }
   const fallback: Record<string, string> = { en: "en-US", de: "de-DE" };

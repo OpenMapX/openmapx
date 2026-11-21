@@ -1,4 +1,9 @@
-import { isRailwayStationCategory, normalizeSearchTerm, type SearchResult } from "@openmapx/core";
+import {
+  beforeFirst,
+  isRailwayStationCategory,
+  normalizeSearchTerm,
+  type SearchResult,
+} from "@openmapx/core";
 import { expandSearchQuery } from "./query-expansion.js";
 
 const STATION_WORDS = new Set(["hauptbahnhof", "bahnhof", "station", "centraal"]);
@@ -64,7 +69,7 @@ export function rankForwardResults(query: string, results: SearchResult[]): Sear
     required.every((word) => name.includes(word));
   const scored = results.map((result, index) => {
     // Older/other adapters can still supply a plain name as the first label segment.
-    const names = [result.name ?? result.label.replace(/,.*/s, ""), ...(result.aliases ?? [])].map(
+    const names = [result.name ?? beforeFirst(result.label, ","), ...(result.aliases ?? [])].map(
       tokens,
     );
     const localities = (result.localities ?? []).map(tokens);

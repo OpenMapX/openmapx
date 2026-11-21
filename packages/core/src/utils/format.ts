@@ -6,6 +6,12 @@ const ESCAPE_MAP: Record<string, string> = {
   "'": "&#39;",
 };
 
+/** The text before the first `separator`, or all of it when there is none. */
+export function beforeFirst(value: string, separator: string): string {
+  const index = value.indexOf(separator);
+  return index < 0 ? value : value.slice(0, index);
+}
+
 export function escapeHtml(str: string): string {
   return str.replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch] ?? ch);
 }

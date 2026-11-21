@@ -21,6 +21,7 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
+  beforeFirst,
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
@@ -101,7 +102,7 @@ export function resolveSourceHeader(
   if (exactMatch) return { ...exactMatch, titleFallback: null };
 
   // Try prefix (e.g., "nextbike" from "nextbike/362/1234")
-  const prefixMatch = SOURCE_HEADERS[primarySource.replace(/\/[\s\S]*/, "")];
+  const prefixMatch = SOURCE_HEADERS[beforeFirst(primarySource, "/")];
   if (prefixMatch) return { ...prefixMatch, titleFallback: null };
 
   // The data source that produced the detail: feed ids such as

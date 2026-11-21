@@ -19,6 +19,7 @@ import type {
 } from "@openmapx/core";
 import {
   addressComponentsFromOsmTags,
+  beforeFirst,
   resolvePoiIconPath,
   sanitizeAddressComponents,
 } from "@openmapx/core";
@@ -91,11 +92,6 @@ function osmReferenceOf(f: MaptilerFeature): string | undefined {
 
 const OSM_ELEMENT_TYPES: Record<string, string> = { n: "node", w: "way", r: "relation" };
 
-/** The kind a MapTiler feature or context id starts with: `municipality` for `municipality.123`. */
-function idKindOf(id: string): string {
-  return id.replace(/\..*$/s, "");
-}
-
 function identityOf(f: MaptilerFeature) {
   const osm = osmReferenceOf(f);
   const wikidata = f.properties?.wikidata;
@@ -130,7 +126,8 @@ function addressEvidenceOf(f: MaptilerFeature, reverse = false): AddressEvidence
   }
   const context: PlaceAddressComponents = {};
   for (const c of f.context ?? []) {
-    const type = idKindOf(c.id);
+    // A context id starts with its kind: `municipality` for `municipality.123`.
+    const type = beforeFirst(c.id, ".");
     const key = {
       municipality: "municipality",
       region: "state",
@@ -252,7 +249,7 @@ function localitiesOf(f: MaptilerFeature): string[] {
         .filter(
           (c) =>
             c.id.startsWith("municipality.") ||
-            (["place", "county", "locality"].includes(idKindOf(c.id)) &&
+            (["place", "county", "locality"].includes(beforeFirst(c.id, ".")) &&
               ["city", "town", "village", "hamlet"].includes(c.place_designation ?? "")),
         )
         .map((c) => c.text),

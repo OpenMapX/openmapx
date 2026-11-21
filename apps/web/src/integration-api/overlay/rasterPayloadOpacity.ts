@@ -70,8 +70,9 @@ export async function inspectRasterPayloadOpacity(
     let visible = false,
       opaque = true;
     for (let i = 3; i < pixels.length; i += 4) {
-      visible ||= numberAt(pixels, i) > 0;
-      opaque &&= pixels[i] === 255;
+      const alpha = numberAt(pixels, i);
+      visible ||= alpha > 0;
+      opaque &&= alpha === 255;
     }
     return opaque ? "opaque" : visible ? "nonopaque" : "transparent";
   } catch {

@@ -1,3 +1,4 @@
+import { beforeFirst } from "@openmapx/core";
 import {
   contributorsForField,
   contributorsForRecords,
@@ -100,7 +101,7 @@ export function concatenateRoutes(routes: Route[]): Route {
   ]);
   const fieldContributors = Object.fromEntries(
     [...retainedFields].map((field) => {
-      const [root = field] = field.split(".", 1);
+      const root = beforeFirst(field, ".");
       const suppliers = ["summary", "mode", "elevationInterval"].includes(root)
         ? [first]
         : root === "hasTolls" && hasTolls === true

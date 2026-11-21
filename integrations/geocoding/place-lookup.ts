@@ -13,6 +13,7 @@ import {
   type Attribution,
   addressComponentsFromOsmTags,
   type BBox,
+  beforeFirst,
   createPlace,
   fetchJson,
   haversineMeters,
@@ -251,7 +252,7 @@ function toPlace(
   // proper street line ("Kinderhauser Straße 40") instead of falling back to
   // display_name's first segment, which is the bare house number in DE/AT/CH.
   const name =
-    r.name?.trim() || formatStreetLine(components) || r.display_name.replace(/,.*/s, "").trim();
+    r.name?.trim() || formatStreetLine(components) || beforeFirst(r.display_name, ",").trim();
   const city =
     components.city ??
     components.town ??

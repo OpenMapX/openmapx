@@ -165,8 +165,9 @@ export function TransitRouteLayer() {
     const geometry = routeLineGeometry(route, shownStops);
     const lineCoords =
       geometry.type === "MultiLineString" ? geometry.coordinates.flat() : geometry.coordinates;
+    if (lineCoords.length < 2) return;
     const bounds = positionBounds(lineCoords);
-    if (lineCoords.length < 2 || !bounds) return;
+    if (!bounds) return;
     fitBounds(
       [
         [bounds.west, bounds.south],

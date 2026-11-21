@@ -103,8 +103,9 @@ function parseCurrentWeather(data: OpenMeteoResponse, coords: LngLat): WeatherRe
 
 /**
  * Open-Meteo sends one value per entry of `time` in every column. This checks
- * the upstream answer, not an invariant of ours: one short column fails the
- * whole forecast rather than yielding points with missing fields.
+ * the upstream answer, not an invariant of ours: one short column deliberately
+ * fails the whole forecast rather than yielding points with missing fields,
+ * and the weather orchestrator then asks the next provider.
  */
 function columnAt<T>(column: readonly T[], index: number, name: string): T {
   const value = column[index];
