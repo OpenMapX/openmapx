@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
 import { groundHeight, type TerrainProbe } from "../web/grounding";
@@ -66,7 +67,7 @@ describe("groundHeight", () => {
       const angle = (i / 100) * Math.PI * 2;
       return [ANCHOR[0] + Math.cos(angle) * 0.001, ANCHOR[1] + Math.sin(angle) * 0.001];
     });
-    ring.push(ring[0] as number[]);
+    ring.push(nth(ring, 0));
     let samples = 0;
     const counting = probe(() => {
       samples += 1;

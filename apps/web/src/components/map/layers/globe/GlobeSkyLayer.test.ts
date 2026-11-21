@@ -196,7 +196,7 @@ describe("GlobeSkyLayer rendering", () => {
     for (const [zoom, transition] of [
       [8, 1],
       [3, 0],
-    ]) {
+    ] as const) {
       const context = createContext();
       const gl = context as unknown as WebGL2RenderingContext;
       const layer = new GlobeSkyLayer(OPTIONS);

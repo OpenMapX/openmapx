@@ -1,5 +1,6 @@
 import { subsolarPoint } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { greenwichSiderealAngle, sunDirection } from "./sunPosition";
 
 const RADIANS = Math.PI / 180;
@@ -25,8 +26,8 @@ describe("sunDirection", () => {
       Math.cos(lng * RADIANS) * Math.cos(lat * RADIANS),
     ];
     const vector = sunDirection(date);
-    for (let i = 0; i < 3; i++) expect(vector[i]).toBeCloseTo(expected[i], 5);
-    expect(Math.hypot(vector[0], vector[1], vector[2])).toBeCloseTo(1, 6);
+    for (let i = 0; i < 3; i++) expect(nth(vector, i)).toBeCloseTo(nth(expected, i), 5);
+    expect(Math.hypot(nth(vector, 0), nth(vector, 1), nth(vector, 2))).toBeCloseTo(1, 6);
   });
 
   it("writes into a supplied array", () => {

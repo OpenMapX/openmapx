@@ -4,6 +4,8 @@
  * sphere to clip space.
  */
 
+import { numberAt } from "@openmapx/core";
+
 /**
  * Project celestial directions through the globe's camera. Keep the x/y/w rows
  * and discard translation: stars are effectively at infinity, so orbit/tilt
@@ -13,11 +15,11 @@
  * also preserves bearing, roll, field of view and asymmetric map padding.
  */
 export function skyProjectionMatrix(matrix: ArrayLike<number>, out = new Float32Array(9)) {
-  const scale = Math.hypot(matrix[3], matrix[7], matrix[11]);
+  const scale = Math.hypot(numberAt(matrix, 3), numberAt(matrix, 7), numberAt(matrix, 11));
   for (let column = 0; column < 3; column++) {
-    out[column * 3] = matrix[column * 4] / scale;
-    out[column * 3 + 1] = matrix[column * 4 + 1] / scale;
-    out[column * 3 + 2] = matrix[column * 4 + 3] / scale;
+    out[column * 3] = numberAt(matrix, column * 4) / scale;
+    out[column * 3 + 1] = numberAt(matrix, column * 4 + 1) / scale;
+    out[column * 3 + 2] = numberAt(matrix, column * 4 + 3) / scale;
   }
   return out;
 }
@@ -25,14 +27,29 @@ export function skyProjectionMatrix(matrix: ArrayLike<number>, out = new Float32
 /**
  * Invert a column-major 4×4 matrix in double precision. The globe matrix maps a
  * unit sphere to a screen thousands of pixels wide, so a single-precision
- * inverse would lose the sphere's edge. Returns `null` for a singular matrix.
+ * inverse would lose the sphere's edge. Returns `null` for a singular matrix,
+ * and for one with fewer than 16 elements, whose missing entries read as NaN.
  */
 export function invertMatrix(
   m: ArrayLike<number>,
   out = new Float64Array(16),
 ): Float64Array | null {
-  const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] =
-    Array.from({ length: 16 }, (_, i) => m[i]);
+  const a00 = numberAt(m, 0);
+  const a01 = numberAt(m, 1);
+  const a02 = numberAt(m, 2);
+  const a03 = numberAt(m, 3);
+  const a10 = numberAt(m, 4);
+  const a11 = numberAt(m, 5);
+  const a12 = numberAt(m, 6);
+  const a13 = numberAt(m, 7);
+  const a20 = numberAt(m, 8);
+  const a21 = numberAt(m, 9);
+  const a22 = numberAt(m, 10);
+  const a23 = numberAt(m, 11);
+  const a30 = numberAt(m, 12);
+  const a31 = numberAt(m, 13);
+  const a32 = numberAt(m, 14);
+  const a33 = numberAt(m, 15);
   const b00 = a00 * a11 - a01 * a10;
   const b01 = a00 * a12 - a02 * a10;
   const b02 = a00 * a13 - a03 * a10;
@@ -73,9 +90,10 @@ export function invertMatrix(
  * divided by its w.
  */
 export function cameraPosition(inverse: ArrayLike<number>, out = new Float32Array(3)) {
-  out[0] = inverse[8] / inverse[11];
-  out[1] = inverse[9] / inverse[11];
-  out[2] = inverse[10] / inverse[11];
+  const w = numberAt(inverse, 11);
+  out[0] = numberAt(inverse, 8) / w;
+  out[1] = numberAt(inverse, 9) / w;
+  out[2] = numberAt(inverse, 10) / w;
   return out;
 }
 
