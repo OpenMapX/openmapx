@@ -74,6 +74,7 @@ export {
   type WeightedBearing,
 } from "./gridOrientation";
 export { lerpHex } from "./hexColor";
+export { indexAt } from "./indexAt";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { numberAt } from "./numberAt";
 export { validObservedAt } from "./observationTime";
