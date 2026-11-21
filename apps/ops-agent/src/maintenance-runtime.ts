@@ -94,13 +94,14 @@ export interface MaintenanceRuntimeDeps {
   now?: () => Date;
 }
 
-/** A lease child key derived from the handoff id, so a restarted agent finds it. */
 /** The candidate source the installed maintenance source must carry. */
 function candidateSourceOf(runtime: Parameters<typeof maintenanceSource>[0]) {
   const { candidateSource } = maintenanceSource(runtime);
   if (!candidateSource) throw Error("Configuration maintenance source unavailable");
   return candidateSource;
 }
+
+/** A lease child key derived from the handoff id, so a restarted agent finds it. */
 function derivedKey(handoffId: string, purpose: string): string {
   const d = createHash("sha256")
     .update(`openmapx-configuration-handoff-${purpose}\0${handoffId}`)
