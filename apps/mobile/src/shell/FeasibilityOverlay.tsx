@@ -49,10 +49,11 @@ const styles = StyleSheet.create({
   buttonLabel: { color: DARK_PALETTE.onAccent, fontSize: 13, fontWeight: BUTTON_SHAPE.labelWeight },
 });
 
-type ProbedProfile = "driving" | "walking" | "transit-cruise";
+/** The location profiles this probe cycles through. */
+type ProbedProfile = Extract<LocationProfileKind, "driving" | "walking" | "transit-cruise">;
 
 /** The profile the switch button moves to from each probed profile. */
-const NEXT_PROFILE: Record<ProbedProfile, ProbedProfile & LocationProfileKind> = {
+const NEXT_PROFILE: Record<ProbedProfile, ProbedProfile> = {
   driving: "walking",
   walking: "transit-cruise",
   "transit-cruise": "driving",
