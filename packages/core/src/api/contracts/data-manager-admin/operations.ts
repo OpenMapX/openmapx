@@ -43,11 +43,6 @@ import {
   adminJson as json,
 } from "./common";
 import {
-  providerHealthEntrySchema,
-  providerHealthResponseSchema,
-  providerResetResponseSchema,
-} from "./providers";
-import {
   roadConditionsPolicySnapshotSchema,
   transitCatalogQuerySchema,
   transitCatalogResponseSchema,
@@ -64,7 +59,6 @@ import { transitPinOperations } from "./transit-pins";
 
 const service = "service" as const;
 const admin = "admin" as const;
-const idParams = z.strictObject({ id: z.string().min(1) });
 const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
 export const adminSourceMutationRequestSchema = transitMutationRequestSchema.omit({
   triggeredBy: true,
@@ -224,37 +218,6 @@ export const dataManagerAdminOperations = {
       ...common,
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
       503: json(z.union([httpErrorSchema, transitRestartUnavailableSchema])),
-    },
-  },
-  getApiDataManagerProviders: {
-    method: "GET",
-    path: "/api/data-manager/providers",
-    auth: service,
-    responses: {
-      ...common,
-      200: json(providerHealthResponseSchema, uncachedResponseHeadersSchema),
-    },
-  },
-  getApiDataManagerProvidersId: {
-    method: "GET",
-    path: "/api/data-manager/providers/:id",
-    auth: service,
-    request: { params: idParams },
-    responses: {
-      ...common,
-      200: json(providerHealthEntrySchema, uncachedResponseHeadersSchema),
-      404: json(httpErrorSchema, uncachedResponseHeadersSchema),
-    },
-  },
-  postApiDataManagerProvidersIdReset: {
-    method: "POST",
-    path: "/api/data-manager/providers/:id/reset",
-    auth: admin,
-    request: { params: idParams },
-    responses: {
-      ...common,
-      200: json(providerResetResponseSchema, uncachedResponseHeadersSchema),
-      503: json(httpErrorSchema, uncachedResponseHeadersSchema),
     },
   },
   postApiDataManagerTransitBumpTransitousRef: {

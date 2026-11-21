@@ -2,18 +2,17 @@ import { describe, expect, it } from "vitest";
 import z from "zod/v4";
 import {
   dataManagerAdminOperations,
-  providerHealthEntrySchema,
   transitCatalogResponseSchema,
   transitFeedsQuerySchema,
   transitJobDetailSchema,
 } from "./index";
 
 describe("application data-manager administration contracts", () => {
-  it("describes all 38 actual BFF operations with the real session-only distinctions", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(38);
+  it("describes all 35 actual API operations with the real session-only distinctions", () => {
+    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(35);
     const operations = Object.values(dataManagerAdminOperations);
-    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(38);
-    expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(21);
+    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(35);
+    expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(20);
     expect(operations.every(({ path }) => path.startsWith("/api/"))).toBe(true);
     expect(dataManagerAdminOperations.getApiDataManagerTransitState.auth).toBe("service");
     expect(dataManagerAdminOperations.getApiDataManagerOvertureStatus.auth).toBe("admin");
@@ -52,35 +51,6 @@ describe("application data-manager administration contracts", () => {
     ] as const;
     for (const [id, method, path, auth] of additions)
       expect(dataManagerAdminOperations[id]).toMatchObject({ method, path, auth });
-  });
-  it("preserves actual provider state and its not-yet-observed timestamp absences", () => {
-    const provider = {
-      id: "p",
-      schema: 2,
-      state: "healthy",
-      successCount: 1,
-      failureCount: 0,
-      countedFailureCount: 0,
-      consecutiveSuccesses: 1,
-      consecutiveFailures: 0,
-      reopenCount: 0,
-      emaLatencyMs: 5,
-      window: [{ outcome: "ok", at: "2026-10-19T00:00:00.000Z", latencyMs: 5 }],
-      windowFailureRate: 0,
-    };
-    expect(providerHealthEntrySchema.parse(provider)).toEqual(provider);
-    expect(
-      providerHealthEntrySchema.safeParse({
-        ...provider,
-        state: "half-open",
-        retryAt: "2026-10-19T00:05:00.000Z",
-      }).success,
-    ).toBe(true);
-    expect(providerHealthEntrySchema.safeParse({ ...provider, state: "active" }).success).toBe(
-      false,
-    );
-    for (const legacy of [{ success: 1 }, { disabledUntil: "2026-10-19T00:05:00.000Z" }])
-      expect(providerHealthEntrySchema.safeParse({ ...provider, ...legacy }).success).toBe(false);
   });
   it("keeps structured JSONB stage errors and nullable job metadata", () => {
     const job = {

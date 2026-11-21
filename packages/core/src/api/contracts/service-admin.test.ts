@@ -22,6 +22,9 @@ const inventory = [
   ["pruneAdminServiceBackups", "POST", "/services/backups/prune"],
   ["listAdminCacheNamespaces", "GET", "/cache"],
   ["clearAdminCache", "POST", "/cache/clear"],
+  ["listAdminProviderHealth", "GET", "/providers"],
+  ["getAdminProviderHealth", "GET", "/providers/:id"],
+  ["resetAdminProviderHealth", "POST", "/providers/:id/reset"],
   ["getAdminArtifactTransferCapabilities", "GET", "/artifact-transfers/capabilities"],
   ["exportAdminArtifactTransfer", "POST", "/artifact-transfers/exports"],
   ["previewAdminArtifactImport", "POST", "/artifact-transfers/:stageId/preview-import"],
@@ -256,6 +259,31 @@ describe("canonical complete service administration contracts", () => {
     ).toEqual(
       inventory.map(([id, method, path]) => [id, method, `/api/admin${path}`, "admin"]).sort(),
     );
+  });
+  it("preserves actual provider state and its not-yet-observed timestamp absences", () => {
+    const provider = {
+      id: "p",
+      schema: 2,
+      state: "healthy",
+      successCount: 1,
+      failureCount: 0,
+      countedFailureCount: 0,
+      consecutiveSuccesses: 1,
+      consecutiveFailures: 0,
+      reopenCount: 0,
+      emaLatencyMs: 5,
+      window: [{ outcome: "ok", at: "2026-10-19T00:00:00.000Z", latencyMs: 5 }],
+      windowFailureRate: 0,
+    };
+    const entry = contracts.providerHealthEntrySchema;
+    expect(entry.parse(provider)).toEqual(provider);
+    expect(
+      entry.safeParse({ ...provider, state: "half-open", retryAt: "2026-10-19T00:05:00.000Z" })
+        .success,
+    ).toBe(true);
+    expect(entry.safeParse({ ...provider, state: "active" }).success).toBe(false);
+    for (const legacy of [{ success: 1 }, { disabledUntil: "2026-10-19T00:05:00.000Z" }])
+      expect(entry.safeParse({ ...provider, ...legacy }).success).toBe(false);
   });
   it("retains full raw manifests including unknown nested JSON, structured capabilities and omitted defaults", () => {
     expect(contracts.adminServiceManifestSchema.parse(raw)).toEqual(raw);

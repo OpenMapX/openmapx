@@ -9,7 +9,6 @@ export type {
 } from "../../../services/data-manager/contracts/overture";
 export * from "./common";
 export * from "./operations";
-export * from "./providers";
 export * from "./transit";
 
 export * from "./transit-credentials";

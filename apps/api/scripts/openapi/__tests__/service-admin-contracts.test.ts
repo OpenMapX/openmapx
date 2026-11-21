@@ -10,6 +10,9 @@ const inventory = [
   ["pruneAdminServiceBackups", "POST", "/services/backups/prune"],
   ["listAdminCacheNamespaces", "GET", "/cache"],
   ["clearAdminCache", "POST", "/cache/clear"],
+  ["listAdminProviderHealth", "GET", "/providers"],
+  ["getAdminProviderHealth", "GET", "/providers/{id}"],
+  ["resetAdminProviderHealth", "POST", "/providers/{id}/reset"],
   ["getAdminArtifactTransferCapabilities", "GET", "/artifact-transfers/capabilities"],
   ["exportAdminArtifactTransfer", "POST", "/artifact-transfers/exports"],
   ["previewAdminArtifactImport", "POST", "/artifact-transfers/{stageId}/preview-import"],
@@ -71,14 +74,14 @@ const inventory = [
   ["rotateAdminDawarichOidcSecret", "POST", "/dawarich/rotate-oidc-secret"],
 ] as const;
 
-it("collects exactly 64 actual service producers with complete statuses, media, headers and auth", async () => {
+it("collects exactly 67 actual service producers with complete statuses, media, headers and auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Network denied"));
   try {
     const document = JSON.parse(await generateDocument());
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("service-admin"));
-    expect(tagged).toHaveLength(64);
+    expect(tagged).toHaveLength(67);
     expect(Object.keys(serviceAdminOperations).sort()).toEqual(inventory.map(([id]) => id).sort());
     for (const [id, method, path] of inventory) {
       const contract = serviceAdminOperations[id];

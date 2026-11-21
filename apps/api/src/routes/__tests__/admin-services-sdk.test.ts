@@ -5,6 +5,7 @@ import {
   cacheAdminOperations,
   coverageAdminOperations,
   platformAdminOperations,
+  providerHealthAdminOperations,
   releaseControlAdminOperations,
   serviceAdminOperations,
   settingsAdminOperations,
@@ -549,6 +550,7 @@ describe("actual service producers through final exported SDK", () => {
       const dedicated = new Set([
         ...Object.keys(releaseControlAdminOperations),
         ...Object.keys(cacheAdminOperations), // Scoped route/SDK/real Valkey coverage is dedicated.
+        ...Object.keys(providerHealthAdminOperations), // admin-provider-health.test.ts
         ...Object.keys(platformAdminOperations),
         ...Object.keys(artifactTransferAdminOperations),
         // Settings, logs, audit, system and coverage producers have their own route suites.

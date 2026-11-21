@@ -459,15 +459,16 @@ never receive browser credentials or replace the browser-facing API client.
 ## Browser-facing data-manager administration
 
 The application API has a separate `data-manager-admin` contract family covering
-all 19 `/api/data-manager` operations and six `/api/admin/ambient-places`
-operations. Its portable schemas live under
+all 20 `/api/data-manager` operations, six `/api/admin/ambient-places`
+operations and nine `/api/admin/transit` credential and pin operations. Its
+portable schemas live under
 `packages/core/src/api/contracts/data-manager-admin`; API-owned database, Redis,
 operations-agent and merged-catalog projections are defined there rather than
 pretending they are internal data-manager responses.
 
 Register these handlers through `registerDataManagerAdminRoute` and keep their
 actual authentication guards beside the corresponding declarations. Authentication
-metadata does not grant or enforce access. The collector checks all 25 actual
+metadata does not grant or enforce access. The collector checks all 35 actual
 registrations, their stable operation IDs, status schemas and authentication
 classifications. Shared schema emission supports Fastify's draft-7 runtime and the
 OpenAPI 3.1 document without maintaining parallel handwritten schemas.
@@ -568,7 +569,9 @@ and the coverage report: `getAdminSettings`, `updateAdminSettings`,
 `sendAdminTestEmail`, `listAdminLogs`, `listAdminAuditLog`, `exportAdminAuditLog`,
 `getAdminSystemStatus`, `checkAdminSystemUpdates`, `applyAdminSystemUpdate`,
 `runAdminSystemDiagnostics`, `listAdminCoverageRegions`, `getAdminCoverageReport`
-and `getAdminCoverageSource`. Their reply schemas are strict: a field the
+and `getAdminCoverageSource`. It also owns the API's own upstream provider health
+under `/api/admin/providers`: `listAdminProviderHealth`, `getAdminProviderHealth`
+and `resetAdminProviderHealth`. Their reply schemas are strict: a field the
 producer adds must be declared in the contract before it reaches the browser.
 Configured secret settings always read as `***`. The audit export is a
 `text-download` whose `format` query selects CSV or JSON; the browser downloads

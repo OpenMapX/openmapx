@@ -26,16 +26,31 @@ describe("application administration contract registration", () => {
     });
     await app.register(
       async (child) =>
-        registerDataManagerAdminRoute(child, "getApiDataManagerProviders", async (_req, reply) =>
-          reply.header("cache-control", "no-store").send({ providers: [] }),
+        registerDataManagerAdminRoute(
+          child,
+          "getApiDataManagerRoadConditionsPolicy",
+          async (_req, reply) =>
+            reply.header("cache-control", "no-store").send({
+              schemaVersion: 1,
+              authoritative: true,
+              evaluatedAt: "2026-11-21T00:00:00.000Z",
+              validUntil: null,
+              revision: "r1",
+              disallowedSourceIds: [],
+              allowGreyArea: false,
+              allowNonCommercial: false,
+            }),
         ),
       { prefix: "/api" },
     );
     try {
-      const response = await app.inject("/api/data-manager/providers");
+      const response = await app.inject("/api/data-manager/road-conditions/policy");
       expect(response.statusCode).toBe(200);
       expect(registered).toEqual([
-        { url: dataManagerAdminOperations.getApiDataManagerProviders.path, auth: "service" },
+        {
+          url: dataManagerAdminOperations.getApiDataManagerRoadConditionsPolicy.path,
+          auth: "service",
+        },
       ]);
     } finally {
       await app.close();
