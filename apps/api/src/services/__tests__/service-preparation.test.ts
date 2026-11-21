@@ -27,7 +27,12 @@ vi.mock("../ops-client", async (actual) => ({
   executeAndWait: transport.inspect,
 }));
 
-import { prepareServiceGeneration, updatePreparedService } from "../service-preparation";
+import { callArg } from "../../test/mock-calls";
+import {
+  prepareServiceGeneration,
+  publishServiceGeneration,
+  updatePreparedService,
+} from "../service-preparation";
 
 const revision = `cfg1_${"a".repeat(43)}`,
   final = `cfg1_${"b".repeat(43)}`;
@@ -95,6 +100,21 @@ it("does not publish a completed preparation when the durable hardlink owner is 
     "admin-job.hardlinks.apply",
     { durableIdentity: `${ctx.jobId}:render` },
   );
+});
+it("forwards a given expected revision, null included, and leaves an omitted one to the producer", async () => {
+  const ctx = context();
+  await publishServiceGeneration(ctx, "omitted", { coordinatorMode: "ensure-running" });
+  await publishServiceGeneration(ctx, "none", {
+    coordinatorMode: "ensure-running",
+    expectedCurrentRevisionId: null,
+  });
+  await publishServiceGeneration(ctx, "given", {
+    coordinatorMode: "ensure-running",
+    expectedCurrentRevisionId: final,
+  });
+  expect(callArg(transport.publish, 0, 0)).not.toHaveProperty("expectedCurrentRevisionId");
+  expect(callArg(transport.publish, 1, 0)).toHaveProperty("expectedCurrentRevisionId", null);
+  expect(callArg(transport.publish, 2, 0)).toHaveProperty("expectedCurrentRevisionId", final);
 });
 it("carries the Update target's own final revision and refuses a competing next generation", async () => {
   const ctx = context();

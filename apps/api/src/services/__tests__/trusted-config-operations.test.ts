@@ -123,6 +123,38 @@ describe("retained trusted configuration producer", () => {
     });
   });
 
+  it.each<{
+    label: string;
+    given: { expectedCurrentRevisionId?: string | null };
+    expected: string | null;
+  }>([
+    {
+      label: "binds an omitted revision to the applied one",
+      given: {},
+      expected: previousRevisionId,
+    },
+    {
+      label: "forwards null, the expectation that no generation exists yet",
+      given: { expectedCurrentRevisionId: null },
+      expected: null,
+    },
+    {
+      label: "forwards a given revision instead of the applied one",
+      given: { expectedCurrentRevisionId: revisionId },
+      expected: revisionId,
+    },
+  ])("$label", async ({ given, expected }) => {
+    await subject.applyTrustedConfigurationWithEvidence({
+      kind: "stack.render",
+      operationKey: key,
+      ctx: owner(),
+      ...given,
+    });
+    expect(ports.prepare).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ expectedCurrentRevisionId: expected }),
+    );
+  });
+
   it("does not prepare or submit when authoritative observation fails", async () => {
     ports.inspect.mockRejectedValueOnce(new Error("observation unavailable"));
     await expect(
