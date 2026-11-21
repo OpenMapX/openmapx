@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   findUnsafeInterpolations,
   type GuardOptions,
@@ -68,8 +68,7 @@ function collectSourceFiles(dir: string): string[] {
 function relativeImports(fileName: string, source: string): string[] {
   const resolved: string[] = [];
   for (const [, specifier] of source.matchAll(/(?:from|import)\s*["'](\.[^"']*)["']/g)) {
-    // The capture group is required, so every match has it.
-    if (specifier === undefined) continue;
+    assert.isDefined(specifier, `an import in ${fileName} matched without its specifier`);
     const target = resolveModule(fileName, specifier);
     if (target) resolved.push(target);
   }
@@ -122,8 +121,7 @@ function findUnsafeAnchorOffenders(files: string[]): string[] {
     const offenders: string[] = [];
     for (const match of source.matchAll(/href\s*=\s*["']\$\{([^}]*)\}/g)) {
       const [, interpolated] = match;
-      // The capture group is required, so every match has it.
-      if (interpolated === undefined) continue;
+      assert.isDefined(interpolated, `an href in ${file} matched without its expression`);
       const expression = interpolated.trim();
       if (expression.startsWith("sanitizeUrl(") || hasSanitizedBinding(source, expression))
         continue;
