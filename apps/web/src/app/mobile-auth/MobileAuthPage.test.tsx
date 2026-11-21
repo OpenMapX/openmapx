@@ -25,13 +25,9 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 // The page is a server component; its async translator has no jsdom equivalent,
 // so it reads the same catalogue the client half renders from.
-vi.mock("next-intl/server", async () => {
-  const { en } = await import("@openmapx/i18n");
-  return {
-    getTranslations: async (namespace: string) => (key: string) =>
-      (en as unknown as Record<string, Record<string, string>>)[namespace]?.[key],
-  };
-});
+vi.mock("next-intl/server", async () =>
+  (await import("@/test/intl")).mockNextIntlServerWithCatalog(),
+);
 
 const { MobileAuthClient } = await import("./MobileAuthClient");
 const MobileAuthPage = (await import("./page")).default;

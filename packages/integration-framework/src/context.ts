@@ -157,6 +157,9 @@ type DeclaredRouteParams<Path extends string> =
       : unknown) &
     (Path extends `${string}*` ? { "*": string } : unknown);
 
+/** One object type with the properties of every member of an intersection. */
+type Flatten<T> = { [Key in keyof T]: T[Key] };
+
 /**
  * The params a literal route path declares: each `:name` segment, and `*` for a
  * trailing wildcard. A literal path without any declares none, and a path only
@@ -166,7 +169,10 @@ export type RouteParams<Path extends string> = string extends Path
   ? Record<string, string>
   : unknown extends DeclaredRouteParams<Path>
     ? Record<string, never>
-    : DeclaredRouteParams<Path>;
+    : Flatten<DeclaredRouteParams<Path>>;
+
+/** A request to a route whose literal path declares no params, such as `/stops/search`. */
+export type ParamlessRouteRequest = RouteRequest<RouteParams<"/">>;
 
 /**
  * A route handler. Its request is compared contravariantly, so `registerRoute`

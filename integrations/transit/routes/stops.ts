@@ -1,6 +1,7 @@
 import { type BBox, overpassQuery } from "@openmapx/core";
 import {
   type IntegrationContext,
+  type ParamlessRouteRequest,
   parsePositiveRadius,
   parseWgs84Point,
   type RouteHandler,
@@ -28,16 +29,13 @@ function utcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** A request to a stops route without path params, such as `/stops/search`. */
-type QueryRequest = RouteRequest<RouteParams<"/stops">>;
-
 /** A request to one of the `/stops/:id/…` routes. */
 type StopRequest = RouteRequest<RouteParams<"/stops/:id">>;
 
 /** Handlers for the stop lookups: by viewport, by name, by id and per stop. */
 export function createStopHandlers(ctx: IntegrationContext, orchestrator: TransitOrchestrator) {
   return {
-    async inBbox(req: QueryRequest, reply) {
+    async inBbox(req: ParamlessRouteRequest, reply) {
       const bbox = parseBBox(scalarQueries(req.query));
       if (!bbox) {
         reply
@@ -52,7 +50,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(result));
     },
 
-    async nearby(req: QueryRequest, reply) {
+    async nearby(req: ParamlessRouteRequest, reply) {
       const point = parseWgs84Point(scalarQueries(req.query).lng, scalarQueries(req.query).lat, {
         maxAbsLatitude: 85,
       });
@@ -76,7 +74,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(result));
     },
 
-    async search(req: QueryRequest, reply) {
+    async search(req: ParamlessRouteRequest, reply) {
       const query = scalarQueries(req.query).q?.trim();
       if (!query || query.length < 2) {
         reply.status(400).send({ error: "Query parameter 'q' must be at least 2 characters" });

@@ -24,13 +24,9 @@ vi.mock("@openmapx/core", () => ({
 const { DeleteAccountActions } = await import("./DeleteAccountActions");
 const DeleteAccountPage = (await import("./page")).default;
 
-vi.mock("next-intl/server", async () => {
-  const { en: catalogue } = await import("@openmapx/i18n");
-  return {
-    getTranslations: async (namespace: string) => (key: string) =>
-      (catalogue as unknown as Record<string, Record<string, string>>)[namespace]?.[key],
-  };
-});
+vi.mock("next-intl/server", async () =>
+  (await import("@/test/intl")).mockNextIntlServerWithCatalog(),
+);
 
 beforeEach(() => {
   sessionState.data = { user: { id: "user-A" } };

@@ -1,6 +1,7 @@
 import {
   type IntegrationContext,
   listQuery,
+  type ParamlessRouteRequest,
   type RouteHandler,
   type RouteParams,
   type RouteRequest,
@@ -22,16 +23,13 @@ export function routeZoomBucket(raw: string | undefined): number {
   return 10;
 }
 
-/** A request to a network route without path params, such as `/vehicles`. */
-type QueryRequest = RouteRequest<RouteParams<"/routes">>;
-
 /** A request to a `/routes/:id/…` or `/vehicles/:id` route. */
 type IdRequest = RouteRequest<RouteParams<"/routes/:id">>;
 
 /** Handlers for lines, their stops and live state, vehicles, area alerts and leg shapes. */
 export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: TransitOrchestrator) {
   return {
-    async routes(req: QueryRequest, reply) {
+    async routes(req: ParamlessRouteRequest, reply) {
       const stopId = scalarQueries(req.query).stop_id;
       if (stopId) {
         const cacheKey = `transit:routes-for-stop:${stopId}`;
@@ -124,7 +122,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       );
     },
 
-    async legGeometry(req: QueryRequest, reply) {
+    async legGeometry(req: ParamlessRouteRequest, reply) {
       const tripId = scalarQueries(req.query).trip_id?.trim();
       if (!tripId) {
         reply.status(400).send({ error: "Required: trip_id" });
@@ -156,7 +154,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(geometry);
     },
 
-    async alerts(req: QueryRequest, reply) {
+    async alerts(req: ParamlessRouteRequest, reply) {
       const bbox = parseBBox(scalarQueries(req.query));
       if (!bbox) {
         reply.status(400).send({ error: "Invalid or missing bbox params" });
@@ -172,7 +170,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(alerts);
     },
 
-    async vehicles(req: QueryRequest, reply) {
+    async vehicles(req: ParamlessRouteRequest, reply) {
       reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
       const routeId = scalarQueries(req.query).route_id;
       if (routeId) {

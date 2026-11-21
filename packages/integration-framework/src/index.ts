@@ -35,6 +35,7 @@ export type {
   IntegrationContext,
   Logger,
   MetricsRecorder,
+  ParamlessRouteRequest,
   ProviderCallOutcome,
   ProviderHealthCountedOutcome,
   ProviderHealthFailureOutcome,

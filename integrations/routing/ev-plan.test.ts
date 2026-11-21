@@ -6,7 +6,7 @@ import {
 } from "@openmapx/integration-framework";
 import { nth } from "@openmapx/integration-framework/testing";
 import type { ChargingSite, EnergyTariff } from "@openmapx/mobility-core/ev-charging";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { stubClosureExclusions } from "./__tests__/support/closure-exclusion-stub.js";
 import { type ResolvedRoutingProvider, runEvPlan } from "./ev-plan.js";
 
@@ -183,10 +183,11 @@ describe("runEvPlan", () => {
   it("fails when the route through the charging stops comes back without a route", async () => {
     const ctx = fakeCtx();
     const answerBaseRoute = ctx._valhalla.getRoute.getMockImplementation();
+    assert.isDefined(answerBaseRoute, "the fake Valhalla has no base route answer");
     ctx._valhalla.getRoute.mockImplementation(async (waypoints: unknown[]) =>
       waypoints.length > 2
         ? { routes: [], activeRouteIndex: 0, waypoints: [] }
-        : answerBaseRoute?.(waypoints),
+        : answerBaseRoute(waypoints),
     );
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },

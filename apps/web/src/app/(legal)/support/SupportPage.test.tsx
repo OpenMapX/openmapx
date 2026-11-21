@@ -3,13 +3,9 @@ import { cleanup, render } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next-intl/server", async () => {
-  const { en: catalogue } = await import("@openmapx/i18n");
-  return {
-    getTranslations: async (namespace: string) => (key: string) =>
-      (catalogue as unknown as Record<string, Record<string, string>>)[namespace]?.[key],
-  };
-});
+vi.mock("next-intl/server", async () =>
+  (await import("@/test/intl")).mockNextIntlServerWithCatalog(),
+);
 
 const SupportPage = (await import("./page")).default;
 

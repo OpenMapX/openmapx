@@ -1,5 +1,11 @@
 import { describe, expectTypeOf, it } from "vitest";
-import type { IntegrationContext, RouteHandler, RouteParams, RouteRequest } from "../context";
+import type {
+  IntegrationContext,
+  ParamlessRouteRequest,
+  RouteHandler,
+  RouteParams,
+  RouteRequest,
+} from "../context";
 
 declare const ctx: IntegrationContext;
 
@@ -17,7 +23,7 @@ function typeOnly(_check: () => void): void {}
 describe("RouteParams", () => {
   it("declares each :name segment of a literal path as a string", () => {
     expectTypeOf<RouteParams<"/stops/:id">>().toEqualTypeOf<{ id: string }>();
-    expectTypeOf<RouteParams<"/tiles/:z/:x/:y">>().toMatchTypeOf<{
+    expectTypeOf<RouteParams<"/tiles/:z/:x/:y">>().toEqualTypeOf<{
       z: string;
       x: string;
       y: string;
@@ -25,7 +31,7 @@ describe("RouteParams", () => {
   });
 
   it("strips a file-extension or hyphen suffix from the param name", () => {
-    expectTypeOf<RouteParams<"/tiles/:z/:x/:y.png">>().toMatchTypeOf<{
+    expectTypeOf<RouteParams<"/tiles/:z/:x/:y.png">>().toEqualTypeOf<{
       z: string;
       x: string;
       y: string;
@@ -35,7 +41,7 @@ describe("RouteParams", () => {
   });
 
   it("declares a trailing wildcard as *", () => {
-    expectTypeOf<RouteParams<"/stations/:id/detail/*">>().toMatchTypeOf<{
+    expectTypeOf<RouteParams<"/stations/:id/detail/*">>().toEqualTypeOf<{
       id: string;
       "*": string;
     }>();
@@ -44,6 +50,7 @@ describe("RouteParams", () => {
 
   it("declares no params for a literal path without any", () => {
     expectTypeOf<RouteParams<"/stops">>().toEqualTypeOf<Record<string, never>>();
+    expectTypeOf<ParamlessRouteRequest>().toEqualTypeOf<RouteRequest<RouteParams<"/stops">>>();
   });
 
   it("declares any param for a path only known as string", () => {
@@ -93,6 +100,18 @@ describe("registerRoute", () => {
     typeOnly(() => {
       ctx.registerRoute("GET", "/stops", anyParams);
       ctx.registerRoute("GET", "/stops/:id", anyParams);
+    });
+  });
+
+  it("gives a path only known as string, as a generic registrar passes it, any params", () => {
+    typeOnly(() => {
+      const path: string = "/stops/:id";
+      ctx.registerRoute("GET", path, anyParams);
+      ctx.registerRoute("GET", path, (req) => {
+        expectTypeOf(req.params).toEqualTypeOf<Record<string, string>>();
+      });
+      // @ts-expect-error a string path does not promise the id this handler needs
+      ctx.registerRoute("GET", path, byId);
     });
   });
 });

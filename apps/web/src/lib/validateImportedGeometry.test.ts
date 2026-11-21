@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { parseGeoFile } from "./importGeoFile";
 
 describe("bounded geographic imports", () => {
@@ -48,8 +49,9 @@ describe("bounded geographic imports", () => {
     expect(parsed?.features).toHaveLength(1);
     const kml =
       '<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><description><![CDATA[<img src="https://tracking.example/">]]></description><Point><coordinates>8,50</coordinates></Point></Placemark></kml>';
-    const [feature] = parseGeoFile("shared.kml", kml)?.features ?? [];
-    expect(feature).toBeDefined();
-    expect(feature?.properties?.description).toBeUndefined();
+    const features = parseGeoFile("shared.kml", kml)?.features;
+    assert.isDefined(features, "the KML file was rejected");
+    const { properties } = nth(features, 0);
+    expect(properties).not.toHaveProperty("description");
   });
 });

@@ -2,7 +2,7 @@ import { type LngLat, numberAt } from "@openmapx/core";
 import along from "@turf/along";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { nth } from "@/test";
 
 import {
@@ -168,9 +168,9 @@ describe("navRouteProgressFraction", () => {
       const traveled = features.find((f) => f.properties?.kind === "traveled") as
         | GeoJSON.Feature<GeoJSON.LineString>
         | undefined;
-      expect(traveled).toBeDefined();
-      const coords = traveled?.geometry.coordinates ?? [];
-      const cutPoint = coords[coords.length - 1] as [number, number];
+      assert.isDefined(traveled, "the split has no traveled part");
+      const last = nth(traveled.geometry.coordinates, -1);
+      const cutPoint: [number, number] = [nth(last, 0), nth(last, 1)];
 
       const fraction = navRouteProgressFraction(prepared, alongMeters);
       const reconstructed = reconstructPositionFromFraction(prepared, fraction);

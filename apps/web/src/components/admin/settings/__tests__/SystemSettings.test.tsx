@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { AdminDraftProvider, useBindAdminDraftOwner } from "@/lib/admin/AdminDraftProvider";
 import {
   act,
@@ -384,8 +384,8 @@ describe("configured secret preservation", () => {
       const patch = fetchMock.mock.calls.find(
         ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
       );
-      expect(patch).toBeDefined();
-      expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      assert.isDefined(patch, "no settings PATCH was sent");
+      expect(JSON.parse(String((patch[1] as RequestInit).body))).toEqual({
         hostedBasemapProvider: "maptiler",
       });
     });
@@ -442,8 +442,8 @@ it("keeps another administrator's clean field while saving only the dirty key", 
     const call = fetchMock.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
     );
-    expect(call).toBeDefined();
-    expect(JSON.parse(String((call?.[1] as RequestInit | undefined)?.body))).toEqual({
+    assert.isDefined(call, "no settings PATCH was sent");
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({
       instanceName: "mine",
     });
   });

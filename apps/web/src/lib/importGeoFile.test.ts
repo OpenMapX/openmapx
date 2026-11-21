@@ -1,5 +1,5 @@
 import { placesToGeoJson, placesToGpx, placesToKml } from "@openmapx/core/saved-place-export";
-import { expect, it } from "vitest";
+import { assert, expect, it } from "vitest";
 import { nth } from "@/test";
 import { parseGeoFile } from "./importGeoFile";
 
@@ -51,10 +51,10 @@ it("does not trust imported map-owner metadata or malformed capture", () => {
     }),
   )?.features;
   if (!features) throw new Error("File rejected");
-  const [feature] = features;
-  expect(feature).toBeDefined();
-  expect(feature?.properties?._mapAttributions).toBe("[]");
-  expect(feature?.properties?.fieldContributors).toBeUndefined();
+  const { properties } = nth(features, 0);
+  assert.exists(properties, "the imported feature has no properties");
+  expect(properties._mapAttributions).toBe("[]");
+  expect(properties.fieldContributors).toBeUndefined();
 });
 
 it("keeps duplicate waypoint receipts matched independently in GPX", () => {
