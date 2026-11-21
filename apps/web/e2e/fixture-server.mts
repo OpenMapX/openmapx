@@ -341,7 +341,7 @@ const server = createServer((request, response) => {
     return;
   }
   // Line breaks in a request target would forge extra log lines.
-  const target = `${request.method} ${url.pathname}${url.search}`.replace(/[\r\n]/g, " ");
+  const target = `${request.method} ${url.pathname}${url.search}`.replace(/\n|\r/g, "");
   console.log(`[fixture] unhandled ${target}`);
   send(request, response, 404, { error: "No fixture" });
 });
