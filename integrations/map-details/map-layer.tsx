@@ -54,11 +54,21 @@ export function MapDetailsLayer(): null {
   const live = useRef({ scheme, pitchFade, paintVisible, template, client });
   live.current = { scheme, pitchFade, paintVisible, template, client };
 
-  // One worker for all derivation, from the first activation until unmount.
+  // One worker for all derivation, from the first activation until unmount. A ref
+  // owns it so a remounting effect (React's development double run) never leaks one.
+  const workerRef = useRef<MapDetailsWorkerClient | null>(null);
   useEffect(() => {
-    if (active && !client) setClient(createMapDetailsWorker());
-  }, [active, client]);
-  useEffect(() => () => client?.dispose(), [client]);
+    if (!active || workerRef.current) return;
+    workerRef.current = createMapDetailsWorker();
+    setClient(workerRef.current);
+  }, [active]);
+  useEffect(
+    () => () => {
+      workerRef.current?.dispose();
+      workerRef.current = null;
+    },
+    [],
+  );
 
   // The street detail TileJSON, fetched once; a failure means no street detail (forests still plant).
   useEffect(() => {

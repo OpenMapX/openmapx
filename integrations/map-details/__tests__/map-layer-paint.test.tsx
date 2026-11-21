@@ -1,4 +1,5 @@
 import { createOverlayStore, useLayerStore, useNavigationStore } from "@openmapx/core";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NEUTRAL_SCENE_LIGHT,
@@ -245,6 +246,20 @@ describe("street paint layer", () => {
       call?.options as { layerContributors: Record<string, Array<{ sourceId: string }>> }
     ).layerContributors[PAINT_LAYER_ID];
     expect(contributors?.map((c) => c.sourceId)).toEqual(["osm-street-detail"]);
+  });
+
+  it("never leaks a worker when effects run twice (React development mode)", async () => {
+    // Already active on mount, as when a link opens the 3D view.
+    act(() => buildings.setState({ panelOpen: true, layerVisible: true }));
+    const view = render(
+      <StrictMode>
+        <MapDetailsLayer />
+      </StrictMode>,
+    );
+    await activate();
+    view.unmount();
+    expect(workers.created).toBeGreaterThan(0);
+    expect(workers.disposed).toBe(workers.created);
   });
 
   it("removes its layer, source and worker when unmounted", async () => {
