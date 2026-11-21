@@ -110,6 +110,16 @@ function polygonBounds(polygon: Polygon): Bounds {
  * Work on each polygon component, never on a merged feature as a whole: a
  * merged feature's other components can be buildings blocks away.
  */
+function pointInRing([x, y]: Pair, ring: Ring): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i] as Pair;
+    const [xj, yj] = ring[j] as Pair;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 function subtractMasks(
   polygon: Polygon,
   masks: { geometry: Polygon[]; bounds: Bounds }[],
@@ -117,8 +127,17 @@ function subtractMasks(
   const box = polygonBounds(polygon);
   const nearby = masks.filter((mask) => overlaps(box, mask.bounds));
   if (nearby.length === 0) return [polygon];
+  // Cheap containment first; polygon clipping is reserved for buildings that
+  // cross a footprint's edge, which keeps dense tiles fast.
+  const outer = polygon[0] ?? [];
+  const maskOuters = nearby.flatMap((mask) => mask.geometry.map((part) => part[0] ?? []));
+  if (maskOuters.some((ring) => outer.every((point) => pointInRing(point, ring)))) return [];
+  const anyInside =
+    outer.some((point) => maskOuters.some((ring) => pointInRing(point, ring))) ||
+    maskOuters.some((ring) => ring.some((point) => pointInRing(point, outer)));
+  if (!anyInside) return [polygon];
   const [first, ...rest] = nearby.map((mask) => mask.geometry as Geom);
-  const coverage = union(first as Geom, ...rest);
+  const coverage = rest.length === 0 ? (first as Geom) : union(first as Geom, ...rest);
   const covered = intersection([polygon] as Geom, coverage) as Polygon[];
   if (covered.length === 0) return [polygon];
   if (geometryArea(covered) >= geometryArea([polygon]) * COVERAGE_DROP_RATIO) return [];

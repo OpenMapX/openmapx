@@ -72,14 +72,68 @@ interface RawTile {
   expires?: string;
 }
 
+export type RewriteTile = (
+  bytes: Uint8Array,
+  tile: { z: number; x: number; y: number },
+  sourceLayer: string,
+  replacements: readonly BuildingReplacement[],
+) => Promise<Uint8Array>;
+
+/** Rewrites in this thread; used where workers are unavailable (tests, old runtimes). */
+const rewriteInline: RewriteTile = async (bytes, tile, sourceLayer, replacements) => {
+  const { rewriteBuildingTile } = await import("./building-mask");
+  return rewriteBuildingTile(bytes, tile, sourceLayer, replacements);
+};
+
+/**
+ * Rewrites in a dedicated worker: decoding, clipping and re-encoding a dense
+ * city tile takes tens of milliseconds, too long for the main thread.
+ */
+function createWorkerRewrite(): RewriteTile {
+  if (typeof Worker === "undefined") return rewriteInline;
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("./mask-worker.ts", import.meta.url), { type: "module" });
+  } catch {
+    return rewriteInline;
+  }
+  let sequence = 0;
+  let broken = false;
+  const pending = new Map<
+    number,
+    { resolve(bytes: Uint8Array): void; reject(error: Error): void }
+  >();
+  worker.onmessage = (event: MessageEvent<{ id: number; bytes?: Uint8Array; error?: string }>) => {
+    const request = pending.get(event.data.id);
+    pending.delete(event.data.id);
+    if (event.data.bytes) request?.resolve(event.data.bytes);
+    else request?.reject(new Error(event.data.error ?? "Building tile rewrite failed"));
+  };
+  worker.onerror = () => {
+    broken = true;
+    for (const request of pending.values())
+      request.reject(new Error("Building tile worker failed"));
+    pending.clear();
+  };
+  return (bytes, tile, sourceLayer, replacements) => {
+    if (broken) return rewriteInline(bytes, tile, sourceLayer, replacements);
+    return new Promise((resolve, reject) => {
+      const id = ++sequence;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, bytes, tile, sourceLayer, replacements }, [bytes.buffer]);
+    });
+  };
+}
+
 /**
  * The protocol behind the masked building source: fetch the basemap tile and
  * drop or trim the buildings that drawn models replace. Tiles no replacement
- * touches pass through unchanged.
+ * touches pass through unchanged without leaving the main thread.
  */
 export function createMaskProtocolHandler(
   getState: () => MaskState,
   fetchImpl: typeof fetch = (...args) => fetch(...args),
+  rewrite: RewriteTile = createWorkerRewrite(),
 ): AddProtocolAction {
   const raw = new Map<string, Promise<RawTile>>();
   let mask: Promise<typeof import("./building-mask")> | undefined;
@@ -120,9 +174,14 @@ export function createMaskProtocolHandler(
     controller.signal.throwIfAborted();
     const tile = await loadRaw(url, controller.signal);
     mask ??= import("./building-mask");
-    const { replacementsForTile, rewriteBuildingTile } = await mask;
+    const { replacementsForTile } = await mask;
     const touching = replacementsForTile({ z, x, y }, replacements);
-    const bytes = rewriteBuildingTile(tile.bytes, { z, x, y }, source.sourceLayer, touching);
+    // The rewrite may transfer its input to a worker, so it gets a copy and the
+    // cached raw tile stays intact.
+    const bytes =
+      touching.length === 0
+        ? tile.bytes
+        : await rewrite(tile.bytes.slice(), { z, x, y }, source.sourceLayer, touching);
     return {
       data: bytes.buffer.slice(
         bytes.byteOffset,

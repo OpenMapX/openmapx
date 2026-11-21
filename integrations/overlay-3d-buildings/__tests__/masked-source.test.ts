@@ -114,6 +114,34 @@ describe("createMaskProtocolHandler", () => {
     expect((error as AJAXError).status).toBe(404);
   });
 
+  it("sends only touched tiles to the rewrite step, with a copy of the raw bytes", async () => {
+    const bytes = buildingTile();
+    const fetchImpl = vi.fn(async () => new Response(bytes, { status: 200 }));
+    const rewritten = new Uint8Array([1, 2, 3]);
+    const rewrite = vi.fn(async (input: Uint8Array, _tile: unknown) => {
+      input.fill(0);
+      return rewritten;
+    });
+    const replacements: BuildingReplacement[] = [
+      { id: "r", featureIds: [22], bbox: [-0.01, 85.0, 0.03, 85.06] },
+    ];
+    const handler = createMaskProtocolHandler(
+      () => ({ source: source(), replacements }),
+      fetchImpl as unknown as typeof fetch,
+      rewrite,
+    );
+    const far = await handler(params("openmapx-buildings://14/9000/9000"), new AbortController());
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(new Uint8Array(far.data as ArrayBuffer)).toEqual(bytes);
+    const touched = await handler(params("openmapx-buildings://14/8192/0"), new AbortController());
+    expect(rewrite).toHaveBeenCalledTimes(1);
+    expect(rewrite.mock.calls[0]?.[1]).toEqual({ z: 14, x: 8192, y: 0 });
+    expect(new Uint8Array(touched.data as ArrayBuffer)).toEqual(rewritten);
+    // The raw cache survives the rewrite step mutating (or transferring) its input.
+    const again = await handler(params("openmapx-buildings://14/9000/9000"), new AbortController());
+    expect(new Uint8Array(again.data as ArrayBuffer)).toEqual(bytes);
+  });
+
   it("reuses the raw tile for repeated requests", async () => {
     const fetchImpl = vi.fn(async () => new Response(buildingTile(), { status: 200 }));
     const handler = createMaskProtocolHandler(
