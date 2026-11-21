@@ -7,6 +7,7 @@ import {
   gapFillBranding,
   isoWithOffsetInZone,
   isSafeHttpUrl,
+  itemAt,
   type OsmIdentity,
   tzOffsetMinutes,
   validObservedAt,
@@ -690,8 +691,8 @@ function groupLabels(site: ChargingSite): {
     }
     const names = tariffNames(members.map((member) => member.tariff));
     for (const [n, { index, connectors }] of members.entries()) {
-      const name = names[n];
-      if (name === undefined) throw new RangeError(`No tariff name for group member ${n}`);
+      // tariffNames returns one name per tariff.
+      const name = itemAt(names, n, "tariff name");
       labels[index] = byConnector ? token("pricing.tariffFor", { connectors, tariff: name }) : name;
     }
   }

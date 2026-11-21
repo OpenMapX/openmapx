@@ -2,6 +2,7 @@ import {
   angularDifference,
   bearingBetween,
   haversineDistance,
+  itemAt,
   type JunctionLookupPoint,
   type JunctionLookupResult,
   type JunctionWay,
@@ -181,11 +182,6 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
   // The bearing is read at the node nearest the decision point, from the
   // segment leaving it (or arriving at it, at the way's end): a ramp curves
   // away within a few nodes, so its far end says nothing about the split.
-  const at = (index: number): LngLat => {
-    const node = nodes[index];
-    if (!node) throw new RangeError(`No node ${index} of way ${element.id}`);
-    return node;
-  };
   let nearest = 0;
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const [i, node] of nodes.entries()) {
@@ -197,14 +193,14 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
   }
   const bearing =
     nearest === nodes.length - 1
-      ? bearingBetween(at(nearest - 1), at(nearest))
-      : bearingBetween(at(nearest), at(nearest + 1));
+      ? bearingBetween(itemAt(nodes, nearest - 1, "way node"), itemAt(nodes, nearest, "way node"))
+      : bearingBetween(itemAt(nodes, nearest, "way node"), itemAt(nodes, nearest + 1, "way node"));
 
   // Signed distance of the way's travel end: positive when the way leads into
   // the point (its end lies upstream of it), negative when it runs away from it.
-  const end = at(nodes.length - 1);
+  const end = itemAt(nodes, nodes.length - 1, "way node");
   const endDistance = haversineDistance(end, centre);
-  const endBearing = bearingBetween(at(nodes.length - 2), end);
+  const endBearing = bearingBetween(itemAt(nodes, nodes.length - 2, "way node"), end);
   const leadsIn =
     endDistance < END_ON_POINT_METERS ||
     angularDifference(bearingBetween(end, centre), endBearing) <= 90;
@@ -220,7 +216,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     local.length <= 128
       ? local
       : Array.from({ length: 128 }, (_, i) =>
-          at(first + Math.round((i * (local.length - 1)) / 127)),
+          itemAt(nodes, first + Math.round((i * (local.length - 1)) / 127), "way node"),
         );
   return {
     wayId: element.id,
@@ -229,7 +225,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     ...(tags.name ? { name: tags.name } : {}),
     bearing,
     endDistanceMeters: leadsIn ? endDistance : -endDistance,
-    startDistanceMeters: haversineDistance(at(0), centre),
+    startDistanceMeters: haversineDistance(itemAt(nodes, 0, "way node"), centre),
     tags: laneTags(tags),
     geometry,
   };

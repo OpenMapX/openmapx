@@ -92,9 +92,8 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     instantMs: number,
     pinArrival: boolean,
   ): Promise<ChainedTripSegment> => {
-    const from = args.waypoints[segmentIndex];
-    const to = args.waypoints[segmentIndex + 1];
-    if (!from || !to) throw new RangeError(`No waypoints for transit segment ${segmentIndex}`);
+    const from = itemAt(args.waypoints, segmentIndex, "segment start waypoint");
+    const to = itemAt(args.waypoints, segmentIndex + 1, "segment end waypoint");
     const request: TripPlanRequest = {
       ...args.baseRequest,
       from,

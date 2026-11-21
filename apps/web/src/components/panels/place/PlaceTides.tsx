@@ -6,6 +6,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import {
+  compassPoint,
   type MetObservation,
   numberAt,
   type TideCurvePoint,
@@ -313,17 +314,11 @@ function CurrentLevelBlock({
   );
 }
 
-const CARDINALS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-
-function windDirection(deg: number): string {
-  const idx = Math.round((deg % 360) / 45) % 8;
-  return CARDINALS[idx] ?? "";
-}
-
 function MetBlock({ met, t }: { met: MetObservation; t: ReturnType<typeof useTranslations> }) {
   const parts: string[] = [];
   if (met.windKnots !== undefined) {
-    const dir = met.windDirDeg !== undefined ? windDirection(met.windDirDeg) : "";
+    // The message reads without a direction when there is none to name.
+    const dir = (met.windDirDeg === undefined ? undefined : compassPoint(met.windDirDeg)) ?? "";
     parts.push(
       met.windGustKnots !== undefined
         ? t("windWithGust", { speed: met.windKnots, gust: met.windGustKnots, dir })

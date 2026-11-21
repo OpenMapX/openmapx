@@ -3,6 +3,7 @@
 import type { DirectionsState } from "@openmapx/core";
 import {
   buildTransitPlanParams,
+  itemAt,
   type TransitPlanQuery,
   transitItineraryKey,
   transitPlanQueryKey,
@@ -179,9 +180,8 @@ export function useTransitDirectionsPlan(snapshot: TransitDirectionsSnapshot) {
     if (state.pendingTransitSelection) return null;
     const selected = selectTransitAlternative(state.transitItineraries, parent, candidate);
     if (!selected) return null;
-    const itinerary = selected.itineraries[selected.index];
     // The selection's index points into its own itinerary list.
-    if (!itinerary) throw new RangeError(`No itinerary at selected index ${selected.index}`);
+    const itinerary = itemAt(selected.itineraries, selected.index, "selected itinerary");
     retainedAlternative.current = { identity: pagingIdentity, itinerary };
     state.setTransitItineraries(selected.itineraries);
     state.setActiveItineraryIndex(selected.index);

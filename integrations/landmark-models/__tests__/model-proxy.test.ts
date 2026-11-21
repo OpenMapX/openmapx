@@ -1,5 +1,4 @@
 import { gzipSync } from "node:zlib";
-import type { RouteHandler } from "@openmapx/integration-framework";
 import { createRecordingReply } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createModelProxy, type ModelProxyOptions } from "../model-proxy";
@@ -44,9 +43,11 @@ function setup(
   };
 }
 
+type ModelHandler = ReturnType<typeof createModelProxy>["handle"];
+
 async function request(
-  handle: RouteHandler,
-  params: Record<string, string>,
+  handle: ModelHandler,
+  params: Parameters<ModelHandler>[0]["params"],
   headers: Record<string, string> = { "accept-encoding": "gzip, br" },
   signal?: AbortSignal,
 ) {
@@ -59,7 +60,7 @@ async function request(
       clientKey: "k",
       headers,
       ...(signal ? { signal } : {}),
-    } as Parameters<RouteHandler>[0],
+    } as Parameters<ModelHandler>[0],
     reply,
   );
   return result;

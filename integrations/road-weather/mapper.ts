@@ -1,4 +1,5 @@
 import {
+  compassPoint,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -39,8 +40,6 @@ const CONDITION_OF: Partial<Record<RoadSurfaceState, SurfaceCondition>> = {
   dry: "dry",
 };
 const SEVERITY: readonly SurfaceCondition[] = ["icy", "snowy", "wet", "dry"];
-
-const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
 
 /** A station that reports nothing current says nothing about the road now. */
 const reporting = (station: RoadWeatherStation): boolean =>
@@ -166,19 +165,15 @@ function surfaceSection(sensor: RoadSurfaceSensor, count: number): DataSourceDet
   };
 }
 
-function compassOf(degrees: number): (typeof COMPASS)[number] {
-  const direction = COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
-  if (!direction) throw new RangeError(`No compass direction for ${degrees}°`);
-  return direction;
-}
-
 function windOf(air: RoadWeatherAir): I18nToken | undefined {
   const speed = air.windSpeedMs?.value;
   if (speed === undefined) return undefined;
+  // A non-finite direction names no compass point, so the wind reads without one.
   const from = air.windDirectionDeg?.value;
-  return from === undefined || speed === 0
+  const direction = from === undefined ? undefined : compassPoint(from);
+  return direction === undefined || speed === 0
     ? token("value.wind", { speed })
-    : token("value.windFrom", { speed, direction: token(`compass.${compassOf(from)}`) });
+    : token("value.windFrom", { speed, direction: token(`compass.${direction}`) });
 }
 
 function visibilityOf(metres: number): I18nToken {

@@ -1,4 +1,4 @@
-import { haversineDistance, indexAt, type LngLat, numberAt } from "@openmapx/core";
+import { haversineDistance, itemAt, type LngLat, numberAt } from "@openmapx/core";
 
 /**
  * `GET /navigation/alerts` — approach hazards from OpenStreetMap (stop signs,
@@ -245,13 +245,6 @@ function isDrivable(way: Way): boolean {
   return roadRank(way) !== undefined;
 }
 
-/** A vertex of a way's geometry at an index derived from that same geometry. */
-function vertex(coords: readonly LngLat[], index: number): LngLat {
-  const point = coords[index];
-  if (!point) throw new RangeError(`No vertex ${index} of ${coords.length}`);
-  return point;
-}
-
 /**
  * Ways a hazard can be met on: roads, plus cycleways for bicycle routes.
  * Footways and paths crossing a road at a speed bump or level crossing are
@@ -287,9 +280,12 @@ function distanceToJunction(
 ): number | null {
   let travelled = 0;
   for (let i = index + step; i >= 0 && i < way.nodes.length; i += step) {
-    travelled += haversineDistance(vertex(way.coords, i - step), vertex(way.coords, i));
+    travelled += haversineDistance(
+      itemAt(way.coords, i - step, "way vertex"),
+      itemAt(way.coords, i, "way vertex"),
+    );
     if (travelled > JUNCTION_SEARCH_M) return null;
-    if (junctionDegree(indexAt(way.nodes, i), waysByNode) >= 3) return travelled;
+    if (junctionDegree(itemAt(way.nodes, i, "way node"), waysByNode) >= 3) return travelled;
   }
   return null;
 }
@@ -399,7 +395,7 @@ function resolveOnRoad(
       index,
       flags,
       anchorAlong: numberAt(cum, index),
-      anchor: vertex(way.coords, index),
+      anchor: itemAt(way.coords, index, "way vertex"),
     });
   }
   return placements;
@@ -612,11 +608,11 @@ function nearestOnLine(coords: LngLat[], position: LngLat, kx: number): LineProj
     distance: Number.POSITIVE_INFINITY,
     segment: 0,
     t: 0,
-    point: vertex(coords, 0),
+    point: itemAt(coords, 0, "way vertex"),
   };
   for (let i = 0; i < coords.length - 1; i++) {
-    const a = vertex(coords, i);
-    const b = vertex(coords, i + 1);
+    const a = itemAt(coords, i, "way vertex");
+    const b = itemAt(coords, i + 1, "way vertex");
     const ax = (a[0] - position[0]) * kx;
     const ay = (a[1] - position[1]) * ky;
     const bx = (b[0] - position[0]) * kx;
@@ -677,8 +673,8 @@ function sliceAround(
     const from = numberAt(cum, i);
     const span = numberAt(cum, i + 1) - from;
     const t = span > 0 ? (along - from) / span : 0;
-    const a = vertex(coords, i);
-    const b = vertex(coords, i + 1);
+    const a = itemAt(coords, i, "way vertex");
+    const b = itemAt(coords, i + 1, "way vertex");
     return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
   };
 

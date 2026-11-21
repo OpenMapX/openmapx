@@ -1,4 +1,4 @@
-import { diceSimilarity, haversineMeters, indexAt } from "@openmapx/core";
+import { diceSimilarity, haversineMeters, indexAt, itemAt } from "@openmapx/core";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 
 export { diceSimilarity, haversineMeters };
@@ -291,9 +291,8 @@ export function deduplicateStops(
   const cells = new Map<string, number[]>();
   const unindexed: number[] = [];
   const compare = (i: number, j: number) => {
-    const a = named[i];
-    const b = named[j];
-    if (!a || !b) throw new RangeError(`No stop ${i} or ${j} of ${named.length}`);
+    const a = itemAt(named, i, "named stop");
+    const b = itemAt(named, j, "named stop");
     const dist = haversineMeters(a.stop.lat, a.stop.lng, b.stop.lat, b.stop.lng);
     if (dist > MAX_DISTANCE_M) return;
     if (diceSimilarity(a.name, b.name) >= MIN_DICE) unite(i, j);

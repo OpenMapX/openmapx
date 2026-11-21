@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core";
 import type { IntegrationContext, UpstreamRuntime } from "@openmapx/integration-framework";
 import { SOURCE_ID } from "./match";
 import { MAX_BYTES, parseSiriEt, type SiriJourney } from "./siri-et-stream";
@@ -107,10 +108,12 @@ export function createSiriClient(ctx: IntegrationContext, now: () => number = Da
         responseTimestamp = parsed.responseTimestamp;
         groups = Array.from({ length: 64 }, () => []);
         for (const record of parsed.journeys) {
-          const index = bucket(record.serviceDate, record.trainNumber);
-          const group = groups[index];
-          if (!group) throw new RangeError(`No SIRI journey bucket ${index}`);
-          group.push(record);
+          // The bucket is taken modulo the 64 groups.
+          itemAt(
+            groups,
+            bucket(record.serviceDate, record.trainNumber),
+            "SIRI journey bucket",
+          ).push(record);
         }
       }
       if (stopped || !(await allowed()) || now() - Date.parse(responseTimestamp) > 1_800_000)

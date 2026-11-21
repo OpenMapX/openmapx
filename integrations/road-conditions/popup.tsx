@@ -1,5 +1,7 @@
 import {
   bearingBetween,
+  COMPASS_POINTS,
+  compassPoint,
   escapeHtml,
   haversineDistance,
   type LngLat,
@@ -122,9 +124,7 @@ const KNOWN_TYPES = new Set([
 
 const DIRECTION_VALUES = new Set(["positive", "negative", "both", "unknown"]);
 const DIRECTION_LOOPS = new Set(["inner", "outer"]);
-/** The eight compass points, clockwise from north, 45° apart. */
-const COMPASS_ORDER = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
-const COMPASS_POINTS = new Set<string>(COMPASS_ORDER);
+const KNOWN_COMPASS_POINTS = new Set<string>(COMPASS_POINTS);
 /** Lifecycles a card names in place of a time, as no time of them holds now. */
 const NOT_RUNNING_STATUSES = new Set(["suspended", "ended", "cancelled"]);
 const SCHEDULE_WEEKDAY_CODES = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
@@ -252,11 +252,6 @@ export function roadNamesForEvents(
   return names.length > 0 ? names.join(", ") : undefined;
 }
 
-/** The eight-point compass direction of a bearing in degrees; none for a non-finite bearing. */
-function compassOf(bearingDeg: number): string | undefined {
-  return COMPASS_ORDER[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
-}
-
 /**
  * The straight line from a heading's start to its end must cover at least
  * this share of the path's length for that heading to describe the path: a
@@ -322,8 +317,8 @@ export function directionText(
         ? translate(`direction.loop.${direction.loop}`)
         : humanizeToken(direction.loop);
   let heading: string | undefined;
-  if (direction.compass && COMPASS_POINTS.has(direction.compass)) heading = direction.compass;
-  else if (direction.bearingDeg !== undefined) heading = compassOf(direction.bearingDeg);
+  if (direction.compass && KNOWN_COMPASS_POINTS.has(direction.compass)) heading = direction.compass;
+  else if (direction.bearingDeg !== undefined) heading = compassPoint(direction.bearingDeg);
   else if (
     direction.basis === "geometry" &&
     (direction.value === "positive" || direction.value === "negative")
@@ -331,7 +326,7 @@ export function directionText(
     const ends = geometry ? lineEnds(geometry) : undefined;
     if (ends) {
       const [from, to] = direction.value === "positive" ? ends : [ends[1], ends[0]];
-      heading = compassOf(bearingBetween(from, to));
+      heading = compassPoint(bearingBetween(from, to));
     }
   }
   const way =
@@ -341,7 +336,7 @@ export function directionText(
         ? translate("direction.toward", { place: direction.toward })
         : direction.text ||
           (heading ? translate(`direction.compass.${heading}`) : undefined) ||
-          (direction.compass && !COMPASS_POINTS.has(direction.compass)
+          (direction.compass && !KNOWN_COMPASS_POINTS.has(direction.compass)
             ? direction.compass
             : undefined) ||
           (DIRECTION_VALUES.has(direction.value) ? undefined : humanizeToken(direction.value));

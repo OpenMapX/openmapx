@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core";
 import { hasRestrictionEvidence } from "./effects.js";
 import type { LocalizedText, RoadConditionEvent } from "./types.js";
 
@@ -34,9 +35,7 @@ function positions(geometry: RoadConditionEvent["geometry"]): [number, number][]
   const stride = raw.length / VERTEX_SAMPLE;
   const out: [number, number][] = [];
   for (let i = 0; i < VERTEX_SAMPLE; i++) {
-    const point = raw[Math.floor(i * stride)];
-    if (!point) throw new RangeError(`No vertex sample ${i} of ${raw.length}`);
-    out.push(point);
+    out.push(itemAt(raw, Math.floor(i * stride), "vertex sample"));
   }
   return out;
 }
@@ -82,10 +81,16 @@ function pointToPolylineMeters(
 ): number {
   const [only] = verts;
   if (verts.length === 1 && only) return pointToSegmentMeters(p, only, only, cosRefLat);
+  // Called per vertex for every candidate pair, so the segments are walked in
+  // place rather than collected into an array first.
   let min = Infinity;
-  for (const [a, b] of segmentsOf(verts)) {
-    const d = pointToSegmentMeters(p, a, b, cosRefLat);
-    if (d < min) min = d;
+  let previous: [number, number] | undefined;
+  for (const b of verts) {
+    if (previous) {
+      const d = pointToSegmentMeters(p, previous, b, cosRefLat);
+      if (d < min) min = d;
+    }
+    previous = b;
   }
   return min;
 }

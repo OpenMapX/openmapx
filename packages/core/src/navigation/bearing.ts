@@ -18,6 +18,20 @@ export function angularDifference(a: number, b: number): number {
   return difference > 180 ? 360 - difference : difference;
 }
 
+/** The eight compass points, clockwise from north, 45° apart. */
+export const COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+export type CompassPoint = (typeof COMPASS_POINTS)[number];
+
+/**
+ * The eight-point compass direction of a bearing in degrees, of any sign or
+ * number of turns. A non-finite bearing has none, so a caller leaves the
+ * direction out instead of failing.
+ */
+export function compassPoint(bearingDeg: number): CompassPoint | undefined {
+  if (!Number.isFinite(bearingDeg)) return undefined;
+  return COMPASS_POINTS[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
+}
+
 /** Bearing of the route segment starting at `segmentIndex`. */
 export function routeBearingAt(route: LngLat[], segmentIndex: number): number {
   const index = Math.max(0, Math.min(segmentIndex, route.length - 2));

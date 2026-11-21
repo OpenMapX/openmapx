@@ -21,7 +21,14 @@ export {
   selectActiveAlert,
   shouldWarnCamera,
 } from "./alerts";
-export { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
+export {
+  angularDifference,
+  bearingBetween,
+  COMPASS_POINTS,
+  type CompassPoint,
+  compassPoint,
+  routeBearingAt,
+} from "./bearing";
 export {
   type CarCamera,
   type CarNativeToWebMessage,

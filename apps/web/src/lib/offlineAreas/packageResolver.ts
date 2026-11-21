@@ -1,6 +1,7 @@
 import {
   indexAt,
   isOfflinePackageCompatible,
+  itemAt,
   numberAt,
   type OfflineMapPackageManifest,
   type OfflinePackageBbox,
@@ -235,13 +236,6 @@ interface ResolverEntry {
   order: number;
 }
 
-/** The entry a bbox index item names; the index is built over these entries, so a miss is a bug. */
-function entryAt(entries: readonly ResolverEntry[], item: number): ResolverEntry {
-  const entry = entries[item];
-  if (!entry) throw new RangeError(`No offline package entry at index item ${item}`);
-  return entry;
-}
-
 interface ResolverSnapshot {
   entries: ResolverEntry[];
   index: StaticBboxIndex;
@@ -331,7 +325,8 @@ export function createOfflinePackageResolver(
         coordinate[0],
         coordinate[1],
         (item: number) => {
-          const entry = entryAt(current.entries, item);
+          // The bbox index is built over these entries, so each item names one.
+          const entry = itemAt(current.entries, item, "offline package entry");
           if (allowed && !allowed.has(entry.recordId)) return;
           if (!contains(entry.bbox, coordinate)) return;
           if (!best || compareEntries(entry, best) < 0) best = entry;
@@ -359,7 +354,7 @@ export function createOfflinePackageResolver(
       }
       const packageIds: string[] = [];
       current.index.query(west, south, east, north, (item: number) => {
-        const entry = entryAt(current.entries, item);
+        const entry = itemAt(current.entries, item, "offline package entry");
         if (geometryIntersectsBbox(entry.bbox, coordinates)) packageIds.push(entry.recordId);
       });
       return packageIds.sort();

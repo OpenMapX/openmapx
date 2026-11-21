@@ -3,9 +3,8 @@
 import Box from "@mui/material/Box";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
+import { compassPoint, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { windDirectionLabel } from "@/components/weather/weatherUtils";
 import { AttributionStrip } from "@/integration-api/components/AttributionStrip";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
@@ -32,6 +31,8 @@ export function PlaceWeather({ lat, lng }: Props) {
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
+  const windDirection =
+    current.windDirection == null ? undefined : compassPoint(current.windDirection);
 
   return (
     <Box sx={{ py: 1 }}>
@@ -51,7 +52,7 @@ export function PlaceWeather({ lat, lng }: Props) {
         {current.windSpeed != null && (
           <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
             {t("windSpeed")}: {Math.round(current.windSpeed)} km/h
-            {current.windDirection != null && ` ${windDirectionLabel(current.windDirection)}`}
+            {windDirection && ` ${windDirection}`}
           </Typography>
         )}
       </Box>

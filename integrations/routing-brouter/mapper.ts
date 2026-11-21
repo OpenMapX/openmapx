@@ -1,6 +1,7 @@
 import {
   haversineDistance,
   indexAt,
+  itemAt,
   type LngLat,
   numberAt,
   type Route,
@@ -22,12 +23,6 @@ function metric(value: unknown): number {
   if (!Number.isFinite(n) || n < 0) throw new Error("Invalid BRouter metric");
   return n;
 }
-/** A point at an index the mapper derived from the same list. */
-function pointAt(points: readonly LngLat[], index: number): LngLat {
-  const point = points[index];
-  if (!point) throw new RangeError(`No BRouter point ${index} of ${points.length}`);
-  return point;
-}
 /** Minimum-distance ordered waypoint assignment. Endpoints are fixed, so loops
  * and repeat visits cannot be mistaken for an earlier destination occurrence. */
 function waypointIndices(geometry: LngLat[], waypoints: LngLat[]): number[] {
@@ -48,7 +43,10 @@ function waypointIndices(geometry: LngLat[], waypoints: LngLat[]): number[] {
         best = cost;
         bestIndex = i - 1;
       }
-      const distance = haversineDistance(pointAt(geometry, i), pointAt(waypoints, w));
+      const distance = haversineDistance(
+        itemAt(geometry, i, "route point"),
+        itemAt(waypoints, w, "waypoint"),
+      );
       if (distance <= 1000 && Number.isFinite(best)) {
         next[i] = best + distance;
         prev[i] = bestIndex;
@@ -206,7 +204,7 @@ export function mapBrouterRoute(
         instruction: t("arrive"),
         distance: 0,
         duration: 0,
-        coordinates: [pointAt(geometry, end)],
+        coordinates: [itemAt(geometry, end, "route point")],
         maneuver: { type: "arrive" },
       });
     return {

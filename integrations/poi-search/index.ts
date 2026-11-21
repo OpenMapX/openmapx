@@ -299,7 +299,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/brand/:qid", async (req, reply) => {
-    const { qid } = req.params as { qid?: string };
+    const { qid } = req.params;
 
     if (!qid || !/^Q\d{1,12}$/.test(qid)) {
       reply.status(400).send({ error: "Invalid Wikidata QID" });
@@ -318,7 +318,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // Every rendered logo needs this exact file's receipt, including map/list icons.
   ctx.registerRoute("GET", "/brand/:qid/logo-attribution", async (req, reply) => {
-    const { qid } = req.params as { qid?: string };
+    const { qid } = req.params;
 
     if (!qid || !/^Q\d{1,12}$/.test(qid)) {
       reply.status(400).send({ error: "Invalid Wikidata QID" });

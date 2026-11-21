@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { BBox } from "@openmapx/core";
+import { type BBox, itemAt } from "@openmapx/core";
 import {
   type CacheClient,
   captureCacheWriter,
@@ -532,8 +532,8 @@ function buildChildStopAreas(
   return [...groups.entries()].map(([groupId, members]) => {
     const lat = members.reduce((sum, point) => sum + point.lat, 0) / members.length;
     const lng = members.reduce((sum, point) => sum + point.lng, 0) / members.length;
-    const [first] = members;
-    if (!first) throw new RangeError(`Traffic point group ${groupId} has no members`);
+    // A group exists only once a point was added to it.
+    const first = itemAt(members, 0, "traffic point group member");
     const suffix = first.designation || groupId.split(":").at(-1) || "";
     return {
       id: providerId(groupId),

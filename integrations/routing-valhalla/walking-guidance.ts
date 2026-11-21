@@ -23,6 +23,7 @@
 import {
   bearingBetween,
   haversineDistance,
+  itemAt,
   type LngLat,
   numberAt,
   type RouteStep,
@@ -307,8 +308,8 @@ export function planWalkingLeg(
   const along = alongDistances(coordinates);
   const last = coordinates.length - 1;
   const initial: Draft[] = maneuvers.map((maneuver, i) => {
-    const step = steps[i];
-    if (!step) throw new RangeError("A walking leg needs one step per maneuver");
+    // Callers pass a leg only when it has one step per maneuver.
+    const step = itemAt(steps, i, "walking step");
     return {
       ...draftKind(maneuver.type),
       name: maneuver.street_names?.[0],

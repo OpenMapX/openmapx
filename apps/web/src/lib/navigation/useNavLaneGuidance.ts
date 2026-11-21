@@ -3,6 +3,7 @@ import {
   fetchJunctionLookups,
   findJunctionCandidates,
   findJunctionDecisionPoints,
+  itemAt,
   type JunctionDecisionPoint,
   type JunctionLookupPoint,
   type JunctionLookupResult,
@@ -52,8 +53,7 @@ export function useNavLaneGuidance(): void {
     lookupEntries = junctionLookupPoints(route, points)
       .map(({ stepIndex, lookup }, i) => {
         // The lookups follow the decision points one to one.
-        const point = points[i];
-        if (!point) throw new RangeError(`No junction decision point for lookup ${i}`);
+        const point = itemAt(points, i, "junction decision point");
         return {
           point,
           lookup,
