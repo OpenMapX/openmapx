@@ -1,5 +1,5 @@
 import { timelineConnectionViewSchema } from "@openmapx/core";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { user } from "../../../db/auth-schema.js";
 import { personalTimelineConnection } from "../../../db/timeline-connection-schema.js";
 import { createMigratedPostgresFixture } from "../../../test/postgres-fixture.js";
@@ -174,7 +174,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await expect(service.testConnection(USER_ID)).rejects.toMatchObject({
             code: "TIMELINE_CREDENTIAL_INVALID",
           });
-        expect(await store.findByUserId(USER_ID)).toEqual(switched!);
+        expect(switched).not.toBeNull();
+        expect(await store.findByUserId(USER_ID)).toEqual(switched);
       },
     );
 
@@ -191,7 +192,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             encryptionTag: encrypted.tag,
           });
         } else {
-          const previous = (await store.findByUserId(USER_ID))!;
+          const previous = await store.findByUserId(USER_ID);
+          assert.exists(previous, "the user has no connection to replace");
           await store.deleteForUser(USER_ID);
           await store.replaceForUser({ ...previous, id: "replacement-connection" });
         }
@@ -254,7 +256,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     });
 
     it("scopes view, read-success and idempotent deletion to the supplied user", async () => {
-      const first = (await store.findByUserId(USER_ID))!;
+      const first = await store.findByUserId(USER_ID);
+      assert.exists(first, "the user has no connection");
       await store.replaceForUser({
         ...first,
         id: "other-connection",

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   isValidRequestTransition,
   REQUEST_STATES,
@@ -81,7 +82,7 @@ suite("privacy case administration on PostgreSQL", () => {
 
   /** A case in an exact state, verified, without operator-held tasks. */
   async function caseIn(state: RequestState, verified = true) {
-    const [row] = await fixture.db
+    const rows = await fixture.db
       .insert(dataSubjectRequest)
       .values({
         kind: "access",
@@ -92,7 +93,7 @@ suite("privacy case administration on PostgreSQL", () => {
         ...(verified ? { identityMethod: "manual" as const, identityVerifiedAt: now } : {}),
       })
       .returning();
-    return row!;
+    return itemAt(rows, 0);
   }
 
   async function app(options: Record<string, unknown> = {}) {

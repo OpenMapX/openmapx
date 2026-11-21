@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDbMock, type DbMock } from "../../test/db.js";
 
 const dbMock: DbMock = createDbMock();
@@ -304,12 +304,11 @@ describe("reconcileCommunityRepositoryTransactions", () => {
       };
       if (request.kind === "communityServices.inspect") return snapshot(repositoriesList) as never;
       if (request.kind === "serviceRepository.publish") {
-        const id = repositories.hashUrl(request.url!);
-        return {
-          repository: id,
-          transactionId: repositoriesList.find((entry) => entry.repository === id)!.pending
-            .transactionId,
-        } as never;
+        assert.isDefined(request.url, "the publish request has no URL");
+        const id = repositories.hashUrl(request.url);
+        const published = repositoriesList.find((entry) => entry.repository === id);
+        assert.isDefined(published, "the published repository is not listed");
+        return { repository: id, transactionId: published.pending.transactionId } as never;
       }
       return { repository: request.repository, outcome: request.outcome, changed: true } as never;
     });

@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { account, user } from "../db/schema";
@@ -295,7 +296,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         actor: admin,
       }),
       grant = await proofFor(admin, "account.verify", target.userId),
-      subject = (await fixture.db.select().from(user).where(eq(user.id, target.userId)))[0],
+      subject = itemAt(await fixture.db.select().from(user).where(eq(user.id, target.userId)), 0),
       input = {
         ...grant,
         action: "verify" as const,
@@ -304,7 +305,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         body: {
           confirmed: true,
           reasonCode: "identity_verified_out_of_band",
-          expectedEmail: subject!.email,
+          expectedEmail: subject.email,
         },
       };
     await fixture.sql.unsafe(

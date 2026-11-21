@@ -1,4 +1,5 @@
 import type { AuthorityObservation, CoverageRegion, StreamEvidence } from "@openmapx/core/coverage";
+import { itemAt } from "@openmapx/core/item-at";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 
@@ -163,16 +164,13 @@ describe("CoverageService", () => {
     both.id = "openconditions";
     both.manifest.id = "openconditions";
     both.manifest.domains = ["road-conditions", "fuel-stations", "parking-sites", "charging-sites"];
+    const template = itemAt(both.manifest.dataSources ?? [], 0);
     both.manifest.dataSources = [
-      { ...both.manifest.dataSources![0]!, sourceId: "nl-ndw-events", name: "NDW" },
-      { ...both.manifest.dataSources![0]!, sourceId: "osm-fuel", domain: "fuel-stations" },
+      { ...template, sourceId: "nl-ndw-events", name: "NDW" },
+      { ...template, sourceId: "osm-fuel", domain: "fuel-stations" },
+      { ...template, sourceId: "de-bw-mobidata-parking", domain: "parking-sites" },
       {
-        ...both.manifest.dataSources![0]!,
-        sourceId: "de-bw-mobidata-parking",
-        domain: "parking-sites",
-      },
-      {
-        ...both.manifest.dataSources![0]!,
+        ...template,
         sourceId: "de-bw-mobidata-charging",
         domain: "charging-sites",
       },
@@ -334,7 +332,7 @@ describe("CoverageService", () => {
     charging.manifest.domains = ["charging-sites"];
     charging.manifest.dataSources = [
       {
-        ...charging.manifest.dataSources![0]!,
+        ...itemAt(charging.manifest.dataSources ?? [], 0),
         sourceId: "de-bw-mobidata-charging",
         domain: "charging-sites",
       },
@@ -397,7 +395,7 @@ describe("CoverageService", () => {
     mixed.id = "openconditions";
     mixed.manifest.id = "openconditions";
     mixed.manifest.domains = ["charging-sites", "parking-sites", "road-conditions"];
-    const template = mixed.manifest.dataSources![0]!;
+    const template = itemAt(mixed.manifest.dataSources ?? [], 0);
     mixed.manifest.dataSources = [
       { ...template, sourceId: "z-charging", domain: "charging-sites" },
       { ...template, sourceId: "a-parking", domain: "parking-sites" },

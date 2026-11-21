@@ -8,13 +8,14 @@ import {
   normalizeDataExecutionInput,
   startDataExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   canonicalJson,
   createControlRootOperationKey,
   executionFingerprint,
 } from "@openmapx/core/ops";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { mockAdminSession } from "../../test/auth";
 
 const state = vi.hoisted(() => ({ session: null as unknown, audit: vi.fn() }));
@@ -94,7 +95,8 @@ beforeEach(async () => {
     posts++;
     const body = startDataExecutionSchema.parse(request.body),
       input = normalizeDataExecutionInput(body.input),
-      deadlineAt = body.requestedDeadlineAt!;
+      deadlineAt = body.requestedDeadlineAt;
+    assert.isDefined(deadlineAt, "the execution request has no deadline");
     const row: DataExecutionStatus = {
       id: randomUUID(),
       kind: input.kind,
@@ -212,7 +214,7 @@ it("recovers a lost admission response by lookup only and cancels that exact ide
     ),
   );
   expect(posts).toBe(1);
-  const row = [...rows.values()][0]!;
+  const row = itemAt([...rows.values()], 0);
   expect(accepted.jobId).toBe(row.id);
   const canceled = sdk.unwrapAdminResponse(
     await sdk.cancelAdminTransitPinExecution(

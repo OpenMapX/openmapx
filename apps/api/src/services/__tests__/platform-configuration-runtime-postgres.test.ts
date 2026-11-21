@@ -18,10 +18,21 @@ import {
   openControlInstallation,
   openLeaseStore,
 } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  assert,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
@@ -194,9 +205,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
         // A recreate replaces the container with one running the new generation.
         host.setCreatingProcess(async (args) => {
-          const id = args.at(-1)!,
+          const id = args.at(-1),
             old = rows.find((row) => row.Labels["com.docker.compose.service"] === id);
-          if (!old || !protectedTargets.includes(id)) throw Error("Unexpected protected target");
+          if (!id || !old || !protectedTargets.includes(id))
+            throw Error("Unexpected protected target");
+          const revision = services.currentConfigurationGeneration(host.infraDir);
+          if (!revision) throw Error("Actual committed configuration generation unavailable");
           const prefix = args.slice(0, args.indexOf("up")),
             options = { signal: new AbortController().signal, timeout: 15000, maxBuffer: 1 << 20 },
             config = JSON.parse(
@@ -207,12 +221,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               await host.execFile("docker", [...prefix, "config", "--hash", id], options)
             ).stdout
               .trim()
-              .split(/\s+/)
-              .at(-1)!,
-            compose = services.configurationGenerationComposeFile(
-              host.infraDir,
-              services.currentConfigurationGeneration(host.infraDir)!,
-            ),
+              .replace(/^.*\s/s, ""),
+            compose = services.configurationGenerationComposeFile(host.infraDir, revision),
             row = {
               ...old,
               Id: (id === "app-api" ? "a" : id === "data-manager" ? "c" : "b").repeat(64),
@@ -262,6 +272,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const helperOutcomes: string[] = [];
         host.setHelperProcess(async (env) => {
           expect(env.OPENMAPX_ROOT_DIR).toBe(host.root);
+          const variable = (name: string) => {
+            const value = env[name];
+            assert.isDefined(value, `the helper environment has no ${name}`);
+            return value;
+          };
           const installation = openControlInstallation({
             infraDir: host.infraDir,
             role: "ops-agent",
@@ -278,10 +293,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 rootDir: host.root,
                 execFile: host.execFile,
               }),
-              maintenanceId: env.OPENMAPX_MAINTENANCE_ID!,
-              handoffId: env.OPS_CONFIGURATION_HANDOFF_ID!,
-              leaseId: env.OPENMAPX_LEASE_ID!,
-              leaseChild: env.OPENMAPX_LEASE_CHILD!,
+              maintenanceId: variable("OPENMAPX_MAINTENANCE_ID"),
+              handoffId: variable("OPS_CONFIGURATION_HANDOFF_ID"),
+              leaseId: variable("OPENMAPX_LEASE_ID"),
+              leaseChild: variable("OPENMAPX_LEASE_CHILD"),
               signal: AbortSignal.timeout(60000),
             });
             helperOutcomes.push(outcome);
@@ -401,30 +416,34 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
           }
           const apply = async (): Promise<{ ok: true; jobId: string }> => {
-            if (!systemRelease)
+            if (!systemRelease) {
+              assert.isDefined(input, "the configuration was not reviewed");
               return unwrapAdminResponse(
-                await applyAdminPlatformConfiguration(input!, headers, { client }),
+                await applyAdminPlatformConfiguration(input, headers, { client }),
               );
+            }
+            assert.isDefined(checkedRelease, "the release was not checked");
             const response = await fetch(`${publicUrl}/api/admin/system/updates/apply`, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 confirmation: "UPDATE OPENMAPX",
                 createBackup: false,
-                releaseId: checkedRelease!.releaseId,
-                expectedDigest: checkedRelease!.manifestDigest,
+                releaseId: checkedRelease.releaseId,
+                expectedDigest: checkedRelease.manifestDigest,
               }),
             });
             expect(response.status).toBe(200);
             return (await response.json()) as { ok: true; jobId: string };
           };
           const readJob = async (jobId: string) =>
-            (
+            itemAt(
               await state.fixture.db
                 .select()
                 .from(schema.adminJob)
-                .where(eq(schema.adminJob.id, jobId))
-            )[0]!;
+                .where(eq(schema.adminJob.id, jobId)),
+              0,
+            );
           const settledJob = async (
             jobId: string,
             until: (status: string) => boolean,

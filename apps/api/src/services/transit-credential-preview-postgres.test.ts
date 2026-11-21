@@ -41,22 +41,25 @@ afterAll(async () => {
 it.skipIf(!enabled)(
   "retains encrypted immutable actor-bound changes with a value-free replayable public preview",
   async () => {
+    const change = {
+      key: "de/required",
+      action: "set" as const,
+      value: "private-transit-credential",
+    };
     const input = {
       actorId: "transit-preview-admin",
       operationKey: "preview-immutable-1",
       catalogRevisionId: "a".repeat(64),
       credentialsRevision: "b".repeat(64),
       expectedCurrentRevisionId: null,
-      changes: [
-        { key: "de/required", action: "set" as const, value: "private-transit-credential" },
-      ],
+      changes: [change],
       preservedCount: 2,
       mapBytes: 53,
     };
     const preview = await retainFeedCredentialPreview(input);
-    expect(JSON.stringify(preview)).not.toContain(input.changes[0]!.value);
+    expect(JSON.stringify(preview)).not.toContain(change.value);
     const [row] = await state.fixture.db.select().from(transitCredentialPreview);
-    expect(JSON.stringify(row)).not.toContain(input.changes[0]!.value);
+    expect(JSON.stringify(row)).not.toContain(change.value);
     expect(await retainFeedCredentialPreview(input)).toEqual(preview);
     expect(
       (
@@ -71,7 +74,7 @@ it.skipIf(!enabled)(
     await expect(
       retainFeedCredentialPreview({
         ...input,
-        changes: [{ ...input.changes[0]!, value: "substitution" }],
+        changes: [{ ...change, value: "substitution" }],
       }),
     ).rejects.toThrow("TRANSIT_CREDENTIALS_CHANGED");
     await expect(

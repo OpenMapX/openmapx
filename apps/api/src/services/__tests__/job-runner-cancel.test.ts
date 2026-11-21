@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const cancelOperations = vi.hoisted(() => vi.fn());
 const database = vi.hoisted(() => {
@@ -137,8 +137,8 @@ it("retains a fulfilled backend's partial failure evidence in failed DB and SSE 
   );
   unsubscribe();
   const failed = database.updates.find((update) => update.status === "failed");
-  expect(failed).toBeDefined();
-  const stored = new PgDialect().sqlToQuery(failed!.result as SQL);
+  assert.isDefined(failed, "the job was not marked failed");
+  const stored = new PgDialect().sqlToQuery(failed.result as SQL);
   expect(JSON.parse(stored.params[0] as string)).toMatchObject({ phase: "build", ...evidence });
   expect(events).toContainEqual(
     expect.objectContaining({
