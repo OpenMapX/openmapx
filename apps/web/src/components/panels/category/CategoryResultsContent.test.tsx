@@ -26,7 +26,7 @@ import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { categoryCardContributors, categoryRatingSourceName } from "@/components/ui/PlaceResultRow";
 import { MapProvider, useMap } from "@/integration-api/map/MapContext";
-import { act, createFakeMap, type FakeMap, fireEvent, render, screen, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, fireEvent, nth, render, screen, waitFor } from "@/test";
 import { createQueryWrapper } from "@/test/query";
 import { CategoryResultsContent } from "./CategoryResultsContent";
 
@@ -1315,10 +1315,14 @@ describe("visible category card enrichment", () => {
     try {
       renderPanel(vi.fn());
       expect(post).not.toHaveBeenCalled();
-      const first = observed.find((node) => node.getAttribute("data-card-id") === places[0].id);
-      const second = observed.find((node) => node.getAttribute("data-card-id") === places[1].id);
+      const first = observed.find(
+        (node) => node.getAttribute("data-card-id") === nth(places, 0).id,
+      );
+      const second = observed.find(
+        (node) => node.getAttribute("data-card-id") === nth(places, 1).id,
+      );
       const offscreen = observed.find(
-        (node) => node.getAttribute("data-card-id") === places[199].id,
+        (node) => node.getAttribute("data-card-id") === nth(places, 199).id,
       );
       expect(first).toBeDefined();
       expect(second).toBeDefined();
@@ -1340,7 +1344,7 @@ describe("visible category card enrichment", () => {
       await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
       expect(
         (post.mock.calls[0]?.[1] as { places: CategoryPlace[] }).places.map((place) => place.id),
-      ).toEqual([places[0].id, places[1].id]);
+      ).toEqual([nth(places, 0).id, nth(places, 1).id]);
       act(() =>
         notifyIntersection(
           [
@@ -1986,7 +1990,7 @@ it("keeps brand credit controls outside result selection and collects catalogue 
     expect(container.querySelector("button button")).toBeNull();
     expect(screen.getAllByText("File artist", { exact: false })).toHaveLength(2);
     expect(screen.getAllByText("Captured catalogue")).toHaveLength(1);
-    fireEvent.click(screen.getAllByRole("button", { name: "photoGallery.credits" })[0]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "photoGallery.credits" }), 0));
     expect(usePlaceStore.getState().selectedPlace?.name).not.toBe("One");
     fireEvent.click(screen.getByRole("button", { name: "common.close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

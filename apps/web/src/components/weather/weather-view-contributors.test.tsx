@@ -2,7 +2,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap, type FakeMap, render, screen } from "@/test";
+import { createFakeMap, type FakeMap, nth, render, screen } from "@/test";
 import brightSkyManifest from "../../../../../integrations/weather-bright-sky/manifest.json";
 
 let fake: FakeMap;
@@ -74,7 +74,7 @@ beforeEach(() => {
   };
 });
 it("widget tooltip shows the complete decoded notice with quoted greater-than attributes", () => {
-  response.contributors[0].attributionText =
+  nth(response.contributors, 0).attributionText =
     '<a title="A > B" href="https://actual.test">A &amp; B &copy; data</a> (CC BY 4.0)';
   render(<WeatherWidget />);
   expect(screen.getByLabelText("A & B © data (CC BY 4.0)")).toBeVisible();
@@ -97,7 +97,7 @@ it("desktop widget map credit uses the displayed response snapshot and honors au
 });
 
 it("keeps the Bright Sky hover hint concise while retaining complete map credit details", () => {
-  const source = brightSkyManifest.dataSources[0];
+  const source = nth(brightSkyManifest.dataSources, 0);
   const contributor: Attribution = {
     sourceId: source.sourceId,
     name: source.name,
@@ -110,8 +110,10 @@ it("keeps the Bright Sky hover hint concise while retaining complete map credit 
   expect(screen.getByLabelText("DWD via Bright Sky")).toBeVisible();
   const presentations = Object.values(useMapAttributionStore.getState().byLayer).flat();
   expect(presentations).toHaveLength(1);
-  expect(presentations[0].fullHtml).toContain("Bright Sky access/passed-through DWD policy terms");
-  expect(presentations[0].detail?.licensing).toEqual(source.licensing);
+  expect(nth(presentations, 0).fullHtml).toContain(
+    "Bright Sky access/passed-through DWD policy terms",
+  );
+  expect(nth(presentations, 0).detail?.licensing).toEqual(source.licensing);
 });
 
 it("uses the captured provider name when no explicit credit is supplied", () => {

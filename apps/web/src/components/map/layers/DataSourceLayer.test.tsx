@@ -2,7 +2,7 @@ import { createPlace, useDataSourceStore, useParkingStore, usePlaceStore } from 
 import { act, render, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
 import { DataSourceLayer } from "./DataSourceLayer";
 
@@ -497,11 +497,14 @@ it("serializes independent label, paint and logo channels with authoritative emp
       "branding.name": credit("unused-brand-name"),
     },
   };
-  const f = buildGeoJson([place], () => "Summary", "icon", {
-    ...sources.sources[0]?.markerStyle,
-    type: "icon",
-    iconPath: "",
-  }).features[0];
+  const f = nth(
+    buildGeoJson([place], () => "Summary", "icon", {
+      ...nth(sources.sources, 0).markerStyle,
+      type: "icon",
+      iconPath: "",
+    }).features,
+    0,
+  );
   const ids = (key: string) =>
     JSON.parse(f.properties[key as keyof typeof f.properties] as string).map(
       (receipt: { sourceId: string }) => receipt.sourceId,
@@ -534,10 +537,11 @@ it("labels the map with a result's label summary, crediting that field, and its 
     },
   };
   const translate = (value: unknown) => (value as { $t: string } | undefined)?.$t;
-  const [labelled, plain] = buildGeoJson(
+  const { features } = buildGeoJson(
     [place, { ...place, id: "plain", labelSummary: undefined }],
     translate,
-  ).features;
+  );
+  const [labelled, plain] = [nth(features, 0), nth(features, 1)];
   const ids = (f: typeof labelled) =>
     JSON.parse(f.properties._mapSummaryLabelAttributions).map(
       (receipt: { sourceId: string }) => receipt.sourceId,
@@ -661,7 +665,7 @@ it("credits the actual name label and adds summary ownership only after its zoom
   fake.state.zoom = 12;
   useMapAttributionStore.setState({ byLayer: {} });
   const old = results[0];
-  const style = sources.sources[0]?.markerStyle;
+  const style = nth(sources.sources, 0).markerStyle;
   const oldType = style.type;
   Object.assign(style, { type: "icon", iconPath: "" });
   fake.map.addImage("ds-marker-sample", {} as never);
@@ -810,6 +814,6 @@ it("does not credit an unused status field on a track without status", async () 
       status: [{ sourceId: "unused", name: "Unused status supplier" }],
     },
   };
-  const feature = buildTrackGeoJson([result] as never).features[0];
+  const feature = nth(buildTrackGeoJson([result] as never).features, 0);
   expect(JSON.parse(feature.properties._mapTrackAttributions ?? "null")).toEqual(track);
 });

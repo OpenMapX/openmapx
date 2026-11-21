@@ -2,7 +2,7 @@ import { ApiClientError, createApiClient } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
-import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
+import { act, cleanup, createTestQueryClient, nth, renderHookWithQuery, waitFor } from "@/test";
 import {
   integrationAdminQueries,
   useIntegrationAdmin,
@@ -77,7 +77,7 @@ describe("integration query boundaries and reload observation", () => {
         await expect(run[kind]()).rejects.toThrow();
       });
       expect(requests).toHaveLength(1);
-      const init = requests[0]?.init;
+      const { init } = nth(requests, 0);
       expect(new Headers(init.headers).get("idempotency-key")).toMatch(
         /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
       );
@@ -220,13 +220,13 @@ describe("integration query boundaries and reload observation", () => {
     const pendingRead = runRead();
     const rejected = expect(pendingRead).rejects.toMatchObject({ detail: null });
     await vi.advanceTimersByTimeAsync(29_999);
-    expect(requests[0].init.signal?.aborted).toBe(false);
+    expect(nth(requests, 0).init.signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await rejected;
-    expect(requests[0].init.signal?.aborted).toBe(true);
+    expect(nth(requests, 0).init.signal?.aborted).toBe(true);
     expect(canceled).toBe(true);
     if (["detail", "bindings", "healthHistory"].includes(read))
-      expect(requests[0].path).toContain("demo%20%2Fid");
+      expect(nth(requests, 0).path).toContain("demo%20%2Fid");
   });
 
   it("retains declared HTTP status and Retry-After evidence without serializing its body", async () => {
@@ -278,7 +278,7 @@ describe("integration query boundaries and reload observation", () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     unmount();
     await waitFor(() => expect(canceled).toBe(true));
-    expect(requests[0].init.signal?.aborted).toBe(true);
+    expect(nth(requests, 0).init.signal?.aborted).toBe(true);
     const malformedRequests = fakeFetch(() =>
       Response.json({ error: "synthetic-private-payload", integrations: [] }),
     );
@@ -422,7 +422,7 @@ describe("integration query boundaries and reload observation", () => {
         apiUrl = "http://second.test";
         rerender();
       }
-      expect(requests[1].init.signal?.aborted).toBe(true);
+      expect(nth(requests, 1).init.signal?.aborted).toBe(true);
       await act(async () => {
         response.resolve(Response.json(job({ status: "success", cancelable: false })));
       });
@@ -472,8 +472,8 @@ describe("integration query boundaries and reload observation", () => {
     const responses = [pending<Response>(), pending<Response>()];
     const requests = fakeFetch((path) => {
       if (path.endsWith("/reload")) return Response.json({ ok: true, jobId: `job-${++accepted}` });
-      if (path === "/api/admin/jobs/job-1") return responses[0].promise;
-      if (path === "/api/admin/jobs/job-2") return responses[1].promise;
+      if (path === "/api/admin/jobs/job-1") return nth(responses, 0).promise;
+      if (path === "/api/admin/jobs/job-2") return nth(responses, 1).promise;
       throw new Error(`Unexpected request ${path}`);
     });
     const qc = client();
@@ -487,15 +487,15 @@ describe("integration query boundaries and reload observation", () => {
     await waitFor(() => expect(requests).toHaveLength(4));
     for (const key of cachedKeys()) qc.setQueryData(key, {});
     await act(async () => {
-      responses[0].resolve(Response.json(job({ status: "failed", cancelable: false })));
+      nth(responses, 0).resolve(Response.json(job({ status: "failed", cancelable: false })));
     });
-    await waitFor(() => expect(qc.getQueryState(cachedKeys()[0])?.isInvalidated).toBe(true));
+    await waitFor(() => expect(qc.getQueryState(nth(cachedKeys(), 0))?.isInvalidated).toBe(true));
     for (const key of cachedKeys()) qc.setQueryData(key, {});
     await act(async () => {
-      responses[1].resolve(
+      nth(responses, 1).resolve(
         Response.json(job({ id: "job-2", status: "success", cancelable: false })),
       );
     });
-    await waitFor(() => expect(qc.getQueryState(cachedKeys()[0])?.isInvalidated).toBe(true));
+    await waitFor(() => expect(qc.getQueryState(nth(cachedKeys(), 0))?.isInvalidated).toBe(true));
   });
 });

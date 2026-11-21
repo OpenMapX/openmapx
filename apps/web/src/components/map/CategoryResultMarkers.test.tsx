@@ -9,7 +9,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { CategoryResultMarkers } from "./CategoryResultMarkers";
 
 const fake = createFakeMap({ styleLoaded: true });
@@ -184,8 +184,8 @@ it("keeps brand-enriched data on unrelated events, reloads logos after a style r
       "NSI logo selection",
       "Logo Commons credit",
     ]);
-    loadedReceipts[0].name = "Mutated consumer";
-    expect(loadedBrandMarkerContributors(fake.map, "Q1")[0].name).toBe("NSI logo selection");
+    nth(loadedReceipts, 0).name = "Mutated consumer";
+    expect(nth(loadedBrandMarkerContributors(fake.map, "Q1"), 0).name).toBe("NSI logo selection");
 
     reach.filtered = [
       {
@@ -203,10 +203,14 @@ it("keeps brand-enriched data on unrelated events, reloads logos after a style r
     await act(async () => {});
     const data = () =>
       fake.state.sources.get("category-results-source")?.data as GeoJSON.FeatureCollection;
-    expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
-    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
-    expect(data().features[0].properties?._mapMarkerAttributions).toContain("NSI logo selection");
-    expect(data().features[0].properties?._mapLabelAttributions).not.toContain(
+    expect(nth(data().features, 0).properties?.imageId).toBe("brand-marker-Q1");
+    expect(nth(data().features, 0).properties?._mapMarkerAttributions).toContain(
+      "Required logo artist",
+    );
+    expect(nth(data().features, 0).properties?._mapMarkerAttributions).toContain(
+      "NSI logo selection",
+    );
+    expect(nth(data().features, 0).properties?._mapLabelAttributions).not.toContain(
       "Required logo artist",
     );
     const uploads = fake.state.counts.setData.get("category-results-source");
@@ -216,7 +220,7 @@ it("keeps brand-enriched data on unrelated events, reloads logos after a style r
     });
     expect(fake.state.counts.setData.get("category-results-source")).toBe(uploads);
     expect(reads).toBe(coordinateReads);
-    expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
+    expect(nth(data().features, 0).properties?.imageId).toBe("brand-marker-Q1");
     act(() => {
       fake.map.setStyle({} as never);
     });
@@ -234,8 +238,10 @@ it("keeps brand-enriched data on unrelated events, reloads logos after a style r
       for (const image of images.slice(1)) image.onload?.();
     });
     expect(fake.map.hasImage("brand-marker-Q1")).toBe(true);
-    expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
-    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
+    expect(nth(data().features, 0).properties?.imageId).toBe("brand-marker-Q1");
+    expect(nth(data().features, 0).properties?._mapMarkerAttributions).toContain(
+      "Required logo artist",
+    );
     // A logo still loading when the results change to ones without that brand
     // never reaches the map.
     const pendingFrom = images.length;
@@ -255,7 +261,7 @@ it("keeps brand-enriched data on unrelated events, reloads logos after a style r
       for (const img of images.slice(pendingFrom)) img.onload?.();
     });
     expect(fake.map.hasImage("brand-marker-Q1")).toBe(false);
-    expect(data().features[0].properties?.id).toBe("new");
+    expect(nth(data().features, 0).properties?.id).toBe("new");
     view.unmount();
   } finally {
     globalThis.Image = OriginalImage;
@@ -293,7 +299,7 @@ it.each([false, true])(
       expect(fake.map.getSource(sourceId)).toBeDefined();
       expect(fake.map.getLayer(layerId)).toBeDefined();
       await act(async () => {
-        images[0].onerror?.();
+        nth(images, 0).onerror?.();
       });
       expect(fake.map.hasImage(imageId)).toBe(false);
       const attempts = images.length;
@@ -374,7 +380,7 @@ it("keeps the selected result out of the ordinary layers through hover and style
     ];
     reach.filtered = places;
     useCategorySearchStore.setState({ activeCategory: "restaurant", hoveredCategoryPlaceId: null });
-    usePlaceStore.setState({ selectedPlace: categoryPlaceToPlace(places[0]) });
+    usePlaceStore.setState({ selectedPlace: categoryPlaceToPlace(nth(places, 0)) });
     view = render(<CategoryResultMarkers />);
     await act(async () => {});
 
@@ -621,7 +627,7 @@ it("does not register a stale marker image after the category changes", async ()
     useCategorySearchStore.setState({ activeCategory: "restaurant" });
     view = render(<CategoryResultMarkers />);
     act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
-    await act(async () => images[0].onload?.());
+    await act(async () => nth(images, 0).onload?.());
     expect(fake.map.hasImage("category-marker-restaurant")).toBe(false);
     await act(async () => images.at(-1)?.onload?.());
     expect(fake.map.hasImage("category-marker-cafes")).toBe(true);

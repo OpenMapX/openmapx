@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent } from "@/test";
+import { nth, render, screen, userEvent } from "@/test";
 import { NearbyParkingCarousel } from "./NearbyParkingCarousel";
 import type { NearbyParkingPlace } from "./nearbyParking";
 
@@ -14,7 +14,7 @@ vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
   },
 }));
 
-const mockPlaces: NearbyParkingPlace[] = [
+const mockPlaces: [NearbyParkingPlace, NearbyParkingPlace, NearbyParkingPlace] = [
   {
     id: "p1",
     name: "Central Garage",
@@ -62,8 +62,8 @@ describe("NearbyParkingCarousel", () => {
     });
     expect(preview.parentElement?.closest("[role='button'], button")).toBeNull();
     const driveButtons = screen.getAllByRole("button", { name: /navigation.driveHere/ });
-    expect(driveButtons[0].parentElement?.closest("[role='button'], button")).toBeNull();
-    await userEvent.click(driveButtons[0]);
+    expect(nth(driveButtons, 0).parentElement?.closest("[role='button'], button")).toBeNull();
+    await userEvent.click(nth(driveButtons, 0));
     expect(onDrive).toHaveBeenCalledWith(mockPlaces[0]);
     expect(onSelect).not.toHaveBeenCalled();
   });

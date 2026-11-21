@@ -1,5 +1,6 @@
 import { type AddProtocolAction, AJAXError, type RasterTileSource } from "maplibre-gl";
 import { afterEach, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import {
   attributedRasterRequestTransform,
   beginRasterResponseAcquisition,
@@ -35,7 +36,7 @@ it("pairs concurrent responses with their own acquisitions, without adding a non
     referrerPolicy: "no-referrer",
   }));
   const run = async (acquisition: typeof a) => {
-    const url = acquisition.source.tiles[0]
+    const url = nth(acquisition.source.tiles, 0)
       .replace("{z}", "2")
       .replace("{x}", "1")
       .replace("{y}", "0");
@@ -48,22 +49,26 @@ it("pairs concurrent responses with their own acquisitions, without adding a non
   await Promise.resolve();
   await Promise.resolve();
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  pending[1](
+  nth(
+    pending,
+    1,
+  )(
     new Response(new Uint8Array([2]), {
       headers: { "X-OpenMapX-Contributors": header("B"), "Cache-Control": "max-age=60" },
     }),
   );
   const resultB = await second;
-  pending[0](
-    new Response(new Uint8Array([1]), { headers: { "X-OpenMapX-Contributors": header("A") } }),
-  );
+  nth(
+    pending,
+    0,
+  )(new Response(new Uint8Array([1]), { headers: { "X-OpenMapX-Contributors": header("A") } }));
   const resultA = await first;
   expect(new Uint8Array(resultA.data as ArrayBuffer)).toEqual(new Uint8Array([1]));
   expect(new Uint8Array(resultB.data as ArrayBuffer)).toEqual(new Uint8Array([2]));
   expect(a.contributors()).toEqual([
     { sourceId: "A", name: "Supplier A", attributionText: "Notice A" },
   ]);
-  expect(b.contributors()[0].sourceId).toBe("B");
+  expect(nth(b.contributors(), 0).sourceId).toBe("B");
   expect(fetchMock.mock.calls[0]?.[0]).toMatchObject({
     url: new URL("/tiles/2/1/0.png", document.baseURI).href,
     credentials: "include",
@@ -93,7 +98,7 @@ it.each([
     ),
   );
   const acquisition = beginRasterResponseAcquisition(source());
-  const params = await attributedRasterRequestTransform()(acquisition.source.tiles[0]);
+  const params = await attributedRasterRequestTransform()(nth(acquisition.source.tiles, 0));
   if (!params) throw new Error("Missing transformed request");
   await protocol(params, new AbortController());
   expect(acquisition.contributors()).toEqual([]);
@@ -102,7 +107,7 @@ it.each([
 
 it("rejects unsuccessful, aborted and oversized responses without inventing receipts", async () => {
   const acquisition = beginRasterResponseAcquisition(source());
-  const params = await attributedRasterRequestTransform()(acquisition.source.tiles[0]);
+  const params = await attributedRasterRequestTransform()(nth(acquisition.source.tiles, 0));
   if (!params) throw new Error("Missing transformed request");
   for (const response of [
     new Response(null, { status: 304 }),
@@ -138,7 +143,7 @@ it("ignores receipt metadata on a successful empty response", async () => {
     ),
   );
   const acquisition = beginRasterResponseAcquisition(source());
-  const params = await attributedRasterRequestTransform()(acquisition.source.tiles[0]);
+  const params = await attributedRasterRequestTransform()(nth(acquisition.source.tiles, 0));
   if (!params) throw new Error("Missing transformed request");
   const response = await protocol(params, new AbortController());
   expect((response.data as ArrayBuffer).byteLength).toBe(0);
@@ -152,7 +157,7 @@ it("applies asynchronous URL policies before HTTP normalization and rejects deni
     url: `${url}?policy=allowed`,
     headers: { "X-Policy": "applied" },
   }));
-  const params = await transform(acquisition.source.tiles[0]);
+  const params = await transform(nth(acquisition.source.tiles, 0));
   if (!params) throw new Error("Missing transformed request");
   const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1])));
   vi.stubGlobal("fetch", fetchMock);
@@ -164,7 +169,7 @@ it("applies asynchronous URL policies before HTTP normalization and rejects deni
   const denied = attributedRasterRequestTransform(() => {
     throw new Error("policy denied");
   });
-  await expect(denied(acquisition.source.tiles[0])).rejects.toThrow("policy denied");
+  await expect(denied(nth(acquisition.source.tiles, 0))).rejects.toThrow("policy denied");
   expect(fetchMock).toHaveBeenCalledTimes(1);
   acquisition.dispose();
 });
@@ -175,7 +180,7 @@ it.each([404, 503])(
     const enginePath = "../../../../../node_modules/maplibre-gl/src/tile/tile_manager.ts";
     const { TileManager } = await import(enginePath);
     const acquisition = beginRasterResponseAcquisition(source());
-    const params = await attributedRasterRequestTransform()(acquisition.source.tiles[0]);
+    const params = await attributedRasterRequestTransform()(nth(acquisition.source.tiles, 0));
     if (!params) throw new Error("Missing transformed request");
     const cancel = vi.fn();
     const errorBody = new ReadableStream<Uint8Array>({
@@ -234,7 +239,7 @@ it.each([404, 503])(
 
 it("preserves native status-zero network errors and abort identity", async () => {
   const acquisition = beginRasterResponseAcquisition(source());
-  const params = await attributedRasterRequestTransform()(acquisition.source.tiles[0]);
+  const params = await attributedRasterRequestTransform()(nth(acquisition.source.tiles, 0));
   if (!params) throw new Error("Missing transformed request");
   try {
     vi.stubGlobal(
@@ -279,7 +284,7 @@ it("retains uniform raster supplier on reload failure and withdraws it after a t
     type: "raster",
     tiles: ["https://fixture.test/tile.jpg"],
     async loadTile(tile: Parameters<RasterTileSource["loadTile"]>[0]) {
-      const params = await attributedRasterRequestTransform()(this.tiles[0]);
+      const params = await attributedRasterRequestTransform()(nth(this.tiles, 0));
       if (!params) throw new Error("Raster transform did not return request parameters");
       await protocol(params, new AbortController());
       tile.texture = tile.texture ?? ({} as typeof tile.texture);

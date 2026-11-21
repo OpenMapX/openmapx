@@ -1,9 +1,16 @@
+import { numberAt } from "@openmapx/core";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { publishMapObstruction } from "@/lib/mapObstructions";
-import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { createFakeMap, expectStyleSwapIsLossless, nth } from "@/test";
 import { routePillAnchors } from "./routePillAnchors";
+
+/** A pill's anchor; a missing coordinate is NaN, which fails every comparison below. */
+function pillLngLat(pill: HTMLElement): [number, number] {
+  const parts = (pill.dataset.lngLat ?? "").split(",").map(Number);
+  return [numberAt(parts, 0), numberAt(parts, 1)];
+}
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -176,7 +183,7 @@ describe("RouteLayer map pills", () => {
       const pills = document.querySelectorAll<HTMLElement>(".omx-route-map-pill");
       expect(pills.length).toBeGreaterThan(0);
       for (const pill of pills) {
-        const [lng, lat] = (pill.dataset.lngLat ?? "").split(",").map(Number);
+        const [lng, lat] = pillLngLat(pill);
         expect(fake.map.project([lng, lat]).x).toBeGreaterThan(800);
       }
     });
@@ -186,7 +193,7 @@ describe("RouteLayer map pills", () => {
       const pills = document.querySelectorAll<HTMLElement>(".omx-route-map-pill");
       expect(pills.length).toBeGreaterThan(0);
       for (const pill of pills) {
-        const [lng, lat] = (pill.dataset.lngLat ?? "").split(",").map(Number);
+        const [lng, lat] = pillLngLat(pill);
         expect(fake.map.project([lng, lat]).y).toBeLessThan(330);
       }
     });
@@ -216,7 +223,7 @@ describe("RouteLayer map pills", () => {
     render(<RouteLayer />);
     const selected = await screen.findByText("20 min");
     const pill = selected.closest(".omx-route-map-pill") as HTMLElement;
-    const [lng, lat] = (pill.dataset.lngLat ?? "").split(",").map(Number);
+    const [lng, lat] = pillLngLat(pill);
     const onFirstSegment = lng >= 0.4 && lng <= 0.6 && Math.abs(lat - 2 * (lng - 0.4)) < 0.0001;
     const onSecondSegment = lng >= 0.6 && lng <= 1 && Math.abs(lat - 0.4) < 0.0001;
     expect(onFirstSegment || onSecondSegment).toBe(true);
@@ -263,7 +270,7 @@ describe("RouteLayer map pills", () => {
 
   it("localizes equal-time pills and keeps alternative buttons keyboard-selectable", async () => {
     locale = "de";
-    drawn.routes[1].duration = 1200;
+    nth(drawn.routes, 1).duration = 1200;
     render(<RouteLayer />);
     const same = await screen.findByRole("button", { name: "Route wählen, Gleiche Dauer" });
     same.focus();

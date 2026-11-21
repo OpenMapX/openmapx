@@ -1,7 +1,7 @@
 import type { ChainedTripPlan } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent } from "@/test";
+import { nth, render, screen, userEvent } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -85,8 +85,8 @@ describe("TransitChainView", () => {
     render(<TransitChainView plan={plan} waypointLabels={labels} />);
     const cards = screen.getAllByTestId("itinerary-card");
     expect(cards).toHaveLength(2);
-    expect(cards[0]).toHaveTextContent("2400");
-    expect(cards[1]).toHaveTextContent("1800");
+    expect(nth(cards, 0)).toHaveTextContent("2400");
+    expect(nth(cards, 1)).toHaveTextContent("1800");
     const first = screen.getByText(/Home – Dentist/);
     const second = screen.getByText(/Dentist – Airport/);
     const wait = screen.getByText(/directions\.chainBoardingWait/);
@@ -94,10 +94,10 @@ describe("TransitChainView", () => {
     const expectPrecedes = (a: Node, b: Node) =>
       expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expectPrecedes(first, wait);
-    expectPrecedes(wait, cards[0]);
-    expectPrecedes(cards[0], second);
+    expectPrecedes(wait, nth(cards, 0));
+    expectPrecedes(nth(cards, 0), second);
     expectPrecedes(second, delay);
-    expectPrecedes(delay, cards[1]);
+    expectPrecedes(delay, nth(cards, 1));
   });
 });
 
@@ -129,18 +129,18 @@ describe("backward partial transit chains", () => {
     const failed = screen.getByText("directions.chainNoConnection");
     expect(screen.getAllByRole("alert")).toHaveLength(3);
     expect(
-      cards[0].compareDocumentPosition(missed) & Node.DOCUMENT_POSITION_FOLLOWING,
+      nth(cards, 0).compareDocumentPosition(missed) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      missed.compareDocumentPosition(cards[1]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      missed.compareDocumentPosition(nth(cards, 1)) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      cards[1].compareDocumentPosition(cancelled) & Node.DOCUMENT_POSITION_FOLLOWING,
+      nth(cards, 1).compareDocumentPosition(cancelled) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       cancelled.compareDocumentPosition(failed) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await userEvent.click(screen.getAllByRole("button", { name: "Details" })[0]);
+    await userEvent.click(nth(screen.getAllByRole("button", { name: "Details" }), 0));
     expect(onDetails).toHaveBeenCalledWith(0);
   });
 
@@ -192,10 +192,10 @@ it("credits selected chain segments and derived schedule without unused alternat
         contributors: [a, b],
         segments: [
           {
-            ...plan.segments[0],
+            ...nth(plan.segments, 0),
             contributors: [a],
-            itinerary: { ...plan.segments[0].itinerary, contributors: [a] },
-            alternatives: [{ ...plan.segments[0].itinerary, contributors: [b] }],
+            itinerary: { ...nth(plan.segments, 0).itinerary, contributors: [a] },
+            alternatives: [{ ...nth(plan.segments, 0).itinerary, contributors: [b] }],
             fieldContributors: { boardingWaitSeconds: [a], delaySeconds: [] },
           },
         ],

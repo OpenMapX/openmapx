@@ -3,7 +3,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { act, createFakeMap } from "@/test";
+import { act, createFakeMap, nth } from "@/test";
 
 const pendingMaps: ReturnType<typeof createFakeMap>[] = [];
 
@@ -119,7 +119,7 @@ it("frames initial and changed download areas without waiting for map tiles", as
     />,
   );
   await waitFor(() => expect(fakeMapClass.instances).toHaveLength(1));
-  const map = fakeMapClass.instances[0];
+  const map = nth(fakeMapClass.instances, 0);
   expect(map.fitBounds).toHaveBeenCalledWith(
     [
       [6, 50],
@@ -166,14 +166,14 @@ it("installs and restores a selected boundary while tiles remain pending", async
     />,
   );
   await waitFor(() => expect(pendingMaps).toHaveLength(1));
-  const pending = pendingMaps[0];
+  const pending = nth(pendingMaps, 0);
   const data = () =>
     pending.state.sources.get("picker-boundary-source")?.data as
       | GeoJSON.FeatureCollection
       | undefined;
-  expect(data()?.features[0].geometry).toEqual(boundary);
+  expect(nth(data()?.features ?? [], 0).geometry).toEqual(boundary);
   act(() => pending.map.setStyle({} as never));
-  expect(data()?.features[0].geometry).toEqual(boundary);
+  expect(nth(data()?.features ?? [], 0).geometry).toEqual(boundary);
   view.unmount();
   expect(pending.state.handlers.get("styledata")?.size ?? 0).toBe(0);
 });

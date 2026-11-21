@@ -3,6 +3,7 @@ import {
   act,
   createQueryWrapper,
   fireEvent,
+  nth,
   render,
   screen,
   userEvent,
@@ -142,7 +143,7 @@ describe("VehiclesDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
 
     await waitFor(() => expect(state.update).toHaveBeenCalledTimes(1));
-    const patch = state.update.mock.calls[0][0];
+    const patch = nth(state.update.mock.calls, 0)[0];
     expect(patch).toMatchObject({ id: "v1", name: "Renamed car", powertrain: spec.powertrain });
     expect(patch).not.toHaveProperty("isDefault");
   });
@@ -269,7 +270,7 @@ describe.each(SAVE_SCENARIOS)("VehiclesDialog saving ($label)", (scenario) => {
     await clickSave();
 
     await waitFor(() => expect(scenario.request).toHaveBeenCalledTimes(1));
-    expect(scenario.request.mock.calls[0][0]).toMatchObject(payload);
+    expect(nth(scenario.request.mock.calls, 0)[0]).toMatchObject(payload);
     expect(nameInput()).toHaveValue(String(payload.name));
     expect(specInput()).toHaveValue(Number(scenario.specValue));
     expect(nameInput()).toBeDisabled();
@@ -310,7 +311,7 @@ describe.each(SAVE_SCENARIOS)("VehiclesDialog saving ($label)", (scenario) => {
 
     await clickSave();
     await waitFor(() => expect(scenario.request).toHaveBeenCalledTimes(2));
-    expect(scenario.request.mock.calls[1][0]).toEqual(scenario.request.mock.calls[0][0]);
+    expect(nth(scenario.request.mock.calls, 1)[0]).toEqual(nth(scenario.request.mock.calls, 0)[0]);
     // The error is cleared the moment the retry starts.
     expect(screen.queryByRole("alert")).toBeNull();
     expect(saveButton()).toBeDisabled();
@@ -402,7 +403,7 @@ describe("VehiclesDialog saving alongside default promotion", () => {
     state.vehicles = [CAR, OTHER];
     respondWith(state.update, request.promise);
     renderDialog();
-    await userEvent.click(screen.getAllByRole("button", { name: "vehicles.edit" })[0]);
+    await userEvent.click(nth(screen.getAllByRole("button", { name: "vehicles.edit" }), 0));
     await userEvent.clear(nameInput());
     await userEvent.type(nameInput(), "Edited Golf");
     await clickSave();
@@ -414,9 +415,9 @@ describe("VehiclesDialog saving alongside default promotion", () => {
     const promote = deferred();
     await startEditSave(edit);
     respondWith(state.update, promote.promise);
-    await userEvent.click(screen.getAllByRole("radio")[1]);
+    await userEvent.click(nth(screen.getAllByRole("radio"), 1));
     await waitFor(() => expect(state.update).toHaveBeenCalledTimes(2));
-    expect(state.update.mock.calls[1][0]).toEqual({ id: "v2", isDefault: true });
+    expect(nth(state.update.mock.calls, 1)[0]).toEqual({ id: "v2", isDefault: true });
 
     await act(async () => edit.resolve());
     await waitFor(() => expect(screen.queryByLabelText("vehicles.name")).toBeNull());
@@ -428,7 +429,7 @@ describe("VehiclesDialog saving alongside default promotion", () => {
     const promote = deferred();
     await startEditSave(edit);
     respondWith(state.update, promote.promise);
-    await userEvent.click(screen.getAllByRole("radio")[1]);
+    await userEvent.click(nth(screen.getAllByRole("radio"), 1));
     await waitFor(() => expect(state.update).toHaveBeenCalledTimes(2));
 
     await act(async () => promote.reject(new Error("promotion failed")));
@@ -655,7 +656,7 @@ describe.each(ELECTRIC_SCENARIOS)("VehiclesDialog electric draft ($label)", (sce
     expectEditorLocked(false);
     await clickSave();
     await waitFor(() => expect(scenario.request).toHaveBeenCalledTimes(1));
-    expect(scenario.request.mock.calls[0][0]).toEqual(scenario.payload);
+    expect(nth(scenario.request.mock.calls, 0)[0]).toEqual(scenario.payload);
 
     expect(readEditor()).toEqual(scenario.shown);
     expectEditorLocked(true);
@@ -667,7 +668,7 @@ describe.each(ELECTRIC_SCENARIOS)("VehiclesDialog electric draft ($label)", (sce
 
     await clickSave();
     await waitFor(() => expect(scenario.request).toHaveBeenCalledTimes(2));
-    expect(scenario.request.mock.calls[1][0]).toEqual(scenario.payload);
+    expect(nth(scenario.request.mock.calls, 1)[0]).toEqual(scenario.payload);
     expect(readEditor()).toEqual(scenario.shown);
     expectEditorLocked(true);
 
@@ -679,7 +680,7 @@ describe.each(ELECTRIC_SCENARIOS)("VehiclesDialog electric draft ($label)", (sce
 describe("VehiclesDialog replacing a pending editor through row Edit", () => {
   const SECOND_EV = { ...EV_CAR, id: "v2", name: "Second EV", isDefault: false };
   const editRow = (index: number) =>
-    userEvent.click(screen.getAllByRole("button", { name: "vehicles.edit" })[index]);
+    userEvent.click(nth(screen.getAllByRole("button", { name: "vehicles.edit" }), index));
 
   /** Opens the editor that will be abandoned; the test then saves it and leaves it pending. */
   const OLD_EDITORS = {

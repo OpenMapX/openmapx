@@ -80,7 +80,7 @@ import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import type { ResolvedPadding } from "@/lib/cameraPadding";
 import { publishMapObstruction } from "@/lib/mapObstructions";
-import { createFakeMap, type FakeMap } from "@/test";
+import { createFakeMap, type FakeMap, nth } from "@/test";
 import { CAMERA_ZOOM_EPSILON } from "./navCameraScheduler";
 import { useNavCamera } from "./useNavCamera";
 
@@ -163,7 +163,7 @@ const geometry: LngLat[] = [
   [0.02, 0.003],
 ];
 const cum = cumulativeDistances(geometry);
-const routeLengthMeters = cum[cum.length - 1];
+const routeLengthMeters = nth(cum, -1);
 const route = {
   distance: routeLengthMeters,
   duration: 200,
@@ -173,14 +173,14 @@ const route = {
   steps: [
     {
       instruction: "Head east",
-      distance: cum[1],
+      distance: nth(cum, 1),
       duration: 60,
       coordinates: geometry.slice(0, 2),
       maneuver: { type: "depart" },
     },
     {
       instruction: "Keep left",
-      distance: routeLengthMeters - cum[1],
+      distance: routeLengthMeters - nth(cum, 1),
       duration: 140,
       coordinates: geometry.slice(1),
       maneuver: { type: "keep", modifier: "left" },
@@ -382,7 +382,7 @@ async function mountNavCamera(options: { startNavigation?: boolean } = {}): Prom
   return {
     fake,
     frames,
-    marker: () => markerTest.markers[0],
+    marker: () => nth(markerTest.markers, 0),
     unmount: () => view.unmount(),
     rerender: () => view.rerender(),
   };
@@ -433,12 +433,12 @@ function runMovingReplay(
       const m = marker();
       puck.push({ lng: m.lngLat[0], lat: m.lngLat[1], rotation: m.rotation });
       const jumps = fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
-      for (let k = seen; k < jumps.length; k += 1) {
+      for (const jump of jumps.slice(seen)) {
         camera.push({
           frame,
-          center: jumps[k].options.center as [number, number],
-          bearing: jumps[k].options.bearing as number,
-          zoom: jumps[k].options.zoom as number,
+          center: jump.options.center as [number, number],
+          bearing: jump.options.bearing as number,
+          zoom: jump.options.zoom as number,
         });
       }
       seen = jumps.length;
@@ -1065,7 +1065,7 @@ describe("useNavCamera approach camera", () => {
       [633, 34, 3017],
       [667, 33, 2983],
       [700, 34, 2950],
-    ]) {
+    ] as const) {
       applyApproachFix(along, speed, distance);
       harness.frames.flush(60, FRAME_MS);
     }

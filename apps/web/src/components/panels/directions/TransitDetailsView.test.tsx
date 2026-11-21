@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { TransitDetailsView } from "./TransitDetailsView";
 
 vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
@@ -291,7 +292,7 @@ it.each([
 ] as const)("describes %s accessibility %s as %s", (instance, accessible, expected) => {
   const itinerary = makeItinerary([undefined]);
   itinerary.instance = instance;
-  itinerary.legs[0].wheelchairAccessible = accessible;
+  nth(itinerary.legs, 0).wheelchairAccessible = accessible;
   const markup = renderToStaticMarkup(
     <TransitDetailsView
       itinerary={itinerary}
@@ -315,7 +316,7 @@ it("opens a journey's stop as that transit stop, so its board treats it as the m
   );
   fireEvent.click(screen.getByText("From 0"));
   expect(enrichment.select).toHaveBeenCalledTimes(1);
-  const provisional = enrichment.select.mock.calls[0][0] as Place;
+  const provisional = nth(enrichment.select.mock.calls, 0)[0] as Place;
   expect(provisional).toMatchObject({
     name: "From 0",
     rawCategory: "transit_stop",
@@ -326,7 +327,7 @@ it("opens a journey's stop as that transit stop, so its board treats it as the m
 
 it("names a different-service alternative and selects its complete RE1 journey with the keyboard", async () => {
   const itinerary = makeItinerary([undefined]);
-  const leg = itinerary.legs[0];
+  const leg = nth(itinerary.legs, 0);
   const re1 = {
     ...leg,
     mode: "rail" as const,
@@ -371,7 +372,9 @@ it("names a different-service alternative and selects its complete RE1 journey w
 
 it("shows legacy compact alternatives by train name without offering an unsafe selection", () => {
   const p = makeItinerary([undefined]);
-  p.legs[0].alternatives = [{ startTime: p.startTime, endTime: p.endTime, routeShortName: "RE42" }];
+  nth(p.legs, 0).alternatives = [
+    { startTime: p.startTime, endTime: p.endTime, routeShortName: "RE42" },
+  ];
   render(
     <TransitDetailsView
       itinerary={p}
@@ -387,7 +390,7 @@ it("shows legacy compact alternatives by train name without offering an unsafe s
 
 it("omits the line-name separator when the provider supplies only alternative times", () => {
   const p = makeItinerary([undefined]);
-  p.legs[0].alternatives = [{ startTime: p.startTime, endTime: p.endTime }];
+  nth(p.legs, 0).alternatives = [{ startTime: p.startTime, endTime: p.endTime }];
   render(
     <TransitDetailsView itinerary={p} originLabel="A" destinationLabel="B" onBack={() => {}} />,
   );

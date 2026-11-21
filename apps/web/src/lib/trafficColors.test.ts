@@ -16,45 +16,45 @@ describe("traffic text tones meet WCAG AA", () => {
   const css = readFileSync(resolve(process.cwd(), "apps/web/src/app/globals.css"), "utf8");
 
   const blockOf = (selector: string) => {
-    const m = css.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`));
-    if (!m) throw new Error(`no ${selector} block in globals.css`);
-    return m[1];
+    const body = css.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1];
+    if (body === undefined) throw new Error(`no ${selector} block in globals.css`);
+    return body;
   };
 
-  const varsIn = (block: string) =>
-    Object.fromEntries(
-      [...block.matchAll(/--omx-traffic-([a-z]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2]]),
-    );
+  /** The traffic tone for `band` in a block; a missing one fails the test. */
+  const toneIn = (block: string, band: string) => {
+    const tone = block.match(new RegExp(`--omx-traffic-${band}:\\s*(#[0-9a-fA-F]{6})`))?.[1];
+    if (tone === undefined) throw new Error(`no --omx-traffic-${band} tone`);
+    return tone;
+  };
 
   const relLum = (hex: string) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const channel = (i: number) => parseInt(hex.slice(i, i + 2), 16) / 255;
     const f = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    return 0.2126 * f(channel(1)) + 0.7152 * f(channel(3)) + 0.0722 * f(channel(5));
   };
 
   const contrast = (a: string, b: string) => {
-    const [x, y] = [relLum(a), relLum(b)].sort((p, q) => q - p);
-    return (x + 0.05) / (y + 0.05);
+    const [la, lb] = [relLum(a), relLum(b)];
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
   };
 
   const BANDS = ["light", "moderate", "heavy", "severe"];
 
   it("clears 4.5:1 on the light surface", () => {
-    const vars = varsIn(blockOf(":root"));
+    const block = blockOf(":root");
     for (const band of BANDS) {
-      expect(vars[band]).toBeDefined();
-      expect(contrast(vars[band], "#ffffff") >= 4.5).toBe(true);
+      expect(contrast(toneIn(block, band), "#ffffff") >= 4.5).toBe(true);
     }
   });
 
   it("clears 4.5:1 on the dark overlay surface", () => {
     const darkBlock = blockOf("\\.dark");
-    const vars = varsIn(darkBlock);
     const darkBg = darkBlock.match(/--omx-overlay-bg:\s*(#[0-9a-fA-F]{6})/)?.[1];
     expect(darkBg).toBe("#2D2D2D");
+    if (darkBg === undefined) throw new Error("no --omx-overlay-bg in the dark block");
     for (const band of BANDS) {
-      expect(vars[band]).toBeDefined();
-      expect(contrast(vars[band], darkBg as string) >= 4.5).toBe(true);
+      expect(contrast(toneIn(darkBlock, band), darkBg) >= 4.5).toBe(true);
     }
   });
 });
