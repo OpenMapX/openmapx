@@ -45,11 +45,21 @@ function materialsOf(mesh: Mesh): Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 }
 
+const samePlacement = (a: PlacedModel, b: PlacedModel) =>
+  a.assetId === b.assetId &&
+  a.model === b.model &&
+  a.anchor[0] === b.anchor[0] &&
+  a.anchor[1] === b.anchor[1] &&
+  a.groundM === b.groundM &&
+  a.elevationM === b.elevationM &&
+  a.clipBelowGround === b.clipBelowGround;
+
 /**
  * Draws landmark models with three.js inside MapLibre's 3D pass, sharing its
  * depth buffer so models and extruded buildings hide each other correctly.
- * MapLibre can drop a custom layer without `onRemove` (full style swaps,
- * context restore), so `onAdd` always starts from a fresh renderer.
+ * The renderer lives as long as its GL context: re-adding the layer reuses it,
+ * so the GPU copies of resident models are uploaded once, and a new context
+ * (after a context loss) gets a new renderer.
  */
 export class LandmarkModelLayer implements CustomLayerInterface {
   readonly id = LANDMARK_LAYER_ID;
@@ -78,7 +88,12 @@ export class LandmarkModelLayer implements CustomLayerInterface {
     this.scene.add(sun);
   }
 
+  /** Repaints only when the placement changed; callers may call this every frame. */
   setPlaced(models: readonly PlacedModel[]): void {
+    const unchanged =
+      models.length === this.placed.length &&
+      models.every((model, i) => samePlacement(model, this.placed[i] as PlacedModel));
+    if (unchanged) return;
     const next = new Set(models.map((p) => p.model.scene));
     for (const previous of this.placed)
       if (!next.has(previous.model.scene)) this.scene.remove(previous.model.scene);
@@ -126,8 +141,9 @@ export class LandmarkModelLayer implements CustomLayerInterface {
   }
 
   onAdd(map: MaplibreMap, gl: WebGL2RenderingContext): void {
-    this.disposeRenderer();
     this.map = map;
+    if (this.renderer?.getContext() === gl) return;
+    this.disposeRenderer();
     try {
       const renderer = new WebGLRenderer({ canvas: map.getCanvas(), context: gl });
       renderer.autoClear = false;
@@ -185,16 +201,17 @@ export class LandmarkModelLayer implements CustomLayerInterface {
     this.options.onFrame?.(this.drawn);
   }
 
+  /** Off the map: forget the placement but keep the renderer for this GL context. */
   onRemove(): void {
-    this.dispose();
+    for (const placed of this.placed) this.scene.remove(placed.model.scene);
+    this.placed = [];
+    this.drawn = [];
   }
 
   /** Release the renderer; the models belong to their store and stay loaded. */
   dispose(): void {
+    this.onRemove();
     this.disposeRenderer();
-    for (const placed of this.placed) this.scene.remove(placed.model.scene);
-    this.placed = [];
-    this.drawn = [];
   }
 
   private disposeRenderer(): void {

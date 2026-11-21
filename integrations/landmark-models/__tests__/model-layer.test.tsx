@@ -10,9 +10,14 @@ const fake = vi.hoisted(() => {
     resetState = vi.fn();
     render = vi.fn();
     dispose = vi.fn();
-    constructor() {
+    private readonly context: unknown;
+    constructor(parameters: { context?: unknown } = {}) {
       if (state.fail) throw new Error("WebGL unavailable");
+      this.context = parameters.context;
       state.renderers.push(this);
+    }
+    getContext() {
+      return this.context;
     }
   }
   return { state, FakeRenderer };
@@ -87,14 +92,36 @@ describe("LandmarkModelLayer", () => {
     expect(model.model.scene.matrixWorld.determinant()).toBeGreaterThan(0);
   });
 
-  it("onAdd twice disposes the first renderer", () => {
+  it("onAdd reuses the renderer for the same GL context and replaces it for a new one", () => {
     const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
-    layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
+    const gl = {} as WebGL2RenderingContext;
+    layer.onAdd(fakeMap(), gl);
+    layer.onRemove();
+    layer.onAdd(fakeMap(), gl);
+    expect(renderers).toHaveLength(1);
+    expect(renderers[0]?.dispose).not.toHaveBeenCalled();
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     expect(renderers).toHaveLength(2);
     expect(renderers[0]?.dispose).toHaveBeenCalled();
     expect(renderers[1]?.autoClear).toBe(false);
     expect(renderers[1]?.localClippingEnabled).toBe(true);
+    layer.dispose();
+    expect(renderers[1]?.dispose).toHaveBeenCalled();
+  });
+
+  it("repaints only when the placement changes", () => {
+    const layer = new LandmarkModelLayer({ onUnsupported: vi.fn() });
+    const map = fakeMap() as { triggerRepaint: ReturnType<typeof vi.fn> };
+    layer.onAdd(map as never, {} as WebGL2RenderingContext);
+    const model = placed("a");
+    layer.setPlaced([model]);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+    layer.setPlaced([{ ...model }]);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+    layer.setPlaced([{ ...model, groundM: 12 }]);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(2);
+    layer.setPlaced([]);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(3);
   });
 
   it("render resets GL state before and after drawing", () => {
