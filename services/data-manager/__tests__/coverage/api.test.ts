@@ -1,8 +1,12 @@
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 import { registerCoverageEvidenceRoute } from "../../src/coverage/api.js";
 import { CoverageSnapshotStore } from "../../src/coverage/snapshot-store.js";
 import type { DataManagerCoverageSnapshot } from "../../src/coverage/types.js";
+
+// The route never reads its data directory here; a path that does not exist proves it.
+const unusedDataDir = fileURLToPath(new URL("./missing-coverage-data-dir/", import.meta.url));
 
 const snapshot: DataManagerCoverageSnapshot = {
   schemaVersion: 1,
@@ -25,7 +29,7 @@ describe("GET /coverage/evidence", () => {
     const app = Fastify({ logger: false });
     const store = new CoverageSnapshotStore({ collect: async () => snapshot });
     registerCoverageEvidenceRoute(app, {
-      dataDir: "/tmp/unused",
+      dataDir: unusedDataDir,
       sql: {} as never,
       stateStore: {} as never,
       snapshotStore: store,
@@ -47,7 +51,7 @@ describe("GET /coverage/evidence", () => {
     const app = Fastify({ logger: false });
     const store = new CoverageSnapshotStore({ collect: async () => snapshot });
     registerCoverageEvidenceRoute(app, {
-      dataDir: "/tmp/unused",
+      dataDir: unusedDataDir,
       sql: {} as never,
       stateStore: {} as never,
       snapshotStore: store,
