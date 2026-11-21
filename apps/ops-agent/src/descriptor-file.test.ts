@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type DescriptorReadOptions,
@@ -46,7 +47,7 @@ function listTestDirectory(root: string, components: readonly string[], maximumE
     descriptorAnchorRoot: anchor,
     hooks: {
       descriptorOpened: (descriptor) => {
-        symlinkSync(targets[opened] as string, join(anchor, String(descriptor)));
+        symlinkSync(itemAt(targets, opened), join(anchor, String(descriptor)));
         opened += 1;
       },
     },
@@ -77,7 +78,7 @@ function readDescriptorAnchoredUtf8(
     hooks: {
       ...options.hooks,
       descriptorOpened: (descriptor) => {
-        symlinkSync(targets[opened] as string, join(anchor, String(descriptor)));
+        symlinkSync(itemAt(targets, opened), join(anchor, String(descriptor)));
         opened += 1;
         original?.(descriptor);
       },

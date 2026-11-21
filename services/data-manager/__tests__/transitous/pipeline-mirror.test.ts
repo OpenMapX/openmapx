@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import type { SafeDownloadOptions } from "@openmapx/core/http/safe-download";
 import { transitousRunnerArgv } from "@openmapx/core/transitous-runner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import {
   buildJobContext,
@@ -268,10 +268,12 @@ describe("mirror-mode pipeline", () => {
 
     const { results } = await runTransitousPipeline(ctx, { stopAt: "fetch-operator" });
     expect(results.find((result) => result.stage === "fetch-operator")?.status).toBe("ok");
+    const [metadataPath] = fetchMetadata;
     expect(fetchMetadata).toHaveLength(1);
-    expect(fetchMetadata[0]).toMatch(/^\//);
-    expect(fetchMetadata[0]).toContain("operator-metadata");
-    const metadata = JSON.parse(readFileSync(fetchMetadata[0] as string, "utf-8")) as {
+    assert.isDefined(metadataPath, "the operator fetch was given no metadata path");
+    expect(metadataPath).toMatch(/^\//);
+    expect(metadataPath).toContain("operator-metadata");
+    const metadata = JSON.parse(readFileSync(metadataPath, "utf-8")) as {
       maintainers: unknown[];
       sources: Array<{ type: string; license: Record<string, unknown> }>;
     };

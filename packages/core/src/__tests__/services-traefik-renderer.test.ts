@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { renderCompose, resolveProxyHost } from "../services/compose-renderer";
 import { findServiceManifestDirs } from "../services/manifest-discovery";
 import { serviceManifestSchema } from "../services/manifest-schema";
@@ -12,6 +12,7 @@ import {
   renderTraefikServiceConfiguration,
 } from "../services/traefik-renderer";
 import type { LoadedService, ServiceManifest } from "../services/types";
+import { itemAt } from "../utils/itemAt";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..", "..");
 const DOMAIN = "maps.example.test";
@@ -57,18 +58,17 @@ function routingFromLabels(labels: Record<string, string>) {
   for (const [key, value] of Object.entries(labels)) {
     let match = /^traefik\.http\.routers\.([^.]+)\.(.+)$/.exec(key);
     if (match) {
-      const name = match[1] as string;
-      routers[name] ??= {};
-      (routers[name] as Record<string, string>)[match[2] as string] = value;
+      const name = itemAt(match, 1);
+      routers[name] = { ...routers[name], [itemAt(match, 2)]: value };
       continue;
     }
     match = /^traefik\.http\.services\.([^.]+)\.loadbalancer\.server\.port$/.exec(key);
     if (match) {
-      services[match[1] as string] = value;
+      services[itemAt(match, 1)] = value;
       continue;
     }
     match = /^traefik\.http\.middlewares\.([^.]+)\.stripprefix\.prefixes$/.exec(key);
-    if (match) middlewares[match[1] as string] = value;
+    if (match) middlewares[itemAt(match, 1)] = value;
   }
   return { routers, services, middlewares };
 }
@@ -117,8 +117,10 @@ describe("generated Traefik file configuration", () => {
       }
 
       // Same backend port.
-      const port = expected.services[manifest.id] as string;
-      const server = actual.http.services[manifest.id]?.loadBalancer.servers[0]?.url as string;
+      const port = expected.services[manifest.id];
+      const server = actual.http.services[manifest.id]?.loadBalancer.servers[0]?.url;
+      assert.isDefined(port, `${manifest.id} labels declare no backend port`);
+      assert.isDefined(server, `${manifest.id} has no generated backend server`);
       expect(server.endsWith(`:${port}`)).toBe(true);
 
       // Same strip-prefix middleware definitions.

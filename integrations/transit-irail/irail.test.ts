@@ -1,5 +1,5 @@
 import { nth } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -15,6 +15,13 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+/** The URL the first fetch call requested. */
+function firstFetchUrl(): string {
+  const [url] = nth(mockFetch.mock.calls, 0);
+  assert(typeof url === "string", "fetch was not called with a URL string");
+  return url;
+}
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -190,7 +197,7 @@ describe("irail provider", () => {
       const { getDepartures } = await loadModule();
       await getDepartures("ir:BE.NMBS.008814001", 30);
 
-      const fetchUrl = nth(mockFetch.mock.calls, 0)[0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("id=BE.NMBS.008814001");
       expect(fetchUrl).not.toContain("ir%3A");
     });
@@ -231,7 +238,7 @@ describe("irail provider", () => {
       expect(arrivals).toHaveLength(1);
 
       // Verify arrdep=arrival was sent
-      const fetchUrl = nth(mockFetch.mock.calls, 0)[0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("arrdep=arrival");
     });
   });
@@ -271,7 +278,7 @@ describe("irail provider", () => {
       const journey = await getVehicleJourney("ir:BE.NMBS.IC1234");
 
       // Verify ir: prefix stripped from API call
-      const fetchUrl = nth(mockFetch.mock.calls, 0)[0] as string;
+      const fetchUrl = firstFetchUrl();
       expect(fetchUrl).toContain("id=BE.NMBS.IC1234");
       expect(fetchUrl).not.toContain("ir%3A");
 

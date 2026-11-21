@@ -480,7 +480,7 @@ export class CrashHost {
     ])
       cpSync(join(REPO, entry), join(this.hostDir, entry), {
         recursive: true,
-        filter: (source) => !skipped.has(source.split("/").at(-1) as string),
+        filter: (source) => !skipped.has(source.replace(/^.*\//s, "")),
       });
     const infraSource = join(REPO, "infra", "docker");
     for (const file of [
@@ -883,9 +883,9 @@ export class CrashHost {
     const env: Record<string, string> = { HOME: "/tmp" };
     for (const entry of container.Config.Env) {
       const eq = entry.indexOf("=");
-      if (eq > 0) env[entry.slice(0, eq)] = entry.slice(eq + 1);
       // As Docker does: a bare name takes the client's value, or is unset.
-      else if (callerEnv[entry] !== undefined) env[entry] = callerEnv[entry] as string;
+      const value = eq > 0 ? entry.slice(eq + 1) : callerEnv[entry];
+      if (value !== undefined) env[eq > 0 ? entry.slice(0, eq) : entry] = value;
     }
     const helper = container.Config.Cmd.some((value) => value.includes("configuration-handoff"));
     Object.assign(env, {

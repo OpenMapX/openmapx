@@ -3,7 +3,7 @@ import { act, render } from "@testing-library/react";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import type { MapGeoJSONFeature } from "maplibre-gl";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_COLORS } from "@/lib/routeStyle";
 import { createFakeMap, expectStyleSwapIsLossless, nth } from "@/test";
@@ -83,7 +83,9 @@ const REMAINING_CASING = "nav-route-remaining-casing";
 /** The `f` boundary out of a `["step", ["line-progress"], v0, f, v1]` gradient. */
 function gradientFraction(layerId: string): number {
   const gradient = fake.state.paint.get(layerId)?.["line-gradient"] as unknown[] | undefined;
-  return gradient?.[3] as number;
+  const fraction = gradient?.[3];
+  assert(typeof fraction === "number", `${layerId} has no step gradient`);
+  return fraction;
 }
 
 // Independent of navRouteSplit.ts's own projectX/projectY (not imported from

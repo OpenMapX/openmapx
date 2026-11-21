@@ -1,6 +1,6 @@
 import { createPlace, useDataSourceStore, useParkingStore, usePlaceStore } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap, nth } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
@@ -506,10 +506,11 @@ it("serializes independent label, paint and logo channels with authoritative emp
     }).features,
     0,
   );
-  const ids = (key: string) =>
-    JSON.parse(f.properties[key as keyof typeof f.properties] as string).map(
-      (receipt: { sourceId: string }) => receipt.sourceId,
-    );
+  const ids = (key: string) => {
+    const receipts = f.properties[key as keyof typeof f.properties];
+    assert(typeof receipts === "string", `${key} is not a serialized receipt list`);
+    return JSON.parse(receipts).map((receipt: { sourceId: string }) => receipt.sourceId);
+  };
   expect(ids("_mapMarkerAttributions")).toEqual(["coords"]);
   expect(ids("_mapHaloAttributions")).toEqual(["coords", "availability", "status"]);
   expect(ids("_mapLabelAttributions")).toEqual(["coords", "name"]);

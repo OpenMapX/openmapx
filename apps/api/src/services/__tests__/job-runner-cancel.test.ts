@@ -60,6 +60,13 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+/** The JSON a query binds as its first parameter. */
+function firstJsonParam(query: { params: unknown[] }) {
+  const [param] = query.params;
+  assert(typeof param === "string", "the query binds no JSON first parameter");
+  return JSON.parse(param);
+}
+
 describe("admin job cancellation", () => {
   it("cancels through the persisted agent projection before reporting canceled", async () => {
     cancelOperations.mockResolvedValue("canceled");
@@ -105,7 +112,7 @@ it("observer abort without backend containment never publishes canceled", async 
   await execute.executeJob("job-1", "test.observer-abort", {}, null, {}, controller.signal);
   expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
   const patch = new PgDialect().sqlToQuery(database.updates.at(-1)?.result as SQL);
-  expect(JSON.parse(patch.params[0] as string)).toMatchObject({
+  expect(firstJsonParam(patch)).toMatchObject({
     observation: { state: "unknown" },
   });
 });
@@ -139,7 +146,7 @@ it("retains a fulfilled backend's partial failure evidence in failed DB and SSE 
   const failed = database.updates.find((update) => update.status === "failed");
   assert.isDefined(failed, "the job was not marked failed");
   const stored = new PgDialect().sqlToQuery(failed.result as SQL);
-  expect(JSON.parse(stored.params[0] as string)).toMatchObject({ phase: "build", ...evidence });
+  expect(firstJsonParam(stored)).toMatchObject({ phase: "build", ...evidence });
   expect(events).toContainEqual(
     expect.objectContaining({
       status: "failed",

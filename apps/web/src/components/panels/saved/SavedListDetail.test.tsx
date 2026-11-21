@@ -7,7 +7,7 @@ import {
 import { en } from "@openmapx/i18n";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import * as savedPlaceActions from "@/lib/openSavedPlace";
 import { nth } from "@/test";
 
@@ -89,9 +89,9 @@ describe("saved list name ownership", () => {
       state.name = name;
       renderDetail();
       expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-      expect(
-        screen.getByText(en.saved[name.slice(1) as keyof typeof en.saved] as string),
-      ).toBeInTheDocument();
+      const label = en.saved[name.slice(1) as keyof typeof en.saved];
+      assert(typeof label === "string", `${name} has no translated label`);
+      expect(screen.getByText(label)).toBeInTheDocument();
     },
   );
 });

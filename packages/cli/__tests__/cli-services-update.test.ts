@@ -185,7 +185,9 @@ describe("services update and app-api's database migrations", () => {
   it("migrates after the pull and before recreation when app-api is replaced", async () => {
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
-      order.push(args[0] as string);
+      const [command] = args;
+      assert.isDefined(command, "docker compose was called without a command");
+      order.push(command);
       return 0;
     });
     vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {

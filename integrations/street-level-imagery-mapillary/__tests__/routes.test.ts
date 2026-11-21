@@ -1,6 +1,6 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { fakeHttpClient, httpStatus, nth } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
 
@@ -155,12 +155,13 @@ describe("street-level-imagery-mapillary /nearest", () => {
     );
 
     const spans = fetchMock.mock.calls.map((call) => {
-      const bbox = new URL(String(call[0])).searchParams.get("bbox") as string;
-      const [west, , east] = bbox.split(",").map(Number);
-      return (east as number) - (west as number);
+      const bbox = new URL(String(call[0])).searchParams.get("bbox");
+      assert.exists(bbox, "the request has no bbox");
+      const edges = bbox.split(",").map(Number);
+      return nth(edges, 2) - nth(edges, 0);
     });
     expect(spans.length).toBeGreaterThan(1);
-    expect(spans[spans.length - 1]).toBeGreaterThan(spans[0] as number);
+    expect(nth(spans, -1)).toBeGreaterThan(nth(spans, 0));
   });
 
   it("returns 404 when no images are found even after expanding the bbox", async () => {

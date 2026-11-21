@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
 import { services as coreServices, services } from "@openmapx/core/server";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
@@ -874,7 +875,8 @@ describe("administrative release runtime", () => {
         expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
         return "a".repeat(64);
       }
-      if (args[0] === "cp") writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
+      if (args[0] === "cp")
+        writeFileSync(itemAt(args, args.length - 1), manifestText, { mode: 0o600 });
       return "";
     };
     const context = {

@@ -3,6 +3,8 @@
  * `range` and `if`/`else`. Anything else is refused so an unexpected format
  * fails loudly instead of answering something Docker never would. */
 
+import { itemAt } from "@openmapx/core/item-at";
+
 type Value = unknown;
 type Node =
   | { type: "text"; text: string }
@@ -35,7 +37,7 @@ function tokenize(source: string): string[] {
   const tokens: string[] = [];
   let index = 0;
   while (index < source.length) {
-    const char = source[index] as string;
+    const char = itemAt(source, index);
     if (/\s/.test(char)) {
       index++;
     } else if (char === "(" || char === ")") {
@@ -56,7 +58,7 @@ function tokenize(source: string): string[] {
       index = end + 1;
     } else {
       let end = index;
-      while (end < source.length && !/[\s()"]/.test(source[end] as string)) end++;
+      while (end < source.length && !/[\s()"]/.test(itemAt(source, end))) end++;
       tokens.push(source.slice(index, end));
       index = end;
     }

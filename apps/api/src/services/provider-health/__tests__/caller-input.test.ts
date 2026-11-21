@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createTransitOrchestrator } from "@integrations/transit/orchestrator";
 import { setup as setupTransitland } from "@integrations/transit-transitland/index";
+import { itemAt } from "@openmapx/core/item-at";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
@@ -22,7 +23,7 @@ class FakeRedis {
   defineCommand(name: string): void {
     (this as unknown as Record<string, unknown>)[name] = async (...args: string[]) => {
       if (name === "providerHealthTransition" && args[2] === "failure")
-        this.counted.push(args.at(-1) as string);
+        this.counted.push(itemAt(args, args.length - 1));
       return "";
     };
   }

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { itemAt } from "../utils/itemAt";
 import { createRequestJsonScope } from "./requestJsonScope";
 
 // These tests drive the real fetchJson through a stubbed fetch with standards
@@ -236,8 +237,9 @@ describe("createRequestJsonScope", () => {
       // The first eight stay shared; the overflow resource is refetched each time.
       for (const url of urls.slice(0, 8)) await scope.getJson(url);
       expect(fetchMock).toHaveBeenCalledTimes(9);
-      await scope.getJson(urls[8] as string);
-      await scope.getJson(urls[8] as string);
+      const overflow = itemAt(urls, 8);
+      await scope.getJson(overflow);
+      await scope.getJson(overflow);
       expect(fetchMock).toHaveBeenCalledTimes(11);
     });
 

@@ -6,7 +6,7 @@ import { en } from "@openmapx/i18n";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   account,
   oauthAccessToken,
@@ -217,7 +217,8 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     const { userId, cookie } = await verifiedUser(email);
     const enabled = await request("/api/auth/two-factor/enable", { password: PASSWORD }, cookie);
     expect(enabled.statusCode, enabled.body).toBe(200);
-    const backupCode = enabled.json().backupCodes[0] as string;
+    const [backupCode] = enabled.json().backupCodes;
+    assert(typeof backupCode === "string", "enrollment returned no backup code");
     const [factor] = await fixture.db.select().from(twoFactor).where(eq(twoFactor.userId, userId));
     if (!factor) throw new Error("MFA did not persist enrollment");
     const secret = await symmetricDecrypt({ key: SECRET, data: factor.secret });

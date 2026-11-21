@@ -1,6 +1,6 @@
 import { setup as setupCrowdReports } from "@integrations/crowd-reports";
 import { setup as setupTransit } from "@integrations/transit";
-import { ApiClient, fetchVehicleJourney } from "@openmapx/core";
+import { ApiClient, fetchVehicleJourney, itemAt } from "@openmapx/core";
 import type {
   IntegrationContext,
   LoadedIntegration,
@@ -212,7 +212,7 @@ describe("integration route params over the production dispatcher", () => {
       new ApiClient({ baseUrl: "https://api.example/", credentials: "omit" }),
     );
     vi.unstubAllGlobals();
-    const built = new URL(urls[0] as string);
+    const built = new URL(itemAt(urls, 0));
 
     const response = await app.inject({ method: "GET", url: `${built.pathname}${built.search}` });
 

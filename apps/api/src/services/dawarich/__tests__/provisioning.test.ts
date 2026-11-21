@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import {
   DAWARICH_APP_SERVICE_ID,
   DAWARICH_POSTGIS_SERVICE_ID,
@@ -903,14 +903,14 @@ describe("rotateManagedDawarichOidcSecret", () => {
       if (GENERATION_KEY in updates) {
         generationWrites += 1;
         if (generationWrites === 3) {
-          harness.appliedGenerations.set(
-            DAWARICH_APP_SERVICE_ID,
-            updates[GENERATION_KEY] as string,
-          );
-          harness.appliedGenerations.set(
-            DAWARICH_WORKER_SERVICE_ID,
-            harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[GENERATION_KEY] as string,
-          );
+          const appGeneration = updates[GENERATION_KEY];
+          const workerGeneration = harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[
+            GENERATION_KEY
+          ];
+          assert(typeof appGeneration === "string", "the app write carries no generation");
+          assert(typeof workerGeneration === "string", "the worker has no generation");
+          harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, appGeneration);
+          harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, workerGeneration);
         }
       }
     });

@@ -7,6 +7,7 @@ import type {
 } from "../../types/roadConditions";
 import type { RouteStep } from "../../types/routing";
 import { haversineDistance } from "../../utils/coordinates";
+import { itemAt } from "../../utils/itemAt";
 import { angularDifference, bearingBetween, routeBearingAt } from "../bearing";
 import {
   type IncidentAlert,
@@ -822,7 +823,7 @@ function randomEvent(
   const along = (rand() - 0.2) * routeMeters * 1.3;
   const lateral = rand() < 0.5 ? (rand() - 0.5) * 30 : (rand() - 0.5) * 200;
   const hasRoads = rand() < 0.6;
-  const roadName = ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)] as string;
+  const roadName = itemAt(ROAD_NAMES, Math.floor(rand() * ROAD_NAMES.length));
   const roads = hasRoads ? [rand() < 0.5 ? { name: en(roadName) } : { ref: roadName }] : undefined;
   const direction = rand() < 0.5 ? DIRECTIONS[Math.floor(rand() * DIRECTIONS.length)] : undefined;
   const geometry: RoadConditionEvent["geometry"] = isLine
@@ -834,8 +835,8 @@ function randomEvent(
         ],
       }
     : { type: "Point", coordinates: offsetLngLat(base, along, lateral) };
-  const type = EVENT_TYPES[Math.floor(rand() * EVENT_TYPES.length)] as string;
-  const severity = SEVERITIES[Math.floor(rand() * SEVERITIES.length)] as RoadConditionSeverityLabel;
+  const type = itemAt(EVENT_TYPES, Math.floor(rand() * EVENT_TYPES.length));
+  const severity = itemAt(SEVERITIES, Math.floor(rand() * SEVERITIES.length));
   return ev(id, severity, geometry, type, {
     headline: en(`random ${id}`),
     ...(roads ? { roads } : {}),

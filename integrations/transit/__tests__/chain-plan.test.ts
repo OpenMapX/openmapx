@@ -4,7 +4,7 @@ import { nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { planTransitChain, selectItinerary } from "../chain-plan.js";
 
 const COLOGNE = { lat: 50.94, lng: 6.96 };
@@ -113,8 +113,12 @@ describe("planTransitChain", () => {
     expect(calls[0]).toMatchObject({ from: COLOGNE, to: BONN });
     // Segment one arrives 40 min after departure, dwells 30 min, so segment two
     // is asked for 70 min after the anchor.
-    expect(Date.parse(nth(calls, 1).departureTime as string)).toBe(
-      Date.parse(nth(calls, 0).departureTime as string) + 40 * 60_000 + 30 * 60_000,
+    const firstDeparture = nth(calls, 0).departureTime;
+    const secondDeparture = nth(calls, 1).departureTime;
+    assert.isDefined(firstDeparture, "segment one was asked without a departure time");
+    assert.isDefined(secondDeparture, "segment two was asked without a departure time");
+    expect(Date.parse(secondDeparture)).toBe(
+      Date.parse(firstDeparture) + 40 * 60_000 + 30 * 60_000,
     );
     expect(plan.segments).toHaveLength(2);
     expect(nth(plan.segments, 0).boardingWaitSeconds).toBe(600);
@@ -144,7 +148,10 @@ describe("planTransitChain", () => {
     });
 
     expect(planTrip).toHaveBeenCalledTimes(2);
-    expect(Date.parse(arrivals[1] as string)).toBeLessThan(Date.parse(arrivals[0] as string));
+    const [first, second] = arrivals;
+    assert.isDefined(first, "the first plan had no arrival time");
+    assert.isDefined(second, "the second plan had no arrival time");
+    expect(Date.parse(second)).toBeLessThan(Date.parse(first));
   });
 
   it("reports the realtime arrival delay per segment", async () => {

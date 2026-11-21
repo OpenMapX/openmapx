@@ -106,7 +106,7 @@ function mountOf(infraDir: string, service: string, target: string): string {
   const model = load(compose) as { services: Record<string, { volumes?: string[] }> };
   const line = model.services[service]?.volumes?.find((entry) => entry.split(":")[1] === target);
   if (!line) throw new Error(`${service} does not mount ${target}`);
-  const source = line.trim().replace(/^- /, "").split(":")[0] as string;
+  const source = line.trim().replace(/^- /, "").replace(/:.*$/s, "");
   return join(infraDir, CURRENT_CONFIGURATION, source);
 }
 
