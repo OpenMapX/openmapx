@@ -1,7 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noUncheckedIndexedAccess": true,
     "lib": ["ES2024", "DOM"],
     "types": ["node"]
   },

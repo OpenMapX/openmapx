@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noUncheckedIndexedAccess": true,
     "target": "ES2022",
     "lib": ["ES2023", "DOM"],
     "module": "ESNext",

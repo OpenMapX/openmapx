@@ -6,7 +6,9 @@
   "compilerOptions": {
     "baseUrl": null,
     "ignoreDeprecations": "6.0",
-    "strict": true
+    "strict": true,
+    // Docusaurus's base, not the repository's, so the shared flag is repeated here.
+    "noUncheckedIndexedAccess": true
   },
   "exclude": [".docusaurus", "build"]
 }
