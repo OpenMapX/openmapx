@@ -1,6 +1,7 @@
 import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
+import { itemAt } from "../utils/itemAt";
 import { cumulativeDistances, distanceAtVertex } from "./deadReckon";
 import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
@@ -268,7 +269,7 @@ function stepGeometryDistances(route: Route, cum: number[]): number[] {
   for (let right = 1; right <= starts.length; right += 1) {
     if (right < starts.length && starts[right] === undefined) continue;
     // The first step always has a start, so every span begins at a known boundary.
-    const from = starts[left] ?? 0;
+    const from = itemAt(starts, left, "maneuver start");
     const to = starts[right] ?? distanceAtVertex(cum, cum.length - 1);
     const span = route.steps.slice(left, right);
     const distance = span.reduce((sum, step) => sum + step.distance, 0);

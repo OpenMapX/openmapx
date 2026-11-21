@@ -116,9 +116,20 @@ export function createSharedMobilityProvider(
         console.warn(`[${config.id}] Entur enrichment failed`, error);
       }
 
+      // A result credits its first source, so a record without one is dropped
+      // and counted rather than shown uncredited or failing the whole viewport.
+      const sourcedStations = inventory.stations.filter((item) => item.sources.length > 0);
+      const sourcedVehicles = inventory.vehicles.filter((item) => item.sources.length > 0);
+      const skipped =
+        inventory.stations.length +
+        inventory.vehicles.length -
+        sourcedStations.length -
+        sourcedVehicles.length;
+      if (skipped > 0) console.warn(`[${config.id}] skipped ${skipped} records without a source`);
+
       // Capture the provider generation's metadata before detail caching or mapping.
-      const stations = inventory.stations.map((item) => captureItem(item));
-      const vehicles = inventory.vehicles.map((item) => captureItem(item));
+      const stations = sourcedStations.map((item) => captureItem(item));
+      const vehicles = sourcedVehicles.map((item) => captureItem(item));
       await detailStore.store([...stations, ...vehicles], writer);
       const results = [
         ...stations.map((station) => mapStationToResult(station)),

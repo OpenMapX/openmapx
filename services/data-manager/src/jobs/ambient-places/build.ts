@@ -302,10 +302,14 @@ export async function rollbackAmbientPlaces(sql: postgres.Sql): Promise<void> {
   await ensureAmbientSchema(sql);
   await cancellableTransaction(sql, async (tx) => {
     await lock(tx);
-    const [state] = await tx.unsafe<{ previous: string | null }[]>(
-      `SELECT previous FROM ambient_places.state WHERE singleton=1`,
+    const state = itemAt(
+      await tx.unsafe<{ previous: string | null }[]>(
+        `SELECT previous FROM ambient_places.state WHERE singleton=1`,
+      ),
+      0,
+      "ambient state row",
     );
-    if (!state?.previous) throw new Error("No previous ambient generation available");
+    if (!state.previous) throw new Error("No previous ambient generation available");
     await tx.unsafe(
       `UPDATE ambient_places.generations SET cache_lease_until=greatest(cache_lease_until,now()+interval '7 days 1 minute') WHERE id IN (SELECT active FROM ambient_places.state WHERE singleton=1 UNION SELECT previous FROM ambient_places.state WHERE singleton=1)`,
     );

@@ -20,6 +20,7 @@ import type {
   PricingPlanEntry,
   Translatable,
 } from "@openmapx/core";
+import { itemAt } from "@openmapx/core";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -196,13 +197,6 @@ function mapContextSelection(
   };
 }
 
-/** The first contributing source; every shared-mobility provider names at least one. */
-function primarySource(record: { id: string; sources: readonly string[] }): string {
-  const [source] = record.sources;
-  if (source === undefined) throw new Error(`Shared-mobility record ${record.id} has no source`);
-  return source;
-}
-
 /**
  * ID prefix that flows from the result through the click handler back to the
  * place resolver, so it can branch on station vs free-floating vehicle
@@ -215,7 +209,8 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     kind: "station",
     name: station.name,
     coordinates: station.coordinates,
-    source: primarySource(station),
+    // The provider drops records without a source before mapping.
+    source: itemAt(station.sources, 0, "shared-mobility source"),
     sources: [...station.sources],
     ...(station.contributors === undefined
       ? {}
@@ -542,7 +537,8 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     kind: "vehicle",
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
-    source: primarySource(vehicle),
+    // The provider drops records without a source before mapping.
+    source: itemAt(vehicle.sources, 0, "shared-mobility source"),
     sources: [...vehicle.sources],
     ...(vehicle.contributors === undefined
       ? {}

@@ -184,6 +184,24 @@ describe("createSharedMobilityProvider", () => {
     expect(warn).toHaveBeenCalledWith("[car-sharing] Entur enrichment failed", expect.any(Error));
   });
 
+  it("skips and counts records without a source instead of failing the viewport", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const shared = definition(
+      vi.fn(async () => ({
+        stations: [station(), { ...station("gbfs/provider/station-2"), sources: [] }],
+        vehicles: [{ ...vehicle(), sources: [] }],
+      })),
+    );
+
+    const result = await shared.search(BBOX);
+
+    expect(result.data.map((item) => item.id)).toEqual(["s:gbfs/provider/station-1"]);
+    expect(warn).toHaveBeenCalledWith("[car-sharing] skipped 2 records without a source");
+    await expect(shared.getDetail("s:gbfs/provider/station-2")).resolves.toMatchObject({
+      data: null,
+    });
+  });
+
   it("maps cached station and vehicle details and enriches each by kind", async () => {
     const shared = definition(undefined, {
       dataSources: [manifestSource("gbfs", "GBFS", "https://example.com")],

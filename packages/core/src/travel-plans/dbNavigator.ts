@@ -60,8 +60,13 @@ export const dbNavigatorAdapter: TravelPlanAdapter = {
         cursor++;
         break;
       }
-      const service = servicePattern.exec(lines[cursor++] ?? "");
-      if (!service || legs.length === 8) return invalid;
+      const [, namedService, namedNumber, productService, productNumber] =
+        servicePattern.exec(lines[cursor++] ?? "") ?? [];
+      // The pattern's two alternatives each capture a name and a number.
+      const serviceName = namedService ?? productService;
+      const trainNumber = namedNumber ?? productNumber;
+      if (serviceName === undefined || trainNumber === undefined || legs.length === 8)
+        return invalid;
       let headsign: string | undefined;
       const headsignLine = lines[cursor];
       if (headsignLine?.startsWith("Nach ")) {
@@ -83,9 +88,8 @@ export const dbNavigatorAdapter: TravelPlanAdapter = {
         to: to.name,
         departure,
         arrival,
-        // The pattern's two alternatives each capture a name and a number.
-        service: (service[1] ?? service[3] ?? "").trim(),
-        trainNumber: service[2] ?? service[4] ?? "",
+        service: serviceName.trim(),
+        trainNumber,
         headsign,
         departurePlatform: from.platform,
         arrivalPlatform: to.platform,

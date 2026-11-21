@@ -13,10 +13,9 @@ import { DEFAULT_ARTIFACT_ARCHIVE_LIMITS, validateBuildBundle, writeBuildBundle 
 import { acquireArtifactTargetLease } from "../target-lease";
 import * as control from "./control";
 
-const root = process.argv[2] ?? "",
-  point = process.argv[3] ?? "";
-if (!root || !["old-directory", "build-record"].includes(point))
-  throw Error("Native fixture input required");
+const [, , root, point] = process.argv;
+if (!root || point === undefined || !["old-directory", "build-record"].includes(point))
+  throw Error("Usage: artifact-publication-process <root> <old-directory|build-record>");
 const dataRoot = join(root, "data"),
   source = join(root, "source");
 fs.mkdirSync(join(dataRoot, "osrm-graph"), { recursive: true, mode: 0o700 });

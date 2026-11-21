@@ -41,10 +41,10 @@ export async function buildConflationComponents(
       let cursorId = "0";
       let changed = 0;
       while (true) {
-        const [page] = await sql.unsafe<
-          { osm_type: string | null; osm_id: string | null; n: number }[]
-        >(
-          `
+        // A SELECT of scalar subqueries without FROM returns one row.
+        const page = itemAt(
+          await sql.unsafe<{ osm_type: string | null; osm_id: string | null; n: number }[]>(
+            `
           WITH batch AS MATERIALIZED (SELECT * FROM ${proposals}
             WHERE (osm_type,osm_id)>($1,$2::BIGINT) ORDER BY osm_type,osm_id LIMIT 10000),
           updated AS (UPDATE ${table} c SET component_id=b.label FROM batch b
@@ -52,9 +52,12 @@ export async function buildConflationComponents(
           SELECT (SELECT osm_type FROM batch ORDER BY osm_type DESC,osm_id DESC LIMIT 1) AS osm_type,
             (SELECT osm_id::TEXT FROM batch ORDER BY osm_type DESC,osm_id DESC LIMIT 1) AS osm_id,
             (SELECT count(*)::INT FROM updated) AS n`,
-          [cursorType, cursorId],
+            [cursorType, cursorId],
+          ),
+          0,
+          "row from the component propagation page query",
         );
-        if (!page?.n || page.osm_type === null || page.osm_id === null) break;
+        if (!page.n || page.osm_type === null || page.osm_id === null) break;
         cursorType = page.osm_type;
         cursorId = page.osm_id;
         changed += page.n;

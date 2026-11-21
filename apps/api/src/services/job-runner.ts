@@ -643,7 +643,7 @@ class AdminJobRunner {
           overlay: options.overlay,
           coordinatorMode: options.coordinatorMode,
           followUp: options.followUp,
-          ...(Object.hasOwn(options, "expectedCurrentRevisionId")
+          ...(options.expectedCurrentRevisionId !== undefined
             ? { expectedCurrentRevisionId: options.expectedCurrentRevisionId }
             : {}),
         },
