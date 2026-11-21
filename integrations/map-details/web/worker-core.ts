@@ -162,8 +162,8 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
   const active = new Set<number>();
   const cancelled = new Set<number>();
 
-  const fetchBytes = (cache: LRU<string, Promise<Uint8Array | null>>, url: string) => {
-    const cached = cache.get(url);
+  const fetchBytes = (byteCache: LRU<string, Promise<Uint8Array | null>>, url: string) => {
+    const cached = byteCache.get(url);
     if (cached) return cached;
     const pending = (async () => {
       const response = await fetchImpl(url);
@@ -171,20 +171,20 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
       if (!response.ok) throw new Error(`Tile request failed with ${response.status}`);
       return new Uint8Array(await response.arrayBuffer());
     })();
-    cache.set(url, pending);
-    pending.catch(() => cache.delete(url));
+    byteCache.set(url, pending);
+    pending.catch(() => byteCache.delete(url));
     return pending;
   };
 
   const decodedTile = async (
-    cache: LRU<string, Promise<Uint8Array | null>>,
+    byteCache: LRU<string, Promise<Uint8Array | null>>,
     url: string,
     layers: string[],
   ): Promise<DecodedTile | null> => {
     const key = `${url}|${layers.join(",")}`;
     const hit = decoded.get(key);
     if (hit) return hit;
-    const bytes = await fetchBytes(cache, url);
+    const bytes = await fetchBytes(byteCache, url);
     if (!bytes) return null;
     const tile = decodeLayers(bytes, layers);
     decoded.set(key, tile);

@@ -93,20 +93,20 @@ same time count against the same budget.
 
 Current defaults in `services/<id>/service.json`:
 
-| Service or bundle | Container memory ceiling | Capacity considerations                                              |
-| ----------------- | ------------------------ | -------------------------------------------------------------------- |
-| Nominatim         | 64 GiB                   | Initial OSM import, database, flat-node storage, and replication     |
-| Overpass          | 32 GiB                   | Converted OSM input, database, and update working space              |
-| Valhalla          | 16 GiB                   | Routing tiles, elevation, administrative and time-zone data          |
-| MOTIS             | 16 GiB **per slot**      | Active and candidate imports, rollback generations, feed-proxy cache |
-| OTP               | 16 GiB runtime           | Separate build helper defaults to a 24 GiB Java heap                 |
-| Photon            | 8 GiB                    | Prebuilt index; parallel refresh needs old and new indexes together  |
-| OSRM              | 8 GiB runtime            | Extract, graph, and preprocessing working files                      |
-| Local AI          | 8 GiB                    | Model files and model-dependent inference memory                     |
-| Elasticsearch     | 4 GiB                    | Pelias also needs its API, Placeholder, PIP, and build workspace     |
-| BRouter           | 2 GiB                    | Selected `.rd5` segments plus a replacement generation               |
-| TileServer GL     | 2 GiB runtime            | Separate Planetiler build, MBTiles, glyphs, and temporary files      |
-| Managed Dawarich  | 8.5 GiB total            | App 4 GiB, worker 2 GiB, database 2 GiB, queue 512 MiB               |
+| Service or bundle | Container memory ceiling | Capacity considerations                                                                      |
+| ----------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
+| Nominatim         | 64 GiB                   | Initial OSM import, database, flat-node storage, and replication                             |
+| Overpass          | 32 GiB                   | Converted OSM input, database, and update working space                                      |
+| Valhalla          | 16 GiB                   | Routing tiles, elevation, administrative and time-zone data                                  |
+| MOTIS             | 16 GiB **per slot**      | Active and candidate imports, rollback generations, feed-proxy cache                         |
+| OTP               | 16 GiB runtime           | Separate build helper defaults to a 24 GiB Java heap                                         |
+| Photon            | 8 GiB                    | Prebuilt index; parallel refresh needs old and new indexes together                          |
+| OSRM              | 8 GiB runtime            | Extract, graph, and preprocessing working files                                              |
+| Local AI          | 8 GiB                    | Model files and model-dependent inference memory                                             |
+| Elasticsearch     | 4 GiB                    | Pelias also needs its API, Placeholder, PIP, and build workspace                             |
+| BRouter           | 2 GiB                    | Selected `.rd5` segments plus a replacement generation                                       |
+| TileServer GL     | 2 GiB runtime            | Separate Planetiler build, MBTiles (base map and street detail), glyphs, and temporary files |
+| Managed Dawarich  | 8.5 GiB total            | App 4 GiB, worker 2 GiB, database 2 GiB, queue 512 MiB                                       |
 
 Pelias API, Placeholder, PIP, and Martin do not all have fixed manifest memory
 limits. Include them in the host budget. See the individual

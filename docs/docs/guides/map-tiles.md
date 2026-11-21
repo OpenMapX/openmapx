@@ -77,9 +77,11 @@ pnpm openmapx data download osm europe/germany
 pnpm openmapx services build tileserver --region europe/germany
 ```
 
-Planetiler writes `data/tile-mbtiles/tiles.mbtiles`. It builds into
-`data/tile-mbtiles.next/` and only replaces the archive once the build succeeds,
-so a failed build keeps the old tiles. Its JVM heap defaults to half the PBF
+Planetiler writes `data/tile-mbtiles/tiles.mbtiles` and, in a second run from
+the same extract, `data/tile-mbtiles/street_detail.mbtiles` (see
+[Street detail](#street-detail)). It builds into `data/tile-mbtiles.next/` and
+only replaces the archives once both runs succeed, so a failed build keeps the
+old tiles. Its JVM heap defaults to half the PBF
 size (at least 2 GB; `-Xmx30g` for the planet), and its downloaded sources and
 temp files live in `data/planetiler/`, where later builds reuse the sources.
 Set `PLANETILER_JAVA_TOOL_OPTIONS` or `PLANETILER_WORK_DIR` in `.env` to change
@@ -107,6 +109,7 @@ With the default local binding, verify the TileJSON, a tile, and a glyph:
 
 ```bash
 curl -sf http://localhost:8080/data/openmapx.json
+curl -sf http://localhost:8080/data/street_detail.json
 curl -sf -o /dev/null http://localhost:8080/data/openmapx/0/0/0.pbf
 curl -sf -o /dev/null 'http://localhost:8080/fonts/Noto%20Sans%20Regular/0-255.pbf'
 ```
@@ -135,6 +138,46 @@ then reload the page. An in-place restart does not reload environment values.
 through the API only when MapTiler is the resolved vector provider. Self-hosted
 and OpenFreeMap vectors always use the owned styles. Complete hosted styles do
 not use the local OpenMapX offline-package pipeline.
+
+## Street detail
+
+The 3D view draws real-width roads with lanes, crossings, rails, pitch markings,
+street trees, lamps, signals and benches from a small supplementary tileset,
+`street_detail.mbtiles` (see
+[Map layers](../features/map-layers.md#forests-street-objects-and-street-paint)).
+The tile build makes it at zoom 16 from your OpenStreetMap extract with the same
+pinned Planetiler image. It is small and quick next to the base map: on the
+Berlin extract (100 MB) the street detail run took 8 seconds, peaked at about
+1.3 GB of the default 2 GB heap and wrote 17.9 MB.
+
+TileServer GL serves it at `/tiles/data/street_detail.json`. The API asks the
+tile server which archives it serves, and the web app shows street detail
+whenever `street_detail` is there. Coverage is your extract: outside it the 3D
+view has no street detail, while forests still grow everywhere.
+
+### Street detail with a hosted base map
+
+To keep OpenFreeMap or MapTiler as the base map and still get street detail,
+set this in `infra/docker/.env` before building:
+
+```dotenv
+TILESERVER_BASEMAP=hosted
+```
+
+The build then skips the base map run and writes only `street_detail.mbtiles`;
+an earlier `tiles.mbtiles` is removed when the new build is promoted. TileServer
+GL starts with `--ignore-missing-files`, so it serves whichever archives exist,
+and because the base map archive is missing, the map uses the hosted base map
+from **Admin → Settings → Map** and draws the street detail on top. Unset, or
+`build`, builds both. In this mode, offline packages cannot be made from local
+tiles, because they read `tiles.mbtiles`. The street data may be a little older
+or newer than the hosted base map.
+
+If you override `services/tileserver/config/config.json` (see
+[Managing services](../install/managing-services.md)), keep the `street_detail`
+entry beside `openmapx`. Prepared tile builds made before street detail existed
+are reported as incomplete until you rebuild; they keep serving the base map
+meanwhile.
 
 ## Relief and contours
 
@@ -197,7 +240,7 @@ requests.
 ## Offline packages
 
 Offline package generation reads the same `tiles.mbtiles` and `tile-fonts`
-trees. A browser package consists of:
+trees. Street detail and forests are not part of offline packages. A browser package consists of:
 
 - one immutable, checksummed PMTiles archive for the selected bounds and zooms;
 - versioned glyph PBFs needed by the bundled OpenMapX light/dark styles; and

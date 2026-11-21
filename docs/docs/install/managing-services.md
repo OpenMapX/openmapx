@@ -449,6 +449,11 @@ The `umask 022` matters on Debian and Ubuntu, whose default umask of `002`
 makes new files and directories group-writable, and render refuses those. To
 fix existing ones: `chmod -R g-w,o-w infra/docker/overrides`.
 
+An override replaces the whole file, so it does not pick up later changes
+to the release's copy. For example, an override of
+`services/tileserver/config/config.json` must list the `street_detail` archive
+beside `openmapx` for the 3D view's street detail.
+
 Render uses the override in place of the release's file. Because the copy's
 directory is named after what it holds, `services update` (or **Recreate** in
 the admin panel) gives the service its new file. Delete the override to go
