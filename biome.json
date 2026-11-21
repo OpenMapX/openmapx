@@ -293,6 +293,7 @@
         "apps/ops-agent/**",
         "apps/transitous-runner/**",
         "integrations/openconditions/**",
+        "integrations/*/types.ts",
         "packages/air-quality/**",
         "packages/brands/**",
         "packages/cli/**",
@@ -321,7 +322,13 @@
         "packages/presets/**",
         "packages/transitous-core/**",
         "scripts/**",
-        "services/data-manager/**"
+        "services/brouter/tests/**",
+        "services/dawarich-*/*.ts",
+        "services/data-manager/**",
+        "services/valhalla/tests/**",
+        "vitest.aliases.ts",
+        "vitest.config.ts",
+        "vitest.setup.node.ts"
       ],
       "linter": {
         "rules": {
