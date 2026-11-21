@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from "@mui/material/styles";
 import {
   createOverlayStore,
   useBuildingReplacementStore,
@@ -94,6 +93,12 @@ vi.mock("../web/scene", () => ({
       dispose: sceneMock.dispose,
     };
   },
+}));
+
+const colorScheme = vi.hoisted(() => ({ mode: "light" as string, systemMode: "light" as string }));
+vi.mock("@mui/material/styles", async (original) => ({
+  ...(await original<typeof import("@mui/material/styles")>()),
+  useColorScheme: () => ({ mode: colorScheme.mode, systemMode: colorScheme.systemMode }),
 }));
 
 const catalogueMock = vi.hoisted(() => ({ candidates: [] as Candidate[] }));
@@ -360,17 +365,15 @@ describe("LandmarkModelsLayer", () => {
   });
 
   it("uses night shading only in dark theme on a vector base map", async () => {
-    const dark = createTheme({ palette: { mode: "dark" } });
-    const view = render(
-      <ThemeProvider theme={dark}>
-        <LandmarkModelsLayer />
-      </ThemeProvider>,
-    );
+    colorScheme.mode = "system";
+    colorScheme.systemMode = "dark";
+    render(<LandmarkModelsLayer />);
     await activate();
     expect(sceneMock.layer.setNight).toHaveBeenLastCalledWith(true);
     act(() => useLayerStore.setState({ activeLayer: "satellite" }));
     await flush();
     expect(sceneMock.layer.setNight).toHaveBeenLastCalledWith(false);
-    view.unmount();
+    colorScheme.mode = "light";
+    colorScheme.systemMode = "light";
   });
 });

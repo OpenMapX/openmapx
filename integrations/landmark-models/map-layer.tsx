@@ -1,6 +1,6 @@
 "use client";
 
-import { useTheme } from "@mui/material/styles";
+import { useColorScheme } from "@mui/material/styles";
 import {
   type BuildingReplacement,
   createPlace,
@@ -75,7 +75,9 @@ export function LandmarkModelsLayer(): null {
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const maskingAvailable = useBuildingReplacementStore((s) => s.maskingAvailable);
   const baseLayer = useLayerStore((s) => s.activeLayer);
-  const dark = useTheme().palette.mode === "dark";
+  // The app themes through MUI colour schemes, so `palette.mode` stays "light".
+  const { mode, systemMode } = useColorScheme();
+  const dark = (mode === "system" ? systemMode : mode) === "dark";
   const [cameraReady, setCameraReady] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [scene, setScene] = useState<LandmarkScene | null>(null);
