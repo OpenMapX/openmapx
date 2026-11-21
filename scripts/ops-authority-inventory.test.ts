@@ -161,7 +161,7 @@ function readdirRecursive(directory: string): string[] {
 }
 
 function sourceSymbolExists(sourceId: string): boolean {
-  const [relativePath, symbol] = sourceId.split("#");
+  const [relativePath = "", symbol] = sourceId.split("#");
   const path = join(root, relativePath);
   if (!statExists(path)) return false;
   if (!symbol) return true;
@@ -190,7 +190,7 @@ function sourceSymbolExists(sourceId: string): boolean {
 }
 
 function readLiteralUnion(sourceId: string): string[] {
-  const [relativePath, symbol] = sourceId.split("#");
+  const [relativePath = "", symbol] = sourceId.split("#");
   const path = join(root, relativePath);
   const source = ts.createSourceFile(
     path,

@@ -320,6 +320,7 @@
         "packages/place-ids/**",
         "packages/presets/**",
         "packages/transitous-core/**",
+        "scripts/**",
         "services/data-manager/**"
       ],
       "linter": {

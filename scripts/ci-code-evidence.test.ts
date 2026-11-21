@@ -6,6 +6,7 @@ import {
   findReusableCodeValidation,
   targetDigest,
 } from "./ci-code-evidence.mjs";
+import { nth } from "./fixtures/nth.ts";
 
 const head = "a".repeat(40);
 const source = { head, number: 790, baseRef: "main", baseRepositoryId: 1171046573 };
@@ -132,16 +133,16 @@ describe("provider-bound code validation reuse", () => {
     "requires positive aggregate success, not %s",
     async (conclusion) => {
       const rows = jobs(100);
-      rows[2].conclusion = conclusion;
+      nth(rows, 2).conclusion = conclusion;
       expect(await find([run(100)], { 100: rows })).toBeNull();
     },
   );
   it("fails closed on missing/ambiguous receipts and unknown newer runs", async () => {
     expect(await find([run(200), run(100)], { 200: [], 100: jobs(100) })).toBeNull();
     const rows = jobs(100);
-    const steps = rows[0].steps;
+    const steps = nth(rows, 0).steps;
     if (!steps) throw Error("Fixture selector must have a source step");
-    steps.push({ ...steps[0] });
+    steps.push({ ...nth(steps, 0) });
     expect(await find([run(100)], { 100: rows })).toBeNull();
   });
   it.each([
@@ -153,14 +154,14 @@ describe("provider-bound code validation reuse", () => {
     { attempt: 2 },
   ])("rejects mismatched source provenance %j", async (changed) => {
     const rows = jobs(100);
-    const step = rows[0].steps?.[0];
+    const step = rows[0]?.steps?.[0];
     if (!step) throw Error("Fixture selector must have a source step");
     step.name = `CI source v1 ${JSON.stringify(receipt(100, true, changed))}`;
     expect(await find([run(100)], { 100: rows })).toBeNull();
   });
   it("accepts carried-forward selection only after the new attempt completes successfully", async () => {
     const carried = jobs(100);
-    carried[2].run_attempt = 2;
+    nth(carried, 2).run_attempt = 2;
     expect((await find([run(100, { run_attempt: 2 })], { 100: carried }))?.attempt).toBe(2);
     expect(await find([run(100, { run_attempt: 2 })], { 100: jobs(100) })).toBeNull();
     expect(
@@ -171,7 +172,7 @@ describe("provider-bound code validation reuse", () => {
   });
   it("never treats metadata evidence as code when a validation job actually ran", async () => {
     const rows = jobs(200, false);
-    rows[1].conclusion = "failure";
+    nth(rows, 1).conclusion = "failure";
     expect(await find([run(200), run(100)], { 200: rows, 100: jobs(100) })).toBeNull();
   });
   it("cannot bootstrap from the misleading PR790 rollup or a missing legacy binding", async () => {

@@ -150,7 +150,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         ),
       ) as { services: Record<string, { volumes: string[] }> };
       expect(
-        generated.services["ops-agent"].volumes.filter((volume) =>
+        generated.services["ops-agent"]?.volumes.filter((volume) =>
           /^\$\{OPENMAPX_HOST_DIR[^}]*\}:/.test(volume),
         ),
       ).toEqual([]);

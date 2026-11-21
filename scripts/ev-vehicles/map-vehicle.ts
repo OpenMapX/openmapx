@@ -140,7 +140,7 @@ export function mapConnectors(raw: RawVehicle): string[] {
     const connector = port?.connector;
     if (!connector) continue;
     if (connector === "nacs") {
-      out.push("nacs", "tesla_ccs", ...CONNECTOR_MAP[european ? "ccs2" : "ccs1"]);
+      out.push("nacs", "tesla_ccs", ...(CONNECTOR_MAP[european ? "ccs2" : "ccs1"] ?? []));
       continue;
     }
     out.push(...(CONNECTOR_MAP[connector] ?? []));
@@ -168,8 +168,8 @@ export function pickRange(raw: RawVehicle): { km: number; cycle: string; notes?:
   const usable = (raw.range?.rated ?? []).filter(
     (entry) => typeof entry?.range_km === "number" && entry.range_km > 0,
   );
-  if (usable.length === 0) return null;
   let picked = usable[0];
+  if (!picked) return null;
   for (const entry of usable) {
     if (effectiveRangeKm(entry) < effectiveRangeKm(picked)) picked = entry;
   }
@@ -274,7 +274,7 @@ export function disambiguateLabels(list: GeneratedVehicle[]): GeneratedVehicle[]
   return list.map((vehicle) => {
     const group = groups.get(vehicle.label) as GeneratedVehicle[];
     if (group.length < 2) return vehicle;
-    const batteryDiffers = group.some((other) => other.batteryKwh !== group[0].batteryKwh);
+    const batteryDiffers = group.some((other) => other.batteryKwh !== group[0]?.batteryKwh);
     const suffix = batteryDiffers ? `${vehicle.batteryKwh} kWh` : `${vehicle.maxDcKw} kW`;
     return { ...vehicle, label: `${vehicle.label} · ${suffix}` };
   });

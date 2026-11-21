@@ -257,7 +257,9 @@ it.each([
 ])("blocks incomplete readiness or artifact identity: %s", async (problem) => {
   const t = setup();
   await t.stage();
-  const readiness = JSON.parse(t.state.draft.assets["readiness.json"]);
+  const staged = t.state.draft.assets["readiness.json"];
+  if (staged === undefined) throw new Error("No readiness asset was staged");
+  const readiness = JSON.parse(staged);
   if (problem === "settings-disabled") readiness.immutableReleases.enabled = false;
   if (problem === "wrong-upgrade-origin") readiness.upgradeOrigin = "invented-stable";
   if (problem === "bad-date") readiness.testedAt = "2026";

@@ -37,7 +37,8 @@ interface GitTreeEntry {
 // biome-ignore lint/suspicious/noExplicitAny: GitHub API / external JSON
 function parseProtocol(typeObj: Record<string, any>): ProtocolType | null {
   for (const key of Object.keys(typeObj)) {
-    if (key in SUPPORTED_PROTOCOLS) return SUPPORTED_PROTOCOLS[key];
+    const protocol = Object.hasOwn(SUPPORTED_PROTOCOLS, key) ? SUPPORTED_PROTOCOLS[key] : undefined;
+    if (protocol) return protocol;
   }
   return null;
 }
@@ -71,6 +72,7 @@ function bboxFromArea(area: { type: string; coordinates: unknown }): BBox | null
   const processRings = (rings: number[][][]) => {
     for (const ring of rings) {
       for (const [lng, lat] of ring) {
+        if (lng === undefined || lat === undefined) continue;
         if (lng < minLng) minLng = lng;
         if (lat < minLat) minLat = lat;
         if (lng > maxLng) maxLng = lng;

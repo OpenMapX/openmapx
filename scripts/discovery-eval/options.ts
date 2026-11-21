@@ -7,16 +7,18 @@ export function parseOptions(args: string[], root: string) {
     evidence: "",
   };
   for (let i = 0; i < args.length; i += 2) {
+    const flag = args[i];
+    const value = args[i + 1];
     if (
-      !["--out", "--baseline", "--evidence"].includes(args[i]) ||
-      !args[i + 1] ||
-      args[i + 1].startsWith("--")
+      (flag !== "--out" && flag !== "--baseline" && flag !== "--evidence") ||
+      !value ||
+      value.startsWith("--")
     ) {
       throw new Error(
         "Usage: pnpm discovery-eval [--out DIRECTORY] [--baseline REPORT.json] [--evidence MANIFEST.json]",
       );
     }
-    result[args[i].slice(2) as keyof typeof result] = resolve(root, args[i + 1]);
+    result[flag.slice(2) as keyof typeof result] = resolve(root, value);
   }
   return result;
 }

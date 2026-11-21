@@ -8,6 +8,7 @@ const requireFromCore = createRequire(new URL("../../packages/core/package.json"
 const { build }: typeof import("esbuild") = requireFromCore("esbuild");
 const ts: typeof import("typescript") = requireFromCore("typescript");
 
+import { nth } from "../fixtures/nth.ts";
 import { generateArtifacts, writeOrCheckArtifacts } from "./codegen.mjs";
 import { adminOperationBindings, createCodegenConfig, selectTaggedDocument } from "./config.mjs";
 import { validatedResponseTypes } from "./validated-response-types.mjs";
@@ -613,7 +614,7 @@ describe("activity generation", () => {
     const input = JSON.parse(
       await readFile(new URL("../../apps/api/openapi.json", import.meta.url), "utf8"),
     );
-    const ids = [
+    const ids: ReadonlyArray<readonly [string, string, string]> = [
       ["listAdminActivityJobs", "get", "/api/admin/jobs"],
       ["getAdminActivityJob", "get", "/api/admin/jobs/{id}"],
       ["cancelAdminActivityJob", "post", "/api/admin/jobs/{id}/cancel"],
@@ -733,7 +734,7 @@ describe("activity generation", () => {
         ],
       });
       const sdk = await import(
-        `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`
+        `data:text/javascript;base64,${Buffer.from(nth(result.outputFiles, 0).text).toString("base64")}`
       );
       expect(
         Object.keys(sdk)
@@ -938,7 +939,7 @@ describe("integration administration generation", () => {
         ],
       });
       const sdk = await import(
-        `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+        `data:text/javascript;base64,${Buffer.from(nth(bundled.outputFiles, 0).text).toString("base64")}`
       );
       expect(sdk.getGetAdminIntegrationUrl("sample /街?")).toBe(
         "/api/admin/integrations/sample%20%2F%E8%A1%97%3F",
@@ -1130,7 +1131,7 @@ describe("service administration custom-client generation", () => {
         ],
       });
       const sdk = await import(
-        `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+        `data:text/javascript;base64,${Buffer.from(nth(bundled.outputFiles, 0).text).toString("base64")}`
       );
       const { createApiClient } = await import("../../packages/core/src/api/client");
       const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });

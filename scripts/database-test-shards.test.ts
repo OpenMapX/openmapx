@@ -4,6 +4,7 @@ import {
   scenarioPattern,
   verifyShardReceipts,
 } from "./database-test-shards.mjs";
+import { nth } from "./fixtures/nth.ts";
 
 describe("complete recovery scenario partitions", () => {
   it("assigns every expanded scenario exactly once without splitting lifecycle sequences", () => {
@@ -17,9 +18,10 @@ describe("complete recovery scenario partitions", () => {
       "six minute retry": 375,
     });
     expect(partitions.flat().sort()).toEqual([...names].sort());
-    expect(partitions.filter((part) => part.includes(names[0]))).toHaveLength(1);
-    expect(partitions.findIndex((part) => part.includes(names[0]))).not.toBe(
-      partitions.findIndex((part) => part.includes(names[1])),
+    const [first, second] = [nth(names, 0), nth(names, 1)];
+    expect(partitions.filter((part) => part.includes(first))).toHaveLength(1);
+    expect(partitions.findIndex((part) => part.includes(first))).not.toBe(
+      partitions.findIndex((part) => part.includes(second)),
     );
     for (const name of names) {
       const runtime = name;
@@ -61,7 +63,7 @@ describe("complete recovery scenario partitions", () => {
     expect(() => verifyShardReceipts(receipts.slice(0, 1), matrix, "a".repeat(40))).toThrow();
     expect(() =>
       verifyShardReceipts(
-        [receipts[0], { ...receipts[1], selected: ["first"] }],
+        [nth(receipts, 0), { ...nth(receipts, 1), selected: ["first"] }],
         matrix,
         "a".repeat(40),
       ),
@@ -69,7 +71,7 @@ describe("complete recovery scenario partitions", () => {
     expect(() => verifyShardReceipts(receipts, matrix, "b".repeat(40))).toThrow();
     expect(() =>
       verifyShardReceipts(
-        [receipts[0], { ...receipts[1], all: ["first", "second", "lost"] }],
+        [nth(receipts, 0), { ...nth(receipts, 1), all: ["first", "second", "lost"] }],
         matrix,
         "a".repeat(40),
       ),

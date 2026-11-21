@@ -80,14 +80,15 @@ export interface LegalSectionStrings {
 // same locale catalogs next-intl loads — keeping a single source of truth — and
 // resolve by locale. `as unknown` bridges the JSON's literal-keyed type to the
 // open Record shape these helpers index dynamically.
+const ENGLISH_LEGAL_STRINGS = (enCatalog as unknown as { legal: LegalSectionStrings }).legal;
 const LEGAL_STRINGS: Record<string, LegalSectionStrings> = {
-  en: (enCatalog as unknown as { legal: LegalSectionStrings }).legal,
+  en: ENGLISH_LEGAL_STRINGS,
   de: (deCatalog as unknown as { legal: LegalSectionStrings }).legal,
 };
 
 /** Resolve the legal section strings for a locale, falling back to English. */
 export function legalSectionStrings(locale: string): LegalSectionStrings {
-  return LEGAL_STRINGS[locale] ?? LEGAL_STRINGS.en;
+  return LEGAL_STRINGS[locale] ?? ENGLISH_LEGAL_STRINGS;
 }
 
 /**

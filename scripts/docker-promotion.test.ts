@@ -20,8 +20,8 @@ const scripts = [
   ...workflow
     .slice(workflow.indexOf("  promote:\n"))
     .matchAll(/^ {8}run: \|\n((?:^ {10}.*\n|^\n)*)/gm),
-].map((match) =>
-  match[1]
+].map(([, body = ""]) =>
+  body
     .split("\n")
     .map((line) => line.slice(10))
     .join("\n"),
@@ -41,7 +41,9 @@ function promote(
     for (const app of apps) {
       const dir = join(temp, "digests", `docker-digest-${app}-1`);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, digests[app].slice(7)), "");
+      const digest = digests[app];
+      if (!digest) throw new Error(`No fixture digest for ${app}`);
+      writeFileSync(join(dir, digest.slice(7)), "");
     }
     // The release's migration journal, as the workflow checks it out beside the plan.
     mkdirSync(join(temp, "source/apps/api/src/db/migrations/meta"), { recursive: true });
@@ -135,7 +137,7 @@ if (args[2] === "inspect" && args.includes("--format")) {
 }
 
 const destinations = (args: string[]) =>
-  args.flatMap((arg, index) => (arg === "--tag" ? [args[index + 1]] : []));
+  args.flatMap((arg, index) => (arg === "--tag" ? (args[index + 1] ?? []) : []));
 const destination = (args: string[]) =>
   args.includes("--tag") ? args[args.indexOf("--tag") + 1] : undefined;
 

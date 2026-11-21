@@ -84,8 +84,16 @@ function osmReferenceOf(f: MaptilerFeature): string | undefined {
   if (typeof ref !== "string") return undefined;
   const match = /^osm:([nwr])([1-9]\d*)$/.exec(ref);
   if (!match || match[0] !== ref) return undefined;
-  const type = { n: "node", w: "way", r: "relation" }[match[1]];
-  return `${type}/${match[2]}`;
+  const [, kind, id] = match;
+  const type = kind && OSM_ELEMENT_TYPES[kind];
+  return type && id ? `${type}/${id}` : undefined;
+}
+
+const OSM_ELEMENT_TYPES: Record<string, string> = { n: "node", w: "way", r: "relation" };
+
+/** The kind a MapTiler feature or context id starts with: `municipality` for `municipality.123`. */
+function idKindOf(id: string): string {
+  return id.replace(/\..*$/s, "");
 }
 
 function identityOf(f: MaptilerFeature) {
@@ -122,7 +130,7 @@ function addressEvidenceOf(f: MaptilerFeature, reverse = false): AddressEvidence
   }
   const context: PlaceAddressComponents = {};
   for (const c of f.context ?? []) {
-    const type = c.id.split(".")[0];
+    const type = idKindOf(c.id);
     const key = {
       municipality: "municipality",
       region: "state",
@@ -180,7 +188,7 @@ function autocompleteLabel(f: MaptilerFeature): string {
   const text = normalize(f.text);
   const houseNumber = normalize(number);
   // The full display label disambiguates numbered streets ("Route 66", house "66").
-  const fullStreetLine = normalize(f.place_name.split(",")[0].trim());
+  const fullStreetLine = normalize(f.place_name.replace(/,.*$/s, "").trim());
   if (text === fullStreetLine && ` ${text} `.includes(` ${houseNumber} `)) return f.text;
   return (
     formatStreetLine({
@@ -244,7 +252,7 @@ function localitiesOf(f: MaptilerFeature): string[] {
         .filter(
           (c) =>
             c.id.startsWith("municipality.") ||
-            (["place", "county", "locality"].includes(c.id.split(".")[0]) &&
+            (["place", "county", "locality"].includes(idKindOf(c.id)) &&
               ["city", "town", "village", "hamlet"].includes(c.place_designation ?? "")),
         )
         .map((c) => c.text),

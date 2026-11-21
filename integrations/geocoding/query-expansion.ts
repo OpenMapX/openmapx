@@ -101,8 +101,9 @@ export async function fetchWithVariants<T extends { id: string }>(
   mergeDuplicate?: (first: T, duplicate: T) => T,
 ): Promise<T[]> {
   const variants = getQueryVariants(query);
-  if (variants.length === 1) {
-    return fetcher(variants[0]);
+  const [only] = variants;
+  if (variants.length === 1 && only !== undefined) {
+    return fetcher(only);
   }
   const results = await Promise.all(variants.map((v) => fetcher(v)));
   const seen = new Map<string, T>();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "./fixtures/nth";
 import { fixture } from "./product-release.fixtures";
 import { readProductReleaseConfig } from "./product-release-config.mjs";
 import * as release from "./product-release-plan.mjs";
@@ -51,8 +52,10 @@ describe("named product candidate", () => {
       string,
       Record<string, unknown>
     >;
-    if (coldRefreshedAt === undefined) delete images.api.coldRefreshedAt;
-    else images.api.coldRefreshedAt = coldRefreshedAt;
+    const api = images.api;
+    if (!api) throw new Error("The fixture has no api build metadata");
+    if (coldRefreshedAt === undefined) delete api.coldRefreshedAt;
+    else api.coldRefreshedAt = coldRefreshedAt;
     expect(() => release.planProductRelease(input)).toThrow(
       "Missing actual build metadata for api",
     );
@@ -65,15 +68,18 @@ describe("named product candidate", () => {
         string,
         Record<string, unknown>
       >;
-      images.api.coldRefreshedAt = coldRefreshedAt;
+      const api = images.api;
+      if (!api) throw new Error("The fixture has no api build metadata");
+      api.coldRefreshedAt = coldRefreshedAt;
       expect(() => release.planProductRelease(input)).not.toThrow();
     },
   );
   it("rejects skipped producer jobs and unapproved images", () => {
     const input = fixture();
-    input.jobs[1].conclusion = "skipped";
+    const producer = nth(input.jobs, 1);
+    producer.conclusion = "skipped";
     expect(() => release.planProductRelease(input)).toThrow();
-    input.jobs[1].conclusion = "success";
+    producer.conclusion = "success";
     input.producerManifest.images.api = `evil.invalid/api@sha256:${"b".repeat(64)}`;
     expect(() => release.planProductRelease(input)).toThrow();
   });

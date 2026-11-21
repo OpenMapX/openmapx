@@ -103,9 +103,10 @@ describe("previous published release acquisition", () => {
           if (args[0] === "pull") return { status: 0, stdout: `Digest: ${digest}` };
           if (args[0] === "image") return { status: 0, stdout: digest };
           if (args[0] === "create") return { status: 0, stdout: container };
-          if (args[0] === "cp") {
-            copiedTo = args[2];
-            writeFileSync(copiedTo, malformed ? "invalid" : JSON.stringify({ release }));
+          const destination = args[2];
+          if (args[0] === "cp" && destination) {
+            copiedTo = destination;
+            writeFileSync(destination, malformed ? "invalid" : JSON.stringify({ release }));
           }
           return { status: 0, stdout: "" };
         });
@@ -197,8 +198,7 @@ describe("build selection and mandatory scanning", () => {
         workflow.indexOf("      - name: Select the exact digest to scan"),
         workflow.indexOf("      # Keep the complete finding set"),
       );
-      const script = block
-        .split("        run: |\n")[1]
+      const script = (block.split("        run: |\n")[1] ?? "")
         .split("\n")
         .map((line) => line.slice(10))
         .join("\n");

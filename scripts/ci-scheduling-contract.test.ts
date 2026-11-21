@@ -184,7 +184,7 @@ describe("CI scheduling and context preservation", () => {
     const load = (name: string) =>
       parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
     // Job names are the required status checks of the main ruleset.
-    const required = {
+    const required: Record<string, readonly [string, string]> = {
       ci: ["ci", "lint / types / test"],
       "pr-title": ["validate", "Validate conventional commit title"],
       // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
@@ -195,7 +195,7 @@ describe("CI scheduling and context preservation", () => {
     for (const [name, [id, check]] of Object.entries(required)) {
       const workflow = load(name);
       expect(workflow.on.merge_group, name).toEqual({ types: ["checks_requested"] });
-      expect(workflow.jobs[id].name, name).toBe(check);
+      expect(workflow.jobs[id]?.name, name).toBe(check);
     }
     // Entries queue behind each other, so no two may share a concurrency group.
     const metadata = load("pr-title").concurrency.group;
@@ -209,9 +209,9 @@ describe("CI scheduling and context preservation", () => {
     for (const [name, id] of [
       ["pr-title", "validate"],
       ["cla", "cla"],
-    ]) {
-      const steps = load(name).jobs[id].steps as { if?: string }[];
-      expect(steps[0].if, name).toBe("github.event_name == 'merge_group'");
+    ] as const) {
+      const steps: { if?: string }[] = load(name).jobs[id]?.steps ?? [];
+      expect(steps[0]?.if, name).toBe("github.event_name == 'merge_group'");
       for (const step of steps.slice(1))
         expect(step.if, name).toBe("github.event_name != 'merge_group'");
     }

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { nth } from "../fixtures/nth.js";
 import { compareReports, createReport, type EvalCase, type EvidenceMetadata } from "./report.js";
 import { buildReviewedEvidence, readManifest } from "./reviewed.js";
 
@@ -37,39 +38,41 @@ describe("versioned discovery evidence reports", () => {
   });
 
   it.each(["skipped", "pending", "todo"])("does not turn %s assertions into success", (status) => {
-    expect(createReport(input(status), cases, metadata, "/repo").cases[0].status).toBe(
+    expect(createReport(input(status), cases, metadata, "/repo").cases[0]?.status).toBe(
       "unavailable",
     );
   });
 
   it("does not pass missing assertions or collection failures", () => {
     expect(
-      createReport(input("passed", "other test"), cases, metadata, "/repo").cases[0].status,
+      createReport(input("passed", "other test"), cases, metadata, "/repo").cases[0]?.status,
     ).toBe("unavailable");
     const failedCollection = input();
-    failedCollection.testResults[0].status = "failed";
-    failedCollection.testResults[0].assertionResults = [];
-    expect(createReport(failedCollection, cases, metadata, "/repo").cases[0].status).toBe("failed");
+    nth(failedCollection.testResults, 0).status = "failed";
+    nth(failedCollection.testResults, 0).assertionResults = [];
+    expect(createReport(failedCollection, cases, metadata, "/repo").cases[0]?.status).toBe(
+      "failed",
+    );
   });
 
   it("keeps an independently passing case intact when a different assertion fails", () => {
     const evidence = input();
     evidence.success = false;
-    evidence.testResults[0].status = "failed";
-    evidence.testResults[0].assertionResults.push({
+    nth(evidence.testResults, 0).status = "failed";
+    nth(evidence.testResults, 0).assertionResults.push({
       fullName: "different case",
       status: "failed",
       failureMessages: [],
     });
     const report = createReport(evidence, cases, metadata, "/repo");
-    expect(report.cases[0].status).toBe("passed");
+    expect(report.cases[0]?.status).toBe("passed");
     expect(report.runSucceeded).toBe(false);
   });
 
   it("reports guarded known gaps separately from passing semantic expectations", () => {
     const report = createReport(
       input(),
-      [{ ...cases[0], knownGap: "Expected station missing in recorded data" }],
+      [{ ...nth(cases, 0), knownGap: "Expected station missing in recorded data" }],
       metadata,
       "/repo",
     );
@@ -98,7 +101,7 @@ describe("versioned discovery evidence reports", () => {
 
   it("rejects omitted assertions even when a shortened suite passes", () => {
     const evidence = input();
-    evidence.testResults[0].assertionResults.push({
+    nth(evidence.testResults, 0).assertionResults.push({
       fullName: "GPS recovery",
       status: "passed",
       failureMessages: [],
@@ -133,7 +136,7 @@ describe("versioned discovery evidence reports", () => {
     expect(() => compareReports(before, { ...before, protocolVersion: 3 })).toThrow("protocol");
     const changed = createReport(
       input(),
-      [{ ...cases[0], assertions: ["different budget"] }],
+      [{ ...nth(cases, 0), assertions: ["different budget"] }],
       metadata,
       "/repo",
     );
@@ -154,7 +157,7 @@ describe("versioned discovery evidence reports", () => {
     });
     expect(
       report.reviewed.definitions.find((entry) => entry.id === "business/edeka-alexa")?.entities[0]
-        .label,
+        ?.label,
     ).toBe("EDEKA");
   });
 

@@ -26,7 +26,9 @@ const FIXTURE_DIR = join(
 
 const args = process.argv.slice(2);
 const apiFlag = args.indexOf("--api");
-const api = apiFlag === -1 ? "http://localhost:3001" : args[apiFlag + 1];
+const apiArgument = apiFlag === -1 ? "http://localhost:3001" : args[apiFlag + 1];
+if (!apiArgument) throw new Error("--api needs a base URL");
+const api: string = apiArgument;
 const only = new Set(args.filter((arg, i) => !arg.startsWith("--") && args[i - 1] !== "--api"));
 
 async function get<T>(path: string, params: Record<string, string>): Promise<T> {

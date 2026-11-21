@@ -113,7 +113,7 @@ describe("data-manager SDK generation", () => {
     for (const [path, operationId] of [
       [archive, "headOfflinePackageArchive"],
       [glyph, "headOfflineGlyph"],
-    ]) {
+    ] as const) {
       for (const status of Object.keys(actual.paths[path].head.responses)) {
         expect(actual.paths[path].head.responses[status]).not.toHaveProperty("content");
         expect(sdk).toContain(`export type ${operationId}Response${status} = {\n  data: void;`);

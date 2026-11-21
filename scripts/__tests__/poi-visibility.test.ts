@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
+import { nth } from "../fixtures/nth.ts";
 
 // Use the exact expression engine installed with the renderer, so a stale
 // generated style or invalid filter cannot pass a policy-helper-only test.
@@ -110,7 +111,7 @@ for (const file of ["openmapx-streets.json", "openmapx-dark.json"]) {
       };
       expect(eligible(15, properties)).toBe(0);
       expect(
-        featureFilter(style.layers[landmark].filter, "landmark.filter").filter(
+        featureFilter(nth(style.layers, landmark).filter, "landmark.filter").filter(
           { zoom: 15 },
           { type: 1, properties },
         ),
