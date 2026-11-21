@@ -33,7 +33,21 @@ function positions(geometry: RoadConditionEvent["geometry"]): [number, number][]
   if (raw.length <= VERTEX_SAMPLE) return raw;
   const stride = raw.length / VERTEX_SAMPLE;
   const out: [number, number][] = [];
-  for (let i = 0; i < VERTEX_SAMPLE; i++) out.push(raw[Math.floor(i * stride)]);
+  for (let i = 0; i < VERTEX_SAMPLE; i++) {
+    const point = raw[Math.floor(i * stride)];
+    if (!point) throw new RangeError(`No vertex sample ${i} of ${raw.length}`);
+    out.push(point);
+  }
+  return out;
+}
+
+/** Consecutive vertex pairs of a line. */
+function segmentsOf<T>(line: readonly T[]): [T, T][] {
+  const out: [T, T][] = [];
+  for (const [i, b] of line.entries()) {
+    const a = line[i - 1];
+    if (a !== undefined) out.push([a, b]);
+  }
   return out;
 }
 
@@ -66,10 +80,11 @@ function pointToPolylineMeters(
   verts: [number, number][],
   cosRefLat: number,
 ): number {
-  if (verts.length === 1) return pointToSegmentMeters(p, verts[0], verts[0], cosRefLat);
+  const [only] = verts;
+  if (verts.length === 1 && only) return pointToSegmentMeters(p, only, only, cosRefLat);
   let min = Infinity;
-  for (let i = 0; i < verts.length - 1; i++) {
-    const d = pointToSegmentMeters(p, verts[i], verts[i + 1], cosRefLat);
+  for (const [a, b] of segmentsOf(verts)) {
+    const d = pointToSegmentMeters(p, a, b, cosRefLat);
     if (d < min) min = d;
   }
   return min;
@@ -81,8 +96,10 @@ function pointToPolylineMeters(
  * lines (whose vertices need never coincide), still register as co-located.
  */
 function geometryDistanceMeters(a: [number, number][], b: [number, number][]): number {
-  if (a.length === 0 || b.length === 0) return Infinity;
-  const cosRefLat = Math.cos((((a[0][1] + b[0][1]) / 2) * Math.PI) / 180);
+  const [a0] = a;
+  const [b0] = b;
+  if (!a0 || !b0) return Infinity;
+  const cosRefLat = Math.cos((((a0[1] + b0[1]) / 2) * Math.PI) / 180);
   let min = Infinity;
   for (const p of a) {
     const d = pointToPolylineMeters(p, b, cosRefLat);
@@ -224,16 +241,17 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
       if (hasRestrictionEvidence(s) || hasRestrictionEvidence(e)) return false;
       if (survivorKeys[i] !== key) return false;
       const sp = survivorPos[i];
-      if (ep.length === 0 || sp.length === 0) return false;
+      if (ep.length === 0 || !sp || sp.length === 0) return false;
       if (geometryDistanceMeters(ep, sp) > CLUSTER_METERS) return false;
       if (roadsConflict(s, e)) return false;
       return headlineSimilar(s.headline, e.headline) && liesAlong(s.geometry, e.geometry);
     });
-    if (dupIdx === -1) {
+    const duplicate = survivors[dupIdx];
+    if (!duplicate) {
       survivors.push(e);
       survivorPos.push(ep);
       survivorKeys.push(key);
-    } else if (newer(survivors[dupIdx], e) === e) {
+    } else if (newer(duplicate, e) === e) {
       // The newer copy survives whole, with its own geometry as the cluster's.
       survivors[dupIdx] = e;
       survivorPos[dupIdx] = ep;
@@ -355,9 +373,9 @@ function bboxesNear(a: Shape["bbox"], b: Shape["bbox"], meters: number): boolean
 function lengthMeters(parts: Part[], cosRefLat: number): number {
   let sum = 0;
   for (const part of parts)
-    for (let i = 1; i < part.length; i++) {
-      const [ax, ay] = toLocal(part[i - 1], cosRefLat);
-      const [bx, by] = toLocal(part[i], cosRefLat);
+    for (const [a, b] of segmentsOf(part)) {
+      const [ax, ay] = toLocal(a, cosRefLat);
+      const [bx, by] = toLocal(b, cosRefLat);
       sum += Math.hypot(bx - ax, by - ay);
     }
   return sum;
@@ -366,21 +384,21 @@ function lengthMeters(parts: Part[], cosRefLat: number): number {
 /** Points spread evenly along a shape's lines, about {@link SAMPLES} of them and one per segment. */
 function samplesAlong(parts: Part[], cosRefLat: number): [number, number][] {
   const total = lengthMeters(parts, cosRefLat);
-  if (total === 0) return parts.map((part) => part[0]);
+  if (total === 0) return parts.flatMap((part) => part.slice(0, 1));
   const step = total / SAMPLES;
   const out: [number, number][] = [];
   for (const part of parts) {
-    if (part.length === 1) out.push(part[0]);
-    for (let i = 1; i < part.length; i++) {
-      const [ax, ay] = part[i - 1];
-      const [bx, by] = part[i];
-      const [lx, ly] = toLocal(part[i - 1], cosRefLat);
-      const [mx, my] = toLocal(part[i], cosRefLat);
+    if (part.length === 1) out.push(...part);
+    for (const [a, b] of segmentsOf(part)) {
+      const [ax, ay] = a;
+      const [bx, by] = b;
+      const [lx, ly] = toLocal(a, cosRefLat);
+      const [mx, my] = toLocal(b, cosRefLat);
       const n = Math.max(1, Math.ceil(Math.hypot(mx - lx, my - ly) / step));
       for (let k = 0; k < n; k++) out.push([ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n]);
     }
-    const last = part[part.length - 1];
-    if (part.length > 1) out.push(last);
+    const last = part.at(-1);
+    if (part.length > 1 && last) out.push(last);
   }
   return out;
 }

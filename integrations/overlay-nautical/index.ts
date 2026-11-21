@@ -191,13 +191,22 @@ export function parseHarbourJsonp(text: string): HarborFeature[] {
   const re =
     /putHarbourMarker\(\s*(\d+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*(\d+)\s*\)/g;
   const features: HarborFeature[] = [];
-  for (const match of text.matchAll(re)) {
-    const id = Number.parseInt(match[1], 10);
-    const lng = Number.parseFloat(match[2]);
-    const lat = Number.parseFloat(match[3]);
-    const name = match[4].trim();
-    const wikiUrl = match[5].trim();
-    const category = Number.parseInt(match[6], 10);
+  for (const [, idText, lngText, latText, rawName, rawWikiUrl, categoryText] of text.matchAll(re)) {
+    if (
+      idText === undefined ||
+      lngText === undefined ||
+      latText === undefined ||
+      rawName === undefined ||
+      rawWikiUrl === undefined ||
+      categoryText === undefined
+    )
+      continue;
+    const id = Number.parseInt(idText, 10);
+    const lng = Number.parseFloat(lngText);
+    const lat = Number.parseFloat(latText);
+    const name = rawName.trim();
+    const wikiUrl = rawWikiUrl.trim();
+    const category = Number.parseInt(categoryText, 10);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     features.push({
       type: "Feature",
@@ -512,6 +521,10 @@ export function setup(ctx: IntegrationContext): void {
   // ---- Harbour detail (Overpass-enriched) --------------------------------
   ctx.registerRoute("GET", "/harbor/:id", async (req, reply) => {
     const id = req.params.id;
+    if (id === undefined) {
+      reply.status(400).send({ error: "Missing harbour id" });
+      return;
+    }
     const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
     const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     const nameParam = (scalarQueries(req.query).name ?? "").trim();
@@ -547,9 +560,9 @@ export function setup(ctx: IntegrationContext): void {
         lat,
         category: Number.isFinite(categoryParam) ? categoryParam : 0,
         type:
-          Number.isFinite(categoryParam) && categoryParam in HARBOR_TYPE_BY_CATEGORY
+          (Number.isFinite(categoryParam) && Object.hasOwn(HARBOR_TYPE_BY_CATEGORY, categoryParam)
             ? HARBOR_TYPE_BY_CATEGORY[categoryParam]
-            : "harbour",
+            : undefined) ?? "harbour",
       },
       facilities,
       nearestTideStation,
@@ -683,12 +696,15 @@ export function setup(ctx: IntegrationContext): void {
 
     const collection: StationFeatureCollection = {
       type: "FeatureCollection",
-      features: limited.map((s) => {
-        const primaryType = s.types.reduce(
+      // A station without any capability has no type to draw or rank by.
+      features: limited.flatMap((s) => {
+        const [firstType, ...otherTypes] = s.types;
+        if (firstType === undefined) return [];
+        const primaryType = otherTypes.reduce(
           (best, t) => (CAPABILITY_RANK[t] < CAPABILITY_RANK[best] ? t : best),
-          s.types[0],
+          firstType,
         );
-        return {
+        const feature: StationFeatureCollection["features"][number] = {
           type: "Feature",
           geometry: { type: "Point", coordinates: [s.lng, s.lat] },
           properties: {
@@ -703,9 +719,10 @@ export function setup(ctx: IntegrationContext): void {
             hasTide: s.types.includes("tide-predictions"),
             hasWaterLevel: s.types.includes("water-level"),
             hasCurrents: s.types.includes("currents"),
-            rank: CAPABILITY_RANK[primaryType] ?? 99,
+            rank: CAPABILITY_RANK[primaryType],
           },
         };
+        return [feature];
       }),
     };
 
@@ -740,7 +757,7 @@ export function setup(ctx: IntegrationContext): void {
   // have a bbox-free harbor lookup API, so we resolve to a coordinate-only
   // Place using the supplied lat/lng hint.
   registerPlaceResolver("openseamap-harbour", async (value, resolveCtx) => {
-    const id = value.split(":")[0].trim();
+    const id = value.replace(/:.*/s, "").trim();
     if (!id) return null;
     const lat = resolveCtx.lat;
     const lng = resolveCtx.lng;

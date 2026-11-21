@@ -158,18 +158,17 @@ export function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] 
 }
 
 export function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null {
-  if (hourly.length === 0) return null;
   const now = Date.now();
-  let bestIdx = 0;
+  let h = hourly[0];
+  if (!h) return null;
   let bestDiff = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < hourly.length; i++) {
-    const diff = Math.abs(new Date(hourly[i].time).getTime() - now);
+  for (const point of hourly) {
+    const diff = Math.abs(new Date(point.time).getTime() - now);
     if (diff < bestDiff) {
       bestDiff = diff;
-      bestIdx = i;
+      h = point;
     }
   }
-  const h = hourly[bestIdx];
   return {
     time: h.time,
     waveHeightM: h.waveHeightM,

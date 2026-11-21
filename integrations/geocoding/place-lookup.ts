@@ -251,7 +251,7 @@ function toPlace(
   // proper street line ("Kinderhauser Straße 40") instead of falling back to
   // display_name's first segment, which is the bare house number in DE/AT/CH.
   const name =
-    r.name?.trim() || formatStreetLine(components) || r.display_name.split(",")[0].trim();
+    r.name?.trim() || formatStreetLine(components) || r.display_name.replace(/,.*/s, "").trim();
   const city =
     components.city ??
     components.town ??
@@ -344,7 +344,7 @@ export async function fetchOsmBoundary(
   signal?: AbortSignal,
 ): Promise<{ boundary: AreaGeometry; boundingBox?: BBox; contributors: Attribution[] } | null> {
   const [osmType, osmId] = osmRef.split("/");
-  const prefix = OSM_TYPE_PREFIX[osmType];
+  const prefix = osmType === undefined ? undefined : OSM_TYPE_PREFIX[osmType];
   if (!prefix || !osmId) return null;
 
   const url = new URL(`${NOMINATIM_URL}/lookup`);
@@ -365,7 +365,13 @@ export async function fetchOsmBoundary(
     let boundingBox: BBox | undefined;
     if (result.boundingbox?.length === 4) {
       const [south, north, west, east] = result.boundingbox.map(Number);
-      if ([south, north, west, east].every(Number.isFinite)) {
+      if (
+        south !== undefined &&
+        north !== undefined &&
+        west !== undefined &&
+        east !== undefined &&
+        [south, north, west, east].every(Number.isFinite)
+      ) {
         boundingBox = [west, south, east, north];
       }
     }
@@ -560,7 +566,6 @@ export async function lookupByNameAndCoords(
   url.searchParams.set("limit", "5");
 
   const results = await fetchNominatim<NominatimDetailResult[]>(url, lang);
-  if (results.length === 0) return null;
 
   // A Wikidata place prefers the objects tagged as that item, so Leipzig
   // Hauptbahnhof resolves to its station rather than a nearer stop position.
@@ -575,7 +580,7 @@ export async function lookupByNameAndCoords(
     }))
     .sort((a, b) => Number(b.item) - Number(a.item) || a.dist - b.dist)[0];
 
-  if (best.dist > MAX_DISTANCE_M) return null;
+  if (!best || best.dist > MAX_DISTANCE_M) return null;
 
   return toPlace(best.r, originalId);
 }
@@ -685,9 +690,8 @@ export async function lookupByOsmFilters(
       .filter((c) => c.dist <= OVERPASS_MAX_DISTANCE_M)
       .sort((a, b) => a.dist - b.dist);
 
-    if (candidates.length === 0) return null;
-
     let best = candidates[0];
+    if (!best) return null;
     if (hasIdentity && identity) {
       const matched = candidates.find((c) => osmMatchesIdentity(c.el.tags ?? {}, identity));
       if (!matched) return null;

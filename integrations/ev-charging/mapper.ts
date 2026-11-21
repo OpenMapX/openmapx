@@ -508,29 +508,21 @@ function priceToken(component: Component, currency: string): I18nToken {
 
 /** Days in week order, three or more in a row as a range: "Mon–Fri", "Sat, Sun". */
 function daysToken(days: readonly Day[]): Translatable | undefined {
-  const sorted = WEEK.filter((d) => days.includes(d));
-  const parts: Translatable[] = [];
-  let start = 0;
-  while (start < sorted.length) {
-    let end = start;
-    while (
-      end + 1 < sorted.length &&
-      WEEK.indexOf(sorted[end + 1]) === WEEK.indexOf(sorted[end]) + 1
-    ) {
-      end++;
-    }
-    if (end - start >= 2) {
-      parts.push(
-        token("qualifier.dayRange", {
-          from: token(`day.${sorted[start]}`),
-          to: token(`day.${sorted[end]}`),
-        }),
-      );
-    } else {
-      for (let i = start; i <= end; i++) parts.push(token(`day.${sorted[i]}`));
-    }
-    start = end + 1;
+  const runs: [Day, ...Day[]][] = [];
+  for (const day of WEEK.filter((d) => days.includes(d))) {
+    const run = runs.at(-1);
+    const previous = run?.at(-1);
+    if (run && previous !== undefined && WEEK.indexOf(day) === WEEK.indexOf(previous) + 1)
+      run.push(day);
+    else runs.push([day]);
   }
+  const parts: Translatable[] = runs.flatMap((run) => {
+    const [from] = run;
+    const to = run.at(-1);
+    return run.length >= 3 && to !== undefined
+      ? [token("qualifier.dayRange", { from: token(`day.${from}`), to: token(`day.${to}`) })]
+      : run.map((day) => token(`day.${day}`));
+  });
   return joinParts(parts, "qualifier.list");
 }
 
@@ -677,26 +669,29 @@ function groupLabels(site: ChargingSite): {
   for (const key of new Set(keys)) {
     // A feed that repeats a tariff under another id prices the same connectors the same way.
     const contents = new Set<string>();
-    const members = keys.flatMap((k, i) => {
-      if (k !== key) return [];
-      const { currency, elements, priceIncludesVat } = site.tariffs[i];
+    const members = site.tariffs.flatMap((tariff, index) => {
+      if (keys[index] !== key) return [];
+      const { currency, elements, priceIncludesVat } = tariff;
       const content = JSON.stringify({ currency, elements, priceIncludesVat });
       if (contents.has(content)) {
-        repeats.add(i);
+        repeats.add(index);
         return [];
       }
       contents.add(content);
-      return [i];
+      return [{ index, tariff }];
     });
-    if (members.length === 1) {
-      if (byConnector) labels[members[0]] = connectorLabels[members[0]];
+    const [only] = members;
+    if (members.length === 1 && only) {
+      if (byConnector) labels[only.index] = connectorLabels[only.index];
       continue;
     }
-    const names = tariffNames(members.map((i) => site.tariffs[i]));
-    for (const [n, i] of members.entries()) {
-      labels[i] = byConnector
-        ? token("pricing.tariffFor", { connectors: connectorLabels[i], tariff: names[n] })
-        : names[n];
+    const names = tariffNames(members.map((member) => member.tariff));
+    for (const [n, { index }] of members.entries()) {
+      const name = names[n];
+      if (name === undefined) throw new RangeError(`No tariff name for group member ${n}`);
+      labels[index] = byConnector
+        ? token("pricing.tariffFor", { connectors: connectorLabels[index], tariff: name })
+        : name;
     }
   }
   return { labels, repeats };
@@ -730,11 +725,12 @@ function pricingRows(site: ChargingSite): PricingRow[] {
     }
   }
   const grouped = labels.some((label) => label !== undefined);
-  return rows.map((row, index) =>
-    index > 0 && grouped && JSON.stringify(row[0]) === JSON.stringify(rows[index - 1][0])
+  return rows.map((row, index) => {
+    const previous = rows[index - 1];
+    return previous && grouped && JSON.stringify(row[0]) === JSON.stringify(previous[0])
       ? ["", row[1], row[2]]
-      : row,
-  );
+      : row;
+  });
 }
 
 /** Each tariff's own page, or its description where there is no page; each once. */

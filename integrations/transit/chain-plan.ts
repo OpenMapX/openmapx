@@ -7,6 +7,7 @@ import {
   requiredTemporalSemantics,
   resolveScheduleConstraints,
   type ScheduleAnchor,
+  stopAt,
   type TemporalCapabilities,
   type TripSchedule,
   type WaypointSchedule,
@@ -44,8 +45,9 @@ export function selectItinerary(
   itineraries: TripItinerary[],
   deadlineMs: number | null,
 ): TripItinerary | null {
-  if (itineraries.length === 0) return null;
-  if (deadlineMs === null) return itineraries[0];
+  const [first] = itineraries;
+  if (!first) return null;
+  if (deadlineMs === null) return first;
   const inTime = itineraries.find((option) => Date.parse(option.endTime) <= deadlineMs);
   if (inTime) return inTime;
   return itineraries.reduce((earliest, option) =>
@@ -55,8 +57,7 @@ export function selectItinerary(
 
 /** Realtime arrival minus scheduled arrival, from the last leg that reports both. */
 function arrivalDelaySeconds(itinerary: TripItinerary): number {
-  for (let index = itinerary.legs.length - 1; index >= 0; index -= 1) {
-    const leg = itinerary.legs[index];
+  for (const leg of [...itinerary.legs].reverse()) {
     if (leg.scheduledEndTime === undefined) continue;
     return Math.round((Date.parse(leg.endTime) - Date.parse(leg.scheduledEndTime)) / 1000);
   }
@@ -91,10 +92,13 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     instantMs: number,
     pinArrival: boolean,
   ): Promise<ChainedTripSegment> => {
+    const from = args.waypoints[segmentIndex];
+    const to = args.waypoints[segmentIndex + 1];
+    if (!from || !to) throw new RangeError(`No waypoints for transit segment ${segmentIndex}`);
     const request: TripPlanRequest = {
       ...args.baseRequest,
-      from: args.waypoints[segmentIndex],
-      to: args.waypoints[segmentIndex + 1],
+      from,
+      to,
       ...(pinArrival
         ? { arrivalTime: new Date(instantMs).toISOString() }
         : { departureTime: new Date(instantMs).toISOString() }),
@@ -110,7 +114,9 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
           return Number.isFinite(start) && Number.isFinite(end) && end >= start;
         })
       : options;
-    const deadline = pinArrival ? instantMs : resolved.stops[segmentIndex + 1].latestArrivalMs;
+    const deadline = pinArrival
+      ? instantMs
+      : stopAt(resolved.stops, segmentIndex + 1).latestArrivalMs;
     const chosen = selectItinerary(itineraries, deadline);
     if (!chosen) {
       warnings.push({ kind: "no-connection", segmentIndex });
@@ -174,16 +180,20 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
         violations.push({ kind: "unreachable", fromIndex: index, toIndex: index + 1 });
         break;
       }
-      deadline = arrivalBefore(resolved.stops[index], Date.parse(segment.itinerary.startTime));
+      deadline = arrivalBefore(
+        stopAt(resolved.stops, index),
+        Date.parse(segment.itinerary.startTime),
+      );
     }
     const retained = segments.filter(
       (segment): segment is ChainedTripSegment => segment !== undefined,
     );
-    for (let index = 1; index < retained.length; index += 1) {
-      const segment = retained[index];
+    for (const [index, segment] of retained.entries()) {
+      const previous = retained[index - 1];
+      if (!previous) continue;
       const ready = departureAfter(
-        resolved.stops[segment.fromIndex],
-        Date.parse(retained[index - 1].itinerary.endTime),
+        stopAt(resolved.stops, segment.fromIndex),
+        Date.parse(previous.itinerary.endTime),
       );
       segment.boardingWaitSeconds = Math.max(
         0,
@@ -211,19 +221,16 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
 
   // Waiting depends on both the selected departure and the prior selected arrival.
   // Alternatives are retained separately and never certify the selected chain.
-  for (let index = 0; index < solved.length; index += 1) {
-    const segment = solved[index];
+  for (const [index, segment] of solved.entries()) {
     const previous = solved[index - 1];
-    segment.fieldContributors = {
-      ...segment.fieldContributors,
-      boardingWaitSeconds: snapshotContributors(
-        contributorsForField(segment.itinerary, "startTime"),
-        previous ? contributorsForField(previous.itinerary, "endTime") : [],
-      ),
-    };
+    const boardingWaitSeconds = snapshotContributors(
+      contributorsForField(segment.itinerary, "startTime"),
+      previous ? contributorsForField(previous.itinerary, "endTime") : [],
+    );
+    segment.fieldContributors = { ...segment.fieldContributors, boardingWaitSeconds };
     segment.contributors = snapshotContributors(
       segment.itinerary.contributors ?? [],
-      segment.fieldContributors.boardingWaitSeconds,
+      boardingWaitSeconds,
       segment.fieldContributors.delaySeconds ?? [],
     );
   }
@@ -231,13 +238,15 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
   // Guard the composed chain rather than trusting the provider: an itinerary
   // that starts before the previous segment lands is a real missed connection,
   // whatever departure time it was asked for.
-  for (let index = 0; index + 1 < solved.length; index += 1) {
-    const lands = Date.parse(solved[index].itinerary.endTime);
-    const leaves = Date.parse(solved[index + 1].itinerary.startTime);
+  for (const [index, current] of solved.entries()) {
+    const next = solved[index + 1];
+    if (!next) continue;
+    const lands = Date.parse(current.itinerary.endTime);
+    const leaves = Date.parse(next.itinerary.startTime);
     if (leaves < lands) {
       warnings.push({
         kind: "missed-connection",
-        afterSegmentIndex: solved[index].fromIndex,
+        afterSegmentIndex: current.fromIndex,
         overlapSeconds: Math.round((lands - leaves) / 1000),
       });
     }

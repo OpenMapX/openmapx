@@ -4,6 +4,8 @@ import {
   parsePositiveRadius,
   parseWgs84Point,
   type RouteHandler,
+  type RouteParams,
+  type RouteRequest,
   scalarQueries,
 } from "@openmapx/integration-framework";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
@@ -25,6 +27,9 @@ const STOP_AREA_TTL_SECONDS = 7 * 24 * 60 * 60;
 function utcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** A request to one of the `/stops/:id/…` routes. */
+type StopRequest = RouteRequest<RouteParams<"/stops/:id">>;
 
 /** Handlers for the stop lookups: by viewport, by name, by id and per stop. */
 export function createStopHandlers(ctx: IntegrationContext, orchestrator: TransitOrchestrator) {
@@ -83,7 +88,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(stops));
     },
 
-    async byId(req, reply) {
+    async byId(req: StopRequest, reply) {
       const res = await orchestrator.getStop(req.params.id);
       if (!res.data) {
         reply.status(404).send({ error: "Stop not found" });
@@ -93,7 +98,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
     },
 
     /** Accessibility-annotated transfers out of a stop. */
-    async transfers(req, reply) {
+    async transfers(req: StopRequest, reply) {
       const stopId = req.params.id;
       const cacheKey = `stop-transfers:${stopId}`;
       const env = await ctx.cache.withCache(cacheKey, 3600, async () =>
@@ -103,7 +108,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(env);
     },
 
-    async infrastructure(req, reply) {
+    async infrastructure(req: StopRequest, reply) {
       const stopId = req.params.id;
       const cacheKey = `stop-infra:${stopId}`;
       let env: MobilityEnvelope<unknown> | null = null;
@@ -128,7 +133,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
      * The stop's platform and stop place, for navigation to decide that a rider
      * reached it. 204 when nothing beyond its point is known.
      */
-    async area(req, reply) {
+    async area(req: StopRequest, reply) {
       const query = parseStopAreaQuery(decodeURIComponent(req.params.id), scalarQueries(req.query));
       if (!query) {
         reply.status(400).send({ error: "Invalid stop area query" });
@@ -164,13 +169,13 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       );
     },
 
-    async platformStops(req, reply) {
+    async platformStops(req: StopRequest, reply) {
       reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
       const result = await orchestrator.getStopPlatforms(req.params.id);
       reply.send(toEnvelope(result));
     },
 
-    async timetable(req, reply) {
+    async timetable(req: StopRequest, reply) {
       const date = scalarQueries(req.query).date ?? utcDate();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         reply.status(400).send({ error: "Invalid date format. Use YYYY-MM-DD." });
@@ -185,7 +190,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(result));
     },
 
-    async departures(req, reply) {
+    async departures(req: StopRequest, reply) {
       const minutes = parseMinutes(scalarQueries(req.query).minutes);
       if (!minutes) {
         reply.status(400).send({ error: "Invalid minutes param" });
@@ -225,7 +230,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       }
     },
 
-    async arrivals(req, reply) {
+    async arrivals(req: StopRequest, reply) {
       const minutes = parseMinutes(scalarQueries(req.query).minutes);
       if (!minutes) {
         reply.status(400).send({ error: "Invalid minutes param" });
@@ -241,7 +246,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(result);
     },
 
-    async alerts(req, reply) {
+    async alerts(req: StopRequest, reply) {
       const stopId = req.params.id;
       const cacheKey = `transit:stop-alerts:${stopId}`;
       const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
@@ -252,7 +257,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(alerts);
     },
 
-    async facilities(req, reply) {
+    async facilities(req: StopRequest, reply) {
       const result = await orchestrator.getFacilities(req.params.id);
       reply.send(toEnvelope(result));
     },

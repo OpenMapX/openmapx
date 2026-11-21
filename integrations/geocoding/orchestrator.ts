@@ -75,15 +75,21 @@ function tagProvider<T extends ContributingRecord & { provider?: string; sourceI
   results: T[],
   integrationId: string,
 ): T[] {
-  return results.map((record) => {
-    const provider = record.provider ?? integrationId;
-    const declared = catalogue.declaredByIntegration.get(provider) ?? [];
-    const tagged = { ...record, provider };
-    if (record.contributors === undefined && declared.length === 0 && !catalogue.hasRuntime)
-      return tagged;
-    const contributors = resolveCapturedContributors(catalogue, provider, record, true);
-    return withContributors(tagged, contributors);
-  });
+  return results.map((record) => tagRecord(catalogue, record, integrationId));
+}
+
+function tagRecord<T extends ContributingRecord & { provider?: string; sourceIds?: string[] }>(
+  catalogue: CapturedContributorCatalogue,
+  record: T,
+  integrationId: string,
+): T {
+  const provider = record.provider ?? integrationId;
+  const declared = catalogue.declaredByIntegration.get(provider) ?? [];
+  const tagged = { ...record, provider };
+  if (record.contributors === undefined && declared.length === 0 && !catalogue.hasRuntime)
+    return tagged;
+  const contributors = resolveCapturedContributors(catalogue, provider, record, true);
+  return withContributors(tagged, contributors);
 }
 
 /**
@@ -113,8 +119,8 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
     chain.push({ integrationId, provider });
   }
 
-  if (chain.length === 1) {
-    const single = chain[0];
+  const [single] = chain;
+  if (chain.length === 1 && single) {
     return {
       ...single.provider,
       async geocode(query, lang, proximity) {
@@ -134,18 +140,18 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       async reverseGeocode(lat, lng, lang) {
         const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
         const result = await single.provider.reverseGeocode(lat, lng, lang);
-        return result ? tagProvider(catalogue, [result], single.integrationId)[0] : null;
+        return result ? tagRecord(catalogue, result, single.integrationId) : null;
       },
     };
   }
 
   return {
     async geocode(query, lang, proximity) {
-      for (let i = 0; i < chain.length; i++) {
+      for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
-          const results = await chain[i].provider.geocode(query, lang, proximity);
-          if (results.length > 0) return tagProvider(catalogue, results, chain[i].integrationId);
+          const results = await provider.geocode(query, lang, proximity);
+          if (results.length > 0) return tagProvider(catalogue, results, integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -153,11 +159,11 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return [];
     },
     async autocomplete(query, lang, bias) {
-      for (let i = 0; i < chain.length; i++) {
+      for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
-          const results = await chain[i].provider.autocomplete(query, lang, bias);
-          if (results.length > 0) return tagProvider(catalogue, results, chain[i].integrationId);
+          const results = await provider.autocomplete(query, lang, bias);
+          if (results.length > 0) return tagProvider(catalogue, results, integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -165,13 +171,11 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return [];
     },
     async reverseGeocode(lat, lng, lang) {
-      for (let i = 0; i < chain.length; i++) {
+      for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
-          const result = await chain[i].provider.reverseGeocode(lat, lng, lang);
-          if (result) {
-            return tagProvider(catalogue, [result], chain[i].integrationId)[0];
-          }
+          const result = await provider.reverseGeocode(lat, lng, lang);
+          if (result) return tagRecord(catalogue, result, integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }

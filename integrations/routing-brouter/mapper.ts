@@ -1,6 +1,8 @@
 import {
   haversineDistance,
+  indexAt,
   type LngLat,
+  numberAt,
   type Route,
   type RouteStep,
   type RoutingOptions,
@@ -20,6 +22,12 @@ function metric(value: unknown): number {
   if (!Number.isFinite(n) || n < 0) throw new Error("Invalid BRouter metric");
   return n;
 }
+/** A point at an index the mapper derived from the same list. */
+function pointAt(points: readonly LngLat[], index: number): LngLat {
+  const point = points[index];
+  if (!point) throw new RangeError(`No BRouter point ${index} of ${points.length}`);
+  return point;
+}
 /** Minimum-distance ordered waypoint assignment. Endpoints are fixed, so loops
  * and repeat visits cannot be mistaken for an earlier destination occurrence. */
 function waypointIndices(geometry: LngLat[], waypoints: LngLat[]): number[] {
@@ -35,11 +43,12 @@ function waypointIndices(geometry: LngLat[], waypoints: LngLat[]): number[] {
     let best = Infinity,
       bestIndex = -1;
     for (let i = 1; i < n - 1; i++) {
-      if (costs[i - 1] < best) {
-        best = costs[i - 1];
+      const cost = numberAt(costs, i - 1);
+      if (cost < best) {
+        best = cost;
         bestIndex = i - 1;
       }
-      const distance = haversineDistance(geometry[i], waypoints[w]);
+      const distance = haversineDistance(pointAt(geometry, i), pointAt(waypoints, w));
       if (distance <= 1000 && Number.isFinite(best)) {
         next[i] = best + distance;
         prev[i] = bestIndex;
@@ -51,17 +60,19 @@ function waypointIndices(geometry: LngLat[], waypoints: LngLat[]): number[] {
   let last = 0;
   if (predecessors.length) {
     let best = Infinity;
-    for (let i = 1; i < n - 1; i++)
-      if (costs[i] < best) {
-        best = costs[i];
+    for (let i = 1; i < n - 1; i++) {
+      const cost = numberAt(costs, i);
+      if (cost < best) {
+        best = cost;
         last = i;
       }
+    }
     if (!Number.isFinite(best)) throw new Error("BRouter waypoint is not on the route");
   }
   const indices = [n - 1];
-  for (let w = predecessors.length - 1; w >= 0; w--) {
+  for (const prev of [...predecessors].reverse()) {
     indices.unshift(last);
-    last = predecessors[w][last];
+    last = indexAt(prev, last);
   }
   indices.unshift(0);
   return indices;
@@ -129,9 +140,13 @@ export function mapBrouterRoute(
   const timeEnd = times.at(-1) as number;
   if (duration > 0 && timeEnd <= 0) throw new Error("Missing BRouter travel times");
   const cumulative = [0];
-  for (let i = 1; i < geometry.length; i++)
-    cumulative.push(cumulative[i - 1] + haversineDistance(geometry[i - 1], geometry[i]));
-  const total = cumulative[cumulative.length - 1];
+  let total = 0;
+  for (const [i, point] of geometry.entries()) {
+    const previous = geometry[i - 1];
+    if (!previous) continue;
+    total += haversineDistance(previous, point);
+    cumulative.push(total);
+  }
   if (total <= 0) throw new Error("Empty BRouter route");
   const indices = waypointIndices(geometry, waypoints);
   const hints = properties.voicehints === undefined ? [] : properties.voicehints;
@@ -142,17 +157,17 @@ export function mapBrouterRoute(
   >();
   let previous = -1;
   for (const h of hints) {
+    const cmd = Array.isArray(h) ? COMMANDS[h[1]] : undefined;
     if (
       !Array.isArray(h) ||
       !Number.isInteger(h[0]) ||
       h[0] < 0 ||
       h[0] >= geometry.length ||
       h[0] <= previous ||
-      !COMMANDS[h[1]]
+      !cmd
     )
       throw new Error("Invalid BRouter maneuver");
     previous = h[0];
-    const cmd = COMMANDS[h[1]];
     if (cmd.type === "roundabout" && (!Number.isInteger(h[2]) || h[2] === 0))
       throw new Error("Invalid BRouter roundabout exit");
     commands.set(h[0], {
@@ -167,7 +182,7 @@ export function mapBrouterRoute(
   }
   const t = createTranslator(options.lang, "directions.bikeManeuvers");
   const legs = indices.slice(0, -1).map((start, legIndex) => {
-    const end = indices[legIndex + 1];
+    const end = indexAt(indices, legIndex + 1);
     const starts = [start, ...[...commands.keys()].filter((i) => i > start && i < end)];
     const steps: RouteStep[] = starts.map((index, i) => {
       const next = starts[i + 1] ?? end;
@@ -177,7 +192,7 @@ export function mapBrouterRoute(
           : (commands.get(index) ?? { key: "continue", type: "continue" });
       return {
         instruction: t(cmd.key, { exit: cmd.exit ?? 0 }),
-        distance: ((cumulative[next] - cumulative[index]) / total) * distance,
+        distance: ((numberAt(cumulative, next) - numberAt(cumulative, index)) / total) * distance,
         duration: timeEnd === 0 ? 0 : ((times[next] - times[index]) / timeEnd) * duration,
         coordinates: geometry.slice(index, next + 1),
         maneuver: { type: cmd.type, ...(cmd.modifier ? { modifier: cmd.modifier } : {}) },
@@ -191,11 +206,11 @@ export function mapBrouterRoute(
         instruction: t("arrive"),
         distance: 0,
         duration: 0,
-        coordinates: [geometry[end]],
+        coordinates: [pointAt(geometry, end)],
         maneuver: { type: "arrive" },
       });
     return {
-      distance: ((cumulative[end] - cumulative[start]) / total) * distance,
+      distance: ((numberAt(cumulative, end) - numberAt(cumulative, start)) / total) * distance,
       duration: timeEnd === 0 ? 0 : ((times[end] - times[start]) / timeEnd) * duration,
       geometry: geometry.slice(start, end + 1),
       steps,
@@ -216,9 +231,10 @@ export function mapBrouterRoute(
     let segment = 1;
     result.elevation = Array.from({ length: count + 1 }, (_, i) => {
       const target = (i / count) * total;
-      while (segment < cumulative.length - 1 && cumulative[segment] < target) segment++;
-      const span = cumulative[segment] - cumulative[segment - 1];
-      const ratio = span > 0 ? (target - cumulative[segment - 1]) / span : 0;
+      while (segment < cumulative.length - 1 && numberAt(cumulative, segment) < target) segment++;
+      const from = numberAt(cumulative, segment - 1);
+      const span = numberAt(cumulative, segment) - from;
+      const ratio = span > 0 ? (target - from) / span : 0;
       return coords[segment - 1][2] + ratio * (coords[segment][2] - coords[segment - 1][2]);
     });
     result.elevationInterval = interval;

@@ -2,6 +2,8 @@ import {
   type IntegrationContext,
   listQuery,
   type RouteHandler,
+  type RouteParams,
+  type RouteRequest,
   scalarQueries,
 } from "@openmapx/integration-framework";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
@@ -21,11 +23,14 @@ export function routeZoomBucket(raw: string | undefined): number {
 }
 
 /** Handlers for lines, their stops and live state, vehicles, area alerts and leg shapes. */
+/** A request to a `/routes/:id/…` or `/vehicles/:id` route. */
+type IdRequest = RouteRequest<RouteParams<"/routes/:id">>;
+
 export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: TransitOrchestrator) {
   return {
     async routes(req, reply) {
-      if (scalarQueries(req.query).stop_id) {
-        const stopId = scalarQueries(req.query).stop_id;
+      const stopId = scalarQueries(req.query).stop_id;
+      if (stopId) {
         const cacheKey = `transit:routes-for-stop:${stopId}`;
         const routes = await ctx.cache.withCache(cacheKey, 300, async () => {
           const res = await orchestrator.getRoutesForStop(stopId);
@@ -53,7 +58,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(routes);
     },
 
-    async route(req, reply) {
+    async route(req: IdRequest, reply) {
       const routeId = req.params.id;
       const cacheKey = `transit:route:${routeId}`;
       const env = await ctx.cache.withCache(
@@ -70,7 +75,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(env);
     },
 
-    async routeStops(req, reply) {
+    async routeStops(req: IdRequest, reply) {
       const routeId = req.params.id;
       const hintStopId = scalarQueries(req.query).hint_stop_id || undefined;
       const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
@@ -84,7 +89,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(env);
     },
 
-    async routeAlerts(req, reply) {
+    async routeAlerts(req: IdRequest, reply) {
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
       const routeId = req.params.id;
       const cacheKey = `transit:route-alerts:${routeId}`;
@@ -95,7 +100,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       reply.send(alerts);
     },
 
-    async routeLive(req, reply) {
+    async routeLive(req: IdRequest, reply) {
       reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
       const routeId = req.params.id;
       const [vehicles, alerts] = await Promise.all([
@@ -166,8 +171,9 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
 
     async vehicles(req, reply) {
       reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
-      if (scalarQueries(req.query).route_id) {
-        const vehicles = await orchestrator.getVehiclePositions(scalarQueries(req.query).route_id);
+      const routeId = scalarQueries(req.query).route_id;
+      if (routeId) {
+        const vehicles = await orchestrator.getVehiclePositions(routeId);
         reply.send(toEnvelope(vehicles));
         return;
       }
@@ -182,7 +188,7 @@ export function createNetworkHandlers(ctx: IntegrationContext, orchestrator: Tra
       });
     },
 
-    async vehicleJourney(req, reply) {
+    async vehicleJourney(req: IdRequest, reply) {
       const tripId = req.params.id;
       // Repeated `fallback_ids=a&fallback_ids=b`, each id verbatim: an id may
       // itself hold a comma or edge spaces. Empty items are dropped, so a bare

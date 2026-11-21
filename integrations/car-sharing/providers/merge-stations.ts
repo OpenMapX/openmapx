@@ -30,16 +30,16 @@ function distanceM(lng1: number, lat1: number, lng2: number, lat2: number): numb
 
 /**
  * Find an existing station within MERGE_RADIUS_M of the given coordinates.
- * Returns the index or -1 if none found.
+ * Returns undefined if none is found.
  */
-function findNearby(stations: SharedMobilityStation[], lng: number, lat: number): number {
-  for (let i = 0; i < stations.length; i++) {
-    const s = stations[i];
-    if (distanceM(lng, lat, s.coordinates[0], s.coordinates[1]) <= MERGE_RADIUS_M) {
-      return i;
-    }
-  }
-  return -1;
+function findNearby(
+  stations: SharedMobilityStation[],
+  lng: number,
+  lat: number,
+): SharedMobilityStation | undefined {
+  return stations.find(
+    (s) => distanceM(lng, lat, s.coordinates[0], s.coordinates[1]) <= MERGE_RADIUS_M,
+  );
 }
 
 /**
@@ -65,15 +65,13 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
   const merged: SharedMobilityStation[] = [];
 
   for (const s of stations) {
-    const idx = findNearby(merged, s.coordinates[0], s.coordinates[1]);
+    const existing = findNearby(merged, s.coordinates[0], s.coordinates[1]);
 
-    if (idx === -1) {
+    if (!existing) {
       // No nearby match — add as new (clone to avoid mutating input/cached objects)
       merged.push({ ...s });
       continue;
     }
-
-    const existing = merged[idx];
 
     const before = contributionState(existing, ENRICHMENT_FIELDS);
 
