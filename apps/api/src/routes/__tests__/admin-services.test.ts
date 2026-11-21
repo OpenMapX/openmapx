@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
+import { callArg } from "../../test/mock-calls";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 import { serviceDataFixture, serviceSelectionFixture } from "./helpers/service-admin-fixtures";
 
@@ -536,9 +537,10 @@ describe("GET /admin/services/:id/logs", () => {
     const headers = { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" };
     await app.inject({ method: "GET", url: "/admin/services/motis/logs?lines=20", headers });
     await app.inject({ method: "GET", url: "/admin/services/motis/logs?lines=21", headers });
-    expect(
-      (mockDockerComposeLogs.mock.calls[0]?.[2] as { operationKey?: string })?.operationKey,
-    ).toBe((mockDockerComposeLogs.mock.calls[1]?.[2] as { operationKey?: string })?.operationKey);
+    const operationKey = (call: number) =>
+      (callArg(mockDockerComposeLogs, call, 2) as { operationKey?: string }).operationKey;
+    expect(operationKey(0)).toEqual(expect.any(String));
+    expect(operationKey(0)).toBe(operationKey(1));
   });
 });
 

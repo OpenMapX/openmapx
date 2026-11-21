@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -82,7 +83,7 @@ describe("GET /api/saved/lists/:id/export", () => {
   it("reads places by position, then creation time, then id so equal positions export in one order", async () => {
     primeListAndPlaces();
     await app.inject({ method: "GET", url: "/api/saved/lists/list-1/export" });
-    const placeQuery = mockSelect.mock.results[1]?.value as {
+    const placeQuery = itemAt(mockSelect.mock.results, 1).value as {
       orderBy: { mock: { calls: unknown[][] } };
     };
     expect(placeQuery.orderBy.mock.calls.flat()).toEqual(["sortOrder", "createdAt", "place.id"]);

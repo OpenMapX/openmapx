@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
@@ -153,10 +154,10 @@ describe("elevationService", () => {
       const { elevationService } = await import("../elevation.service.js");
       await elevationService.getElevation(sampleCoords, 5000);
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/height");
 
-      const options = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      const options = callArg(mockFetch, 0, 1) as RequestInit;
       expect(options.method).toBe("POST");
 
       const body = JSON.parse(options.body as string);

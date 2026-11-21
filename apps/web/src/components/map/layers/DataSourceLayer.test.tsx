@@ -308,7 +308,8 @@ it("keeps generic pins after a logo failure without retrying each style notifica
   });
   expect(logoLoad).toHaveBeenCalledTimes(1);
   const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0]?.properties?.brandImageId).toBeUndefined();
+  expect(data.features).toHaveLength(1);
+  expect(nth(data.features, 0).properties?.brandImageId).toBeUndefined();
   expect(fake.map.getLayer("ds-sample-markers")).toBeDefined();
   view.unmount();
   results[0].branding = undefined;

@@ -1,5 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../test/mock-calls";
 
 const mockInsert = vi.fn();
 const mockValues = vi.fn();
@@ -40,7 +41,7 @@ describe("mergeServiceConfig", () => {
   it("atomically merges updates into the current JSONB value on conflict", async () => {
     await mergeServiceConfig("dawarich-app", { APPLICATION_HOST: "timeline.example.com" });
 
-    const conflict = mockOnConflictDoUpdate.mock.calls[0]?.[0] as {
+    const conflict = callArg(mockOnConflictDoUpdate, 0, 0) as {
       set: { config: unknown };
     };
     expect(renderSql(conflict.set.config)).toBe(

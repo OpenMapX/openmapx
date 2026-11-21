@@ -5,6 +5,7 @@ import { createOtpGraphQlAdapter } from "../../../../integrations/transit-dynami
 import { OTP_PROFILES } from "../../../../integrations/transit-dynamic-registry/otp-profiles";
 import type { RegistryEntry } from "../../../../integrations/transit-dynamic-registry/registry-types";
 import { createHttpClient } from "../integration-clients";
+import { callArg } from "../test/mock-calls";
 
 afterEach(() => vi.unstubAllGlobals());
 function fixture(response: () => Response) {
@@ -101,7 +102,7 @@ describe("public OTP using actual host HTTP error boundaries", () => {
         }),
     );
     expect(await f.client("fi/digitransit-otp")()).toEqual([]);
-    const init = f.fetch.mock.calls[0]?.[1] as RequestInit;
+    const init = callArg(f.fetch, 0, 1) as RequestInit;
     expect(new Headers(init.headers).get("content-type")).toBe("application/json");
     expect(new Headers(init.headers).get("digitransit-subscription-key")).toBe("fixture-key");
     expect(JSON.parse(String(init.body))).toMatchObject({

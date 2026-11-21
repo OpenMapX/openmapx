@@ -2,6 +2,7 @@ import { createValhallaService } from "@integrations/routing-valhalla/provider.j
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHttpClient } from "../../integration-clients.js";
+import { callArg } from "../../test/mock-calls";
 import { emptyResponse, streamedJsonResponse } from "../../test/streamed-response.js";
 
 /** The provider on the real host HTTP client, so global fetch sees its requests. */
@@ -364,10 +365,10 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/route");
 
-      const options = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      const options = callArg(mockFetch, 0, 1) as RequestInit;
       expect(options.method).toBe("POST");
       expect((options.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     });
@@ -526,7 +527,7 @@ describe("valhallaService", () => {
 
       await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/optimized_route");
     });
 
@@ -675,8 +676,8 @@ describe("valhallaService", () => {
 
       await valhallaService.getMatch?.(trace, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
-      const init = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      const url = callArg(mockFetch, 0, 0) as string;
+      const init = callArg(mockFetch, 0, 1) as RequestInit;
       const body = JSON.parse(init.body as string);
 
       expect(url).toContain("/trace_attributes");

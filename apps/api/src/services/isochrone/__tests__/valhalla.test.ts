@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../../test/mock-calls";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -225,7 +226,7 @@ describe("valhallaIsochroneProvider", () => {
         mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
         const { valhallaIsochroneProvider } = await import("../valhalla.js");
         await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-        const url = mockFetch.mock.calls[0]?.[0] as string;
+        const url = callArg(mockFetch, 0, 0) as string;
         expect(url).toContain("/isochrone?api_key=test-stadia-key");
       } finally {
         if (prev === undefined) delete process.env.VALHALLA_API_KEY;

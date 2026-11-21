@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { uniformErrorHandler } from "../../server-wiring.js";
+import { callArg } from "../../test/mock-calls";
 
 let app: FastifyInstance;
 
@@ -52,10 +53,41 @@ describe("GET /tiles/cyclosm — empty-string env regression", () => {
 
     expect(res.statusCode).toBe(200);
     // Subdomain rotates across {a,b,c}; assert the non-template part resolved.
-    const calledUrl = fetchMock.mock.calls[0]?.[0] as string;
+    const calledUrl = callArg(fetchMock, 0, 0) as string;
     expect(calledUrl).toMatch(
       /^https:\/\/[abc]\.tile-cyclosm\.openstreetmap\.fr\/cyclosm\/3\/4\/2\.png$/,
     );
+  });
+});
+
+describe("cycling tile subdomains", () => {
+  it("cycle through a, b and c with one counter per tile server", async () => {
+    vi.stubEnv("CYCLOSM_TILE_URL", "");
+    const fetchMock = pngResponseMock();
+    vi.stubGlobal("fetch", fetchMock);
+    const requestTiles = async (count: number) => {
+      for (let i = 0; i < count; i++) {
+        await app.inject({ method: "GET", url: "/tiles/cyclosm/3/4/2.png" });
+      }
+    };
+    vi.stubEnv("THUNDERFOREST_API_KEY", undefined);
+    await requestTiles(2);
+    vi.stubEnv("THUNDERFOREST_API_KEY", "fixture-key");
+    await requestTiles(4);
+    vi.stubEnv("THUNDERFOREST_API_KEY", undefined);
+    await requestTiles(4);
+
+    const hosts = fetchMock.mock.calls.map(([url]) => new URL(String(url)).hostname);
+    const subdomains = (server: string) =>
+      hosts
+        .filter((host) => host.includes(server))
+        .map((host) => host.split(".", 1).join(""))
+        .join("");
+    // Earlier tests advanced the counters, so each sequence may start anywhere in the cycle.
+    expect(subdomains("cyclosm")).toHaveLength(6);
+    expect("abcabcabc").toContain(subdomains("cyclosm"));
+    expect(subdomains("thunderforest")).toHaveLength(4);
+    expect("abcabcabc").toContain(subdomains("thunderforest"));
   });
 });
 

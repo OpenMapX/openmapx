@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
 import { mockRequireAuth } from "../../test/auth.js";
 import { createDbMock, orderByArgs } from "../../test/db.js";
+import { callArg } from "../../test/mock-calls";
 
 const USER_ID = "user-1";
 const authMock = mockRequireAuth(USER_ID);
@@ -66,10 +68,10 @@ beforeEach(async () => {
 });
 
 function insertedRow(): Record<string, unknown> {
-  const chain = dbMock.db.insert.mock.results[0]?.value as {
+  const chain = itemAt(dbMock.db.insert.mock.results, 0).value as {
     values: { mock: { calls: unknown[][] } };
   };
-  return chain.values.mock.calls[0]?.[0] as Record<string, unknown>;
+  return callArg(chain.values, 0, 0) as Record<string, unknown>;
 }
 
 describe("POST /api/shares", () => {
@@ -224,7 +226,7 @@ describe("GET /api/shares", () => {
     dbMock.queueSelect([]);
     const res = await app.inject({ method: "GET", url: "/api/shares" });
     expect(res.statusCode).toBe(200);
-    const projection = dbMock.db.select.mock.calls[0]?.[0] as Record<string, unknown>;
+    const projection = callArg(dbMock.db.select, 0, 0) as Record<string, unknown>;
     expect(Object.keys(projection).sort()).toEqual([
       "createdAt",
       "expiresAt",

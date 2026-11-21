@@ -12,6 +12,7 @@ import enturLiveManifest from "../../../../integrations/live-transit-entur/manif
 import { setup as setupEnturTransit } from "../../../../integrations/transit-entur/index";
 import enturTransitManifest from "../../../../integrations/transit-entur/manifest.json";
 import { createSwissTransitClient } from "../../../../integrations/transit-opentransportdata-ch/client.js";
+import { callArg } from "../test/mock-calls";
 
 const { redisMock, sharedValues, sharedTtls, clearLeases } = vi.hoisted(() => {
   const sharedValues = new Map<string, string>();
@@ -775,7 +776,7 @@ describe("Entur setup ownership through host clients", () => {
           ? "https://a.test/vehicles"
           : "https://a.test/geocoder/v3/autocomplete?q=Stop&limit=1&layers=stopPlace&sources=nsr&countries=no&multimodal=parent",
       );
-      expect((fetch.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+      expect((callArg(fetch, 0, 1) as RequestInit).headers).toMatchObject({
         "ET-Client-Name": "a-client",
       });
       expect(result.data[0]?.contributors?.[0]?.name).toBe("a");

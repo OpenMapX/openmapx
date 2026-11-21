@@ -12,6 +12,7 @@ import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
  * checks run as in production against an in-memory job row.
  */
 
+import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import type { services as coreServices } from "@openmapx/core/server";
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from "vitest";
@@ -625,13 +626,13 @@ describe("installExtension", () => {
       }),
       expect.anything(),
     );
-    const integrationInsert = dbMock.db.insert.mock.results[1]?.value as {
+    const integrationInsert = itemAt(dbMock.db.insert.mock.results, 1).value as {
       values: ReturnType<typeof vi.fn>;
     };
     expect(integrationInsert.values).toHaveBeenCalledWith(
       expect.objectContaining({ repository: "https://ex.example/extension.json" }),
     );
-    const extensionInsert = dbMock.db.insert.mock.results[2]?.value as {
+    const extensionInsert = itemAt(dbMock.db.insert.mock.results, 2).value as {
       values: ReturnType<typeof vi.fn>;
     };
     expect(extensionInsert.values).toHaveBeenCalledWith(
@@ -666,7 +667,7 @@ describe("installExtension", () => {
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-    const firstInsert = dbMock.db.insert.mock.results[0]?.value as {
+    const firstInsert = itemAt(dbMock.db.insert.mock.results, 0).value as {
       values: ReturnType<typeof vi.fn>;
     };
     expect(firstInsert.values).toHaveBeenCalledWith({
@@ -683,7 +684,7 @@ describe("installExtension", () => {
     await installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-    const integrationInsert = dbMock.db.insert.mock.results[0]?.value as {
+    const integrationInsert = itemAt(dbMock.db.insert.mock.results, 0).value as {
       values: ReturnType<typeof vi.fn>;
       onConflictDoUpdate: ReturnType<typeof vi.fn>;
     };
@@ -1167,7 +1168,7 @@ describe("installExtension", () => {
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
 
     // Inserts: [0]=installedIntegration, [1]=installedExtension, [2]=component.
-    const componentInsertChain = dbMock.db.insert.mock.results[2]?.value as {
+    const componentInsertChain = itemAt(dbMock.db.insert.mock.results, 2).value as {
       values: ReturnType<typeof vi.fn>;
     };
     expect(componentInsertChain.values).toHaveBeenCalledWith([

@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 import { emptyResponse, streamedJsonResponse } from "../../test/streamed-response.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
@@ -179,7 +180,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving", { avoidHighways: true });
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("exclude=motorway");
     });
 
@@ -189,7 +190,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving", { avoidTolls: true });
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("exclude=toll");
     });
 
@@ -199,7 +200,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving", { avoidFerries: true });
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("exclude=ferry");
     });
 
@@ -213,7 +214,7 @@ describe("osrmService", () => {
         avoidFerries: true,
       });
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("exclude=motorway%2Ctoll%2Cferry");
     });
 
@@ -268,7 +269,7 @@ describe("osrmService", () => {
       const threeWaypoints: [number, number][] = [origin, [13.395, 52.525], destination];
       await osrmService.getRoute(threeWaypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).not.toContain("alternatives");
     });
 
@@ -278,7 +279,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("alternatives=3");
     });
   });
@@ -499,7 +500,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.optimizeRoute?.(fourWaypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/trip/v1/driving/");
     });
 
@@ -509,7 +510,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.optimizeRoute?.(fourWaypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("source=first");
       expect(url).toContain("destination=last");
       expect(url).toContain("roundtrip=false");
@@ -674,7 +675,7 @@ describe("osrmService", () => {
         avoidTolls: true,
       });
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("exclude=motorway%2Ctoll");
     });
   });
@@ -686,7 +687,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/route/v1/driving/13.388,52.517;13.405,52.535");
       expect(url).toContain("overview=full");
       expect(url).toContain("geometries=geojson");
@@ -700,7 +701,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving");
 
-      const options = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      const options = callArg(mockFetch, 0, 1) as RequestInit;
       expect((options.headers as Record<string, string>)["User-Agent"]).toBe("Open-MapX/1.0");
     });
 
@@ -710,7 +711,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       await osrmService.getRoute(waypoints, "driving");
 
-      const url = mockFetch.mock.calls[0]?.[0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).not.toContain("exclude");
     });
   });
