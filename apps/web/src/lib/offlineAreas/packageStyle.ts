@@ -1,9 +1,5 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import {
-  collectStyleFontFaceUrls,
-  rewriteStyleFontFaces,
-  SCRIPT_FONT_SET_VERSION,
-} from "../scriptFontFaces";
+import { collectStyleFontFaceUrls, rewriteStyleFontFaces } from "../scriptFontFaces";
 import { offlineGlyphCacheNameForVersion } from "../swCaches";
 import { isLocallyRenderedGlyphRange } from "./localGlyphRanges";
 import { offlinePackageApiPath } from "./packageApi";
@@ -266,15 +262,9 @@ export async function validateOfflineStyleAssets(
   await fetchPinnedGlyphs([...urls], manifest);
   await cache.put(
     glyphCompletionUrl(manifest),
-    new Response(
-      JSON.stringify({
-        glyphsVersion: manifest.glyphs.version,
-        scriptFontsVersion: SCRIPT_FONT_SET_VERSION,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      },
-    ),
+    new Response(JSON.stringify({ glyphsVersion: manifest.glyphs.version }), {
+      headers: { "Content-Type": "application/json" },
+    }),
   );
 }
 

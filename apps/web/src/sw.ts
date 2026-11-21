@@ -146,20 +146,7 @@ async function matchOfflineGlyph(request: Request): Promise<Response | null> {
   // NEXT_PUBLIC_API_URL does not strand an otherwise valid offline package.
   url.protocol = self.location.protocol;
   url.host = self.location.host;
-  const pinned = await cache.match(url.toString(), { ignoreSearch: false });
-  if (pinned) return pinned;
-
-  // Packages downloaded before bundled script fallback fonts were added do not
-  // carry those WOFF2 files in their package cache; fall back to the runtime
-  // script-font cache so previously loaded fonts still serve offline without
-  // invalidating existing packages.
-  if (isBundledScriptFontPath(url.pathname)) {
-    url.searchParams.delete("offlineGlyphs");
-    const scriptCache = await caches.open(SCRIPT_FONT_CACHE);
-    const cachedScriptFont = await scriptCache.match(url.toString(), { ignoreSearch: false });
-    if (cachedScriptFont) return cachedScriptFont;
-  }
-  return null;
+  return (await cache.match(url.toString(), { ignoreSearch: false })) ?? null;
 }
 
 function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {

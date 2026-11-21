@@ -45,11 +45,6 @@ export const BUNDLED_SCRIPT_FONTS: readonly BundledScriptFont[] = [
   },
 ];
 
-/** Deterministic version identifier for the bundled script fallback font set. */
-export const SCRIPT_FONT_SET_VERSION = BUNDLED_SCRIPT_FONTS.map(
-  (font) => `${font.path}@${font.version}`,
-).join(",");
-
 const BASEMAP_FONT_NAMES = ["Noto Sans Regular", "Noto Sans Bold", "Noto Sans Italic"] as const;
 
 function resolveFontUrl(font: BundledScriptFont, origin?: string): string {
