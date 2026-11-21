@@ -2053,7 +2053,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, id));
-      expect(JSON.stringify(unchanged?.result)).toBe(original);
+      assert.isDefined(unchanged, "the first job row disappeared");
+      expect(JSON.stringify(unchanged.result)).toBe(original);
       expect(posts.get("service.pull") ?? 0).toBe(0);
     }, 180000);
     describe("with the API's decision write refused", () => {
