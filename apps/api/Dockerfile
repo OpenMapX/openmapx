@@ -26,7 +26,6 @@ COPY packages/entur-client/package.json packages/entur-client/
 COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
-COPY packages/cli/package.json packages/cli/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
@@ -60,7 +59,6 @@ COPY packages/entur-client/package.json packages/entur-client/
 COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
-COPY packages/cli/package.json packages/cli/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
@@ -207,17 +205,8 @@ COPY --from=prod-deps /app/packages/open-landmarks-client/node_modules ./package
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
 COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
-# packages/cli source + node_modules are needed by admin-cli.ts, which spawns
-# `node --experimental-strip-types packages/cli/src/index.ts <cmd>` for data
-# jobs, backups, and service-lifecycle actions from the admin GUI. When the
-# operator sets OPENMAPX_HOST_DIR the host repo's CLI takes precedence (via
-# the bind mount), so these files are really the fallback for deployments
-# that don't bind-mount the host tree. The CLI is tiny (no native deps) so
-# the image-size cost is negligible.
-COPY packages/cli/ packages/cli/
-COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
-# cli imports @openmapx/transitous-core (transit data jobs); ship its source too
-# (source-only package, no runtime node_modules of its own).
+# The API and packages/core import @openmapx/transitous-core for transit feed
+# credentials and MOTIS build artifacts.
 COPY packages/transitous-core/ packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 
