@@ -147,12 +147,10 @@ function equalSecret(left: string, right: string): boolean {
 }
 
 function classifyCopies(values: Array<string | null>): ProvisioningSecretState {
-  const present = values.filter((value): value is string => value !== null);
-  if (present.length === 0) return "missing";
-  if (present.length !== values.length) return "conflict";
-  return present.every((value) => equalSecret(value, present[0] as string))
-    ? "consistent"
-    : "conflict";
+  const [first, ...rest] = values.filter((value): value is string => value !== null);
+  if (first === undefined) return "missing";
+  if (rest.length + 1 !== values.length) return "conflict";
+  return rest.every((value) => equalSecret(value, first)) ? "consistent" : "conflict";
 }
 
 function buildContext(input: ManagedDawarichProvisioningInput): ProvisioningContext {

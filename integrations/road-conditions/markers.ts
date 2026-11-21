@@ -116,9 +116,10 @@ export function markerImageIdFor(
 
 /** Parse a marker image id back into its glyph + severity. */
 export function parseMarkerImageId(id: string): { glyph: string; severity: string } | null {
-  const parts = id.split(":");
-  if (parts.length !== 3 || parts[0] !== MARKER_PREFIX) return null;
-  return { glyph: parts[1] as string, severity: parts[2] as string };
+  const [prefix, glyph, severity, ...rest] = id.split(":");
+  if (prefix !== MARKER_PREFIX || glyph === undefined || severity === undefined || rest.length > 0)
+    return null;
+  return { glyph, severity };
 }
 
 /**

@@ -26,9 +26,9 @@ const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
 
 /** Tags are emitted in sorted key order so identical input yields identical XML. */
 function tagNodes(tags: Readonly<Record<string, string>>): Array<Record<string, string>> {
-  return Object.keys(tags)
-    .sort()
-    .map((key) => ({ "@k": key, "@v": tags[key] as string }));
+  return Object.entries(tags)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([key, value]) => ({ "@k": key, "@v": value }));
 }
 
 function wrap(root: Record<string, unknown>): string {

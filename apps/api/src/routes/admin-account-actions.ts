@@ -61,7 +61,7 @@ export async function registerAccountActions(app: FastifyInstance) {
       return await provisionAccount({
         ...request.body,
         actor: actor(request),
-        idempotencyKey: request.headers["idempotency-key"] as string,
+        idempotencyKey: request.headers["idempotency-key"],
       });
     } catch (error) {
       return failure(error, reply);
@@ -83,11 +83,11 @@ export async function registerAccountActions(app: FastifyInstance) {
           userId: request.params.userId,
           body: request.body,
           actor: actor(request),
-          idempotencyKey: request.headers["idempotency-key"] as string,
+          idempotencyKey: request.headers["idempotency-key"],
           ...(nonce
             ? {
                 proof: {
-                  challengeId: request.headers["x-openmapx-reauth-challenge"] as string,
+                  challengeId: request.headers["x-openmapx-reauth-challenge"],
                   nonce,
                 },
               }
@@ -103,7 +103,7 @@ export async function registerAccountActions(app: FastifyInstance) {
         userId: request.params.userId,
         body: request.body,
         actor: actor(request),
-        idempotencyKey: request.headers["idempotency-key"] as string,
+        idempotencyKey: request.headers["idempotency-key"],
       });
     } catch (error) {
       return failure(error, reply);

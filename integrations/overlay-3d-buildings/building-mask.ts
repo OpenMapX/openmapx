@@ -2,7 +2,7 @@
 // https://github.com/alexwohlbruck/landmarks/tree/4d92e9c718f2f6e2ba5ff6c116d880271681614a
 import { classifyRings, VectorTile } from "@mapbox/vector-tile";
 import { type Feature, fromVectorTileJs, GeoJSONWrapper } from "@maplibre/vt-pbf";
-import type { BuildingReplacement } from "@openmapx/core";
+import { type BuildingReplacement, numberAt } from "@openmapx/core";
 import { PbfReader } from "pbf";
 import { difference, type Geom, intersection, union } from "polyclip-ts";
 
@@ -46,11 +46,8 @@ export function tileBounds({ z, x, y }: TileCoordinate): Bounds {
   return [(x / n) * 360 - 180, yToLat(y + 1, n), ((x + 1) / n) * 360 - 180, yToLat(y, n)];
 }
 
-const overlaps = (a: Bounds, b: readonly number[]) =>
-  a[0] <= (b[2] as number) &&
-  a[2] >= (b[0] as number) &&
-  a[1] <= (b[3] as number) &&
-  a[3] >= (b[1] as number);
+const overlaps = (a: Bounds, b: Readonly<Bounds>) =>
+  a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 
 /** The replacements whose extent touches a tile. */
 export function replacementsForTile(
@@ -61,17 +58,23 @@ export function replacementsForTile(
   return all.filter((replacement) => overlaps(bounds, replacement.bbox));
 }
 
-function toTilePixel([lng, lat]: readonly number[], tile: TileCoordinate, extent: number): Pair {
+function toTilePixel(
+  [lng, lat]: readonly [number, number],
+  tile: TileCoordinate,
+  extent: number,
+): Pair {
   const n = 2 ** tile.z;
-  return [
-    (lngToX(lng as number, n) - tile.x) * extent,
-    (latToY(lat as number, n) - tile.y) * extent,
-  ];
+  return [(lngToX(lng, n) - tile.x) * extent, (latToY(lat, n) - tile.y) * extent];
 }
 
-function boundsToPixels(bbox: readonly number[], tile: TileCoordinate, extent: number): Bounds {
-  const [x0, y0] = toTilePixel([bbox[0] as number, bbox[3] as number], tile, extent);
-  const [x1, y1] = toTilePixel([bbox[2] as number, bbox[1] as number], tile, extent);
+/** A footprint position in tile pixels; one without two coordinates lands on NaN. */
+function positionToTilePixel(point: readonly number[], tile: TileCoordinate, extent: number): Pair {
+  return toTilePixel([numberAt(point, 0), numberAt(point, 1)], tile, extent);
+}
+
+function boundsToPixels(bbox: Readonly<Bounds>, tile: TileCoordinate, extent: number): Bounds {
+  const [x0, y0] = toTilePixel([bbox[0], bbox[3]], tile, extent);
+  const [x1, y1] = toTilePixel([bbox[2], bbox[1]], tile, extent);
   return [x0, y0, x1, y1];
 }
 
@@ -167,7 +170,7 @@ export function rewriteBuildingTile(
     .flatMap((replacement) => (replacement.footprint ? [replacement.footprint] : []))
     .map((footprint) => {
       const geometry = footprint.coordinates.map((polygon) =>
-        polygon.map((ring) => ring.map((point) => toTilePixel(point, tile, extent))),
+        polygon.map((ring) => ring.map((point) => positionToTilePixel(point, tile, extent))),
       );
       return { geometry, bounds: polygonBounds(geometry.flat()) };
     })

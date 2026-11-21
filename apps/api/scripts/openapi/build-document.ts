@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import { AUTH_LEVELS, type AuthLevel } from "../../src/utils/route-auth.js";
 import type { IntegrationRouteDescriptor } from "./collect-integration-routes.js";
 
@@ -91,7 +92,7 @@ function toOperationId(method: string, path: string): string {
 
 /** Path parameters OpenAPI requires to be declared, derived from the templated path. */
 function pathParameters(path: string): Record<string, unknown>[] {
-  const names = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1] as string);
+  const names = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => itemAt(match, 1));
   return names.map((name) => ({
     name,
     in: "path",

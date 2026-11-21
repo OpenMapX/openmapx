@@ -252,9 +252,9 @@ export function roadNamesForEvents(
   return names.length > 0 ? names.join(", ") : undefined;
 }
 
-/** The eight-point compass direction of a bearing in degrees. */
-function compassOf(bearingDeg: number): string {
-  return COMPASS_ORDER[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8] as string;
+/** The eight-point compass direction of a bearing in degrees; none for a non-finite bearing. */
+function compassOf(bearingDeg: number): string | undefined {
+  return COMPASS_ORDER[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
 }
 
 /**

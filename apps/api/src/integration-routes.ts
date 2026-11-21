@@ -199,9 +199,9 @@ function matchRoutePath(pattern: string, path: string): Record<string, string> |
     );
     const match = pathSegment.match(new RegExp(`^${regexSource}$`));
     if (!match) return null;
-    for (let j = 0; j < names.length; j++) {
+    for (const [j, name] of names.entries()) {
       const captured = match[j + 1];
-      if (captured !== undefined) params[names[j] as string] = captured;
+      if (captured !== undefined) params[name] = captured;
     }
   }
 

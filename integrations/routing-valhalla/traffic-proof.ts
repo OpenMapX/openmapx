@@ -28,8 +28,8 @@ export function readTrafficProof<E extends ProvenEndpoint>(
   )
     return undefined;
   for (const key of ["writeId", "graphGeneration", "engineBootId", "validUntil", "evaluatedAt"]) {
-    if (typeof p[key] !== "string" || !(p[key] as string).trim() || (p[key] as string).length > 256)
-      return undefined;
+    const field = p[key];
+    if (typeof field !== "string" || !field.trim() || field.length > 256) return undefined;
   }
   const evaluatedAt = Date.parse(p.evaluatedAt as string);
   const validUntil = Date.parse(p.validUntil as string);

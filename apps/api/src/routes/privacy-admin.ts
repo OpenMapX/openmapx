@@ -55,8 +55,8 @@ function eventProjection(row: {
       : {};
   const safe: Record<string, string> = {};
   for (const key of ["reasonCode", "kind", "channel", "from"]) {
-    if (typeof payload[key] === "string" && payload[key].length <= 128)
-      safe[key] = payload[key] as string;
+    const value = payload[key];
+    if (typeof value === "string" && value.length <= 128) safe[key] = value;
   }
   return {
     eventType: row.eventType,

@@ -31,6 +31,7 @@ type ContractRequest<R extends Registry, K extends keyof R> = {
   Body: ContractPart<R, K, "body">;
   Querystring: ContractPart<R, K, "query">;
   Params: ContractPart<R, K, "params">;
+  Headers: ContractPart<R, K, "headers">;
 };
 export interface RegistrationOptions {
   preHandler?: preHandlerHookHandler | preHandlerHookHandler[];

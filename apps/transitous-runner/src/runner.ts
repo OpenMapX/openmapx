@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import { setTimeout as processGroupDelay } from "node:timers/promises";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   CAPABILITY_TTL_MS,
   OPERATOR_METADATA_DIR,
@@ -125,7 +126,7 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     const argv = transitousRunnerArgv(run);
     if (run.script === "fetch") assertInsideCatalog(options.catalogDir, run.feedPath);
     if (run.script === "fetch-operator") {
-      assertInsideCatalog(options.catalogDir, argv[1] as string, OPERATOR_METADATA_DIR);
+      assertInsideCatalog(options.catalogDir, itemAt(argv, 1), OPERATOR_METADATA_DIR);
     }
     return argv;
   }
@@ -151,10 +152,10 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
           HOME: options.stagingDir,
           TMPDIR: options.stagingDir,
           ...Object.fromEntries(
-            FORWARDED_ENV.filter((name) => process.env[name]).map((name) => [
-              name,
-              process.env[name] as string,
-            ]),
+            FORWARDED_ENV.flatMap((name) => {
+              const value = process.env[name];
+              return value ? [[name, value]] : [];
+            }),
           ),
         },
       });

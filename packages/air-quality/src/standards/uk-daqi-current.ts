@@ -170,7 +170,9 @@ function windowMean(series: PollutantSeries, endAt: string): number | null {
   }
   const samples = [...slots]
     .sort(([left], [right]) => left - right)
-    .flatMap(([, values]) => (new Set(values).size === 1 ? [values[0] as number] : []));
+    .flatMap(([, [first, ...rest]]) =>
+      first !== undefined && rest.every((value) => value === first) ? [first] : [],
+    );
   if (samples.length < requiredSamples(series)) return null;
   return arithmeticMean(samples);
 }

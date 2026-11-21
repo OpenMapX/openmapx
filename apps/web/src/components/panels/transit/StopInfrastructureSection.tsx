@@ -390,8 +390,10 @@ export function StopInfrastructureSection({
 
   if (!resolvedStopId && !isLoading) return null;
 
-  const modeLabel = (mode: TransportMode) =>
-    MODE_LABEL_KEYS[mode] ? t(MODE_LABEL_KEYS[mode] as string) : mode;
+  const modeLabel = (mode: TransportMode) => {
+    const key = MODE_LABEL_KEYS[mode];
+    return key ? t(key) : mode;
+  };
 
   if (isLoading) {
     return (

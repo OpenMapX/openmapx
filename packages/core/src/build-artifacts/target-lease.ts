@@ -191,14 +191,15 @@ export async function delegateArtifactTargetLease(
     throw Error("Reserved child target subset changed");
   const parent = s.node === null ? undefined : record.children.find((c) => c.key === s.node);
   if (!plan && parent) {
-    const kinds = childPhaseKinds[child.phase];
+    const [kind, ...otherKinds] = childPhaseKinds[child.phase];
     if (
       furtherEdges(record, parent).includes(child.phase) &&
-      kinds.length === 1 &&
+      kind !== undefined &&
+      otherKinds.length === 0 &&
       child.execution.operationKey ===
         controlChildOperationKey(s.execution.operationKey, child.phase, 0)
     )
-      plan = { ...child, kind: kinds[0] as string, ordinal: 0 };
+      plan = { ...child, kind, ordinal: 0 };
   }
   if (!plan) throw Error("Child is absent from immutable admitted plan");
   if (child.serviceIds.some((id) => !lease.serviceIds.includes(id)))

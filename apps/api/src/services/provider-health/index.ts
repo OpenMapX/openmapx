@@ -436,8 +436,7 @@ export class ProviderHealth implements ProviderHealthHandle {
       }
       return result;
     }
-    for (let index = 0; index < ids.length; index++) {
-      const providerId = ids[index] as string;
+    for (const [index, providerId] of ids.entries()) {
       const raw = values[index];
       if (!raw) {
         result.set(providerId, { providerId, status: "unobserved" });
@@ -510,15 +509,11 @@ export class ProviderHealth implements ProviderHealthHandle {
     const values = await this.redis.mget(...keys);
     const result: Record<string, ProviderHealthObservation> = {};
     const now = this.now();
-    for (let index = 0; index < keys.length; index++) {
+    for (const [index, key] of keys.entries()) {
       const raw = values[index];
       if (!raw) continue;
       const state = parseState(raw);
-      if (state)
-        result[(keys[index] as string).slice(REDIS_PREFIX.length)] = observeProviderHealth(
-          state,
-          now,
-        );
+      if (state) result[key.slice(REDIS_PREFIX.length)] = observeProviderHealth(state, now);
     }
     return result;
   }

@@ -25,11 +25,12 @@ export function findBuildingSourceReference(map: maplibregl.Map): BuildingSource
     }
 
     const source = sources[layer.source];
-    if (source?.type !== "vector") continue;
+    const sourceLayer = layer["source-layer"];
+    if (source?.type !== "vector" || sourceLayer === undefined) continue;
 
     matches.push({
       source: layer.source,
-      sourceLayer: layer["source-layer"] as string,
+      sourceLayer,
       hidden: layer.layout?.visibility === "none",
     });
   }

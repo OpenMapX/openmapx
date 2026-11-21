@@ -34,7 +34,7 @@ export function collectToolchainPinViolations(
   overrides: Readonly<Record<string, string>> = {},
 ): string[] {
   const read = (rel: string): string =>
-    Object.hasOwn(overrides, rel) ? (overrides[rel] as string) : readRepoFile(rel);
+    (Object.hasOwn(overrides, rel) ? overrides[rel] : undefined) ?? readRepoFile(rel);
   const errors: string[] = [];
 
   // Node, pnpm, and mobile releases cross package-manager, container, and

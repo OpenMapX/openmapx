@@ -265,7 +265,7 @@ export function findProviderHttpFindings(
   const findings: ProviderHttpFinding[] = [];
   const record = (rule: ProviderHttpRule, node: ts.Node) => {
     const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-    findings.push({ rule, line: line + 1, text: node.getText(source).split("\n")[0] as string });
+    findings.push({ rule, line: line + 1, text: node.getText(source).replace(/\n.*$/s, "") });
   };
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && isGlobalFetchReference(node, shadowingScopes)) {

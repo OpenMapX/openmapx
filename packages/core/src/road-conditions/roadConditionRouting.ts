@@ -105,7 +105,7 @@ export function isRoadConditionRoutingEvidence(
       "commercial_use",
       "attribution_required",
       "retention",
-    ].every((k) => ["yes", "no", "unknown"].includes(r[k] as string)) ||
+    ].every((k) => ["yes", "no", "unknown"].some((allowed) => allowed === r[k])) ||
     !["evidence_origin", "evidence_version", "reviewed_at"].every((k) => nullable(r[k]))
   )
     return false;

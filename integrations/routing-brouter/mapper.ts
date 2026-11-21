@@ -137,7 +137,7 @@ export function mapBrouterRoute(
     times[0] !== 0
   )
     throw new Error("Invalid BRouter times");
-  const timeEnd = times.at(-1) as number;
+  const timeEnd = numberAt(times, times.length - 1);
   if (duration > 0 && timeEnd <= 0) throw new Error("Missing BRouter travel times");
   const cumulative = [0];
   let total = 0;

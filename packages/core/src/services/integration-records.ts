@@ -274,10 +274,13 @@ export function readIntegrationRecords(
     throw error;
   }
   assertOwnDirectory(directory, uid);
-  const names = readdirSync(directory).filter((name) => RECORD_FILE.test(name));
-  if (names.length > MAX_RECORDS) throw new Error("Too many integration records");
-  for (const name of names.sort()) {
-    const integrationId = (RECORD_FILE.exec(name) as RegExpExecArray)[1] as string;
+  const files = readdirSync(directory).flatMap((name) => {
+    const [, integrationId] = RECORD_FILE.exec(name) ?? [];
+    return integrationId === undefined ? [] : [{ name, integrationId }];
+  });
+  if (files.length > MAX_RECORDS) throw new Error("Too many integration records");
+  files.sort((a, b) => (a.name < b.name ? -1 : 1));
+  for (const { name, integrationId } of files) {
     try {
       const bytes = readRecordBytes(join(directory, name), uid);
       const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));

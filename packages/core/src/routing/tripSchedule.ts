@@ -4,6 +4,7 @@ import type {
   ScheduleViolation,
   TripSchedule,
 } from "../types/routing";
+import { itemAt } from "../utils/itemAt";
 import { numberAt } from "../utils/numberAt";
 import { isoWithOffsetInZone, localDateInZone, tzOffsetMinutes } from "../utils/timezone";
 import { type ResolvedStopConstraint, stopAt } from "./scheduleConstraints";
@@ -29,6 +30,16 @@ export function arrivalBefore(stop: ResolvedStopConstraint, departureMs: number)
 }
 
 /**
+ * An instant the walk has already set. Each leg's departure and arrival are
+ * set before they are read, so an unset one is a programming error and throws.
+ */
+function instantAt(times: readonly (number | null)[], index: number, what: string): number {
+  const ms = times[index];
+  if (ms === null || ms === undefined) throw new RangeError(`No ${what} at stop ${index}`);
+  return ms;
+}
+
+/**
  * Turn fixed leg durations plus resolved constraints into the canonical
  * timeline. Both directions are exact in a single pass, because leg `i`'s
  * departure is fully determined by the legs before it.
@@ -47,7 +58,7 @@ export function composeSchedule(input: ComposeScheduleInput): TripSchedule {
   if (direction === "forward") {
     departureMs[0] = departureAfter({ ...stopAt(stops, 0), dwellSeconds: 0 }, anchorMs);
     for (const [leg, seconds] of legSeconds.entries()) {
-      const arrival = (departureMs[leg] as number) + seconds * 1000;
+      const arrival = instantAt(departureMs, leg, "departure") + seconds * 1000;
       const next = leg + 1;
       arrivalMs[next] = arrival;
       const deadline = stopAt(stops, next).latestArrivalMs;
@@ -73,7 +84,7 @@ export function composeSchedule(input: ComposeScheduleInput): TripSchedule {
     const lastDeadline = stopAt(stops, last).latestArrivalMs;
     arrivalMs[last] = lastDeadline === null ? anchorMs : Math.min(anchorMs, lastDeadline);
     for (let leg = legSeconds.length - 1; leg >= 0; leg -= 1) {
-      const departure = (arrivalMs[leg + 1] as number) - numberAt(legSeconds, leg) * 1000;
+      const departure = instantAt(arrivalMs, leg + 1, "arrival") - numberAt(legSeconds, leg) * 1000;
       departureMs[leg] = departure;
       const allowed = stopAt(stops, leg).earliestDepartureMs;
       if (allowed !== null && departure < allowed) {
@@ -96,14 +107,14 @@ export function composeSchedule(input: ComposeScheduleInput): TripSchedule {
   }
 
   const scheduledStops: ScheduledStop[] = stops.map((stop, index) => {
-    const reference = arrivalMs[index] ?? departureMs[index] ?? anchorMs;
+    const arrival = itemAt(arrivalMs, index);
+    const departure = itemAt(departureMs, index);
+    const reference = arrival ?? departure ?? anchorMs;
     return {
       waypointIndex: stop.index,
       timeZone: stop.timeZone,
-      ...(arrivalMs[index] !== null ? { arrival: render(arrivalMs[index] as number, index) } : {}),
-      ...(departureMs[index] !== null
-        ? { departure: render(departureMs[index] as number, index) }
-        : {}),
+      ...(arrival !== null ? { arrival: render(arrival, index) } : {}),
+      ...(departure !== null ? { departure: render(departure, index) } : {}),
       dwellSeconds: stop.dwellSeconds,
       waitSeconds: waitSeconds[index] ?? 0,
       utcOffsetMinutes: tzOffsetMinutes(new Date(reference), stop.timeZone) ?? 0,
@@ -113,8 +124,8 @@ export function composeSchedule(input: ComposeScheduleInput): TripSchedule {
   const legs: ScheduledLeg[] = legSeconds.map((seconds, leg) => ({
     fromIndex: stopAt(stops, leg).index,
     toIndex: stopAt(stops, leg + 1).index,
-    departure: render(departureMs[leg] as number, leg),
-    arrival: render(arrivalMs[leg + 1] as number, leg + 1),
+    departure: render(instantAt(departureMs, leg, "departure"), leg),
+    arrival: render(instantAt(arrivalMs, leg + 1, "arrival"), leg + 1),
     travelSeconds: seconds,
   }));
 
