@@ -19,6 +19,7 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "standalone.install",
       "standalone.adopt",
       "standalone.remove",
+      "provider.reset",
     ],
   },
   {
@@ -173,6 +174,7 @@ export const AUDIT_TARGET_TYPES: readonly string[] = [
   "auth-policy",
   "cache",
   "release",
+  "provider",
   "extension",
   "ambient-places",
   "transit",

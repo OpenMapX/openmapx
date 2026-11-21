@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { getProviderHealth } from "../services/provider-health/registry";
-import { requireAdmin } from "../utils/require-admin";
+import { writeAuditLog } from "../utils/audit-log";
+import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
@@ -40,6 +41,13 @@ export async function adminProviderHealthRoute(app: FastifyInstance): Promise<vo
       return reply.code(503).send({ error: "Provider health tracker not initialised" });
     }
     await health.reset(request.params.id);
+    await writeAuditLog({
+      actorId: getAdminSession(request).user.id,
+      targetType: "provider",
+      targetId: request.params.id,
+      action: "provider.reset",
+      request,
+    });
     return { ok: true as const, providerId: request.params.id };
   });
 }

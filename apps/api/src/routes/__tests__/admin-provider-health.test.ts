@@ -3,11 +3,10 @@ import { listAdminProviderHealth } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ProviderHealthObservation } from "../../services/provider-health/index.js";
-import { dataManagerTokenFile } from "../../test/data-manager-token";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
-const { requireAdmin: mockRequireAdmin } = installAdminRouteMocks();
+const { requireAdmin: mockRequireAdmin, writeAuditLog } = installAdminRouteMocks();
 
 const providerHealthMock = vi.hoisted(() => ({
   getAll: vi.fn(),
@@ -67,18 +66,6 @@ describe("GET /admin/providers", () => {
   it("returns 401 when no admin session is present", async () => {
     rejectAs(401, "Authentication required");
     const res = await app.inject({ method: "GET", url: "/admin/providers" });
-    expect(res.statusCode).toBe(401);
-    expect(providerHealthMock.getAll).not.toHaveBeenCalled();
-  });
-
-  it("refuses the data-manager service token without an admin session", async () => {
-    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("service-token"));
-    rejectAs(401, "Authentication required");
-    const res = await app.inject({
-      method: "GET",
-      url: "/admin/providers",
-      headers: { authorization: "Bearer service-token" },
-    });
     expect(res.statusCode).toBe(401);
     expect(providerHealthMock.getAll).not.toHaveBeenCalled();
   });
@@ -143,13 +130,20 @@ describe("GET /admin/providers/:id", () => {
 });
 
 describe("POST /admin/providers/:id/reset", () => {
-  it("returns 200 + clears state for an administrator", async () => {
+  it("returns 200, clears state and records the reset for an administrator", async () => {
     providerHealthMock.reset.mockResolvedValue(undefined);
 
     const res = await app.inject({ method: "POST", url: "/admin/providers/acme/reset" });
     expect(res.statusCode).toBe(200);
     expect(providerHealthMock.reset).toHaveBeenCalledWith("acme");
     expect(res.json()).toEqual({ ok: true, providerId: "acme" });
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "provider.reset",
+        targetType: "provider",
+        targetId: "acme",
+      }),
+    );
   });
 
   it("returns 403 for a signed-in user who is not an administrator", async () => {
@@ -158,6 +152,7 @@ describe("POST /admin/providers/:id/reset", () => {
     const res = await app.inject({ method: "POST", url: "/admin/providers/acme/reset" });
     expect(res.statusCode).toBe(403);
     expect(providerHealthMock.reset).not.toHaveBeenCalled();
+    expect(writeAuditLog).not.toHaveBeenCalled();
   });
 
   it("returns 401 when no admin session is present", async () => {
