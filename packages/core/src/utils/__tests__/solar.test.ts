@@ -3,6 +3,7 @@ import {
   antisolarPoint,
   darkRegion,
   solarAltitudeDeg,
+  solarAzimuthDeg,
   solarPosition,
   subsolarPoint,
   twilightBands,
@@ -61,6 +62,66 @@ describe("solarAltitudeDeg", () => {
     for (let hour = 0; hour < 24; hour += 3) {
       const date = new Date(Date.UTC(2026, 5, 21, hour));
       expect(solarAltitudeDeg(date, 78.2, 15.6)).toBeGreaterThan(0);
+    }
+  });
+});
+
+/** The minute of the UTC day with the highest sun at a place. */
+function solarNoon(day: Date, lat: number, lng: number): Date {
+  let best = day;
+  let bestAltitude = -Infinity;
+  for (let minute = 0; minute < 24 * 60; minute += 1) {
+    const date = new Date(day.getTime() + minute * 60_000);
+    const altitude = solarAltitudeDeg(date, lat, lng);
+    if (altitude > bestAltitude) {
+      best = date;
+      bestAltitude = altitude;
+    }
+  }
+  return best;
+}
+
+describe("solarAzimuthDeg", () => {
+  const berlin = { lat: 52.52, lng: 13.405 };
+
+  it("points due south at local solar noon in the northern mid-latitudes", () => {
+    const noon = solarNoon(new Date("2026-03-20T00:00:00Z"), 50, 8);
+    expect(solarAzimuthDeg(noon, 50, 8)).toBeCloseTo(180, 0);
+  });
+
+  it("points due north at local solar noon in the southern mid-latitudes", () => {
+    const noon = solarNoon(new Date("2026-06-21T00:00:00Z"), -34, 151);
+    const azimuth = solarAzimuthDeg(noon, -34, 151);
+    expect(Math.min(azimuth, 360 - azimuth)).toBeLessThan(0.5);
+  });
+
+  it("rises in the east and sets in the west", () => {
+    const morning = solarAzimuthDeg(new Date("2026-06-21T06:00:00Z"), berlin.lat, berlin.lng);
+    const evening = solarAzimuthDeg(new Date("2026-06-21T18:00:00Z"), berlin.lat, berlin.lng);
+    expect(morning).toBeGreaterThan(0);
+    expect(morning).toBeLessThan(180);
+    expect(evening).toBeGreaterThan(180);
+    expect(evening).toBeLessThan(360);
+  });
+
+  it("matches the NOAA solar calculator for Berlin at the June solstice", () => {
+    // Reference values from the NOAA spreadsheet formulation, computed independently.
+    expect(solarAzimuthDeg(new Date("2026-06-21T06:00:00Z"), berlin.lat, berlin.lng)).toBeCloseTo(
+      84.97,
+      0,
+    );
+    expect(solarAzimuthDeg(new Date("2026-06-21T18:00:00Z"), berlin.lat, berlin.lng)).toBeCloseTo(
+      294.37,
+      0,
+    );
+  });
+
+  it("stays finite and in range at the poles", () => {
+    for (const lat of [90, -90]) {
+      const azimuth = solarAzimuthDeg(JUN_SOLSTICE, lat, 0);
+      expect(Number.isFinite(azimuth)).toBe(true);
+      expect(azimuth).toBeGreaterThanOrEqual(0);
+      expect(azimuth).toBeLessThan(360);
     }
   });
 });

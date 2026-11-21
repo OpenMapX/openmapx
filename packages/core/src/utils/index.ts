@@ -401,6 +401,7 @@ export {
   normalizeLongitude,
   type SolarPosition,
   solarAltitudeDeg,
+  solarAzimuthDeg,
   solarPosition,
   subsolarPoint,
   type TwilightBandOptions,
