@@ -425,13 +425,13 @@ examples:
       geometry: point
       tags:
         natural: tree
-        height: "12"
+        height: "12.5"
         leaf_type: broadleaved
     output:
       - layer: trees
         geometry: point
         tags:
-          height: 12
+          height: 12.5
           leaf: broadleaved
   - name: tree row
     input:
