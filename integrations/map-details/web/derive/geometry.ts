@@ -161,6 +161,25 @@ export function slice(line: readonly Pt[], fromM: number, toM: number): Pt[] {
   return out.length >= 2 ? out : [];
 }
 
+/** The point at a distance along a polyline and the unit direction of travel there. */
+export function pointAlong(line: readonly Pt[], distance: number): { point: Pt; dir: Pt } {
+  let walked = 0;
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1] as Pt;
+    const b = line[i] as Pt;
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (length < EPSILON) continue;
+    const dir: Pt = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+    if (walked + length >= distance || i === line.length - 1) {
+      const t = Math.min(Math.max(distance - walked, 0), length);
+      return { point: [a[0] + dir[0] * t, a[1] + dir[1] * t], dir };
+    }
+    walked += length;
+  }
+  const only = (line[0] ?? [0, 0]) as Pt;
+  return { point: [only[0], only[1]], dir: [1, 0] };
+}
+
 /** Dash pieces along a line, restarting the phase at its start. */
 export function dashes(line: readonly Pt[], dash: number, gap: number): Pt[][] {
   const total = polylineLength(line);

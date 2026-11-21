@@ -24,6 +24,9 @@ export interface RoadPiece {
   /** The piece starts or ends at a junction's cut-back point (a stop line at the end). */
   startAtJunction: boolean;
   endAtJunction: boolean;
+  /** Distances of the vertices the piece runs between (the junction centre or the line's end). */
+  startVertexM: number;
+  endVertexM: number;
 }
 
 const LINE_HALF_WIDTH = 0.075;
@@ -102,6 +105,8 @@ export function junctionCuts(
           endM,
           startAtJunction: from.cut > 0,
           endAtJunction: to.cut > 0,
+          startVertexM: from.d,
+          endVertexM: to.d,
         });
       }
     });
