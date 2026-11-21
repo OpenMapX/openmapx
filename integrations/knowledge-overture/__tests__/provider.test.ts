@@ -267,7 +267,82 @@ describe("knowledge-overture provider lookup", () => {
 
     const spatialCall = db.execute.mock.calls.find(([sql]) => String(sql).includes("ST_DWithin"));
     expect(spatialCall?.[0]).toContain("taxonomy_hierarchy && $3::TEXT[]");
-    expect(spatialCall?.[1]).toEqual([13.4, 52.5, ["cafe", "coffee_shop", "tea_house"]]);
+    expect(spatialCall?.[0]).toContain("(operating_status IS NULL OR operating_status = 'open')");
+    expect(spatialCall?.[1]).toEqual([
+      13.4,
+      52.5,
+      ["cafe", "coffee_shop", "tea_room", "tea_house"],
+    ]);
+  });
+
+  it("skips empty-string array entries, trims socials/addresses, and credits exact array pointers", async () => {
+    const manifest = structuredClone((await import("../manifest.json")).default);
+    const db = makeDb(
+      vi.fn().mockResolvedValue([
+        {
+          gers_id: "overture-dirty-1",
+          name: "Cafe",
+          sources_catalogue: manifest.dataSources.map((source) => ({
+            sourceId: source.sourceId,
+            name: source.name,
+          })),
+          names: { primary: "Cafe", common: { de: "  ", en: "\u200ECafe EN" } },
+          brand: { names: { primary: "  " }, wikidata: " Q37158 " },
+          phones: ["", "   ", "\u200E+49 30 98765"],
+          websites: ["", " https://cafe.example/menu "],
+          socials: ["", " https://www.facebook.com/cafe "],
+          emails: ["", "   "],
+          addresses: [
+            {
+              freeform: "Hauptstraße 5, 10117 Berlin",
+              locality: "Berlin",
+              postcode: "10117",
+              country: " DE ",
+            },
+          ],
+          sources: [
+            { property: "", dataset: "Meta" },
+            { property: "/phones/2", dataset: "Foursquare" },
+            { property: "/websites/1", dataset: "Microsoft" },
+            { property: "/socials/1", dataset: "PinMeTo" },
+          ],
+          release: "2026-09-23.0",
+        },
+      ]),
+    );
+    const ctx = makeCtx(db);
+    installHostCapabilities(ctx, { manifest: integrationManifestSchema.parse(manifest) });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const { overtureKnowledgeSource } = await import("../provider.js");
+
+    const result = await overtureKnowledgeSource.lookup({}, "en", {
+      ids: { overture: "overture-dirty-1" },
+    });
+
+    expect(result?.brand).toBeUndefined();
+    expect(result?.externalIds?.wikidata).toBe("Q37158");
+    expect(result?.names).toEqual({ en: "Cafe EN" });
+    expect(result?.phone).toBe("+49 30 98765");
+    expect(result?.website).toBe("https://cafe.example/menu");
+    expect(result?.email).toBeUndefined();
+    expect(result?.socials).toEqual(["https://www.facebook.com/cafe"]);
+    expect(result?.address).toBe("Hauptstraße 5, 10117 Berlin");
+    expect(result?.city).toBe("Berlin");
+    expect(result?.countryCode).toBe("de");
+    expect(result?.fieldContributors?.phone?.map((r) => r.sourceId).sort()).toEqual([
+      "foursquare",
+      "overture",
+    ]);
+    expect(result?.fieldContributors?.website?.map((r) => r.sourceId).sort()).toEqual([
+      "microsoft-places",
+      "overture",
+    ]);
+    expect(result?.fieldContributors?.socials?.map((r) => r.sourceId).sort()).toEqual([
+      "overture",
+      "pinmeto",
+    ]);
+    expect(result?.fieldContributors?.email).toBeUndefined();
   });
 
   it("returns null when candidates exist but name similarity is below 0.8", async () => {

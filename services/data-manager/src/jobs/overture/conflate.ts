@@ -493,11 +493,12 @@ export async function scoreOvertureCandidates(opts: {
     const placeRows: PlaceRow[] = await sql.unsafe<PlaceRow[]>(
       `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8,
               basic_category, taxonomy_primary, taxonomy_hierarchy, taxonomy_alternates,
-              addresses, brand->>'wikidata' AS wikidata, phones, websites[1] AS website,
+              addresses, brand->>'wikidata' AS wikidata, phones,
+              (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               confidence
        FROM "${schema}".places
        WHERE h3_r8 = ANY($1::TEXT[])
-         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+         AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE}) LIMIT 50001`,
       [cells],
     );

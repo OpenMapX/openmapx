@@ -83,11 +83,11 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
       ST_Y(geom) AS lat,
       ST_X(geom) AS lng,
       basic_category AS category,
-      addresses->0->>'freeform' AS address,
-      addresses->0->>'postcode' AS postcode,
+      NULLIF(BTRIM(addresses->0->>'freeform'), '') AS address,
+      NULLIF(BTRIM(addresses->0->>'postcode'), '') AS postcode,
       brand->>'wikidata' AS wikidata,
       phones,
-      websites[1] AS website,
+      (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
       confidence,
       operating_status
     FROM overture_places.places
@@ -143,7 +143,8 @@ function runSweepWithConflate(
   return SWEEP_GRID.map((cell) => {
     const filteredOverture = overtureRows.filter(
       (r) =>
-        (r.confidence ?? 1) >= cell.confidenceFloor && r.operating_status !== "permanently_closed",
+        (r.confidence ?? 1) >= cell.confidenceFloor &&
+        (r.operating_status == null || r.operating_status === "open"),
     );
 
     // Mirror the production conflateOverture point construction so the sweep

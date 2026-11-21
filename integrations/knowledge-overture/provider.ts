@@ -7,9 +7,13 @@ import type {
 import {
   CATEGORY_FILTERS,
   captureOvertureFieldContributors,
+  cleanOvertureString,
   nameSimilarity,
   normalizeOvertureProvenance,
   openMapXCategoryToOvertureConcepts,
+  selectFirstOvertureString,
+  selectOvertureAddress,
+  selectOvertureStrings,
 } from "@openmapx/core";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -157,7 +161,7 @@ export async function resolveGers(
           OR taxonomy_hierarchy && $3::TEXT[]
           OR taxonomy_alternates && $3::TEXT[]
         )
-        AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+        AND (operating_status IS NULL OR operating_status = 'open')
       ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
@@ -177,7 +181,7 @@ export async function resolveGers(
           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
           150
         )
-        AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+        AND (operating_status IS NULL OR operating_status = 'open')
       ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
@@ -223,46 +227,47 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
     provenance: normalizeOvertureProvenance(row.sources, row.release),
   };
 
-  const brandName = row.brand?.names?.primary;
+  const brandName = cleanOvertureString(row.brand?.names?.primary);
   if (brandName) {
     result.brand = { name: brandName };
   }
-  if (row.brand?.wikidata) {
-    if (result.brand) result.brand.wikidata = row.brand.wikidata;
-    result.externalIds = { ...result.externalIds, wikidata: row.brand.wikidata };
+  const brandWikidata = cleanOvertureString(row.brand?.wikidata);
+  if (brandWikidata) {
+    if (result.brand) result.brand.wikidata = brandWikidata;
+    result.externalIds = { ...result.externalIds, wikidata: brandWikidata };
   }
 
-  if (row.names?.common && Object.keys(row.names.common).length > 0) {
-    result.names = row.names.common;
+  const cleanedNames: Array<[string, string]> = [];
+  for (const [tag, raw] of Object.entries(row.names?.common ?? {})) {
+    const cleaned = cleanOvertureString(raw);
+    if (cleaned !== undefined) cleanedNames.push([tag, cleaned]);
+  }
+  if (cleanedNames.length > 0) {
+    result.names = Object.fromEntries(cleanedNames);
   }
 
-  const phone = row.phones?.[0];
-  if (phone) result.phone = phone;
+  const phone = selectFirstOvertureString(row.phones, "/phones");
+  if (phone) result.phone = phone.value;
 
-  const website = row.websites?.[0];
-  if (website) result.website = website;
+  const website = selectFirstOvertureString(row.websites, "/websites");
+  if (website) result.website = website.value;
 
-  const email = row.emails?.[0];
-  if (email) result.email = email;
+  const email = selectFirstOvertureString(row.emails, "/emails");
+  if (email) result.email = email.value;
 
-  if (row.socials?.length) result.socials = row.socials;
+  const socials = selectOvertureStrings(row.socials, "/socials");
+  if (socials) result.socials = socials.values;
 
-  const address = row.addresses?.[0];
-  if (address) {
-    const localityLine = [address.postcode, address.locality].filter(Boolean).join(" ");
-    result.address = [address.freeform, localityLine || undefined].filter(Boolean).join(", ");
-    result.city = address.locality ?? undefined;
-    result.countryCode = address.country?.toLowerCase() ?? undefined;
-  }
+  const address = selectOvertureAddress(row.addresses);
+  if (address.address) result.address = address.address;
+  if (address.city) result.city = address.city;
+  if (address.countryCode) result.countryCode = address.countryCode;
 
   const pointers: Record<string, string[]> = {};
-  for (const field of ["phone", "website", "email"] as const) {
-    if (result[field])
-      pointers[field] = [
-        `/${field === "phone" ? "phones" : field === "email" ? "emails" : "websites"}/0`,
-      ];
-  }
-  if (result.socials) pointers.socials = result.socials.map((_, index) => `/socials/${index}`);
+  if (phone) pointers.phone = [phone.pointer];
+  if (website) pointers.website = [website.pointer];
+  if (email) pointers.email = [email.pointer];
+  if (socials) pointers.socials = socials.pointers;
   if (result.names) {
     pointers.names = [];
     for (const key of Object.keys(result.names)) {
@@ -280,13 +285,9 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
     }
   }
   if (result.externalIds?.wikidata) pointers["externalIds.wikidata"] = ["/brand/wikidata"];
-  if (result.address) {
-    pointers.address = [];
-    for (const field of ["freeform", "postcode", "locality"] as const)
-      if (address?.[field]) pointers.address.push(`/addresses/0/${field}`);
-  }
-  if (result.city) pointers.city = ["/addresses/0/locality"];
-  if (result.countryCode) pointers.countryCode = ["/addresses/0/country"];
+  if (address.pointers.address) pointers.address = address.pointers.address;
+  if (address.pointers.city) pointers.city = address.pointers.city;
+  if (address.pointers.countryCode) pointers.countryCode = address.pointers.countryCode;
   const captured = captureOvertureFieldContributors(result, row.sources, catalogue, pointers);
   captured.fieldContributors["externalIds.gers"] = snapshotContributors(
     catalogue.filter((receipt) => receipt.sourceId === "overture"),

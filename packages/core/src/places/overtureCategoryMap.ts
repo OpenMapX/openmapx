@@ -1,32 +1,47 @@
 // This is deliberately a small interoperability bridge, not a copy of
 // Overture's taxonomy. Each OpenMapX UI category points at one or more stable,
-// broad Overture concepts. Matching descendants is delegated to the hierarchy
-// shipped on every Overture place, so new or renamed leaves do not require a
-// generated catalog in this repository.
+// broad Overture concepts (aligned with Overture's 2026-09-23.0 taxonomy while
+// retaining pre-rename terms for older 2026 snapshots). Matching descendants is
+// delegated to the hierarchy shipped on every Overture place, so new or renamed
+// leaves do not require a generated catalog in this repository.
 const categoryConcepts: Record<string, string[]> = {
   restaurants: ["restaurant"],
-  cafes: ["cafe", "coffee_shop", "tea_house"],
-  bars: ["bar", "pub"],
+  cafes: ["cafe", "coffee_shop", "tea_room", "tea_house"],
+  bars: ["bar", "pub", "beer_garden"],
   hotels: ["hotel"],
   supermarkets: ["supermarket", "grocery_store"],
-  banks: ["bank", "credit_union"],
+  banks: ["bank", "credit_union", "bank_or_credit_union"],
   fuel: ["gas_station"],
-  shopping_malls: ["shopping_mall"],
+  shopping_malls: ["shopping_mall", "department_store"],
   bookstores: ["bookstore"],
   pharmacies: ["pharmacy"],
-  bakeries: ["bakery"],
-  nightlife: ["night_club", "dance_club"],
-  gyms: ["gym", "fitness_center"],
-  hairdressers: ["hair_salon", "barber_shop"],
+  bakeries: ["bakery", "patisserie_cake_shop"],
+  nightlife: ["dance_club", "nightlife_venue", "casino", "night_club"],
+  gyms: ["gym", "fitness_studio", "fitness_center"],
+  hairdressers: ["hair_salon", "barber", "barber_shop", "beauty_salon"],
   laundromats: ["laundromat", "laundry_service"],
-  opticians: ["optician", "eyewear_store"],
-  car_rental: ["car_rental"],
-  car_repair: ["auto_repair", "car_repair"],
-  veterinarians: ["veterinarian"],
+  opticians: ["optician", "eyewear_store", "optometry"],
+  car_rental: ["car_rental_service", "car_rental"],
+  car_repair: [
+    "automotive_repair",
+    "auto_repair_service",
+    "auto_body_shop",
+    "auto_repair",
+    "car_repair",
+  ],
+  veterinarians: ["veterinary_care", "veterinarian"],
   markets: ["market", "farmers_market"],
   cinemas: ["movie_theater", "cinema"],
-  doctors: ["doctor", "medical_clinic"],
-  dentists: ["dentist"],
+  doctors: [
+    "doctors_office",
+    "primary_care_or_general_clinic",
+    "pediatric_clinic",
+    "urgent_care_clinic",
+    "walk_in_clinic",
+    "doctor",
+    "medical_clinic",
+  ],
+  dentists: ["dental_clinic", "dentist"],
   hospitals: ["hospital"],
   museums: ["museum"],
 };
