@@ -279,6 +279,7 @@ export class MapDetailsObjectsLayer implements CustomLayerInterface {
     }
     if (shadowRows.length > this.shadows.instanceMatrix.count) {
       this.scene.remove(this.shadows);
+      this.shadows.geometry.dispose();
       this.shadows.dispose();
       this.shadows = this.createShadows(shadowRows.length * 2);
     }

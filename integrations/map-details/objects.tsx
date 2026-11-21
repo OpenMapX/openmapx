@@ -162,9 +162,12 @@ export function useMapDetailsObjects({
 
     const viewCells = () => {
       const bounds = map.getBounds();
+      const canvas = map.getCanvas();
+      // The ground under the bottom centre of the screen: the camera's foreground.
+      const foreground = map.unproject([canvas.clientWidth / 2, canvas.clientHeight]);
       return visibleCells(
         [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-        map.getZoom(),
+        [foreground.lng, foreground.lat],
       );
     };
 

@@ -31,7 +31,7 @@ describe("visible cells", () => {
     const east = lngOf(CELL.x + 1.8);
     const north = latOf(CELL.y + 0.2);
     const south = latOf(CELL.y + 0.8);
-    const cells = visibleCells([west, south, east, north], 17);
+    const cells = visibleCells([west, south, east, north]);
     const keys = new Set(cells.map((c) => cellKey(c.x, c.y)));
     for (let x = CELL.x - 1; x <= CELL.x + 2; x++)
       for (let y = CELL.y - 1; y <= CELL.y + 1; y++) expect(keys.has(cellKey(x, y))).toBe(true);
@@ -44,17 +44,50 @@ describe("visible cells", () => {
   });
 
   it("lists a world-wide view without enumerating every cell", () => {
-    const cells = visibleCells([-180, -85, 180, 85], 17);
+    const cells = visibleCells([-180, -85, 180, 85]);
     expect(cells).toHaveLength(400);
   });
 
   it("caps the count at 400 cells nearest the view centre", () => {
-    const cells = visibleCells(
-      [lngOf(CELL.x - 40), latOf(CELL.y + 40), lngOf(CELL.x + 40), latOf(CELL.y - 40)],
-      16,
-    );
+    const cells = visibleCells([
+      lngOf(CELL.x - 40),
+      latOf(CELL.y + 40),
+      lngOf(CELL.x + 40),
+      latOf(CELL.y - 40),
+    ]);
     expect(cells).toHaveLength(400);
     expect(cells.some((c) => c.x === CELL.x && c.y === CELL.y)).toBe(true);
+  });
+
+  it("keeps the cells under a steeply tilted camera's foreground, not the far horizon", () => {
+    // A view reaching 80 cells north of the camera; its foreground sits at the bottom edge.
+    const bounds: [number, number, number, number] = [
+      lngOf(CELL.x - 10),
+      latOf(CELL.y + 1),
+      lngOf(CELL.x + 10),
+      latOf(CELL.y - 80),
+    ];
+    const focus: [number, number] = [lngOf(CELL.x + 0.5), latOf(CELL.y + 0.5)];
+    const cells = visibleCells(bounds, focus);
+    expect(cells).toHaveLength(400);
+    const keys = new Set(cells.map((c) => cellKey(c.x, c.y)));
+    for (let x = CELL.x - 3; x <= CELL.x + 3; x++)
+      for (let y = CELL.y - 3; y <= CELL.y; y++) expect(keys.has(cellKey(x, y))).toBe(true);
+    expect(keys.has(cellKey(CELL.x, CELL.y - 70))).toBe(false);
+  });
+
+  it("measures nearness from inside the view when the focus falls outside it", () => {
+    const bounds: [number, number, number, number] = [
+      lngOf(CELL.x - 40),
+      latOf(CELL.y + 40),
+      lngOf(CELL.x + 40),
+      latOf(CELL.y - 40),
+    ];
+    const cells = visibleCells(bounds, [0, 0]);
+    expect(cells).toHaveLength(400);
+    expect(cells.every((c) => Math.abs(c.x - CELL.x) <= 41 && Math.abs(c.y - CELL.y) <= 41)).toBe(
+      true,
+    );
   });
 });
 

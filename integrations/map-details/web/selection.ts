@@ -18,28 +18,38 @@ const latToY = (lat: number) => {
   return ((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * 2 ** CELL_ZOOM;
 };
 
-/** The z16 cells intersecting `[west, south, east, north]` plus a one-cell ring, at most 400. */
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
+/**
+ * The z16 cells intersecting `[west, south, east, north]` plus a one-cell ring,
+ * at most 400, nearest `focus` first. Pass the ground under the bottom centre of
+ * the screen: at a steep tilt the view's middle lies far towards the horizon,
+ * and measuring from there would drop the cells right in front of the camera.
+ * Without a focus (or one outside the view) nearness is measured from inside the view.
+ */
 export function visibleCells(
   bounds: [number, number, number, number],
-  _zoom: number,
+  focus?: readonly [number, number],
 ): Array<{ x: number; y: number }> {
   const [west, south, east, north] = bounds;
   const x0 = Math.floor(lngToX(west)) - 1;
   const x1 = Math.floor(lngToX(east)) + 1;
   const y0 = Math.floor(latToY(north)) - 1;
   const y1 = Math.floor(latToY(south)) + 1;
-  const cx = (x0 + x1 + 1) / 2;
-  const cy = (y0 + y1 + 1) / 2;
-  // Enumerate at most a window around the centre big enough for the cap: a wide
-  // view (a steep tilt, or the whole world) would otherwise list millions of cells.
-  const half = Math.ceil(Math.sqrt(MAX_CELLS) / 2) + 1;
+  const fx = clamp(focus ? lngToX(focus[0]) : (x0 + x1 + 1) / 2, x0, x1 + 1);
+  const fy = clamp(focus ? latToY(focus[1]) : (y0 + y1 + 1) / 2, y0, y1 + 1);
+  // Enumerate at most a window big enough for the cap, kept inside the view so a
+  // focus at its edge still fills it: a wide view (a steep tilt, or the whole
+  // world) would otherwise list millions of cells.
+  const span = 2 * (Math.ceil(Math.sqrt(MAX_CELLS) / 2) + 1);
+  const wx0 = clamp(Math.floor(fx) - span / 2, x0, Math.max(x0, x1 - span));
+  const wy0 = clamp(Math.floor(fy) - span / 2, y0, Math.max(y0, y1 - span));
   const cells: Array<{ x: number; y: number }> = [];
-  for (let x = Math.max(x0, Math.floor(cx) - half); x <= Math.min(x1, Math.floor(cx) + half); x++)
-    for (let y = Math.max(y0, Math.floor(cy) - half); y <= Math.min(y1, Math.floor(cy) + half); y++)
-      cells.push({ x, y });
+  for (let x = wx0; x <= Math.min(x1, wx0 + span); x++)
+    for (let y = wy0; y <= Math.min(y1, wy0 + span); y++) cells.push({ x, y });
   if (cells.length <= MAX_CELLS) return cells;
   return cells
-    .map((cell) => ({ cell, d: Math.hypot(cell.x + 0.5 - cx, cell.y + 0.5 - cy) }))
+    .map((cell) => ({ cell, d: Math.hypot(cell.x + 0.5 - fx, cell.y + 0.5 - fy) }))
     .sort((a, b) => a.d - b.d)
     .slice(0, MAX_CELLS)
     .map(({ cell }) => cell);

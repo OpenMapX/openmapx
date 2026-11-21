@@ -151,6 +151,20 @@ describe("MapDetailsObjectsLayer", () => {
     expect(shadows.renderOrder).toBeLessThan(mesh(layer, "broadleaf|near").renderOrder);
   });
 
+  it("frees the old disc geometry when the shadow mesh grows", () => {
+    const { layer } = setup();
+    const before = layer.shadowMesh();
+    let freed = false;
+    before.geometry.addEventListener("dispose", () => {
+      freed = true;
+    });
+    const many = Array.from({ length: 40 }, (_, i): [number, number, number] => [i * 2, 10, 0]);
+    layer.setInstances(selection(selected("broadleaf", many)), ORIGIN);
+    expect(layer.shadowMesh()).not.toBe(before);
+    expect(layer.shadowMesh().count).toBe(40);
+    expect(freed).toBe(true);
+  });
+
   it("hides a cell while its terrain loads and grounds it on the sampled grid", () => {
     const { layer } = setup();
     layer.setInstances(selection(selected("broadleaf", [[SIZE / 2, SIZE / 2, 0]])), ORIGIN);

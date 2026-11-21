@@ -116,4 +116,16 @@ describe("worker transport", () => {
     });
     worker.reply({ id: first?.request.id ?? 0, kind: "objects", instances: [] });
   });
+
+  it("answers null after disposal instead of deriving in this thread", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createMapDetailsWorker();
+    client.dispose();
+    expect(await client.paint(16, 1, 2, TEMPLATE)).toBeNull();
+    // Give a stray inline derivation the chance to start before checking it did not.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -46,6 +46,7 @@ function inlineSend(): Send {
 export function createMapDetailsWorker(): MapDetailsWorkerClient {
   const base = typeof document === "undefined" ? "http://localhost/" : document.baseURI;
   let sequence = 0;
+  let disposed = false;
   let worker: Worker | null = null;
   let send: Send = inlineSend();
   const pending = new Map<number, (response: WorkerResponse | null) => void>();
@@ -67,7 +68,8 @@ export function createMapDetailsWorker(): MapDetailsWorkerClient {
         pending.clear();
       };
       send = (request) => {
-        if (!worker) return inlineSend()(request);
+        // Only after disposal: a broken worker swaps `send` for the inline fallback.
+        if (!worker) return Promise.resolve(null);
         const target = worker;
         return new Promise((resolve) => {
           if (request.kind === "cancel") {
@@ -88,7 +90,7 @@ export function createMapDetailsWorker(): MapDetailsWorkerClient {
     body: Extract<WorkerRequest, { kind: "paint" | "objects" }>,
     signal: AbortSignal | undefined,
   ): Promise<WorkerResponse | null> {
-    if (signal?.aborted) return null;
+    if (disposed || signal?.aborted) return null;
     const answer = send(body);
     if (!signal) return answer;
     return new Promise((resolve, reject) => {
@@ -151,6 +153,7 @@ export function createMapDetailsWorker(): MapDetailsWorkerClient {
       return unwrap(response, (r) => ("kind" in r && r.kind === "objects" ? r.instances : []));
     },
     dispose() {
+      disposed = true;
       worker?.terminate();
       worker = null;
       for (const resolve of pending.values()) resolve(null);
