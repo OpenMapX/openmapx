@@ -123,9 +123,70 @@ describe("poi-overture provider.search", () => {
     expect(first.category).toBe("cafes");
     expect(first.provenance?.map((source) => source.sourceId)).toEqual(["overture", "foursquare"]);
     expect(nth(db.execute.mock.calls, 0)[0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain(
+      "(operating_status IS NULL OR operating_status = 'open')",
+    );
     expect(nth(db.execute.mock.calls, 0)[0]).toContain("ORDER BY");
     expect(nth(db.execute.mock.calls, 0)[0]).toContain("confidence DESC NULLS LAST");
-    expect(nth(db.execute.mock.calls, 0)[1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);
+    expect(nth(db.execute.mock.calls, 0)[0]).toContain(
+      "NULLIF(BTRIM(COALESCE(addresses->0->>'freeform', '')), '') IS NOT NULL",
+    );
+    expect(nth(db.execute.mock.calls, 0)[1][4]).toEqual([
+      "cafe",
+      "coffee_shop",
+      "tea_room",
+      "tea_house",
+    ]);
+  });
+
+  it("sanitizes empty-string arrays and dirty contact strings while preserving JSON-Pointer provenance", async () => {
+    const dirtyRow = {
+      ...FIXTURE_ROWS[0],
+      names: { primary: "\bStarbucks Mitte", common: { de: "  " } },
+      phones: ["", "   ", "\u200E+49 30 999"],
+      websites: ["", " https://starbucks.example/clean "],
+      emails: ["", "   "],
+      socials: ["", " https://instagram.com/starbucks "],
+      sources: [
+        { property: "", dataset: "Meta" },
+        { property: "/phones/2", dataset: "Foursquare" },
+        { property: "/websites/1", dataset: "Microsoft" },
+        { property: "/socials/1", dataset: "PinMeTo" },
+      ],
+      sources_catalogue: [
+        { sourceId: "overture", name: "Overture Maps" },
+        { sourceId: "meta-places", name: "Meta Places" },
+        { sourceId: "foursquare", name: "Foursquare" },
+        { sourceId: "microsoft-places", name: "Microsoft Places" },
+        { sourceId: "pinmeto", name: "PinMeTo" },
+      ],
+    };
+    const db = makeFakeDb([dirtyRow]);
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const provider = nth(ctx.registered.poiSearch, 0) as PoiSearchProvider;
+    const { results } = await toOutcome(provider.search("cafes", BBOX, { lang: "de" }));
+    const item = nth(results, 0);
+    expect(item.name).toBe("Starbucks Mitte");
+    expect(item.names).toBeUndefined();
+    expect(item.phone).toBe("+49 30 999");
+    expect(item.website).toBe("https://starbucks.example/clean");
+    expect(item.email).toBeUndefined();
+    expect(item.socials).toEqual(["https://instagram.com/starbucks"]);
+    expect(item.fieldContributors?.phone?.map((r) => r.sourceId).sort()).toEqual([
+      "foursquare",
+      "overture",
+    ]);
+    expect(item.fieldContributors?.website?.map((r) => r.sourceId).sort()).toEqual([
+      "microsoft-places",
+      "overture",
+    ]);
+    expect(item.fieldContributors?.socials?.map((r) => r.sourceId).sort()).toEqual([
+      "overture",
+      "pinmeto",
+    ]);
+    expect(item.fieldContributors?.email).toBeUndefined();
   });
 
   it("returns [] for non-commercial category that has no Overture leaves", async () => {

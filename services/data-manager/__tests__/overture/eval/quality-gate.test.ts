@@ -120,9 +120,14 @@ describe("Overture permanent quality baseline", () => {
         baseline.bbox.south,
         baseline.bbox.east,
         baseline.bbox.north,
-        ["cafe", "coffee_shop", "tea_house"],
+        ["cafe", "coffee_shop", "tea_room", "tea_house"],
         0.5,
       ],
+    );
+    const stagingSql = String(mocks.unsafe.mock.calls[0]?.[0] ?? "");
+    expect(stagingSql).toContain("(operating_status IS NULL OR operating_status = 'open')");
+    expect(stagingSql).toContain(
+      "NULLIF(BTRIM(COALESCE(addresses->0->>'freeform', '')), '') IS NOT NULL",
     );
   });
 

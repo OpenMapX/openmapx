@@ -1,4 +1,5 @@
 import { DEFAULT_CONFLATION_THRESHOLDS } from "@openmapx/core";
+import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import {
   assignLinkRecords,
@@ -6,6 +7,7 @@ import {
   type OsmPoiPoint,
   type OverturePlacePoint,
   scoreLinkCandidates,
+  scoreOvertureCandidates,
 } from "../../src/jobs/overture/conflate.js";
 
 const RELEASE = "2026-06-17.0";
@@ -265,4 +267,50 @@ it("refuses dense scoring pages before retaining an unbounded candidate graph", 
   }
   expect(error).toBeInstanceOf(Error);
   expect((error as Error).message).toMatch(/candidate.*50000/i);
+});
+
+it("filters conflation candidates to open/null operating_status and skips empty website strings", async () => {
+  const executedQueries: string[] = [];
+  let osmPages = 0;
+  const sql = {
+    unsafe: vi.fn(async (query: string) => {
+      executedQueries.push(query);
+      if (query.includes('FROM "overture_places".osm_pois')) {
+        osmPages += 1;
+        if (osmPages > 1) return [];
+        return [
+          {
+            osm_type: "node",
+            osm_id: "42",
+            name: "Cafe Test",
+            lat: BASE_LAT,
+            lng: BASE_LNG,
+            h3_r8: "881f1d4817fffff",
+            category: "cafes",
+            street: null,
+            housenumber: null,
+            postcode: null,
+            wikidata: null,
+            phone: null,
+            website: null,
+          },
+        ];
+      }
+      if (query.includes("SELECT COUNT(*)::TEXT AS count")) {
+        return [{ count: "0" }];
+      }
+      return [];
+    }),
+  } as unknown as postgres.Sql;
+
+  await scoreOvertureCandidates({
+    sql,
+    region: "europe/germany/berlin",
+    release: RELEASE,
+  });
+
+  const placeQuery = executedQueries.find((q) => q.includes('FROM "overture_places".places'));
+  expect(placeQuery).toBeDefined();
+  expect(placeQuery).toContain("(operating_status IS NULL OR operating_status = 'open')");
+  expect(placeQuery).toContain("unnest(websites)");
 });

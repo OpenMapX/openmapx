@@ -135,11 +135,12 @@ async function queryFusedCase(
     ),
     sql.unsafe<FusedOvertureRow[]>(
       `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng,
-              phones[1] AS phone, websites[1] AS website,
-              addresses->0->>'freeform' AS address
+              (SELECT BTRIM(v) FROM unnest(phones) AS v WHERE BTRIM(v) <> '' LIMIT 1) AS phone,
+              (SELECT BTRIM(v) FROM unnest(websites) AS v WHERE BTRIM(v) <> '' LIMIT 1) AS website,
+              NULLIF(BTRIM(addresses->0->>'freeform'), '') AS address
        FROM "${schema}".places
        WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+         AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= $6)
          AND (
            basic_category = ANY($5::TEXT[])
@@ -204,7 +205,7 @@ async function queryCase(
     `SELECT gers_id
      FROM "${schema}".places
      WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-       AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+       AND (operating_status IS NULL OR operating_status = 'open')
        AND (confidence IS NULL OR confidence >= $6)
        AND (
          basic_category = ANY($5::TEXT[])
@@ -215,8 +216,10 @@ async function queryCase(
      ORDER BY
        geom <-> ST_SetSRID(ST_MakePoint(($1 + $3) / 2, ($2 + $4) / 2), 4326),
        confidence DESC NULLS LAST,
-       ((addresses IS NOT NULL)::INT + (websites IS NOT NULL)::INT +
-        (phones IS NOT NULL)::INT + (emails IS NOT NULL)::INT) DESC,
+       ((NULLIF(BTRIM(COALESCE(addresses->0->>'freeform', '')), '') IS NOT NULL)::INT +
+        (EXISTS (SELECT 1 FROM unnest(websites) AS v WHERE BTRIM(v) <> ''))::INT +
+        (EXISTS (SELECT 1 FROM unnest(phones) AS v WHERE BTRIM(v) <> ''))::INT +
+        (EXISTS (SELECT 1 FROM unnest(emails) AS v WHERE BTRIM(v) <> ''))::INT) DESC,
        gers_id
      LIMIT 50`,
     [west, south, east, north, concepts, 0.5],

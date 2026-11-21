@@ -80,13 +80,18 @@ export {
 export {
   assertSupportedOvertureContributors,
   captureOvertureFieldContributors,
+  cleanOvertureString,
   normalizeOvertureProvenance,
   OVERTURE_PLACE_DATASET_SOURCE_IDS,
+  type OvertureAddressItem,
   type OverturePlaceDataset,
   type OvertureSourceItem,
   overtureDatasetSourceId,
   overturePropertyContributors,
+  selectFirstOvertureString,
+  selectOvertureAddress,
   selectOvertureName,
+  selectOvertureStrings,
 } from "./overtureSource";
 export { formatPaymentMethodLabel } from "./paymentMethods";
 export {

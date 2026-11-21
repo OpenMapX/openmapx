@@ -174,26 +174,142 @@ export function captureOvertureFieldContributors<T extends object>(
   };
 }
 
+export interface OvertureAddressItem {
+  freeform?: string | null;
+  locality?: string | null;
+  postcode?: string | null;
+  region?: string | null;
+  country?: string | null;
+}
+
+function isDroppedControlOrBidi(codePoint: number): boolean {
+  return (
+    codePoint <= 0x1f ||
+    codePoint === 0x7f ||
+    codePoint === 0x200e ||
+    codePoint === 0x200f ||
+    (codePoint >= 0x202a && codePoint <= 0x202e) ||
+    (codePoint >= 0x2066 && codePoint <= 0x2069)
+  );
+}
+
+/**
+ * Cleans an upstream Overture string by converting ASCII line/tab separators to
+ * spaces, dropping other ASCII control characters and Unicode bidi marks, and
+ * trimming whitespace. Returns undefined when no printable content remains.
+ */
+export function cleanOvertureString(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let cleaned = "";
+  for (const ch of value) {
+    const cp = ch.codePointAt(0);
+    if (cp === undefined) continue;
+    if (cp === 0x09 || cp === 0x0a || cp === 0x0d) {
+      cleaned += " ";
+      continue;
+    }
+    if (isDroppedControlOrBidi(cp)) continue;
+    cleaned += ch;
+  }
+  const trimmed = cleaned.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** Picks the first non-empty cleaned string alongside its original JSON Pointer. */
+export function selectFirstOvertureString(
+  values: readonly (string | null | undefined)[] | null | undefined,
+  pointerPrefix: string,
+): { value: string; pointer: string } | undefined {
+  if (!values) return undefined;
+  for (let index = 0; index < values.length; index++) {
+    const cleaned = cleanOvertureString(values[index]);
+    if (cleaned !== undefined) return { value: cleaned, pointer: `${pointerPrefix}/${index}` };
+  }
+  return undefined;
+}
+
+/** Cleans all non-empty entries while retaining each item's original JSON Pointer. */
+export function selectOvertureStrings(
+  values: readonly (string | null | undefined)[] | null | undefined,
+  pointerPrefix: string,
+): { values: string[]; pointers: string[] } | undefined {
+  if (!values) return undefined;
+  const cleanedValues: string[] = [];
+  const pointers: string[] = [];
+  for (let index = 0; index < values.length; index++) {
+    const cleaned = cleanOvertureString(values[index]);
+    if (cleaned === undefined) continue;
+    cleanedValues.push(cleaned);
+    pointers.push(`${pointerPrefix}/${index}`);
+  }
+  return cleanedValues.length > 0 ? { values: cleanedValues, pointers } : undefined;
+}
+
+/** Normalizes the primary Overture address and returns exact upstream JSON Pointers. */
+export function selectOvertureAddress(
+  addresses: readonly OvertureAddressItem[] | null | undefined,
+): {
+  address?: string;
+  city?: string;
+  countryCode?: string;
+  pointers: { address?: string[]; city?: string[]; countryCode?: string[] };
+} {
+  const value = addresses?.[0];
+  if (!value) return { pointers: {} };
+  const freeform = cleanOvertureString(value.freeform);
+  const locality = cleanOvertureString(value.locality);
+  const postcode = cleanOvertureString(value.postcode);
+  const country = cleanOvertureString(value.country);
+  const localityLine = [postcode, locality].filter(Boolean).join(" ");
+  const includeLocalityLine =
+    localityLine.length > 0 &&
+    !freeform?.toLocaleLowerCase().includes(localityLine.toLocaleLowerCase());
+  const address =
+    [freeform, includeLocalityLine ? localityLine : undefined].filter(Boolean).join(", ") ||
+    undefined;
+  const addressPointers: string[] = [];
+  if (freeform) addressPointers.push("/addresses/0/freeform");
+  if (includeLocalityLine) {
+    if (postcode) addressPointers.push("/addresses/0/postcode");
+    if (locality) addressPointers.push("/addresses/0/locality");
+  }
+  const countryCode = country?.toLowerCase() || undefined;
+  return {
+    address,
+    city: locality,
+    countryCode,
+    pointers: {
+      ...(address ? { address: addressPointers } : {}),
+      ...(locality ? { city: ["/addresses/0/locality"] } : {}),
+      ...(countryCode ? { countryCode: ["/addresses/0/country"] } : {}),
+    },
+  };
+}
+
 /** Choose the localized scalar and its exact upstream JSON Pointer together. */
 export function selectOvertureName(
   names: { primary?: string; common?: Record<string, string> | null } | null,
   fallback: string,
   lang?: string,
 ): { name: string; variants?: Record<string, string>; property: string } {
-  const common = names?.common ?? undefined;
+  const cleanedEntries: Array<[string, string]> = [];
+  for (const [tag, raw] of Object.entries(names?.common ?? {})) {
+    const cleaned = cleanOvertureString(raw);
+    if (cleaned !== undefined) cleanedEntries.push([tag, cleaned]);
+  }
   const requested = lang?.toLowerCase();
   const base = requested?.split("-")[0];
-  const entries = Object.entries(common ?? {});
   const selected = requested
-    ? (entries.find(([tag]) => tag.toLowerCase() === requested) ??
-      entries.find(([tag]) => tag.toLowerCase() === base) ??
-      entries.find(([tag]) => tag.toLowerCase().split("-")[0] === base))
+    ? (cleanedEntries.find(([tag]) => tag.toLowerCase() === requested) ??
+      cleanedEntries.find(([tag]) => tag.toLowerCase() === base) ??
+      cleanedEntries.find(([tag]) => tag.toLowerCase().split("-")[0] === base))
     : undefined;
-  const name = selected?.[1].trim() || names?.primary?.trim() || fallback;
+  const primary = cleanOvertureString(names?.primary);
+  const name = selected?.[1] || primary || cleanOvertureString(fallback) || fallback;
   return {
     name,
-    variants: common && entries.length > 0 ? common : undefined,
-    property: selected?.[1].trim()
+    variants: cleanedEntries.length > 0 ? Object.fromEntries(cleanedEntries) : undefined,
+    property: selected
       ? `/names/common/${selected[0].replace(/~/g, "~0").replace(/\//g, "~1")}`
       : "/names/primary",
   };
