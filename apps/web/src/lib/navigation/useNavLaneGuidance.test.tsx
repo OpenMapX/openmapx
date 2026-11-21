@@ -1,7 +1,7 @@
 import type { Route } from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";
 import { useNavLaneGuidanceStore } from "./laneGuidanceStore";
 import { useNavLaneGuidance } from "./useNavLaneGuidance";
@@ -164,7 +164,8 @@ describe("useNavLaneGuidance", () => {
     await waitFor(() =>
       expect(useNavLaneGuidanceStore.getState().guidanceByStep.get(1)).toBeDefined(),
     );
-    const model = useNavLaneGuidanceStore.getState().guidanceByStep.get(1)!;
+    const model = useNavLaneGuidanceStore.getState().guidanceByStep.get(1);
+    assert.isDefined(model);
     expect(model.lanes).toHaveLength(4);
     expect(model.preferredLanes).toEqual([]);
   });

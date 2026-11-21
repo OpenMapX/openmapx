@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { cleanup, createTestQueryClient, fireEvent, nth, render, screen, waitFor } from "@/test";
 import {
   readTransitCredentialContinuation,
   TransitCredentialsSection,
@@ -171,7 +171,9 @@ it("discards a late preview response when the actor changes", async () => {
     </QueryClientProvider>,
   );
   await screen.findByLabelText("New value for de/A");
-  expect((mocks.preview.mock.calls[0]![1] as { signal: AbortSignal }).signal.aborted).toBe(true);
+  expect((nth(mocks.preview.mock.calls, 0)[1] as { signal: AbortSignal }).signal.aborted).toBe(
+    true,
+  );
   resolve(reviewedReply());
   await waitFor(() =>
     expect(

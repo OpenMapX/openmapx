@@ -10,7 +10,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
@@ -263,7 +263,8 @@ describe("useRouteSearch route index ownership", () => {
     const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
     await act(async () => {});
     directions.mockClear();
-    const original = useNavigationStore.getState().route!;
+    const original = useNavigationStore.getState().route;
+    assert.exists(original);
     let finish!: (result: DirectionsResult) => void;
     directions.mockImplementation(
       () =>

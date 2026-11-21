@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => {
   const { createTranslator } = await vi.importActual<typeof import("next-intl")>("next-intl");
@@ -202,10 +202,12 @@ describe("RouteSearchResultsLayer brand pins", () => {
     const { rerender } = render(<RouteSearchResultsLayer {...props} results={[unknown]} />);
     const label = () => drawnFeatures()[0]?.properties.label;
     expect(label()).toBe("Unknown detour");
+    const { detour } = unknown;
+    assert.isDefined(detour);
     rerender(
       <RouteSearchResultsLayer
         {...props}
-        results={[{ ...unknown, detour: { ...unknown.detour!, kind: "unreachable" } }]}
+        results={[{ ...unknown, detour: { ...detour, kind: "unreachable" } }]}
       />,
     );
     expect(label()).toBe("Unreachable");

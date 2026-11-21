@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { apiClient } from "../../../../../../packages/core/src/api/client";
 import en from "../../../../../../packages/i18n/locales/en.json";
@@ -74,7 +74,9 @@ it("shares catalogue details across fuel rows and retains only displayed fields 
   );
   expect(screen.getAllByRole("button", { name: /credits/i })).toHaveLength(1);
   for (const img of screen.getAllByRole("img")) {
-    const src = new URL(img.getAttribute("src")!, window.location.href);
+    const source = img.getAttribute("src");
+    assert.exists(source);
+    const src = new URL(source, window.location.href);
     expect(src.pathname).toBe("/api/image-proxy");
     expect(src.searchParams.get("url")).toBe("https://example.com/brand.png");
     fireEvent.error(img);

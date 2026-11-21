@@ -1,6 +1,7 @@
 import { Evented } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import { createFakeMap } from "./fakeMap";
+import { nth } from "./nth";
 
 describe("fake map light", () => {
   it("refuses a light while the style is not loaded", () => {
@@ -505,7 +506,7 @@ describe("rendered feature association", () => {
       properties: {},
     } as never;
     fake.setRenderedFeatures("ring", [point]);
-    const hit = fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] })[0]!;
+    const hit = nth(fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] }), 0);
     expect(hit.layer).toMatchObject({
       id: "ring",
       type: "circle",
@@ -514,7 +515,7 @@ describe("rendered feature association", () => {
     expect(point).not.toHaveProperty("layer");
     fake.map.setPaintProperty("ring", "circle-stroke-width", 0);
     expect(
-      fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] })[0]!.layer.paint,
+      nth(fake.map.queryRenderedFeatures(undefined, { layers: ["ring"] }), 0).layer.paint,
     ).toMatchObject({ "circle-stroke-width": 0 });
   });
 });
@@ -542,7 +543,7 @@ describe("partial rendered layer metadata", () => {
         },
       },
     ] as never);
-    const hit = fake.map.queryRenderedFeatures(undefined, { layers: ["symbol"] })[0]!;
+    const hit = nth(fake.map.queryRenderedFeatures(undefined, { layers: ["symbol"] }), 0);
     expect(hit.layer.paint).toMatchObject({ "icon-opacity": 0, "text-opacity": 0.5 });
     expect(hit.layer.layout).toMatchObject({
       "icon-image": "pin",

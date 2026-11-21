@@ -1,7 +1,16 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  cleanup,
+  createTestQueryClient,
+  fireEvent,
+  nth,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
 import { deferred } from "@/test/extensionAdmin";
 import { job } from "../activity/__tests__/fixtures";
 import { StandaloneInstallDialog } from "./StandaloneInstallDialog";
@@ -85,14 +94,16 @@ it("reviews a fixed source commit before sending the retained inspection to inst
   fireEvent.click(screen.getByRole("button", { name: "Review source" }));
   expect(await screen.findByText(`Resolved commit: ${inspection.commit}`)).toBeVisible();
   expect(screen.getByRole("button", { name: "Install integration" })).not.toBeDisabled();
-  const preview = calls.find((call) => call.url.pathname.endsWith("/preview"))!;
+  const preview = calls.find((call) => call.url.pathname.endsWith("/preview"));
+  assert.isDefined(preview);
   expect(JSON.parse(String(preview.init.body))).toEqual({
     source: { kind: "source", repository: "https://github.com/public/example.git" },
   });
   expect(new Headers(preview.init.headers).get("idempotency-key")).toMatch(/^[a-f0-9-]{36}$/);
   fireEvent.click(screen.getByRole("button", { name: "Install integration" }));
   expect(await screen.findByText("Standalone integration installed.")).toBeVisible();
-  const install = calls.find((call) => call.url.pathname.endsWith("/install"))!;
+  const install = calls.find((call) => call.url.pathname.endsWith("/install"));
+  assert.isDefined(install);
   expect(JSON.parse(String(install.init.body))).toEqual({
     inspectionId: inspection.inspectionId,
     expectedContentDigest: inspection.contentDigest,
@@ -151,12 +162,16 @@ it("allocates a fresh inspection request when explicitly reviewing an existing p
   });
   fireEvent.click(screen.getByRole("button", { name: "Review source" }));
   await screen.findByText(`Resolved commit: ${inspection.commit}`);
-  const first = calls.find((call) => call.url.pathname.endsWith("/preview"))!;
+  const first = calls.find((call) => call.url.pathname.endsWith("/preview"));
+  assert.isDefined(first);
   fireEvent.click(screen.getByRole("button", { name: "Review source" }));
   await waitFor(() =>
     expect(calls.filter((call) => call.url.pathname.endsWith("/preview"))).toHaveLength(2),
   );
-  const second = calls.filter((call) => call.url.pathname.endsWith("/preview"))[1]!;
+  const second = nth(
+    calls.filter((call) => call.url.pathname.endsWith("/preview")),
+    1,
+  );
   expect(new Headers(second.init.headers).get("idempotency-key")).not.toBe(
     new Headers(first.init.headers).get("idempotency-key"),
   );
@@ -215,10 +230,10 @@ it("retries a lost preview acknowledgement using the already-uploaded immutable 
   expect(await screen.findByRole("button", { name: "Install integration" })).not.toBeDisabled();
   const uploads = calls.filter((call) => call.init.method === "PUT");
   expect(uploads).toHaveLength(1);
-  expect(uploads[0]!.init.body).toBe(file);
+  expect(nth(uploads, 0).init.body).toBe(file);
   const previews = calls.filter((call) => call.url.pathname.endsWith("/preview"));
   expect(previews).toHaveLength(2);
-  expect(new Headers(previews[0]!.init.headers).get("idempotency-key")).toBe(
-    new Headers(previews[1]!.init.headers).get("idempotency-key"),
+  expect(new Headers(nth(previews, 0).init.headers).get("idempotency-key")).toBe(
+    new Headers(nth(previews, 1).init.headers).get("idempotency-key"),
   );
 });

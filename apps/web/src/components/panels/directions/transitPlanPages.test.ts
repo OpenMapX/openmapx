@@ -1,5 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { nth } from "@/test";
 import { mergeTransitItineraryPage, selectTransitAlternative } from "./transitPlanPages";
 
@@ -187,17 +187,19 @@ describe("selecting complete transit alternatives", () => {
   } as TripItinerary;
   it("reuses an authoritative main journey, retaining its refresh handle", () => {
     const authoritative = { ...ride, id: "authoritative", refreshToken: "own-token" };
-    const result = selectTransitAlternative([a, authoritative], a, ride)!;
+    const result = selectTransitAlternative([a, authoritative], a, ride);
+    assert.exists(result);
     expect(result.index).toBe(1);
     expect(result.itineraries[1]).toBe(authoritative);
     expect(nth(result.itineraries, 1).refreshToken).toBe("own-token");
   });
   it("inserts a new choice without losing the original and refuses stale callbacks", () => {
-    const result = selectTransitAlternative([a], a, ride)!;
+    const result = selectTransitAlternative([a], a, ride);
+    assert.exists(result);
     expect(result.itineraries).toEqual([a, ride]);
     expect(result.index).toBe(1);
     expect(selectTransitAlternative([b], a, ride)).toBeNull();
-    expect(selectTransitAlternative(result.itineraries, a, ride)!.itineraries).toHaveLength(2);
+    expect(selectTransitAlternative(result.itineraries, a, ride)?.itineraries).toHaveLength(2);
   });
 });
 

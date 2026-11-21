@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@/test";
+import { cleanup, fireEvent, nth, render, screen, waitFor } from "@/test";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
@@ -30,7 +30,7 @@ it("clears a saved resource through explicit reset while leaving unrelated value
     />,
   );
   const inputs = screen.getAllByRole("spinbutton");
-  fireEvent.change(inputs[0]!, { target: { value: "" } });
+  fireEvent.change(nth(inputs, 0), { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
   await waitFor(() => expect(save).toHaveBeenCalledWith({ OPENMAPX_MEMORY_MIB: null }));
 });

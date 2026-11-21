@@ -1,5 +1,5 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, renderHook } from "@/test";
 import { useMapAttributionStore } from "./mapAttributionStore";
 import { useRenderedMapAttributions } from "./useRenderedMapAttributions";
@@ -13,7 +13,13 @@ const MAP_REF = {
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: 0 }),
 }));
-const LAYERS = ["incidents-marker", "incidents-line"];
+const LAYERS: [string, string] = ["incidents-marker", "incidents-line"];
+/** A layer the fake map holds; the test fails if it was never added. */
+function layerState(id: string) {
+  const layer = fake.state.layers.get(id);
+  assert.isDefined(layer, `no layer ${id}`);
+  return layer;
+}
 const credit = (name: string) => ({
   sourceId: name,
   name,
@@ -49,20 +55,20 @@ beforeEach(() => {
   vi.useFakeTimers();
   fake = createFakeMap();
   fake.map.addLayer({
-    id: LAYERS[0]!,
+    id: LAYERS[0],
     type: "symbol",
     source: "incidents",
     minzoom: 7,
     layout: { "icon-image": "pin" },
   });
-  fake.map.addLayer({ id: LAYERS[1]!, type: "line", source: "incidents", minzoom: 7 });
+  fake.map.addLayer({ id: LAYERS[1], type: "line", source: "incidents", minzoom: 7 });
   useMapAttributionStore.setState({ byLayer: {} });
 });
 afterEach(() => vi.useRealTimers());
 
 describe("rendered map attribution lifecycle", () => {
   it("keeps visible incident credits while unrelated sources are still loading", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["still-visible"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["still-visible"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     fake.state.styleLoaded = false;
@@ -71,8 +77,8 @@ describe("rendered map attribution lifecycle", () => {
     expect(html()).toContain("still-visible");
   });
   it("credits the union of rendered markers and shared lines, deduplicating tile copies", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["marker"]), feature(["marker"])]);
-    fake.setRenderedFeatures(LAYERS[1]!, [feature(["line-a", "line-b"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["marker"]), feature(["marker"])]);
+    fake.setRenderedFeatures(LAYERS[1], [feature(["line-a", "line-b"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     expect(html()).toContain("marker");
@@ -86,10 +92,10 @@ describe("rendered map attribution lifecycle", () => {
   });
 
   it("updates during continuous navigation movement without requiring idle", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["old"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["old"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["new"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["new"])]);
     act(() => fake.emit("move"));
     flush();
     expect(html()).toContain("new");
@@ -103,7 +109,7 @@ describe("rendered map attribution lifecycle", () => {
     expect(html()).toBe("");
     // MapLibre can finish cross-tile symbol placement on later frames without
     // another source event. Its idle event follows the final render.
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["late-symbol"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["late-symbol"])]);
     act(() => {
       fake.emit("idle");
       vi.advanceTimersByTime(250);
@@ -115,7 +121,7 @@ describe("rendered map attribution lifecycle", () => {
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     fake.state.styleLoaded = false;
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["late-without-idle"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["late-without-idle"])]);
     // Placement frames need not emit sourcedata or move, and global pending
     // sources prevent idle. They still change the features actually drawn.
     flush();
@@ -123,20 +129,20 @@ describe("rendered map attribution lifecycle", () => {
   });
 
   it("retains the rendered snapshot while a newer source payload is pending", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["cached"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["cached"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     act(() => fake.emit("sourcedata", { sourceId: "incidents" }));
     flush();
     expect(html()).toContain("cached");
-    fake.setRenderedFeatures(LAYERS[0]!, []);
+    fake.setRenderedFeatures(LAYERS[0], []);
     act(() => fake.emit("sourcedata", { sourceId: "incidents" }));
     flush();
     expect(html()).toBe("");
   });
 
   it("clears below minimum zoom, above maximum zoom, and when layers are hidden", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["visible"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["visible"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     expect(html()).toContain("visible");
@@ -148,14 +154,14 @@ describe("rendered map attribution lifecycle", () => {
     flush();
     expect(html()).toContain("visible");
     fake.state.zoom = 10;
-    fake.state.layers.get(LAYERS[0]!)!.maxzoom = 10;
+    layerState(LAYERS[0]).maxzoom = 10;
     act(() => fake.emit("styledata"));
     flush();
     expect(html()).toBe("");
-    fake.state.layers.get(LAYERS[0]!)!.maxzoom = 11;
+    layerState(LAYERS[0]).maxzoom = 11;
     flush();
     expect(html()).toContain("visible");
-    fake.map.setLayoutProperty(LAYERS[0]!, "visibility", "none");
+    fake.map.setLayoutProperty(LAYERS[0], "visibility", "none");
     act(() => fake.emit("styledata"));
     flush();
     expect(html()).toBe("");
@@ -167,7 +173,7 @@ describe("rendered map attribution lifecycle", () => {
       .setLayer("base", [
         { fullHtml: "Base map credit", visibleHtml: "Base map credit", logos: [] },
       ]);
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["shared"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["shared"])]);
     const area = renderHook(({ visible }) => useRenderedMapAttributions("area", LAYERS, visible), {
       initialProps: { visible: true },
     });
@@ -188,14 +194,14 @@ describe("rendered map attribution lifecycle", () => {
   });
 
   it("clears through style teardown and restores credits after source replay", () => {
-    fake.setRenderedFeatures(LAYERS[0]!, [feature(["replayed"])]);
+    fake.setRenderedFeatures(LAYERS[0], [feature(["replayed"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
     flush();
     expect(html()).toBe("");
     fake.map.addLayer({
-      id: LAYERS[0]!,
+      id: LAYERS[0],
       type: "symbol",
       source: "incidents",
       layout: { "icon-image": "pin" },
@@ -236,7 +242,7 @@ describe("rendered map attribution lifecycle", () => {
         attributionText: '<script>evil()</script><a href="javascript:evil()">Publisher</a>',
       },
     ]);
-    fake.setRenderedFeatures(LAYERS[0]!, [bad, unsafe, feature(["valid"])]);
+    fake.setRenderedFeatures(LAYERS[0], [bad, unsafe, feature(["valid"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     expect(html()).toContain("valid");
@@ -431,9 +437,9 @@ describe("evaluated channels and captured receipts", () => {
   });
 
   it("projects only the selected field snapshot before serialized and uniform receipts", () => {
-    fake.setRenderedFeatures(LAYERS[1]!, [feature(["all-fields"])]);
+    fake.setRenderedFeatures(LAYERS[1], [feature(["all-fields"])]);
     const options = {
-      layerContributors: { [LAYERS[1]!]: [credit("uniform")] },
+      layerContributors: { [LAYERS[1]]: [credit("uniform")] },
       resolveFeatureContributors: () => [credit("geometry-only")],
     };
     const hook = renderHook(
@@ -481,7 +487,7 @@ describe("evaluated channels and captured receipts", () => {
   it("routes each layer hit only to subscribed owners and updates options without new listeners", () => {
     fake.map.addLayer({ id: "other", type: "circle", source: "data" });
     fake.setRenderedFeatures("other", [feature(["other-credit"])]);
-    fake.setRenderedFeatures(LAYERS[1]!, [feature(["incident-credit"])]);
+    fake.setRenderedFeatures(LAYERS[1], [feature(["incident-credit"])]);
     const first = renderHook(({ active }) => useRenderedMapAttributions("first", LAYERS, active), {
       initialProps: { active: true },
     });
@@ -508,14 +514,14 @@ describe("evaluated channels and captured receipts", () => {
 
 describe("map instance replacement", () => {
   it("moves the owner to the new map and removes the old map's scheduler", () => {
-    fake.setRenderedFeatures(LAYERS[1]!, [feature(["old-map"])]);
+    fake.setRenderedFeatures(LAYERS[1], [feature(["old-map"])]);
     const hook = renderHook(() => useRenderedMapAttributions("replacement", LAYERS, true));
     flush();
     expect(html()).toContain("old-map");
     const old = fake;
     fake = createFakeMap();
-    fake.map.addLayer({ id: LAYERS[1]!, type: "line", source: "incidents" });
-    fake.setRenderedFeatures(LAYERS[1]!, [feature(["new-map"])]);
+    fake.map.addLayer({ id: LAYERS[1], type: "line", source: "incidents" });
+    fake.setRenderedFeatures(LAYERS[1], [feature(["new-map"])]);
     hook.rerender();
     flush();
     expect(html()).toContain("new-map");
@@ -532,14 +538,14 @@ describe("evaluated heatmap ramp", () => {
       source: "data",
       paint: { "heatmap-weight": 1, "heatmap-radius": 25 },
     });
-    fake.state.layers.get("density")!.colorRamp = {
+    layerState("density").colorRamp = {
       data: new Uint8Array([255, 0, 0, 0, 0, 255, 0, 0]),
     };
     fake.setRenderedFeatures("density", [feature(["density-source"])]);
     renderHook(() => useRenderedMapAttributions("density", ["density"], true));
     flush();
     expect(html()).toBe("");
-    fake.state.layers.get("density")!.colorRamp = {
+    layerState("density").colorRamp = {
       data: new Uint8Array([255, 0, 0, 0, 0, 255, 0, 255]),
     };
     flush();
