@@ -211,13 +211,20 @@ const BUILTIN_PROCESSORS: Record<
 
 function isPrivateIpv4(hostname: string): boolean {
   const parts = hostname.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
+  const [first, second] = parts;
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part)) ||
+    first === undefined ||
+    second === undefined
+  )
+    return false;
   return (
-    parts[0] === 10 ||
-    parts[0] === 127 ||
-    (parts[0] === 169 && parts[1] === 254) ||
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168)
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
   );
 }
 

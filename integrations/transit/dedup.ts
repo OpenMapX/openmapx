@@ -1,4 +1,4 @@
-import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import { diceSimilarity, haversineMeters, indexAt } from "@openmapx/core";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 
 export { diceSimilarity, haversineMeters };
@@ -259,11 +259,11 @@ export function deduplicateStops(
 
   function find(x: number): number {
     let r = x;
-    while (parent[r] !== r) r = parent[r];
+    while (indexAt(parent, r) !== r) r = indexAt(parent, r);
     // Path compression
     let c = x;
     while (c !== r) {
-      const next = parent[c];
+      const next = indexAt(parent, c);
       parent[c] = r;
       c = next;
     }
@@ -290,13 +290,20 @@ export function deduplicateStops(
   const cellWidth = MAX_DISTANCE_M / 6_371_000 + 1e-12;
   const cells = new Map<string, number[]>();
   const unindexed: number[] = [];
-  const compare = (i: number, j: number) => {
-    const dist = haversineMeters(sorted[i].lat, sorted[i].lng, sorted[j].lat, sorted[j].lng);
-    if (dist > MAX_DISTANCE_M) return;
-    if (diceSimilarity(normNames[i], normNames[j]) >= MIN_DICE) unite(i, j);
+  const stopAt = (i: number): { stop: TransitStop; name: string } => {
+    const stop = sorted[i];
+    const name = normNames[i];
+    if (!stop || name === undefined) throw new RangeError(`No stop ${i} of ${sorted.length}`);
+    return { stop, name };
   };
-  for (let i = 0; i < sorted.length; i++) {
-    const { lat, lng } = sorted[i];
+  const compare = (i: number, j: number) => {
+    const a = stopAt(i);
+    const b = stopAt(j);
+    const dist = haversineMeters(a.stop.lat, a.stop.lng, b.stop.lat, b.stop.lng);
+    if (dist > MAX_DISTANCE_M) return;
+    if (diceSimilarity(a.name, b.name) >= MIN_DICE) unite(i, j);
+  };
+  for (const [i, { lat, lng }] of sorted.entries()) {
     if (
       !Number.isFinite(lat) ||
       !Number.isFinite(lng) ||

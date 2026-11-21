@@ -340,7 +340,9 @@
     },
     {
       "includes": [
+        "integrations/**/*.ts",
         "integrations/**/*.tsx",
+        "!integrations/**/*.test.ts",
         "!integrations/**/*.test.tsx",
         "!integrations/**/__tests__/**"
       ],

@@ -73,12 +73,16 @@ export function parseTripReferenceRequest(value: unknown): TransitTripResolveReq
   );
   if (
     prefixes.size !== 1 ||
-    legs.some(
-      (r, i) =>
+    legs.some((r, i) => {
+      const previous = legs[i - 1];
+      return (
         Date.parse(r.scheduledArrival) <= Date.parse(r.scheduledDeparture) ||
-        (i > 0 && Date.parse(r.scheduledDeparture) < Date.parse(legs[i - 1].scheduledArrival)),
-    ) ||
-    Date.parse(legs.at(-1)?.scheduledArrival ?? "") - Date.parse(legs[0].scheduledDeparture) >
+        (previous !== undefined &&
+          Date.parse(r.scheduledDeparture) < Date.parse(previous.scheduledArrival))
+      );
+    }) ||
+    Date.parse(legs.at(-1)?.scheduledArrival ?? "") -
+      Date.parse(legs[0]?.scheduledDeparture ?? "") >
       72 * 3600000
   )
     fail("Invalid reference sequence");

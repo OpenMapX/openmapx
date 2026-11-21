@@ -9,6 +9,7 @@ import {
   resolveTemporalCapabilities,
   type ScheduledDirectionsResult,
   type SchedulePlanWarning,
+  stopAt,
   type TemporalCapabilities,
   type TemporalSemantic,
   type TemporalSupport,
@@ -91,7 +92,8 @@ export async function runSchedulePlan(
 
   const semantics = requiredTemporalSemantics(resolved);
   const eligible = eligibleProviders(chain, semantics);
-  if (eligible.length === 0) throw new NoScheduleProviderError(semantics, request.travelMode);
+  const [primary] = eligible;
+  if (!primary) throw new NoScheduleProviderError(semantics, request.travelMode);
 
   const warnings: SchedulePlanWarning[] = resolved.stops
     .filter((stop) => stop.dwellIgnored)
@@ -185,8 +187,11 @@ export async function runSchedulePlan(
   }
 
   const oracle = async (legIndex: number, instantMs: number, pinArrival: boolean) => {
-    const pair: [number, number][] = [request.waypoints[legIndex], request.waypoints[legIndex + 1]];
-    const zone = resolved.stops[pinArrival ? legIndex + 1 : legIndex].timeZone;
+    const from = request.waypoints[legIndex];
+    const to = request.waypoints[legIndex + 1];
+    if (!from || !to) throw new RangeError(`No waypoints for scheduled leg ${legIndex}`);
+    const pair: [number, number][] = [from, to];
+    const zone = stopAt(resolved.stops, pinArrival ? legIndex + 1 : legIndex).timeZone;
     const call = await callChain(pair, {
       ...request.routingOptions,
       ...(pinArrival
@@ -200,7 +205,7 @@ export async function runSchedulePlan(
     resolved,
     forward: (legIndex, departureMs) => oracle(legIndex, departureMs, false),
     backward: (legIndex, arrivalMs) => oracle(legIndex, arrivalMs, true),
-    providerId: eligible[0].resolved.integrationId,
+    providerId: primary.resolved.integrationId,
   });
 
   const retained = planned.legPayloads.filter(

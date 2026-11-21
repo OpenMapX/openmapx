@@ -161,10 +161,8 @@ export function extractOfficialBookingUrl(
   const fromSchema = extractReserveActionUrl(html, baseUrl, dates);
   if (fromSchema) return fromSchema;
   const urlRe = /(?:href|src)\s*=\s*["']([^"']+)["']/gi;
-  let m: RegExpExecArray | null;
-  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop
-  while ((m = urlRe.exec(html)) !== null) {
-    const u = asAbsoluteUrl(m[1], baseUrl);
+  for (const [, raw] of html.matchAll(urlRe)) {
+    const u = raw === undefined ? null : asAbsoluteUrl(raw, baseUrl);
     if (!u) continue;
     const built = buildIbeUrl(u, dates);
     if (built) return built;

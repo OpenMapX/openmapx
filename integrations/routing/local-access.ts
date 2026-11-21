@@ -29,8 +29,7 @@ function nearestOnLine(
   let best = { point: line[0] ?? p, metres: Number.POSITIVE_INFINITY, along: 0 };
   const k = Math.cos((p[1] * Math.PI) / 180);
   let start = 0;
-  for (let i = 0; i < line.length; i++) {
-    const a = line[i]!;
+  for (const [i, a] of line.entries()) {
     const b = line[i + 1] ?? a;
     const dx = (b[0] - a[0]) * k;
     const dy = b[1] - a[1];
@@ -78,9 +77,10 @@ function planEnd(
     .map((line) => nearestOnLine(end, line))
     .filter((n) => n.metres <= REACH_M)
     .sort((a, b) => a.metres - b.metres);
-  if (near.length === 0) return undefined;
+  const [nearest] = near;
+  if (!nearest) return undefined;
   return {
-    snapOntoClosure: near[0]!.metres <= SNAP_M && distanceTo(end, hard) > SNAP_M,
+    snapOntoClosure: nearest.metres <= SNAP_M && distanceTo(end, hard) > SNAP_M,
     accessPoints: near.slice(0, MAX_ACCESS_POINTS).map((n) => n.point),
   };
 }
@@ -97,9 +97,11 @@ export function planLocalAccess(
   local: readonly (readonly LngLat[])[],
   hard: readonly (readonly LngLat[])[],
 ): RoutingOptions["localAccess"] {
-  if (local.length === 0 || waypoints.length < 2) return undefined;
-  const origin = planEnd(waypoints[0]!, local, hard);
-  const destination = planEnd(waypoints[waypoints.length - 1]!, local, hard);
+  const first = waypoints[0];
+  const last = waypoints.at(-1);
+  if (local.length === 0 || waypoints.length < 2 || !first || !last) return undefined;
+  const origin = planEnd(first, local, hard);
+  const destination = planEnd(last, local, hard);
   if (!origin && !destination) return undefined;
   return { ...(origin ? { origin } : {}), ...(destination ? { destination } : {}) };
 }
@@ -138,11 +140,13 @@ export function routeUsesLocalAccessRoad(
   let run: { road: number; from: number } | undefined;
   for (const p of route) {
     let near: { road: number; along: number } | undefined;
-    for (let r = 0; r < roads.length && !near; r++) {
-      const { line, box } = roads[r]!;
+    for (const [r, { line, box }] of roads.entries()) {
       if (p[0] < box[0] || p[0] > box[2] || p[1] < box[1] || p[1] > box[3]) continue;
       const hit = nearestOnLine(p, line);
-      if (hit.metres <= ALONG_WITHIN_M) near = { road: r, along: hit.along };
+      if (hit.metres <= ALONG_WITHIN_M) {
+        near = { road: r, along: hit.along };
+        break;
+      }
     }
     if (!near) {
       run = undefined;

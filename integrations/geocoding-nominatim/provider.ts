@@ -235,7 +235,7 @@ export const nominatimService: GeocodingProviderImpl = {
       const short =
         r.name?.trim() ||
         (r.address && formatStreetLine(r.address)) ||
-        r.display_name.split(",")[0].trim();
+        r.display_name.replace(/,.*/s, "").trim();
       return {
         id: makeId(r),
         addressEvidence: {

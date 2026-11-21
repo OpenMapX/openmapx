@@ -74,7 +74,8 @@ function summaryOf(vehicle: ServiceVehicle): I18nToken {
 }
 
 function headingOf(degrees: number): I18nToken {
-  const direction = COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8]!;
+  const direction = COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+  if (!direction) throw new RangeError(`No compass direction for ${degrees}°`);
   return token("value.heading", {
     direction: token(`compass.${direction}`),
     degrees: Math.round(degrees),
@@ -87,7 +88,9 @@ function workSection(vehicle: ServiceVehicle): DataSourceDetailSection {
     rows.push([token("row.activity"), token(`activity.${vehicle.activity}`)]);
   }
   const tasks = statedTasks(vehicle);
-  if (tasks.length === 1) rows.push([token("row.task"), taskLabel(tasks[0]!)]);
+  const [onlyTask] = tasks;
+  if (tasks.length === 1 && onlyTask !== undefined)
+    rows.push([token("row.task"), taskLabel(onlyTask)]);
   if (tasks.length > 1) rows.push([token("row.tasks"), tasks.map(taskLabel)]);
   if (tasks.length === 0) rows.push([token("row.task"), token("value.noTask")]);
   if (vehicle.plowDown !== undefined) {

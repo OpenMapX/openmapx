@@ -66,7 +66,7 @@ function fallbackNameOf(camera: Camera): { fallbackName?: I18nToken } {
  * its number. A title two views share gets the later view's number, since
  * the place panel tells sections apart by their titles.
  */
-function viewTitles(camera: Camera): I18nToken[] {
+function titledViews(camera: Camera): { view: Camera["views"][number]; title: I18nToken }[] {
   const seen = new Set<string>();
   return camera.views.map((view, index) => {
     const n = index + 1;
@@ -79,9 +79,9 @@ function viewTitles(camera: Camera): I18nToken[] {
     const key = JSON.stringify(title);
     if (!seen.has(key)) {
       seen.add(key);
-      return title;
+      return { view, title };
     }
-    return token("view.repeated", { view: title, n });
+    return { view, title: token("view.repeated", { view: title, n }) };
   });
 }
 
@@ -192,16 +192,16 @@ export function mapCameraToResult(camera: Camera): DataSourceResult {
  */
 export function mapCameraToDetail(camera: Camera): DataSourceDetail {
   const link = isSafeHttpUrl(camera.detailUrl) ? camera.detailUrl : undefined;
-  const titles = viewTitles(camera);
+  const views = titledViews(camera);
   const sections: DataSourceDetailSection[] = [];
-  camera.views.forEach((view, i) => {
-    const image = imageSection(camera, view, titles[i], link);
+  for (const { view, title } of views) {
+    const image = imageSection(camera, view, title, link);
     if (image) sections.push(image);
-  });
-  camera.views.forEach((view, i) => {
-    const stream = streamSection(camera, view, titles[i]);
+  }
+  for (const { view, title } of views) {
+    const stream = streamSection(camera, view, title);
     if (stream) sections.push(stream);
-  });
+  }
   if (camera.playerEmbedUrl && isSafeHttpUrl(camera.playerEmbedUrl)) {
     sections.push({
       title: token("section.liveTimelapse"),

@@ -721,8 +721,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     input: TransitTripResolveRequest,
   ): Promise<MobilityResult<TripPlan | null>> {
     const params = parseTripReferenceRequest(input);
+    const [firstLeg] = params.reference.legs;
+    // parseTripReferenceRequest rejects a reference without legs.
+    if (!firstLeg) throw new RangeError("Trip reference has no legs");
     const provider = await resolveLookup(
-      params.reference.legs[0].tripId,
+      firstLeg.tripId,
       (p) => !!p.resolveTrip && p.capabilities.planning,
     );
     if (provider === "unavailable")
@@ -1252,7 +1255,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       byProvider.set(provider, [...(byProvider.get(provider) ?? []), id]);
     }
     for (const [provider, [primary, ...rest]] of byProvider) {
-      if (!provider.getVehicleJourney) continue;
+      if (!provider.getVehicleJourney || primary === undefined) continue;
       const fn = provider.getVehicleJourney.bind(provider);
       const outcome = await timed(
         providerHealth,

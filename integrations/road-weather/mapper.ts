@@ -167,7 +167,9 @@ function surfaceSection(sensor: RoadSurfaceSensor, count: number): DataSourceDet
 }
 
 function compassOf(degrees: number): (typeof COMPASS)[number] {
-  return COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8]!;
+  const direction = COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+  if (!direction) throw new RangeError(`No compass direction for ${degrees}°`);
+  return direction;
 }
 
 function windOf(air: RoadWeatherAir): I18nToken | undefined {

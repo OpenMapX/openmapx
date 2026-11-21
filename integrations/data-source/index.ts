@@ -46,9 +46,10 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     let filters: Record<string, unknown> | undefined;
-    if (scalarQueries(req.query).filters) {
+    const rawFilters = scalarQueries(req.query).filters;
+    if (rawFilters) {
       try {
-        filters = JSON.parse(scalarQueries(req.query).filters);
+        filters = JSON.parse(rawFilters);
       } catch {
         reply.status(400).send({ error: "Invalid filters JSON" });
         return;
@@ -174,9 +175,10 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     let filters: Record<string, unknown> | undefined;
-    if (scalarQueries(req.query).filters) {
+    const rawFilters = scalarQueries(req.query).filters;
+    if (rawFilters) {
       try {
-        filters = JSON.parse(scalarQueries(req.query).filters);
+        filters = JSON.parse(rawFilters);
       } catch {
         reply.status(400).send({ error: "Invalid filters JSON" });
         return;
@@ -184,9 +186,10 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     let options: Record<string, unknown> | undefined;
-    if (scalarQueries(req.query).options) {
+    const rawOptions = scalarQueries(req.query).options;
+    if (rawOptions) {
       try {
-        options = JSON.parse(scalarQueries(req.query).options);
+        options = JSON.parse(rawOptions);
       } catch {
         reply.status(400).send({ error: "Invalid options JSON" });
         return;

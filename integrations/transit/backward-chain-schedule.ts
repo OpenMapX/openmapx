@@ -5,6 +5,7 @@ import {
   localDateInZone,
   type ResolvedSchedule,
   type ScheduleViolation,
+  stopAt,
   type TripSchedule,
   tzOffsetMinutes,
 } from "@openmapx/core";
@@ -31,7 +32,7 @@ export function composeBackwardTransitSchedule(args: {
   const firstIndex = segments[0]?.fromIndex ?? finalStop.index;
   const retained = resolved.stops.filter((stop) => stop.index >= firstIndex);
   const render = (instant: number, index: number) =>
-    isoWithOffsetInZone(new Date(instant), resolved.stops[index].timeZone);
+    isoWithOffsetInZone(new Date(instant), stopAt(resolved.stops, index).timeZone);
 
   const stops = retained.map((stop) => {
     const arrival = arrivals.get(stop.index);
@@ -96,7 +97,7 @@ export function composeBackwardTransitSchedule(args: {
     totalDwellSeconds: stops.reduce((sum, stop) => sum + stop.dwellSeconds, 0),
     totalWaitSeconds: stops.reduce((sum, stop) => sum + stop.waitSeconds, 0),
     multiDay:
-      localDateInZone(new Date(startMs), resolved.stops[firstIndex].timeZone) !==
+      localDateInZone(new Date(startMs), stopAt(resolved.stops, firstIndex).timeZone) !==
       localDateInZone(new Date(endMs), finalStop.timeZone),
     violations,
   };

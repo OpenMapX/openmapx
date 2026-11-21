@@ -24,7 +24,9 @@ function samePoint(a: [number, number], b: [number, number]): boolean {
  * ETA and traffic-delay comparison downstream silently wrong.
  */
 export function concatenateRoutes(routes: Route[]): Route {
-  if (routes.length === 1) return routes[0];
+  const [first] = routes;
+  if (!first) throw new Error("No routes to concatenate");
+  if (routes.length === 1) return first;
 
   const geometryContributors: GeometryContributorSpan[] = [];
   const geometry: [number, number][] = [];
@@ -44,7 +46,7 @@ export function concatenateRoutes(routes: Route[]): Route {
     : routes.every((route) => route.hasTolls === false)
       ? false
       : undefined;
-  const interval = routes[0].elevationInterval;
+  const interval = first.elevationInterval;
   const everyHasElevation = routes.every(
     (route) => route.elevation !== undefined && route.elevationInterval === interval,
   );
@@ -54,8 +56,10 @@ export function concatenateRoutes(routes: Route[]): Route {
     // The shared endpoint would otherwise appear twice and introduce a
     // zero-length segment, which breaks the 1:1 `segmentSpeedLimits` alignment
     // and confuses route snapping during navigation.
-    const hasJoin = geometry.length > 0 && route.geometry.length > 0;
-    const sharedEndpoint = hasJoin && samePoint(geometry[geometry.length - 1], route.geometry[0]);
+    const joinFrom = geometry.at(-1);
+    const joinTo = route.geometry[0];
+    const hasJoin = joinFrom !== undefined && joinTo !== undefined;
+    const sharedEndpoint = hasJoin && samePoint(joinFrom, joinTo);
     const shape = sharedEndpoint ? route.geometry.slice(1) : route.geometry;
     const offset = geometry.length - (sharedEndpoint ? 1 : 0);
     if (hasJoin && !sharedEndpoint)
@@ -88,7 +92,7 @@ export function concatenateRoutes(routes: Route[]): Route {
     "legs",
     "steps",
     "mode",
-    ...(routes[0].summary ? ["summary"] : []),
+    ...(first.summary ? ["summary"] : []),
     ...(everyHasBaseline ? ["baselineDuration"] : []),
     ...(everyHasSpeedLimits ? ["segmentSpeedLimits"] : []),
     ...(hasTolls === undefined ? [] : ["hasTolls"]),
@@ -96,9 +100,9 @@ export function concatenateRoutes(routes: Route[]): Route {
   ]);
   const fieldContributors = Object.fromEntries(
     [...retainedFields].map((field) => {
-      const root = field.split(".")[0];
+      const [root = field] = field.split(".", 1);
       const suppliers = ["summary", "mode", "elevationInterval"].includes(root)
-        ? [routes[0]]
+        ? [first]
         : root === "hasTolls" && hasTolls === true
           ? routes.filter((route) => route.hasTolls === true)
           : routes;
@@ -146,9 +150,9 @@ export function concatenateRoutes(routes: Route[]): Route {
     geometry,
     legs,
     steps,
-    mode: routes[0].mode,
+    mode: first.mode,
     ...(everyHasSpeedLimits ? { segmentSpeedLimits: speedLimits } : {}),
-    ...(routes[0].summary ? { summary: routes[0].summary } : {}),
+    ...(first.summary ? { summary: first.summary } : {}),
     ...(hasTolls === undefined ? {} : { hasTolls }),
     ...(sourceIds.length > 0 ? { sourceIds } : {}),
     ...(everyHasElevation && interval !== undefined

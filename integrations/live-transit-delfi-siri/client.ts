@@ -106,8 +106,12 @@ export function createSiriClient(ctx: IntegrationContext, now: () => number = Da
         const parsed = await parseSiriEt(response.stream, now());
         responseTimestamp = parsed.responseTimestamp;
         groups = Array.from({ length: 64 }, () => []);
-        for (const record of parsed.journeys)
-          groups[bucket(record.serviceDate, record.trainNumber)].push(record);
+        for (const record of parsed.journeys) {
+          const index = bucket(record.serviceDate, record.trainNumber);
+          const group = groups[index];
+          if (!group) throw new RangeError(`No SIRI journey bucket ${index}`);
+          group.push(record);
+        }
       }
       if (stopped || !(await allowed()) || now() - Date.parse(responseTimestamp) > 1_800_000)
         return;

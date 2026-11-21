@@ -532,7 +532,8 @@ function buildChildStopAreas(
   return [...groups.entries()].map(([groupId, members]) => {
     const lat = members.reduce((sum, point) => sum + point.lat, 0) / members.length;
     const lng = members.reduce((sum, point) => sum + point.lng, 0) / members.length;
-    const first = members[0];
+    const [first] = members;
+    if (!first) throw new RangeError(`Traffic point group ${groupId} has no members`);
     const suffix = first.designation || groupId.split(":").at(-1) || "";
     return {
       id: providerId(groupId),

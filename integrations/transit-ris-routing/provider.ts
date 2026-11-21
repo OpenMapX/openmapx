@@ -401,11 +401,11 @@ export async function planJourney(
     }
   }
 
-  if (allItineraries.length === 0) return null;
+  const [firstItinerary] = allItineraries;
+  if (!firstItinerary) return null;
 
-  const first = allItineraries[0].legs[0];
-  const lastIt = allItineraries[0];
-  const last = lastIt.legs[lastIt.legs.length - 1];
+  const first = firstItinerary.legs[0];
+  const last = firstItinerary.legs.at(-1);
 
   return {
     from: {

@@ -101,19 +101,26 @@ function parseCurrentWeather(data: OpenMeteoResponse, coords: LngLat): WeatherRe
   };
 }
 
+/** Open-Meteo sends one value per entry of `time` in every column; a short column is a broken answer. */
+function columnAt<T>(column: readonly T[], index: number, name: string): T {
+  const value = column[index];
+  if (value === undefined) throw new Error(`Open-Meteo ${name} is shorter than its time axis`);
+  return value;
+}
+
 function parseHourly(data: OpenMeteoResponse): HourlyForecastPoint[] {
   const h = data.hourly;
   if (!h) return [];
   return h.time.map((time, i) => ({
     time,
-    temperature: h.temperature_2m[i],
-    weatherCode: h.weather_code[i],
-    precipitationProbability: h.precipitation_probability[i],
-    precipitation: h.precipitation[i],
-    windSpeed: h.wind_speed_10m[i],
-    windDirection: h.wind_direction_10m[i],
-    cloudCover: h.cloud_cover[i],
-    pressure: h.pressure_msl[i],
+    temperature: columnAt(h.temperature_2m, i, "temperature_2m"),
+    weatherCode: columnAt(h.weather_code, i, "weather_code"),
+    precipitationProbability: columnAt(h.precipitation_probability, i, "precipitation_probability"),
+    precipitation: columnAt(h.precipitation, i, "precipitation"),
+    windSpeed: columnAt(h.wind_speed_10m, i, "wind_speed_10m"),
+    windDirection: columnAt(h.wind_direction_10m, i, "wind_direction_10m"),
+    cloudCover: columnAt(h.cloud_cover, i, "cloud_cover"),
+    pressure: columnAt(h.pressure_msl, i, "pressure_msl"),
   }));
 }
 
@@ -124,13 +131,13 @@ function parseDaily(data: OpenMeteoResponse): DailyForecastPoint[] {
   return d.time.map((date, i) => ({
     date,
     ...(data.timezone ? { timeZone: data.timezone } : {}),
-    weatherCode: d.weather_code[i],
-    temperatureMax: d.temperature_2m_max[i],
-    temperatureMin: d.temperature_2m_min[i],
-    precipitationSum: d.precipitation_sum[i],
-    windSpeedMax: d.wind_speed_10m_max[i],
-    sunrise: d.sunrise[i],
-    sunset: d.sunset[i],
+    weatherCode: columnAt(d.weather_code, i, "weather_code"),
+    temperatureMax: columnAt(d.temperature_2m_max, i, "temperature_2m_max"),
+    temperatureMin: columnAt(d.temperature_2m_min, i, "temperature_2m_min"),
+    precipitationSum: columnAt(d.precipitation_sum, i, "precipitation_sum"),
+    windSpeedMax: columnAt(d.wind_speed_10m_max, i, "wind_speed_10m_max"),
+    sunrise: columnAt(d.sunrise, i, "sunrise"),
+    sunset: columnAt(d.sunset, i, "sunset"),
   }));
 }
 

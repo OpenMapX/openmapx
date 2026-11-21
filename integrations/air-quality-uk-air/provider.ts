@@ -19,12 +19,15 @@ const MAX_XML_ELEMENTS = 4_096;
 const MAX_DISTANCE_METERS = 25_000;
 const VALIDITY_MS = 2 * 60 * 60_000;
 
+const licensing = parseLicensing(sourceManifest.dataSources[0]?.licensing);
+if (!licensing) throw new Error("air-quality-uk-air manifest declares no valid source licensing");
+
 const source: AirQualitySourceRef = {
   sourceId: SOURCE_ID,
   name: "UK-AIR current site pollution levels",
   url: ENDPOINT,
   owner: "UK Department for Environment, Food & Rural Affairs",
-  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
+  licensing,
   methodologyUrl: "https://uk-air.defra.gov.uk/air-pollution/daqi",
   attribution: "Department for Environment, Food & Rural Affairs (Defra), UK-AIR",
 };

@@ -661,16 +661,19 @@ function groupLabels(site: ChargingSite): {
   labels: (Translatable | undefined)[];
   repeats: Set<number>;
 } {
-  const connectorLabels = site.tariffs.map((t) => applicabilityLabel(applicabilityOf(site, t)));
-  const keys = connectorLabels.map((label) => JSON.stringify(label));
+  const tariffs = site.tariffs.map((tariff) => {
+    const connectors = applicabilityLabel(applicabilityOf(site, tariff));
+    return { tariff, connectors, key: JSON.stringify(connectors) };
+  });
+  const keys = tariffs.map(({ key }) => key);
   const byConnector = new Set(keys).size > 1;
   const labels: (Translatable | undefined)[] = site.tariffs.map(() => undefined);
   const repeats = new Set<number>();
   for (const key of new Set(keys)) {
     // A feed that repeats a tariff under another id prices the same connectors the same way.
     const contents = new Set<string>();
-    const members = site.tariffs.flatMap((tariff, index) => {
-      if (keys[index] !== key) return [];
+    const members = tariffs.flatMap(({ tariff, connectors, key: tariffKey }, index) => {
+      if (tariffKey !== key) return [];
       const { currency, elements, priceIncludesVat } = tariff;
       const content = JSON.stringify({ currency, elements, priceIncludesVat });
       if (contents.has(content)) {
@@ -678,20 +681,18 @@ function groupLabels(site: ChargingSite): {
         return [];
       }
       contents.add(content);
-      return [{ index, tariff }];
+      return [{ index, tariff, connectors }];
     });
     const [only] = members;
     if (members.length === 1 && only) {
-      if (byConnector) labels[only.index] = connectorLabels[only.index];
+      if (byConnector) labels[only.index] = only.connectors;
       continue;
     }
     const names = tariffNames(members.map((member) => member.tariff));
-    for (const [n, { index }] of members.entries()) {
+    for (const [n, { index, connectors }] of members.entries()) {
       const name = names[n];
       if (name === undefined) throw new RangeError(`No tariff name for group member ${n}`);
-      labels[index] = byConnector
-        ? token("pricing.tariffFor", { connectors: connectorLabels[index], tariff: name })
-        : name;
+      labels[index] = byConnector ? token("pricing.tariffFor", { connectors, tariff: name }) : name;
     }
   }
   return { labels, repeats };

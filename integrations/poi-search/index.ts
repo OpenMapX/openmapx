@@ -83,7 +83,14 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const { category, south, west, north, east, lang } = scalarQueries(req.query);
+    const {
+      category,
+      south = "",
+      west = "",
+      north = "",
+      east = "",
+      lang,
+    } = scalarQueries(req.query);
 
     const bbox = {
       south: Number.parseFloat(south),
@@ -119,7 +126,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/text", async (req, reply) => {
-    const { q, south, west, north, east, lang } = scalarQueries(req.query);
+    const { q, south = "", west = "", north = "", east = "", lang } = scalarQueries(req.query);
 
     if (!q || q.trim().length < 2) {
       reply.send({ results: [], partial: false, truncated: false, total: 0 });
