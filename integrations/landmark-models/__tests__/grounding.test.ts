@@ -50,6 +50,22 @@ describe("groundHeight", () => {
     ).toBeCloseTo(70, 6);
   });
 
+  it("does not sample a footprint position without two coordinates", () => {
+    const sampled: [number, number][] = [];
+    const flat = probe((lngLat) => {
+      sampled.push(lngLat);
+      return { state: "loaded", drawn: 5 };
+    });
+    const footprint: Polygon = {
+      type: "Polygon",
+      coordinates: [[[-122.406, 37.8022], [-122.4056], [-122.4056, 37.8026], [-122.406, 37.8022]]],
+    };
+    expect(groundHeight({ anchor: ANCHOR, grounding: "footprint-minimum" }, footprint, flat)).toBe(
+      5,
+    );
+    expect(sampled).toEqual([ANCHOR, [-122.406, 37.8022], [-122.4056, 37.8026]]);
+  });
+
   it("moves from a parent value to the own-tile value", () => {
     let ownTileLoaded = false;
     const terrain = probe(() =>

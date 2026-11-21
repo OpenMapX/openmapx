@@ -42,18 +42,26 @@ describe("derivedHull", () => {
 });
 
 describe("acceptableHull", () => {
-  const hull = () => derivedHull(box(), ANCHOR) as NonNullable<ReturnType<typeof derivedHull>>;
+  const hullOf = (positions: Float32Array) => {
+    const hull = derivedHull(positions, ANCHOR);
+    assert.exists(hull, "expected a hull");
+    return hull;
+  };
+  const hull = () => hullOf(box());
 
   it("accepts a hull within its asset bounds", () => {
     expect(acceptableHull(hull(), [-73.98, 40.7591, -73.9792, 40.7593])).toBe(true);
   });
 
   it("rejects a hull smaller than 4 m²", () => {
-    const tiny = derivedHull(
-      new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]),
-      ANCHOR,
-    ) as NonNullable<ReturnType<typeof derivedHull>>;
+    const tiny = hullOf(new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]));
     expect(acceptableHull(tiny, [-73.98, 40.759, -73.979, 40.76])).toBe(false);
+  });
+
+  it("rejects a hull with a position missing a coordinate", () => {
+    const broken = structuredClone(hull());
+    nth(broken.coordinates, 0).splice(1, 1, [-73.9796]);
+    expect(acceptableHull(broken, [-73.98, 40.7591, -73.9792, 40.7593])).toBe(false);
   });
 
   it("rejects a hull larger than 1.5 times the bounds", () => {
@@ -92,6 +100,19 @@ describe("toReplacement", () => {
     expect(replacement.footprint?.type).toBe("MultiPolygon");
     expect(replacement.bbox).toEqual([1, 1, 2, 2]);
     expect(replacement.featureIds).toEqual([12]);
+  });
+
+  it("leaves a footprint position without two coordinates out of the bbox", () => {
+    const replacement = toReplacement(
+      "c",
+      {
+        type: "Polygon",
+        coordinates: [[[1, 1], [2, 1], [9], [2, 2], [1, 1]]],
+      },
+      ["way/1"],
+      [0, 0, 3, 3],
+    );
+    expect(replacement.bbox).toEqual([1, 1, 2, 2]);
   });
 
   it("uses the asset bounds without a footprint", () => {
