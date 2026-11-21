@@ -1,3 +1,5 @@
+import { numberAt } from "@openmapx/core";
+
 export type RasterPayloadOpacity = "opaque" | "nonopaque" | "transparent" | "unknown";
 /** JPEG has no alpha. Check the encoded format, not a URL or response header.
  * This evidence is usable ONLY after the engine successfully decodes/uploads
@@ -12,16 +14,16 @@ export function rasterPayloadOpacity(data: ArrayBuffer): RasterPayloadOpacity {
     if (b[i++] !== 255) return "unknown";
     while (b[i] === 255) i++;
     const marker = b[i++];
-    const length = (b[i] << 8) | b[i + 1];
+    const length = (numberAt(b, i) << 8) | numberAt(b, i + 1);
     if (length < 2 || i + length > b.length) return "unknown";
     if (marker === 192 || marker === 193 || marker === 194) {
-      const channels = b[i + 7];
+      const channels = numberAt(b, i + 7);
       frame =
         length === 8 + 3 * channels &&
         (channels === 1 || channels === 3 || channels === 4) &&
         b[i + 2] === 8 &&
-        ((b[i + 3] << 8) | b[i + 4]) > 0 &&
-        ((b[i + 5] << 8) | b[i + 6]) > 0;
+        ((numberAt(b, i + 3) << 8) | numberAt(b, i + 4)) > 0 &&
+        ((numberAt(b, i + 5) << 8) | numberAt(b, i + 6)) > 0;
     }
     if (marker === 218) return frame ? "opaque" : "unknown";
     i += length;
@@ -68,7 +70,7 @@ export async function inspectRasterPayloadOpacity(
     let visible = false,
       opaque = true;
     for (let i = 3; i < pixels.length; i += 4) {
-      visible ||= pixels[i] > 0;
+      visible ||= numberAt(pixels, i) > 0;
       opaque &&= pixels[i] === 255;
     }
     return opaque ? "opaque" : visible ? "nonopaque" : "transparent";

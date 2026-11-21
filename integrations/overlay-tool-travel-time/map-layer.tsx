@@ -48,10 +48,7 @@ const MODE_COLORS: Record<TravelTimeMode, string> = {
 
 /** Smallest selected band (ascending) a reach time falls into, or -1 if beyond all. */
 function bandIndex(reachMinutes: number, sortedAsc: number[]): number {
-  for (let i = 0; i < sortedAsc.length; i++) {
-    if (reachMinutes <= sortedAsc[i]) return i;
-  }
-  return -1;
+  return sortedAsc.findIndex((band) => reachMinutes <= band);
 }
 
 function computeOpacity(index: number, total: number): number {

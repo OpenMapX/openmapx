@@ -138,18 +138,19 @@ export function findStylePoiFeatureId(
   const wanted = new Set(place.names.filter(Boolean).map(normalizeName));
   if (wanted.size === 0) return null;
   const layers = (map.getStyle()?.layers ?? []) as StyleLayer[];
-  const sources = new Set<string>();
+  const sources = new Map<string, { source: string; sourceLayer: string }>();
   for (const layer of layers) {
     if (!poiLayerIds.includes(layer.id) || !("source" in layer)) continue;
     const sourceLayer = (layer as { "source-layer"?: string })["source-layer"];
-    if (sourceLayer) sources.add(`${layer.source}\u0000${sourceLayer}`);
+    if (sourceLayer)
+      sources.set(`${layer.source}\u0000${sourceLayer}`, { source: layer.source, sourceLayer });
   }
   let best: { id: number; distance: number } | null = null;
-  for (const key of sources) {
-    const [source, sourceLayer] = key.split("\u0000");
+  for (const { source, sourceLayer } of sources.values()) {
     for (const feature of map.querySourceFeatures(source, { sourceLayer })) {
       if (typeof feature.id !== "number" || feature.geometry.type !== "Point") continue;
       const [lng, lat] = feature.geometry.coordinates;
+      if (lng === undefined || lat === undefined) continue;
       const distance = haversineDistance(place.coordinates, [lng, lat]);
       if (distance > SAME_PLACE_RADIUS_M || (best && distance >= best.distance)) continue;
       if (featureNames(feature.properties).some((name) => wanted.has(name))) {

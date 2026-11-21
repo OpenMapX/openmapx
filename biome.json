@@ -337,6 +337,20 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "integrations/**/*.tsx",
+        "!integrations/**/*.test.tsx",
+        "!integrations/**/__tests__/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "error"
+          }
+        }
+      }
     }
   ],
   "javascript": {

@@ -107,7 +107,9 @@ function circleColorExpr(mode: "depth" | "recency"): maplibregl.ExpressionSpecif
     : ["interpolate", ["linear"], ["get", "ageMs"], ...RECENCY_COLORS.flat()];
 }
 
-const MAG_SEVERITY: [number, string, string][] = [
+type MagnitudeBand = readonly [threshold: number, label: string, color: string];
+
+const MAG_SEVERITY: readonly [MagnitudeBand, ...MagnitudeBand[]] = [
   [0, "Micro", "#94a3b8"],
   [2.0, "Minor", "#22c55e"],
   [4.0, "Light", "#eab308"],

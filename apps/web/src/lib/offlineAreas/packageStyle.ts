@@ -163,11 +163,14 @@ function validateGlyphCatalog(raw: unknown): Record<string, string[]> {
 
 function rangesForStack(catalog: Record<string, string[]>, stack: string): string[] {
   const fonts = stack.split(",").map((font) => font.trim());
-  const ranges = fonts.map((font) => catalog[font]);
-  if (ranges.some((value) => !value)) {
-    throw new Error(`offline package has no glyph catalog for style font stack: ${stack}`);
-  }
-  const [first, ...rest] = ranges as string[][];
+  const [first, ...rest] = fonts.map((font) => {
+    const range = catalog[font];
+    if (!range) {
+      throw new Error(`offline package has no glyph catalog for style font stack: ${stack}`);
+    }
+    return range;
+  });
+  if (!first) throw new Error(`offline style font stack is empty: ${stack}`);
   return first.filter((range) => rest.every((candidate) => candidate.includes(range)));
 }
 
@@ -286,7 +289,8 @@ export function resolveOfflinePackageStyle(
       b.dataset.generatedAt.localeCompare(a.dataset.generatedAt) ||
       a.packageId.localeCompare(b.packageId),
   )[0];
-  const bounds = typedManifests.reduce(
+  if (!glyphManifest) throw new Error("at least one offline package is required");
+  const bounds = typedManifests.reduce<[number, number, number, number]>(
     (value, manifest) => [
       Math.min(value[0], manifest.coverage.bbox.west),
       Math.min(value[1], manifest.coverage.bbox.south),

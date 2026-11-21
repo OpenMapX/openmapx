@@ -44,8 +44,7 @@ export function findBuildingRoofColor(
   reference: BuildingSourceReference,
 ): string | null {
   const layers = map.getStyle().layers ?? [];
-  for (let index = layers.length - 1; index >= 0; index--) {
-    const layer = layers[index];
+  for (const layer of [...layers].reverse()) {
     if (
       layer.type !== "fill" ||
       layer.source !== reference.source ||
@@ -117,13 +116,12 @@ export function buildingExtrusionColor(
     ["at", channel, ["var", "roof"]],
     ["*", ["-", 255, ["at", channel, ["var", "roof"]]], ["var", "lift"]],
   ];
-  const [red, green, blue] = RGBA_CHANNELS.map(
-    (channel): maplibregl.ExpressionSpecification => [
-      "+",
-      ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
-      ["*", ["at", channel, ["var", "lifted"]], ["-", 1, ["var", "weight"]]],
-    ],
-  );
+  const mix = (channel: (typeof RGBA_CHANNELS)[number]): maplibregl.ExpressionSpecification => [
+    "+",
+    ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
+    ["*", ["at", channel, ["var", "lifted"]], ["-", 1, ["var", "weight"]]],
+  ];
+  const [red, green, blue] = [mix(RGBA_CHANNELS[0]), mix(RGBA_CHANNELS[1]), mix(RGBA_CHANNELS[2])];
 
   // Each `let` sees only the bindings of the ones around it, hence the nesting.
   return [

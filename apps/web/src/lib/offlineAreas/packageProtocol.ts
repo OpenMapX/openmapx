@@ -48,9 +48,8 @@ export function registerOfflinePmtilesProtocol(
   const registration = {
     resolver,
     handler: async (parameters: { url: string }) => {
-      const match = URL_PATTERN.exec(parameters.url);
-      if (!match) throw new OfflineCoverageError("invalid offline PMTiles URL");
-      const [, packageSet, zoomValue, xValue, yValue] = match;
+      const [, packageSet, zoomValue, xValue, yValue] = URL_PATTERN.exec(parameters.url) ?? [];
+      if (packageSet === undefined) throw new OfflineCoverageError("invalid offline PMTiles URL");
       let lastError: unknown;
       for (const packageId of packageSet.split(",")) {
         try {

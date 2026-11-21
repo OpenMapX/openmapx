@@ -163,7 +163,10 @@ export function planAnchorMoves(
   const indexOf = (id: string) => styleLayers.findIndex((layer) => layer.id === id);
   const symbolIndex = symbolId === undefined ? Number.POSITIVE_INFINITY : indexOf(symbolId);
 
-  const ordered = present.every((r, i) => i === 0 || indexOf(present[i - 1].id) < indexOf(r.id));
+  const ordered = present.every((r, i) => {
+    const previous = present[i - 1];
+    return !previous || indexOf(previous.id) < indexOf(r.id);
+  });
   // With no base-style symbol layer to straddle, `symbolIndex` is +Infinity and
   // no above-labels layer can ever be past it — so the check could never be
   // satisfied, every call would return a non-empty plan, and `MapLayerStack`'s
@@ -180,8 +183,7 @@ export function planAnchorMoves(
   const moves: Array<{ id: string; beforeId: string | undefined }> = [];
   let beforeId: string | undefined;
   let crossedSymbol = false;
-  for (let i = present.length - 1; i >= 0; i--) {
-    const registration = present[i];
+  for (const registration of [...present].reverse()) {
     const belowLabels = MAP_LAYER_SLOTS.indexOf(registration.slot) < SYMBOL_SLOT_INDEX;
     // The walk runs top rank first. The first below-labels layer it reaches must
     // anchor to the symbol layer, not to the above-labels layer before it —

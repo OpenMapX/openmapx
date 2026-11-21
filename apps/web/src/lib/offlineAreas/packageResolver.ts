@@ -1,5 +1,7 @@
 import {
+  indexAt,
   isOfflinePackageCompatible,
+  numberAt,
   type OfflineMapPackageManifest,
   type OfflinePackageBbox,
   type OfflinePackageCompatibility,
@@ -66,8 +68,10 @@ function geometryIntersectsBbox(
   coordinates: readonly [number, number][],
 ): boolean {
   if (coordinates.some((coordinate) => contains(bbox, coordinate))) return true;
-  for (let index = 1; index < coordinates.length; index++) {
-    if (segmentIntersectsBbox(bbox, coordinates[index - 1], coordinates[index])) return true;
+  let previous: [number, number] | undefined;
+  for (const coordinate of coordinates) {
+    if (previous && segmentIntersectsBbox(bbox, previous, coordinate)) return true;
+    previous = coordinate;
   }
   return false;
 }
@@ -118,10 +122,10 @@ function levelEndAbove(bounds: readonly number[], value: number): number {
   let high = bounds.length - 1;
   while (low < high) {
     const middle = (low + high) >> 1;
-    if (bounds[middle] > value) high = middle;
+    if (numberAt(bounds, middle) > value) high = middle;
     else low = middle + 1;
   }
-  return bounds[low];
+  return indexAt(bounds, low);
 }
 
 function createStaticBboxIndex(items: readonly OfflinePackageBbox[]): StaticBboxIndex {
@@ -156,19 +160,13 @@ function createStaticBboxIndex(items: readonly OfflinePackageBbox[]): StaticBbox
   // the tree prunes, never which boxes a query can reach.
   const spanX = east - west || 1;
   const spanY = north - south || 1;
-  const codes = new Float64Array(count);
-  const sorted: number[] = [];
-  for (let item = 0; item < count; item++) {
-    const bbox = items[item];
+  const leaves = items.map((bbox, item) => {
     const centreX = Math.floor((65535 * ((bbox.west + bbox.east) / 2 - west)) / spanX);
     const centreY = Math.floor((65535 * ((bbox.south + bbox.north) / 2 - south)) / spanY);
-    codes[item] = (spreadBits(centreX) | (spreadBits(centreY) << 1)) >>> 0;
-    sorted.push(item);
-  }
-  sorted.sort((a, b) => codes[a] - codes[b]);
-  for (let slot = 0; slot < count; slot++) {
-    const item = sorted[slot];
-    const bbox = items[item];
+    return { bbox, item, code: (spreadBits(centreX) | (spreadBits(centreY) << 1)) >>> 0 };
+  });
+  leaves.sort((a, b) => a.code - b.code);
+  for (const [slot, { bbox, item }] of leaves.entries()) {
     coordinates[slot * 4] = bbox.west;
     coordinates[slot * 4 + 1] = bbox.south;
     coordinates[slot * 4 + 2] = bbox.east;
@@ -178,8 +176,7 @@ function createStaticBboxIndex(items: readonly OfflinePackageBbox[]): StaticBbox
 
   let write = count * 4;
   let read = 0;
-  for (let level = 0; level < levelBounds.length - 1; level++) {
-    const end = levelBounds[level];
+  for (const end of levelBounds.slice(0, -1)) {
     while (read < end) {
       const child = read;
       let nodeWest = Number.POSITIVE_INFINITY;
@@ -187,10 +184,10 @@ function createStaticBboxIndex(items: readonly OfflinePackageBbox[]): StaticBbox
       let nodeEast = Number.NEGATIVE_INFINITY;
       let nodeNorth = Number.NEGATIVE_INFINITY;
       for (let slot = 0; slot < INDEX_NODE_SIZE && read < end; slot++) {
-        nodeWest = Math.min(nodeWest, coordinates[read++]);
-        nodeSouth = Math.min(nodeSouth, coordinates[read++]);
-        nodeEast = Math.max(nodeEast, coordinates[read++]);
-        nodeNorth = Math.max(nodeNorth, coordinates[read++]);
+        nodeWest = Math.min(nodeWest, numberAt(coordinates, read++));
+        nodeSouth = Math.min(nodeSouth, numberAt(coordinates, read++));
+        nodeEast = Math.max(nodeEast, numberAt(coordinates, read++));
+        nodeNorth = Math.max(nodeNorth, numberAt(coordinates, read++));
       }
       references[write >> 2] = child;
       coordinates[write++] = nodeWest;
@@ -211,14 +208,14 @@ function createStaticBboxIndex(items: readonly OfflinePackageBbox[]): StaticBbox
         const end = Math.min(node + INDEX_NODE_SIZE * 4, levelEndAbove(levelBounds, node));
         for (let position = node; position < end; position += 4) {
           if (
-            queryEast < coordinates[position] ||
-            queryNorth < coordinates[position + 1] ||
-            queryWest > coordinates[position + 2] ||
-            querySouth > coordinates[position + 3]
+            queryEast < numberAt(coordinates, position) ||
+            queryNorth < numberAt(coordinates, position + 1) ||
+            queryWest > numberAt(coordinates, position + 2) ||
+            querySouth > numberAt(coordinates, position + 3)
           ) {
             continue;
           }
-          const reference = references[position >> 2];
+          const reference = indexAt(references, position >> 2);
           if (node >= itemEnd) pending.push(reference);
           else visit(reference);
         }
@@ -236,6 +233,13 @@ interface ResolverEntry {
   generatedAt: string;
   /** Position in record order, used to break otherwise complete ties. */
   order: number;
+}
+
+/** The entry a bbox index item names; the index is built over these entries, so a miss is a bug. */
+function entryAt(entries: readonly ResolverEntry[], item: number): ResolverEntry {
+  const entry = entries[item];
+  if (!entry) throw new RangeError(`No offline package entry at index item ${item}`);
+  return entry;
 }
 
 interface ResolverSnapshot {
@@ -327,7 +331,7 @@ export function createOfflinePackageResolver(
         coordinate[0],
         coordinate[1],
         (item: number) => {
-          const entry = current.entries[item];
+          const entry = entryAt(current.entries, item);
           if (allowed && !allowed.has(entry.recordId)) return;
           if (!contains(entry.bbox, coordinate)) return;
           if (!best || compareEntries(entry, best) < 0) best = entry;
@@ -355,7 +359,7 @@ export function createOfflinePackageResolver(
       }
       const packageIds: string[] = [];
       current.index.query(west, south, east, north, (item: number) => {
-        const entry = current.entries[item];
+        const entry = entryAt(current.entries, item);
         if (geometryIntersectsBbox(entry.bbox, coordinates)) packageIds.push(entry.recordId);
       });
       return packageIds.sort();
