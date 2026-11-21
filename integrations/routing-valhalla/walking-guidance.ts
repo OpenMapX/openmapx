@@ -20,7 +20,13 @@
  * Valhalla's own text.
  */
 
-import { bearingBetween, haversineDistance, type LngLat, type RouteStep } from "@openmapx/core";
+import {
+  bearingBetween,
+  haversineDistance,
+  type LngLat,
+  numberAt,
+  type RouteStep,
+} from "@openmapx/core";
 // biome-ignore lint/style/noRestrictedImports: backend routing provider; never bundled for the browser
 import { createTranslator } from "@openmapx/i18n";
 
@@ -146,15 +152,6 @@ function alongDistances(coordinates: LngLat[]): number[] {
   return along;
 }
 
-/**
- * Metres along the leg at a shape index. Indices come from the leg's own
- * maneuvers and edges and are clamped to its shape; one outside it reads as
- * NaN, as the unchecked read did, so comparisons against it stay false.
- */
-function metresAt(along: readonly number[], index: number): number {
-  return along[index] ?? Number.NaN;
-}
-
 /** Index range of each crossing on the leg, with crosswalks across an island joined. */
 function crossingRuns(edges: readonly WalkEdge[], along: number[]): Array<[number, number]> {
   const runs: Array<[number, number]> = [];
@@ -170,19 +167,19 @@ function crossingRuns(edges: readonly WalkEdge[], along: number[]): Array<[numbe
     .sort((a, b) => a[0] - b[0]);
   for (const [begin, end] of crossings) {
     const last = runs.at(-1);
-    if (last && metresAt(along, begin) - metresAt(along, last[1]) < ISLAND_M)
+    if (last && numberAt(along, begin) - numberAt(along, last[1]) < ISLAND_M)
       last[1] = Math.max(last[1], end);
     else runs.push([begin, end]);
   }
   return runs.filter(
-    ([begin, end]) => metresAt(along, end) - metresAt(along, begin) >= MIN_CROSSING_M,
+    ([begin, end]) => numberAt(along, end) - numberAt(along, begin) >= MIN_CROSSING_M,
   );
 }
 
 /** Splits `draft` at shape index `at`; the second part becomes the crossing. */
 function splitAt(draft: Draft, at: number, along: number[]): [Draft, Draft] {
-  const span = metresAt(along, draft.end) - metresAt(along, draft.begin);
-  const share = span > 0 ? (metresAt(along, at) - metresAt(along, draft.begin)) / span : 0;
+  const span = numberAt(along, draft.end) - numberAt(along, draft.begin);
+  const share = span > 0 ? (numberAt(along, at) - numberAt(along, draft.begin)) / span : 0;
   return [
     {
       ...draft,
@@ -213,7 +210,7 @@ function withCrossings(drafts: Draft[], runs: Array<[number, number]>, along: nu
     let current = draft;
     for (const [begin, end] of runs) {
       if (begin < current.begin || begin >= current.end) continue;
-      const offset = metresAt(along, begin) - metresAt(along, current.begin);
+      const offset = numberAt(along, begin) - numberAt(along, current.begin);
       if (current.kind !== "depart" && offset < CROSS_AT_START_M) {
         current = { ...current, kind: "cross", modifier: undefined, crossing: [begin, end] };
       } else if (offset >= 1) {
@@ -231,8 +228,8 @@ function withCrossings(drafts: Draft[], runs: Array<[number, number]>, along: nu
 function pointAway(plan: Pick<WalkingLegPlan, "along">, index: number, span: number): number {
   const { along } = plan;
   let j = index;
-  if (span < 0) while (j > 0 && metresAt(along, index) - metresAt(along, j) < -span) j--;
-  else while (j < along.length - 1 && metresAt(along, j) - metresAt(along, index) < span) j++;
+  if (span < 0) while (j > 0 && numberAt(along, index) - numberAt(along, j) < -span) j--;
+  else while (j < along.length - 1 && numberAt(along, j) - numberAt(along, index) < span) j++;
   return j;
 }
 
@@ -334,12 +331,12 @@ export function planWalkingLeg(
 function pointAt(plan: WalkingLegPlan, metres: number): LngLat {
   const { along, coordinates } = plan;
   let i = 1;
-  while (i < along.length - 1 && metresAt(along, i) < metres) i++;
+  while (i < along.length - 1 && numberAt(along, i) < metres) i++;
   const a = coordinates[i - 1];
   if (!a) throw new RangeError("A walking leg has no shape");
   const b = coordinates[i] ?? a;
-  const span = metresAt(along, i) - metresAt(along, i - 1);
-  const t = span > 0 ? Math.min(Math.max((metres - metresAt(along, i - 1)) / span, 0), 1) : 0;
+  const span = numberAt(along, i) - numberAt(along, i - 1);
+  const t = span > 0 ? Math.min(Math.max((metres - numberAt(along, i - 1)) / span, 0), 1) : 0;
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
@@ -359,7 +356,7 @@ export interface NameLookup {
 export function nameLookups(plan: WalkingLegPlan): NameLookup[] {
   const lookups: NameLookup[] = [];
   const middle = (begin: number, end: number) =>
-    pointAt(plan, (metresAt(plan.along, begin) + metresAt(plan.along, end)) / 2);
+    pointAt(plan, (numberAt(plan.along, begin) + numberAt(plan.along, end)) / 2);
   plan.drafts.forEach((draft, index) => {
     if (draft.kind === "cross") {
       // A crossing's middle lies on the street it crosses, so the street

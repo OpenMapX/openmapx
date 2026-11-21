@@ -171,6 +171,7 @@ export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
 export { type MatchRange, matchRanges } from "./matchRanges";
 export { matchesAnyOperator, normalizeOperator, operatorKeyMatches } from "./normalize-operator";
+export { numberAt } from "./numberAt";
 export { validObservedAt } from "./observationTime";
 export {
   isOpenAtBitmap,
