@@ -15,7 +15,8 @@ import {
 } from "@openmapx/core/ops";
 import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { build } from "esbuild";
-import { afterAll, assert, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { present } from "../../../__tests__/helpers/present.js";
 import { transitChildCandidateId } from "./ops-children.js";
 
 /** A fault that runs at the next forward check; every check waits for it. `bound`
@@ -50,11 +51,6 @@ vi.mock("@openmapx/core/build-artifacts", async (importOriginal) => {
 });
 
 /** The lease holding `target` in the installation whose data root is `data`. */
-/** A value the test admitted or read earlier; it fails the test if it is missing. */
-function present<T>(value: T | null | undefined): T {
-  assert.exists(value);
-  return value;
-}
 function targetLease(data: string, target: string): string | undefined {
   return control
     .openLeaseStore({ directory: control.leaseStoreDirectory(dirname(data)), purpose: "test" })

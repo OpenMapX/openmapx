@@ -8,8 +8,9 @@ import { sql as expression } from "drizzle-orm";
 import { integer, pgSchema } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { assert, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
+import { present } from "../../../__tests__/helpers/present.js";
 import { DataManagerReadiness } from "../../readiness.js";
 import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
@@ -20,11 +21,6 @@ import { createPostgresDataExecutionStore } from "./store.js";
 import { cancellableTransaction, openCancellableSql, publishDataChange } from "./worker-scope.js";
 
 /** Opens each worker's handle as production does: a pool of its own on `url`. */
-/** A value the test admitted or read earlier; it fails the test if it is missing. */
-function present<T>(value: T | null | undefined): T {
-  assert.exists(value);
-  return value;
-}
 function workerHandles(url: string, control: postgres.Sql) {
   return (signal: AbortSignal) =>
     openCancellableSql(
