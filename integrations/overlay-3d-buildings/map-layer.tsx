@@ -51,13 +51,14 @@ function moveToPitch(map: maplibregl.Map, pitch: number, duration: number): void
 
 type BuildingSourceReference = NonNullable<ReturnType<typeof findBuildingSourceReference>>;
 
-function extrusionLayer(
+/** The one place the extrusion layer enters the stack, whichever source feeds it. */
+function addExtrusionLayer(
   map: maplibregl.Map,
   basemap: BuildingSourceReference,
   source: string,
   sourceLayer: string,
-): maplibregl.FillExtrusionLayerSpecification {
-  return {
+): void {
+  const layer = {
     id: LAYER_ID,
     type: "fill-extrusion",
     source,
@@ -88,6 +89,7 @@ function extrusionLayer(
       "fill-extrusion-vertical-gradient": true,
     },
   } as maplibregl.FillExtrusionLayerSpecification;
+  addLayerInSlot(map, layer, "area-overlays", 5);
 }
 
 const replacementKey = (replacement: BuildingReplacement) =>
@@ -134,12 +136,7 @@ export function BuildingExtrusionLayer() {
       if (!buildingSource) return;
 
       if (!map.getLayer(LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          extrusionLayer(map, buildingSource, buildingSource.source, buildingSource.sourceLayer),
-          "area-overlays",
-          5,
-        );
+        addExtrusionLayer(map, buildingSource, buildingSource.source, buildingSource.sourceLayer);
         map.setLight({
           anchor: "viewport",
           color: "#ffffff",
@@ -195,12 +192,7 @@ export function BuildingExtrusionLayer() {
       }));
       addMaskedSource(map, maskedFrom);
       map.removeLayer(LAYER_ID);
-      addLayerInSlot(
-        map,
-        extrusionLayer(map, basemap, MASKED_SOURCE_ID, maskedFrom.sourceLayer),
-        "area-overlays",
-        5,
-      );
+      addExtrusionLayer(map, basemap, MASKED_SOURCE_ID, maskedFrom.sourceLayer);
     };
 
     const reloadMaskedTiles = () => {

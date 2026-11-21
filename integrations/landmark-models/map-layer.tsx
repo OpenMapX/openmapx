@@ -12,7 +12,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/integration-framework";
-import type { MapMouseEvent } from "maplibre-gl";
+import type { Map as MaplibreMap, MapMouseEvent, MapSourceDataEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -38,6 +38,11 @@ const MIN_ZOOM = 13;
 const DEFAULT_DETAIL_ZOOM = 17;
 const RELEASE_AFTER_MS = 30_000;
 const MOVE_DEBOUNCE_MS = 150;
+/**
+ * Above the 3D buildings (order 5): translucent model parts write no depth,
+ * so extrusions drawn after them would paint over them.
+ */
+const SLOT_ORDER = 12;
 
 type Polygonal = NonNullable<Candidate["asset"]["footprint"]>;
 
@@ -64,6 +69,22 @@ function footprintOf(
 }
 
 /**
+ * Icons and circles drawn above the models (basemap POIs, saved places, stops)
+ * keep their clicks: a person taps what they see on top.
+ */
+function markerAbove(map: MaplibreMap, point: { x: number; y: number }): boolean {
+  const order = map.getLayersOrder();
+  const own = order.indexOf(LAYER_ID);
+  if (own < 0) return false;
+  const layers = order.slice(own + 1).filter((id) => {
+    const type = map.getLayer(id)?.type;
+    return type === "circle" || (type === "symbol" && !!map.getLayoutProperty(id, "icon-image"));
+  });
+  if (layers.length === 0) return false;
+  return map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
+}
+
+/**
  * Landmark models in the 3D view: active while the 3D view is selected, the
  * camera is tilted and close enough, navigation is idle and the basemap's
  * buildings can be masked. three.js is loaded only on first activation.
@@ -81,6 +102,8 @@ export function LandmarkModelsLayer(): null {
   const [cameraReady, setCameraReady] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [scene, setScene] = useState<LandmarkScene | null>(null);
+  const sceneRef = useRef<LandmarkScene | null>(null);
+  sceneRef.current = scene;
   const active = selected && cameraReady && !navigating && maskingAvailable && !unsupported;
 
   const catalogue = useMemo(() => new LandmarkCatalogue({ apiUrl }), [apiUrl]);
@@ -91,8 +114,8 @@ export function LandmarkModelsLayer(): null {
   const publishedKey = useRef("");
   const map = mapRef.current;
 
+  /** Placed models hide their buildings, whether or not they are in view right now. */
   const publish = (ids: readonly string[]) => {
-    drawn.current = ids;
     const replacements: BuildingReplacement[] = [];
     for (const id of ids) {
       const candidate = byId.current.get(id);
@@ -103,13 +126,23 @@ export function LandmarkModelsLayer(): null {
         toReplacement(id, footprint, candidate.asset.replaces, candidate.asset.bounds),
       );
     }
-    const key = replacements.map((r) => r.id).join("|");
+    const key = replacements.map((r) => `${r.id}${r.footprint ? "+" : ""}`).join("|");
     if (key === publishedKey.current) return;
     publishedKey.current = key;
     useBuildingReplacementStore.getState().setReplacements(OWNER, replacements);
   };
   const publishRef = useRef(publish);
   publishRef.current = publish;
+
+  // Unmounted while active (the map stays): give the buildings back.
+  useEffect(
+    () => () => {
+      const store = useBuildingReplacementStore.getState();
+      if (store.owners.has(OWNER)) store.setReplacements(OWNER, []);
+      sceneRef.current?.dispose();
+    },
+    [],
+  );
 
   // Camera conditions: tilted into the 3D view and close enough for landmarks.
   useEffect(() => {
@@ -140,7 +173,9 @@ export function LandmarkModelsLayer(): null {
           createLandmarkScene({
             apiUrl,
             onUnsupported: () => setUnsupported(true),
-            onFrame: (ids) => publishRef.current(ids),
+            onFrame: (ids) => {
+              drawn.current = ids;
+            },
           }),
         );
       });
@@ -167,7 +202,7 @@ export function LandmarkModelsLayer(): null {
     void styleVersion;
     if (!map || !mapReady || !scene || !active) return;
     const unsubscribe = subscribeStyleLoaded(map, () => {
-      if (!map.getLayer(LAYER_ID)) addLayerInSlot(map, scene.layer, "area-overlays", 6);
+      if (!map.getLayer(LAYER_ID)) addLayerInSlot(map, scene.layer, "area-overlays", SLOT_ORDER);
     });
     return () => {
       unsubscribe();
@@ -217,6 +252,15 @@ export function LandmarkModelsLayer(): null {
         });
       }
       scene.layer.setPlaced(placed);
+      publishRef.current(placed.map((model) => model.assetId));
+    };
+    const onSourceData = (event: MapSourceDataEvent) => {
+      if (event.sourceId === map.getTerrain()?.source) place();
+    };
+    // Heights sampled before terrain changed belong to another surface.
+    const onTerrain = () => {
+      grounds.current.clear();
+      place();
     };
 
     const refresh = async () => {
@@ -255,13 +299,17 @@ export function LandmarkModelsLayer(): null {
     const stopModels = scene.models.onChange(place);
     map.on("moveend", schedule);
     // Re-ground as terrain tiles arrive; a coarse parent tile is replaced by the exact one.
-    for (const event of ["sourcedata", "terrain", "idle"] as const) map.on(event, place);
+    map.on("sourcedata", onSourceData);
+    map.on("terrain", onTerrain);
+    map.on("idle", place);
     return () => {
       controller.abort();
       clearTimeout(timer);
       stopModels();
       map.off("moveend", schedule);
-      for (const event of ["sourcedata", "terrain", "idle"] as const) map.off(event, place);
+      map.off("sourcedata", onSourceData);
+      map.off("terrain", onTerrain);
+      map.off("idle", place);
     };
   }, [map, mapReady, scene, active, catalogue]);
 
@@ -271,7 +319,7 @@ export function LandmarkModelsLayer(): null {
     const unregister = registerCustomMapHitTester(
       map,
       OWNER,
-      (point) => scene.layer.pick(point) !== null,
+      (point) => scene.layer.pick(point) !== null && !markerAbove(map, point),
     );
     let frame = 0;
     const onClick = (event: MapMouseEvent) => {

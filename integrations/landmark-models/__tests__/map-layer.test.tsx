@@ -6,6 +6,7 @@ import {
   usePlaceStore,
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import type { Candidate } from "../web/loader";
 import type { WireAsset } from "../wire";
@@ -49,6 +50,8 @@ const sceneMock = vi.hoisted(() => {
     drawn: [] as string[],
     pick: null as string | null,
     loaded: new Map<string, unknown>(),
+    /** Assets whose low level of detail is not loaded (only the detail one is). */
+    lowMissing: new Set<string>(),
     listeners: new Set<() => void>(),
     layer: undefined as unknown as Record<
       string,
@@ -80,7 +83,8 @@ vi.mock("../web/scene", () => ({
       models: {
         request: vi.fn(),
         best: (id: string) => sceneMock.loaded.get(id),
-        get: (id: string) => sceneMock.loaded.get(id),
+        get: (id: string, lod: string) =>
+          lod === "low" && sceneMock.lowMissing.has(id) ? undefined : sceneMock.loaded.get(id),
         touch: vi.fn(),
         cancelExcept: vi.fn(),
         failure: () => "none",
@@ -148,11 +152,19 @@ function wireAsset(id: string, overrides: Partial<WireAsset> = {}): WireAsset {
 
 const RECEIPT = { sourceId: "open-landmarks", name: "Arc de Triomphe" };
 
-function loadedModel() {
+/** A 40 m × 20 m box, 30 m tall, in the GLB frame (X east, Y up, Z south). */
+function boxPositions(): Float32Array {
+  const points: number[] = [];
+  for (const x of [-20, 20])
+    for (const y of [0, 30]) for (const z of [-10, 10]) points.push(x, y, z);
+  return new Float32Array(points);
+}
+
+function loadedModel(positions: Float32Array = new Float32Array()) {
   return {
     key: "k",
     scene: {},
-    positions: new Float32Array(),
+    positions,
     bytesEstimate: 1,
     dispose: vi.fn(),
     setNight: vi.fn(),
@@ -192,6 +204,7 @@ beforeEach(() => {
   sceneMock.drawn = [];
   sceneMock.pick = null;
   sceneMock.loaded = new Map([["landmark-models-open-landmarks:arc", loadedModel()]]);
+  sceneMock.lowMissing.clear();
   sceneMock.listeners.clear();
   catalogueMock.candidates = [
     { asset: wireAsset("landmark-models-open-landmarks:arc"), receipts: [RECEIPT] },
@@ -256,14 +269,12 @@ describe("LandmarkModelsLayer", () => {
     expect(fake.state.layers.get(LAYER_ID)).toBe(sceneMock.layer);
   });
 
-  it("publishes replacements only for drawn, grounded models and empties them when inactive", async () => {
+  it("publishes replacements for placed, grounded models and empties them when inactive", async () => {
     render(<LandmarkModelsLayer />);
     await activate();
     expect(sceneMock.layer.setPlaced).toHaveBeenLastCalledWith([
       expect.objectContaining({ assetId: "landmark-models-open-landmarks:arc", groundM: 0 }),
     ]);
-    expect(replacements()).toEqual([]);
-    act(() => sceneMock.options?.onFrame(["landmark-models-open-landmarks:arc"]));
     expect(replacements().map((r) => r.id)).toEqual(["landmark-models-open-landmarks:arc"]);
     expect(replacements()[0]?.featureIds).toEqual([2264135082]);
     act(() => buildings.setState({ panelOpen: false, layerVisible: false }));
@@ -271,12 +282,51 @@ describe("LandmarkModelsLayer", () => {
     expect(replacements()).toEqual([]);
   });
 
-  it("withdraws a replacement when its model is evicted or fails", async () => {
+  it("keeps a replacement while its model is outside the view", async () => {
     render(<LandmarkModelsLayer />);
     await activate();
     act(() => sceneMock.options?.onFrame(["landmark-models-open-landmarks:arc"]));
     act(() => sceneMock.options?.onFrame([]));
+    expect(replacements().map((r) => r.id)).toEqual(["landmark-models-open-landmarks:arc"]);
+  });
+
+  it("withdraws a replacement when its model is evicted or fails", async () => {
+    render(<LandmarkModelsLayer />);
+    await activate();
+    sceneMock.loaded.clear();
+    act(() => {
+      for (const listener of sceneMock.listeners) listener();
+    });
     expect(replacements()).toEqual([]);
+  });
+
+  it("republishes a replacement once its derived footprint is known", async () => {
+    const id = "landmark-models-barrelman:tower";
+    catalogueMock.candidates = [
+      {
+        asset: wireAsset(id, { footprint: undefined, derivedFootprintAllowed: true }),
+        receipts: [RECEIPT],
+      },
+    ];
+    sceneMock.loaded = new Map([[id, loadedModel(boxPositions())]]);
+    sceneMock.lowMissing.add(id);
+    render(<LandmarkModelsLayer />);
+    await activate();
+    expect(replacements()[0]?.footprint).toBeUndefined();
+    sceneMock.lowMissing.clear();
+    act(() => {
+      for (const listener of sceneMock.listeners) listener();
+    });
+    expect(replacements()[0]?.footprint?.type).toBe("MultiPolygon");
+  });
+
+  it("clears its replacements and releases the scene when unmounted while active", async () => {
+    const view = render(<LandmarkModelsLayer />);
+    await activate();
+    expect(replacements()).toHaveLength(1);
+    view.unmount();
+    expect(replacements()).toEqual([]);
+    expect(sceneMock.dispose).toHaveBeenCalled();
   });
 
   it("publishes no replacements when the layer reports unsupported", async () => {
@@ -300,13 +350,36 @@ describe("LandmarkModelsLayer", () => {
     await activate();
     expect(sceneMock.layer.setPlaced).toHaveBeenLastCalledWith([]);
     state = "loaded";
-    for (const event of ["sourcedata", "terrain", "idle"]) {
+    (sceneMock.layer.setPlaced as ReturnType<typeof vi.fn>).mockClear();
+    act(() => fake.emit("sourcedata", { sourceId: "basemap" }));
+    expect(sceneMock.layer.setPlaced).not.toHaveBeenCalled();
+    for (const [event, data] of [
+      ["sourcedata", { sourceId: "dem" }],
+      ["terrain", {}],
+      ["idle", {}],
+    ] as const) {
       (sceneMock.layer.setPlaced as ReturnType<typeof vi.fn>).mockClear();
-      act(() => fake.emit(event));
+      act(() => fake.emit(event, data));
       expect(sceneMock.layer.setPlaced).toHaveBeenLastCalledWith([
         expect.objectContaining({ groundM: 35 }),
       ]);
     }
+  });
+
+  it("forgets flat-map ground heights when terrain is switched on", async () => {
+    render(<LandmarkModelsLayer />);
+    await activate();
+    expect(sceneMock.layer.setPlaced).toHaveBeenLastCalledWith([
+      expect.objectContaining({ groundM: 0 }),
+    ]);
+    fake.state.terrain = { source: "dem" };
+    (fake.map as unknown as { terrain: unknown }).terrain = {
+      getElevationAndDEMStateForLngLat: () => ({ elevation: 0, demState: "loading" }),
+      getDrawnElevationForLngLat: () => undefined,
+    };
+    act(() => fake.emit("terrain", {}));
+    expect(sceneMock.layer.setPlaced).toHaveBeenLastCalledWith([]);
+    expect(replacements()).toEqual([]);
   });
 
   it("keeps the last ground height while a re-evaluation is pending", async () => {
@@ -352,6 +425,28 @@ describe("LandmarkModelsLayer", () => {
     const place = usePlaceStore.getState().selectedPlace;
     expect(place?.name).toBe("Landmark landmark-models-open-landmarks:arc");
     expect(place?.ids.osm).toBe("way/226413508");
+  });
+
+  it("leaves a click to an icon drawn above the model", async () => {
+    render(<LandmarkModelsLayer />);
+    await activate();
+    sceneMock.pick = "landmark-models-open-landmarks:arc";
+    const click = () => ({
+      target: fake.map,
+      point: { x: 10, y: 10 },
+      originalEvent: new MouseEvent("click"),
+    });
+    expect(getMapClickOwner(click())).toBe("custom-content");
+    fake.state.layers.set("poi-icons", {
+      id: "poi-icons",
+      type: "symbol",
+      layout: { "icon-image": "poi" },
+    });
+    fake.state.layers.set("street-names", { id: "street-names", type: "symbol", layout: {} });
+    fake.setRenderedFeatures("street-names", [{ properties: {} } as never]);
+    expect(getMapClickOwner(click())).toBe("custom-content");
+    fake.setRenderedFeatures("poi-icons", [{ properties: {} } as never]);
+    expect(getMapClickOwner(click())).toBeNull();
   });
 
   it("credits only drawn models", async () => {
