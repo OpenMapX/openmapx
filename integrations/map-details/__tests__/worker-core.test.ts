@@ -3,7 +3,12 @@ import { PbfReader } from "pbf";
 import { describe, expect, it, vi } from "vitest";
 import { type Pt, ringArea } from "../web/derive/geometry";
 import type { PaintPolygon } from "../web/derive/roads";
-import { createWorkerCore, encodePaintTile, type WorkerResponse } from "../web/worker-core";
+import {
+  createWorkerCore,
+  encodePaintTile,
+  type WorkerRequest,
+  type WorkerResponse,
+} from "../web/worker-core";
 import { ALEXANDERPLATZ, fixtureBytes, fixtureTile } from "./fixtures";
 
 const TEMPLATE = "https://maps.example/tiles/data/street_detail/{z}/{x}/{y}.pbf";
@@ -33,12 +38,25 @@ function decodePaint(bytes: ArrayBuffer | null) {
   }));
 }
 
+/** A core whose answers to non-cancel requests are never null. */
+function coreWith(fetchImpl: ReturnType<typeof fakeFetch>) {
+  const core = createWorkerCore(fetchImpl as unknown as typeof fetch);
+  return {
+    cancel: (target: number) => core.handle({ id: 0, kind: "cancel", target }),
+    async handle(request: Exclude<WorkerRequest, { kind: "cancel" }>) {
+      const result = await core.handle(request);
+      if (!result) throw new Error("no answer");
+      return result;
+    },
+  };
+}
+
 const paintBytes = (response: WorkerResponse) =>
   "kind" in response && response.kind === "paint" ? response.bytes : undefined;
 
 describe("worker core paint", () => {
   it("encodes a z16 tile as one paint layer with kind and layer", async () => {
-    const core = createWorkerCore(fakeFetch() as unknown as typeof fetch);
+    const core = coreWith(fakeFetch());
     const { response, transfer } = await core.handle({
       id: 1,
       kind: "paint",
@@ -59,7 +77,7 @@ describe("worker core paint", () => {
 
   it("derives the z16 parent once for its children and keeps each child's geometry in its square", async () => {
     const fetchImpl = fakeFetch();
-    const core = createWorkerCore(fetchImpl as unknown as typeof fetch);
+    const core = coreWith(fetchImpl);
     for (const [z, dx, dy] of [
       [17, 0, 0],
       [17, 1, 1],
@@ -89,7 +107,7 @@ describe("worker core paint", () => {
   });
 
   it("answers null for a missing street tile", async () => {
-    const core = createWorkerCore(fakeFetch() as unknown as typeof fetch);
+    const core = coreWith(fakeFetch());
     const { response } = await core.handle({
       id: 3,
       kind: "paint",
@@ -109,7 +127,7 @@ describe("worker core paint", () => {
           release = resolve;
         }),
     });
-    const core = createWorkerCore(fetchImpl as unknown as typeof fetch);
+    const core = coreWith(fetchImpl);
     const pending = core.handle({
       id: 4,
       kind: "paint",
@@ -118,7 +136,7 @@ describe("worker core paint", () => {
       y: Y,
       streetTemplate: TEMPLATE,
     });
-    await core.handle({ id: 5, kind: "cancel", target: 4 });
+    await core.cancel(4);
     release(new Response(fixtureBytes(ALEXANDERPLATZ)));
     expect((await pending).response).toEqual({ id: 4, error: "cancelled" });
   });
@@ -127,7 +145,7 @@ describe("worker core paint", () => {
 describe("worker core objects", () => {
   it("serves paint and objects for one tile from a single street fetch", async () => {
     const fetchImpl = fakeFetch();
-    const core = createWorkerCore(fetchImpl as unknown as typeof fetch);
+    const core = coreWith(fetchImpl);
     const paint = await core.handle({
       id: 6,
       kind: "paint",

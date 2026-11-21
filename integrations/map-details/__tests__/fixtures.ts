@@ -6,7 +6,7 @@ export const STREET_LAYERS = ["roads", "rails", "crossings", "trees", "furniture
 export const BASEMAP_LAYERS = ["landcover", "landuse", "transportation", "building", "water"];
 
 /** Raw bytes of a gzipped fixture tile. */
-export function fixtureBytes(name: string): Uint8Array {
+export function fixtureBytes(name: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(
     gunzipSync(readFileSync(new URL(`./fixtures/${name}.pbf.gz`, import.meta.url))),
   );

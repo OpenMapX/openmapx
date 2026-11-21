@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "domains": ["map-overlay"],
   "frontend": {
-    "mapLayer": false,
+    "mapLayer": true,
     "legend": false,
     "panel": false
   },
@@ -21,6 +21,38 @@
       }
     }
   },
+  "dataSources": [
+    {
+      "sourceId": "osm-street-detail",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "commercialUse": "yes",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://opendatacommons.org/licenses/odbl/"
+          }
+        ]
+      }
+    }
+  ],
   "quality": "built-in",
   "category": "Map Overlays"
 }

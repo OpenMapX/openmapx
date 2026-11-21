@@ -8,6 +8,8 @@
     "@mapbox/vector-tile": "^3.0.0",
     "@maplibre/vt-pbf": "^4.3.3",
     "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "pbf": "^5.1.2",
     "three": "0.185.1"
   },
@@ -16,6 +18,7 @@
     "react": ">=19"
   },
   "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.9.0",
     "@types/react": "^19.3.0",
     "@types/three": "0.185.4",
     "maplibre-gl": "^6.16.0",

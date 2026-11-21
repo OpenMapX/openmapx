@@ -1460,6 +1460,12 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       pbf:
         specifier: ^5.1.2
         version: 5.1.2
@@ -1467,6 +1473,9 @@ importers:
         specifier: 0.185.1
         version: 0.185.1
     devDependencies:
+      '@maplibre/maplibre-gl-style-spec':
+        specifier: 26.9.0
+        version: 26.9.0
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0

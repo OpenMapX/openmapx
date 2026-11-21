@@ -1,0 +1,11 @@
+{
+  "name": "Map details",
+  "description": "Forests, street trees, lamps, signals and street paint in the 3D view",
+  "dataSources": {
+    "osm-street-detail": {
+      "purpose": "Street layout, crossings, trees, lamps, signals and pitches for the 3D view",
+      "dataSent": "None; tiles from this installation's tile server",
+      "dataReceived": "Roads, lanes, crossings, rails, trees, street furniture and sports pitches"
+    }
+  }
+}
