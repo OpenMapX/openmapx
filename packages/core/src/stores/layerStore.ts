@@ -4,9 +4,15 @@ import { getStorage } from "../platform/storage";
 export type MapLayer = "default" | "satellite" | "terrain" | "cycling";
 
 const GLOBE_STORAGE_KEY = "openmapx:globeView";
+const GLOBE_LIGHTING_STORAGE_KEY = "openmapx:globeLighting";
 
 function readGlobePreference(): boolean {
   return getStorage().getString(GLOBE_STORAGE_KEY) === "true";
+}
+
+/** Real-time day and night on the globe is on unless the user turned it off. */
+function readGlobeLightingPreference(): boolean {
+  return getStorage().getString(GLOBE_LIGHTING_STORAGE_KEY) !== "false";
 }
 
 interface LayerState {
@@ -16,6 +22,9 @@ interface LayerState {
   /** Transient camera intent; explicit deep-link cameras must not be replaced by a reveal. */
   globeCameraBehavior: "reveal" | "preserve";
   setGlobeView: (enabled: boolean, cameraBehavior?: "reveal" | "preserve") => void;
+  /** Real-time day and night, city lights and the Sun on the zoomed-out globe. */
+  globeLighting: boolean;
+  setGlobeLighting: (enabled: boolean) => void;
 }
 
 export const useLayerStore = create<LayerState>((set) => ({
@@ -26,5 +35,10 @@ export const useLayerStore = create<LayerState>((set) => ({
   setGlobeView: (globeView, globeCameraBehavior = "reveal") => {
     getStorage().setString(GLOBE_STORAGE_KEY, String(globeView));
     set({ globeView, globeCameraBehavior });
+  },
+  globeLighting: readGlobeLightingPreference(),
+  setGlobeLighting: (globeLighting) => {
+    getStorage().setString(GLOBE_LIGHTING_STORAGE_KEY, String(globeLighting));
+    set({ globeLighting });
   },
 }));

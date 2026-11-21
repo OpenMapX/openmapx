@@ -49,6 +49,14 @@ describe("galacticRotation", () => {
     expect(z).toBeCloseTo(1, 3);
   });
 
+  it.each(DATES)("is a rotation, not a mirror image, at %s", (date) => {
+    // Galactic longitude 90°, latitude 0°.
+    const [x, y, z] = apply(galacticRotation(date), starDirection(318.004, 48.33, date));
+    expect(x).toBeCloseTo(0, 3);
+    expect(y).toBeCloseTo(1, 3);
+    expect(z).toBeCloseTo(0, 3);
+  });
+
   it("writes into a supplied array", () => {
     const out = new Float32Array(9);
     expect(galacticRotation(DATES[0], out)).toBe(out);

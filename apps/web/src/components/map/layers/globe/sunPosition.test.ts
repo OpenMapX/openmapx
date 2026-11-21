@@ -56,6 +56,13 @@ describe("greenwichSiderealAngle", () => {
     );
   });
 
+  it("advances at the sidereal rate", () => {
+    expect(greenwichSiderealAngle(new Date("2026-01-01T00:00:00Z"))).toBeCloseTo(
+      100.66083 * RADIANS,
+      5,
+    );
+  });
+
   it("stays in [0, 2π)", () => {
     for (const iso of ["1999-03-01T00:00:00Z", "2026-11-21T18:30:00Z", "2080-07-04T06:00:00Z"]) {
       const angle = greenwichSiderealAngle(new Date(iso));

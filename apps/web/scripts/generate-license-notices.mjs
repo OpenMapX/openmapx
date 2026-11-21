@@ -123,6 +123,29 @@ We also encourage you to join our Placemaker community where you can contribute 
 `,
 });
 
+// The globe's bundled textures (apps/web/public/globe/README.md) are imagery,
+// not npm dependencies; list their sources and licences here as well.
+notices.push(
+  {
+    name: "ESO all-sky Milky Way panorama (eso0932a)",
+    version: "data-source",
+    license: "CC-BY-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    projectUrl: "https://www.eso.org/public/images/eso0932a/",
+    licenseText: "Credit: ESO/S. Brunier. Resized and recompressed for the globe's sky.\n",
+  },
+  {
+    name: "NASA Black Marble 2016 (Earth at Night)",
+    version: "data-source",
+    license: "Public Domain",
+    licenseUrl:
+      "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+    projectUrl: "https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/",
+    licenseText:
+      "Credit: NASA Earth Observatory, using Suomi NPP VIIRS data processed at NASA's Goddard Space Flight Center. Resized for the globe's night side.\n",
+  },
+);
+
 const payload = {
   generatedAt: new Date().toISOString(),
   rootCount: rootPackageJsonPaths.length,
