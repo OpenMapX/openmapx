@@ -1,6 +1,6 @@
 "use client";
 
-import type { MapGeoJSONFeature, MapMouseEvent, Popup } from "maplibre-gl";
+import type { MapGeoJSONFeature, MapMouseEvent, Point, Popup } from "maplibre-gl";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
@@ -25,6 +25,12 @@ export interface MapOverlayInteractionOptions {
    * pointer is over the map.
    */
   onHover?: (features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) => void;
+  /**
+   * Whether the overlay has content under the point, for content MapLibre
+   * cannot query, such as a custom 3D layer. It replaces the rendered-feature
+   * lookup on `layerIds`.
+   */
+  hitTest?: (point: Point) => boolean;
   /** Registers only while true, e.g. while the layers are drawn. Defaults to true. */
   enabled?: boolean;
 }
@@ -45,6 +51,7 @@ export function useMapOverlayInteraction({
   priority,
   onClick,
   onHover,
+  hitTest,
   enabled = true,
 }: MapOverlayInteractionOptions): void {
   const { mapRef, mapReady } = useMap();
@@ -52,8 +59,10 @@ export function useMapOverlayInteraction({
   const hover = useEffectEvent((features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) =>
     onHover?.(features, event),
   );
+  const test = useEffectEvent((point: Point) => hitTest?.(point) ?? false);
   const hasClick = onClick !== undefined;
   const hasHover = onHover !== undefined;
+  const hasHitTest = hitTest !== undefined;
   const layerKey = layerIds.join("\n");
 
   useEffect(() => {
@@ -65,8 +74,9 @@ export function useMapOverlayInteraction({
       priority,
       ...(hasClick ? { onClick: click } : {}),
       ...(hasHover ? { onHover: hover } : {}),
+      ...(hasHitTest ? { hitTest: test } : {}),
     });
-  }, [mapRef, mapReady, enabled, id, layerKey, priority, hasClick, hasHover]);
+  }, [mapRef, mapReady, enabled, id, layerKey, priority, hasClick, hasHover, hasHitTest]);
 }
 
 /**

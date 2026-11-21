@@ -21,6 +21,7 @@ import {
   registerCustomMapHitTester,
 } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -321,7 +322,6 @@ export function LandmarkModelsLayer(): null {
       OWNER,
       (point) => scene.layer.pick(point) !== null && !markerAbove(map, point),
     );
-    let frame = 0;
     const onClick = (event: MapMouseEvent) => {
       if (getMapClickOwner(event) !== "custom-content") return;
       const id = scene.layer.pick(event.point);
@@ -339,22 +339,22 @@ export function LandmarkModelsLayer(): null {
       );
       useSidebarStore.getState().openSidebar(PANEL.PLACE);
     };
-    const onMouseMove = (event: MapMouseEvent) => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        map.getCanvas().style.cursor = scene.layer.pick(event.point) ? "pointer" : "";
-      });
-    };
     map.on("click", onClick);
-    map.on("mousemove", onMouseMove);
     return () => {
       unregister();
-      cancelAnimationFrame(frame);
       map.off("click", onClick);
-      map.off("mousemove", onMouseMove);
     };
   }, [map, mapReady, scene, active]);
+
+  // The shared pipeline owns the cursor; overlays with rendered hits rank above.
+  useMapOverlayInteraction({
+    id: OWNER,
+    layerIds: [LAYER_ID],
+    priority: 0,
+    enabled: !!map && mapReady && !!scene && active,
+    hitTest: (point) =>
+      !!map && !!scene && scene.layer.pick(point) !== null && !markerAbove(map, point),
+  });
 
   const attributionOptions = useMemo(
     () => ({

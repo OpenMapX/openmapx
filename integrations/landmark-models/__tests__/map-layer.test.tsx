@@ -449,6 +449,26 @@ describe("LandmarkModelsLayer", () => {
     expect(getMapClickOwner(click())).toBeNull();
   });
 
+  it("shows the pointer over a model, but not under an icon drawn above it", async () => {
+    render(<LandmarkModelsLayer />);
+    await activate();
+    const cursor = () => fake.map.getCanvasContainer().style.cursor;
+    const move = () => act(() => fake.emit("mousemove", { point: { x: 10, y: 10 } }));
+    move();
+    expect(cursor()).toBe("");
+    sceneMock.pick = "landmark-models-open-landmarks:arc";
+    move();
+    expect(cursor()).toBe("pointer");
+    fake.state.layers.set("poi-icons", {
+      id: "poi-icons",
+      type: "symbol",
+      layout: { "icon-image": "poi" },
+    });
+    fake.setRenderedFeatures("poi-icons", [{ properties: {} } as never]);
+    move();
+    expect(cursor()).toBe("");
+  });
+
   it("credits only drawn models", async () => {
     render(<LandmarkModelsLayer />);
     await activate();
