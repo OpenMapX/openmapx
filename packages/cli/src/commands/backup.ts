@@ -997,7 +997,11 @@ export function requiredDependentStops(
   running: ReadonlySet<string>,
 ): string[] {
   if (!containsOpenMapXDatabase(manifest)) return [];
-  return ["app-api", "data-manager", "martin"].filter((id) => running.has(id));
+  return [
+    coreServices.CORE_SERVICE_ID.api,
+    coreServices.CORE_SERVICE_ID.dataManager,
+    "martin",
+  ].filter((id) => running.has(id));
 }
 
 function erasureJournalPaths(rootDir?: string): { journalPath: string; keyPath: string } {
@@ -1487,7 +1491,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     log.err(`Restore failed: ${(err as Error).message}`);
     // Best-effort restart of everything we stopped, even on failure.
     for (const id of [...stopped].reverse()) {
-      if (id === "app-api" && !protectedDatabaseSafe) {
+      if (id === coreServices.CORE_SERVICE_ID.api && !protectedDatabaseSafe) {
         log.warn(
           "Leaving app-api stopped because the account database was not safely replayed after restore",
         );

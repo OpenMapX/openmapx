@@ -6,16 +6,6 @@ import type { LoadedService } from "./types";
 export const SERVICE_SELECTION_ENV = "OPENMAPX_ENABLED_SERVICES";
 const APP_API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
 
-export const DEFAULT_SELECTED_SERVICE_IDS = [
-  "traefik",
-  "well-known",
-  "app-api",
-  "app-web",
-  "postgis",
-  "redis",
-  "data-manager",
-] as const;
-
 export interface ExpandedServiceSelection {
   /** Operator-requested root service ids before dependency expansion. */
   requestedIds: string[];

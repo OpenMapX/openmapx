@@ -116,6 +116,17 @@ export {
 } from "./container-mounts";
 export { coordinatorPullReferenceIdentity } from "./coordinator-pull-reference";
 export {
+  CONTROL_PLANE_SERVICE_IDS,
+  CORE_RESTART_SERVICE_IDS,
+  CORE_SERVICE_ID,
+  type CoreRestartServiceId,
+  type CoreServiceId,
+  DEFAULT_SELECTED_SERVICE_IDS,
+  PROTECTED_CONFIGURATION_SERVICE_IDS,
+  RELEASE_PINNED_SERVICE_IDS,
+  type ReleasePinnedServiceId,
+} from "./core-service-ids";
+export {
   composeCreationDependencyIds,
   serviceCreationDependencyIds,
 } from "./creation-dependencies";
@@ -253,7 +264,6 @@ export {
   builtInServiceManifestSource,
   captureReleaseServiceAuthority,
   RELEASE_BUILT_IN_SERVICE_IDS,
-  RELEASE_NEVER_MANAGE_SERVICE_IDS,
   type ReleaseServiceAuthorityCapture,
   readBuiltInServices,
   validateReleaseServiceAuthority,
@@ -278,7 +288,6 @@ export {
   parseReleaseManifest,
   RELEASE_IMAGE_NAMES,
   RELEASE_MANIFEST_CONTAINER_PATH,
-  RELEASE_PINNED_SERVICE_IDS,
   RELEASE_REPOSITORY_ENV,
   RELEASE_SELECTOR_ENV,
   type ReleaseChannel,
@@ -329,7 +338,6 @@ export { computeServiceSecurityRating, type ServiceSecurityRating } from "./secu
 export {
   APPLIED_SERVICES_ENV,
   buildAppApiServiceEnv,
-  DEFAULT_SELECTED_SERVICE_IDS,
   type ExpandedServiceSelection,
   type ExpandServiceSelectionOptions,
   expandServiceSelection,

@@ -66,13 +66,6 @@ const MAX_CLI_DURATION_MS = 30 * 60_000;
 // published loopback port, is the host's; inside this container it reaches
 // nothing.
 const FIXED_CLI_DATA_MANAGER_URL = "http://data-manager:4000";
-const INSPECT_RELEASE_SERVICE_IDS = [
-  "app-api",
-  "app-web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-] as const;
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -711,7 +704,7 @@ export function createDefaultReleaseEffects(
       }
       const serviceImages = manifest ? coreServices.releaseServiceImages(manifest) : undefined;
       const services: OpsResultFor<"system.inspect">["services"] = [];
-      for (const serviceId of INSPECT_RELEASE_SERVICE_IDS) {
+      for (const serviceId of coreServices.RELEASE_PINNED_SERVICE_IDS) {
         const pinnedImage = serviceImages?.[serviceId];
         let containerId: string | undefined;
         // A thrown or unparseable `ps -q` is an absent observation, not an

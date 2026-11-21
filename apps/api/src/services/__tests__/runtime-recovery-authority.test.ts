@@ -28,7 +28,7 @@ describe("runtime recovery startup authority", () => {
     expect(openJournal).toHaveBeenCalledWith(expect.stringMatching(/runtime-recovery-v1\.json$/), {
       forbiddenServiceIds: expect.arrayContaining([
         ...services.RELEASE_BUILT_IN_SERVICE_IDS,
-        ...services.RELEASE_NEVER_MANAGE_SERVICE_IDS,
+        ...services.CONTROL_PLANE_SERVICE_IDS,
       ]),
     });
   });

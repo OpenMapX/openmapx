@@ -6,7 +6,7 @@ import { dockerCompose, dockerComposeStream } from "./docker";
 import { log } from "./output";
 import { repoPaths } from "./paths";
 
-export const API_SERVICE_ID = "app-api";
+export const API_SERVICE_ID = coreServices.CORE_SERVICE_ID.api;
 
 /** The app-api image's migration entry point, relative to its working directory. */
 const MIGRATE_SCRIPT = "dist/migrate.js";
@@ -16,7 +16,7 @@ const NO_MIGRATION_STEP = 78;
 const STOP_TIMEOUT_SECONDS = "60";
 
 /** Marks migration containers among the one-off containers of app-api. */
-const MIGRATION_MARKER = "org.openmapx.migration=app-api";
+const MIGRATION_MARKER = `org.openmapx.migration=${API_SERVICE_ID}`;
 
 /**
  * The labels of this stack's migration containers. `docker compose run`

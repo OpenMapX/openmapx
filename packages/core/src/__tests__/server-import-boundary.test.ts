@@ -25,8 +25,9 @@ describe("server HTTP import boundaries", () => {
 
     expect(result.errors).toEqual([]);
     const inputs = Object.keys(result.metafile.inputs);
-    // The two pure platform/release value schemas live beside host services.
-    // Their precise exceptions below must never introduce a Node builtin.
+    // The pure platform/release value schemas and the import-free core service
+    // IDs live beside host services. Their precise exceptions below must never
+    // introduce a Node builtin.
     expect(
       Object.values(result.metafile.outputs)
         .flatMap((output) => output.imports)
@@ -35,7 +36,7 @@ describe("server HTTP import boundaries", () => {
     expect(inputs.some((path) => path.endsWith("/api/client.ts"))).toBe(true);
     expect(
       inputs.filter((path) =>
-        /(?:^|\/)(?:react|react-dom|@tanstack)(?:\/|@)|packages\/core\/src\/(?:index\.ts|hooks\/|stores\/|server(?:\.ts|\/)|services\/(?!data-manager\/contracts\/|platform-configuration\.ts$|release-selection\.ts$))|\/admin\/serviceAdmin\.ts/.test(
+        /(?:^|\/)(?:react|react-dom|@tanstack)(?:\/|@)|packages\/core\/src\/(?:index\.ts|hooks\/|stores\/|server(?:\.ts|\/)|services\/(?!data-manager\/contracts\/|platform-configuration\.ts$|release-selection\.ts$|core-service-ids\.ts$))|\/admin\/serviceAdmin\.ts/.test(
           path,
         ),
       ),

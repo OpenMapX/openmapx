@@ -163,7 +163,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: "Invalid action — must be start | stop | restart | apply" };
       }
       const adminSession = getAdminSession(req),
-        coreRestart = action === "restart" && (id === "app-api" || id === "traefik"),
+        coreRestart =
+          action === "restart" &&
+          (coreServices.CORE_RESTART_SERVICE_IDS as readonly string[]).includes(id),
         type = coreRestart ? "service.core-restart" : (`service.${action}` as const),
         payload = { service: id },
         key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),

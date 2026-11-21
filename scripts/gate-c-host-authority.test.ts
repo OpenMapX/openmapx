@@ -16,7 +16,7 @@ import { renderConfiguration } from "../packages/core/src/services/configuration
 import { findServiceManifestDirs } from "../packages/core/src/services/manifest-discovery";
 import { serviceManifestSchema } from "../packages/core/src/services/manifest-schema";
 import type { LoadedService, ServiceManifest } from "../packages/core/src/services/types";
-import { findAuthorityViolations } from "./check-ops-authority";
+import { findAuthorityViolations, findUnknownNamedServices } from "./check-ops-authority";
 
 /**
  * Gate C — host authority.
@@ -578,7 +578,21 @@ describe("Gate C — host authority", () => {
   });
 
   it("passes the standalone policy gate with no violations", () => {
+    expect(findUnknownNamedServices(ROOT)).toEqual([]);
     expect(findAuthorityViolations(ROOT)).toEqual([]);
+  });
+
+  it("fails closed when a rule names a service no manifest declares", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      mkdirSync(join(root, "services", "postgis"), { recursive: true });
+      writeFileSync(join(root, "services", "postgis", "service.json"), '{"id":"postgis"}');
+      expect(
+        findUnknownNamedServices(root, ["postgis", "renamed-api"]).map((v) => v.detail),
+      ).toEqual(['names service "renamed-api", which has no services/renamed-api/service.json']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("ships no Docker CLI in the API image", () => {

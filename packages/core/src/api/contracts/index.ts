@@ -1,4 +1,5 @@
 export { compareServiceBuildOrder, serviceBatchResultSchema } from "../../ops/service-results";
+export { CONTROL_PLANE_SERVICE_IDS } from "../../services/core-service-ids";
 export * from "./account-admin/index";
 export * from "./activity-admin";
 export * from "./configuration-ownership";

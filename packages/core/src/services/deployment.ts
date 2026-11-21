@@ -13,12 +13,8 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { atomicWrite } from "../release-files";
-import {
-  DEFAULT_SELECTED_SERVICE_IDS,
-  normalizeServiceIds,
-  parseServiceIdList,
-  SERVICE_SELECTION_ENV,
-} from "./selection";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "./core-service-ids";
+import { normalizeServiceIds, parseServiceIdList, SERVICE_SELECTION_ENV } from "./selection";
 
 /**
  * The deployment has two pieces of state, shared by the CLI and the admin

@@ -1,12 +1,17 @@
 import { configurationGenerationRevisionSchema, type OpsOperation } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { AdminJobFailure } from "./admin-job-failure";
 import { executeAdminJobOperation, retainedAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 
+function isCoreRestartServiceId(value: unknown): value is coreServices.CoreRestartServiceId {
+  return (coreServices.CORE_RESTART_SERVICE_IDS as readonly unknown[]).includes(value);
+}
+
 export async function runCoreServiceMaintenance(ctx: JobContext): Promise<Record<string, unknown>> {
   const serviceId = ctx.payload.service;
-  if (serviceId !== "app-api" && serviceId !== "traefik")
+  if (!isCoreRestartServiceId(serviceId))
     throw new AdminJobFailure("Core service restart is not available", {});
   const address = createDurableOpsKey(
     "admin-job.service.core-restart",

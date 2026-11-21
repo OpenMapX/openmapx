@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildProbeArgs,
@@ -169,6 +170,11 @@ describe("DEEP_PROBES", () => {
     expect(overpass).not.toBeNull();
     expect(overpass?.path).toContain("%5Btimeout%3A");
     expect(overpass?.expect).toBe("elements");
+  });
+
+  it("names only built-in services, so no probe is skipped as an unknown service", () => {
+    for (const id of Object.keys(DEEP_PROBES))
+      expect(services.RELEASE_BUILT_IN_SERVICE_IDS).toContain(id);
   });
 });
 

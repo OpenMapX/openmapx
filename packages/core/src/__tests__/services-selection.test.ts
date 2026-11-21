@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderServiceSnippet } from "../services/compose-renderer";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/core-service-ids";
 import {
   buildAppApiServiceEnv,
-  DEFAULT_SELECTED_SERVICE_IDS,
   expandServiceSelection,
   formatServiceIdList,
   normalizeServiceIds,

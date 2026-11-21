@@ -13,6 +13,7 @@ import {
   canonicalJson,
   type OpsOperation,
   opsOperationFingerprint,
+  protectedConfigurationServiceIdSchema,
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
@@ -423,8 +424,8 @@ export function installTrustedConfigurationRuntime(
       const originalContainers = await options.ownedServices.inspectOwnedServices(context.signal);
       if (
         candidate.record.privatePlatformIntent &&
-        candidate.record.affectedServiceIds.some((id) =>
-          ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"].includes(id),
+        candidate.record.affectedServiceIds.some(
+          (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
         )
       ) {
         const agent = originalContainers.find((value) => value.serviceId === "ops-agent");

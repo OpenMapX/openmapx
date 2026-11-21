@@ -5,8 +5,8 @@ import {
   flattenResolvedConfig,
   resolveServiceConfigFromEnv,
 } from "../../../packages/core/src/services/config-resolver";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "../../../packages/core/src/services/core-service-ids";
 import { validateServiceManifest } from "../../../packages/core/src/services/manifest-schema";
-import { DEFAULT_SELECTED_SERVICE_IDS } from "../../../packages/core/src/services/selection";
 import type { ServiceManifest } from "../../../packages/core/src/services/types";
 
 describe("optional managed BRouter service", () => {

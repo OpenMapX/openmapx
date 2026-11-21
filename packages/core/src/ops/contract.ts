@@ -10,6 +10,7 @@ import {
 } from "../catalog-pins/proposal-schemas";
 import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
+import { CORE_RESTART_SERVICE_IDS, RELEASE_PINNED_SERVICE_IDS } from "../services/core-service-ids";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
   artifactTransferOperationSchemas,
@@ -533,7 +534,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   serviceOperation("service.restart"),
   z.strictObject({
     kind: z.literal("coreService.restart"),
-    serviceId: z.enum(["app-api", "traefik"]),
+    serviceId: z.enum(CORE_RESTART_SERVICE_IDS),
     expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
   }),
   serviceRecreateOperationSchema,
@@ -1057,13 +1058,7 @@ const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
 });
-const systemCoreServiceId = z.enum([
-  "app-api",
-  "app-web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-]);
+const systemCoreServiceId = z.enum(RELEASE_PINNED_SERVICE_IDS);
 const dockerImageId = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const pinnedImageReference = z
   .string()
@@ -1158,7 +1153,7 @@ export const OPS_RESULT_SCHEMAS = {
   "service.restart": changed,
   "coreService.restart": z.strictObject({
     changed: z.literal(true),
-    serviceId: z.enum(["app-api", "traefik"]),
+    serviceId: z.enum(CORE_RESTART_SERVICE_IDS),
   }),
   "service.recreate": changed,
   "service.recreateIsolated": changed,
@@ -1277,7 +1272,7 @@ export const OPS_RESULT_SCHEMAS = {
           state: z.enum(["current", "update_available", "not_running", "unknown"]),
         }),
       )
-      .max(5)
+      .max(RELEASE_PINNED_SERVICE_IDS.length)
       .refine(
         (services) =>
           new Set(services.map((service) => service.serviceId)).size === services.length,

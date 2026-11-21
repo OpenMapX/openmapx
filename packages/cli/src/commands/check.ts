@@ -18,6 +18,7 @@ interface PsLine {
 }
 
 type DockerComposeResult = Awaited<ReturnType<typeof dockerCompose>>;
+const { CORE_SERVICE_ID } = coreServices;
 
 export async function dockerComposeAfterDeploymentSecretCheck(
   args: string[],
@@ -62,16 +63,16 @@ export const DEEP_PROBES: Record<string, { port: number; path: string; expect?: 
   },
   tileserver: { port: 8080, path: "/health" },
   pelias: { port: 4000, path: "/v1/place?ids=whosonfirst:locality:101748479" },
-  "app-api": { port: 3001, path: "/health" },
+  [CORE_SERVICE_ID.api]: { port: 3001, path: "/health" },
   martin: { port: 3000, path: "/health" },
   // Services whose engine-level healthcheck is the most useful probe — leave to docker.
-  postgis: null,
-  redis: null,
+  [CORE_SERVICE_ID.postgis]: null,
+  [CORE_SERVICE_ID.redis]: null,
   elasticsearch: null,
-  traefik: null,
-  "app-web": null,
-  "well-known": null,
-  "data-manager": { port: 4000, path: "/status", expect: "ok" },
+  [CORE_SERVICE_ID.traefik]: null,
+  [CORE_SERVICE_ID.web]: null,
+  [CORE_SERVICE_ID.wellKnown]: null,
+  [CORE_SERVICE_ID.dataManager]: { port: 4000, path: "/status", expect: "ok" },
   "motis-feed-proxy": { port: 80, path: "/healthz" },
   "pelias-pip": { port: 4200, path: "/" },
   "pelias-placeholder": { port: 4100, path: "/parser/findbyid?ids=1" },

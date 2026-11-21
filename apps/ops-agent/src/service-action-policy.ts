@@ -1,5 +1,8 @@
 import type { ServiceAction, ServiceActionDecision } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import type { OwnedServiceSnapshot } from "./owned-services";
+
+const { CONTROL_PLANE_SERVICE_IDS, CORE_SERVICE_ID } = coreServices;
 
 export interface ServiceAuthority {
   revisionId: string;
@@ -12,8 +15,8 @@ export interface ServiceAuthority {
   }[];
 }
 
-const controlPlane = new Set(["ops-agent", "app-api", "traefik"]);
-const dependencies = new Set(["postgis", "redis"]);
+const controlPlane = new Set<string>(CONTROL_PLANE_SERVICE_IDS);
+const dependencies = new Set<string>([CORE_SERVICE_ID.postgis, CORE_SERVICE_ID.redis]);
 
 /** With no container, callers scope services to the single target being decided. */
 export function decideServiceAction(

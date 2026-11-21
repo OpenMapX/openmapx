@@ -1,24 +1,18 @@
 /** Fixed handoff data. A matching DTO never supplies target authority. */
 import { z } from "zod";
+import { PROTECTED_CONFIGURATION_SERVICE_IDS } from "../services/core-service-ids";
 import { strictlyAscending } from "../utils/strictlyAscending";
 
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-export const protectedConfigurationServiceIdSchema = z.enum([
-  "postgis",
-  "redis",
-  "app-web",
-  "app-api",
-  "traefik",
-  "ops-agent",
-]);
+export const protectedConfigurationServiceIdSchema = z.enum(PROTECTED_CONFIGURATION_SERVICE_IDS);
 export type ProtectedConfigurationServiceId = z.infer<typeof protectedConfigurationServiceIdSchema>;
 /** Explicit reconciliation of already-saved protected settings, never a new image selection. */
 export const protectedConfigurationReconcileIdsSchema = z
   .array(protectedConfigurationServiceIdSchema)
   .min(1)
-  .max(6)
+  .max(PROTECTED_CONFIGURATION_SERVICE_IDS.length)
   .refine(strictlyAscending);
 export const configurationHandoffModeSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("configuration") }),

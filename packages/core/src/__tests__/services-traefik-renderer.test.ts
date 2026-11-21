@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { assert, describe, expect, it } from "vitest";
 import { renderCompose, resolveProxyHost } from "../services/compose-renderer";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/core-service-ids";
 import { findServiceManifestDirs } from "../services/manifest-discovery";
 import { serviceManifestSchema } from "../services/manifest-schema";
-import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/selection";
 import {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,
