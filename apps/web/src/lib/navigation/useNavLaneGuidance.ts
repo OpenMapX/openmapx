@@ -50,12 +50,17 @@ export function useNavLaneGuidance(): void {
     const points = [...accepted, ...candidates];
     const candidateSteps = new Set(candidates.map((point) => point.stepIndex));
     lookupEntries = junctionLookupPoints(route, points)
-      .map(({ stepIndex, lookup }, i) => ({
-        point: points[i],
-        lookup,
-        candidate: candidateSteps.has(stepIndex),
-        status: "pending" as const,
-      }))
+      .map(({ stepIndex, lookup }, i) => {
+        // The lookups follow the decision points one to one.
+        const point = points[i];
+        if (!point) throw new RangeError(`No junction decision point for lookup ${i}`);
+        return {
+          point,
+          lookup,
+          candidate: candidateSteps.has(stepIndex),
+          status: "pending" as const,
+        };
+      })
       .sort((a, b) => a.point.stepIndex - b.point.stepIndex);
     const carried = new Map<number, ApproachLaneGuidance>();
     for (const entry of lookupEntries) {

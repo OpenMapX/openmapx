@@ -127,9 +127,8 @@ export async function parseImportFiles(
   options: ParseOptions = {},
 ): Promise<ParsedImport> {
   const result: ParsedImport = { lists: [], errors: [], skippedLists: [] };
-  for (let i = 0; i < files.length; i++) {
+  for (const [i, file] of files.entries()) {
     options.signal?.throwIfAborted();
-    const file = files[i];
     try {
       if (file.size > MAX_BYTES) throw new ImportFileError("tooLarge");
       if (/\.(zip|kmz)$/i.test(file.name)) {

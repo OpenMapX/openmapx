@@ -130,7 +130,7 @@ export function AdminJobEffectsProvider({
         data = observation?.data;
       if (!data && observation?.isError && !job.unresolved)
         changes.set(job.jobId, { status: job.status, unresolved: true, settled: false });
-      if (data?.id !== job.jobId || data.source !== "application") continue;
+      if (!observation || data?.id !== job.jobId || data.source !== "application") continue;
       const unresolved = observation.isError || hasUnresolvedJobObservation(data.result);
       const settled = terminal.has(data.status) && !unresolved;
       if (job.status !== data.status || job.unresolved !== unresolved || job.settled !== settled)

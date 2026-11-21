@@ -35,17 +35,14 @@ export function useReplayPosition(onFix: (fix: FixInput) => void): void {
   useEffect(() => {
     if (!replaying || !loaded || loaded.fixes.length === 0) return;
     const geometry = loaded.route.geometry;
-    if (geometry.length < 2) return;
+    const start = geometry[0];
+    const end = geometry.at(-1);
+    if (geometry.length < 2 || !start || !end) return;
     const reroutes = loaded.reroutes ?? [];
 
     // Bootstrap a fresh session on the recorded route. Waypoints only matter for
     // the (suppressed) live reroute, so the geometry endpoints suffice.
-    useNavigationStore
-      .getState()
-      .startGroundNavigation(loaded.route, loaded.mode, [
-        geometry[0],
-        geometry[geometry.length - 1],
-      ]);
+    useNavigationStore.getState().startGroundNavigation(loaded.route, loaded.mode, [start, end]);
 
     let i = 0;
     let rerouteIdx = 0;
@@ -54,24 +51,28 @@ export function useReplayPosition(onFix: (fix: FixInput) => void): void {
 
     const feed = () => {
       if (cancelled) return;
-      if (i >= loaded.fixes.length) {
+      const fix = loaded.fixes[i];
+      if (!fix) {
         stopReplay();
         return;
       }
       // Apply any reroute that takes effect before this fix.
-      while (rerouteIdx < reroutes.length && reroutes[rerouteIdx].afterFixCount === i) {
-        useNavigationStore.getState().applyReroute(reroutes[rerouteIdx].route);
+      for (
+        let reroute = reroutes[rerouteIdx];
+        reroute && reroute.afterFixCount === i;
+        reroute = reroutes[rerouteIdx]
+      ) {
+        useNavigationStore.getState().applyReroute(reroute.route);
         rerouteIdx += 1;
       }
-      onFixRef.current(loaded.fixes[i]);
-      const prevTs = loaded.fixes[i].timestampMs;
+      onFixRef.current(fix);
       i += 1;
-      if (i >= loaded.fixes.length) {
+      const next = loaded.fixes[i];
+      if (!next) {
         stopReplay();
         return;
       }
-      const gap =
-        Math.max(0, loaded.fixes[i].timestampMs - prevTs) / Math.max(0.1, rateRef.current);
+      const gap = Math.max(0, next.timestampMs - fix.timestampMs) / Math.max(0.1, rateRef.current);
       timer = setTimeout(feed, Math.min(gap, 10_000));
     };
     feed();

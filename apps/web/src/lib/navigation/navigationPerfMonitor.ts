@@ -1,5 +1,6 @@
 "use client";
 
+import { numberAt } from "@openmapx/core";
 import type { Map as MaplibreMap } from "maplibre-gl";
 
 /**
@@ -262,7 +263,7 @@ class RingBuffer {
     if (this.values.length === 0) return 0;
     const sorted = [...this.values].sort((a, b) => a - b);
     const index = Math.min(sorted.length - 1, Math.floor(fraction * (sorted.length - 1)));
-    return sorted[index];
+    return numberAt(sorted, index);
   }
 }
 

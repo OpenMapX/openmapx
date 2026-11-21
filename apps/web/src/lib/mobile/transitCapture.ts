@@ -172,7 +172,10 @@ export async function prepareTransitStart(
   const journeys: Record<string, readonly JourneyStopLike[] | undefined> = {};
   const outcomes: CaptureOutcome[] = [];
   for (const [index, tripId] of tripIds.entries()) {
-    const stops = fetched[index].stops;
+    const result = fetched[index];
+    // pMap returns one result per trip, in order.
+    if (!result) throw new RangeError(`No journey result for trip ${index}`);
+    const stops = result.stops;
     journeys[tripId] = stops;
     outcomes.push({ tripId, status: stops && stops.length > 0 ? "captured" : "missing" });
   }

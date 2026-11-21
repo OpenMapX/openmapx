@@ -2,6 +2,7 @@ import {
   bboxAroundPoint,
   type DataSourceResult,
   type LngLat,
+  numberAt,
   type ProvenanceMeta,
   useDataSourceSearch,
 } from "@openmapx/core";
@@ -42,7 +43,9 @@ export function calculateMedian(values: number[]): number | null {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   const median =
-    sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    sorted.length % 2 === 1
+      ? numberAt(sorted, middle)
+      : (numberAt(sorted, middle - 1) + numberAt(sorted, middle)) / 2;
   return Number(median.toFixed(4));
 }
 

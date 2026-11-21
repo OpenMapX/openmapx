@@ -40,7 +40,7 @@ export function selectVoice<T extends { name: string; lang: string }>(
     if (named) return named;
   }
   const wanted = locale.toLowerCase();
-  const base = wanted.split("-")[0];
+  const base = wanted.replace(/-.*/, "");
   return (
     voices.find((v) => v.lang?.toLowerCase() === wanted) ??
     voices.find((v) => v.lang?.toLowerCase().startsWith(base))

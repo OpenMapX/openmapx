@@ -75,7 +75,10 @@ function routeListForState(state: NavigationState) {
 }
 
 function coordinateForRoute(route: Route, progress: NavigationState["progress"]): LngLat {
-  return progress?.snapped ?? route.geometry[0];
+  const coordinate = progress?.snapped ?? route.geometry[0];
+  // Navigation only starts on a route with geometry.
+  if (!coordinate) throw new Error("A navigation route has no geometry");
+  return coordinate;
 }
 
 function createSnapshotForState(
