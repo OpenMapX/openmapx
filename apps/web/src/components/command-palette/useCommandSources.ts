@@ -74,6 +74,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
+  const globeLighting = useLayerStore((s) => s.globeLighting);
 
   return useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -115,6 +116,22 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         return false;
       },
     });
+
+    // Day and night only applies to the globe, so it is offered only there.
+    if (globeView) {
+      out.push({
+        id: "layers.globe-lighting",
+        group: "layers",
+        label: t("cmdToggleGlobeLighting"),
+        iconKey: "globe-lighting",
+        isActive: () => globeLighting,
+        run: () => {
+          const current = useLayerStore.getState().globeLighting;
+          useLayerStore.getState().setGlobeLighting(!current);
+          return false;
+        },
+      });
+    }
 
     // Overlays
     for (const integration of integrations.getEnabled()) {
@@ -357,6 +374,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     activeLayer,
     setActiveLayer,
     globeView,
+    globeLighting,
     integrations,
     isSignedIn,
     parkedLocations,

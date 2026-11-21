@@ -100,7 +100,10 @@ void main() {
     vec3 galaxy = sampleWrapped(u_milky_way, galacticUv(u_galactic * ray)).rgb;
     space += pow(max(galaxy - 0.035, vec3(0.0)), vec3(1.4)) * 0.6 * u_galaxy;
   }
-  vec3 background = mix(u_theme_sky, space, u_space);
+  // Zooming in, the theme's sky rises from the horizon as space recedes
+  // upwards, as it does seen from a descending spacecraft. Fully space at u_space = 1.
+  float spaceWeight = clamp(2.0 * u_space - exp(-above / 0.08), 0.0, 1.0);
+  vec3 background = mix(u_theme_sky, space, spaceWeight);
   background += (glowColour * haze + vec3(0.72, 0.86, 1.0) * rim) * sunSide * u_surface;
   background += sunGlow(ray) * u_lighting * u_surface;
 
@@ -111,7 +114,7 @@ void main() {
   float day = smoothstep(-0.10, 0.12, mu);
   // Imagery dims towards the terminator like real daylight; maps stay evenly
   // lit across the whole day side so they remain legible.
-  float daylight = mix(1.0, 0.55 + 0.45 * sqrt(max(mu, 0.0)), u_day_falloff);
+  float daylight = mix(1.0, 0.75 + 0.25 * sqrt(max(mu, 0.0)), u_day_falloff);
   float brightness = u_night + (1.0 - u_night) * day * daylight;
   brightness = mix(1.0, brightness, u_lighting);
 
@@ -119,7 +122,9 @@ void main() {
   // limb haze, then city lights as emitted light.
   vec3 colour = vec3(0.0);
   float alpha = 1.0 - brightness;
-  float tint = exp(-pow(mu / 0.07, 2.0)) * u_lighting * 0.16;
+  // A warm band at the terminator reads as sunset on imagery, but as a
+  // muddy stain on a cartographic map.
+  float tint = exp(-pow(mu / 0.045, 2.0)) * u_lighting * u_day_falloff * 0.05;
   colour = TWILIGHT * tint + colour * (1.0 - tint);
   alpha = tint + alpha * (1.0 - tint);
   float limbHaze = exp(-5.0 * halfChord) * 0.5 * mix(1.0, 0.2 + 0.8 * smoothstep(-0.2, 0.3, mu), u_lighting);

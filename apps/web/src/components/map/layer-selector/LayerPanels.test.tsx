@@ -50,10 +50,26 @@ afterEach(() => {
     useMeasurementStore.getState().deactivate();
     useTravelTimeStore.getState().deactivate();
     useLayerStore.getState().setActiveLayer("default");
+    useLayerStore.setState({ globeView: false, globeLighting: true });
   });
 });
 
 describe("layer panels", () => {
+  it("offers day and night only while globe view is on, selected by default", () => {
+    act(() => useLayerStore.setState({ globeView: false, globeLighting: true }));
+    render(<LayerDetailsPanel variant="sheet" onClose={() => undefined} />);
+    expect(screen.queryByRole("button", { name: "globeLighting" })).toBeNull();
+
+    act(() => fireEvent.click(screen.getByRole("button", { name: "globeView" })));
+    const tile = screen.getByRole("button", { name: "globeLighting" });
+    expect(tile.getAttribute("aria-pressed")).toBe("true");
+    act(() => fireEvent.click(tile));
+    expect(useLayerStore.getState().globeLighting).toBe(false);
+    expect(screen.getByRole("button", { name: "globeLighting" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
   it("lets phone users operate both tools and select one basemap", () => {
     render(<LayerDetailsPanel variant="sheet" onClose={() => undefined} />);
     act(() => fireEvent.click(screen.getByRole("button", { name: "measurement" })));

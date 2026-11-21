@@ -2,7 +2,7 @@
 
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +38,7 @@ import {
   isOverlayActive,
   type OverlayStoreBase,
   registerOverlayEntry,
+  useLayerStore,
 } from "@openmapx/core";
 import { useCommandSources } from "./useCommandSources";
 
@@ -137,5 +138,30 @@ describe("useCommandSources map orientation commands", () => {
 
     expect(out.find((c) => c.id === "actions.alignToStreets")).toBeUndefined();
     expect(out.find((c) => c.id === "actions.northUp")).toBeUndefined();
+  });
+});
+
+describe("useCommandSources globe commands", () => {
+  afterEach(() => {
+    act(() => useLayerStore.setState({ globeView: false, globeLighting: true }));
+  });
+
+  it("offers day and night only with globe view and toggles it", () => {
+    useLayerStore.setState({ globeView: false, globeLighting: true });
+    const offGlobe = renderHook(() => useCommandSources({ openShortcutsDialog: () => {} }), {
+      wrapper,
+    }).result.current;
+    expect(offGlobe.find((c) => c.id === "layers.globe-lighting")).toBeUndefined();
+
+    act(() => useLayerStore.setState({ globeView: true }));
+    const { result } = renderHook(() => useCommandSources({ openShortcutsDialog: () => {} }), {
+      wrapper,
+    });
+    const command = result.current.find((c) => c.id === "layers.globe-lighting");
+    expect(command?.isActive?.()).toBe(true);
+    act(() => {
+      command?.run();
+    });
+    expect(useLayerStore.getState().globeLighting).toBe(false);
   });
 });

@@ -40,11 +40,15 @@ The renderer turns it into Earth's frame using sidereal time.
 - Credit: ESO/S. Brunier.
 - Licence: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
   ([ESO copyright notice](https://www.eso.org/public/copyright/)). Changes:
-  resized and recompressed; brightness is reduced when drawn.
+  resized, recompressed, and faint point stars removed with a morphological
+  opening (the renderer draws its own sharp stars; photographed ones smear
+  where the panorama is stretched near the galactic poles). Brightness is
+  reduced when drawn. The changes are stated here and on the app's licences
+  page.
 
 Prepared with:
 
 ```sh
-magick eso0932a.jpg -filter Lanczos -resize '2048x1024!' milky.png
-cwebp -q 78 -m 6 milky.png -o milky-way.webp
+magick eso0932a.jpg -filter Lanczos -resize '4096x2048!' -morphology Open Disk:1.5 -resize '2048x1024!' milky.png
+cwebp -q 80 -m 6 milky.png -o milky-way.webp
 ```

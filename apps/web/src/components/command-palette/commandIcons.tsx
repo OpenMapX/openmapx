@@ -1,6 +1,7 @@
 "use client";
 
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
+import Brightness4Icon from "@mui/icons-material/Brightness4";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExploreIcon from "@mui/icons-material/Explore";
@@ -30,6 +31,7 @@ const ICONS: Record<string, ReactNode> = {
   "layer-terrain": <TerrainIcon fontSize="small" />,
   "layer-cycling": <ExploreIcon fontSize="small" />,
   globe: <PublicIcon fontSize="small" />,
+  "globe-lighting": <Brightness4Icon fontSize="small" />,
   overlay: <LayersIcon fontSize="small" />,
   panel: <NearMeIcon fontSize="small" />,
   saved: <BookmarkBorderIcon fontSize="small" />,

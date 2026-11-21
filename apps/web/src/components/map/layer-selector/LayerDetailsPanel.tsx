@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { LayerDetailsTile } from "./LayerDetailsTile";
-import { globePreview } from "./layerPreviewSvgs";
+import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
 import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
@@ -98,6 +98,8 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
   const setGlobeView = useLayerStore((s) => s.setGlobeView);
+  const globeLighting = useLayerStore((s) => s.globeLighting);
+  const setGlobeLighting = useLayerStore((s) => s.setGlobeLighting);
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
   const { isAvailable } = useCapabilities();
@@ -193,6 +195,14 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
         labelWidth={labelWidth}
         onClick={() => setGlobeView(!globeView)}
       />
+      {globeView ? (
+        <LayerDetailsTile
+          item={{ preview: globeLightingPreview, selected: globeLighting }}
+          label={t("globeLighting")}
+          labelWidth={labelWidth}
+          onClick={() => setGlobeLighting(!globeLighting)}
+        />
+      ) : null}
     </TileGrid>
   );
 

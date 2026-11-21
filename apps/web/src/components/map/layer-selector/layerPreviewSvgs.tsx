@@ -340,3 +340,62 @@ export const globePreview: ReactNode = (
     <circle cx="40" cy="40" r="27" fill="none" stroke="#88c6fc" strokeWidth="1.1" opacity="0.5" />
   </svg>
 );
+
+export const globeLightingPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    preserveAspectRatio="xMidYMid slice"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <defs>
+      <radialGradient id="globeLightingSun" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stopColor="#fff6dc" />
+        <stop offset="0.25" stopColor="#ffb45a" stopOpacity="0.7" />
+        <stop offset="1" stopColor="#ff8a2a" stopOpacity="0" />
+      </radialGradient>
+      <linearGradient id="globeLightingDay" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#2a72b8" />
+        <stop offset="0.45" stopColor="#1f5f9e" />
+        <stop offset="0.58" stopColor="#c46a2c" stopOpacity="0.9" />
+        <stop offset="0.66" stopColor="#0b1a2e" />
+        <stop offset="1" stopColor="#060d18" />
+      </linearGradient>
+    </defs>
+    <rect x="-2" y="-2" width="84" height="84" fill="#03060c" />
+    <g fill="#dce8f8" opacity="0.55">
+      <circle cx="70" cy="66" r="0.6" />
+      <circle cx="64" cy="10" r="0.7" />
+      <circle cx="74" cy="38" r="0.5" />
+    </g>
+    <circle cx="11" cy="13" r="12" fill="url(#globeLightingSun)" />
+    <circle cx="44" cy="44" r="29" fill="#4d94ff" opacity="0.14" />
+    <circle cx="44" cy="44" r="27" fill="url(#globeLightingDay)" />
+    {/* land on the day side */}
+    <g fill="#3d8c5c">
+      <path d="M24 30l8-5 7 3 4 5-6 4-7-1-5-3Z" />
+      <path d="M22 48l7 1 3 6-3 7-6-2-2-7Z" />
+    </g>
+    {/* city lights on the night side */}
+    <g fill="#ffd27a">
+      <circle cx="56" cy="32" r="0.9" />
+      <circle cx="60" cy="36" r="0.7" />
+      <circle cx="58" cy="44" r="1" />
+      <circle cx="63" cy="48" r="0.6" />
+      <circle cx="55" cy="54" r="0.8" />
+      <circle cx="66" cy="40" r="0.6" />
+      <circle cx="61" cy="57" r="0.7" />
+    </g>
+    <path
+      d="M24 22a27 27 0 0 1 20-5"
+      fill="none"
+      stroke="#bfe0ff"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      opacity="0.75"
+    />
+  </svg>
+);

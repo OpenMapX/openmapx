@@ -132,7 +132,8 @@ notices.push(
     license: "CC-BY-4.0",
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
     projectUrl: "https://www.eso.org/public/images/eso0932a/",
-    licenseText: "Credit: ESO/S. Brunier. Resized and recompressed for the globe's sky.\n",
+    licenseText:
+      "Credit: ESO/S. Brunier. Changes: resized, recompressed and faint point stars removed for the globe's sky.\n",
   },
   {
     name: "NASA Black Marble 2016 (Earth at Night)",
