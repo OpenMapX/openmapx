@@ -159,6 +159,7 @@ export {
   nearestGridBearing,
   type WeightedBearing,
 } from "./gridOrientation";
+export { lerpHex } from "./hexColor";
 export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
 export {
