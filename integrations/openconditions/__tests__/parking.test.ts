@@ -5,7 +5,6 @@ import {
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
 import { assert, describe, expect, test } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
 import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToParkingSite } from "../parking/map.js";
@@ -16,6 +15,7 @@ import stringsEn from "../strings/en.json" with { type: "json" };
 import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-parking.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-parking.json" with { type: "json" };
+import { connectedClient, latestOf, nth, offersOf, recordOf } from "./support.js";
 
 /*
  * The fixtures are OpenConditions answers recorded in operator scope from a
@@ -46,30 +46,13 @@ const MOBIDATA_PROVIDER = "MobiData BW, Datenlizenz Deutschland – Namensnennun
 
 const clone = <T>(value: T): T => structuredClone(value);
 
-type Body = { records: Rec[]; latest: Record<string, Rec[]>; offers: Record<string, Rec[]> };
+type Body = {
+  records: Rec[];
+  latest: Record<string, LatestReading[]>;
+  offers: Record<string, Rec[]>;
+};
 
 const body = () => clone(featuresResponse) as unknown as Body & Rec;
-function recordOf(b: Body): Rec {
-  const [record] = b.records;
-  assert.isDefined(record, "the answer has no record");
-  return record;
-}
-function latestOf(b: Body): LatestReading[] {
-  const latest = b.latest[SITE_ID];
-  assert.isDefined(latest, "the answer has no readings for its site");
-  return latest as unknown as LatestReading[];
-}
-function offersOf(b: Body): Rec[] {
-  const offers = b.offers[SITE_ID];
-  assert.isDefined(offers, "the answer has no offers for its site");
-  return offers;
-}
-/** An element the fixture is known to hold; the test fails if it is missing. */
-function nth<T>(values: readonly T[], index: number): T {
-  const value = values[index];
-  assert.isDefined(value, `no element at ${index}`);
-  return value;
-}
 
 type Responder = (req: FakeHttpRequest) => unknown;
 
@@ -85,8 +68,7 @@ const EVERY_SOURCE: LiveSources = {
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
-  assert.exists(client);
+  const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
   return { http, provider: createParkingSiteProvider(client, sources, { now: () => now }) };
 }
 
@@ -98,7 +80,14 @@ const listing =
 const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" } };
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
-  recordToParkingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
+  recordToParkingSite(
+    recordOf(b),
+    latestOf(b, SITE_ID),
+    offersOf(b, SITE_ID),
+    excluded,
+    NO_SOURCES,
+    now,
+  );
 /** A mapped site; the test fails if the answer maps to none. */
 function mappedSite(b: Body, excluded: (id: string) => boolean = () => false) {
   const site = mapped(b, excluded);
@@ -177,7 +166,7 @@ describe("parking-sites-openconditions", () => {
 
   test("a reading past its validUntil is stale", async () => {
     const answer = body();
-    latestOf(answer).push({
+    latestOf(answer, SITE_ID).push({
       property: "parking.available",
       componentKey: "osm-parking/car:disabled",
       result: { type: "count", value: 2 },
@@ -372,7 +361,7 @@ describe("parking-sites-openconditions", () => {
   test("an excluded source's readings and offers are dropped", async () => {
     const answer = body();
     // An OSM reading of the site and an OSM tariff beside MobiData's.
-    latestOf(answer).push({
+    latestOf(answer, SITE_ID).push({
       property: "parking.trend",
       result: { type: "category", value: "filling", vocabulary: "trend" },
       phenomenonTime: { instant: "2026-10-05T03:30:00Z" },
@@ -380,10 +369,10 @@ describe("parking-sites-openconditions", () => {
       source: "@fused",
       contributors: [MOBIDATA, OSM],
     } as LatestReading);
-    const osmRate = clone(nth(offersOf(answer), 0));
+    const osmRate = clone(nth(offersOf(answer, SITE_ID), 0));
     osmRate.id = "oc:offer:osm-parking:node/1725394191:1";
     (osmRate.provenance as Rec).sourceId = OSM;
-    offersOf(answer).push(osmRate);
+    offersOf(answer, SITE_ID).push(osmRate);
     const { provider } = providerWith(listing(answer));
 
     const all = nth((await provider.searchSites(BBOX)).sites, 0);
@@ -503,8 +492,8 @@ describe("parking-sites-openconditions", () => {
     const canonical =
       "oc:feature:test.local:0000000000000000000000000000000000000000000000000000000000000000";
     record.id = canonical;
-    answer.latest = { [canonical]: latestOf(body()) as unknown as Rec[] };
-    answer.offers = { [canonical]: offersOf(body()) };
+    answer.latest = { [canonical]: latestOf(body(), SITE_ID) };
+    answer.offers = { [canonical]: offersOf(body(), SITE_ID) };
     const provenance = record.provenance as { derivedFrom: { records: Rec[] } };
     provenance.derivedFrom.records.push({ class: "feature", id: "oc:feature:osm-parking:way/9" });
 
@@ -626,7 +615,7 @@ describe("recordToParkingSite", () => {
 
   test("durations in any unit become minutes", () => {
     const answer = body();
-    const rate = nth(offersOf(answer), 0);
+    const rate = nth(offersOf(answer, SITE_ID), 0);
     const row = (minDuration: Rec | undefined, maxDuration: Rec) => ({
       components: [{ type: "flat", price: { amount: "1.00", currency: "EUR" } }],
       restrictions: { ...(minDuration ? { minDuration } : {}), maxDuration },
@@ -648,10 +637,10 @@ describe("recordToParkingSite", () => {
 
   test("an offer without a priced row, or of another kind, is no rate", () => {
     const answer = body();
-    const rate = nth(offersOf(answer), 0);
+    const rate = nth(offersOf(answer, SITE_ID), 0);
     const other = { ...clone(rate), kind: "charging_tariff" };
     rate.elements = [{ components: [{ type: "flat", price: { amount: "n/a", currency: "EUR" } }] }];
-    offersOf(answer).push(other);
+    offersOf(answer, SITE_ID).push(other);
     expect(mappedSite(answer).rates).toEqual([]);
   });
 
@@ -740,12 +729,12 @@ describe("recordToParkingSite", () => {
 
   test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
-    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
-    nth(latestOf(answer), 0).provenance = CROWD_PROVENANCE;
+    nth(latestOf(answer, SITE_ID), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer, SITE_ID), 0).provenance = CROWD_PROVENANCE;
     const site = recordToParkingSite(
       recordOf(answer),
-      latestOf(answer),
-      offersOf(answer),
+      latestOf(answer, SITE_ID),
+      offersOf(answer, SITE_ID),
       () => false,
       CROWD_SOURCES,
       FRESH,
@@ -756,7 +745,7 @@ describe("recordToParkingSite", () => {
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {
     const answer = body();
-    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer, SITE_ID), 0).contributors = [MOBIDATA, "crowd"];
     const site = mappedSite(answer, (sourceId) => sourceId === "crowd");
     expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });

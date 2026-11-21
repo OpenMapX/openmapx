@@ -4,8 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { assert, describe, expect, test } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
+import { describe, expect, test } from "vitest";
 import type { LatestReading } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToRoadWeatherStation } from "../road-weather/map.js";
@@ -14,6 +13,7 @@ import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-weather.json" with { type: "json" };
+import { connectedClient, found, nth } from "./support.js";
 
 /*
  * `features-weather.json` is the `GET /features?kind=weather_station&canonical=1&expand=components,latest`
@@ -33,12 +33,6 @@ const NOW = new Date("2026-10-14T23:30:00Z");
 
 type Body = { records: Rec[]; latest: Record<string, LatestReading[]> };
 const body = () => structuredClone(featuresResponse) as unknown as Body;
-/** A value the fixture is known to hold; the test fails if it is missing. */
-function found<T>(value: T | null | undefined, what = "fixture value"): T {
-  assert.exists(value, `${what} is missing`);
-  return value;
-}
-const nth = <T>(values: readonly T[], index: number) => found(values[index], `element ${index}`);
 const latest = (answer: Body, id: string) => found(answer.latest[id], `readings of ${id}`);
 
 const EVERY_SOURCE: LiveSources = {
@@ -54,7 +48,7 @@ function providerWith(answer: unknown, sources: LiveSources = EVERY_SOURCE, now 
   const http = fakeHttpClient((req: FakeHttpRequest) =>
     req.url === `${BASE_URL}/features` ? answer : undefined,
   );
-  const client = found(createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http));
+  const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
   return { http, provider: createRoadWeatherProvider(client, sources, { now: () => now }) };
 }
 

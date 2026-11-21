@@ -4,12 +4,10 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { assert, describe, expect, test } from "vitest";
 import { recordToCamera } from "../cameras/map.js";
 import { createCameraProvider } from "../cameras/provider.js";
-import { createOpenConditionsClient } from "../client.js";
 import { itemIdOf, type LatestReading } from "../features/record.js";
 import { setup } from "../index.js";
 import type { MediaSources } from "../sources.js";
@@ -17,6 +15,7 @@ import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
 import featureResponse from "./fixtures/feature-camera.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-cameras.json" with { type: "json" };
+import { connectedClient, latestOf, licensingOf, recordOf } from "./support.js";
 
 /*
  * The fixtures are recorded OpenConditions answers: the ingest API of the
@@ -49,21 +48,11 @@ const NOW = new Date("2026-10-08T07:20:00.000Z");
 const clone = <T>(value: T): T => structuredClone(value);
 const rec = (value: unknown) => value as Rec;
 
-type Body = { records: Rec[]; latest: Record<string, Rec[]> };
+type Body = { records: Rec[]; latest: Record<string, LatestReading[]> };
 
 const body = () => clone(featuresResponse) as unknown as Body & Rec;
-function recordOf(b: Body): Rec {
-  const [record] = b.records;
-  assert.isDefined(record, "the answer has no record");
-  return record;
-}
-function latestOf(b: Body): LatestReading[] {
-  const latest = b.latest[CANONICAL_ID];
-  assert.isDefined(latest, "the answer has no readings for its camera");
-  return latest as unknown as LatestReading[];
-}
 function readingOf(b: Body, key: string): LatestReading {
-  const reading = latestOf(b).find((r) => r.componentKey === key);
+  const reading = latestOf(b, CANONICAL_ID).find((r) => r.componentKey === key);
   assert.isDefined(reading, `no reading for ${key}`);
   return reading;
 }
@@ -93,8 +82,7 @@ type Responder = (req: FakeHttpRequest) => unknown;
 
 function providerWith(respond: Responder, sources: MediaSources = EVERY_SOURCE, now = NOW) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
-  assert.exists(client);
+  const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
   return { http, provider: createCameraProvider(client, sources, { now: () => now }) };
 }
 
@@ -106,13 +94,7 @@ const listing =
 const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" } };
 
 const mapped = (b: Body, sources: MediaSources = EVERY_SOURCE, excluded = (_: string) => false) =>
-  recordToCamera(recordOf(b), latestOf(b), excluded, sources, NOW);
-/** The licensing an attribution carries; the test fails without one. */
-function licensingOf(attribution: Attribution | undefined) {
-  assert.isDefined(attribution, "the attribution is missing");
-  assert.isDefined(attribution.licensing, `${attribution.sourceId} carries no licensing`);
-  return attribution.licensing;
-}
+  recordToCamera(recordOf(b), latestOf(b, CANONICAL_ID), excluded, sources, NOW);
 /** A mapped camera; the test fails if the answer maps to none. */
 function mappedCamera(b: Body, sources: MediaSources = EVERY_SOURCE) {
   const camera = mapped(b, sources);
@@ -445,9 +427,9 @@ describe("cameras-openconditions", () => {
 
   test("a view without a reading reads unknown and stale", () => {
     const answer = body();
-    answer.latest[CANONICAL_ID] = latestOf(answer).filter(
+    answer.latest[CANONICAL_ID] = latestOf(answer, CANONICAL_ID).filter(
       (r) => r.componentKey !== "C0150302",
-    ) as unknown as Rec[];
+    );
     const view = mappedCamera(answer).views[1];
     assert.isDefined(view);
     expect(view).toEqual({
@@ -463,7 +445,7 @@ describe("cameras-openconditions", () => {
 
   test("a reading that is not a camera status leaves the view unknown", () => {
     const answer = body();
-    const second = latestOf(answer)[1];
+    const second = latestOf(answer, CANONICAL_ID)[1];
     assert.isDefined(second);
     rec(rec(second.result).value).status = "broken";
     expect(mappedCamera(answer).views[0]?.status).toBe("unknown");

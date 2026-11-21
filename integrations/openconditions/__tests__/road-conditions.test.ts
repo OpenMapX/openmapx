@@ -2,11 +2,11 @@ import type { RoadConditionsProvider } from "@openmapx/integration-framework";
 import { fakeHttpClient } from "@openmapx/integration-framework/testing";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { assert, describe, expect, it } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
 import { featureCollectionToRoadFlowSegments } from "../road-conditions/flow.js";
 import { createRoadConditionsProvider } from "../road-conditions/provider.js";
 import { situationToRoadConditionEvent } from "../road-conditions/situation.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
+import { connectedClient, licensingOf } from "./support.js";
 
 type Rec = Record<string, unknown>;
 type Params = Record<string, unknown> | undefined;
@@ -19,11 +19,6 @@ function roadEvent(situationRecord: Rec) {
   const event = situationToRoadConditionEvent(situationRecord);
   assert.isNotNull(event, "the situation maps to no road-condition event");
   return event;
-}
-/** The licensing an attribution carries; the test fails without one. */
-function licensingOf(attribution: { licensing?: Parameters<typeof formatLicensing>[0] }) {
-  assert.isDefined(attribution.licensing, "the attribution carries no licensing");
-  return attribution.licensing;
 }
 
 function situation(local: string, over: Rec = {}): Rec {
@@ -129,8 +124,7 @@ function provider(
     if (body instanceof Error) throw body;
     return body ?? { type: "FeatureCollection", features: [] };
   });
-  const client = createOpenConditionsClient(opts.env ?? { OPENCONDITIONS_URL: BASE_URL }, http);
-  assert.exists(client);
+  const client = connectedClient(opts.env ?? { OPENCONDITIONS_URL: BASE_URL }, http);
   const created = createRoadConditionsProvider(client, opts.sources ?? EVERY_SOURCE);
   assert(isFullProvider(created), "the road provider lacks an optional capability");
   return created;

@@ -8,7 +8,6 @@ import {
 } from "@openmapx/integration-framework/testing";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { assert, describe, expect, test } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
 import { pointOf, textOf } from "../hazards/map.js";
 import { createHazardsProvider } from "../hazards/provider.js";
 import { setup } from "../index.js";
@@ -26,6 +25,7 @@ import grid from "./fixtures/observations-grid.json" with { type: "json" };
 import alertsAnswer from "./fixtures/situations-alerts.json" with { type: "json" };
 import naturalAnswer from "./fixtures/situations-natural.json" with { type: "json" };
 import sourcesAnswer from "./fixtures/sources-hazards.json" with { type: "json" };
+import { connectedClient, found } from "./support.js";
 
 /*
  * The fixtures are OpenConditions answers built from the parsers of its
@@ -60,12 +60,6 @@ const COPERNICUS_LICENSE = {
  * The EUMETSAT SLSTR feed as `/sources` lists it. The hazards fixture predates
  * the feed, so the entry is written here in the shape of the FIRMS entries.
  */
-/** A value the fixture is known to hold; the test fails if it is missing. */
-function found<T>(value: T | null | undefined, what = "fixture value"): T {
-  assert.exists(value, `${what} is missing`);
-  return value;
-}
-
 function slstrSource(): OcSource {
   const modis = found(ocSources().find((s) => s.id === MODIS));
   return {
@@ -116,7 +110,7 @@ function providerWith(responder: Responder, sources: LiveSources = liveSources()
     const params = (req.options?.params ?? {}) as Record<string, unknown>;
     return responder(path, params);
   });
-  const client = found(createOpenConditionsClient(OPERATOR, http));
+  const client = connectedClient(OPERATOR, http);
   const now = () => new Date("2026-10-09T02:00:00.000Z");
   const provider: HazardsProvider = createHazardsProvider(client, sources, { now });
   return { provider, calls: http.calls };

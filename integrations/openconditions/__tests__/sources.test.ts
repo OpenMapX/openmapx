@@ -8,7 +8,6 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, assert, beforeEach, describe, expect, test, vi } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
 import { setup } from "../index.js";
 import manifest from "../manifest.json" with { type: "json" };
 import {
@@ -24,17 +23,13 @@ import { CROWD_CREDIT } from "./fixtures/crowd.js";
 import featuresResponse from "./fixtures/features-fuel.json" with { type: "json" };
 import sourcesAnswer from "./fixtures/sources.json" with { type: "json" };
 import conditionsSources from "./fixtures/sources-conditions.json" with { type: "json" };
+import { connectedClient } from "./support.js";
 
 /** An OC source the integration maps; the test fails if it maps to no domain. */
 function dataSource(source: Parameters<typeof toDataSource>[0]) {
   const mapped = toDataSource(source);
   assert.isDefined(mapped, `${source.id} maps to no OpenMapX domain`);
   return mapped;
-}
-function connectedClient(...args: Parameters<typeof createOpenConditionsClient>) {
-  const client = createOpenConditionsClient(...args);
-  assert.exists(client, "the OpenConditions client is not configured");
-  return client;
 }
 
 const BASE_URL = "http://openconditions.test:4100";

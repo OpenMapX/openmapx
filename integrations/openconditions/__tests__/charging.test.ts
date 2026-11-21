@@ -7,7 +7,6 @@ import {
 import { assert, describe, expect, test } from "vitest";
 import { recordToChargingSite } from "../charging/map.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
-import { createOpenConditionsClient } from "../client.js";
 import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
@@ -16,6 +15,7 @@ import stringsEn from "../strings/en.json" with { type: "json" };
 import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-charging.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-charging.json" with { type: "json" };
+import { connectedClient, latestOf, nth, offersOf, recordOf } from "./support.js";
 
 /*
  * The fixtures are hand-built OpenConditions answers that follow the shape
@@ -46,30 +46,13 @@ const LATER = new Date("2026-10-06T03:40:00.000Z");
 
 const clone = <T>(value: T): T => structuredClone(value);
 
-type Body = { records: Rec[]; latest: Record<string, Rec[]>; offers: Record<string, Rec[]> };
+type Body = {
+  records: Rec[];
+  latest: Record<string, LatestReading[]>;
+  offers: Record<string, Rec[]>;
+};
 
 const body = () => clone(featuresResponse) as unknown as Body & Rec;
-function recordOf(b: Body): Rec {
-  const [record] = b.records;
-  assert.isDefined(record, "the answer has no record");
-  return record;
-}
-function latestOf(b: Body): LatestReading[] {
-  const latest = b.latest[SITE_ID];
-  assert.isDefined(latest, "the answer has no readings for its site");
-  return latest as unknown as LatestReading[];
-}
-function offersOf(b: Body): Rec[] {
-  const offers = b.offers[SITE_ID];
-  assert.isDefined(offers, "the answer has no offers for its site");
-  return offers;
-}
-/** An element the fixture is known to hold; the test fails if it is missing. */
-function nth<T>(values: readonly T[], index: number): T {
-  const value = values[index];
-  assert.isDefined(value, `no element at ${index}`);
-  return value;
-}
 
 type Responder = (req: FakeHttpRequest) => unknown;
 
@@ -85,8 +68,7 @@ const EVERY_SOURCE: LiveSources = {
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
   const http = fakeHttpClient(respond);
-  const client = createOpenConditionsClient({ OPENCONDITIONS_URL: BASE_URL }, http);
-  assert.exists(client);
+  const client = connectedClient({ OPENCONDITIONS_URL: BASE_URL }, http);
   return { http, provider: createChargingSiteProvider(client, sources, { now: () => now }) };
 }
 
@@ -98,7 +80,14 @@ const listing =
 const NOT_FOUND = { status: 404, headers: {}, body: { error: "no such feature" } };
 
 const mapped = (b: Body, excluded: (id: string) => boolean = () => false, now = FRESH) =>
-  recordToChargingSite(recordOf(b), latestOf(b), offersOf(b), excluded, NO_SOURCES, now);
+  recordToChargingSite(
+    recordOf(b),
+    latestOf(b, SITE_ID),
+    offersOf(b, SITE_ID),
+    excluded,
+    NO_SOURCES,
+    now,
+  );
 /** A mapped site; the test fails if the answer maps to none. */
 function mappedSite(b: Body, excluded: (id: string) => boolean = () => false) {
   const site = mapped(b, excluded);
@@ -253,7 +242,7 @@ describe("charging-sites-openconditions", () => {
 
     // A reference to a tariff that is not on the site is not kept.
     const answer = body();
-    offersOf(answer).splice(0, 1);
+    offersOf(answer, SITE_ID).splice(0, 1);
     const without = mappedSite(answer);
     expect(without.evses[0]?.connectors[0]?.tariffIds).toEqual([]);
     expect(without.tariffs.map((t) => t.id)).toEqual([OSM_TARIFF]);
@@ -261,7 +250,7 @@ describe("charging-sites-openconditions", () => {
 
   test("an excluded source's readings and offers are dropped; upstream publishers are credited", async () => {
     const answer = body();
-    latestOf(answer).push({
+    latestOf(answer, SITE_ID).push({
       property: "charging.evse_status",
       componentKey: "EVSE-1",
       result: { type: "category", value: "available", vocabulary: "evse_status" },
@@ -323,12 +312,12 @@ describe("charging-sites-openconditions", () => {
 
   test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
-    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
-    nth(latestOf(answer), 0).provenance = CROWD_PROVENANCE;
+    nth(latestOf(answer, SITE_ID), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer, SITE_ID), 0).provenance = CROWD_PROVENANCE;
     const site = recordToChargingSite(
       recordOf(answer),
-      latestOf(answer),
-      offersOf(answer),
+      latestOf(answer, SITE_ID),
+      offersOf(answer, SITE_ID),
       () => false,
       CROWD_SOURCES,
       FRESH,
@@ -339,7 +328,7 @@ describe("charging-sites-openconditions", () => {
 
   test("a crowd reading is left out while /sources states no crowd credit", () => {
     const answer = body();
-    nth(latestOf(answer), 0).contributors = [MOBIDATA, "crowd"];
+    nth(latestOf(answer, SITE_ID), 0).contributors = [MOBIDATA, "crowd"];
     const site = mappedSite(answer, (sourceId) => sourceId === "crowd");
     expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
@@ -515,7 +504,7 @@ describe("charging-sites-openconditions", () => {
         ],
       },
     };
-    nth(offersOf(answer), 0).energyMix = { isGreen: false };
+    nth(offersOf(answer, SITE_ID), 0).energyMix = { isGreen: false };
     const site = mappedSite(answer);
     expect(site.energyMix).toEqual({
       isGreen: true,
@@ -535,7 +524,7 @@ describe("charging-sites-openconditions", () => {
 
   test("a tariff element priced for a booking says which part of it", () => {
     const answer = body();
-    const tariff = nth(offersOf(answer), 0);
+    const tariff = nth(offersOf(answer, SITE_ID), 0);
     tariff.elements = [
       {
         components: [{ type: "flat", price: { amount: "5.00", currency: "EUR" } }],

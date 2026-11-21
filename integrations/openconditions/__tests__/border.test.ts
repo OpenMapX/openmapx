@@ -4,16 +4,16 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { assert, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { recordToBorderCrossing } from "../border/map.js";
 import { createBorderCrossingProvider } from "../border/provider.js";
-import { createOpenConditionsClient } from "../client.js";
 import { type LatestReading, rec } from "../features/record.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-border.json" with { type: "json" };
+import { connectedClient, found, nth } from "./support.js";
 
 /*
  * `features-border.json` is the `GET /features?kind=border_crossing&canonical=1&expand=components,latest`
@@ -32,19 +32,11 @@ const CBSA = "ca-cbsa-waits";
 
 type Body = { records: Rec[]; latest: Record<string, LatestReading[]> };
 const body = () => structuredClone(featuresResponse) as unknown as Body;
-/** A value the fixture is known to hold; the test fails if it is missing. */
-function found<T>(value: T | null | undefined, what = "fixture value"): T {
-  assert.exists(value, `${what} is missing`);
-  return value;
-}
 const named = (answer: Body, name: string) =>
   found(
     answer.records.find((r) => JSON.stringify(r.name).includes(`"${name}"`)),
     name,
   );
-function connectedClient(...args: Parameters<typeof createOpenConditionsClient>) {
-  return found(createOpenConditionsClient(...args), "the OpenConditions client");
-}
 
 const EVERY_SOURCE: LiveSources = {
   ready: true,
@@ -220,22 +212,20 @@ describe("border-crossings-openconditions", () => {
 
   test("a crossing's detail finds a member up to the linking distance away", async () => {
     // The CBP member stands 1.5 km north of the CBSA survivor the crossing is placed at.
+    const memberAt: readonly [lon: number, lat: number] = [-78.9056, 42.9204];
     const member = {
       id: `oc:feature:${CBP}:090101`,
       kind: "border_crossing",
-      location: { geometry: { type: "Point", coordinates: [-78.9056, 42.9204] } },
+      location: { geometry: { type: "Point", coordinates: memberAt } },
       provenance: { sourceId: CBP },
       openingHours: { osm: "24/7" },
     };
     const http = fakeHttpClient((req: FakeHttpRequest) => {
       if (req.url !== `${BASE_URL}/features`) return undefined;
       if (req.options?.params?.canonical !== 0) return body();
-      const [w = Number.NaN, s = Number.NaN, e = Number.NaN, n = Number.NaN] = String(
-        req.options.params.bbox,
-      )
-        .split(",")
-        .map(Number);
-      const [lon = Number.NaN, lat = Number.NaN] = member.location.geometry.coordinates;
+      const bbox = String(req.options.params.bbox).split(",").map(Number);
+      const [w, s, e, n] = [nth(bbox, 0), nth(bbox, 1), nth(bbox, 2), nth(bbox, 3)];
+      const [lon, lat] = memberAt;
       const inside = lon >= w && lon <= e && lat >= s && lat <= n;
       return { records: inside ? [member] : [], next: null };
     });
