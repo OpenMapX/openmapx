@@ -533,7 +533,7 @@ function buildChildStopAreas(
     const lat = members.reduce((sum, point) => sum + point.lat, 0) / members.length;
     const lng = members.reduce((sum, point) => sum + point.lng, 0) / members.length;
     // A group exists only once a point was added to it.
-    const first = itemAt(members, 0, "traffic point group member");
+    const first = itemAt(members, 0, `member of traffic point group ${groupId}`);
     const suffix = first.designation || groupId.split(":").at(-1) || "";
     return {
       id: providerId(groupId),

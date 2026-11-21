@@ -191,16 +191,17 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
       nearestDistance = distance;
     }
   }
+  const wayNode = `node of way ${element.id}`;
   const bearing =
     nearest === nodes.length - 1
-      ? bearingBetween(itemAt(nodes, nearest - 1, "way node"), itemAt(nodes, nearest, "way node"))
-      : bearingBetween(itemAt(nodes, nearest, "way node"), itemAt(nodes, nearest + 1, "way node"));
+      ? bearingBetween(itemAt(nodes, nearest - 1, wayNode), itemAt(nodes, nearest, wayNode))
+      : bearingBetween(itemAt(nodes, nearest, wayNode), itemAt(nodes, nearest + 1, wayNode));
 
   // Signed distance of the way's travel end: positive when the way leads into
   // the point (its end lies upstream of it), negative when it runs away from it.
-  const end = itemAt(nodes, nodes.length - 1, "way node");
+  const end = itemAt(nodes, nodes.length - 1, wayNode);
   const endDistance = haversineDistance(end, centre);
-  const endBearing = bearingBetween(itemAt(nodes, nodes.length - 2, "way node"), end);
+  const endBearing = bearingBetween(itemAt(nodes, nodes.length - 2, wayNode), end);
   const leadsIn =
     endDistance < END_ON_POINT_METERS ||
     angularDifference(bearingBetween(end, centre), endBearing) <= 90;
@@ -216,7 +217,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     local.length <= 128
       ? local
       : Array.from({ length: 128 }, (_, i) =>
-          itemAt(nodes, first + Math.round((i * (local.length - 1)) / 127), "way node"),
+          itemAt(nodes, first + Math.round((i * (local.length - 1)) / 127), wayNode),
         );
   return {
     wayId: element.id,
@@ -225,7 +226,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     ...(tags.name ? { name: tags.name } : {}),
     bearing,
     endDistanceMeters: leadsIn ? endDistance : -endDistance,
-    startDistanceMeters: haversineDistance(itemAt(nodes, 0, "way node"), centre),
+    startDistanceMeters: haversineDistance(itemAt(nodes, 0, wayNode), centre),
     tags: laneTags(tags),
     geometry,
   };

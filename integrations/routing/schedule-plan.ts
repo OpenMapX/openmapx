@@ -187,9 +187,8 @@ export async function runSchedulePlan(
   }
 
   const oracle = async (legIndex: number, instantMs: number, pinArrival: boolean) => {
-    const from = request.waypoints[legIndex];
-    const to = request.waypoints[legIndex + 1];
-    if (!from || !to) throw new RangeError(`No waypoints for scheduled leg ${legIndex}`);
+    const from = itemAt(request.waypoints, legIndex, "scheduled leg start waypoint");
+    const to = itemAt(request.waypoints, legIndex + 1, "scheduled leg end waypoint");
     const pair: [number, number][] = [from, to];
     const zone = itemAt(
       resolved.stops,
