@@ -137,6 +137,33 @@ describe("CoverageService", () => {
     expect(getEvents).not.toHaveBeenCalled();
   });
 
+  it("does not touch operational evidence on a provider of another kind", async () => {
+    const read = vi.fn();
+    const geocoder = integration();
+    const provider = {
+      id: "geocoder",
+      search: async () => [],
+      get getOperationalEvidence() {
+        return read();
+      },
+    };
+    geocoder.providers = new Map([["geocoding", [provider]]]);
+    await collectCoverageData({
+      now: () => new Date("2026-09-11T12:00:00Z"),
+      integrations: [geocoder],
+      dataManager: {
+        read: async () => {
+          throw new Error("Unavailable");
+        },
+      },
+      loadBindings: async () => new Map(),
+      loadPolicy: async () => ({ allowGreyArea: true, allowNonCommercial: true }),
+      providerHealth: null,
+      integrationHealth: () => ({ updatedAt: null, results: [] }),
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("retains API evidence when data-manager is unavailable", async () => {
     const parking = integration();
     parking.manifest.domains = ["parking-sites"];

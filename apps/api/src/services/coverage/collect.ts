@@ -115,9 +115,10 @@ function operationalReads(
   integrations: readonly LoadedIntegration[],
 ): OperationalRead[] {
   const roads = catalog.providers.flatMap((p): OperationalRead[] => {
+    if (p.kind !== "road-conditions" || !p.enabled) return [];
     const provider = p.provider as RoadConditionsProvider;
     const evidence = provider.getOperationalEvidence;
-    if (p.kind !== "road-conditions" || !p.enabled || !evidence) return [];
+    if (!evidence) return [];
     return [
       {
         read: () => evidence.call(provider),
