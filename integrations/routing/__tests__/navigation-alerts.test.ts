@@ -337,6 +337,19 @@ describe("mapAlertElements — other hazards", () => {
     expect(mapAlertElements([node(50, 30, 20, { highway: "speed_camera" }), street])).toEqual([]);
   });
 
+  it("does not take a highway value that names an object property for a road", () => {
+    const notARoad = way(
+      7,
+      [
+        [8, -100, 0],
+        [9, 0, 0],
+        [10, 100, 0],
+      ],
+      { highway: "constructor" },
+    );
+    expect(mapAlertElements([node(9, 0, 0, { traffic_calming: "bump" }), notARoad])).toEqual([]);
+  });
+
   it("drops a stop sign standing between two roads", () => {
     const other = way(
       4,

@@ -39,6 +39,10 @@ describe("concatenateRoutes", () => {
     expect(concatenateRoutes([only])).toBe(only);
   });
 
+  it("refuses an empty list instead of folding nothing into a route", () => {
+    expect(() => concatenateRoutes([])).toThrow("No routes to concatenate");
+  });
+
   it("drops the duplicated join coordinate", () => {
     const merged = concatenateRoutes([
       route({

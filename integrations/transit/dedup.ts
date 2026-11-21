@@ -252,7 +252,7 @@ export function deduplicateStops(
   const sorted = [...stops].sort((a, b) => getPriority(a.provider) - getPriority(b.provider));
 
   // Pre-compute normalised names
-  const normNames = sorted.map((s) => normalizeName(s.name));
+  const named = sorted.map((stop) => ({ stop, name: normalizeName(stop.name) }));
 
   // Union-Find to cluster duplicates
   const parent = sorted.map((_, i) => i);
@@ -290,15 +290,10 @@ export function deduplicateStops(
   const cellWidth = MAX_DISTANCE_M / 6_371_000 + 1e-12;
   const cells = new Map<string, number[]>();
   const unindexed: number[] = [];
-  const stopAt = (i: number): { stop: TransitStop; name: string } => {
-    const stop = sorted[i];
-    const name = normNames[i];
-    if (!stop || name === undefined) throw new RangeError(`No stop ${i} of ${sorted.length}`);
-    return { stop, name };
-  };
   const compare = (i: number, j: number) => {
-    const a = stopAt(i);
-    const b = stopAt(j);
+    const a = named[i];
+    const b = named[j];
+    if (!a || !b) throw new RangeError(`No stop ${i} or ${j} of ${named.length}`);
     const dist = haversineMeters(a.stop.lat, a.stop.lng, b.stop.lat, b.stop.lng);
     if (dist > MAX_DISTANCE_M) return;
     if (diceSimilarity(a.name, b.name) >= MIN_DICE) unite(i, j);

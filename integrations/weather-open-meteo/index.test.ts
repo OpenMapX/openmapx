@@ -149,6 +149,29 @@ describe("Open-Meteo weather provider", () => {
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("&hourly=temperature_2m");
   });
 
+  it("fails the forecast when a column is shorter than the time axis", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        ...currentResponse(),
+        hourly: {
+          time: ["2026-03-10T10:00", "2026-03-10T11:00"],
+          temperature_2m: [10, 11],
+          precipitation_probability: [5, 20],
+          precipitation: [0, 0.1],
+          weather_code: [1, 2],
+          cloud_cover: [10, 40],
+          wind_speed_10m: [12, 14],
+          wind_direction_10m: [180],
+          pressure_msl: [1015, 1014],
+        },
+      }),
+    );
+
+    await expect(getProvider().getHourlyForecast(COORDS, 2)).rejects.toThrow(
+      "Open-Meteo wind_direction_10m is shorter than its time axis",
+    );
+  });
+
   it("returns an empty hourly array when the response omits hourly data", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
     expect(await getProvider().getHourlyForecast(COORDS, 12)).toEqual({

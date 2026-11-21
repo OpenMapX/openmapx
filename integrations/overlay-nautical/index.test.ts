@@ -263,6 +263,35 @@ describe("nautical routes", () => {
       expect(body.features.map((f) => f.properties.id)).toEqual(["tide-only"]);
     });
 
+    it("drops a station without any capability, which has no type to draw", async () => {
+      const cache = createFencedMemoryCache();
+      cache.values.set("catalog:contributors-v1:ioc", [
+        { network: "ioc", id: "no-types", name: "Empty", lat: 42.2, lng: -71.2, types: [] },
+        {
+          network: "ioc",
+          id: "with-types",
+          name: "Gauge",
+          lat: 42.4,
+          lng: -71.4,
+          types: ["water-level"],
+        },
+      ]);
+      ctx = createMockIntegrationContext({ cache });
+      setup(ctx);
+      loadStations.mockResolvedValue([]);
+      fetchJson.mockResolvedValue(null);
+      mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
+
+      const { reply, result } = makeReply();
+      await getRoute("/stations")(
+        routeRequest({ query: { west: "-72", south: "41", east: "-70", north: "43" } }),
+        reply,
+      );
+
+      const body = result.body as { features: Array<{ properties: { id: string } }> };
+      expect(body.features.map((f) => f.properties.id)).toEqual(["with-types"]);
+    });
+
     it("serves but does not cache a merge while a network is unavailable, then caches the recovered one", async () => {
       const cache = createFencedMemoryCache();
       let iwls: unknown = httpStatus(503);

@@ -179,6 +179,34 @@ describe("runEvPlan", () => {
     expect(rerouteWps.length).toBe(3); // origin + charger + dest
   });
 
+  it("fails when the route through the charging stops comes back without a route", async () => {
+    const ctx = fakeCtx();
+    const answerBaseRoute = ctx._valhalla.getRoute.getMockImplementation();
+    ctx._valhalla.getRoute.mockImplementation(async (waypoints: unknown[]) =>
+      waypoints.length > 2
+        ? { routes: [], activeRouteIndex: 0, waypoints: [] }
+        : answerBaseRoute?.(waypoints),
+    );
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    await expect(
+      runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla:model_3:2024:model_3_long_range",
+        socStartPct: 40,
+        socArrivalMinPct: 10,
+        socTargetPct: 80,
+        ambientTempC: 20,
+        avoidClosures: false,
+      }),
+    ).rejects.toThrow("Routing via the charging stops returned no route");
+    expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(2);
+  });
+
   it("threads closure exclusions into both routing calls", async () => {
     // Route runs along lat=50 from lng 0 to lng 2.7 (same fixture geometry as
     // the other tests), with an exclusion point right on the corridor.

@@ -66,6 +66,9 @@ export function parseTripReferenceRequest(value: unknown): TransitTripResolveReq
       scheduledArrival: instant(leg.scheduledArrival),
     };
   });
+  const [firstLeg] = legs;
+  const lastLeg = legs.at(-1);
+  if (!firstLeg || !lastLeg) return fail("Expected 1..8 transit references");
   const prefixes = new Set(
     legs.flatMap((r) =>
       [r.tripId, r.fromStopId, r.toStopId].map((v) => v.slice(0, v.indexOf(":"))),
@@ -81,9 +84,7 @@ export function parseTripReferenceRequest(value: unknown): TransitTripResolveReq
           Date.parse(r.scheduledDeparture) < Date.parse(previous.scheduledArrival))
       );
     }) ||
-    Date.parse(legs.at(-1)?.scheduledArrival ?? "") -
-      Date.parse(legs[0]?.scheduledDeparture ?? "") >
-      72 * 3600000
+    Date.parse(lastLeg.scheduledArrival) - Date.parse(firstLeg.scheduledDeparture) > 72 * 3600000
   )
     fail("Invalid reference sequence");
   if (

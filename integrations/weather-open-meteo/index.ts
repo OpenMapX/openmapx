@@ -101,7 +101,11 @@ function parseCurrentWeather(data: OpenMeteoResponse, coords: LngLat): WeatherRe
   };
 }
 
-/** Open-Meteo sends one value per entry of `time` in every column; a short column is a broken answer. */
+/**
+ * Open-Meteo sends one value per entry of `time` in every column. This checks
+ * the upstream answer, not an invariant of ours: one short column fails the
+ * whole forecast rather than yielding points with missing fields.
+ */
 function columnAt<T>(column: readonly T[], index: number, name: string): T {
   const value = column[index];
   if (value === undefined) throw new Error(`Open-Meteo ${name} is shorter than its time axis`);

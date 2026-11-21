@@ -521,10 +521,6 @@ export function setup(ctx: IntegrationContext): void {
   // ---- Harbour detail (Overpass-enriched) --------------------------------
   ctx.registerRoute("GET", "/harbor/:id", async (req, reply) => {
     const id = req.params.id;
-    if (id === undefined) {
-      reply.status(400).send({ error: "Missing harbour id" });
-      return;
-    }
     const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
     const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     const nameParam = (scalarQueries(req.query).name ?? "").trim();
