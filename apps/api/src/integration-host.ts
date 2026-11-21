@@ -18,8 +18,6 @@ import {
   type LoadedIntegration,
   type Logger,
   PLATFORM_VERSION,
-  type RouteHandler,
-  type RouteOptions,
   resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
   validateDataSource,
@@ -811,7 +809,7 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("gtfs-catalog", existing);
     },
-    registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
+    registerRoute(method, path, handler, options) {
       registerIntegrationRoute(id, method, path, handler, options);
     },
     registerHealthCheck(fn: CustomHealthCheckFn) {
