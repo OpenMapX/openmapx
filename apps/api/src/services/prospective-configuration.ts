@@ -287,6 +287,15 @@ export function validatedConfigurationCandidateState(
   administrativeConfigurationState(state.writer);
   return state;
 }
+/**
+ * A value the candidate's own preparation guarantees, such as a maintenance
+ * record's step keys or an overlay change's row. A missing one means the
+ * retained record does not match its candidate, so the write stops.
+ */
+function guaranteed<T>(value: T | null | undefined, what: string): T {
+  if (value === undefined || value === null) throw Error(`Configuration ${what} unavailable`);
+  return value;
+}
 function createCandidate(input: {
   writer: AdministrativeConfigurationWriter;
   operationKey: string;
@@ -592,7 +601,8 @@ async function prepareMaintenance(candidate: ValidatedConfigurationCandidate): P
   const state = candidate.state,
     { job } = administrativeConfigurationState(state.writer),
     record = state.record;
-  if (!readProjection(job.protocol).operations[record.prepareOperationKey!]?.attempt) {
+  const prepareKey = guaranteed(record.prepareOperationKey, "preparation step");
+  if (!readProjection(job.protocol).operations[prepareKey]?.attempt) {
     // A coordinator update pulls its image first, as an ordinary keyed step
     // that names the candidate; the maintenance commits what it pulled.
     const lifecycle = record.privateCoordinatorLifecycle;
@@ -607,7 +617,10 @@ async function prepareMaintenance(candidate: ValidatedConfigurationCandidate): P
           {
             kind: "service.pull",
             serviceId: "data-manager",
-            expectedConfigurationRevisionId: candidate.expectedCurrentRevisionId!,
+            expectedConfigurationRevisionId: guaranteed(
+              candidate.expectedCurrentRevisionId,
+              "expected revision",
+            ),
             candidateId: candidate.candidateId,
           },
           "configuration.coordinator-pull",
@@ -1381,8 +1394,8 @@ async function mergeOverlay(
           context,
         )
       : await resolveIntegrationConfigWithSourcesStrict(
-          integration!.manifest,
-          integration!.directory,
+          guaranteed(integration, "integration").manifest,
+          guaranteed(integration, "integration").directory,
           context,
         );
     if (
@@ -1413,7 +1426,8 @@ async function mergeOverlay(
       if (host?.source === "host" || ["env", "config.json"].includes(resolved[key]?.source ?? ""))
         throw new ConfigurationSourceOwned(
           projectFieldOwnership({
-            source: host?.source === "host" ? "env" : resolved[key]!.source,
+            source:
+              host?.source === "host" ? "env" : guaranteed(resolved[key], "field source").source,
             secret: definition["x-openmapx-secret"] === true,
             envVar: host?.envVar,
           }),
@@ -1603,9 +1617,10 @@ export async function prepareProspectiveConfiguration(input: {
         if ((await sourceFingerprint(context)) !== fingerprint)
           throw Error("Configuration source changed during preparation");
         for (const entry of payload.serviceConfigs) {
-          const manifest = context.services.find(
-            (service) => service.manifest.id === entry.serviceId,
-          )!.manifest;
+          const { manifest } = guaranteed(
+            context.services.find((service) => service.manifest.id === entry.serviceId),
+            "service",
+          );
           if (!coreServices.validateTrustedConfigurationValues(entry.values, manifest.configSchema))
             throw Error("Configuration schema rejected");
         }
@@ -1699,7 +1714,7 @@ export async function prepareProspectiveConfiguration(input: {
                 version: 1 as const,
                 serviceId: "data-manager" as const,
                 action: "update" as const,
-                originalOrdinal: coordinator.originalOrdinal!,
+                originalOrdinal: guaranteed(coordinator.originalOrdinal, "coordinator ordinal"),
                 noDeps: coordinator.noDeps,
               }
           : undefined;
@@ -1745,7 +1760,7 @@ export async function prepareProspectiveConfiguration(input: {
             coordinatorMode: overlay.coordinatorMode,
             ...(maintenanceId ? { maintenanceId, candidateId } : {}),
             ...(kind === "serviceConfig.apply" || kind === "vault.apply"
-              ? { serviceId: affectedServiceIds[0]! }
+              ? { serviceId: guaranteed(affectedServiceIds[0], "affected service") }
               : {}),
             ...(kind === "integrationConfig.apply"
               ? { integrationId: (overlay.changes[0] as { integrationId: string }).integrationId }
@@ -2138,7 +2153,7 @@ function savedRowIntents(state: CandidateState) {
                 (row) => row.integrationId === ownerId && row.key === secretKey,
               );
     if (!source && !desired) return [];
-    const rowId = source?.id ?? desired!.id,
+    const rowId = source?.id ?? guaranteed(desired, "row").id,
       previousRowVersion = source ? (source as { _rowVersion?: unknown })._rowVersion : null;
     if (
       typeof rowId !== "string" ||
@@ -2238,13 +2253,15 @@ async function readSavedRowVersions(
       if (matches.length) throw Error("Configuration deletion receipt conflict");
       return { ...intent, rowVersion: null };
     }
+    const [match] = matches;
     if (
       matches.length !== 1 ||
-      matches[0]!.id !== intent.rowId ||
-      !/^\d{1,10}$/.test(matches[0]!.rowVersion)
+      !match ||
+      match.id !== intent.rowId ||
+      !/^\d{1,10}$/.test(match.rowVersion)
     )
       throw Error("Configuration saved row receipt conflict");
-    return { ...intent, rowVersion: matches[0]!.rowVersion };
+    return { ...intent, rowVersion: match.rowVersion };
   });
   assertRowReceiptBudget(receipts);
   return receipts;
@@ -2268,7 +2285,10 @@ async function persistOverlay(
   const touched = new Set<string>();
   for (const change of state.overlay.changes) {
     if (change.kind === "service-config") {
-      const row = state.rows.serviceRows.find((row) => row.serviceId === change.serviceId)!;
+      const row = guaranteed(
+        state.rows.serviceRows.find((row) => row.serviceId === change.serviceId),
+        "service row",
+      );
       if (touched.has(`s:${row.serviceId}`)) continue;
       touched.add(`s:${row.serviceId}`);
       const prior = state.sourceRows.serviceRows.find((item) => item.serviceId === row.serviceId);
@@ -2289,9 +2309,10 @@ async function persistOverlay(
             .returning({ id: schema.serviceConfig.id }),
         );
     } else if (change.kind === "integration-config") {
-      const row = state.rows.integrationRows.find(
-        (row) => row.integrationId === change.integrationId,
-      )!;
+      const row = guaranteed(
+        state.rows.integrationRows.find((row) => row.integrationId === change.integrationId),
+        "integration row",
+      );
       if (touched.has(`i:${row.integrationId}`)) continue;
       touched.add(`i:${row.integrationId}`);
       const prior = state.sourceRows.integrationRows.find(
@@ -2346,9 +2367,12 @@ async function persistOverlay(
               .returning({ id: schema.serviceSecret.id }),
           );
       } else {
-        const row = state.rows.serviceSecretRows.find(
-          (row) => row.serviceId === change.serviceId && row.key === change.key,
-        )!;
+        const row = guaranteed(
+          state.rows.serviceSecretRows.find(
+            (row) => row.serviceId === change.serviceId && row.key === change.key,
+          ),
+          "service secret row",
+        );
         if (prior)
           one(
             await tx
@@ -2382,9 +2406,12 @@ async function persistOverlay(
               .returning({ id: schema.integrationSecret.id }),
           );
       } else {
-        const row = state.rows.integrationSecretRows.find(
-          (row) => row.integrationId === change.integrationId && row.key === change.key,
-        )!;
+        const row = guaranteed(
+          state.rows.integrationSecretRows.find(
+            (row) => row.integrationId === change.integrationId && row.key === change.key,
+          ),
+          "integration secret row",
+        );
         if (prior)
           one(
             await tx
@@ -2663,7 +2690,7 @@ async function settleJobMaintenance(
 async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurationCandidate) {
   const state = validatedConfigurationCandidateState(candidate),
     { job } = administrativeConfigurationState(state.writer),
-    maintenanceId = state.record.maintenanceId!;
+    maintenanceId = guaranteed(state.record.maintenanceId, "maintenance");
   const cancelled = () => cancelRequestedAt(job.protocol) !== undefined;
   // A cancelled job starts no apply, but observes the one it already sent: its
   // result carries the generation the agent committed.
@@ -2762,7 +2789,7 @@ export async function completeIntegrationActivation(
   });
   const expected = Object.fromEntries(
     (manifest.requires ?? []).map((req) => {
-      const key = req.capability ?? req.service!;
+      const key = guaranteed(req.capability ?? req.service, "requirement");
       return [key, resolved.get(key)?.serviceId ?? null];
     }),
   );

@@ -3,6 +3,7 @@ import {
   adminIntegrationReloadResultSchema,
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
+import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
@@ -329,7 +330,7 @@ class AdminJobRunner {
         )
         .limit(2);
       if (rows.length) {
-        const old = rows[0]!,
+        const old = itemAt(rows, 0),
           retained = old.payload as Record<string, unknown>;
         if (
           rows.length !== 1 ||
@@ -430,7 +431,7 @@ class AdminJobRunner {
           return [{ ...created, _fresh: true }];
         });
     if (retained.length !== 1) throw new JobObservationPending("recovery_required");
-    let job = retained[0]!,
+    let job = itemAt(retained, 0),
       checkpoint = jobCheckpoint(job.result, job.protocol) ?? {},
       recovering = false;
     if (
@@ -458,7 +459,9 @@ class AdminJobRunner {
       checkpoint = jobCheckpoint(claimed.result, claimed.protocol) ?? {};
       recovering = true;
     }
-    const execution = readJobExecution(job.protocol)!;
+    const execution = readJobExecution(job.protocol);
+    // Every immediate job is created with an execution; a row without one needs recovery.
+    if (!execution) throw new JobObservationPending("recovery_required");
     const controller = new AbortController(),
       signal = options.signal
         ? AbortSignal.any([controller.signal, options.signal])

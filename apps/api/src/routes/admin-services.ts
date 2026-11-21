@@ -521,17 +521,19 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       secretsConfigured: isSecretsConfigured(),
       credentials: fields.map((f) => {
         const v = vaultByKey.get(f.key);
+        const resolved = snapshot.resolved[f.key];
         return {
           key: f.key,
           title: f.title,
           description: f.description,
           setup: f.setup,
           source:
-            snapshot.resolved[f.key]?.value === undefined ||
-            snapshot.resolved[f.key]?.value === null ||
-            snapshot.resolved[f.key]?.value === ""
+            resolved === undefined ||
+            resolved.value === undefined ||
+            resolved.value === null ||
+            resolved.value === ""
               ? ("missing" as const)
-              : snapshot.resolved[f.key]!.source,
+              : resolved.source,
           ownership: snapshot.ownership[f.key],
           managedBy: managedServiceCredential(svc.manifest.id, f.key),
           updatedAt: v?.updatedAt?.toISOString(),

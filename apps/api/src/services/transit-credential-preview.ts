@@ -1,5 +1,6 @@
 /** Private immutable encrypted proposals; public intents contain no value-derived hashes. */
 import { createHash, randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import type { FeedCredentialChange } from "@openmapx/transitous-core/feed-credentials";
 import { and, eq, lt, sql } from "drizzle-orm";
@@ -210,5 +211,6 @@ export async function readRetainedFeedCredentialPreview(
     )
     .limit(2);
   if (rows.length !== 1) return undefined;
-  return { row: rows[0]!, private: decoded(rows[0]!) };
+  const row = itemAt(rows, 0);
+  return { row, private: decoded(row) };
 }

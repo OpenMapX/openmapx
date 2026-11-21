@@ -55,7 +55,7 @@ export function recordAdministrativeConfigurationFile(
   identity: unknown,
 ): void {
   assertAdministrativeConfigurationRead(context);
-  const observed = files.get(context)!;
+  const observed = fileObservationsOf(context);
   if (observed.has(path) && JSON.stringify(observed.get(path)) !== JSON.stringify(identity))
     throw new Error("Configuration acquisition unavailable");
   observed.set(path, identity);
@@ -64,7 +64,14 @@ export function administrativeConfigurationFileObservations(
   context: AdministrativeConfigurationReadContext,
 ) {
   assertAdministrativeConfigurationRead(context);
-  return [...files.get(context)!.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...fileObservationsOf(context).entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** The file observations of a context created by this module, which registers every one. */
+function fileObservationsOf(context: AdministrativeConfigurationReadContext) {
+  const observed = files.get(context);
+  if (!observed) throw new Error("Configuration acquisition unavailable");
+  return observed;
 }
 export function withAdministrativeConfigurationReadScope<T>(
   context: AdministrativeConfigurationReadContext,

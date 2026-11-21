@@ -342,12 +342,12 @@ function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
         removeServiceRepository(request, options),
       ),
     publishIntegration: (
-      request: Parameters<typeof publishIntegration>[0],
+      request: Parameters<typeof publishIntegration>[0] & { extensionId: string },
       options: Parameters<typeof publishIntegration>[1],
     ) =>
       extensionStep(workflow, `integration.publish:${options.operationKey}`, request, async () => {
         if (!hasRetainedAdminJobOperation(ctx, options.operationKey))
-          await assertNotRevoked(request.extensionId!);
+          await assertNotRevoked(request.extensionId);
         return publishIntegration(request, options);
       }),
     settleIntegration: (
@@ -601,7 +601,9 @@ async function installExtensionNow(
         "selection.enable",
         serviceComponents.map((s) => s.service),
         async () => {
-          const roots = ledger.selectedRootsBefore!;
+          const roots = ledger.selectedRootsBefore;
+          // Recorded above whenever the extension brings services.
+          if (!roots) throw new Error("The service selection before the install is unknown");
           const added = serviceComponents.map((s) => s.service).filter((id) => !roots.includes(id));
           if (added.length)
             await applySelectionRoots(

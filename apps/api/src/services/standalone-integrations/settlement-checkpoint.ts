@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import { type OpsOperation, standaloneInstallReceiptSchema } from "@openmapx/core/ops";
 import { and, eq, sql } from "drizzle-orm";
 import type { db } from "../../db";
@@ -49,7 +50,7 @@ export async function assertStandaloneSettlementCheckpoint(
       entry.operation.operationId === state.operationId,
   );
   if (original.length !== 1) throw new JobOwnershipLost();
-  const source = original[0]!,
+  const source = itemAt(original, 0),
     body = source.operation,
     delivery = source.receiptDelivery;
   if (
@@ -172,14 +173,14 @@ export async function hasVerifiedStandaloneRestoration(
         operation.operation.transactionId === state.operationId,
     );
     if (restore.length !== 1) return false;
-    const operation = restore[0]!,
+    const operation = itemAt(restore, 0),
       body = operation.operation,
-      receipt = operation.receiptDelivery!.terminalReceipt;
+      receipt = operation.receiptDelivery?.terminalReceipt;
     return (
       body?.kind === "integration.settle" &&
       body.decision === "restore" &&
       body.expectedContentDigest === state.inspection.contentDigest &&
-      receipt.state === "succeeded" &&
+      receipt?.state === "succeeded" &&
       receipt.kind === "integration.settle" &&
       receipt.operationKey === operation.operationKey &&
       receipt.fingerprint === operation.fingerprint &&

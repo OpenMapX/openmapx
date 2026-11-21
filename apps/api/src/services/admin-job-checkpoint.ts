@@ -65,15 +65,14 @@ export async function checkpointOwnedAdminJob(
         return { conflict: true as const, result: current, protocol: currentProtocol };
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
         return { capacity: true as const, result: current, protocol: currentProtocol };
-      const standaloneSettlement =
+      const settlement =
         ["standalone.install", "standalone.adopt", "standalone.remove"].includes(row.type) &&
-        operation.operation?.kind === "integration.settle";
-      if (standaloneSettlement)
-        await assertStandaloneSettlementCheckpoint(
-          { ...row, result: current },
-          operation.operation!,
-          tx,
-        );
+        operation.operation?.kind === "integration.settle"
+          ? operation.operation
+          : undefined;
+      const standaloneSettlement = settlement !== undefined;
+      if (settlement)
+        await assertStandaloneSettlementCheckpoint({ ...row, result: current }, settlement, tx);
       // Cancellation never authorizes a forward phase. Only the settlement of
       // this job's own configuration maintenance may still be sent.
       const body = operation.operation,

@@ -252,10 +252,11 @@ export async function recoverAgentIntegrations(
     }
     const { transactionId } = entry.pending;
     const projection = readProjection(options.ctx.protocol, options.ctx.checkpointResult);
+    const { jobId } = options.ctx;
     const original = Object.values(projection.operations).find(
       (operation) =>
         operation.kind === "catalogIntegration.publish" &&
-        operation.attempt?.apiJobId === options.ctx!.jobId &&
+        operation.attempt?.apiJobId === jobId &&
         operation.operation?.kind === "catalogIntegration.publish" &&
         operation.operation.integrationId === entry.integrationId,
     );

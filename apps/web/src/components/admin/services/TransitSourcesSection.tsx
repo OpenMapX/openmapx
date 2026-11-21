@@ -88,8 +88,9 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
     let key = identities.current.get(fingerprint);
     if (!key) {
       key = crypto.randomUUID();
-      if (identities.current.size >= 128)
-        identities.current.delete(identities.current.keys().next().value!);
+      // A full map has an oldest entry to evict.
+      const oldest = identities.current.keys().next();
+      if (identities.current.size >= 128 && !oldest.done) identities.current.delete(oldest.value);
       identities.current.set(fingerprint, key);
     }
     return key;
@@ -173,11 +174,14 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   };
   const addMutation = useMutation({
     retry: false,
-    mutationFn: async () =>
-      sdk.unwrapAdminResponse(
+    mutationFn: async () => {
+      const sources = sourcesQuery.data;
+      // The add button stays disabled until the sources have loaded.
+      if (!sources) throw new Error("Transit sources are not loaded");
+      return sdk.unwrapAdminResponse(
         await sdk.postApiDataManagerTransitSources(
           {
-            expectedSourceRevision: sourcesQuery.data!.sourceRevision,
+            expectedSourceRevision: sources.sourceRevision,
             idempotencyKey: operationId({
               action: "add",
               url,
@@ -199,7 +203,8 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
           },
           { client },
         ),
-      ),
+      );
+    },
     onSuccess: ({ jobId }) => {
       reportJob(jobId, t("sourceChangeQueued", { jobId }));
       setDialogOpen(false);

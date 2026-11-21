@@ -167,8 +167,8 @@ export async function publishServiceGeneration(
     ctx,
     kind: "stack.render",
     coordinatorMode: options.coordinatorMode,
-    ...(Object.hasOwn(options, "expectedCurrentRevisionId")
-      ? { expectedCurrentRevisionId: options.expectedCurrentRevisionId! }
+    ...(options.expectedCurrentRevisionId !== undefined
+      ? { expectedCurrentRevisionId: options.expectedCurrentRevisionId }
       : {}),
     operationKey: createDurableOpsKey("admin-job.config.prepare", `${ctx.jobId}:${scope}`),
     signal: ctx.signal,

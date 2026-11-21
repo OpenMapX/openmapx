@@ -3,6 +3,7 @@ import {
   standaloneInstallRequestSchema,
   standalonePreviewRequestSchema,
 } from "@openmapx/core/api-contracts";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   canonicalJson,
   type StandaloneIntegrationProvenance,
@@ -128,7 +129,7 @@ async function previewForInstall(ctx: JobContext, ownerId: string, inspectionId:
     throw new AdminJobFailure("Standalone preview is missing or belongs to another administrator", {
       operationId: ctx.payload.operationId,
     });
-  const row = rows[0]!;
+  const row = itemAt(rows, 0);
   await authenticatePayload({
     ...ctx,
     jobId: row.id,
