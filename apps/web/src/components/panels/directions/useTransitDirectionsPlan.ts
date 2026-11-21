@@ -180,6 +180,8 @@ export function useTransitDirectionsPlan(snapshot: TransitDirectionsSnapshot) {
     const selected = selectTransitAlternative(state.transitItineraries, parent, candidate);
     if (!selected) return null;
     const itinerary = selected.itineraries[selected.index];
+    // The selection's index points into its own itinerary list.
+    if (!itinerary) throw new RangeError(`No itinerary at selected index ${selected.index}`);
     retainedAlternative.current = { identity: pagingIdentity, itinerary };
     state.setTransitItineraries(selected.itineraries);
     state.setActiveItineraryIndex(selected.index);
@@ -229,7 +231,7 @@ export function useTransitDirectionsPlan(snapshot: TransitDirectionsSnapshot) {
         items.push(active);
       retainedAlternative.current = {
         identity: pagingIdentity,
-        itinerary: match >= 0 ? items[match] : active,
+        itinerary: items[match] ?? active,
       };
     }
     lastPublication.current = { data: transitPlanData, identity };
@@ -238,12 +240,13 @@ export function useTransitDirectionsPlan(snapshot: TransitDirectionsSnapshot) {
       const index = items.findIndex(
         (item) => transitItineraryKey(item, transitPlanData.provider) === pending.itineraryKey,
       );
-      if (store.completeTransitSelection(pending) && index >= 0) {
+      const itinerary = items[index];
+      if (store.completeTransitSelection(pending) && itinerary) {
         store.setActiveItineraryIndex(index);
         setSelectionToOpen({
           index,
           itineraryKey: pending.itineraryKey,
-          itinerary: items[index],
+          itinerary,
           queryIdentity: pagingIdentity,
         });
       }

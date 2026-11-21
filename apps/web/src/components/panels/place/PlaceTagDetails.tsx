@@ -276,10 +276,10 @@ function collectMultilingualEntries(tags: Record<string, string>): MultilingualE
         baseKey = mk;
         break;
       }
-      const m = key.match(new RegExp(`^${mk}:([a-z]{2,3})$`));
-      if (m) {
+      const suffix = key.match(new RegExp(`^${mk}:([a-z]{2,3})$`))?.[1];
+      if (suffix !== undefined) {
         baseKey = mk;
-        lang = m[1];
+        lang = suffix;
         break;
       }
     }
@@ -290,10 +290,10 @@ function collectMultilingualEntries(tags: Record<string, string>): MultilingualE
           baseKey = key;
           break;
         }
-        const m = key.match(new RegExp(`^([^:]+):${mk}:([a-z]{2,3})$`));
-        if (m) {
-          baseKey = `${m[1]}:${mk}`;
-          lang = m[2];
+        const [, namespace, suffix] = key.match(new RegExp(`^([^:]+):${mk}:([a-z]{2,3})$`)) ?? [];
+        if (namespace !== undefined && suffix !== undefined) {
+          baseKey = `${namespace}:${mk}`;
+          lang = suffix;
           break;
         }
       }
@@ -1046,12 +1046,12 @@ export function PlaceTagDetails({
   });
   const multilingualEntries = shows("remaining") ? collectMultilingualEntries(osmTags) : [];
   const socialLinks = shows("practical")
-    ? SOCIAL_PLATFORMS.filter((p) => osmTags[p.tagKey]).map((p) => ({
-        tagKey: p.tagKey,
-        label: p.label,
-        icon: p.icon,
-        url: p.toUrl(osmTags[p.tagKey]),
-      }))
+    ? SOCIAL_PLATFORMS.flatMap((p) => {
+        const handle = osmTags[p.tagKey];
+        return handle
+          ? [{ tagKey: p.tagKey, label: p.label, icon: p.icon, url: p.toUrl(handle) }]
+          : [];
+      })
     : [];
   if (rows.length === 0 && multilingualEntries.length === 0 && socialLinks.length === 0) {
     return null;

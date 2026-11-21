@@ -372,7 +372,9 @@ function TideChart({
   const points = curve
     .map((p) => ({ t: parseLocalTime(p.time).getTime(), v: p.valueFt }))
     .filter((p) => p.t >= windowStart && p.t <= windowEnd);
-  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points.at(-1);
+  if (points.length < 2 || !first || !last) return null;
 
   const minV = Math.min(...points.map((p) => p.v));
   const maxV = Math.max(...points.map((p) => p.v));
@@ -387,9 +389,9 @@ function TideChart({
     .map((p, i) => `${i === 0 ? "M" : "L"}${xFor(p.t).toFixed(1)} ${yFor(p.v).toFixed(1)}`)
     .join(" ");
   // Closed area path for the soft fill underneath.
-  const area = `${path} L${xFor(points[points.length - 1].t).toFixed(1)} ${(
-    CHART_PAD_Y + innerH
-  ).toFixed(1)} L${xFor(points[0].t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(1)} Z`;
+  const area = `${path} L${xFor(last.t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(
+    1,
+  )} L${xFor(first.t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(1)} Z`;
 
   const visibleEvents = events.filter(
     (e) => e.parsed.getTime() >= windowStart && e.parsed.getTime() <= windowEnd,
@@ -464,8 +466,8 @@ function parseLocalTime(timeStr: string): Date {
   if (/T\d{2}:\d{2}/.test(timeStr) && /Z|[+-]\d{2}:?\d{2}$/.test(timeStr)) {
     return new Date(timeStr);
   }
-  const [datePart, timePart = "00:00"] = timeStr.split(" ");
-  const [y, m, d] = datePart.split("-").map(Number);
+  const [datePart = "", timePart = "00:00"] = timeStr.split(" ");
+  const [y = Number.NaN, m, d] = datePart.split("-").map(Number);
   const [hh, mm] = timePart.split(":").map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
 }

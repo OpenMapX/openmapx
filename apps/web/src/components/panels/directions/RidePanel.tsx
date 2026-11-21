@@ -209,12 +209,13 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
     const rank = (result: (typeof sorted)[number]) => {
       const ranks = result.quotes.map(quoteRank);
       const currencies = new Set(ranks.map((r) => r.currency).filter(Boolean));
+      const [cheapest] = ranks;
       // A provider offering multiple currencies cannot have a single cheapest
       // monetary rank. Keep it with unpriced providers, ordered by earliest ETA.
-      if (currencies.size > 1 || ranks.length === 0) {
+      if (currencies.size > 1 || !cheapest) {
         return { currency: "", amount: undefined, eta: Math.min(...ranks.map((r) => r.eta)) };
       }
-      return ranks[0];
+      return cheapest;
     };
     return sorted.sort((a, b) => compareRanks(rank(a), rank(b)));
   }, [results]);

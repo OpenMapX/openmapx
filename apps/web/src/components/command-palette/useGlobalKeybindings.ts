@@ -22,11 +22,13 @@ const SEQUENCE_TIMEOUT_MS = 1200;
 
 // Pre-parsed once at module load so the keydown handler doesn't re-parse on
 // every keystroke. The handler indexes `[0]`, so this must stay a single chord.
-const PALETTE_TOGGLE = parseShortcut("Mod+K");
-if (PALETTE_TOGGLE.length !== 1) {
-  throw new Error("PALETTE_TOGGLE must be a single chord");
+const PALETTE_TOGGLE_CHORD = singleChord(parseShortcut("Mod+K"));
+
+function singleChord(chords: readonly KeyChord[]): KeyChord {
+  const [chord, ...extra] = chords;
+  if (!chord || extra.length > 0) throw new Error("PALETTE_TOGGLE must be a single chord");
+  return chord;
 }
-const PALETTE_TOGGLE_CHORD = PALETTE_TOGGLE[0];
 
 interface Options {
   commands: Command[];

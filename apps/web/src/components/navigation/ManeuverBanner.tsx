@@ -24,12 +24,8 @@ import { ExitSignStrip } from "./signs/ExitSignStrip";
  * alone. Handles German umlauts.
  */
 export function lowercaseFirstWord(instruction: string): string {
-  if (
-    instruction.length >= 2 &&
-    /[A-ZÄÖÜ]/.test(instruction[0]) &&
-    /[a-zäöüß]/.test(instruction[1])
-  ) {
-    return instruction[0].toLowerCase() + instruction.slice(1);
+  if (/^[A-ZÄÖÜ][a-zäöüß]/.test(instruction)) {
+    return instruction.charAt(0).toLowerCase() + instruction.slice(1);
   }
   return instruction;
 }

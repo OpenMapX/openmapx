@@ -101,8 +101,7 @@ export function resolveSourceHeader(
   if (exactMatch) return { ...exactMatch, titleFallback: null };
 
   // Try prefix (e.g., "nextbike" from "nextbike/362/1234")
-  const prefix = primarySource.split("/")[0];
-  const prefixMatch = SOURCE_HEADERS[prefix];
+  const prefixMatch = SOURCE_HEADERS[primarySource.replace(/\/[\s\S]*/, "")];
   if (prefixMatch) return { ...prefixMatch, titleFallback: null };
 
   // The data source that produced the detail: feed ids such as
@@ -243,9 +242,8 @@ function safeAppDeepLink(uri: string | undefined): string | undefined {
   const http = trimmed && /^(?:https?):\/\//i.test(trimmed) ? safeHref(trimmed) : undefined;
   if (http) return http;
   if (!trimmed) return undefined;
-  const match = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
-  if (!match) return undefined;
-  const scheme = match[1].toLowerCase();
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed)?.[1]?.toLowerCase();
+  if (scheme === undefined) return undefined;
   return ALLOWED_DEEP_LINK_SCHEMES.has(scheme) || REVERSE_DNS_DEEP_LINK_SCHEME.test(scheme)
     ? trimmed
     : undefined;

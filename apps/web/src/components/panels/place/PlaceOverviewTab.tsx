@@ -361,6 +361,7 @@ export function PlaceOverviewTab({
   const { data: labeledPlaces } = useLabeledPlaces();
 
   const savedInLists = allLists?.filter((l) => savedInListIds?.includes(l.id)) ?? [];
+  const [firstSavedList, secondSavedList] = savedInLists;
   const existingLabel = labeledPlaces?.find((lp) => lp.placeId === place.id);
 
   const resolveListName = (name: string) =>
@@ -620,7 +621,7 @@ export function PlaceOverviewTab({
         {isCity && <PlaceCitySections place={place} onNavigateToInfo={onNavigateToInfo} />}
 
         {/* Saved-in banner */}
-        {savedInLists.length > 0 && (
+        {firstSavedList && (
           <>
             <Divider sx={{ my: 1 }} />
             {savedInLists.length === 1 || savedExpanded ? (
@@ -637,7 +638,7 @@ export function PlaceOverviewTab({
                       {tSaved("savedIn", { list: resolveListName(sl.name) })}
                     </Typography>
                   </Box>
-                  {savedInLists.length > 1 && sl.id === savedInLists[0].id && (
+                  {savedInLists.length > 1 && sl.id === firstSavedList.id && (
                     <IconButton
                       size="small"
                       aria-label={tc("showLess")}
@@ -664,13 +665,13 @@ export function PlaceOverviewTab({
                     flex: 1,
                   }}
                 >
-                  {savedInLists.length === 2
+                  {savedInLists.length === 2 && secondSavedList
                     ? tSaved("savedInTwo", {
-                        list1: resolveListName(savedInLists[0].name),
-                        list2: resolveListName(savedInLists[1].name),
+                        list1: resolveListName(firstSavedList.name),
+                        list2: resolveListName(secondSavedList.name),
                       })
                     : tSaved("savedInMany", {
-                        list: resolveListName(savedInLists[0].name),
+                        list: resolveListName(firstSavedList.name),
                         count: savedInLists.length - 1,
                       })}
                 </Typography>

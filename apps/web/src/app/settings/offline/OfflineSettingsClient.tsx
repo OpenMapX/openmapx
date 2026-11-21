@@ -783,7 +783,8 @@ function DownloadAreaDialog({
                 max={maxZoomLimit}
                 step={1}
                 onChange={(_event, value) => {
-                  if (Array.isArray(value)) setZoomRange([value[0], value[1]]);
+                  const [from, to] = Array.isArray(value) ? value : [];
+                  if (from !== undefined && to !== undefined) setZoomRange([from, to]);
                 }}
                 valueLabelDisplay="auto"
                 disableSwap

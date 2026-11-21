@@ -30,7 +30,7 @@ interface DepartureRowProps {
   hasAlert?: boolean;
 }
 
-function topRemark(remarks: TripRemark[]): TripRemark {
+function topRemark(remarks: TripRemark[]): TripRemark | undefined {
   return [...remarks].sort((a, b) => REMARK_PRIORITY[b.type] - REMARK_PRIORITY[a.type])[0];
 }
 
@@ -141,8 +141,8 @@ export function DepartureRow({
         <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
           {(onClick
             ? (() => {
-                const urgent = departure.remarks.filter((r) => r.type !== "info");
-                return urgent.length > 0 ? [topRemark(urgent)] : [];
+                const top = topRemark(departure.remarks.filter((r) => r.type !== "info"));
+                return top ? [top] : [];
               })()
             : departure.remarks
           ).map((remark, i) => (

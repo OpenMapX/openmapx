@@ -59,7 +59,7 @@ function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
  */
 function speechLang(locale: string): string {
   const nav = typeof navigator !== "undefined" ? navigator.language : "";
-  if (nav.includes("-") && nav.split("-")[0].toLowerCase() === locale.toLowerCase()) {
+  if (nav.includes("-") && nav.replace(/-.*/, "").toLowerCase() === locale.toLowerCase()) {
     return nav;
   }
   const fallback: Record<string, string> = { en: "en-US", de: "de-DE" };
@@ -181,7 +181,7 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
       rec.onresult = (event) => {
         let transcript = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0]?.transcript ?? "";
+          transcript += event.results[i]?.[0]?.transcript ?? "";
         }
         transcript = transcript.trim();
         if (!transcript) return;

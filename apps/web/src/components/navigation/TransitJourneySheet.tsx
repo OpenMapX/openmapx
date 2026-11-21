@@ -80,7 +80,7 @@ function RideStops({
           >
             {stop.name}
           </Typography>
-          {stop.alerts && stop.alerts.length > 0 && (
+          {stop.alerts?.[0] && (
             <Tooltip title={stop.alerts[0].title} placement="top" arrow>
               <WarningAmberIcon sx={{ fontSize: 15, color: "warning.main", flexShrink: 0 }} />
             </Tooltip>

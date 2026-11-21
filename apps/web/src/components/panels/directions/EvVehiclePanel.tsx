@@ -64,6 +64,13 @@ function isGroupRow(row: ListboxRow): row is GroupRow {
   return !Array.isArray(row);
 }
 
+/** The row the list asks for; it only asks for indices below `rows.length`. */
+function rowAt(rows: readonly ListboxRow[], index: number): ListboxRow {
+  const row = rows[index];
+  if (!row) throw new RangeError(`No vehicle row at ${index}`);
+  return row;
+}
+
 function rowHeight(row: ListboxRow): number {
   return isGroupRow(row) ? GROUP_HEADER_HEIGHT : OPTION_ROW_HEIGHT;
 }
@@ -73,7 +80,7 @@ function rowHeight(row: ListboxRow): number {
  * option exactly one line tall, which is what lets the heights above be fixed.
  */
 function VehicleRow({ index, rows, style }: RowComponentProps<{ rows: ListboxRow[] }>) {
-  const row = rows[index];
+  const row = rowAt(rows, index);
   const rowStyle = { ...style, top: (Number(style.top) || 0) + LISTBOX_PADDING };
   if (isGroupRow(row)) {
     return (
@@ -131,7 +138,7 @@ const VehicleListbox = forwardRef<HTMLDivElement, VehicleListboxProps>(function 
         className={className}
         listRef={virtualListRef}
         rowCount={rows.length}
-        rowHeight={(index) => rowHeight(rows[index])}
+        rowHeight={(index) => rowHeight(rowAt(rows, index))}
         rowComponent={VehicleRow}
         rowProps={{ rows }}
         // A numeric height keeps react-window off ResizeObserver entirely, so
