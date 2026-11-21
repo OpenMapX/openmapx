@@ -103,7 +103,12 @@ export interface CreateFakeMapOptions {
    * else — the app's sources and layers do not survive a style change. Defaults
    * to none so existing tests that assert an exact layer list are unaffected.
    */
-  baseLayers?: Array<{ id: string; type: string; layout?: Record<string, unknown> }>;
+  baseLayers?: Array<{
+    id: string;
+    type: string;
+    source?: string;
+    layout?: Record<string, unknown>;
+  }>;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
   /** Initial camera pitch and pitch constraint. */

@@ -1,4 +1,5 @@
 export const MAPLIBRE_RUNTIME_CACHE = "maplibre-runtimes";
+export const SCRIPT_FONT_CACHE = "script-fonts";
 
 export const MAP_TILE_CACHE = "map-tiles";
 export const STREET_LEVEL_IMAGERY_TILE_CACHE = "street-level-imagery-tiles";
@@ -89,6 +90,10 @@ export function isMapLibreRuntimeAssetPath(pathname: string): boolean {
   return /^\/runtime\/maplibre-gl\/[A-Za-z0-9._+-]{1,128}\/maplibre-gl-(?:worker|shared)\.mjs$/.test(
     pathname,
   );
+}
+
+export function isBundledScriptFontPath(pathname: string): boolean {
+  return /^\/fonts\/scripts\/[A-Za-z0-9._-]{1,128}\.woff2$/.test(pathname);
 }
 
 export function offlineGlyphCacheNameForVersion(version: string): string {

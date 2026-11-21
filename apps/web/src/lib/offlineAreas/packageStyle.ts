@@ -1,5 +1,7 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
+import { collectStyleFontFaceUrls, rewriteStyleFontFaces } from "../scriptFontFaces";
 import { offlineGlyphCacheNameForVersion } from "../swCaches";
+import { isLocallyRenderedGlyphRange } from "./localGlyphRanges";
 import { offlinePackageApiPath } from "./packageApi";
 import { offlinePmtilesTileUrl } from "./packageProtocol";
 
@@ -8,6 +10,7 @@ const GLYPH_FETCH_CONCURRENCY = 8;
 type StyleJson = Record<string, unknown> & {
   sources?: Record<string, Record<string, unknown>>;
   glyphs?: string;
+  "font-faces"?: Record<string, unknown>;
   sprite?: string;
   layers?: Array<Record<string, unknown> & { layout?: { "text-font"?: unknown } }>;
 };
@@ -243,12 +246,18 @@ export async function validateOfflineStyleAssets(
   const stacks = [...new Set(Object.values(typedStyles).flatMap(fontStacks))];
   const urls = new Set<string>();
   for (const stack of stacks) {
-    const ranges = rangesForStack(catalog, stack);
-    if (ranges.length === 0) {
+    const allRanges = rangesForStack(catalog, stack);
+    if (allRanges.length === 0) {
       throw new Error(`offline package has no common glyph ranges for style font stack: ${stack}`);
     }
+    const ranges = allRanges.filter((range) => !isLocallyRenderedGlyphRange(range));
     for (const url of glyphUrls(glyphTemplate(manifest, apiBaseUrl), [stack], ranges))
       urls.add(url);
+  }
+  for (const style of Object.values(typedStyles)) {
+    for (const fontFaceUrl of collectStyleFontFaceUrls(style["font-faces"])) {
+      urls.add(withVersion(fontFaceUrl, manifest.glyphs.version));
+    }
   }
   await fetchPinnedGlyphs([...urls], manifest);
   await cache.put(
@@ -312,9 +321,14 @@ export function resolveOfflinePackageStyle(
   };
   delete primarySource.url;
 
+  const rewrittenFontFaces = rewriteStyleFontFaces(style["font-faces"], (url) =>
+    withVersion(url, glyphManifest.glyphs.version),
+  );
+
   return {
     ...configuredStyle,
     sources: { ...(style.sources ?? {}), openmaptiles: primarySource },
     glyphs: glyphTemplate(glyphManifest, options.apiBaseUrl),
+    ...(rewrittenFontFaces ? { "font-faces": rewrittenFontFaces } : {}),
   };
 }

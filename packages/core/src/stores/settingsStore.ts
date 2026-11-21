@@ -24,6 +24,7 @@ const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
 const AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:autoSwitchFasterRoutes";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
+const MAP_LOCAL_SCRIPT_STORAGE_KEY = "openmapx:mapLocalScript";
 const TOUCH_ZOOM_BUTTONS_STORAGE_KEY = "openmapx:touchZoomButtons";
 const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
 const EV_SOC_TARGET_PCT_STORAGE_KEY = "openmapx:evSocTargetPct";
@@ -116,6 +117,10 @@ function readVoiceName(): string | null {
 
 function readMapNorthUp(): boolean {
   return getStorage().getString(MAP_NORTH_UP_STORAGE_KEY) === "true";
+}
+
+function readShowLocalScript(): boolean {
+  return getStorage().getString(MAP_LOCAL_SCRIPT_STORAGE_KEY) !== "false";
 }
 
 // Defaults OFF: pinch and double-tap already zoom on a touch screen, so the
@@ -211,6 +216,9 @@ interface SettingsState {
   /** Reopen the map where it was last left (on by default). */
   rememberMapView: boolean;
   setRememberMapView: (v: boolean) => void;
+  /** Show non-Latin local place scripts beneath translated map labels (on by default). */
+  showLocalScript: boolean;
+  setShowLocalScript: (v: boolean) => void;
   /** Last-chosen EV vehicle preset key; null = no vehicle picked yet. */
   evVehicleId: string | null;
   setEvVehicleId: (v: string | null) => void;
@@ -324,6 +332,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!rememberMapView) storage.remove(LAST_MAP_VIEW_STORAGE_KEY);
     set({ rememberMapView });
   },
+  showLocalScript: readShowLocalScript(),
+  setShowLocalScript: (showLocalScript) => {
+    getStorage().setString(MAP_LOCAL_SCRIPT_STORAGE_KEY, String(showLocalScript));
+    set({ showLocalScript });
+  },
   evVehicleId: readEvVehicleId(),
   setEvVehicleId: (evVehicleId) => {
     getStorage().setString(EV_VEHICLE_ID_STORAGE_KEY, evVehicleId ?? "");
@@ -388,6 +401,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       mapNorthUp: readMapNorthUp(),
       touchZoomButtons: readTouchZoomButtons(),
       rememberMapView: readRememberMapView(),
+      showLocalScript: readShowLocalScript(),
       evVehicleId: readEvVehicleId(),
       evSocTargetPct: readEvSocTargetPct(),
       evPreferredNetworks: readStringArray(EV_PREFERRED_NETWORKS_STORAGE_KEY),

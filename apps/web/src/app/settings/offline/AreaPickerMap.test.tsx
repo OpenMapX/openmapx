@@ -7,6 +7,8 @@ import { act, createFakeMap, nth } from "@/test";
 
 const pendingMaps: ReturnType<typeof createFakeMap>[] = [];
 
+vi.mock("next-intl", () => ({ useLocale: () => "en" }));
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => {
   const env = { styleProvider: "openmapx" };
   return { useEnv: () => env };

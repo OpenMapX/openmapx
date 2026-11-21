@@ -2,12 +2,16 @@
 
 import Box from "@mui/material/Box";
 import { type SxProps, type Theme, useColorScheme } from "@mui/material/styles";
+import { useSettingsStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
-import type { StyleSpecification } from "maplibre-gl";
+import type { Map as MaplibreMap, StyleSpecification } from "maplibre-gl";
+import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { localizeMapLabels } from "@/components/map/localizeTextField";
 import { MapCredits } from "@/components/map/MapCredits";
 import { ClickableRow } from "@/components/ui/ClickableRow";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
@@ -30,10 +34,7 @@ type LocationMinimapProps = {
 );
 
 interface MinimapInstance {
-  map: {
-    flyTo: (opts: { center: [number, number]; zoom?: number; duration: number }) => void;
-    remove: () => void;
-  };
+  map: MaplibreMap;
   marker: { setLngLat: (coords: [number, number]) => unknown };
 }
 
@@ -53,6 +54,10 @@ export function LocationMinimap({
   onCreditsChange,
 }: LocationMinimapProps) {
   const env = useEnv();
+  const locale = useLocale();
+  const showLocalScript = useSettingsStore((s) => s.showLocalScript);
+  const labelPrefsRef = useRef({ locale, showLocalScript });
+  labelPrefsRef.current = { locale, showLocalScript };
   const { mode, systemMode } = useColorScheme();
   const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,6 +75,7 @@ export function LocationMinimap({
     const acquisition = captureNativeBasemapRequest(env);
     let cancelled = false;
     let instance: MinimapInstance | null = null;
+    let unsubscribeLabels: (() => void) | undefined;
 
     (async () => {
       const [maplibregl, style] = await Promise.all([
@@ -111,6 +117,11 @@ export function LocationMinimap({
 
       instance = { map, marker };
       mapRef.current = instance;
+      unsubscribeLabels = subscribeStyleLoaded(map, () =>
+        localizeMapLabels(map, labelPrefsRef.current.locale, {
+          showLocalScript: labelPrefsRef.current.showLocalScript,
+        }),
+      );
       const installedCredits = snapshotContributors(
         candidate.styleContributors,
         ...Object.values(candidate.sourceContributors),
@@ -123,6 +134,7 @@ export function LocationMinimap({
 
     return () => {
       cancelled = true;
+      unsubscribeLabels?.();
       if (instance) {
         setCredits([]);
         creditsCallbackRef.current?.([]);
@@ -132,6 +144,12 @@ export function LocationMinimap({
       }
     };
   }, [env, variant]);
+
+  useEffect(() => {
+    const map = mapRef.current?.map;
+    if (!map?.getStyle()) return;
+    localizeMapLabels(map, locale, { showLocalScript });
+  }, [locale, showLocalScript]);
 
   useEffect(() => {
     if (!mapRef.current) return;

@@ -25,6 +25,16 @@ and does not move the map. The last view is saved in this browser only. Turn off
 is already granted) or the world view instead; turning it off deletes the saved
 view.
 
+## Place labels and local scripts
+
+Map labels follow your selected interface language and fall back to Latin
+transliterations when no translation is available. On OpenMapX vector styles,
+places, railway stations, airports, and water bodies also display non-Latin
+local names on a second line underneath the translated name when the two
+differ. Turn off **Show local place scripts** in Settings to show
+single-language labels instead; the car navigation surface keeps labels
+single-language regardless of this setting.
+
 ## Align to streets
 
 Zoom in to at least level 13, then use the grid button in the map controls to

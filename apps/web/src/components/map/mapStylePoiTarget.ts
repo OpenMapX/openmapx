@@ -3,6 +3,7 @@ import { haversineDistance } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import type { FilterSpecification, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
 import { getAmbientIdentity } from "./ambientPlaceIdentity";
+import { resolveLabelName } from "./localizeTextField";
 import { STOP_LABEL_LAYER_ID } from "./stopLabelPoints";
 
 const POI_SOURCE_LAYERS = new Set(["poi"]);
@@ -41,21 +42,12 @@ export function getStylePoiLayerIds(map: maplibregl.Map): string[] {
 }
 
 /**
- * The name a basemap POI label shows: the map localises every `name` label to
- * supplied colon/underscore language fields with plain `name` as fallback, so the selected place's
- * pin and panel take the same name the map printed beside the icon.
+ * The name a basemap POI label shows: uses the same `resolveLabelName` chain as
+ * `localizeMapLabels`, so the selected place's pin and panel take the same
+ * primary name the map printed beside the icon.
  */
 function displayedName(properties: MapGeoJSONFeature["properties"], locale?: string) {
-  if (locale) {
-    for (const language of new Set([locale, locale.split("-")[0]])) {
-      for (const key of [`name:${language}`, `name_${language}`]) {
-        const localized = properties?.[key];
-        if (typeof localized === "string" && localized.length > 0) return localized;
-      }
-    }
-  }
-  const name = properties?.name;
-  return typeof name === "string" && name.length > 0 ? name : null;
+  return resolveLabelName(properties, locale);
 }
 
 function targetFromFeature(feature: MapGeoJSONFeature, locale?: string): StylePoiTarget | null {

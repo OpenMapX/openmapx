@@ -2559,6 +2559,8 @@
     "mapSection": "Map",
     "rememberMapView": "Remember map view",
     "rememberMapViewHint": "Reopen the map where you left it. The last view is saved on this device only; turning this off deletes it.",
+    "showLocalScript": "Show local place scripts",
+    "showLocalScriptHint": "Display the local writing system below translated names for places, stations, airports and water bodies (for example, Tokyo with 東京都 underneath).",
     "languageAndRegion": "Language & region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Voice guidance timing",

@@ -2559,6 +2559,8 @@
     "mapSection": "Karte",
     "rememberMapView": "Kartenansicht merken",
     "rememberMapViewHint": "Die Karte dort wieder öffnen, wo Sie sie verlassen haben. Die letzte Ansicht wird nur auf diesem Gerät gespeichert; beim Ausschalten wird sie gelöscht.",
+    "showLocalScript": "Lokale Schriftsysteme anzeigen",
+    "showLocalScriptHint": "Zeigt bei Orten, Bahnhöfen, Flughäfen und Gewässern die lokale Schrift unter übersetzten Namen an (zum Beispiel Tokio mit 東京都 darunter).",
     "languageAndRegion": "Sprache & Region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Zeitpunkt der Sprachansagen",

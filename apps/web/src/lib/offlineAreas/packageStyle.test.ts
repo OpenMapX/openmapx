@@ -81,19 +81,29 @@ function styles(): { light: Record<string, unknown>; dark: Record<string, unknow
 }
 
 describe("offline package styles", () => {
-  it("validates the configured online styles and pins only package fonts", async () => {
+  it("validates the configured online styles, pins package fonts and skips locally drawn ranges", async () => {
     const cache = memoryCache();
     vi.stubGlobal("caches", { open: async () => cache });
     const fetchMock = vi.fn(async (...args: unknown[]) => {
       const url = String(args[0]);
       if (url.includes("/catalog.json")) {
-        return Response.json({ Metropolis: ["0-255", "1024-1279", "19968-20223"] });
+        return Response.json({
+          Metropolis: ["0-255", "1024-1279", "1536-1791", "19968-20223", "2304-2559"],
+        });
       }
       return new Response(new ArrayBuffer(1));
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const configured = styles();
+    configured.light["font-faces"] = {
+      Metropolis: [
+        {
+          url: "https://maps.example/fonts/scripts/NotoSansTifinagh-Regular.woff2",
+          "unicode-range": ["U+2D30-2D7F"],
+        },
+      ],
+    };
     expect(await hasOfflineGlyphAssets(manifest)).toBe(false);
     await validateOfflineStyleAssets(manifest, configured, {
       apiBaseUrl: "https://api.example.test/",
@@ -109,12 +119,26 @@ describe("offline package styles", () => {
         ),
       ),
     ).toBe(true);
-    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/19968-20223.pbf"))).toBe(
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/1536-1791.pbf"))).toBe(
       true,
+    );
+    // CJK and complex-shaping ranges are rasterized locally by MapLibre and skipped offline.
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/19968-20223.pbf"))).toBe(
+      false,
+    );
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/2304-2559.pbf"))).toBe(
+      false,
     );
     expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/256-511.pbf"))).toBe(
       false,
     );
+    expect(
+      fetchMock.mock.calls.some(
+        (args) =>
+          String(args[0]) ===
+          "https://maps.example/fonts/scripts/NotoSansTifinagh-Regular.woff2?offlineGlyphs=glyphs-v1",
+      ),
+    ).toBe(true);
     expect(fetchMock.mock.calls.some((args) => String(args[0]) === "/styles/sprite.json")).toBe(
       true,
     );
@@ -124,13 +148,31 @@ describe("offline package styles", () => {
   });
 
   it("rewrites the configured online style for one or more offline packages", () => {
-    const configured = onlineStyle();
+    const configured: Record<string, unknown> = {
+      ...onlineStyle(),
+      "font-faces": {
+        Metropolis: [
+          {
+            url: "https://maps.example/fonts/scripts/NotoSansTifinagh-Regular.woff2",
+            "unicode-range": ["U+2D30-2D7F"],
+          },
+        ],
+      },
+    };
     const style = resolveOfflinePackageStyle(configured, [{ packageId, manifest }]);
     const source = vectorSource(style);
 
     expect(source.tiles).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
     expect(source.url).toBeUndefined();
     expect(style.glyphs).toContain("offlineGlyphs=glyphs-v1");
+    expect(style["font-faces"]).toEqual({
+      Metropolis: [
+        {
+          url: "https://maps.example/fonts/scripts/NotoSansTifinagh-Regular.woff2?offlineGlyphs=glyphs-v1",
+          "unicode-range": ["U+2D30-2D7F"],
+        },
+      ],
+    });
     expect(style.sprite).toBe("/styles/sprite");
     expect(style.layers).toEqual(configured.layers);
   });

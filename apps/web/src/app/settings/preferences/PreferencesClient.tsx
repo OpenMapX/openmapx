@@ -29,6 +29,8 @@ export function PreferencesClient() {
   const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
   const rememberMapView = useSettingsStore((s) => s.rememberMapView);
   const setRememberMapView = useSettingsStore((s) => s.setRememberMapView);
+  const showLocalScript = useSettingsStore((s) => s.showLocalScript);
+  const setShowLocalScript = useSettingsStore((s) => s.setShowLocalScript);
 
   const handleToggle = (next: boolean) => {
     setHapticsOn(next);
@@ -79,6 +81,25 @@ export function PreferencesClient() {
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
                   {t("rememberMapViewHint")}
+                </Typography>
+              </Stack>
+            }
+            sx={{ alignItems: "flex-start", m: 0 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showLocalScript}
+                onChange={(e) => setShowLocalScript(e.target.checked)}
+              />
+            }
+            label={
+              <Stack spacing={0.5}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t("showLocalScript")}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {t("showLocalScriptHint")}
                 </Typography>
               </Stack>
             }
