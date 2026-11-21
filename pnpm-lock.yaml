@@ -774,7 +774,7 @@ importers:
         version: 8.2.0
       '@maplibre/maplibre-gl-style-spec':
         specifier: ^26.5.0
-        version: 26.5.1
+        version: 26.7.0
       '@rapideditor/temaki':
         specifier: ^5.13.0
         version: 5.13.0
@@ -6065,8 +6065,8 @@ packages:
   '@maplibre/geojson-vt@6.3.3':
     resolution: {integrity: sha512-sfftN4326foT7uex0aN0jqr+vq/lfgeTfASOd+kvdUd0uMMIgXZDPdntCazKFKKcxPH002NPCy4j396peanWCg==}
 
-  '@maplibre/maplibre-gl-style-spec@26.5.1':
-    resolution: {integrity: sha512-9ufQ5LR+Ldn87SILPVyRNz4wVm/sBrM2ZRv9VfjLRKYKIGAcvC1VFw/DEkJLAHqfMV8m03zDz1DUNTIUj/GvdA==}
+  '@maplibre/maplibre-gl-style-spec@26.7.0':
+    resolution: {integrity: sha512-9d7hK1zk1WRx/AFvq7NtmlTlaOGPXS2r+FZXsrMv8453Xy14bnXBpVCPJDBupCfQs/p8FL0/kb0ygbEWTufN0g==}
     hasBin: true
 
   '@maplibre/maplibre-gl-style-spec@26.9.0':
@@ -16087,7 +16087,7 @@ snapshots:
     dependencies:
       kdbush: 4.1.0
 
-  '@maplibre/maplibre-gl-style-spec@26.5.1':
+  '@maplibre/maplibre-gl-style-spec@26.7.0':
     dependencies:
       '@mapbox/jsonlint-lines-primitives': 2.0.3
       '@mapbox/unitbezier': 1.0.0
