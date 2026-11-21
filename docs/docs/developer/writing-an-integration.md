@@ -397,7 +397,8 @@ services:
   the integration prefix. An inline handler's `req.params` has exactly the
   `:name` params (and `*` wildcard) its literal path declares, each a string; a
   handler written apart from its path types its request as
-  `RouteRequest<RouteParams<"/stops/:id">>`. Pass `{ requireAuth: true }` to make the host reject
+  `RouteRequest<RouteParams<"/stops/:id">>`, and `registerRoute` refuses it on a
+  path that does not declare those params. Pass `{ requireAuth: true }` to make the host reject
   unauthenticated callers with 401 before your handler runs and before the
   request body is read; the authenticated user id is then available as
   `req.userId`. A route accepts a request body of up to 1 MiB; pass

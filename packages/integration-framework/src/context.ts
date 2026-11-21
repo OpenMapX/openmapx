@@ -148,27 +148,35 @@ type RouteParamName<Segment extends string> = Segment extends `${infer Name}.${s
     ? RouteParamName<Name>
     : Segment;
 
+/** Each `:name` segment of a literal path and `*` for a trailing wildcard; `unknown` when there are none. */
+type DeclaredRouteParams<Path extends string> =
+  (Path extends `${string}:${infer Segment}/${infer Rest}`
+    ? { [Name in RouteParamName<Segment>]: string } & DeclaredRouteParams<Rest>
+    : Path extends `${string}:${infer Segment}`
+      ? { [Name in RouteParamName<Segment>]: string }
+      : unknown) &
+    (Path extends `${string}*` ? { "*": string } : unknown);
+
 /**
  * The params a literal route path declares: each `:name` segment, and `*` for a
- * trailing wildcard. A path only known as `string` declares any param.
+ * trailing wildcard. A literal path without any declares none, and a path only
+ * known as `string` declares any param.
  */
 export type RouteParams<Path extends string> = string extends Path
   ? Record<string, string>
-  : (Path extends `${string}:${infer Segment}/${infer Rest}`
-      ? { [Name in RouteParamName<Segment>]: string } & RouteParams<Rest>
-      : Path extends `${string}:${infer Segment}`
-        ? { [Name in RouteParamName<Segment>]: string }
-        : unknown) &
-      (Path extends `${string}*` ? { "*": string } : unknown);
+  : unknown extends DeclaredRouteParams<Path>
+    ? Record<string, never>
+    : DeclaredRouteParams<Path>;
 
 /**
- * A route handler. It is declared through a method so that a handler typed for
- * one path's params still fits a registrar or a test double typed for another;
- * `registerRoute` is what ties a handler's params to its literal path.
+ * A route handler. Its request is compared contravariantly, so `registerRoute`
+ * refuses a handler that reads a param its literal path does not declare, while
+ * a handler typed with the default params fits any path.
  */
-export type RouteHandler<Params = Record<string, string>> = {
-  handle(req: RouteRequest<Params>, reply: RouteReply): Promise<void> | void;
-}["handle"];
+export type RouteHandler<Params = Record<string, string>> = (
+  req: RouteRequest<Params>,
+  reply: RouteReply,
+) => Promise<void> | void;
 
 export interface RouteRequest<Params = Record<string, string>> {
   query: RouteQuery;

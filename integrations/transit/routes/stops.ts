@@ -28,13 +28,16 @@ function utcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** A request to a stops route without path params, such as `/stops/search`. */
+type QueryRequest = RouteRequest<RouteParams<"/stops">>;
+
 /** A request to one of the `/stops/:id/…` routes. */
 type StopRequest = RouteRequest<RouteParams<"/stops/:id">>;
 
 /** Handlers for the stop lookups: by viewport, by name, by id and per stop. */
 export function createStopHandlers(ctx: IntegrationContext, orchestrator: TransitOrchestrator) {
   return {
-    async inBbox(req, reply) {
+    async inBbox(req: QueryRequest, reply) {
       const bbox = parseBBox(scalarQueries(req.query));
       if (!bbox) {
         reply
@@ -49,7 +52,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(result));
     },
 
-    async nearby(req, reply) {
+    async nearby(req: QueryRequest, reply) {
       const point = parseWgs84Point(scalarQueries(req.query).lng, scalarQueries(req.query).lat, {
         maxAbsLatitude: 85,
       });
@@ -73,7 +76,7 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       reply.send(toEnvelope(result));
     },
 
-    async search(req, reply) {
+    async search(req: QueryRequest, reply) {
       const query = scalarQueries(req.query).q?.trim();
       if (!query || query.length < 2) {
         reply.status(400).send({ error: "Query parameter 'q' must be at least 2 characters" });
@@ -261,5 +264,5 @@ export function createStopHandlers(ctx: IntegrationContext, orchestrator: Transi
       const result = await orchestrator.getFacilities(req.params.id);
       reply.send(toEnvelope(result));
     },
-  } satisfies Record<string, RouteHandler>;
+  } satisfies Record<string, RouteHandler<never>>;
 }
