@@ -15,7 +15,12 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { readCatalogPinSet, readCatalogProposal } from "@openmapx/core/catalog-pins";
+import {
+  pinnedAtlasCommit,
+  pinnedTransitousCommit,
+  readCatalogPinSet,
+  readCatalogProposal,
+} from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, executionFingerprint } from "@openmapx/core/ops";
 import { fsyncDirectory } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
@@ -298,9 +303,8 @@ export async function generateTransitousApiKeys(
       control.closeControlInstallation(reader);
     }
   }
-  const sha = pins.transitous.ref.split("@").at(-1),
-    atlas = pins.transitous.submodules["transitland-atlas"];
-  if (!sha || !atlas) throw Error("Exact Transitous and atlas pins are required");
+  const sha = pinnedTransitousCommit(pins.transitous),
+    atlas = pinnedAtlasCommit(pins.transitous);
   const outputPath = options.outputPath
     ? resolve(paths.root, options.outputPath)
     : ensureTransitousApiKeysFile(paths.root).path;
