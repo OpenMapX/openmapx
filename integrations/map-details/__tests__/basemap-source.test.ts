@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { findForestSource } from "../web/basemap-source";
 
-const style = (sources: Record<string, unknown>, layers: unknown[]) => ({
+const style = (
+  sources: Record<string, unknown>,
+  layers: Array<{ source?: unknown; "source-layer"?: unknown }>,
+) => ({
   version: 8,
   sources,
   layers,

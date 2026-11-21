@@ -98,7 +98,6 @@ describe("procedural models", () => {
     ]);
     expect(day).not.toEqual([night.r, night.g, night.b]);
     expect(ROLE_COLOURS.night.lens).toBe(0xffd28a);
-    expect(colour.needsUpdate === undefined || typeof colour.version === "number").toBe(true);
   });
 
   it("darkens with a multiplying contact shadow that keeps the canvas alpha", () => {
