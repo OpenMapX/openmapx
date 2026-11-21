@@ -3,6 +3,7 @@ import {
   AMBIENT_FORMAT_VERSION,
   type AmbientBuildProgress,
   type AmbientManifest,
+  type AmbientOvertureRow,
 } from "@openmapx/core/ambient-places";
 import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
@@ -25,11 +26,16 @@ export interface PlanetStage {
   startedAt: string;
   updatedAt: string;
 }
+export interface PlanetOvertureSource {
+  release: string;
+  sourcesCatalogue: AmbientOvertureRow["sources_catalogue"];
+}
 export interface PlanetSources {
   signature: string;
   osmRows: number;
   overtureRows: number;
   sources: AmbientManifest["sources"];
+  overture: PlanetOvertureSource | null;
 }
 function count(value: unknown): number {
   const n = Number(value);
@@ -74,6 +80,7 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
   const osmRows = count(osm.state.place_count);
   if (!osmRows) throw new Error("Planet OSM snapshot is empty");
   let overtureRows = 0;
+  let overture: PlanetOvertureSource | null = null;
   const otExists = itemAt(
     await sql.unsafe<{ exists: boolean }[]>(
       `SELECT to_regclass('overture_places.places') IS NOT NULL AS exists`,
@@ -114,9 +121,13 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
       const publishedAt = fresh(ot.state.places_published_at as string | null);
       const completedAt = fresh(ot.state.completed_at as string | null);
       overtureRows = count(ot.state.place_count);
+      const release = String(ot.state.release);
+      const sourcesCatalogue = ot.state
+        .sources_catalogue as AmbientOvertureRow["sources_catalogue"];
+      overture = { release, sourcesCatalogue };
       sources.overture = {
         region: "planet",
-        release: String(ot.state.release),
+        release,
         publishedAt,
         count: 0,
       };
@@ -129,6 +140,7 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
         completion: completedAt,
         attempt: ot.state.attempt_count,
         fingerprint: ot.state.source_fingerprint,
+        sourcesCatalogue,
       };
     }
   }
@@ -139,6 +151,7 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
     osmRows,
     overtureRows,
     sources,
+    overture,
   };
 }
 export async function readPlanetStage(sql: postgres.Sql): Promise<PlanetStage | null> {

@@ -52,11 +52,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await seed(pg);
           await pg.sql.unsafe(buildSchemaDDL("overture_places"));
           await pg.sql.unsafe(`UPDATE osm_search.index_state SET ambient_source_version=1;
-          INSERT INTO overture_places.places(gers_id,name,basic_category,geom,confidence,operating_status,sources_catalogue,release)
-          SELECT 'g-legacy-'||i,'Overture copy '||i,'hospital',ST_SetSRID(ST_MakePoint(6.08+i/1000.0,50.77),4326),0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1' FROM generate_series(200,203) i;
+          INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release)
+          SELECT 'g-legacy-'||i,'Overture copy '||i,'hospital',ST_SetSRID(ST_MakePoint(6.08+i/1000.0,50.77),4326),'881f1d4887fffff',0.9,'open','2026-09-23.1' FROM generate_series(200,203) i;
           UPDATE overture_places.places SET geom=ST_SetSRID(ST_MakePoint(6.08,50.77),4326);
-          INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase)
-          VALUES('2026-09-23.1','europe/germany',4,now(),'completed','complete');
+          INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,sources_catalogue)
+          VALUES('2026-09-23.1','europe/germany',4,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
           SELECT 'way',i,'g-legacy-'||i,1,0,'fixture','{}','2026-09-23.1' FROM generate_series(200,203) i;
           INSERT INTO overture_places.osm_pois(osm_type,osm_id,name,lat,lng,h3_r8,category,tags) VALUES
@@ -148,13 +148,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ('way',2,'Outside authoritative',50,5.79,'amenity/hospital','{}',1),
         ('relation',3,'Closed authoritative',52.52,13.4,'shop/bakery','{"disused":"yes"}',1);
         UPDATE osm_search.index_state SET place_count=3;
-        INSERT INTO overture_places.places(gers_id,name,names,geom,basic_category,confidence,operating_status,sources_catalogue,release) VALUES
-        ('gers-a','Translated clinic','{"common":{"en":"Translated clinic"}}',ST_SetSRID(ST_MakePoint(5.79,50),4326),'hospital',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1'),
-        ('gers-b','Outside counterpart',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'hospital',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1'),
-        ('gers-c','Closed counterpart',NULL,ST_SetSRID(ST_MakePoint(13.4,52.52),4326),'bakery',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1'),
-        ('gers-d','Missing-index clinic',NULL,ST_SetSRID(ST_MakePoint(11.575,48.137),4326),'hospital',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1');
-        INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase)
-        VALUES(1,'2026-09-23.1','europe/germany',4,now(),'completed','complete');
+        INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES
+        ('gers-a','Translated clinic','{"common":{"en":"Translated clinic"}}',ST_SetSRID(ST_MakePoint(5.79,50),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1'),
+        ('gers-b','Outside counterpart',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1'),
+        ('gers-c','Closed counterpart',NULL,ST_SetSRID(ST_MakePoint(13.4,52.52),4326),'881f1d4887fffff','bakery',0.9,'open','2026-09-23.1'),
+        ('gers-d','Missing-index clinic',NULL,ST_SetSRID(ST_MakePoint(11.575,48.137),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1');
+        INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
+        VALUES(1,'2026-09-23.1','europe/germany',4,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release)
         VALUES('node',1,'gers-a',0.9,1,0,'fixture','{}','2026-09-23.1'),('way',2,'gers-b',0.9,1,0,'fixture','{}','2026-09-23.1'),
         ('relation',3,'gers-c',0.9,1,0,'fixture','{}','2026-09-23.1'),('way',99,'gers-d',0.9,1,0,'fixture','{}','2026-09-23.1')`);
@@ -192,10 +192,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).rejects.toThrow(/Germany.*OSM|OSM.*Germany/);
         await pg.sql.unsafe(`UPDATE osm_search.index_state SET region='europe/germany'`);
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase)
-        VALUES(1,'2026-09-23.1','europe/germany/nordrhein-westfalen',1,now(),'completed','complete');
-        INSERT INTO overture_places.places(gers_id,name,geom,basic_category,confidence,operating_status,sources_catalogue,release)
-        VALUES('gers','Cafe',ST_SetSRID(ST_MakePoint(13,52),4326),'cafe',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','wrong-release')`);
+        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
+        VALUES(1,'2026-09-23.1','europe/germany/nordrhein-westfalen',1,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
+        INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release)
+        VALUES('gers','Cafe',ST_SetSRID(ST_MakePoint(13,52),4326),'881f1d4887fffff','cafe',0.9,'open','wrong-release')`);
         await expect(
           buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
             availableBytes: ampleSpace,
@@ -329,11 +329,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
           VALUES('node',2,'Closed cafe',52.52,13.405,'amenity/cafe','{"disused":"yes"}',1);
           UPDATE osm_search.index_state SET place_count=2;
-          INSERT INTO overture_places.places(gers_id,name,geom,basic_category,confidence,operating_status,sources_catalogue,release)
-          SELECT 'gers-'||lpad(id::TEXT,5,'0'),'Cafe '||id,ST_SetSRID(ST_MakePoint(13.405,52.52),4326),'cafe',0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1' FROM generate_series(1,2101) AS id;
+          INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release)
+          SELECT 'gers-'||lpad(id::TEXT,5,'0'),'Cafe '||id,ST_SetSRID(ST_MakePoint(13.405,52.52),4326),'881f1d4895fffff','cafe',0.9,'open','2026-09-23.1' FROM generate_series(1,2101) AS id;
           UPDATE overture_places.places SET sources='[{"dataset":"unsupported-country-source"}]' WHERE gers_id='gers-02101';
-          INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase)
-          VALUES(1,'2026-09-23.1','europe/germany',2101,now(),'completed','complete');
+          INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
+          VALUES(1,'2026-09-23.1','europe/germany',2101,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release)
           VALUES('node',1,'gers-00001',0.9,1,0,'fixture','{}','2026-09-23.1'),('node',2,'gers-00002',0.9,1,0,'fixture','{}','2026-09-23.1')`);
         await expect(

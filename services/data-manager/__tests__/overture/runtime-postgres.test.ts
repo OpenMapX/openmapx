@@ -2,10 +2,18 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseClient } from "@openmapx/integration-framework";
-import { latLngToCell } from "h3-js";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { resolveGers } from "../../../../integrations/knowledge-overture/provider.js";
+import {
+  bindDb as bindKnowledgeDb,
+  overtureKnowledgeSource,
+  resolveGers,
+} from "../../../../integrations/knowledge-overture/provider.js";
+import {
+  overtureProvider,
+  setup as setupPoiOverture,
+} from "../../../../integrations/poi-overture/index.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontainer.js";
 
@@ -79,52 +87,75 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     else process.env.DATABASE_URL = previousDatabaseUrl;
   });
 
-  it("backfills 25,000 rows in key order, preserves prefilled values, and restarts after a failed batch", async () => {
-    await pg.sql.unsafe(buildSchemaDDL("overture_h3test", { deferPlacesIndexes: true }));
-    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
-    await pg.sql.unsafe(`INSERT INTO overture_h3test.places (gers_id, geom, h3_r8, sources_catalogue, release)
-      SELECT lpad(i::text, 8, '0'), ST_SetSRID(ST_MakePoint(8 + (i % 100) / 10000.0, 50),4326),
-        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, '[{"sourceId":"overture","name":"Overture Maps"}]', 'synthetic'
-      FROM generate_series(25000,1,-1) i`);
-    await pg.sql.unsafe(`CREATE FUNCTION overture_h3test.fail_late() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN IF NEW.gers_id > '00010000' THEN RAISE EXCEPTION 'injected late batch failure'; END IF; RETURN NEW; END $$;
-      CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`);
-    await expect(
-      ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test"),
-    ).rejects.toThrow("injected late batch failure");
-    const [partial] = await pg.sql.unsafe(
-      `SELECT count(*)::int AS count FROM overture_h3test.places WHERE h3_r8 IS NOT NULL AND h3_r8 <> 'prefilled'`,
-    );
-    expect(partial?.count).toBe(5000);
-    await pg.sql.unsafe("DROP TRIGGER fail_late ON overture_h3test.places");
-    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
-    const rows = await pg.sql.unsafe<{ gers_id: string; h3_r8: string }[]>(
-      "SELECT gers_id, h3_r8 FROM overture_h3test.places",
-    );
-    expect(rows).toHaveLength(25000);
-    for (const row of rows) {
-      const i = Number(row.gers_id);
-      expect(row.h3_r8).toBe(
-        i % 7 === 0 ? "prefilled" : latLngToCell(50, 8 + (i % 100) / 10000, 8),
-      );
-    }
-    // An all-filled restart must perform no writes.
+  it("joins conflation_state.sources_catalogue for POI and knowledge reads and fails closed on missing or mismatched release", async () => {
     await pg.sql.unsafe(
-      `CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`,
+      `INSERT INTO overture_places.places
+         (gers_id, name, basic_category, taxonomy_primary, taxonomy_hierarchy,
+          taxonomy_alternates, geom, h3_r8, sources, release)
+       VALUES
+         ('gers-join', 'Join Cafe', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
+          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff',
+          '[{"property":"","dataset":"meta"}]', '2026-07-22.0')`,
     );
-    await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
-  }, 60_000);
+    const database: DatabaseClient = {
+      execute: <T>(query: string, params: unknown[] = []) =>
+        pg.sql.unsafe(query, params as never[]) as unknown as Promise<T>,
+    };
+    setupPoiOverture(createMockIntegrationContext({ db: database }));
+    bindKnowledgeDb(database);
+
+    // Without conflation_state, INNER JOIN fails closed rather than serving uncredited rows.
+    const bbox = { west: 6.08, south: 50.77, east: 6.09, north: 50.78 };
+    const withoutState = await overtureProvider.search("cafes", bbox);
+    expect(Array.isArray(withoutState) ? withoutState : withoutState.results).toEqual([]);
+    await expect(
+      overtureKnowledgeSource.lookup({}, "en", { ids: { overture: "gers-join" } }),
+    ).resolves.toBeNull();
+
+    // Matching release exposes captured sources_catalogue receipts from conflation_state.
+    await pg.sql.unsafe(
+      `INSERT INTO overture_places.conflation_state
+         (release, region, place_count, status, sources_catalogue)
+       VALUES
+         ('2026-07-22.0', 'europe/germany/berlin', 1, 'completed',
+          '[{"sourceId":"overture","name":"Overture Maps"},{"sourceId":"meta-places","name":"Meta Places"}]')`,
+    );
+    const withState = await overtureProvider.search("cafes", bbox);
+    const results = Array.isArray(withState) ? withState : withState.results;
+    expect(results).toHaveLength(1);
+    expect(results[0]?.contributors?.map((c) => c.sourceId).sort()).toEqual([
+      "meta-places",
+      "overture",
+    ]);
+    const knowledge = await overtureKnowledgeSource.lookup({}, "en", {
+      ids: { overture: "gers-join" },
+    });
+    expect(knowledge?.externalIds?.gers).toBe("gers-join");
+    expect(knowledge?.contributors?.map((c) => c.sourceId)).toEqual(["overture"]);
+
+    // A release mismatch between places and conflation_state also fails closed.
+    await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET release = '2026-08-19.0'`);
+    const mismatched = await overtureProvider.search("cafes", bbox);
+    expect(Array.isArray(mismatched) ? mismatched : mismatched.results).toEqual([]);
+    await expect(
+      overtureKnowledgeSource.lookup({}, "en", { ids: { overture: "gers-join" } }),
+    ).resolves.toBeNull();
+
+    await pg.sql.unsafe(
+      `DELETE FROM overture_places.conflation_state; DELETE FROM overture_places.places WHERE gers_id = 'gers-join'`,
+    );
+  });
 
   it("executes the spatial fallback with one SRID and resolves the nearby place", async () => {
     await pg.sql.unsafe(
       `INSERT INTO overture_places.places
          (gers_id, name, basic_category, taxonomy_primary, taxonomy_hierarchy,
-          taxonomy_alternates, geom, h3_r8, sources_catalogue, release)
+          taxonomy_alternates, geom, h3_r8, release)
        VALUES
          ('gers-nearby', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0'),
+          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff', '2026-07-22.0'),
          ('gers-far', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), '881f1d4887ffffe', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0')`,
+          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), '881f1d4887ffffe', '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
@@ -146,7 +177,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `INSERT INTO overture_places.places
          (gers_id, name, basic_category, taxonomy_primary, taxonomy_hierarchy,
-          taxonomy_alternates, geom, h3_r8, sources_catalogue, release)
+          taxonomy_alternates, geom, h3_r8, release)
        VALUES
          ('gers-east-120m', 'Eastside Cafe', 'cafe', 'cafe', ARRAY['cafe'],
           ARRAY[]::TEXT[],
@@ -155,7 +186,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
             120,
             RADIANS(90)
           )::geometry,
-          '881f1d4887ffffd', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0')`,
+          '881f1d4887ffffd', '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
@@ -180,8 +211,8 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     writeFileSync(join(osmDir, "europe-germany-berlin.osm.pbf"), "snapshot-one");
     await pg.sql.unsafe(
       `INSERT INTO overture_places.conflation_state
-         (release, region, place_count, status)
-       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending')`,
+         (release, region, place_count, status, sources_catalogue)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
     );
 
     let fingerprint = "snapshot-one";
@@ -557,14 +588,15 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `INSERT INTO "${live}".conflation_state
          (release, region, place_count, status, phase, source_fingerprint,
-          emitted_count, extracted_count)
+          emitted_count, extracted_count, sources_catalogue)
        VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'completed', 'complete',
-               'same-pbf', 2, 1)`,
+               'same-pbf', 2, 1, '[{"sourceId":"overture","name":"Old Overture"}]')`,
     );
     await pg.sql.unsafe(
       `INSERT INTO "${staging}".conflation_state
-         (release, region, place_count, status)
-       VALUES ('2026-08-19.0', 'europe/germany/berlin', 3, 'pending')`,
+         (release, region, place_count, status, sources_catalogue)
+       VALUES ('2026-08-19.0', 'europe/germany/berlin', 3, 'pending',
+               '[{"sourceId":"overture","name":"New Overture"}]')`,
     );
 
     await ingestModule.activateOvertureStagingSchema(
@@ -589,10 +621,11 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: string;
         source_fingerprint: string;
         extracted_count: string;
+        sources_catalogue: unknown;
         places_published_at_ms: string;
       }[]
     >(
-      `SELECT release, phase, source_fingerprint, extracted_count::TEXT,
+      `SELECT release, phase, source_fingerprint, extracted_count::TEXT, sources_catalogue,
               (EXTRACT(EPOCH FROM places_published_at) * 1000)::BIGINT::TEXT
                 AS places_published_at_ms
        FROM "${live}".conflation_state`,
@@ -604,6 +637,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: "score",
         source_fingerprint: "same-pbf",
         extracted_count: "1",
+        sources_catalogue: [{ sourceId: "overture", name: "New Overture" }],
         places_published_at_ms: String(Date.parse("2026-09-10T12:00:00.000Z")),
       },
     ]);

@@ -1,9 +1,7 @@
-import { statSync } from "node:fs";
 import { join } from "node:path";
 import { itemAt } from "@openmapx/core/item-at";
 import { assertSupportedOvertureContributors } from "@openmapx/core/places/overtureSource";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
-import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
 import {
   assertDataPublication,
@@ -19,54 +17,63 @@ import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildPlacesIndexesDDL, buildSchemaDDL } from "./schema.js";
 import { readOverturePullContract } from "./stac.js";
 
-/**
- * Backfills the local H3 acceleration column. Category hierarchy and
- * generalisation come directly from Overture and are never materialised into
- * an OpenMapX-owned taxonomy.
- */
-export async function backfillDerivedColumns(sql: postgres.Sql, schema: string): Promise<void> {
-  assertValidOvertureSchema(schema);
-
-  // Bulk loading leaves no useful null/selectivity statistics. Without this,
-  // PostgreSQL can sort repeated full scans instead of using the primary key.
-  await sql.unsafe(`ANALYZE "${schema}".places`);
-  const H3_BATCH = 5_000;
-  let cursor: string | undefined;
-  while (true) {
-    const h3Rows = await sql<{ gers_id: string; lat: number; lng: number }[]>`
-      SELECT gers_id,
-             ST_Y(geom) AS lat,
-             ST_X(geom) AS lng
-      FROM ${sql(schema)}.places
-      WHERE h3_r8 IS NULL
-      ${cursor === undefined ? sql`` : sql`AND gers_id > ${cursor}`}
-      ORDER BY gers_id
-      LIMIT ${H3_BATCH}
-    `;
-    if (h3Rows.length === 0) break;
-
-    const gersIds = h3Rows.map((row) => row.gers_id);
-    const h3Values = h3Rows.map((row) => latLngToCell(row.lat, row.lng, 8));
-
-    await sql.unsafe(
-      `UPDATE "${schema}".places AS p
-       SET h3_r8 = v.h3
-       FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS h3) AS v
-       WHERE p.gers_id = v.gers_id AND p.h3_r8 IS NULL`,
-      [gersIds, h3Values],
-    );
-    const last = h3Rows.at(-1);
-    if (!last) break;
-    cursor = last.gers_id;
-  }
-}
-
 export interface IngestOvertureOptions {
   sql: postgres.Sql;
   region: string;
   dataDir: string;
   release?: string;
   onProgress?: (msg: string) => void;
+}
+
+/**
+ * Builds the single-pass DuckDB → PostGIS ingest SQL. Geometry CRS is validated
+ * against OGC:CRS84 before relabeling to EPSG:4326 so PostGIS receives typed
+ * `geometry(Point, 4326)` and `h3_r8` directly without post-load table rewrites.
+ */
+export function buildOvertureIngestSql(opts: {
+  databaseUrl: string;
+  stagingSchema: string;
+  parquetPath: string;
+  release: string;
+}): string {
+  assertValidOvertureSchema(opts.stagingSchema);
+  return [
+    "LOAD postgres;",
+    "LOAD spatial;",
+    "LOAD h3;",
+    `ATTACH ${duckDbSqlLiteral(opts.databaseUrl)} AS pg (TYPE postgres);`,
+    `INSERT INTO pg."${opts.stagingSchema}".places`,
+    `  (gers_id, name, names, basic_category, taxonomy_primary, taxonomy_hierarchy,`,
+    `   taxonomy_alternates, geom, h3_r8,`,
+    `   addresses, country_code, websites, socials, emails, phones, brand,`,
+    `   confidence, operating_status, sources, release)`,
+    `SELECT`,
+    `  id AS gers_id,`,
+    `  COALESCE(names.primary, '') AS name,`,
+    `  to_json(names) AS names,`,
+    `  basic_category,`,
+    `  taxonomy.primary AS taxonomy_primary,`,
+    `  taxonomy.hierarchy AS taxonomy_hierarchy,`,
+    `  taxonomy.alternates AS taxonomy_alternates,`,
+    // Overture GeoParquet carries GEOMETRY('OGC:CRS84'), which shares WGS 84
+    // (lon, lat) axis order with PostGIS SRID 4326. Cast to OGC:CRS84 first so
+    // an unexpected CRS fails at bind time before ST_SetCRS relabels it to
+    // EPSG:4326 for the typed PostGIS geometry(Point, 4326) column.
+    `  ST_SetCRS(geometry::GEOMETRY('OGC:CRS84'), 'EPSG:4326') AS geom,`,
+    `  h3_latlng_to_cell_string(ST_Y(geometry), ST_X(geometry), 8) AS h3_r8,`,
+    `  to_json(addresses) AS addresses,`,
+    `  addresses[1].country AS country_code,`,
+    `  websites,`,
+    `  socials,`,
+    `  emails,`,
+    `  phones,`,
+    `  to_json(brand) AS brand,`,
+    `  confidence,`,
+    `  operating_status,`,
+    `  to_json(sources) AS sources,`,
+    `  ${duckDbSqlLiteral(opts.release)}::TEXT AS release`,
+    `FROM read_parquet(${duckDbSqlLiteral(opts.parquetPath)});`,
+  ].join("\n");
 }
 
 /**
@@ -174,11 +181,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     schema,
     stage: "PostGIS staging ingest",
     workingBytes: (activeSchemaBytes) =>
-      estimateOvertureIngestBytes(
-        statSync(parquetPath).size,
-        activeSchemaBytes,
-        Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) * pullContract.rowCount,
-      ),
+      estimateOvertureIngestBytes(pullContract.rowCount, activeSchemaBytes),
   });
 
   const databaseUrl = resolveDatabaseUrl("postgresql://postgres:postgres@postgis:5432/openmapx");
@@ -186,58 +189,15 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   opts.onProgress?.("Creating staging schema...");
   await sql.unsafe(buildSchemaDDL(stagingSchema, { deferPlacesIndexes: true }));
 
-  const duckSql = [
-    "INSTALL postgres; LOAD postgres;",
-    "INSTALL spatial; LOAD spatial;",
-    `ATTACH ${duckDbSqlLiteral(databaseUrl)} AS pg (TYPE postgres);`,
-    `INSERT INTO pg."${stagingSchema}".places`,
-    `  (gers_id, name, names, basic_category, taxonomy_primary, taxonomy_hierarchy,`,
-    `   taxonomy_alternates, geom, h3_r8,`,
-    `   addresses, country_code, websites, socials, emails, phones, brand,`,
-    `   confidence, operating_status, sources, sources_catalogue, release)`,
-    `SELECT`,
-    `  id AS gers_id,`,
-    `  COALESCE(names.primary, '') AS name,`,
-    `  to_json(names) AS names,`,
-    `  basic_category,`,
-    `  taxonomy.primary AS taxonomy_primary,`,
-    `  taxonomy.hierarchy AS taxonomy_hierarchy,`,
-    `  taxonomy.alternates AS taxonomy_alternates,`,
-    // Overture GeoParquet exposes a single `geometry` column, not
-    // longitude/latitude, which DuckDB reads as its GEOMETRY type. The postgres
-    // extension writes that type into the PostGIS geometry column directly;
-    // a hex-WKB string is parsed as text there and rejected. The written
-    // geometry carries no SRID, so the ALTER below stamps SRID 4326 + the
-    // POINT typmod Postgres-side before the swap.
-    `  geometry AS geom,`,
-    `  NULL::TEXT AS h3_r8,`,
-    `  to_json(addresses) AS addresses,`,
-    `  addresses[1].country AS country_code,`,
-    `  websites,`,
-    `  socials,`,
-    `  emails,`,
-    `  phones,`,
-    `  to_json(brand) AS brand,`,
-    `  confidence,`,
-    `  operating_status,`,
-    `  to_json(sources) AS sources,`,
-    `  ${duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
-    `  ${duckDbSqlLiteral(release)}::TEXT AS release`,
-    `FROM read_parquet(${duckDbSqlLiteral(parquetPath)});`,
-  ].join("\n");
+  const duckSql = buildOvertureIngestSql({
+    databaseUrl,
+    stagingSchema,
+    parquetPath,
+    release,
+  });
 
   opts.onProgress?.("Running DuckDB → PostGIS ingest...");
   await runDuckDbScript(duckSql);
-
-  opts.onProgress?.("Stamping geometry SRID 4326...");
-  await sql.unsafe(
-    `ALTER TABLE "${stagingSchema}".places
-       ALTER COLUMN geom TYPE geometry(Point, 4326) USING ST_SetSRID(geom, 4326)`,
-  );
-
-  opts.onProgress?.("Backfilling h3_r8...");
-  await backfillDerivedColumns(sql, stagingSchema);
-  await sql.unsafe(`ALTER TABLE "${stagingSchema}".places ALTER COLUMN h3_r8 SET NOT NULL`);
 
   opts.onProgress?.("Building Overture Places indexes after bulk load...");
   await sql.unsafe(buildPlacesIndexesDDL(stagingSchema));
@@ -268,9 +228,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   await sql.unsafe(
     `INSERT INTO "${stagingSchema}".conflation_state
-       (release, region, place_count, status)
-     VALUES ($1, $2, $3, 'pending')`,
-    [release, opts.region, count],
+       (release, region, place_count, status, sources_catalogue)
+     VALUES ($1, $2, $3, 'pending', $4::TEXT::JSONB)`,
+    [release, opts.region, count, JSON.stringify(pullContract.sourcesCatalogue)],
   );
 
   opts.onProgress?.("Atomic swap staging → live...");

@@ -107,9 +107,15 @@ export async function buildAmbientPlaces(
           if (!(await tableExists(tx, "overture_places.conflation_state")))
             throw new Error("Overture conflation state is missing");
           const [state] = await tx.unsafe<
-            { region: string; release: string; status: string; places_published_at: Date | null }[]
+            {
+              region: string;
+              release: string;
+              status: string;
+              places_published_at: Date | null;
+              sources_catalogue: AmbientOvertureRow["sources_catalogue"];
+            }[]
           >(
-            `SELECT region,release,status,places_published_at FROM overture_places.conflation_state WHERE singleton=1`,
+            `SELECT region,release,status,places_published_at,sources_catalogue FROM overture_places.conflation_state WHERE singleton=1`,
           );
           if (!state) {
             const input = itemAt(
@@ -136,9 +142,11 @@ export async function buildAmbientPlaces(
             if (releases.mismatch)
               throw new Error("Overture conflation release does not match published places");
             const rows = await tx.unsafe<
-              (AmbientOvertureRow & { sources: OvertureSourceItem[] | null })[]
+              (Omit<AmbientOvertureRow, "sources_catalogue"> & {
+                sources: OvertureSourceItem[] | null;
+              })[]
             >(
-              `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources,sources_catalogue,release FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
+              `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources,release FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
               params,
             );
             if (rows.length > AMBIENT_LIMITS.places)
@@ -146,8 +154,9 @@ export async function buildAmbientPlaces(
                 "Regional Overture input exceeds 100000 places; choose a smaller region",
               );
             overture = rows.flatMap((row) => {
-              identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
-              const p = ambientPlaceFromOverture(row);
+              const enriched = { ...row, sources_catalogue: state.sources_catalogue };
+              identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(enriched));
+              const p = ambientPlaceFromOverture(enriched);
               if (p)
                 assertSupportedOvertureContributors(
                   (row.sources ?? []).flatMap((source) => (source.dataset ? [source.dataset] : [])),
@@ -173,11 +182,11 @@ export async function buildAmbientPlaces(
             ];
             if (missingIdentities.length) {
               const identities = await tx.unsafe<
-                (Pick<AmbientOvertureRow, "gers_id" | "sources" | "sources_catalogue"> & {
+                (Pick<AmbientOvertureRow, "gers_id" | "sources"> & {
                   release: string;
                 })[]
               >(
-                `SELECT gers_id,sources,sources_catalogue,release FROM overture_places.places WHERE gers_id=ANY($1::TEXT[]) ORDER BY gers_id`,
+                `SELECT gers_id,sources,release FROM overture_places.places WHERE gers_id=ANY($1::TEXT[]) ORDER BY gers_id`,
                 [missingIdentities],
               );
               if (
@@ -188,7 +197,13 @@ export async function buildAmbientPlaces(
                   "Regional accepted GERS identity does not match published Overture places",
                 );
               for (const row of identities)
-                identityEvidence.set(row.gers_id, ambientOvertureIdentityEvidence(row));
+                identityEvidence.set(
+                  row.gers_id,
+                  ambientOvertureIdentityEvidence({
+                    ...row,
+                    sources_catalogue: state.sources_catalogue,
+                  }),
+                );
             }
             // A linked OSM point can straddle the bbox boundary. Its policy and
             // authoritative fields must still win over the regional Overture point.

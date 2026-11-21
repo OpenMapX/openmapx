@@ -68,12 +68,18 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain('CREATE TABLE "overture_places".poi_conflation_link_next');
     expect(ddl).toContain('CREATE UNLOGGED TABLE "overture_places".poi_conflation_component');
     expect(ddl).toContain('CREATE TABLE "overture_places".conflation_state');
+    expect(ddl).toContain("geom              GEOMETRY(Point, 4326) NOT NULL");
+    expect(ddl).toContain("h3_r8             TEXT NOT NULL");
+    expect(ddl).toContain(
+      "sources_catalogue JSONB NOT NULL CHECK (jsonb_typeof(sources_catalogue) = 'array')",
+    );
     expect(ddl).toContain("phase             TEXT NOT NULL DEFAULT 'extract'");
     expect(ddl).toContain("phase_durations_ms JSONB NOT NULL");
     expect(ddl).toContain("workspace_cleaned_at TIMESTAMPTZ");
     expect(ddl).toContain("release_files_pruned_at TIMESTAMPTZ");
     expect(ddl).toContain("'waiting_for_osm'");
     expect(ddl).toContain("h3_r8     TEXT NOT NULL");
+    expect(ddl.match(/sources_catalogue/g)).toHaveLength(2);
     expect(ddl).not.toContain("confidence DOUBLE PRECISION NOT NULL");
     expect(ddl).not.toContain("openmapx_category");
     expect(ddl).not.toContain("opening_hours");

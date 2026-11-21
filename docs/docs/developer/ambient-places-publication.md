@@ -99,8 +99,8 @@ limits; the layer is not a complete business directory.
 
 New publications use manifest/feature format `2`. The Overture pull captures
 trusted built-in source notices before acquisition, stores that catalogue in its
-version 2 pull contract, and retains it as `sources_catalogue` with the ingested
-release. Field receipts apply Overture JSON Pointer inheritance to the scalar
+version 2 pull contract, and retains it once per release as
+`overture_places.conflation_state.sources_catalogue`. Field receipts apply Overture JSON Pointer inheritance to the scalar
 actually retained: a specific property overrides its ancestors, including the
 whole-feature root. A phone-only supplier does not become a label supplier.
 Localized names have separate receipts. OSM names, position and category remain
@@ -112,9 +112,10 @@ Format 2 feature properties include `format_version`, `_mapAttributions`
 and `source_lineage` (public source properties plus release). Receipts retain
 their captured wording after registry reloads. A captured empty array is
 authoritative. Attribution is never reconstructed: the Overture ingest refuses a
-pull contract without a source catalogue, `sources_catalogue` is `NOT NULL`, and
-ambient publication fails rather than publish an Overture place or accepted GERS
-identity whose catalogue is missing or malformed.
+pull contract without a source catalogue, `conflation_state.sources_catalogue` is
+`NOT NULL` and constrained to a JSON array, and ambient publication fails rather
+than publish an Overture place or accepted GERS identity whose catalogue is
+missing or malformed.
 
 The web layer selects the current locale's actual placed label receipts and
 uses the shared rendered-feature tracker. Unloaded, offscreen, collision-hidden,
@@ -125,10 +126,13 @@ basemap feature is rendered. The basemap retains its own geometry attribution.
 
 Readers serve and accept only format 2 generations. The encoder accounts for
 each distinct MVT metadata string and per-feature overhead within the
-256-feature/128-KiB limits. Planet source signatures include the ambient format,
-and candidates staged under another format must be discarded and rebuilt.
+256-feature/128-KiB limits. Planet source signatures include the ambient format
+and the captured Overture source catalogue, and candidates staged under another
+format or catalogue must be discarded and rebuilt.
 Capacity preflights allow 8 KiB per ambient input row for receipts and lineage;
-Overture ingest adds the captured catalogue's raw row bytes plus WAL headroom.
+Overture ingest uses a row-count allowance (`OVERTURE_INGEST_BYTES_PER_ROW`,
+default 4 KiB per contracted row, minimum 4 GiB, or 1.5× the active schema size)
+rather than scaling from compressed Parquet bytes.
 These are admission allowances, not measured country or planet storage claims.
 
 The Germany build body is:
@@ -323,12 +327,17 @@ can still exhaust space after admission, in which case the candidate fails safel
 | `OVERTURE_DUCKDB_MEMORY_MB`          |         `2048` | Buffer-manager limit; total RSS can exceed it.                                                                             |
 | `OVERTURE_DUCKDB_THREADS`            |            `4` | Preparation parallelism, validated 1 to 64.                                                                                |
 | `OVERTURE_DUCKDB_TEMP_MB`            |        `32768` | Maximum per-process spill (32 GiB); allocated in a unique directory under `/data/overture/duckdb-tmp`, removed after exit. |
+| `OVERTURE_INGEST_BYTES_PER_ROW`      |         `4096` | PostGIS staging admission allowance per contracted Overture row (4 KiB), minimum 4 GiB or 1.5× the active schema size.     |
 | `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` | `137438953472` | File-backed node-index admission allowance (128 GiB), plus 5 GiB free on the source volume; adjust for the selected PBF.   |
 
 These settings are forwarded by the data-manager service manifest and can be set
 through its existing deployment configuration. Unset, empty or whitespace-only
 values use the documented defaults; nonblank invalid or nonpositive values fail
-validation. Increase the service's memory/CPU
+validation. The data-manager image pre-installs checksum-pinned DuckDB extensions
+under `/opt/duckdb/extensions` and disables runtime autoinstall; for local host
+runs outside the container, install `httpfs`, `spatial`, `postgres`, and
+`h3 FROM community` into `~/.duckdb/extensions` and set
+`OVERTURE_DUCKDB_EXTENSION_DIR="$HOME/.duckdb/extensions"`. Increase the service's memory/CPU
 resource limits separately for full source preparation; its 8-GiB default is not a
 planet preparation promise. Overture pull admission additionally uses 512 bytes per
 selected STAC row as a working allowance; ingest/conflation apply their existing

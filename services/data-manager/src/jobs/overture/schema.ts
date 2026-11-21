@@ -84,8 +84,8 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       taxonomy_primary  TEXT,
       taxonomy_hierarchy TEXT[],
       taxonomy_alternates TEXT[],
-      geom              GEOMETRY NOT NULL,
-      h3_r8             TEXT,
+      geom              GEOMETRY(Point, 4326) NOT NULL,
+      h3_r8             TEXT NOT NULL,
       addresses         JSONB,
       country_code      TEXT,
       websites          TEXT[],
@@ -96,7 +96,6 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       confidence        DOUBLE PRECISION,
       operating_status  TEXT,
       sources           JSONB,
-      sources_catalogue JSONB NOT NULL,
       release           TEXT NOT NULL,
       imported_at       TIMESTAMPTZ DEFAULT NOW()
     );
@@ -163,6 +162,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       release           TEXT NOT NULL,
       region            TEXT NOT NULL,
       place_count       BIGINT NOT NULL CHECK (place_count > 0),
+      sources_catalogue JSONB NOT NULL CHECK (jsonb_typeof(sources_catalogue) = 'array'),
       places_published_at TIMESTAMPTZ,
       status            TEXT NOT NULL CHECK (
         status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')

@@ -133,12 +133,20 @@ describe("production supply-chain policy", () => {
     const transitousRunnerDockerfile = read("apps/transitous-runner/Dockerfile");
     const requirements = read("services/motis/tools/transitous/requirements.txt");
 
-    // DuckDB is the image's one downloaded executable.
-    expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(1);
-    for (const architecture of ["AMD64", "ARM64"]) {
-      expect(dataManagerDockerfile).toMatch(
-        new RegExp(`^ARG DUCKDB_SHA256_${architecture}=[a-f0-9]{64}$`, "m"),
-      );
+    // DuckDB CLI and its pre-installed extensions are both checksum-verified.
+    expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(2);
+    for (const artifact of [
+      "DUCKDB",
+      "DUCKDB_EXT_HTTPFS",
+      "DUCKDB_EXT_SPATIAL",
+      "DUCKDB_EXT_POSTGRES_SCANNER",
+      "DUCKDB_EXT_H3",
+    ]) {
+      for (const architecture of ["AMD64", "ARM64"]) {
+        const argName = `${artifact}_SHA256_${architecture}`;
+        expect(dataManagerDockerfile).toMatch(new RegExp(`^ARG ${argName}=[a-f0-9]{64}$`, "m"));
+        expect(dataManagerDockerfile).toContain(`"$${argName}"`);
+      }
     }
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
