@@ -3,6 +3,7 @@ import type { Departure } from "@openmapx/mobility-core/transit";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TransitBoardingDepartures } from "@/components/navigation/TransitBoardingDepartures";
+import { nth } from "@/test";
 import { DepartureRow } from "./DepartureRow";
 import { PlaceDeparturesView } from "./PlaceDeparturesView";
 import { PlaceTransitSection } from "./PlaceTransitSection";
@@ -114,7 +115,7 @@ describe("departure uncertainty and identity", () => {
     );
     expect(screen.getAllByText("Sibling station")).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("dataStatus.refreshFailed");
-    fireEvent.click(screen.getAllByRole("button", { name: /Sibling station/ })[1]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: /Sibling station/ }), 1));
     expect(select).toHaveBeenCalledWith(
       expect.objectContaining({
         tripId: "mo:trip-b",

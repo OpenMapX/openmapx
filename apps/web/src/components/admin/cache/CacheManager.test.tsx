@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, render, screen, userEvent, waitFor, within } from "@/test";
+import { createQueryWrapper, nth, render, screen, userEvent, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
@@ -40,8 +40,7 @@ function clearCalls(): unknown[][] {
 
 /** Latest request body passed to a clear call, parsed. */
 function lastClearBody(): unknown {
-  const calls = clearCalls();
-  const last = calls[calls.length - 1];
+  const last = nth(clearCalls(), -1);
   return JSON.parse((last[1] as { body: string }).body);
 }
 
@@ -94,7 +93,7 @@ describe("CacheManager", () => {
 
     // First row's per-namespace Clear button.
     const clearButtons = screen.getAllByRole("button", { name: "Clear" });
-    await user.click(clearButtons[0]);
+    await user.click(nth(clearButtons, 0));
 
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Clear" }));

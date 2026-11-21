@@ -3,6 +3,7 @@ import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OPENMAPTILES_ATTRIBUTION } from "@/lib/map";
+import { nth } from "@/test";
 import { MapCredits } from "./MapCredits";
 
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
@@ -78,6 +79,6 @@ it("links distinct captured terms in details with a short label and keeps raw UR
   await screen.findByRole("dialog");
   const links = screen.getAllByRole("link", { name: "termsOfUse" });
   expect(links).toHaveLength(1);
-  expect(links[0].getAttribute("href")).toBe(url);
+  expect(nth(links, 0).getAttribute("href")).toBe(url);
   expect(screen.queryByText(url)).toBeNull();
 });

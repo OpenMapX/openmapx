@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, type FakeMap } from "@/test";
+import { createFakeMap, type FakeMap, nth } from "@/test";
 
 vi.mock("@/integration-api/map/MapContext", () => {
   const value = {
@@ -234,7 +234,7 @@ describe("NavPerfControl", () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(anchorClicks).toBe(1);
 
-    const text = await blobs[0].text();
+    const text = await nth(blobs, 0).text();
     const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(Object.keys(parsed)).toContain("frames");
     expect(Object.keys(parsed)).toContain("resources");

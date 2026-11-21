@@ -5,6 +5,7 @@ import {
   cleanup,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   userEvent,
@@ -140,7 +141,7 @@ describe("integration administration browser behavior", () => {
         ),
       ).toBe(true);
       expect(calls).toHaveLength(1);
-      expect(calls[0].init.signal?.aborted).toBe(false);
+      expect(nth(calls, 0).init.signal?.aborted).toBe(false);
     },
   );
 
@@ -991,7 +992,7 @@ describe("integration administration browser behavior", () => {
         for (const key of keys.slice(0, 4))
           expect(client.getQueryState(key)?.isInvalidated).toBe(true);
       });
-      expect(client.getQueryState(keys[4])?.isInvalidated).toBe(false);
+      expect(client.getQueryState(nth(keys, 4))?.isInvalidated).toBe(false);
       expect(calls.filter(({ url }) => url.pathname.endsWith("/reload"))).toHaveLength(1);
     },
   );

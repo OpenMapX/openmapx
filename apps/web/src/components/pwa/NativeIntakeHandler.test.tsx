@@ -3,7 +3,7 @@ import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render as renderInDom, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IntakeTransferError } from "@/lib/mobile/nativeIntake";
-import { createQueryWrapper, createTestQueryClient } from "@/test";
+import { createQueryWrapper, createTestQueryClient, nth } from "@/test";
 import { transitPlanQueryKey } from "../../../../../packages/core/src/api/transit";
 import { providerPlanSelection } from "../../../../../packages/core/src/travel-plans/__fixtures__/providerPlan";
 import { NativeIntakeHandler } from "./NativeIntakeHandler";
@@ -301,7 +301,7 @@ it("automatically opens the provider trip without showing a confirmation dialog"
   await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
   expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
-    travelResult.plan.data.itineraries[0],
+    nth(travelResult.plan.data.itineraries, 0),
   );
   expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(travelResult.plan);
   expect(screen.queryByRole("dialog")).toBeNull();

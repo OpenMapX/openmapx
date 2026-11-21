@@ -7,7 +7,7 @@ vi.mock("next-intl/server", async () => {
   const { en: catalogue } = await import("@openmapx/i18n");
   return {
     getTranslations: async (namespace: string) => (key: string) =>
-      (catalogue as unknown as Record<string, Record<string, string>>)[namespace][key],
+      (catalogue as unknown as Record<string, Record<string, string>>)[namespace]?.[key],
   };
 });
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
+import { createQueryWrapper, nth, render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
@@ -25,8 +25,7 @@ function makeEntries(count: number) {
 
 /** Latest request URL passed to fetch, as a URL object. */
 function lastFetchUrl(): URL {
-  const calls = fetchMock.mock.calls;
-  return new URL(calls[calls.length - 1][0] as string);
+  return new URL(nth(fetchMock.mock.calls, -1)[0] as string);
 }
 
 beforeEach(() => {

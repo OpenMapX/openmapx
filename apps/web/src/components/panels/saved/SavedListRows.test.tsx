@@ -13,6 +13,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { savedPlaceToPlace } from "@/lib/openSavedPlace";
+import { nth } from "@/test";
 import { SavedListRows } from "./SavedListRows";
 
 vi.mock("@openmapx/integration-framework/react", () => ({
@@ -140,7 +141,7 @@ describe("saved result rows", () => {
     );
     const { waypoints, isOpen } = useDirectionsStore.getState();
     expect(isOpen).toBe(true);
-    expect(waypoints[waypoints.length - 1].label).toBe("Landmark one");
+    expect(nth(waypoints, -1).label).toBe("Landmark one");
     expect(select).not.toHaveBeenCalled();
     act(() => useDirectionsStore.getState().close());
   });
@@ -210,7 +211,7 @@ describe("saved result rows", () => {
     );
     view.unmount();
     expect(
-      (getMock.mock.calls[3][2] as { signal?: AbortSignal } | undefined)?.signal?.aborted,
+      (nth(getMock.mock.calls, 3)[2] as { signal?: AbortSignal } | undefined)?.signal?.aborted,
     ).toBe(true);
   });
 

@@ -1,7 +1,7 @@
 import type { CategoryPlace, Route } from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { nth, render, screen, userEvent, waitFor } from "@/test";
 import { setPendingArrivalHandoff } from "./arrivalHandoffState";
 
 const state = vi.hoisted(() => ({ saveHere: vi.fn(async () => "saved" as const) }));
@@ -190,7 +190,7 @@ describe("ArrivalCard", () => {
     expect(screen.getByText("Street Parking")).toBeInTheDocument();
     const driveHereBtns = screen.getAllByRole("button", { name: "navigation.driveHere" });
     expect(driveHereBtns).toHaveLength(2);
-    await userEvent.click(driveHereBtns[0]);
+    await userEvent.click(nth(driveHereBtns, 0));
 
     await waitFor(() => {
       expect(startGroundNav).toHaveBeenCalledWith(
@@ -220,7 +220,7 @@ describe("ArrivalCard", () => {
       expect(screen.getAllByText("navigation.parkingWalkToDestination")).toHaveLength(2),
     );
     mockFetchDirections.mockResolvedValue({ routes: [] });
-    await userEvent.click(screen.getAllByRole("button", { name: "navigation.driveHere" })[0]);
+    await userEvent.click(nth(screen.getAllByRole("button", { name: "navigation.driveHere" }), 0));
 
     expect(await screen.findByText("navigation.handoffFailed")).toBeInTheDocument();
   });

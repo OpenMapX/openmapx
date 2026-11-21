@@ -212,11 +212,12 @@ describe("WaypointMarkers", () => {
   });
 
   it("keeps a marker that is being dragged across a reverse", async () => {
-    const [a, , c] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, c] = [nth(ids, 0), nth(ids, 2)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 

@@ -1,6 +1,7 @@
 import { Blob } from "node:buffer";
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { createPlatformOpfs } from "../../test/platformOpfs";
 import {
   createOfflinePackageStorage,
@@ -90,7 +91,7 @@ for (const backend of ["blob", "opfs-move", "opfs-copy"] as const) {
       original.name = "mutated";
       const fresh = reopen();
       expect(await fresh.get(packageId)).toEqual(record());
-      const result = (await fresh.list())[0];
+      const result = nth(await fresh.list(), 0);
       result.name = "also mutated";
       expect((await fresh.get(packageId))?.name).toBe("Fixture");
     });

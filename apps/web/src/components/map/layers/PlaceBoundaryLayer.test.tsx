@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 
 let fake = createFakeMap({
   styleLoaded: true,
@@ -70,7 +70,7 @@ it("owns captured boundary receipts only while fill or outline is actually rende
   vi.useFakeTimers();
   const view = render(<PlaceBoundaryLayer />);
   const data = fake.state.sources.get("place-boundary-source")?.data as GeoJSON.FeatureCollection;
-  expect(JSON.parse(data.features[0].properties?._mapAttributions)).toEqual([receipt]);
+  expect(JSON.parse(nth(data.features, 0).properties?._mapAttributions)).toEqual([receipt]);
   const html = () =>
     Object.values(useMapAttributionStore.getState().byLayer)
       .flat()

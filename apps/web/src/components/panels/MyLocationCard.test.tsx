@@ -1,6 +1,6 @@
 import { PANEL, useDirectionsStore, useSidebarStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { nth, render, screen, userEvent, waitFor } from "@/test";
 
 const state = vi.hoisted(() => ({
   saveHere: vi.fn(async () => "saved" as const),
@@ -74,7 +74,7 @@ describe("MyLocationCard", () => {
   it("seeds the directions origin and opens the panel", async () => {
     render(<MyLocationCard coords={[6.6, 51.55]} onClose={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: /parking.directionsFromHere/ }));
-    expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([6.6, 51.55]);
+    expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toEqual([6.6, 51.55]);
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
   });
 });

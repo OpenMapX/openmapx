@@ -3,6 +3,7 @@ import { en } from "@openmapx/i18n";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 const state = vi.hoisted(() => ({ lists: [] as SavedList[], create: vi.fn() }));
 vi.mock("./ImportPlacesPicker", () => ({ ImportPlacesPicker: () => null }));
@@ -35,13 +36,13 @@ describe("creating a list from the Lists tab", () => {
     state.lists.push(list(en.saved.untitledList), list(`${en.saved.untitledList} (2)`));
     renderTab();
     fireEvent.click(screen.getByRole("button", { name: en.saved.newList }));
-    expect(state.create.mock.calls[0][0]).toEqual({ name: `${en.saved.untitledList} (3)` });
+    expect(nth(state.create.mock.calls, 0)[0]).toEqual({ name: `${en.saved.untitledList} (3)` });
   });
 
   it("explains a refused creation at the list limit", async () => {
     renderTab();
     fireEvent.click(screen.getByRole("button", { name: en.saved.newList }));
-    const options = state.create.mock.calls[0][1] as { onError: (error: unknown) => void };
+    const options = nth(state.create.mock.calls, 0)[1] as { onError: (error: unknown) => void };
     act(() =>
       options.onError(new ApiClientError(409, { error: "limit", code: "SAVED_LIST_LIMIT" }, null)),
     );

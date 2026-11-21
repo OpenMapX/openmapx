@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 
 const INTEGRATIONS_DIR = fileURLToPath(new URL("../../../../integrations", import.meta.url));
 const WEB_SRC_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -82,7 +83,7 @@ function moduleSpecifiers(file: string, source: string): string[] {
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require"))
     ) {
-      const specifier = callSpecifier(node.arguments[0]);
+      const specifier = callSpecifier(nth(node.arguments, 0));
       if (specifier) specifiers.push(specifier);
     } else if (
       ts.isImportTypeNode(node) &&

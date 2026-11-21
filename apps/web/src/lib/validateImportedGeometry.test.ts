@@ -48,6 +48,8 @@ describe("bounded geographic imports", () => {
     expect(parsed?.features).toHaveLength(1);
     const kml =
       '<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><description><![CDATA[<img src="https://tracking.example/">]]></description><Point><coordinates>8,50</coordinates></Point></Placemark></kml>';
-    expect(parseGeoFile("shared.kml", kml)?.features[0].properties?.description).toBeUndefined();
+    const [feature] = parseGeoFile("shared.kml", kml)?.features ?? [];
+    expect(feature).toBeDefined();
+    expect(feature?.properties?.description).toBeUndefined();
   });
 });

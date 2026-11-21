@@ -436,7 +436,7 @@ it("captures immutable name/address/coordinate field winners at the save action"
   name.name = "Changed catalogue";
   expect(
     (nth(fixture.post.mock.calls, 0)[1] as { fieldContributors: { name: { name: string }[] } })
-      .fieldContributors.name[0].name,
+      .fieldContributors.name[0]?.name,
   ).toBe("Original name supplier");
   await act(async () => fixture.finishPost());
 });

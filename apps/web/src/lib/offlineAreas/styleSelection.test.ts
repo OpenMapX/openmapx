@@ -87,7 +87,7 @@ describe("online-first OpenMapX style selection", () => {
 
     expect(selected.offline).toBe(true);
     expect(
-      (selected.style.sources as Record<string, Record<string, unknown>>).openmaptiles.tiles,
+      (selected.style.sources as Record<string, Record<string, unknown>>).openmaptiles?.tiles,
     ).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
   });
 
