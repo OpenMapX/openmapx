@@ -340,7 +340,9 @@ const server = createServer((request, response) => {
     send(request, response, answer.status ?? 200, answer.body, answer.contentType);
     return;
   }
-  console.log(`[fixture] unhandled ${request.method} ${url.pathname}${url.search}`);
+  // Line breaks in a request target would forge extra log lines.
+  const target = `${request.method} ${url.pathname}${url.search}`.replace(/[\r\n]/g, " ");
+  console.log(`[fixture] unhandled ${target}`);
   send(request, response, 404, { error: "No fixture" });
 });
 
