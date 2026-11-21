@@ -35,6 +35,7 @@ const PACKAGE_ROOTS = [
   "packages/mobility-core/src",
   "packages/noaa-coops-data",
   "packages/ourairports-data",
+  "packages/open-landmarks-client",
   "packages/entur-client/src",
   "packages/otp-client/src",
 ];

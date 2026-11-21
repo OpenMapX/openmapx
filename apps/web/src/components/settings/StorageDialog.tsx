@@ -62,6 +62,9 @@ const ROW_LABELS: Record<string, string> = {
   "api-autocomplete": "apiResponses",
   "api-weather": "apiResponses",
   "api-photos": "apiResponses",
+  "api-landmark-coverage": "apiResponses",
+  "api-landmark-cells": "apiResponses",
+  "api-landmark-models": "apiResponses",
 };
 
 // "Clear cached tiles" empties the worker's tile caches (CLEARABLE_TILE_CACHES).

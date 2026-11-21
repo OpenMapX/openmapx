@@ -11,6 +11,7 @@ import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "./contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
+import type { LandmarkModelProvider } from "./contracts/landmark-model-provider.js";
 import type { MessageSignProvider } from "./contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
@@ -569,6 +570,12 @@ export interface IntegrationContext {
    * `message-signs` orchestrator merges all registered providers.
    */
   registerMessageSignProvider(provider: MessageSignProvider): void;
+  /**
+   * Register a 3D landmark model catalogue provider (`landmark-models`
+   * domain). The host checks that its id is the integration's id and that
+   * every source id is a manifest data source.
+   */
+  registerLandmarkModelProvider(provider: LandmarkModelProvider): void;
   /**
    * Typed registrar for road-weather providers (road weather stations and
    * what they measure). Stored under the `road-weather` key; the

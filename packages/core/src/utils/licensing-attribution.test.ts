@@ -1,5 +1,46 @@
 import { describe, expect, it } from "vitest";
 import { buildAttributionPresentation, buildRuntimeAttributionHtml } from "./attribution";
+import { dedupeAttributionHtml } from "./attribution-presentation";
+
+describe("per-model receipts with a compact source policy", () => {
+  it("three Open Landmarks receipts present one compact visible line", () => {
+    const policy = {
+      placement: "visible" as const,
+      surfaces: ["map" as const, "content" as const],
+      basis: "licence" as const,
+      reviewedAt: "2026-11-20",
+      evidenceUrls: ["https://creativecommons.org/licenses/by/4.0/legalcode"],
+      reason: "Attribution through a linked resource.",
+      compactText: "3D models: Open Landmarks (CC BY 4.0 and others)",
+    };
+    const receipt = (name: string, expression: string) => ({
+      sourceId: "open-landmarks",
+      name,
+      url: `https://open-landmarks.benmaps.fr/landmarks/${name}/`,
+      publisher: { name: "Open Landmarks contributors" },
+      attributionText: `${name} by Open Landmarks contributors`,
+      licensing: {
+        version: 1 as const,
+        bindings: [
+          {
+            scope: "imagery" as const,
+            subject: name,
+            license: { kind: "spdx" as const, expression },
+            attribution: policy,
+          },
+        ],
+      },
+    });
+    const visible = dedupeAttributionHtml(
+      [
+        receipt("arc-de-triomphe", "CC-BY-4.0"),
+        receipt("eiffel-tower", "CC-BY-SA-3.0"),
+        receipt("pantheon", "CC-BY-4.0"),
+      ].map((r) => buildAttributionPresentation(r, "map").visibleHtml),
+    );
+    expect(visible).toEqual(["3D models: Open Landmarks (CC BY 4.0 and others)"]);
+  });
+});
 
 describe("scoped licence attribution presentation", () => {
   it("renders all content choices and preserves captured notices without software-as-data credit", () => {

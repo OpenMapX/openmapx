@@ -19,6 +19,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import * as mapContextModule from "@/integration-api/map/MapContext";
+import { registerCustomMapHitTester } from "@/integration-api/map/mapClickOwnership";
 import { consumeLongPressClick, LONG_PRESS_MS } from "@/lib/mapTouch";
 import { MapClickHandler } from "./MapClickHandler";
 
@@ -75,6 +76,24 @@ afterEach(() => {
 });
 
 describe("MapClickHandler with a mouse", () => {
+  it("no pin drops under custom content", () => {
+    const unregister = registerCustomMapHitTester(fake.map, "test-models", () => true);
+    try {
+      render(<MapClickHandler />);
+      openPlace();
+      fake.emit("click", {
+        target: fake.map,
+        lngLat: { lng: 6.1, lat: 50.1 },
+        point: { x: 10, y: 10 },
+        originalEvent: { pointerType: "mouse" },
+      });
+      expect(useMapClickStore.getState().clickedLngLat).toBeNull();
+      expect(usePlaceStore.getState().selectedPlace).toEqual(PLACE);
+    } finally {
+      unregister();
+    }
+  });
+
   it("drops the gray pin on a click, as before", () => {
     render(<MapClickHandler />);
     openPlace();

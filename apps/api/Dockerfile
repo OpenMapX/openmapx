@@ -34,6 +34,7 @@ COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
@@ -67,6 +68,7 @@ COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
@@ -183,6 +185,7 @@ COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
 COPY packages/ourairports-data/ packages/ourairports-data/
+COPY packages/open-landmarks-client/ packages/open-landmarks-client/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/presets/ packages/presets/
 COPY packages/brands/ packages/brands/
@@ -200,6 +203,7 @@ COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mang
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
 COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
+COPY --from=prod-deps /app/packages/open-landmarks-client/node_modules ./packages/open-landmarks-client/node_modules
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
 COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 

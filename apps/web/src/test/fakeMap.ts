@@ -40,6 +40,10 @@ export interface FakeMapState {
     addLayer: Map<string, number>;
     removeLayer: Map<string, number>;
   };
+  /** Every `refreshTiles(sourceId, tileIds)` call, in order. */
+  refreshedTiles: Array<{ sourceId: string; tileIds: unknown[] | undefined }>;
+  /** Backing value for `getTerrain()`; null when terrain is off. */
+  terrain: Record<string, unknown> | null;
   /** Backing value for `getZoom()` — mutate then emit("moveend") to simulate a zoom gesture. */
   zoom: number;
   pitch: number;
@@ -152,6 +156,8 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     canvas,
     projectedPoint: { x: 0, y: 0 },
     sources: new Map(),
+    refreshedTiles: [],
+    terrain: null,
     layers: new Map(),
     paint: new Map(),
     layout: new Map(),
@@ -304,8 +310,18 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
           bump(state.counts.setData, id);
         };
       }
+      if (source.type === "vector") {
+        stored.setTiles = (tiles: string[]) => {
+          stored.tiles = tiles;
+          stored.setTilesCalls = ((stored.setTilesCalls as number | undefined) ?? 0) + 1;
+        };
+      }
       state.sources.set(id, stored);
     },
+    refreshTiles: (sourceId: string, tileIds?: unknown[]) => {
+      state.refreshedTiles.push({ sourceId, tileIds });
+    },
+    getTerrain: () => state.terrain,
     removeSource: (id: string) => {
       state.sources.delete(id);
     },

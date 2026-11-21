@@ -248,14 +248,39 @@ while such a warning is drawn.
 
 ### Recreation & specialty
 
-| Overlay               | Shows                                                                                                                                                       | Data                                          |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| **Cycling**           | Cycle tracks, lanes, parking, and bike shops                                                                                                                | OpenStreetMap (via Overpass)                  |
-| **Hiking**            | Hiking trails and mountain shelters                                                                                                                         | Waymarked Trails, Refuges.info, OpenStreetMap |
-| **Winter sports**     | Ski areas, pistes, and lifts                                                                                                                                | OpenSnowMap                                   |
-| **Nautical**          | Sea marks, depths, tides, and water levels                                                                                                                  | OpenSeaMap and marine agencies                |
-| **Satellite imagery** | A true-color satellite overlay (distinct from the satellite base)                                                                                           | NASA GIBS / MODIS                             |
-| **3D view**           | Tilts the camera; close-up buildings rise automatically from zoom 16.5 to 17, including when you tilt by gesture, tinted by their mapped colour or material | OpenMapTiles-compatible building layers       |
+| Overlay               | Shows                                                                                                                                                                                              | Data                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Cycling**           | Cycle tracks, lanes, parking, and bike shops                                                                                                                                                       | OpenStreetMap (via Overpass)                                         |
+| **Hiking**            | Hiking trails and mountain shelters                                                                                                                                                                | Waymarked Trails, Refuges.info, OpenStreetMap                        |
+| **Winter sports**     | Ski areas, pistes, and lifts                                                                                                                                                                       | OpenSnowMap                                                          |
+| **Nautical**          | Sea marks, depths, tides, and water levels                                                                                                                                                         | OpenSeaMap and marine agencies                                       |
+| **Satellite imagery** | A true-color satellite overlay (distinct from the satellite base)                                                                                                                                  | NASA GIBS / MODIS                                                    |
+| **3D view**           | Tilts the camera; close-up buildings rise automatically from zoom 16.5 to 17, including when you tilt by gesture, tinted by their mapped colour or material; notable landmarks appear as 3D models | OpenMapTiles-compatible building layers; landmark models (see below) |
+
+#### 3D landmarks
+
+While the 3D view is on and the map is tilted, well-known buildings and
+structures appear as low-poly 3D models in place of their extruded box, from
+each model's own minimum zoom (13 to 17). Close up, a more detailed version
+loads. Models stand on the 3D terrain of the Terrain base map, and use night
+lighting in the dark theme. Clicking a model opens the building it represents.
+
+The models come from two openly licensed collections, each its own integration:
+
+| Provider                  | Models                                                      | Licence                                                   |
+| ------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| **Landmarks (Barrelman)** | About 1,850 placements, mostly in the US, some in Europe    | Models CC0; placements ODbL, © OpenStreetMap contributors |
+| **Open Landmarks**        | Paris, London and San Francisco; only rights-cleared models | Models CC BY 4.0 or their own licence; placements ODbL    |
+
+When both collections model the same building, a reviewed model wins, then
+Barrelman's, then an Open Landmarks draft. The map footer credits the models
+that are on screen. Your browser loads everything from your OpenMapX server,
+never from the providers.
+
+Operators can disable either provider, or hide individual models with the
+**Hidden models** setting of the **3D landmarks** integration (one
+`provider-id:asset-id` per line). Offline map packages and the car screen show
+the plain 3D view without models.
 
 ### Map tools
 

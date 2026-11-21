@@ -5,7 +5,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@mapbox/vector-tile": "^3.0.0",
+    "@maplibre/vt-pbf": "^4.3.3",
+    "@openmapx/core": "workspace:^",
+    "pbf": "^5.1.2",
+    "polyclip-ts": "^0.16.8"
   },
   "peerDependencies": {
     "maplibre-gl": "^6.16.0",

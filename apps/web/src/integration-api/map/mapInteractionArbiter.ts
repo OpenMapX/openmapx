@@ -1,4 +1,10 @@
-import type { MapGeoJSONFeature, Map as MaplibreMap, MapMouseEvent, Popup } from "maplibre-gl";
+import type {
+  MapGeoJSONFeature,
+  Map as MaplibreMap,
+  MapMouseEvent,
+  Point,
+  Popup,
+} from "maplibre-gl";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 
@@ -27,6 +33,12 @@ export interface MapOverlayInteractionRegistration {
    * map. The pointer event comes along while the pointer is over the map.
    */
   onHover?: (features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) => void;
+  /**
+   * Whether this overlay has content under the point, for content MapLibre
+   * cannot query, such as a custom 3D layer. It replaces the rendered-feature
+   * lookup, and a hit reports no features.
+   */
+  hitTest?: (point: Point) => boolean;
 }
 
 interface RegistrationRecord extends MapOverlayInteractionRegistration {
@@ -59,19 +71,22 @@ function existingLayerIds(map: MaplibreMap, layerIds: readonly string[]): string
   });
 }
 
+/** The features an overlay has under the pointer, or null when it has none. */
 function hitForRegistration(
   map: MaplibreMap,
   registration: RegistrationRecord,
   event: MapMouseEvent,
-): MapGeoJSONFeature[] {
+): MapGeoJSONFeature[] | null {
+  if (registration.hitTest) return registration.hitTest(event.point) ? [] : null;
   const layers = existingLayerIds(map, registration.layerIds);
-  if (layers.length === 0) return [];
+  if (layers.length === 0) return null;
   try {
-    return map.queryRenderedFeatures(event.point, { layers }) as MapGeoJSONFeature[];
+    const features = map.queryRenderedFeatures(event.point, { layers }) as MapGeoJSONFeature[];
+    return features.length > 0 ? features : null;
   } catch {
     // The style may have been torn down during a style swap. A missed hover or
     // click is safer than breaking the map event pipeline in that frame.
-    return [];
+    return null;
   }
 }
 
@@ -86,7 +101,7 @@ function winningHit(
     .sort((a, b) => b.priority - a.priority || a.order - b.order);
   for (const registration of registrations) {
     const features = hitForRegistration(map, registration, event);
-    if (features.length > 0) return { registration, features };
+    if (features) return { registration, features };
   }
   return null;
 }

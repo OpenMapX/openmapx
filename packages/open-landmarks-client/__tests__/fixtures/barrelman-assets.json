@@ -1,0 +1,2787 @@
+{
+  "schemaVersion": 1,
+  "release": "landmarks-a6be78485df5e621bd85",
+  "assets": [
+    {
+      "id": "30-rockefeller-plaza",
+      "name": "30 Rockefeller Plaza",
+      "anchor": [-73.9796355, 40.7591554],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 13,
+      "lods": {
+        "low": {
+          "url": "/models/30-rockefeller-plaza/9118a51ac8e4bbe56602de1832aabc0e7ad6f9841c86d4b184d248e486075bb5/low.glb",
+          "bytes": 149660,
+          "sha256": "9118a51ac8e4bbe56602de1832aabc0e7ad6f9841c86d4b184d248e486075bb5",
+          "triangles": 4392,
+          "info": {
+            "triangles": 4392,
+            "vertices": 5020,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 3,
+            "nodes": 1,
+            "materials": ["indiana-limestone", "window", "terracotta-terraces"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/30-rockefeller-plaza/9118a51ac8e4bbe56602de1832aabc0e7ad6f9841c86d4b184d248e486075bb5/low.glb.gz",
+            "bytes": 45549,
+            "sha256": "a0ed8ee4b00041e22270e19258f5d16e812e946be9bee99dcd28e404ab036af3",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 4392,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 487519790,
+        "url": "https://www.openstreetmap.org/way/487519790"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 771918436,
+          "url": "https://www.openstreetmap.org/way/771918436"
+        },
+        {
+          "type": "way",
+          "id": 145341279,
+          "url": "https://www.openstreetmap.org/way/145341279"
+        },
+        {
+          "type": "way",
+          "id": 145341265,
+          "url": "https://www.openstreetmap.org/way/145341265"
+        },
+        {
+          "type": "way",
+          "id": 145341264,
+          "url": "https://www.openstreetmap.org/way/145341264"
+        },
+        {
+          "type": "way",
+          "id": 145341294,
+          "url": "https://www.openstreetmap.org/way/145341294"
+        },
+        {
+          "type": "way",
+          "id": 145341256,
+          "url": "https://www.openstreetmap.org/way/145341256"
+        },
+        {
+          "type": "way",
+          "id": 145341286,
+          "url": "https://www.openstreetmap.org/way/145341286"
+        },
+        {
+          "type": "way",
+          "id": 145341288,
+          "url": "https://www.openstreetmap.org/way/145341288"
+        },
+        {
+          "type": "way",
+          "id": 145341276,
+          "url": "https://www.openstreetmap.org/way/145341276"
+        },
+        {
+          "type": "way",
+          "id": 145341282,
+          "url": "https://www.openstreetmap.org/way/145341282"
+        },
+        {
+          "type": "way",
+          "id": 145341268,
+          "url": "https://www.openstreetmap.org/way/145341268"
+        },
+        {
+          "type": "way",
+          "id": 145341275,
+          "url": "https://www.openstreetmap.org/way/145341275"
+        },
+        {
+          "type": "way",
+          "id": 145341266,
+          "url": "https://www.openstreetmap.org/way/145341266"
+        },
+        {
+          "type": "way",
+          "id": 145341259,
+          "url": "https://www.openstreetmap.org/way/145341259"
+        }
+      ],
+      "wikidata": "Q680614",
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "new-york-area",
+        "name": "New York metropolitan area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "building",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 260,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "30-rockefeller-plaza",
+      "placement": {
+        "bearing": 29,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/985d6d3aa2360745711838f5817a0df4a953522d2b6191ea2cc247de86c513f5/30-rockefeller-plaza.ts",
+        "bytes": 15897,
+        "sha256": "985d6d3aa2360745711838f5817a0df4a953522d2b6191ea2cc247de86c513f5"
+      },
+      "bounds": [-73.9808734, 40.7582177, -73.9783976, 40.7600931],
+      "revision": "aee7a4287f949eb7b200a9dc63deda206932f6f623955df16ee691dea5e82c9e",
+      "metadata": "/assets/30-rockefeller-plaza/aee7a4287f949eb7b200a9dc63deda206932f6f623955df16ee691dea5e82c9e/asset.json"
+    },
+    {
+      "id": "dal-att-stadium",
+      "name": "AT&T Stadium",
+      "anchor": [-97.092837, 32.747842],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 13,
+      "lods": {
+        "low": {
+          "url": "/models/dal-att-stadium/df8e440c2b0e1d9335d90c4b79cb72deaeac5ae5b1b3c3b8adeca8354e7b08a6/low.glb",
+          "bytes": 219968,
+          "sha256": "df8e440c2b0e1d9335d90c4b79cb72deaeac5ae5b1b3c3b8adeca8354e7b08a6",
+          "triangles": 4922,
+          "info": {
+            "triangles": 4922,
+            "vertices": 7108,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 5,
+            "nodes": 1,
+            "materials": ["att-roof", "att-roof-panel", "att-arch-steel", "window", "window-2"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/dal-att-stadium/df8e440c2b0e1d9335d90c4b79cb72deaeac5ae5b1b3c3b8adeca8354e7b08a6/low.glb.gz",
+            "bytes": 74410,
+            "sha256": "68aeab7513e105733de79238a840f795f40e9802f07ad18d343ff30ec10570d1",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 4922,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 47086748,
+        "url": "https://www.openstreetmap.org/way/47086748"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 126702663,
+          "url": "https://www.openstreetmap.org/way/126702663"
+        },
+        {
+          "type": "way",
+          "id": 126702664,
+          "url": "https://www.openstreetmap.org/way/126702664"
+        },
+        {
+          "type": "way",
+          "id": 126704934,
+          "url": "https://www.openstreetmap.org/way/126704934"
+        },
+        {
+          "type": "way",
+          "id": 126704935,
+          "url": "https://www.openstreetmap.org/way/126704935"
+        },
+        {
+          "type": "way",
+          "id": 126704936,
+          "url": "https://www.openstreetmap.org/way/126704936"
+        },
+        {
+          "type": "way",
+          "id": 126705089,
+          "url": "https://www.openstreetmap.org/way/126705089"
+        }
+      ],
+      "wikidata": "Q838284",
+      "elevation": -15,
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "github": "alexwohlbruck",
+          "role": "creator"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "model": "Claude Opus 5.5",
+          "role": "procedural modeling",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "dallas-area",
+        "name": "Dallas area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "stadium",
+      "tags": ["arch", "football", "retractable-roof"],
+      "references": [
+        {
+          "title": "Arlington June 2020 2 (AT&T Stadium).jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Arlington_June_2020_2_(AT%26T_Stadium).jpg",
+          "author": "Michael Barera",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Arlington June 2020 3 (AT&T Stadium).jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Arlington_June_2020_3_(AT%26T_Stadium).jpg",
+          "author": "Michael Barera",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Arlington June 2020 4 (AT&T Stadium).jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Arlington_June_2020_4_(AT%26T_Stadium).jpg",
+          "author": "Michael Barera",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Richard Greene Linear Park June 2020 27 (AT&T Stadium).jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Richard_Greene_Linear_Park_June_2020_27_(AT%26T_Stadium).jpg",
+          "author": "Michael Barera",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "AT&T Stadium, home of the Dallas Cowboys National Football League team in Arlington, Texas",
+          "url": "https://commons.wikimedia.org/wiki/File:AT%26T_Stadium,_home_of_the_Dallas_Cowboys_National_Football_League_team_in_Arlington,_Texas_LCCN2015630685.tif",
+          "author": "Carol M. Highsmith",
+          "license": "Public domain"
+        },
+        {
+          "title": "Cowboys Stadium, a domed stadium with a retractable roof in Arlington, Texas",
+          "url": "https://commons.wikimedia.org/wiki/File:Cowboys_Stadium,_a_domed_stadium_with_a_retractable_roof_in_Arlington,_Texas_LCCN2013650777.tif",
+          "author": "Carol M. Highsmith",
+          "license": "Public domain"
+        },
+        {
+          "title": "Cowboys stadium outside view.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Cowboys_stadium_outside_view.JPG",
+          "author": "Mahanga",
+          "license": "CC BY 3.0"
+        },
+        {
+          "title": "Dallas Stadium Support.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Dallas_Stadium_Support.JPG",
+          "author": "M.Fitzsimmons",
+          "license": "CC BY-SA 3.0"
+        },
+        {
+          "title": "Cowboys Stadium 2.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Cowboys_Stadium_2.jpg",
+          "author": "bobbyh_80",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Cowboys-Stadium-Night.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Cowboys-Stadium-Night.jpg",
+          "author": "Alienevil",
+          "license": "CC BY-SA 3.0"
+        }
+      ],
+      "reviewStatus": "unreviewed",
+      "height": 98.3,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "dal-att-stadium",
+      "placement": {
+        "bearing": 339,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/a60afb0cdcf1deaf5d9add6aed0a9ef4ba2fe037c0b98438f5f8ad8436baa8c5/dal-att-stadium.ts",
+        "bytes": 25786,
+        "sha256": "a60afb0cdcf1deaf5d9add6aed0a9ef4ba2fe037c0b98438f5f8ad8436baa8c5"
+      },
+      "bounds": [-97.0954373, 32.745655, -97.0902367, 32.750029],
+      "revision": "4586d424ec2655264619aedadc4ee715798cec108fe8e4bc97886bac41c3aeb0",
+      "metadata": "/assets/dal-att-stadium/4586d424ec2655264619aedadc4ee715798cec108fe8e4bc97886bac41c3aeb0/asset.json"
+    },
+    {
+      "id": "london-eye",
+      "name": "London Eye",
+      "anchor": [-0.1196765, 51.5033416],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/london-eye/3529c6a668b6447c6ec4c40eeeb9731c3f431f9c999b5819563c459fbf938538/low.glb",
+          "bytes": 196528,
+          "sha256": "3529c6a668b6447c6ec4c40eeeb9731c3f431f9c999b5819563c459fbf938538",
+          "triangles": 6184,
+          "info": {
+            "triangles": 6184,
+            "vertices": 8072,
+            "meshes": 3,
+            "meshInstances": 34,
+            "primitives": 11,
+            "nodes": 34,
+            "materials": [
+              "neon-eye-white",
+              "cable",
+              "eye-white",
+              "pier-grey",
+              "drive-orange",
+              "window"
+            ],
+            "textures": 0,
+            "images": [],
+            "animations": [
+              {
+                "name": "turn",
+                "durationSeconds": 90,
+                "channels": 33,
+                "keyframes": 49,
+                "targets": [
+                  "wheel · rotation",
+                  "capsule-1 · rotation",
+                  "capsule-2 · rotation",
+                  "capsule-3 · rotation",
+                  "capsule-4 · rotation",
+                  "capsule-5 · rotation",
+                  "capsule-6 · rotation",
+                  "capsule-7 · rotation",
+                  "capsule-8 · rotation",
+                  "capsule-9 · rotation",
+                  "capsule-10 · rotation",
+                  "capsule-11 · rotation",
+                  "capsule-12 · rotation",
+                  "capsule-13 · rotation",
+                  "capsule-14 · rotation",
+                  "capsule-15 · rotation",
+                  "capsule-16 · rotation",
+                  "capsule-17 · rotation",
+                  "capsule-18 · rotation",
+                  "capsule-19 · rotation",
+                  "capsule-20 · rotation",
+                  "capsule-21 · rotation",
+                  "capsule-22 · rotation",
+                  "capsule-23 · rotation",
+                  "capsule-24 · rotation",
+                  "capsule-25 · rotation",
+                  "capsule-26 · rotation",
+                  "capsule-27 · rotation",
+                  "capsule-28 · rotation",
+                  "capsule-29 · rotation",
+                  "capsule-30 · rotation",
+                  "capsule-31 · rotation",
+                  "capsule-32 · rotation"
+                ]
+              }
+            ],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/london-eye/3529c6a668b6447c6ec4c40eeeb9731c3f431f9c999b5819563c459fbf938538/low.glb.gz",
+            "bytes": 45244,
+            "sha256": "2f9858827916e572f0a7be433f99d11817cde66f2fcc8352699707b7d5784532",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 6184,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 153273222,
+        "url": "https://www.openstreetmap.org/way/153273222"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 204068874,
+          "url": "https://www.openstreetmap.org/way/204068874"
+        },
+        {
+          "type": "way",
+          "id": 335716202,
+          "url": "https://www.openstreetmap.org/way/335716202"
+        },
+        {
+          "type": "way",
+          "id": 1133007190,
+          "url": "https://www.openstreetmap.org/way/1133007190"
+        },
+        {
+          "type": "way",
+          "id": 1133007191,
+          "url": "https://www.openstreetmap.org/way/1133007191"
+        },
+        {
+          "type": "way",
+          "id": 1133007192,
+          "url": "https://www.openstreetmap.org/way/1133007192"
+        },
+        {
+          "type": "way",
+          "id": 1133007193,
+          "url": "https://www.openstreetmap.org/way/1133007193"
+        },
+        {
+          "type": "way",
+          "id": 1133007194,
+          "url": "https://www.openstreetmap.org/way/1133007194"
+        },
+        {
+          "type": "way",
+          "id": 1133007195,
+          "url": "https://www.openstreetmap.org/way/1133007195"
+        },
+        {
+          "type": "way",
+          "id": 1133007196,
+          "url": "https://www.openstreetmap.org/way/1133007196"
+        },
+        {
+          "type": "way",
+          "id": 1133007197,
+          "url": "https://www.openstreetmap.org/way/1133007197"
+        },
+        {
+          "type": "way",
+          "id": 1133007198,
+          "url": "https://www.openstreetmap.org/way/1133007198"
+        },
+        {
+          "type": "way",
+          "id": 1133007199,
+          "url": "https://www.openstreetmap.org/way/1133007199"
+        },
+        {
+          "type": "way",
+          "id": 1133007200,
+          "url": "https://www.openstreetmap.org/way/1133007200"
+        },
+        {
+          "type": "way",
+          "id": 1133007201,
+          "url": "https://www.openstreetmap.org/way/1133007201"
+        },
+        {
+          "type": "way",
+          "id": 1133007202,
+          "url": "https://www.openstreetmap.org/way/1133007202"
+        },
+        {
+          "type": "way",
+          "id": 1133007203,
+          "url": "https://www.openstreetmap.org/way/1133007203"
+        },
+        {
+          "type": "way",
+          "id": 1133007204,
+          "url": "https://www.openstreetmap.org/way/1133007204"
+        },
+        {
+          "type": "way",
+          "id": 1133007205,
+          "url": "https://www.openstreetmap.org/way/1133007205"
+        },
+        {
+          "type": "way",
+          "id": 1133007206,
+          "url": "https://www.openstreetmap.org/way/1133007206"
+        },
+        {
+          "type": "way",
+          "id": 1133007207,
+          "url": "https://www.openstreetmap.org/way/1133007207"
+        },
+        {
+          "type": "way",
+          "id": 1133007208,
+          "url": "https://www.openstreetmap.org/way/1133007208"
+        },
+        {
+          "type": "way",
+          "id": 1133007209,
+          "url": "https://www.openstreetmap.org/way/1133007209"
+        },
+        {
+          "type": "way",
+          "id": 1133007210,
+          "url": "https://www.openstreetmap.org/way/1133007210"
+        },
+        {
+          "type": "way",
+          "id": 1133007211,
+          "url": "https://www.openstreetmap.org/way/1133007211"
+        },
+        {
+          "type": "way",
+          "id": 1133007212,
+          "url": "https://www.openstreetmap.org/way/1133007212"
+        },
+        {
+          "type": "way",
+          "id": 1133007213,
+          "url": "https://www.openstreetmap.org/way/1133007213"
+        },
+        {
+          "type": "way",
+          "id": 1133007214,
+          "url": "https://www.openstreetmap.org/way/1133007214"
+        },
+        {
+          "type": "way",
+          "id": 1133007215,
+          "url": "https://www.openstreetmap.org/way/1133007215"
+        },
+        {
+          "type": "way",
+          "id": 1133007216,
+          "url": "https://www.openstreetmap.org/way/1133007216"
+        },
+        {
+          "type": "way",
+          "id": 1133007217,
+          "url": "https://www.openstreetmap.org/way/1133007217"
+        },
+        {
+          "type": "way",
+          "id": 1133007218,
+          "url": "https://www.openstreetmap.org/way/1133007218"
+        },
+        {
+          "type": "way",
+          "id": 1133007219,
+          "url": "https://www.openstreetmap.org/way/1133007219"
+        },
+        {
+          "type": "way",
+          "id": 1133007220,
+          "url": "https://www.openstreetmap.org/way/1133007220"
+        },
+        {
+          "type": "way",
+          "id": 1133007221,
+          "url": "https://www.openstreetmap.org/way/1133007221"
+        },
+        {
+          "type": "way",
+          "id": 1133007222,
+          "url": "https://www.openstreetmap.org/way/1133007222"
+        },
+        {
+          "type": "way",
+          "id": 1133007223,
+          "url": "https://www.openstreetmap.org/way/1133007223"
+        },
+        {
+          "type": "way",
+          "id": 1133007224,
+          "url": "https://www.openstreetmap.org/way/1133007224"
+        },
+        {
+          "type": "way",
+          "id": 1133007225,
+          "url": "https://www.openstreetmap.org/way/1133007225"
+        },
+        {
+          "type": "way",
+          "id": 1133007226,
+          "url": "https://www.openstreetmap.org/way/1133007226"
+        },
+        {
+          "type": "way",
+          "id": 1133007227,
+          "url": "https://www.openstreetmap.org/way/1133007227"
+        },
+        {
+          "type": "way",
+          "id": 1133007228,
+          "url": "https://www.openstreetmap.org/way/1133007228"
+        },
+        {
+          "type": "way",
+          "id": 1133007229,
+          "url": "https://www.openstreetmap.org/way/1133007229"
+        },
+        {
+          "type": "way",
+          "id": 1133007230,
+          "url": "https://www.openstreetmap.org/way/1133007230"
+        },
+        {
+          "type": "way",
+          "id": 1133007231,
+          "url": "https://www.openstreetmap.org/way/1133007231"
+        },
+        {
+          "type": "way",
+          "id": 1133007232,
+          "url": "https://www.openstreetmap.org/way/1133007232"
+        },
+        {
+          "type": "way",
+          "id": 1133007233,
+          "url": "https://www.openstreetmap.org/way/1133007233"
+        },
+        {
+          "type": "way",
+          "id": 1133007234,
+          "url": "https://www.openstreetmap.org/way/1133007234"
+        },
+        {
+          "type": "way",
+          "id": 1133007235,
+          "url": "https://www.openstreetmap.org/way/1133007235"
+        },
+        {
+          "type": "way",
+          "id": 1133007236,
+          "url": "https://www.openstreetmap.org/way/1133007236"
+        },
+        {
+          "type": "way",
+          "id": 1133007237,
+          "url": "https://www.openstreetmap.org/way/1133007237"
+        },
+        {
+          "type": "way",
+          "id": 1133007238,
+          "url": "https://www.openstreetmap.org/way/1133007238"
+        },
+        {
+          "type": "way",
+          "id": 1133007239,
+          "url": "https://www.openstreetmap.org/way/1133007239"
+        },
+        {
+          "type": "way",
+          "id": 1133007240,
+          "url": "https://www.openstreetmap.org/way/1133007240"
+        },
+        {
+          "type": "way",
+          "id": 1133007241,
+          "url": "https://www.openstreetmap.org/way/1133007241"
+        },
+        {
+          "type": "way",
+          "id": 1133007242,
+          "url": "https://www.openstreetmap.org/way/1133007242"
+        },
+        {
+          "type": "way",
+          "id": 1133007243,
+          "url": "https://www.openstreetmap.org/way/1133007243"
+        },
+        {
+          "type": "way",
+          "id": 1133007244,
+          "url": "https://www.openstreetmap.org/way/1133007244"
+        },
+        {
+          "type": "way",
+          "id": 1133007245,
+          "url": "https://www.openstreetmap.org/way/1133007245"
+        },
+        {
+          "type": "way",
+          "id": 1133007246,
+          "url": "https://www.openstreetmap.org/way/1133007246"
+        },
+        {
+          "type": "way",
+          "id": 1133007247,
+          "url": "https://www.openstreetmap.org/way/1133007247"
+        },
+        {
+          "type": "way",
+          "id": 1133007248,
+          "url": "https://www.openstreetmap.org/way/1133007248"
+        },
+        {
+          "type": "way",
+          "id": 1133007249,
+          "url": "https://www.openstreetmap.org/way/1133007249"
+        },
+        {
+          "type": "way",
+          "id": 1133007250,
+          "url": "https://www.openstreetmap.org/way/1133007250"
+        },
+        {
+          "type": "way",
+          "id": 1133007251,
+          "url": "https://www.openstreetmap.org/way/1133007251"
+        },
+        {
+          "type": "way",
+          "id": 1133007252,
+          "url": "https://www.openstreetmap.org/way/1133007252"
+        },
+        {
+          "type": "way",
+          "id": 1133007253,
+          "url": "https://www.openstreetmap.org/way/1133007253"
+        },
+        {
+          "type": "way",
+          "id": 1133007254,
+          "url": "https://www.openstreetmap.org/way/1133007254"
+        },
+        {
+          "type": "way",
+          "id": 1133007255,
+          "url": "https://www.openstreetmap.org/way/1133007255"
+        },
+        {
+          "type": "way",
+          "id": 1133007256,
+          "url": "https://www.openstreetmap.org/way/1133007256"
+        },
+        {
+          "type": "way",
+          "id": 1133007257,
+          "url": "https://www.openstreetmap.org/way/1133007257"
+        },
+        {
+          "type": "way",
+          "id": 1133007258,
+          "url": "https://www.openstreetmap.org/way/1133007258"
+        },
+        {
+          "type": "way",
+          "id": 1133007259,
+          "url": "https://www.openstreetmap.org/way/1133007259"
+        },
+        {
+          "type": "way",
+          "id": 1133007260,
+          "url": "https://www.openstreetmap.org/way/1133007260"
+        },
+        {
+          "type": "way",
+          "id": 1133007261,
+          "url": "https://www.openstreetmap.org/way/1133007261"
+        },
+        {
+          "type": "way",
+          "id": 1133007262,
+          "url": "https://www.openstreetmap.org/way/1133007262"
+        },
+        {
+          "type": "way",
+          "id": 1133007263,
+          "url": "https://www.openstreetmap.org/way/1133007263"
+        },
+        {
+          "type": "way",
+          "id": 1133007264,
+          "url": "https://www.openstreetmap.org/way/1133007264"
+        },
+        {
+          "type": "way",
+          "id": 1133007265,
+          "url": "https://www.openstreetmap.org/way/1133007265"
+        },
+        {
+          "type": "way",
+          "id": 1133007266,
+          "url": "https://www.openstreetmap.org/way/1133007266"
+        },
+        {
+          "type": "way",
+          "id": 1133007267,
+          "url": "https://www.openstreetmap.org/way/1133007267"
+        },
+        {
+          "type": "way",
+          "id": 1133007268,
+          "url": "https://www.openstreetmap.org/way/1133007268"
+        },
+        {
+          "type": "way",
+          "id": 1133007269,
+          "url": "https://www.openstreetmap.org/way/1133007269"
+        },
+        {
+          "type": "way",
+          "id": 1133007270,
+          "url": "https://www.openstreetmap.org/way/1133007270"
+        },
+        {
+          "type": "way",
+          "id": 1133007271,
+          "url": "https://www.openstreetmap.org/way/1133007271"
+        },
+        {
+          "type": "way",
+          "id": 1133007272,
+          "url": "https://www.openstreetmap.org/way/1133007272"
+        },
+        {
+          "type": "way",
+          "id": 1133007273,
+          "url": "https://www.openstreetmap.org/way/1133007273"
+        },
+        {
+          "type": "way",
+          "id": 1133007274,
+          "url": "https://www.openstreetmap.org/way/1133007274"
+        },
+        {
+          "type": "way",
+          "id": 1133007275,
+          "url": "https://www.openstreetmap.org/way/1133007275"
+        },
+        {
+          "type": "way",
+          "id": 1133007276,
+          "url": "https://www.openstreetmap.org/way/1133007276"
+        },
+        {
+          "type": "way",
+          "id": 1133007277,
+          "url": "https://www.openstreetmap.org/way/1133007277"
+        },
+        {
+          "type": "way",
+          "id": 1133007278,
+          "url": "https://www.openstreetmap.org/way/1133007278"
+        },
+        {
+          "type": "way",
+          "id": 1133007279,
+          "url": "https://www.openstreetmap.org/way/1133007279"
+        },
+        {
+          "type": "way",
+          "id": 1133007280,
+          "url": "https://www.openstreetmap.org/way/1133007280"
+        },
+        {
+          "type": "way",
+          "id": 1133007281,
+          "url": "https://www.openstreetmap.org/way/1133007281"
+        },
+        {
+          "type": "way",
+          "id": 1133007282,
+          "url": "https://www.openstreetmap.org/way/1133007282"
+        },
+        {
+          "type": "way",
+          "id": 1133007283,
+          "url": "https://www.openstreetmap.org/way/1133007283"
+        },
+        {
+          "type": "way",
+          "id": 1133007284,
+          "url": "https://www.openstreetmap.org/way/1133007284"
+        },
+        {
+          "type": "way",
+          "id": 1133007285,
+          "url": "https://www.openstreetmap.org/way/1133007285"
+        },
+        {
+          "type": "way",
+          "id": 1133007286,
+          "url": "https://www.openstreetmap.org/way/1133007286"
+        },
+        {
+          "type": "way",
+          "id": 1133007287,
+          "url": "https://www.openstreetmap.org/way/1133007287"
+        },
+        {
+          "type": "way",
+          "id": 1133007288,
+          "url": "https://www.openstreetmap.org/way/1133007288"
+        },
+        {
+          "type": "way",
+          "id": 1133007289,
+          "url": "https://www.openstreetmap.org/way/1133007289"
+        },
+        {
+          "type": "way",
+          "id": 1133007290,
+          "url": "https://www.openstreetmap.org/way/1133007290"
+        },
+        {
+          "type": "way",
+          "id": 1133007291,
+          "url": "https://www.openstreetmap.org/way/1133007291"
+        },
+        {
+          "type": "way",
+          "id": 1133007292,
+          "url": "https://www.openstreetmap.org/way/1133007292"
+        },
+        {
+          "type": "way",
+          "id": 1133007293,
+          "url": "https://www.openstreetmap.org/way/1133007293"
+        },
+        {
+          "type": "way",
+          "id": 1133007294,
+          "url": "https://www.openstreetmap.org/way/1133007294"
+        },
+        {
+          "type": "way",
+          "id": 1133007295,
+          "url": "https://www.openstreetmap.org/way/1133007295"
+        },
+        {
+          "type": "way",
+          "id": 1133007296,
+          "url": "https://www.openstreetmap.org/way/1133007296"
+        },
+        {
+          "type": "way",
+          "id": 1133007297,
+          "url": "https://www.openstreetmap.org/way/1133007297"
+        },
+        {
+          "type": "way",
+          "id": 1133007298,
+          "url": "https://www.openstreetmap.org/way/1133007298"
+        },
+        {
+          "type": "way",
+          "id": 1133007299,
+          "url": "https://www.openstreetmap.org/way/1133007299"
+        },
+        {
+          "type": "way",
+          "id": 1133007300,
+          "url": "https://www.openstreetmap.org/way/1133007300"
+        },
+        {
+          "type": "way",
+          "id": 1133007301,
+          "url": "https://www.openstreetmap.org/way/1133007301"
+        },
+        {
+          "type": "way",
+          "id": 1133007302,
+          "url": "https://www.openstreetmap.org/way/1133007302"
+        },
+        {
+          "type": "way",
+          "id": 1133007303,
+          "url": "https://www.openstreetmap.org/way/1133007303"
+        },
+        {
+          "type": "way",
+          "id": 1133007304,
+          "url": "https://www.openstreetmap.org/way/1133007304"
+        },
+        {
+          "type": "way",
+          "id": 1133009833,
+          "url": "https://www.openstreetmap.org/way/1133009833"
+        },
+        {
+          "type": "way",
+          "id": 1133009834,
+          "url": "https://www.openstreetmap.org/way/1133009834"
+        },
+        {
+          "type": "way",
+          "id": 1133009835,
+          "url": "https://www.openstreetmap.org/way/1133009835"
+        },
+        {
+          "type": "way",
+          "id": 1133009836,
+          "url": "https://www.openstreetmap.org/way/1133009836"
+        },
+        {
+          "type": "way",
+          "id": 1133009837,
+          "url": "https://www.openstreetmap.org/way/1133009837"
+        },
+        {
+          "type": "way",
+          "id": 1133009838,
+          "url": "https://www.openstreetmap.org/way/1133009838"
+        },
+        {
+          "type": "way",
+          "id": 1133009839,
+          "url": "https://www.openstreetmap.org/way/1133009839"
+        },
+        {
+          "type": "way",
+          "id": 1133009840,
+          "url": "https://www.openstreetmap.org/way/1133009840"
+        },
+        {
+          "type": "way",
+          "id": 1133009841,
+          "url": "https://www.openstreetmap.org/way/1133009841"
+        },
+        {
+          "type": "way",
+          "id": 1133009842,
+          "url": "https://www.openstreetmap.org/way/1133009842"
+        },
+        {
+          "type": "way",
+          "id": 1133009843,
+          "url": "https://www.openstreetmap.org/way/1133009843"
+        },
+        {
+          "type": "way",
+          "id": 1133009844,
+          "url": "https://www.openstreetmap.org/way/1133009844"
+        },
+        {
+          "type": "way",
+          "id": 1133009845,
+          "url": "https://www.openstreetmap.org/way/1133009845"
+        },
+        {
+          "type": "way",
+          "id": 1133009846,
+          "url": "https://www.openstreetmap.org/way/1133009846"
+        },
+        {
+          "type": "way",
+          "id": 1133009847,
+          "url": "https://www.openstreetmap.org/way/1133009847"
+        },
+        {
+          "type": "way",
+          "id": 1133009848,
+          "url": "https://www.openstreetmap.org/way/1133009848"
+        },
+        {
+          "type": "way",
+          "id": 1133009849,
+          "url": "https://www.openstreetmap.org/way/1133009849"
+        },
+        {
+          "type": "way",
+          "id": 1133009850,
+          "url": "https://www.openstreetmap.org/way/1133009850"
+        },
+        {
+          "type": "way",
+          "id": 1133009851,
+          "url": "https://www.openstreetmap.org/way/1133009851"
+        },
+        {
+          "type": "way",
+          "id": 1133009852,
+          "url": "https://www.openstreetmap.org/way/1133009852"
+        },
+        {
+          "type": "way",
+          "id": 1133009853,
+          "url": "https://www.openstreetmap.org/way/1133009853"
+        },
+        {
+          "type": "way",
+          "id": 1133009854,
+          "url": "https://www.openstreetmap.org/way/1133009854"
+        },
+        {
+          "type": "way",
+          "id": 1133009855,
+          "url": "https://www.openstreetmap.org/way/1133009855"
+        },
+        {
+          "type": "way",
+          "id": 1133009856,
+          "url": "https://www.openstreetmap.org/way/1133009856"
+        },
+        {
+          "type": "way",
+          "id": 1133009857,
+          "url": "https://www.openstreetmap.org/way/1133009857"
+        },
+        {
+          "type": "way",
+          "id": 1133009858,
+          "url": "https://www.openstreetmap.org/way/1133009858"
+        },
+        {
+          "type": "way",
+          "id": 1133009859,
+          "url": "https://www.openstreetmap.org/way/1133009859"
+        },
+        {
+          "type": "way",
+          "id": 1133009860,
+          "url": "https://www.openstreetmap.org/way/1133009860"
+        },
+        {
+          "type": "way",
+          "id": 1133009861,
+          "url": "https://www.openstreetmap.org/way/1133009861"
+        },
+        {
+          "type": "way",
+          "id": 1133009862,
+          "url": "https://www.openstreetmap.org/way/1133009862"
+        },
+        {
+          "type": "way",
+          "id": 1133009863,
+          "url": "https://www.openstreetmap.org/way/1133009863"
+        },
+        {
+          "type": "way",
+          "id": 1133009864,
+          "url": "https://www.openstreetmap.org/way/1133009864"
+        },
+        {
+          "type": "way",
+          "id": 1133009865,
+          "url": "https://www.openstreetmap.org/way/1133009865"
+        },
+        {
+          "type": "way",
+          "id": 1133009866,
+          "url": "https://www.openstreetmap.org/way/1133009866"
+        },
+        {
+          "type": "way",
+          "id": 1133013729,
+          "url": "https://www.openstreetmap.org/way/1133013729"
+        },
+        {
+          "type": "way",
+          "id": 1133013730,
+          "url": "https://www.openstreetmap.org/way/1133013730"
+        },
+        {
+          "type": "way",
+          "id": 1133013731,
+          "url": "https://www.openstreetmap.org/way/1133013731"
+        },
+        {
+          "type": "way",
+          "id": 1133013732,
+          "url": "https://www.openstreetmap.org/way/1133013732"
+        },
+        {
+          "type": "way",
+          "id": 1133013733,
+          "url": "https://www.openstreetmap.org/way/1133013733"
+        },
+        {
+          "type": "way",
+          "id": 1133013734,
+          "url": "https://www.openstreetmap.org/way/1133013734"
+        },
+        {
+          "type": "way",
+          "id": 1133013735,
+          "url": "https://www.openstreetmap.org/way/1133013735"
+        },
+        {
+          "type": "way",
+          "id": 1133013736,
+          "url": "https://www.openstreetmap.org/way/1133013736"
+        },
+        {
+          "type": "way",
+          "id": 1133013737,
+          "url": "https://www.openstreetmap.org/way/1133013737"
+        },
+        {
+          "type": "way",
+          "id": 1133013738,
+          "url": "https://www.openstreetmap.org/way/1133013738"
+        },
+        {
+          "type": "way",
+          "id": 1133013739,
+          "url": "https://www.openstreetmap.org/way/1133013739"
+        },
+        {
+          "type": "way",
+          "id": 1133013740,
+          "url": "https://www.openstreetmap.org/way/1133013740"
+        },
+        {
+          "type": "way",
+          "id": 1133013741,
+          "url": "https://www.openstreetmap.org/way/1133013741"
+        },
+        {
+          "type": "way",
+          "id": 1133013742,
+          "url": "https://www.openstreetmap.org/way/1133013742"
+        },
+        {
+          "type": "way",
+          "id": 1133013743,
+          "url": "https://www.openstreetmap.org/way/1133013743"
+        },
+        {
+          "type": "way",
+          "id": 1133013744,
+          "url": "https://www.openstreetmap.org/way/1133013744"
+        },
+        {
+          "type": "way",
+          "id": 1133013745,
+          "url": "https://www.openstreetmap.org/way/1133013745"
+        },
+        {
+          "type": "way",
+          "id": 1133013746,
+          "url": "https://www.openstreetmap.org/way/1133013746"
+        },
+        {
+          "type": "way",
+          "id": 1133013747,
+          "url": "https://www.openstreetmap.org/way/1133013747"
+        },
+        {
+          "type": "way",
+          "id": 1133013748,
+          "url": "https://www.openstreetmap.org/way/1133013748"
+        },
+        {
+          "type": "way",
+          "id": 1133013749,
+          "url": "https://www.openstreetmap.org/way/1133013749"
+        },
+        {
+          "type": "way",
+          "id": 1133013750,
+          "url": "https://www.openstreetmap.org/way/1133013750"
+        },
+        {
+          "type": "way",
+          "id": 1133013751,
+          "url": "https://www.openstreetmap.org/way/1133013751"
+        },
+        {
+          "type": "way",
+          "id": 1133013752,
+          "url": "https://www.openstreetmap.org/way/1133013752"
+        },
+        {
+          "type": "way",
+          "id": 1133013753,
+          "url": "https://www.openstreetmap.org/way/1133013753"
+        },
+        {
+          "type": "way",
+          "id": 1133013754,
+          "url": "https://www.openstreetmap.org/way/1133013754"
+        },
+        {
+          "type": "way",
+          "id": 1133013755,
+          "url": "https://www.openstreetmap.org/way/1133013755"
+        },
+        {
+          "type": "way",
+          "id": 1133013756,
+          "url": "https://www.openstreetmap.org/way/1133013756"
+        },
+        {
+          "type": "way",
+          "id": 1133013757,
+          "url": "https://www.openstreetmap.org/way/1133013757"
+        },
+        {
+          "type": "way",
+          "id": 1133013758,
+          "url": "https://www.openstreetmap.org/way/1133013758"
+        },
+        {
+          "type": "way",
+          "id": 1133013759,
+          "url": "https://www.openstreetmap.org/way/1133013759"
+        },
+        {
+          "type": "way",
+          "id": 1133013760,
+          "url": "https://www.openstreetmap.org/way/1133013760"
+        },
+        {
+          "type": "way",
+          "id": 1133013761,
+          "url": "https://www.openstreetmap.org/way/1133013761"
+        },
+        {
+          "type": "way",
+          "id": 1133013762,
+          "url": "https://www.openstreetmap.org/way/1133013762"
+        },
+        {
+          "type": "way",
+          "id": 1133013763,
+          "url": "https://www.openstreetmap.org/way/1133013763"
+        },
+        {
+          "type": "way",
+          "id": 1133013764,
+          "url": "https://www.openstreetmap.org/way/1133013764"
+        },
+        {
+          "type": "way",
+          "id": 1133013765,
+          "url": "https://www.openstreetmap.org/way/1133013765"
+        },
+        {
+          "type": "way",
+          "id": 1133013766,
+          "url": "https://www.openstreetmap.org/way/1133013766"
+        },
+        {
+          "type": "way",
+          "id": 1133013767,
+          "url": "https://www.openstreetmap.org/way/1133013767"
+        },
+        {
+          "type": "way",
+          "id": 1133013768,
+          "url": "https://www.openstreetmap.org/way/1133013768"
+        },
+        {
+          "type": "way",
+          "id": 1133013769,
+          "url": "https://www.openstreetmap.org/way/1133013769"
+        },
+        {
+          "type": "way",
+          "id": 1133013770,
+          "url": "https://www.openstreetmap.org/way/1133013770"
+        },
+        {
+          "type": "way",
+          "id": 1133013771,
+          "url": "https://www.openstreetmap.org/way/1133013771"
+        },
+        {
+          "type": "way",
+          "id": 1133013772,
+          "url": "https://www.openstreetmap.org/way/1133013772"
+        },
+        {
+          "type": "way",
+          "id": 1133013773,
+          "url": "https://www.openstreetmap.org/way/1133013773"
+        },
+        {
+          "type": "way",
+          "id": 1133013774,
+          "url": "https://www.openstreetmap.org/way/1133013774"
+        },
+        {
+          "type": "way",
+          "id": 1133013775,
+          "url": "https://www.openstreetmap.org/way/1133013775"
+        },
+        {
+          "type": "way",
+          "id": 1133013776,
+          "url": "https://www.openstreetmap.org/way/1133013776"
+        },
+        {
+          "type": "way",
+          "id": 1133013777,
+          "url": "https://www.openstreetmap.org/way/1133013777"
+        },
+        {
+          "type": "way",
+          "id": 1133013778,
+          "url": "https://www.openstreetmap.org/way/1133013778"
+        },
+        {
+          "type": "way",
+          "id": 1133013779,
+          "url": "https://www.openstreetmap.org/way/1133013779"
+        },
+        {
+          "type": "way",
+          "id": 1133013780,
+          "url": "https://www.openstreetmap.org/way/1133013780"
+        },
+        {
+          "type": "way",
+          "id": 1133013781,
+          "url": "https://www.openstreetmap.org/way/1133013781"
+        },
+        {
+          "type": "way",
+          "id": 1133013782,
+          "url": "https://www.openstreetmap.org/way/1133013782"
+        },
+        {
+          "type": "way",
+          "id": 1133013783,
+          "url": "https://www.openstreetmap.org/way/1133013783"
+        },
+        {
+          "type": "way",
+          "id": 1133013784,
+          "url": "https://www.openstreetmap.org/way/1133013784"
+        },
+        {
+          "type": "way",
+          "id": 1133013785,
+          "url": "https://www.openstreetmap.org/way/1133013785"
+        },
+        {
+          "type": "way",
+          "id": 1133013786,
+          "url": "https://www.openstreetmap.org/way/1133013786"
+        },
+        {
+          "type": "way",
+          "id": 1133013787,
+          "url": "https://www.openstreetmap.org/way/1133013787"
+        },
+        {
+          "type": "way",
+          "id": 1133013788,
+          "url": "https://www.openstreetmap.org/way/1133013788"
+        },
+        {
+          "type": "way",
+          "id": 1133013789,
+          "url": "https://www.openstreetmap.org/way/1133013789"
+        },
+        {
+          "type": "way",
+          "id": 1133013790,
+          "url": "https://www.openstreetmap.org/way/1133013790"
+        },
+        {
+          "type": "way",
+          "id": 1133013791,
+          "url": "https://www.openstreetmap.org/way/1133013791"
+        },
+        {
+          "type": "way",
+          "id": 1133013792,
+          "url": "https://www.openstreetmap.org/way/1133013792"
+        },
+        {
+          "type": "way",
+          "id": 1133013793,
+          "url": "https://www.openstreetmap.org/way/1133013793"
+        },
+        {
+          "type": "way",
+          "id": 1133013794,
+          "url": "https://www.openstreetmap.org/way/1133013794"
+        },
+        {
+          "type": "way",
+          "id": 1133013795,
+          "url": "https://www.openstreetmap.org/way/1133013795"
+        },
+        {
+          "type": "way",
+          "id": 1133013796,
+          "url": "https://www.openstreetmap.org/way/1133013796"
+        },
+        {
+          "type": "way",
+          "id": 1133013797,
+          "url": "https://www.openstreetmap.org/way/1133013797"
+        },
+        {
+          "type": "way",
+          "id": 1133013798,
+          "url": "https://www.openstreetmap.org/way/1133013798"
+        },
+        {
+          "type": "way",
+          "id": 1133013799,
+          "url": "https://www.openstreetmap.org/way/1133013799"
+        },
+        {
+          "type": "way",
+          "id": 1133013800,
+          "url": "https://www.openstreetmap.org/way/1133013800"
+        },
+        {
+          "type": "way",
+          "id": 1133013801,
+          "url": "https://www.openstreetmap.org/way/1133013801"
+        },
+        {
+          "type": "way",
+          "id": 1133013802,
+          "url": "https://www.openstreetmap.org/way/1133013802"
+        },
+        {
+          "type": "way",
+          "id": 1133013803,
+          "url": "https://www.openstreetmap.org/way/1133013803"
+        },
+        {
+          "type": "way",
+          "id": 1133013804,
+          "url": "https://www.openstreetmap.org/way/1133013804"
+        },
+        {
+          "type": "way",
+          "id": 1133013805,
+          "url": "https://www.openstreetmap.org/way/1133013805"
+        },
+        {
+          "type": "way",
+          "id": 1133013806,
+          "url": "https://www.openstreetmap.org/way/1133013806"
+        },
+        {
+          "type": "way",
+          "id": 1133013807,
+          "url": "https://www.openstreetmap.org/way/1133013807"
+        },
+        {
+          "type": "way",
+          "id": 1133013808,
+          "url": "https://www.openstreetmap.org/way/1133013808"
+        },
+        {
+          "type": "way",
+          "id": 1133013809,
+          "url": "https://www.openstreetmap.org/way/1133013809"
+        },
+        {
+          "type": "way",
+          "id": 1133013810,
+          "url": "https://www.openstreetmap.org/way/1133013810"
+        },
+        {
+          "type": "way",
+          "id": 1133013811,
+          "url": "https://www.openstreetmap.org/way/1133013811"
+        },
+        {
+          "type": "way",
+          "id": 1133013812,
+          "url": "https://www.openstreetmap.org/way/1133013812"
+        },
+        {
+          "type": "way",
+          "id": 1133013813,
+          "url": "https://www.openstreetmap.org/way/1133013813"
+        },
+        {
+          "type": "way",
+          "id": 1133013814,
+          "url": "https://www.openstreetmap.org/way/1133013814"
+        },
+        {
+          "type": "way",
+          "id": 1133013815,
+          "url": "https://www.openstreetmap.org/way/1133013815"
+        },
+        {
+          "type": "way",
+          "id": 1133013816,
+          "url": "https://www.openstreetmap.org/way/1133013816"
+        },
+        {
+          "type": "way",
+          "id": 1133013817,
+          "url": "https://www.openstreetmap.org/way/1133013817"
+        },
+        {
+          "type": "way",
+          "id": 1133013818,
+          "url": "https://www.openstreetmap.org/way/1133013818"
+        },
+        {
+          "type": "way",
+          "id": 1133013819,
+          "url": "https://www.openstreetmap.org/way/1133013819"
+        },
+        {
+          "type": "way",
+          "id": 1133013820,
+          "url": "https://www.openstreetmap.org/way/1133013820"
+        },
+        {
+          "type": "way",
+          "id": 1133013821,
+          "url": "https://www.openstreetmap.org/way/1133013821"
+        },
+        {
+          "type": "way",
+          "id": 1133013822,
+          "url": "https://www.openstreetmap.org/way/1133013822"
+        },
+        {
+          "type": "way",
+          "id": 1133013823,
+          "url": "https://www.openstreetmap.org/way/1133013823"
+        },
+        {
+          "type": "way",
+          "id": 1133013824,
+          "url": "https://www.openstreetmap.org/way/1133013824"
+        },
+        {
+          "type": "way",
+          "id": 1133013825,
+          "url": "https://www.openstreetmap.org/way/1133013825"
+        },
+        {
+          "type": "way",
+          "id": 1133013826,
+          "url": "https://www.openstreetmap.org/way/1133013826"
+        },
+        {
+          "type": "way",
+          "id": 1133013827,
+          "url": "https://www.openstreetmap.org/way/1133013827"
+        },
+        {
+          "type": "way",
+          "id": 1133013828,
+          "url": "https://www.openstreetmap.org/way/1133013828"
+        },
+        {
+          "type": "way",
+          "id": 1133013829,
+          "url": "https://www.openstreetmap.org/way/1133013829"
+        },
+        {
+          "type": "way",
+          "id": 1133013830,
+          "url": "https://www.openstreetmap.org/way/1133013830"
+        },
+        {
+          "type": "way",
+          "id": 1133013831,
+          "url": "https://www.openstreetmap.org/way/1133013831"
+        },
+        {
+          "type": "way",
+          "id": 1133013832,
+          "url": "https://www.openstreetmap.org/way/1133013832"
+        },
+        {
+          "type": "way",
+          "id": 1133013833,
+          "url": "https://www.openstreetmap.org/way/1133013833"
+        },
+        {
+          "type": "way",
+          "id": 1133013834,
+          "url": "https://www.openstreetmap.org/way/1133013834"
+        },
+        {
+          "type": "way",
+          "id": 1133013835,
+          "url": "https://www.openstreetmap.org/way/1133013835"
+        },
+        {
+          "type": "way",
+          "id": 1133013836,
+          "url": "https://www.openstreetmap.org/way/1133013836"
+        },
+        {
+          "type": "way",
+          "id": 1133013837,
+          "url": "https://www.openstreetmap.org/way/1133013837"
+        },
+        {
+          "type": "way",
+          "id": 1133013838,
+          "url": "https://www.openstreetmap.org/way/1133013838"
+        },
+        {
+          "type": "way",
+          "id": 1133013839,
+          "url": "https://www.openstreetmap.org/way/1133013839"
+        },
+        {
+          "type": "way",
+          "id": 1133013840,
+          "url": "https://www.openstreetmap.org/way/1133013840"
+        },
+        {
+          "type": "way",
+          "id": 1133013841,
+          "url": "https://www.openstreetmap.org/way/1133013841"
+        },
+        {
+          "type": "way",
+          "id": 1133013842,
+          "url": "https://www.openstreetmap.org/way/1133013842"
+        },
+        {
+          "type": "way",
+          "id": 1133013843,
+          "url": "https://www.openstreetmap.org/way/1133013843"
+        },
+        {
+          "type": "way",
+          "id": 1133013844,
+          "url": "https://www.openstreetmap.org/way/1133013844"
+        },
+        {
+          "type": "way",
+          "id": 1133013845,
+          "url": "https://www.openstreetmap.org/way/1133013845"
+        },
+        {
+          "type": "way",
+          "id": 1133013846,
+          "url": "https://www.openstreetmap.org/way/1133013846"
+        },
+        {
+          "type": "way",
+          "id": 1133013847,
+          "url": "https://www.openstreetmap.org/way/1133013847"
+        },
+        {
+          "type": "way",
+          "id": 1133013848,
+          "url": "https://www.openstreetmap.org/way/1133013848"
+        },
+        {
+          "type": "way",
+          "id": 1133013849,
+          "url": "https://www.openstreetmap.org/way/1133013849"
+        },
+        {
+          "type": "way",
+          "id": 1133013850,
+          "url": "https://www.openstreetmap.org/way/1133013850"
+        },
+        {
+          "type": "way",
+          "id": 1133013851,
+          "url": "https://www.openstreetmap.org/way/1133013851"
+        },
+        {
+          "type": "way",
+          "id": 1133013852,
+          "url": "https://www.openstreetmap.org/way/1133013852"
+        },
+        {
+          "type": "way",
+          "id": 1133013853,
+          "url": "https://www.openstreetmap.org/way/1133013853"
+        },
+        {
+          "type": "way",
+          "id": 1133013854,
+          "url": "https://www.openstreetmap.org/way/1133013854"
+        },
+        {
+          "type": "way",
+          "id": 1133013855,
+          "url": "https://www.openstreetmap.org/way/1133013855"
+        },
+        {
+          "type": "way",
+          "id": 1133013856,
+          "url": "https://www.openstreetmap.org/way/1133013856"
+        },
+        {
+          "type": "way",
+          "id": 1133013857,
+          "url": "https://www.openstreetmap.org/way/1133013857"
+        },
+        {
+          "type": "way",
+          "id": 1133013858,
+          "url": "https://www.openstreetmap.org/way/1133013858"
+        },
+        {
+          "type": "way",
+          "id": 1133013859,
+          "url": "https://www.openstreetmap.org/way/1133013859"
+        },
+        {
+          "type": "way",
+          "id": 1133013860,
+          "url": "https://www.openstreetmap.org/way/1133013860"
+        },
+        {
+          "type": "way",
+          "id": 1133013861,
+          "url": "https://www.openstreetmap.org/way/1133013861"
+        },
+        {
+          "type": "way",
+          "id": 1133013862,
+          "url": "https://www.openstreetmap.org/way/1133013862"
+        },
+        {
+          "type": "way",
+          "id": 1133013863,
+          "url": "https://www.openstreetmap.org/way/1133013863"
+        },
+        {
+          "type": "way",
+          "id": 1133013864,
+          "url": "https://www.openstreetmap.org/way/1133013864"
+        },
+        {
+          "type": "way",
+          "id": 1133013865,
+          "url": "https://www.openstreetmap.org/way/1133013865"
+        },
+        {
+          "type": "way",
+          "id": 1133013866,
+          "url": "https://www.openstreetmap.org/way/1133013866"
+        },
+        {
+          "type": "way",
+          "id": 1133013867,
+          "url": "https://www.openstreetmap.org/way/1133013867"
+        },
+        {
+          "type": "way",
+          "id": 1133013868,
+          "url": "https://www.openstreetmap.org/way/1133013868"
+        },
+        {
+          "type": "way",
+          "id": 1133013869,
+          "url": "https://www.openstreetmap.org/way/1133013869"
+        },
+        {
+          "type": "way",
+          "id": 1133013870,
+          "url": "https://www.openstreetmap.org/way/1133013870"
+        },
+        {
+          "type": "way",
+          "id": 1133013871,
+          "url": "https://www.openstreetmap.org/way/1133013871"
+        },
+        {
+          "type": "way",
+          "id": 1133013872,
+          "url": "https://www.openstreetmap.org/way/1133013872"
+        },
+        {
+          "type": "way",
+          "id": 1133013873,
+          "url": "https://www.openstreetmap.org/way/1133013873"
+        },
+        {
+          "type": "way",
+          "id": 1133013874,
+          "url": "https://www.openstreetmap.org/way/1133013874"
+        },
+        {
+          "type": "way",
+          "id": 1133013875,
+          "url": "https://www.openstreetmap.org/way/1133013875"
+        },
+        {
+          "type": "way",
+          "id": 1133013876,
+          "url": "https://www.openstreetmap.org/way/1133013876"
+        },
+        {
+          "type": "way",
+          "id": 1133013877,
+          "url": "https://www.openstreetmap.org/way/1133013877"
+        }
+      ],
+      "wikidata": "Q160659",
+      "authors": ["Colin", "Claude"],
+      "credits": [
+        {
+          "name": "Colin",
+          "kind": "person",
+          "role": "creator"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "london",
+        "name": "London",
+        "kind": "city",
+        "wikidata": "Q84"
+      },
+      "placeParents": [],
+      "type": "ride",
+      "tags": ["cantilever", "observation-wheel", "riverside"],
+      "references": [
+        {
+          "title": "London Eye (00776p).jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London_Eye_(00776p).jpg",
+          "author": "Rhododendrites",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "London, London Eye -- 2016 -- 4625.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London,_London_Eye_--_2016_--_4625.jpg",
+          "author": "Dietmar Rabich",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "London, London Eye -- 2016 -- 1445.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London,_London_Eye_--_2016_--_1445.jpg",
+          "author": "Dietmar Rabich",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Thames and London Eye from Westminster Bridge.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Thames_and_London_Eye_from_Westminster_Bridge.jpg",
+          "author": "Domob",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "London eye and county hall pano edited 2008-02-19.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London_eye_and_county_hall_pano_edited_2008-02-19.jpg",
+          "author": "Kim Hansen",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "London MMB »0X2 London Eye.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London_MMB_%C2%BB0X2_London_Eye.jpg",
+          "author": "mattbuck",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "London Eye 2011 013.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:London_Eye_2011_013.jpg",
+          "author": "Perituss",
+          "license": "CC0 1.0"
+        },
+        {
+          "title": "British Airways London Eye Profile.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:British_Airways_London_Eye_Profile.jpg",
+          "author": "Tim-desser",
+          "license": "CC0 1.0"
+        }
+      ],
+      "reviewStatus": "unreviewed",
+      "height": 137,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "london-eye",
+      "placement": {
+        "bearing": 7.4,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/e39bd455ca2b9da1214adccce9414cdd5d77649e66878671c598a3fe96b857b0/london-eye.ts",
+        "bytes": 22511,
+        "sha256": "e39bd455ca2b9da1214adccce9414cdd5d77649e66878671c598a3fe96b857b0"
+      },
+      "bounds": [-0.1208939, 51.5025838, -0.1184591, 51.5040994],
+      "revision": "695d2d25ed5f2da53887b25cf31d7ea3ce7ecb728fcbc08eca61a6a4b5fe03da",
+      "metadata": "/assets/london-eye/695d2d25ed5f2da53887b25cf31d7ea3ce7ecb728fcbc08eca61a6a4b5fe03da/asset.json"
+    },
+    {
+      "id": "ascendus",
+      "name": "Ascendus",
+      "anchor": [-80.9232622, 35.2191714],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 16,
+      "lods": {
+        "low": {
+          "url": "/models/ascendus/651461d1c748c64cf70ddba75fbc26194b32d7192b3fd0cb03939e2d5b5ce1b5/low.glb",
+          "bytes": 118968,
+          "sha256": "651461d1c748c64cf70ddba75fbc26194b32d7192b3fd0cb03939e2d5b5ce1b5",
+          "triangles": 2098,
+          "info": {
+            "triangles": 2098,
+            "vertices": 4288,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 4,
+            "nodes": 1,
+            "materials": ["steel-silver", "fin-glass", "ascendus-orange", "dichroic-glass"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/ascendus/651461d1c748c64cf70ddba75fbc26194b32d7192b3fd0cb03939e2d5b5ce1b5/low.glb.gz",
+            "bytes": 47581,
+            "sha256": "eb4b8041a0ea7629c5604e670156e2da0f646721d82ea99276e70844c0545be9",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 2098,
+      "entranceLights": [],
+      "osm": null,
+      "additionalOsm": [],
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "charlotte-area",
+        "name": "Charlotte area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "sculpture",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 18.44,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "ascendus",
+      "placement": {
+        "bearing": 0,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/cd1e0c2a06d1c916cfb9919fe3ab82fee1b92800e80abac2b276717459ccab4a/ascendus.ts",
+        "bytes": 8336,
+        "sha256": "cd1e0c2a06d1c916cfb9919fe3ab82fee1b92800e80abac2b276717459ccab4a"
+      },
+      "bounds": [-80.9233087, 35.2191334, -80.9232157, 35.2192094],
+      "revision": "fad425c7509f72c6d9eb7742b3cb9f405cfd90e1a71599867e9f31d3e5850bb7",
+      "metadata": "/assets/ascendus/fad425c7509f72c6d9eb7742b3cb9f405cfd90e1a71599867e9f31d3e5850bb7/asset.json"
+    },
+    {
+      "id": "sf-bay-bridge-west-w2",
+      "name": "Bay Bridge west span (tower W2)",
+      "anchor": [-122.3858231, 37.7907531],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/sf-bay-bridge-west-w2/fa2e0516fd1b03b3846fdb794d6f19d715a52ff78f66868cdb8738031850a02a/low.glb",
+          "bytes": 50344,
+          "sha256": "fa2e0516fd1b03b3846fdb794d6f19d715a52ff78f66868cdb8738031850a02a",
+          "triangles": 942,
+          "info": {
+            "triangles": 942,
+            "vertices": 1748,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 3,
+            "nodes": 1,
+            "materials": ["bay-bridge-silver", "bay-bridge-shadow", "concrete"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/sf-bay-bridge-west-w2/fa2e0516fd1b03b3846fdb794d6f19d715a52ff78f66868cdb8738031850a02a/low.glb.gz",
+            "bytes": 12350,
+            "sha256": "d75d67914ef48936ee05c988648c9fd37921e7e33ae78b35b9a3202a9b1d0b78",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 942,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 432712476,
+        "url": "https://www.openstreetmap.org/way/432712476"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 1011568818,
+          "url": "https://www.openstreetmap.org/way/1011568818"
+        }
+      ],
+      "wikidata": "Q130699957",
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "san-francisco-bay-area",
+        "name": "San Francisco Bay Area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "bridge",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 143.4,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "sf-bay-bridge-west",
+      "placement": {
+        "bearing": 40.4,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/8efb96b61a1fb9d94a226adcb364098847912b53b03c6138418de7268e7edf4d/sf-bay-bridge-west.ts",
+        "bytes": 8324,
+        "sha256": "8efb96b61a1fb9d94a226adcb364098847912b53b03c6138418de7268e7edf4d"
+      },
+      "bounds": [-122.3862119, 37.7904459, -122.3854343, 37.7910603],
+      "revision": "5f0d9d144226610011b4741b4c86cd280d81f05b09f4f7ac283f616478b41ae9",
+      "metadata": "/assets/sf-bay-bridge-west-w2/5f0d9d144226610011b4741b4c86cd280d81f05b09f4f7ac283f616478b41ae9/asset.json"
+    },
+    {
+      "id": "sf-bay-bridge-west-w3",
+      "name": "Bay Bridge west span (tower W3)",
+      "anchor": [-122.3806476, 37.795588],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/sf-bay-bridge-west-w3/8dc4f2c47ef117f70038a981c22a2e00ff791767a913368987a1b8d0115a3469/low.glb",
+          "bytes": 50340,
+          "sha256": "8dc4f2c47ef117f70038a981c22a2e00ff791767a913368987a1b8d0115a3469",
+          "triangles": 942,
+          "info": {
+            "triangles": 942,
+            "vertices": 1748,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 3,
+            "nodes": 1,
+            "materials": ["bay-bridge-silver", "bay-bridge-shadow", "concrete"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/sf-bay-bridge-west-w3/8dc4f2c47ef117f70038a981c22a2e00ff791767a913368987a1b8d0115a3469/low.glb.gz",
+            "bytes": 12350,
+            "sha256": "89f13214d97645db713db0f6af93ed9025a402cb4f2c4c0416e984341d8ad67f",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 942,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 432712477,
+        "url": "https://www.openstreetmap.org/way/432712477"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 1011568818,
+          "url": "https://www.openstreetmap.org/way/1011568818"
+        }
+      ],
+      "wikidata": "Q130699957",
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "san-francisco-bay-area",
+        "name": "San Francisco Bay Area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "bridge",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 157,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "sf-bay-bridge-west-inner",
+      "placement": {
+        "bearing": 40.4,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/86ea5f8de74047528e123207dadf9fc67751ca1f8173e3fb520569a684ad9d11/sf-bay-bridge-west-inner.ts",
+        "bytes": 739,
+        "sha256": "86ea5f8de74047528e123207dadf9fc67751ca1f8173e3fb520569a684ad9d11"
+      },
+      "bounds": [-122.3810364, 37.7952808, -122.3802588, 37.7958952],
+      "revision": "2e4c8cc8c9d72f9f317127ad9d00a596ba97473220211b310e1c4e3ab8066cd9",
+      "metadata": "/assets/sf-bay-bridge-west-w3/2e4c8cc8c9d72f9f317127ad9d00a596ba97473220211b310e1c4e3ab8066cd9/asset.json"
+    },
+    {
+      "id": "la-vincent-thomas-bridge-east",
+      "name": "Vincent Thomas Bridge (east tower)",
+      "anchor": [-118.2689686, 33.7491062],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/la-vincent-thomas-bridge-east/1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190/low.glb",
+          "bytes": 40816,
+          "sha256": "1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190",
+          "triangles": 840,
+          "info": {
+            "triangles": 840,
+            "vertices": 1440,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 1,
+            "nodes": 1,
+            "materials": ["bridge-green"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/la-vincent-thomas-bridge-east/1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190/low.glb.gz",
+            "bytes": 9846,
+            "sha256": "3759eb7d214fd561a18575159c27720b9d7b9b0fee0a20113e40af2b2040b08d",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 840,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 1011852501,
+        "url": "https://www.openstreetmap.org/way/1011852501"
+      },
+      "additionalOsm": [],
+      "wikidata": "Q496944",
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "los-angeles-area",
+        "name": "Los Angeles area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "bridge",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 108.5,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "la-vincent-thomas-bridge",
+      "placement": {
+        "bearing": 100.2,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/a3bebf244d9ecbd72ca7d30af6b76f40e8bfa25cbb2c4e8e7684b5468685a077/la-vincent-thomas-bridge.ts",
+        "bytes": 5259,
+        "sha256": "a3bebf244d9ecbd72ca7d30af6b76f40e8bfa25cbb2c4e8e7684b5468685a077"
+      },
+      "bounds": [-118.2691046, 33.7489931, -118.2688326, 33.7492193],
+      "revision": "cea074357da90b725a0df8cfd7b195b630a4e71afe294995fe6ba87fd5b1a8ae",
+      "metadata": "/assets/la-vincent-thomas-bridge-east/cea074357da90b725a0df8cfd7b195b630a4e71afe294995fe6ba87fd5b1a8ae/asset.json"
+    },
+    {
+      "id": "la-vincent-thomas-bridge-west",
+      "name": "Vincent Thomas Bridge (west tower)",
+      "anchor": [-118.2738195, 33.7498368],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/la-vincent-thomas-bridge-east/1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190/low.glb",
+          "bytes": 40816,
+          "sha256": "1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190",
+          "triangles": 840,
+          "info": {
+            "triangles": 840,
+            "vertices": 1440,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 1,
+            "nodes": 1,
+            "materials": ["bridge-green"],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/la-vincent-thomas-bridge-east/1e744ccf145680fd162cf5435c8e1cf1ab4f252441545c5dfd43d3bf197d5190/low.glb.gz",
+            "bytes": 9846,
+            "sha256": "3759eb7d214fd561a18575159c27720b9d7b9b0fee0a20113e40af2b2040b08d",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "triangles": 840,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 1011852501,
+        "url": "https://www.openstreetmap.org/way/1011852501"
+      },
+      "additionalOsm": [],
+      "wikidata": "Q496944",
+      "authors": ["Alex Wohlbruck", "Claude"],
+      "credits": [
+        {
+          "name": "Alex Wohlbruck",
+          "kind": "person",
+          "role": "creator",
+          "github": "alexwohlbruck"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "los-angeles-area",
+        "name": "Los Angeles area",
+        "kind": "region"
+      },
+      "placeParents": [],
+      "type": "bridge",
+      "tags": [],
+      "reviewStatus": "unreviewed",
+      "height": 108.5,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "la-vincent-thomas-bridge",
+      "placement": {
+        "bearing": 100.2,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/a3bebf244d9ecbd72ca7d30af6b76f40e8bfa25cbb2c4e8e7684b5468685a077/la-vincent-thomas-bridge.ts",
+        "bytes": 5259,
+        "sha256": "a3bebf244d9ecbd72ca7d30af6b76f40e8bfa25cbb2c4e8e7684b5468685a077"
+      },
+      "bounds": [-118.2739555, 33.7497237, -118.2736835, 33.7499499],
+      "revision": "7fcfba8e373619b7d9477895aed7c02cb64e7b04eeac9c98cba12e60a8b5e176",
+      "metadata": "/assets/la-vincent-thomas-bridge-west/7fcfba8e373619b7d9477895aed7c02cb64e7b04eeac9c98cba12e60a8b5e176/asset.json"
+    },
+    {
+      "id": "abu-dhabi-louvre",
+      "name": "Louvre Abu Dhabi",
+      "anchor": [54.3985952, 24.5336433],
+      "heading": 0,
+      "units": "metres",
+      "axes": "X east / Y up / Z south",
+      "minZoom": 14,
+      "lods": {
+        "low": {
+          "url": "/models/abu-dhabi-louvre/51a3c30cfb5a855ef6354be858fb9aba63151c6fe4a8c9c266e25aea62d43f41/low.glb",
+          "bytes": 228584,
+          "sha256": "51a3c30cfb5a855ef6354be858fb9aba63151c6fe4a8c9c266e25aea62d43f41",
+          "triangles": 5862,
+          "info": {
+            "triangles": 5862,
+            "vertices": 7514,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 5,
+            "nodes": 1,
+            "materials": [
+              "louvre-white",
+              "louvre-roof",
+              "louvre-dome",
+              "louvre-dome-inner",
+              "window"
+            ],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/abu-dhabi-louvre/51a3c30cfb5a855ef6354be858fb9aba63151c6fe4a8c9c266e25aea62d43f41/low.glb.gz",
+            "bytes": 130825,
+            "sha256": "6bdc252059df1d4d8b19ec2be7ebc9dcea51e2a9e3397141643748b25b983575",
+            "encoding": "gzip-file"
+          }
+        },
+        "detail": {
+          "url": "/models/abu-dhabi-louvre/0edcefb52b20cd9882614f02089851cf2ca13590347805feb856f30f7096afbe/detail.glb",
+          "bytes": 1047720,
+          "sha256": "0edcefb52b20cd9882614f02089851cf2ca13590347805feb856f30f7096afbe",
+          "triangles": 31822,
+          "info": {
+            "triangles": 31822,
+            "vertices": 35154,
+            "meshes": 1,
+            "meshInstances": 1,
+            "primitives": 5,
+            "nodes": 1,
+            "materials": [
+              "louvre-white",
+              "louvre-roof",
+              "louvre-dome",
+              "louvre-dome-inner",
+              "window"
+            ],
+            "textures": 0,
+            "images": [],
+            "animations": [],
+            "skins": 0,
+            "morphTargets": 0,
+            "generator": "barrelman scripts/landmarks",
+            "gltfVersion": "2.0",
+            "copyright": null,
+            "extensionsUsed": [],
+            "extensionsRequired": []
+          },
+          "gzip": {
+            "url": "/models/abu-dhabi-louvre/0edcefb52b20cd9882614f02089851cf2ca13590347805feb856f30f7096afbe/detail.glb.gz",
+            "bytes": 427268,
+            "sha256": "cf3fc3e3f338f520ffac82a18b0ddc9bbd6b8ef066d4ea3fe10557212369b34c",
+            "encoding": "gzip-file"
+          }
+        }
+      },
+      "detailZoom": 16,
+      "triangles": 5862,
+      "entranceLights": [],
+      "osm": {
+        "type": "way",
+        "id": 498046180,
+        "url": "https://www.openstreetmap.org/way/498046180"
+      },
+      "additionalOsm": [
+        {
+          "type": "way",
+          "id": 403276371,
+          "url": "https://www.openstreetmap.org/way/403276371"
+        }
+      ],
+      "wikidata": "Q3176133",
+      "authors": ["OnlyHudson", "Claude"],
+      "credits": [
+        {
+          "name": "OnlyHudson",
+          "kind": "person",
+          "role": "creator",
+          "github": "TheOnlyHudson"
+        },
+        {
+          "name": "Claude",
+          "kind": "ai",
+          "role": "procedural modeling",
+          "model": "Claude Opus 5.5",
+          "url": "https://claude.ai/"
+        }
+      ],
+      "collection": {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "url": "https://github.com/alexwohlbruck/landmarks"
+      },
+      "place": {
+        "id": "abu-dhabi",
+        "name": "Abu Dhabi",
+        "kind": "city",
+        "parent": "united-arab-emirates",
+        "wikidata": "Q1519"
+      },
+      "placeParents": [
+        {
+          "id": "united-arab-emirates",
+          "name": "United Arab Emirates",
+          "kind": "country",
+          "wikidata": "Q878"
+        }
+      ],
+      "type": "building",
+      "tags": ["contemporary", "dome", "lattice", "museum"],
+      "references": [
+        {
+          "title": "Louvre Abu Dhabi (dome over the entrance)",
+          "url": "https://www.flickr.com/photos/32916425@N04/39755590230",
+          "author": "Roller Coaster Philosoph",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Louvre Abu Dhabi (outer lattice)",
+          "url": "https://www.flickr.com/photos/32916425@N04/40671252165",
+          "author": "Roller Coaster Philosoph",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Louvre Abu Dhabi (lattice from below)",
+          "url": "https://www.flickr.com/photos/32916425@N04/39754585730",
+          "author": "Roller Coaster Philosoph",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Louvre Abu Dhabi (plaza and basin)",
+          "url": "https://www.flickr.com/photos/32916425@N04/26694416957",
+          "author": "Roller Coaster Philosoph",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Louvre Abu Dhabi (rim over the basin)",
+          "url": "https://www.flickr.com/photos/32916425@N04/27693349928",
+          "author": "Roller Coaster Philosoph",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Abu Dhabi (Louvre cubes)",
+          "url": "https://www.flickr.com/photos/133200397@N03/48341438347",
+          "author": "sergei.gussev",
+          "license": "CC BY 2.0"
+        },
+        {
+          "title": "Jean nouvel, modellino del louvre abu dhabi",
+          "url": "https://commons.wikimedia.org/wiki/File:Jean_nouvel,_modellino_del_louvre_abu_dhabi.jpg",
+          "author": "Francesco Bini",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Jean nouvel, modellino del loubre abu dhabi",
+          "url": "https://commons.wikimedia.org/wiki/File:Jean_nouvel,_modellino_del_loubre_abu_dhabi.jpg",
+          "author": "Francesco Bini",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Louvre abu dhabi, interno, cortile coperto 01",
+          "url": "https://commons.wikimedia.org/wiki/File:Louvre_abu_dhabi,_interno,_cortile_coperto_01.jpg",
+          "author": "Francesco Bini",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "title": "Visitors at Louvre Abu Dhabi",
+          "url": "https://commons.wikimedia.org/wiki/File:Visitors_at_Louvre_Abu_Dhabi.jpg",
+          "author": "Tasos Lekkas",
+          "license": "CC0"
+        },
+        {
+          "title": "LouvreAD platforms",
+          "url": "https://commons.wikimedia.org/wiki/File:LouvreAD_platforms.jpg",
+          "author": "Boubloub",
+          "license": "CC BY-SA 4.0"
+        }
+      ],
+      "reviewStatus": "unreviewed",
+      "height": 36.12,
+      "artisticLicense": "CC0-1.0",
+      "spatialDataLicense": "ODbL-1.0",
+      "licenseScope": "The model licence covers the 3D model only. The anchor and the OSM elements it replaces are derived from OpenStreetMap and are ODbL-1.0.",
+      "model": "abu-dhabi-louvre",
+      "placement": {
+        "bearing": 49.5,
+        "scale": 1
+      },
+      "source": {
+        "url": "/objects/1f3c4a2d7213b8d6745039cf77afa4f12f342f8ef78f79a0f576b9274d2d19e9/abu-dhabi-louvre.ts",
+        "bytes": 21374,
+        "sha256": "1f3c4a2d7213b8d6745039cf77afa4f12f342f8ef78f79a0f576b9274d2d19e9"
+      },
+      "bounds": [54.3966833, 24.531904, 54.4005071, 24.5353826],
+      "revision": "a4a345352ebdc3de747da56121de6518895d3a554bc6638f79bc758aade55a6b",
+      "metadata": "/assets/abu-dhabi-louvre/a4a345352ebdc3de747da56121de6518895d3a554bc6638f79bc758aade55a6b/asset.json"
+    }
+  ]
+}

@@ -25,6 +25,10 @@ const PROCESS_LIFECYCLE_EVENTS = new Set([
 const INTEGRATION_SETUP_TIMER_ORIGINS = [
   "packages/ourairports-data/loader.ts",
   "integrations/transit-dynamic-registry/registry.ts",
+  "integrations/landmark-models/model-proxy.ts",
+  // One catalogue refresh loop per Open Landmarks upstream (Barrelman and Open Landmarks).
+  "packages/open-landmarks-client/client.ts",
+  "packages/open-landmarks-client/client.ts",
 ];
 
 interface TrackedTimer {

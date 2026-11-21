@@ -1,3 +1,5 @@
+export type { BuildingReplacement, BuildingReplacementState } from "./buildingReplacementStore";
+export { allReplacements, useBuildingReplacementStore } from "./buildingReplacementStore";
 export { useCategoryFacetStore } from "./categoryFacetStore";
 export { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "./categorySearchStore";
 export { useCommandPaletteStore } from "./commandPaletteStore";

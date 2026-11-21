@@ -35,6 +35,7 @@ import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "../contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
+import type { LandmarkModelProvider } from "../contracts/landmark-model-provider.js";
 import type { MessageSignProvider } from "../contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
@@ -432,6 +433,7 @@ export interface CapturedRegistrations {
   chargingSites: ChargingSiteProvider[];
   cameras: CameraProvider[];
   messageSigns: MessageSignProvider[];
+  landmarkModels: LandmarkModelProvider[];
   roadWeather: RoadWeatherProvider[];
   serviceVehicles: ServiceVehicleProvider[];
   borderCrossings: BorderCrossingProvider[];
@@ -490,6 +492,7 @@ export function createMockIntegrationContext(
     chargingSites: [],
     cameras: [],
     messageSigns: [],
+    landmarkModels: [],
     roadWeather: [],
     serviceVehicles: [],
     borderCrossings: [],
@@ -564,6 +567,9 @@ export function createMockIntegrationContext(
     },
     registerMessageSignProvider: (p) => {
       registered.messageSigns.push(p);
+    },
+    registerLandmarkModelProvider: (p) => {
+      registered.landmarkModels.push(p);
     },
     registerRoadWeatherProvider: (p) => {
       registered.roadWeather.push(p);

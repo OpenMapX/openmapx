@@ -1,0 +1,4 @@
+{
+  "name": "3D landmarks",
+  "description": "Draws 3D models of landmarks in the 3D view, in place of the extruded buildings they represent. Models come from the enabled landmark model providers."
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Open Landmarks",
+  "description": "Offen lizenzierte 3D-Modelle von Wahrzeichen aus Open Landmarks, in der 3D-Ansicht anstelle der Gebäude gezeichnet, die sie darstellen. Gezeigt werden nur Modelle mit abgeschlossener Rechteprüfung.",
+  "dataSources": {
+    "open-landmarks": {
+      "purpose": "3D-Modelle von Wahrzeichen in der 3D-Ansicht zeigen.",
+      "dataSent": "Nichts über Sie. Der OpenMapX-Server ruft öffentliche Katalog- und Modelldateien ab.",
+      "dataReceived": "Positionen, Metadaten, Lizenzen und 3D-Modelldateien von Wahrzeichen."
+    },
+    "openstreetmap": {
+      "purpose": "Jedes Wahrzeichenmodell auf der Karte platzieren und die Gebäude bestimmen, die es ersetzt.",
+      "dataSent": "Nichts über Sie. Die Platzierungen kommen mit dem Wahrzeichenkatalog.",
+      "dataReceived": "Positionen, Umrisse und OpenStreetMap-Kennungen der Gebäude, die jedes Modell ersetzt."
+    }
+  }
+}

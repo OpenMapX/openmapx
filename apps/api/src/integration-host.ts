@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import {
   type ActivationTransactionScope,
   assertAirQualityProviderContract,
+  assertLandmarkModelProviderContract,
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
@@ -747,6 +748,13 @@ function buildIntegrationContext(args: {
       const existing = providers.get("message-signs") ?? [];
       existing.push(provider);
       providers.set("message-signs", existing);
+    },
+    registerLandmarkModelProvider(provider) {
+      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
+      assertLandmarkModelProviderContract(provider, manifest.id, allowedSourceIds);
+      const existing = providers.get("landmark-models") ?? [];
+      existing.push(provider);
+      providers.set("landmark-models", existing);
     },
     registerRoadWeatherProvider(provider) {
       const existing = providers.get("road-weather") ?? [];

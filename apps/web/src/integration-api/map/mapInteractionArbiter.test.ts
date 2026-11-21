@@ -162,6 +162,44 @@ describe("map interaction arbiter", () => {
     unregister();
   });
 
+  it("answers hover for content MapLibre cannot query through a custom hit test", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-flow");
+    let modelUnderPointer = false;
+    const hitTest = vi.fn(() => modelUnderPointer);
+    const modelHover = vi.fn();
+    const unregisterModel = registerMapOverlayInteraction(map, {
+      id: "model",
+      layerIds: ["test-model"],
+      priority: 0,
+      hitTest,
+      onHover: modelHover,
+    });
+    const unregisterFlow = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+    });
+
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("");
+
+    modelUnderPointer = true;
+    state.emit("mousemove", event());
+    expect(hitTest).toHaveBeenLastCalledWith(event().point);
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+    expect(modelHover).toHaveBeenLastCalledWith([], event());
+
+    // A rendered overlay of higher priority above the model owns the hover.
+    state.setHits("test-flow", [feature("flow")]);
+    state.emit("mousemove", event());
+    expect(modelHover).toHaveBeenLastCalledWith(null, event());
+
+    unregisterFlow();
+    unregisterModel();
+  });
+
   it("reports hover to the winning overlay and null to the others on every move", () => {
     const { map, state } = createMap();
     state.addLayer("test-incident");

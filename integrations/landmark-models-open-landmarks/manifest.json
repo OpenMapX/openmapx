@@ -1,0 +1,131 @@
+{
+  "id": "landmark-models-open-landmarks",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://github.com/benjamintd/open-landmarks/blob/main/docs/API.md",
+  "domains": ["landmark-models"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "healthCheck": [
+    {
+      "name": "Open Landmarks",
+      "type": "http",
+      "url": "https://open-landmarks.benmaps.fr/api/v1/preview.json"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Map Overlays",
+  "dataSources": [
+    {
+      "sourceId": "open-landmarks",
+      "name": "Open Landmarks",
+      "url": "https://open-landmarks.benmaps.fr/",
+      "owner": "Open Landmarks contributors",
+      "termsUrl": "https://github.com/benjamintd/open-landmarks/blob/main/LICENSES.md",
+      "commercialUse": "yes",
+      "usageConditions": [
+        "Each model's own licence and attribution apply; models imported under a share-alike licence (for example the Eiffel Tower, CC BY-SA 3.0) keep that licence."
+      ],
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://vercel.com/legal/privacy-policy",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "apiHosts": ["open-landmarks.benmaps.fr"],
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "3D models",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "licence",
+              "reviewedAt": "2026-11-20",
+              "evidenceUrls": [
+                "https://creativecommons.org/licenses/by/4.0/legalcode",
+                "https://github.com/benjamintd/open-landmarks/blob/main/LICENSES.md"
+              ],
+              "reason": "CC BY 4.0 §3(a)(2) permits attribution through a linked resource; the map footer shows one compact line and the credit details list each drawn model's notice.",
+              "compactText": "3D models: Open Landmarks (CC BY 4.0 and others)"
+            }
+          },
+          {
+            "scope": "imagery",
+            "subject": "Imported 3D models",
+            "license": {
+              "kind": "per-item",
+              "raw": "Each model states its own licence; imports may be CC BY-SA or CC0."
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Landmark placements and footprints",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC BY 4.0 and per-model licences for models; ODbL-1.0 placements",
+            "url": "https://github.com/benjamintd/open-landmarks/blob/main/LICENSES.md"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "openstreetmap",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://www.openstreetmap.org/copyright"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://www.openstreetmap.org/copyright"
+          }
+        ]
+      }
+    }
+  ]
+}

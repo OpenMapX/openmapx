@@ -1,0 +1,16 @@
+{
+  "name": "Landmarks (Barrelman)",
+  "description": "Low-poly 3D landmark models from the Barrelman Landmarks collection, drawn in the 3D view in place of the buildings they represent.",
+  "dataSources": {
+    "barrelman-landmarks": {
+      "purpose": "Show 3D models of landmarks in the 3D view.",
+      "dataSent": "Nothing about you. The OpenMapX server requests public catalogue and model files.",
+      "dataReceived": "Landmark positions, metadata and 3D model files."
+    },
+    "openstreetmap": {
+      "purpose": "Place each landmark model on the map and identify the buildings it replaces.",
+      "dataSent": "Nothing about you. The placements come with the landmark catalogue.",
+      "dataReceived": "Positions and OpenStreetMap identifiers of the buildings each model replaces."
+    }
+  }
+}

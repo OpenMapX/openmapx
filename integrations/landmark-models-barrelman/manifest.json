@@ -1,0 +1,108 @@
+{
+  "id": "landmark-models-barrelman",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://github.com/alexwohlbruck/landmarks/blob/main/docs/reference.md",
+  "domains": ["landmark-models"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "healthCheck": [
+    {
+      "name": "Landmarks (Barrelman)",
+      "type": "http",
+      "url": "https://landmarks.barrelman.dev/api/v1/latest.json"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Map Overlays",
+  "dataSources": [
+    {
+      "sourceId": "barrelman-landmarks",
+      "name": "Landmarks (Barrelman)",
+      "url": "https://landmarks.barrelman.dev/",
+      "owner": "Alex Wohlbruck",
+      "termsUrl": "https://github.com/alexwohlbruck/landmarks/blob/main/NOTICE",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "apiHosts": ["landmarks.barrelman.dev"],
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "3D models",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Landmark placements",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC0-1.0 models; ODbL-1.0 placements",
+            "url": "https://github.com/alexwohlbruck/landmarks/blob/main/NOTICE"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "openstreetmap",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://www.openstreetmap.org/copyright"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://www.openstreetmap.org/copyright"
+          }
+        ]
+      }
+    }
+  ]
+}
