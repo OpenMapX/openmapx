@@ -3,6 +3,7 @@
 import type { LngLat } from "@openmapx/core";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 interface FakeMarkerShape {
   element: HTMLElement;
@@ -120,11 +121,12 @@ afterEach(() => {
 
 describe("WaypointMarkers", () => {
   it("moves the dragged waypoint and swaps pin styles after a reverse", async () => {
-    const [a, b, c] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, b, c] = [nth(ids, 0), nth(ids, 1), nth(ids, 2)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 
@@ -144,10 +146,13 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint after a stop is inserted before it", async () => {
-    const [, c] = setUp([
-      [A, "A"],
-      [C, "C"],
-    ]);
+    const c = nth(
+      setUp([
+        [A, "A"],
+        [C, "C"],
+      ]),
+      1,
+    );
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(2));
 
@@ -155,7 +160,7 @@ describe("WaypointMarkers", () => {
       useDirectionsStore.getState().insertWaypoint(1, B, "B");
     });
     await waitFor(() => expect(live()).toHaveLength(3));
-    const b = useDirectionsStore.getState().waypoints[1]?.id;
+    const b = nth(useDirectionsStore.getState().waypoints, 1).id;
 
     drag(markerAt(C), DROP);
     expect(byId(c)?.coords).toEqual(DROP);
@@ -165,12 +170,13 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint and renumbers stops after a removal", async () => {
-    const [, , c, d] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
       [D, "D"],
     ]);
+    const [c, d] = [nth(ids, 2), nth(ids, 3)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(4));
 
@@ -184,11 +190,12 @@ describe("WaypointMarkers", () => {
   });
 
   it("moves the dragged waypoint and restyles pins after a reorder", async () => {
-    const [a, b] = setUp([
+    const ids = setUp([
       [A, "A"],
       [B, "B"],
       [C, "C"],
     ]);
+    const [a, b] = [nth(ids, 0), nth(ids, 1)];
     render(<WaypointMarkers />);
     await waitFor(() => expect(live()).toHaveLength(3));
 

@@ -1,6 +1,6 @@
 import type { Map as MapLibreMap, RasterTileSource, SourceSpecification } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, type FakeMap, renderHook } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, renderHook } from "@/test";
 import { useMapAttributionStore } from "./mapAttributionStore";
 import { addAttributedRasterSource } from "./rasterMapContribution";
 import {
@@ -146,7 +146,7 @@ describe("effective raster contribution", () => {
         fake.map,
         "supplier",
         { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}"] },
-        descriptors[0].contributors,
+        nth(descriptors, 0).contributors,
       );
       const source = fake.map.getSource<RasterTileSource>("supplier");
       if (!source) throw new Error("missing source");
@@ -162,18 +162,18 @@ describe("effective raster contribution", () => {
       hook.rerender({
         descriptors: [
           {
-            ...descriptors[0],
+            ...nth(descriptors, 0),
             contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
           },
         ],
       });
       const second = source.loadTile(tile as Tile);
-      completions[1]();
+      nth(completions, 1)();
       await second;
       flush();
       expect(tile.texture.bytes).toBe("1");
       expect(html()).toContain("replacement-notice");
-      completions[0](outcome);
+      nth(completions, 0)(outcome);
       if (outcome === "fail" || outcome === "failed-upload") await expect(first).rejects.toThrow();
       else await first;
       if (outcome !== "success") {
@@ -197,29 +197,29 @@ describe("effective raster contribution", () => {
       // An empty response returns without touching loaded/texture; success of
       // the Promise itself must not restamp the retained old bytes.
       const absent = source.loadTile(tile as Tile);
-      completions[2]("absent");
+      nth(completions, 2)("absent");
       await absent;
       flush();
       expect(html()).toContain("successful-supplier");
       expect(html()).not.toContain("replacement-notice");
       const aborted = source.loadTile(tile as Tile);
-      completions[3]("abort");
+      nth(completions, 3)("abort");
       await aborted;
       flush();
       expect(html()).toBe("");
       // A later real reload owns its own receipt; a still later failed load
       // changes engine state but must not pretend that new bytes were acquired.
       const successful = source.loadTile(tile as Tile);
-      completions[4]();
+      nth(completions, 4)();
       await successful;
       const failing = source.loadTile(tile as Tile);
-      completions[5]("fail");
+      nth(completions, 5)("fail");
       await expect(failing).rejects.toThrow("failed request");
       tile.state = "reloading";
       flush();
       expect(html()).toContain("replacement-notice");
       const upload = source.loadTile(tile as Tile);
-      completions[6]("failed-upload");
+      nth(completions, 6)("failed-upload");
       await expect(upload).rejects.toThrow("failed upload");
       flush();
       expect(html()).toBe("");
@@ -251,7 +251,7 @@ describe("effective raster contribution", () => {
       fake.map,
       "supplier",
       { type: "raster", tiles: ["https://tiles.test/{z}/{x}/{y}"] },
-      descriptors[0].contributors,
+      nth(descriptors, 0).contributors,
     );
     const source = fake.map.getSource<RasterTileSource>("supplier");
     if (!source) throw new Error("missing source");
@@ -267,7 +267,10 @@ describe("effective raster contribution", () => {
     const first = load();
     hook.rerender({
       descriptors: [
-        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+        {
+          ...nth(descriptors, 0),
+          contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+        },
       ],
     });
     flush();
@@ -305,7 +308,7 @@ describe("effective raster contribution", () => {
       hook.rerender({
         descriptors: [
           {
-            ...descriptors[0],
+            ...nth(descriptors, 0),
             contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
           },
         ],
@@ -336,7 +339,10 @@ describe("effective raster contribution", () => {
     visible = ["pending"];
     hook.rerender({
       descriptors: [
-        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+        {
+          ...nth(descriptors, 0),
+          contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+        },
       ],
     });
     flush();
@@ -357,7 +363,10 @@ describe("effective raster contribution", () => {
     flush();
     hook.rerender({
       descriptors: [
-        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+        {
+          ...nth(descriptors, 0),
+          contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+        },
       ],
     });
     tile.hasData = () => true;
@@ -384,7 +393,10 @@ describe("effective raster contribution", () => {
     flush();
     hook.rerender({
       descriptors: [
-        { ...descriptors[0], contributors: [{ sourceId: "supplier", name: "replacement-notice" }] },
+        {
+          ...nth(descriptors, 0),
+          contributors: [{ sourceId: "supplier", name: "replacement-notice" }],
+        },
       ],
     });
     retained.set("child", { ...loaded(), fadeOpacity: 0, fadingParentID: { key: "parent" } });

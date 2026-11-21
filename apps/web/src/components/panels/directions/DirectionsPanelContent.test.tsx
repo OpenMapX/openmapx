@@ -4,6 +4,7 @@ import {
   createQueryWrapper,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   waitFor,
@@ -458,7 +459,7 @@ describe("DirectionsPanelContent", () => {
     // (the origin, "Berlin") leaves the middle+destination pair.
     const removeButtons = screen.getAllByRole("button", { name: "directions.removeStop" });
     expect(removeButtons.length).toBe(3);
-    fireEvent.click(removeButtons[0]);
+    fireEvent.click(nth(removeButtons, 0));
 
     expect(useDirectionsStore.getState().waypoints.length).toBe(2);
     expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([
@@ -740,10 +741,10 @@ describe("DirectionsPanelContent", () => {
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "directions.changeDestination" }));
     expect(document.activeElement).toBe(screen.getByDisplayValue("Munich"));
-    expect(useDirectionsStore.getState().waypoints[1].coords).toEqual([11.5, 48.1]);
+    expect(nth(useDirectionsStore.getState().waypoints, 1).coords).toEqual([11.5, 48.1]);
     const modeButtons = screen.getAllByRole("button", { name: "directions.tryMode" });
     expect(modeButtons).toHaveLength(3);
-    fireEvent.click(modeButtons[0]);
+    fireEvent.click(nth(modeButtons, 0));
     expect(useDirectionsStore.getState().mode).toBe("walking");
   });
 
@@ -943,7 +944,7 @@ describe("DirectionsPanelContent", () => {
       expect(snapTo).not.toHaveBeenCalledWith("full");
 
       act(() => request?.onPick({ coordinates: [13.4, 52.52], label: "Alexanderplatz" }));
-      expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13.4, 52.52]);
+      expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toEqual([13.4, 52.52]);
       act(() => useStopSearchStore.getState().close());
     });
 
@@ -962,7 +963,7 @@ describe("DirectionsPanelContent", () => {
       });
       const { snapTo } = renderAtPeek();
 
-      fireEvent.click(screen.getAllByText("directions.bestRoute")[1]);
+      fireEvent.click(nth(screen.getAllByText("directions.bestRoute"), 1));
       expect(snapTo).toHaveBeenCalledWith("peek");
     });
   });
@@ -1291,7 +1292,7 @@ it("credits scheduled cards, the ordinary mode-button duration and selected deta
   expect(screen.getAllByRole("button", { name: "footer.attributions" })).toHaveLength(1);
   // The ordinary duration remains painted on the active mode button.
   expect(screen.getByText("Retained ordinary source")).toBeTruthy();
-  fireEvent.click(screen.getAllByText("common.details")[1]);
+  fireEvent.click(nth(screen.getAllByText("common.details"), 1));
   expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
   expect(screen.queryByText("Scheduled first source")).toBeNull();
   expect(screen.queryByText("Retained ordinary source")).toBeNull();
@@ -1732,8 +1733,8 @@ it("keeps real details and active selection across result object replacement and
   view.rerender(<DirectionsPanelContent />);
   await waitFor(() => expect(screen.queryByTestId("transit-itinerary-card")).toBeNull());
   fireEvent.click(screen.getByRole("button", { name: /RE1 ·/ }));
-  const selected = useDirectionsStore.getState().transitItineraries[1];
-  expect(selected.legs[0].tripId).toBe("mo:re1");
+  const selected = nth(useDirectionsStore.getState().transitItineraries, 1);
+  expect(nth(selected.legs, 0).tripId).toBe("mo:re1");
   expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
   publishReviewTransit([{ ...parent }]);
   view.rerender(<DirectionsPanelContent />);
@@ -1759,7 +1760,7 @@ it("ignores an old details callback after the user changes the search", () => {
     stale?.(parent, {
       ...parent,
       id: undefined,
-      legs: [{ ...parent.legs[0], tripId: "mo:another" }],
+      legs: [{ ...nth(parent.legs, 0), tripId: "mo:another" }],
     }),
   );
   expect(useDirectionsStore.getState().transitItineraries).toEqual([parent]);
@@ -1780,7 +1781,7 @@ it.each(["same", "changed", "fallback"])(
       legs: parent.legs.map((l) => ({ ...l, tripId: kind === "changed" ? "mo:new" : l.tripId })),
     };
     act(() => selectionCallbacks.refresh?.(updated, false, kind === "fallback"));
-    expect(useDirectionsStore.getState().transitItineraries[0].regionalOnly).toBe(
+    expect(nth(useDirectionsStore.getState().transitItineraries, 0).regionalOnly).toBe(
       kind === "same" ? true : undefined,
     );
   },
@@ -1826,7 +1827,7 @@ it("opens provided provider details and keeps their origin when an earlier auto-
       timestamp: Date.now(),
     } as GeolocationPosition),
   );
-  expect(useDirectionsStore.getState().waypoints[0].label).toBe("Provider Aachen");
+  expect(nth(useDirectionsStore.getState().waypoints, 0).label).toBe("Provider Aachen");
   await screen.findAllByText("Provider Aachen");
   expect(screen.queryByText("directions.importedTrip")).toBeNull();
   expect(screen.queryByText("DB Navigator")).toBeNull();
@@ -1999,7 +2000,7 @@ describe("directions input behaviour", () => {
         await deliverFix();
 
         expect(screen.getByPlaceholderText("directions.chooseOrigin")).toHaveValue("Alexan");
-        expect(useDirectionsStore.getState().waypoints[0].coords).toBeNull();
+        expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toBeNull();
         expect(useMapStore.getState().userLocation).toEqual([13.405, 52.52]);
       });
 
@@ -2029,7 +2030,7 @@ describe("directions input behaviour", () => {
         fireEvent.focus(origin);
         fireEvent.change(origin, { target: { value: "Alexan" } });
         await deliverFix();
-        expect(useDirectionsStore.getState().waypoints[0].coords).toBeNull();
+        expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toBeNull();
 
         fireEvent.change(screen.getByPlaceholderText("directions.chooseOrigin"), {
           target: { value: "" },
@@ -2090,7 +2091,7 @@ describe("directions input behaviour", () => {
           target: { value: " " },
         });
 
-        expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13.405, 52.52]);
+        expect(nth(useDirectionsStore.getState().waypoints, 0).coords).toEqual([13.405, 52.52]);
       });
 
       it("keeps a typed stop with that stop when another one is removed", () => {
@@ -2098,7 +2099,7 @@ describe("directions input behaviour", () => {
         renderPanel();
         fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "Mun" } });
 
-        fireEvent.click(screen.getAllByRole("button", { name: "directions.removeStop" })[1]);
+        fireEvent.click(nth(screen.getAllByRole("button", { name: "directions.removeStop" }), 1));
 
         expect(inputValues()).toEqual(["Berlin", "Mun"]);
       });
@@ -2116,7 +2117,7 @@ describe("directions input behaviour", () => {
         fireEvent.click(await screen.findByRole("option", { name: /Munich/ }));
 
         expect(inputValues()).toEqual(["Berlin", "Munich"]);
-        expect(useDirectionsStore.getState().waypoints[1].coords).toEqual([11.6, 48.2]);
+        expect(nth(useDirectionsStore.getState().waypoints, 1).coords).toEqual([11.6, 48.2]);
       });
 
       it("keeps autocomplete open on the next field after the previous field blurred", () => {

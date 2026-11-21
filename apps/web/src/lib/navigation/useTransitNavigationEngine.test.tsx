@@ -3,6 +3,7 @@ import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { onlineManager } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 let handler: ((fix: FixInput) => void) | null = null;
 vi.mock("../useWatchPosition", () => ({
@@ -122,7 +123,12 @@ it("aborts the vehicle journey request when navigation unmounts", async () => {
 it("clears the warning immediately when the rider reaches the final walking leg", async () => {
   vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
   const chosen = selectedTrip();
-  chosen.legs.push({ ...chosen.legs[0], mode: "walking", tripId: undefined, route: undefined });
+  chosen.legs.push({
+    ...nth(chosen.legs, 0),
+    mode: "walking",
+    tripId: undefined,
+    route: undefined,
+  });
   useNavigationStore.getState().startTransitNavigation(chosen);
   renderHookWithQuery(() => useTransitNavigationEngine());
   await waitFor(() =>
@@ -164,8 +170,8 @@ it("recovers vehicle updates after a real refresh mutation fails while retaining
   const post = vi.spyOn(apiClient, "post").mockRejectedValue(new ApiClientError(400, null, null));
   const chosen = selectedTrip();
   chosen.refreshToken = "expired";
-  chosen.legs[0].realtime = true;
-  chosen.legs[0].startTime = new Date(Date.now() + 300000).toISOString();
+  nth(chosen.legs, 0).realtime = true;
+  nth(chosen.legs, 0).startTime = new Date(Date.now() + 300000).toISOString();
   useNavigationStore.getState().startTransitNavigation(chosen);
   function Runtime() {
     useTransitNavigationEngine();
@@ -238,8 +244,8 @@ const liveJourney = () => ({
 });
 const selectedTrip = () => {
   const chosen = trip();
-  chosen.legs[0].from.stopId = "A";
-  chosen.legs[0].to.stopId = "B";
+  nth(chosen.legs, 0).from.stopId = "A";
+  nth(chosen.legs, 0).to.stopId = "B";
   return chosen;
 };
 
@@ -279,7 +285,7 @@ it.each(["partial", "stale", "null", "unmappable", "error"])(
 it("requires a fresh response for every tracked trip, even with identical timestamps and content", async () => {
   vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
   const chosen = selectedTrip();
-  chosen.legs.push({ ...chosen.legs[0], tripId: "second" });
+  chosen.legs.push({ ...nth(chosen.legs, 0), tripId: "second" });
   useNavigationStore.getState().startTransitNavigation(chosen);
   const { queryClient } = renderHookWithQuery(() => useTransitNavigationEngine());
   await waitFor(() => expect(useNavigationStore.getState().transitCaptures).toHaveLength(2));
@@ -358,7 +364,7 @@ it("does not use a previous session's in-flight result to recover a replacement 
 
 it("does not introduce a warning on a healthy remount and reconnects without live trip IDs", async () => {
   const chosen = selectedTrip();
-  delete chosen.legs[0].tripId;
+  delete nth(chosen.legs, 0).tripId;
   useNavigationStore.getState().startTransitNavigation(chosen);
   const view = renderHookWithQuery(() => useTransitNavigationEngine());
   view.unmount();
@@ -406,8 +412,8 @@ it("retains confirmed boarding on component remount and same-journey live refres
 
 it("recovers the offline warning after the selected vehicle's data returns", async () => {
   const chosen = trip();
-  chosen.legs[0].from.stopId = "A";
-  chosen.legs[0].to.stopId = "B";
+  nth(chosen.legs, 0).from.stopId = "A";
+  nth(chosen.legs, 0).to.stopId = "B";
   const response = (platform: string) => ({
     data: {
       stops: [
@@ -463,13 +469,13 @@ it("refreshes upcoming captured journeys after platform evidence becomes availab
     };
   });
   const chosen = trip();
-  chosen.legs[0].from.stopId = "a";
-  chosen.legs[0].to.stopId = "b";
+  nth(chosen.legs, 0).from.stopId = "a";
+  nth(chosen.legs, 0).to.stopId = "b";
   chosen.legs.push({
-    ...chosen.legs[0],
+    ...nth(chosen.legs, 0),
     tripId: "future",
-    from: { ...chosen.legs[0].from, stopId: "fa" },
-    to: { ...chosen.legs[0].to, stopId: "fb" },
+    from: { ...nth(chosen.legs, 0).from, stopId: "fa" },
+    to: { ...nth(chosen.legs, 0).to, stopId: "fb" },
   });
   useNavigationStore.getState().startTransitNavigation(chosen);
   const view = renderHookWithQuery(() => useTransitNavigationEngine());
@@ -478,8 +484,11 @@ it("refreshes upcoming captured journeys after platform evidence becomes availab
     enriched = true;
     await act(async () => vi.advanceTimersByTimeAsync(30_001));
     expect(
-      useNavigationStore.getState().transitCaptures.find((c) => c.tripId === "future")?.stops[0]
-        .departurePlatform?.code,
+      nth(
+        useNavigationStore.getState().transitCaptures.find((c) => c.tripId === "future")?.stops ??
+          [],
+        0,
+      ).departurePlatform?.code,
     ).toBe("3");
   } finally {
     view.unmount();

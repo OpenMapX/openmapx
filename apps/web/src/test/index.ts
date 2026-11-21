@@ -13,6 +13,7 @@ export {
   renderedFeature,
 } from "./fakeMap";
 export { mockNextIntl, mockNextIntlWithCatalog, renderWithIntl } from "./intl";
+export { nth } from "./nth";
 export {
   createQueryWrapper,
   createTestQueryClient,

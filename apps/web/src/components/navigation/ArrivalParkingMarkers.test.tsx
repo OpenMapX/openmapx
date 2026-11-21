@@ -4,7 +4,7 @@ import type { CategoryPlace } from "@openmapx/core";
 import { useParkingStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
-import { fireEvent, render } from "@/test";
+import { fireEvent, nth, render } from "@/test";
 
 const { createdMarkers, FakeMarker } = vi.hoisted(() => {
   const markers: FakeMarkerInstance[] = [];
@@ -73,7 +73,7 @@ vi.mock("@/integration-api/overlay/renderedMapAttributionTracker", () => ({
 
 import { ArrivalParkingMarkers } from "./ArrivalParkingMarkers";
 
-const samplePlaces: CategoryPlace[] = [
+const samplePlaces: [CategoryPlace, CategoryPlace] = [
   {
     id: "p1",
     name: "Parking Central",
@@ -256,11 +256,11 @@ describe("ArrivalParkingMarkers", () => {
     const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
     expect(markers).toHaveLength(2);
 
-    expect(markers[0]).toHaveAttribute("aria-pressed", "true");
-    expect(markers[1]).toHaveAttribute("aria-pressed", "false");
-    expect(markers[0].style.backgroundColor).toBe(markers[1].style.color);
-    expect(markers[0].style.color).toBe(markers[1].style.backgroundColor);
-    expect(markers[0].style.backgroundColor).not.toBe(markers[1].style.backgroundColor);
+    expect(nth(markers, 0)).toHaveAttribute("aria-pressed", "true");
+    expect(nth(markers, 1)).toHaveAttribute("aria-pressed", "false");
+    expect(nth(markers, 0).style.backgroundColor).toBe(nth(markers, 1).style.color);
+    expect(nth(markers, 0).style.color).toBe(nth(markers, 1).style.backgroundColor);
+    expect(nth(markers, 0).style.backgroundColor).not.toBe(nth(markers, 1).style.backgroundColor);
   });
 
   it("disables marker interaction while a handoff is starting", () => {
@@ -304,11 +304,11 @@ describe("ArrivalParkingMarkers", () => {
     const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
 
     // Enter on unselected
-    fireEvent.keyDown(markers[0], { key: "Enter" });
+    fireEvent.keyDown(nth(markers, 0), { key: "Enter" });
     expect(onSelectPlace).toHaveBeenLastCalledWith(samplePlaces[0]);
 
     // Space on selected
-    fireEvent.keyDown(markers[1], { key: " " });
+    fireEvent.keyDown(nth(markers, 1), { key: " " });
     expect(onSelectPlace).toHaveBeenLastCalledWith(null);
   });
 
@@ -337,8 +337,8 @@ describe("ArrivalParkingMarkers", () => {
 
     const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
     expect(markers).toHaveLength(2);
-    expect(markers[1]).toHaveAttribute("aria-pressed", "true");
-    expect(markers[1].style.backgroundColor).not.toBe(markers[0].style.backgroundColor);
+    expect(nth(markers, 1)).toHaveAttribute("aria-pressed", "true");
+    expect(nth(markers, 1).style.backgroundColor).not.toBe(nth(markers, 0).style.backgroundColor);
     expect([...markers].map((marker) => marker.textContent)).toEqual(["P", "P"]);
     expect(createdMarkers.slice(-2).map((marker) => marker.lngLat)).toEqual([
       [13.405, 52.52],

@@ -1,6 +1,7 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { describe, expect, it, vi } from "vitest";
 import { SAMPLE_TRANSIT_ITINERARY } from "@/components/panels/directions/TransitRouteView.fixtures";
+import { nth } from "@/test";
 import {
   BridgeClient,
   BridgeError,
@@ -113,7 +114,7 @@ function deliverHello(
   context: ReturnType<typeof harness>,
   overrides: Record<string, unknown> = {},
 ) {
-  const forMessageId = JSON.parse(context.sent[0]).messageId as string;
+  const forMessageId = JSON.parse(nth(context.sent, 0)).messageId as string;
   context.deliver(helloReply(forMessageId, overrides));
 }
 
@@ -238,7 +239,7 @@ describe("BridgeClient.hello", () => {
     expect(context.handlerCount()).toBe(1);
 
     const pending = context.client.hello();
-    expect(JSON.parse(context.sent[0])).toMatchObject({
+    expect(JSON.parse(nth(context.sent, 0))).toMatchObject({
       channelNonce: NONCE,
       payload: { webBuildId: "web-build-1" },
     });
@@ -314,7 +315,7 @@ describe("BridgeClient.request", () => {
     const context = await negotiated();
 
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
-    const forMessageId = JSON.parse(context.sent[0]).messageId as string;
+    const forMessageId = JSON.parse(nth(context.sent, 0)).messageId as string;
     context.deliver({
       protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "session.stopped",
@@ -333,7 +334,7 @@ describe("BridgeClient.request", () => {
     const context = await negotiated();
 
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
-    const messageId = JSON.parse(context.sent[0]).messageId;
+    const messageId = JSON.parse(nth(context.sent, 0)).messageId;
     context.deliver({
       protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "native.error",
@@ -355,7 +356,7 @@ describe("BridgeClient.request", () => {
     context.client.subscribe((message) => seen.push(message.type));
 
     const pending = context.client.request("snapshot.request", {});
-    const messageId = JSON.parse(context.sent[0]).messageId;
+    const messageId = JSON.parse(nth(context.sent, 0)).messageId;
     context.advance(READ_TIMEOUT_MS);
     await expect(pending).rejects.toMatchObject({ code: "timeout" });
     context.deliver({
@@ -376,8 +377,8 @@ describe("BridgeClient.request", () => {
 
     const first = context.client.request("snapshot.request", {});
     const second = context.client.request("snapshot.request", {});
-    const firstMessageId = JSON.parse(context.sent[0]).messageId as string;
-    const secondMessageId = JSON.parse(context.sent[1]).messageId as string;
+    const firstMessageId = JSON.parse(nth(context.sent, 0)).messageId as string;
+    const secondMessageId = JSON.parse(nth(context.sent, 1)).messageId as string;
 
     context.deliver({
       ...snapshotMessage(2),
@@ -404,7 +405,7 @@ describe("BridgeClient.request", () => {
     context.client.subscribe((message) => seen.push(message));
 
     const pending = context.client.request("snapshot.request", {});
-    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    const messageId = JSON.parse(nth(context.sent, 0)).messageId as string;
     context.deliver({
       ...snapshotMessage(7),
       protocolVersion: MOBILE_PROTOCOL_MAX,
@@ -432,7 +433,7 @@ describe("BridgeClient.request", () => {
     context.client.subscribe((message) => seen.push(message));
 
     const pending = context.client.request("snapshot.request", {});
-    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    const messageId = JSON.parse(nth(context.sent, 0)).messageId as string;
     const refused = {
       ...snapshotMessage(7),
       payload: { snapshot: { revision: 7 }, forMessageId: messageId },
@@ -454,7 +455,7 @@ describe("BridgeClient.request", () => {
   it("rejects a correlated reply whose type cannot answer the named command", async () => {
     const context = await negotiated();
     const pending = context.client.request("snapshot.request", {});
-    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    const messageId = JSON.parse(nth(context.sent, 0)).messageId as string;
 
     context.deliver({
       protocolVersion: MOBILE_PROTOCOL_MAX,
@@ -555,7 +556,7 @@ it("accepts a null selection using the incompatible native's declared envelope v
   const context = harness();
   context.client.attach();
   const pending = context.client.hello();
-  const sent = JSON.parse(context.sent[0]);
+  const sent = JSON.parse(nth(context.sent, 0));
   const reply = helloReply(sent.messageId, {
     selectedProtocolVersion: null,
     minProtocolVersion: 2,
@@ -576,7 +577,7 @@ it("uses real browser timer defaults for deadlines and cancellation", async () =
   try {
     client.attach();
     const ready = client.hello();
-    const hello = JSON.parse(shell.sent[0]);
+    const hello = JSON.parse(nth(shell.sent, 0));
     shell.deliver(helloReply(hello.messageId));
     await ready;
     expect(cancel).toHaveBeenCalledTimes(1);
@@ -605,7 +606,7 @@ describe("navigation Start with production timers", () => {
     const client = new BridgeClient({ webBuildId: "production", scope: shell.scope });
     client.attach();
     const hello = client.hello();
-    shell.deliver(helloReply(JSON.parse(shell.sent[0]).messageId));
+    shell.deliver(helloReply(JSON.parse(nth(shell.sent, 0)).messageId));
     await hello;
     const commands = new NativeNavigationCommands(client, () => ({
       sessionId: null,
@@ -665,7 +666,7 @@ describe("navigation End against a refusing shell", () => {
     const client = new BridgeClient({ webBuildId: "production", scope: shell.scope });
     client.attach();
     const hello = client.hello();
-    shell.deliver(helloReply(JSON.parse(shell.sent[0]).messageId));
+    shell.deliver(helloReply(JSON.parse(nth(shell.sent, 0)).messageId));
     await hello;
     const commands = new NativeNavigationCommands(client, () => ({
       sessionId: "s1",

@@ -11,6 +11,7 @@ import {
 } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 // Fuel prices have their own tests (useRouteSearch.fuel.test.tsx); these run without a query client.
@@ -21,12 +22,13 @@ vi.mock("./useRouteFuelPrices", async (importOriginal) => ({
 const directions = vi.hoisted(() => vi.fn());
 
 // POIs along the corridor, standing in for the category search response.
-const places: { id: string; name: string; coordinates: [number, number] }[] = [
+type Poi = { id: string; name: string; coordinates: [number, number] };
+const places: [Poi, Poi, Poi] = [
   { id: "a", name: "A", coordinates: [0.001, 0.0002] },
   { id: "b", name: "B", coordinates: [0.002, -0.0003] },
   { id: "c", name: "C", coordinates: [0.003, 0.0001] },
 ];
-let categoryPlaces: ((typeof places)[number] & { routingEntrance?: [number, number] })[] = places;
+let categoryPlaces: (Poi & { routingEntrance?: [number, number] })[] = places;
 
 // A deliberately different-shaped fixture for the filter search response —
 // different ids, names, coordinates, *and* length (2 vs 3) from `places`. If
@@ -34,7 +36,7 @@ let categoryPlaces: ((typeof places)[number] & { routingEntrance?: [number, numb
 // `active` inside useRouteSearch stopped selecting `useFilterSearch` — the
 // results would come back as 3 items with `places`' ids, not 2 with these,
 // and the assertions below would catch it.
-const filterPlaces: typeof places = [
+const filterPlaces: Poi[] = [
   { id: "x", name: "X", coordinates: [0.0015, 0.0004] },
   { id: "y", name: "Y", coordinates: [0.0035, -0.0002] },
 ];
@@ -43,7 +45,7 @@ const filterPlaces: typeof places = [
 // reset to) disabled/no-data — that also means it never needs a real
 // QueryClientProvider. The filter-branch test below swaps in real data.
 let filterSearchResult: {
-  data?: { results: typeof places };
+  data?: { results: Poi[] };
   isLoading: boolean;
   isError: boolean;
 } = {
@@ -149,12 +151,12 @@ describe("useRouteSearch route index ownership", () => {
       routes: [freshRoute()],
     });
     const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
-    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
+    await waitFor(() => expect(nth(result.current.results, 0).detour?.kind).toBe("network"));
     directions.mockClear();
     await act(async () => {
       expect(await result.current.addStop(places[0])).toBe(true);
     });
-    expect(directions.mock.calls[0][0]).toMatchObject({ provider: "routing-a" });
+    expect(nth(directions.mock.calls, 0)[0]).toMatchObject({ provider: "routing-a" });
     expect(useNavigationStore.getState().routeProvider).toBe("routing-a");
   });
   it("rejects an old entrance after the selected candidate target refreshes", async () => {
@@ -224,9 +226,9 @@ describe("useRouteSearch route index ownership", () => {
       };
     });
     const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
-    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
-    expect(result.current.results[0].detourSeconds).toBe(120);
-    expect(result.current.results[0].detourMeters).toBe(1000);
+    await waitFor(() => expect(nth(result.current.results, 0).detour?.kind).toBe("network"));
+    expect(nth(result.current.results, 0).detourSeconds).toBe(120);
+    expect(nth(result.current.results, 0).detourMeters).toBe(1000);
     for (const [params, , options] of directions.mock.calls) {
       expect(params).toMatchObject({
         provider: "routing-fixture",
@@ -251,10 +253,10 @@ describe("useRouteSearch route index ownership", () => {
       routes: [route],
     });
     const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
-    await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
+    await waitFor(() => expect(nth(result.current.results, 0).detour?.kind).toBe("network"));
     directions.mockReturnValue(new Promise(() => {}));
     act(() => useNavigationStore.setState({ routeProvider: "routing-other" }));
-    expect(result.current.results[0].detour?.kind).not.toBe("network");
+    expect(nth(result.current.results, 0).detour?.kind).not.toBe("network");
   });
 
   it("rejects a late added stop after another session starts with the same route", async () => {
@@ -308,7 +310,8 @@ describe("useRouteSearch route index ownership", () => {
       pending = result.current.addStop(places[1]);
     });
     const finishStop = finish;
-    const signal = (directions.mock.calls[0][2] as { signal: AbortSignal } | undefined)?.signal;
+    const signal = (nth(directions.mock.calls, 0)[2] as { signal: AbortSignal } | undefined)
+      ?.signal;
     act(() => result.current.cancelAddStop());
     expect(signal?.aborted).toBe(true);
     expect(useNavigationStore.getState().status).toBe("navigating");
@@ -345,7 +348,10 @@ describe("useRouteSearch route index ownership", () => {
     });
     expect(directions).toHaveBeenCalledTimes(2);
     await act(async () => {
-      finishes[1]({
+      nth(
+        finishes,
+        1,
+      )({
         waypoints,
         activeRouteIndex: 0,
         provider: "routing-fixture",
@@ -354,7 +360,10 @@ describe("useRouteSearch route index ownership", () => {
       expect(await second).toBe(true);
     });
     await act(async () => {
-      finishes[0]({
+      nth(
+        finishes,
+        0,
+      )({
         waypoints,
         activeRouteIndex: 0,
         provider: "routing-fixture",
@@ -380,10 +389,10 @@ describe("useRouteSearch route index ownership", () => {
       });
       const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
       await act(async () => {});
-      expect(result.current.results[0].detour?.kind).toBe("network");
+      expect(nth(result.current.results, 0).detour?.kind).toBe("network");
       const calls = directions.mock.calls.length;
       await act(async () => vi.advanceTimersByTimeAsync(60_001));
-      expect(result.current.results[0].detour?.kind).not.toBe("network");
+      expect(nth(result.current.results, 0).detour?.kind).not.toBe("network");
       expect(directions).toHaveBeenCalledTimes(calls);
     } finally {
       vi.useRealTimers();
@@ -487,7 +496,7 @@ describe("useRouteSearch route index ownership", () => {
         progress: state.progress ? { ...state.progress, speedMps: 24 } : null,
       })),
     );
-    expect(result.current.results[0].detourSeconds).toBeCloseTo(slower.detourSeconds / 2);
+    expect(nth(result.current.results, 0).detourSeconds).toBeCloseTo(slower.detourSeconds / 2);
     expect(readRouteMatcherCounters().snaps).toBe(places.length);
   });
 
@@ -497,14 +506,14 @@ describe("useRouteSearch route index ownership", () => {
     };
     filterSearchResult = { data: { results: places }, isLoading: false, isError: false };
     const { result, rerender } = renderHook(() => useRouteSearch({ filter }));
-    const initial = result.current.results[0].alongMeters;
+    const initial = nth(result.current.results, 0).alongMeters;
     const refreshed = places.map((p) => ({
       ...p,
       coordinates: [p.coordinates[0] + 0.0005, p.coordinates[1]] as [number, number],
     }));
     filterSearchResult = { ...filterSearchResult, data: { results: refreshed } };
     rerender();
-    expect(result.current.results[0].alongMeters).toBeGreaterThan(initial);
+    expect(nth(result.current.results, 0).alongMeters).toBeGreaterThan(initial);
     expect(readRouteMatcherCounters().snaps).toBe(places.length * 2);
   });
 

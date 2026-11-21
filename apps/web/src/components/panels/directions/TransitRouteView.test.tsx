@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { TransitItineraryCard } from "./TransitRouteView";
 import { SAMPLE_TRANSIT_ITINERARY } from "./TransitRouteView.fixtures";
 
@@ -58,7 +59,7 @@ const itineraryWith = (legs: TripItinerary["legs"]): TripItinerary => ({
   legs,
 });
 
-const railLeg = SAMPLE_TRANSIT_ITINERARY.legs[0];
+const railLeg = nth(SAMPLE_TRANSIT_ITINERARY.legs, 0);
 
 vi.mock("@openmapx/core", () => ({
   CALLER_SHOWS_ERRORS: { meta: { errorShownByCaller: true } },

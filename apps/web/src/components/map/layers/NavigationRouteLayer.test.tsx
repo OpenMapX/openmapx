@@ -1,3 +1,4 @@
+import { numberAt } from "@openmapx/core";
 import { act, render } from "@testing-library/react";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
@@ -5,7 +6,7 @@ import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_COLORS } from "@/lib/routeStyle";
-import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { createFakeMap, expectStyleSwapIsLossless, nth } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -114,17 +115,19 @@ function reconstructPositionFromFraction(
   const { mercatorCumulative } = prepared;
   let segIdx = mercatorCumulative.length - 2;
   for (let i = 0; i < mercatorCumulative.length - 1; i++) {
-    if (target <= mercatorCumulative[i + 1]) {
+    if (target <= nth(mercatorCumulative, i + 1)) {
       segIdx = i;
       break;
     }
   }
-  const segStart = coords[segIdx];
-  const segEnd = coords[segIdx + 1];
-  const segMercLen = mercatorCumulative[segIdx + 1] - mercatorCumulative[segIdx];
-  const ratio = segMercLen > 1e-12 ? (target - mercatorCumulative[segIdx]) / segMercLen : 0;
-  const mx = projectX(segStart[0]) + ratio * (projectX(segEnd[0]) - projectX(segStart[0]));
-  const my = projectY(segStart[1]) + ratio * (projectY(segEnd[1]) - projectY(segStart[1]));
+  const segStart = nth(coords, segIdx);
+  const segEnd = nth(coords, segIdx + 1);
+  const startX = projectX(numberAt(segStart, 0));
+  const startY = projectY(numberAt(segStart, 1));
+  const segMercLen = nth(mercatorCumulative, segIdx + 1) - nth(mercatorCumulative, segIdx);
+  const ratio = segMercLen > 1e-12 ? (target - nth(mercatorCumulative, segIdx)) / segMercLen : 0;
+  const mx = startX + ratio * (projectX(numberAt(segEnd, 0)) - startX);
+  const my = startY + ratio * (projectY(numberAt(segEnd, 1)) - startY);
   return [unprojectX(mx), unprojectY(my)];
 }
 function metersBetween(a: [number, number], b: [number, number]): number {
@@ -276,7 +279,7 @@ it("publishes the navigation route snapshot once while progress only updates pai
   const data = fake.state.sources.get(SOURCE)?.data as {
     features: { properties: { _mapAttributions: string } }[];
   };
-  expect(JSON.parse(data.features[0].properties._mapAttributions)).toEqual(route.contributors);
+  expect(JSON.parse(nth(data.features, 0).properties._mapAttributions)).toEqual(route.contributors);
   const initial = fake.state.sources.get(SOURCE)?.data;
   navState.progress = { alongMeters: 500 };
   view.rerender(<NavigationRouteLayer />);
@@ -438,7 +441,7 @@ describe("NavigationRouteLayer alternative taps", () => {
       expect(calls("on", "click")).toHaveLength(1);
       expect(calls("on", "mouseenter")).toHaveLength(1);
       expect(calls("on", "mouseleave")).toHaveLength(1);
-      const handler = calls("on", "click")[0].handler;
+      const handler = nth(calls("on", "click"), 0).handler;
       act(() =>
         handler({
           originalEvent: new MouseEvent("click"),

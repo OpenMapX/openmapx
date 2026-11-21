@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { TransitItineraryCard } from "./TransitRouteView";
 import { SAMPLE_TRANSIT_ITINERARY } from "./TransitRouteView.fixtures";
 
@@ -129,12 +130,12 @@ describe("TransitItineraryCard origin time zone", () => {
           ...itinerary,
           legs: [
             {
-              ...SAMPLE_TRANSIT_ITINERARY.legs[0],
+              ...nth(SAMPLE_TRANSIT_ITINERARY.legs, 0),
               mode: "walking",
               route: undefined,
             },
             {
-              ...SAMPLE_TRANSIT_ITINERARY.legs[0],
+              ...nth(SAMPLE_TRANSIT_ITINERARY.legs, 0),
               startTime: "2026-07-15T00:05:00Z",
               from: {
                 name: "Tokyo Station",
