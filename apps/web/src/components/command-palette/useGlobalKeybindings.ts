@@ -21,12 +21,13 @@ import { SEARCH_INPUT_ID } from "./constants";
 const SEQUENCE_TIMEOUT_MS = 1200;
 
 // Pre-parsed once at module load so the keydown handler doesn't re-parse on
-// every keystroke. The handler indexes `[0]`, so this must stay a single chord.
-const PALETTE_TOGGLE_CHORD = singleChord(parseShortcut("Mod+K"));
+// every keystroke. The handler matches one chord, so the shortcut must not be a
+// sequence.
+const PALETTE_TOGGLE_CHORD = singleChord("Mod+K");
 
-function singleChord(chords: readonly KeyChord[]): KeyChord {
-  const [chord, ...extra] = chords;
-  if (!chord || extra.length > 0) throw new Error("PALETTE_TOGGLE must be a single chord");
+function singleChord(shortcut: string): KeyChord {
+  const [chord, ...extra] = parseShortcut(shortcut);
+  if (!chord || extra.length > 0) throw new Error(`"${shortcut}" is not a single chord`);
   return chord;
 }
 

@@ -1,4 +1,4 @@
-import { type LngLat, numberAt } from "@openmapx/core";
+import { itemAt, type LngLat, numberAt } from "@openmapx/core";
 import bearing from "@turf/bearing";
 import destination from "@turf/destination";
 import { lineString } from "@turf/helpers";
@@ -103,9 +103,10 @@ export function buildNavRouteLine(geometry: LngLat[]): NavRouteLine | null {
  * primitives `lineSliceAlong` uses), projects it into normalized-Mercator
  * space, and returns the planar fraction along that measure.
  *
- * Never throws and never returns `NaN`: degenerate geometry (fewer than two
- * points, or a `NaN` coordinate from a bad polyline decode — see the same
- * failure mode in `routeFlowBands.ts`) resolves to `0`.
+ * Never returns `NaN`: degenerate geometry (fewer than two points, or a `NaN`
+ * coordinate from a bad polyline decode — see the same failure mode in
+ * `routeFlowBands.ts`) resolves to `0`. It throws only when `prepared` was not
+ * built by {@link buildNavRouteLine}, whose tables match the line's vertices.
  */
 export function navRouteProgressFraction(prepared: NavRouteLine, alongMeters: number): number {
   const { cumulativeKm, mercatorCumulative, mercatorTotal, lengthKm, line } = prepared;
@@ -141,10 +142,10 @@ export function navRouteProgressFraction(prepared: NavRouteLine, alongMeters: nu
     else high = mid;
   }
   const segIdx = low - 1;
-  const segStart = line.geometry.coordinates[segIdx];
-  const segEnd = line.geometry.coordinates[low];
-  // The tables come from the same geometry as the line, so this cannot miss.
-  if (!segStart || !segEnd) return 0;
+  // The tables have one entry per vertex of the same geometry as the line, and
+  // the search keeps `low` within them, so a miss is a bug in this module.
+  const segStart = itemAt(line.geometry.coordinates, segIdx);
+  const segEnd = itemAt(line.geometry.coordinates, low);
   // Turf interpolates backwards from the segment end. Use the full-route
   // prefix for its overshoot so rounding at long-route boundaries also agrees.
   const overshot = alongKm - numberAt(cumulativeKm, low);

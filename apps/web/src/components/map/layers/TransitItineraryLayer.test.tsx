@@ -57,15 +57,19 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
   useRenderedMapAttributions: vi.fn(),
 }));
-vi.mock("@openmapx/core", async (importOriginal) => ({
-  numberAt: (await importOriginal<typeof import("@openmapx/core")>()).numberAt,
-  API_ENDPOINTS: { transitLegGeometry: "/leg-geometry" },
-  apiClient: { get: state.get },
-  MODE_COLORS: { walking: "#757575" },
-  routeColor: (route: { color?: string }, fallback: string) => route.color ?? fallback,
-  useDirectionsStore: () => state.directions,
-  useNavigationStore: (selector: (s: unknown) => unknown) => selector(state.navigation),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const { itemAt, numberAt } = await importOriginal<typeof import("@openmapx/core")>();
+  return {
+    itemAt,
+    numberAt,
+    API_ENDPOINTS: { transitLegGeometry: "/leg-geometry" },
+    apiClient: { get: state.get },
+    MODE_COLORS: { walking: "#757575" },
+    routeColor: (route: { color?: string }, fallback: string) => route.color ?? fallback,
+    useDirectionsStore: () => state.directions,
+    useNavigationStore: (selector: (s: unknown) => unknown) => selector(state.navigation),
+  };
+});
 
 import { TransitItineraryLayer } from "./TransitItineraryLayer";
 
@@ -113,6 +117,15 @@ describe("TransitItineraryLayer", () => {
     };
     rerender(<TransitItineraryLayer />);
     expect(state.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws nothing and keeps the camera for an itinerary without legs", () => {
+    state.directions = { ...state.directions, transitItineraries: [{ legs: [] }] };
+    render(<TransitItineraryLayer />);
+
+    expect(features("transit-itinerary-source")).toEqual([]);
+    expect(features("transit-itinerary-points-source")).toEqual([]);
+    expect(state.fitBounds).not.toHaveBeenCalled();
   });
 
   it("removes its layers and sources when the itinerary is cleared", () => {

@@ -5,13 +5,14 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type {
-  MetObservation,
-  TideCurvePoint,
-  TideDatum,
-  TideEvent,
-  TidesResponse,
-  WaterLevelObservation,
+import {
+  type MetObservation,
+  numberAt,
+  type TideCurvePoint,
+  type TideDatum,
+  type TideEvent,
+  type TidesResponse,
+  type WaterLevelObservation,
 } from "@openmapx/core";
 import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
@@ -466,10 +467,14 @@ function parseLocalTime(timeStr: string): Date {
   if (/T\d{2}:\d{2}/.test(timeStr) && /Z|[+-]\d{2}:?\d{2}$/.test(timeStr)) {
     return new Date(timeStr);
   }
-  const [datePart = "", timePart = "00:00"] = timeStr.split(" ");
-  const [y = Number.NaN, m, d] = datePart.split("-").map(Number);
+  const space = timeStr.indexOf(" ");
+  const datePart = space === -1 ? timeStr : timeStr.slice(0, space);
+  const timePart = space === -1 ? "00:00" : timeStr.slice(space + 1);
+  const dateFields = datePart.split("-").map(Number);
+  const [, m, d] = dateFields;
   const [hh, mm] = timePart.split(":").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
+  // `split` always yields a first field; an unparsable year is NaN, an Invalid Date.
+  return new Date(numberAt(dateFields, 0), (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
 }
 
 function todayLocalDate(): Date {
