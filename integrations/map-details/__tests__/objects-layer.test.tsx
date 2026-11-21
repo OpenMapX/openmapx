@@ -23,7 +23,6 @@ const fake = vi.hoisted(() => {
   }
   return { state, FakeRenderer };
 });
-type FakeRenderer = InstanceType<typeof fake.FakeRenderer>;
 
 vi.mock("three", async (original) => ({
   ...(await original<typeof import("three")>()),
