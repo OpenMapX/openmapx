@@ -39,23 +39,23 @@ function at(altitude: number, azimuth = 180, overrides: Partial<SceneLightInput>
 }
 
 const DUSK = {
-  color: "#c4b5e6",
+  color: "#e4def2",
   intensity: 0.3,
   sunIntensity: 1.1,
-  ambientColor: "#b9b4d8",
+  ambientColor: "#d9d6ea",
   ambientIntensity: 0.9,
   sky: { skyColor: "#5d6fa8", horizonColor: "#e3b4a6", fogColor: "#c9c1d3" },
 };
 const GOLDEN = {
-  color: "#ffc58c",
-  intensity: 0.5,
+  color: "#ffe8d0",
+  intensity: 0.46,
   sunIntensity: 2.4,
-  ambientColor: "#ffe2c4",
+  ambientColor: "#ffeedd",
   ambientIntensity: 1.2,
   sky: { skyColor: "#9cc1e6", horizonColor: "#ffd8ad", fogColor: "#ffe9d2" },
 };
 const DAY = {
-  color: "#fff8ee",
+  color: "#fffbf5",
   intensity: 0.4,
   sunIntensity: 2.2,
   ambientColor: "#ffffff",
@@ -115,9 +115,9 @@ describe("computeSceneLight", () => {
 
   it("interpolates between keyframes", () => {
     const light = at(7);
-    expect(light.intensity).toBe(0.45);
+    expect(light.intensity).toBe(0.43);
     expect(light.sunIntensity).toBe(2.3);
-    expect(light.color).toBe("#ffdfbd");
+    expect(light.color).toBe("#fff2e3");
     expect(light.preset).toBe("day");
   });
 
@@ -133,9 +133,9 @@ describe("computeSceneLight", () => {
   });
 
   it("clamps the polar angle", () => {
-    expect(at(2).polarDeg).toBe(65);
+    expect(at(2).polarDeg).toBe(45);
     expect(at(80).polarDeg).toBe(25);
-    expect(at(40).polarDeg).toBe(50);
+    expect(at(55).polarDeg).toBe(35);
   });
 
   it("passes the sun's azimuth through", () => {
@@ -154,10 +154,10 @@ describe("computeSceneLight", () => {
 
   it("softens and greys the light when overcast", () => {
     const light = at(30, 180, { overcast: 1 });
-    expect(light.intensity).toBe(0.29);
-    expect(light.sunIntensity).toBe(1.43);
-    // 70% of the way from the day colour towards the overcast grey.
-    expect(light.color).toBe("#eeeeee");
+    expect(light.intensity).toBe(0.32);
+    expect(light.sunIntensity).toBe(1.65);
+    // Half way from the day colour towards the overcast grey.
+    expect(light.color).toBe("#f6f5f4");
     expect(light.sunColor).toBe(light.color);
     expect(light.sky).toEqual(DAY.sky);
   });

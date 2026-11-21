@@ -96,29 +96,33 @@ interface Keyframe {
   sky: SceneSky;
 }
 
-/** The real-time light by solar altitude, interpolated between these. */
+/**
+ * The real-time light by solar altitude, interpolated between these. MapLibre
+ * multiplies the light colour into every face of every building, roofs
+ * included, while the ground stays untinted, so the tints stay faint.
+ */
 const SCENE_KEYFRAMES: readonly Keyframe[] = [
   {
     altitudeDeg: -4,
-    color: "#c4b5e6",
+    color: "#e4def2",
     intensity: 0.3,
     sunIntensity: 1.1,
-    ambientColor: "#b9b4d8",
+    ambientColor: "#d9d6ea",
     ambientIntensity: 0.9,
     sky: { skyColor: "#5d6fa8", horizonColor: "#e3b4a6", fogColor: "#c9c1d3" },
   },
   {
     altitudeDeg: 2,
-    color: "#ffc58c",
-    intensity: 0.5,
+    color: "#ffe8d0",
+    intensity: 0.46,
     sunIntensity: 2.4,
-    ambientColor: "#ffe2c4",
+    ambientColor: "#ffeedd",
     ambientIntensity: 1.2,
     sky: { skyColor: "#9cc1e6", horizonColor: "#ffd8ad", fogColor: "#ffe9d2" },
   },
   {
     altitudeDeg: 12,
-    color: "#fff8ee",
+    color: "#fffbf5",
     intensity: 0.4,
     sunIntensity: 2.2,
     ambientColor: "#ffffff",
@@ -127,10 +131,16 @@ const SCENE_KEYFRAMES: readonly Keyframe[] = [
   },
 ];
 
-const OVERCAST_GREY = "#e6e9ee";
-/** The polar angle stays in this range, so walls never all fall into shade or go flat. */
+const OVERCAST_GREY = "#eceef2";
+/** How far an overcast sky moves the light towards flat grey, at most. */
+const OVERCAST_WEIGHT = 0.5;
+/**
+ * The polar angle stays in this range. MapLibre lights roofs by its cosine, so
+ * a low winter or evening sun would turn every roof grey; a summer noon sun
+ * would flatten the walls.
+ */
 const MIN_POLAR = 25;
-const MAX_POLAR = 65;
+const MAX_POLAR = 45;
 /** Near the zenith the azimuth swings fast; it eases to the fixed direction over this band. */
 const ZENITH_EASE_START = 70;
 const ZENITH_EASE_END = 85;
@@ -192,7 +202,7 @@ export function computeSceneLight(input: SceneLightInput): SceneLight {
   const altitude = solarAltitudeDeg(date, center.lat, center.lng);
   const azimuth = solarAzimuthDeg(date, center.lat, center.lng);
   const frame = keyframeAt(altitude);
-  const k = 0.7 * clamp(input.overcast, 0, 1);
+  const k = OVERCAST_WEIGHT * clamp(input.overcast, 0, 1);
   const color = k > 0 ? lerpHex(frame.color, OVERCAST_GREY, k) : frame.color;
 
   return {

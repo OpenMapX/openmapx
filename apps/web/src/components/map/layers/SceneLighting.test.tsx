@@ -107,14 +107,14 @@ afterEach(() => {
 describe("SceneLighting", () => {
   it("applies a map-anchored light once the style has loaded", () => {
     render(<SceneLighting />);
-    expect(fake.state.light).toMatchObject({ anchor: "map", color: "#fff8ee" });
+    expect(fake.state.light).toMatchObject({ anchor: "map", color: "#fffbf5" });
     expect(useSceneLightStore.getState().light.preset).toBe("day");
   });
 
   it("re-applies the light after a style reload", () => {
     render(<SceneLighting />);
     act(() => fake.map.setStyle({} as never));
-    expect(fake.state.light).toMatchObject({ anchor: "map", color: "#fff8ee" });
+    expect(fake.state.light).toMatchObject({ anchor: "map", color: "#fffbf5" });
   });
 
   it("defers a light change made while the style is loading", () => {
@@ -126,7 +126,7 @@ describe("SceneLighting", () => {
 
     scheme.mode = "dark";
     expect(() => act(() => useLayerStore.setState({ activeLayer: "terrain" }))).not.toThrow();
-    expect(fake.state.light).toMatchObject({ color: "#fff8ee" });
+    expect(fake.state.light).toMatchObject({ color: "#fffbf5" });
 
     fake.state.styleLoaded = true;
     Object.assign(fake.map, { getStyle: style });
