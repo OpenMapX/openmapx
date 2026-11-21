@@ -141,7 +141,7 @@ describe("poi-overture provider.search", () => {
 
   it("sanitizes empty-string arrays and dirty contact strings while preserving JSON-Pointer provenance", async () => {
     const dirtyRow = {
-      ...FIXTURE_ROWS[0],
+      ...nth(FIXTURE_ROWS, 0),
       names: { primary: "\bStarbucks Mitte", common: { de: "  " } },
       phones: ["", "   ", "\u200E+49 30 999"],
       websites: ["", " https://starbucks.example/clean "],
