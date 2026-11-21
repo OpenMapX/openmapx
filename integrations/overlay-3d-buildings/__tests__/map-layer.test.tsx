@@ -5,7 +5,13 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
+import {
+  CONTACT_LAYER_ID,
+  findBuildingRoofColor,
+  findBuildingSourceReference,
+} from "../building-style";
 import manifest from "../manifest.json";
 import { useBuildingsStore } from "../store";
 
@@ -80,6 +86,63 @@ afterEach(() => {
 });
 
 describe("BuildingExtrusionLayer", () => {
+  it("draws a contact shadow just below the extrusions", () => {
+    render(<BuildingExtrusionLayer />);
+    expect(fake.state.layers.get(CONTACT_LAYER_ID)).toMatchObject({
+      type: "line",
+      source: "city",
+      "source-layer": "building",
+      filter: ["!=", ["get", "hide_3d"], true],
+    });
+    expect(layerRegistrations().find((r) => r.id === CONTACT_LAYER_ID)).toMatchObject({
+      slot: "area-overlays",
+      order: 4.5,
+    });
+  });
+
+  it("shows the contact shadow only with the extrusions", () => {
+    fake.state.pitch = 0;
+    render(<BuildingExtrusionLayer />);
+    act(() => fake.emit("pitch"));
+    expect(fake.state.layout.get(CONTACT_LAYER_ID)?.visibility).toBe("none");
+    fake.state.pitch = 55;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    expect(fake.state.layout.get(CONTACT_LAYER_ID)?.visibility).toBe("visible");
+  });
+
+  it("keeps the contact shadow across a style reload", () => {
+    render(<BuildingExtrusionLayer />);
+    fake.state.layers.delete(CONTACT_LAYER_ID);
+    act(() => {
+      fake.emit("styledataloading");
+      fake.emit("style.load");
+    });
+    expect(fake.state.layers.has(CONTACT_LAYER_ID)).toBe(true);
+  });
+
+  it("ignores the contact layer when resolving the building source and roof", () => {
+    fake.state.layers.set(BUILDING_LAYER_ID, {
+      ...(fake.state.layers.get(BUILDING_LAYER_ID) as object),
+      paint: { "fill-color": "#e8e9ed" },
+    } as never);
+    render(<BuildingExtrusionLayer />);
+    expect(fake.state.layers.has(CONTACT_LAYER_ID)).toBe(true);
+    expect(findBuildingSourceReference(fake.map)).toEqual({
+      source: "city",
+      sourceLayer: "building",
+    });
+    expect(findBuildingRoofColor(fake.map, { source: "city", sourceLayer: "building" })).toBe(
+      "#e8e9ed",
+    );
+  });
+
+  it("leaves the scene light to the scene lighting", () => {
+    render(<BuildingExtrusionLayer />);
+    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    expect(fake.state.light).toBeNull();
+  });
+
   it("hides buildings for navigation and restores the normal map selection", () => {
     render(<BuildingExtrusionLayer />);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);

@@ -88,12 +88,14 @@ export const EXTRUSION_BASE: maplibregl.ExpressionSpecification = [
 const RGBA_CHANNELS = [0, 1, 2] as const;
 
 /**
- * Tint the roof with the OpenMapTiles `colour` field (OSM `building:colour`,
- * or a palette colour derived from `building:material`). Raw OSM colours are
- * often saturated CSS names, so they are only mixed into the basemap roof:
- * about 45% on a light roof, falling to about 12% on a dark one so a tagged
- * white facade does not glow in the dark theme. Unparseable values such as
- * misspelt colour names fall back to the untinted roof.
+ * A calmer roof: the basemap roof is first lifted towards white in proportion
+ * to its luminance, so light roofs read as pastel while dark-theme roofs
+ * barely change. Then the OpenMapTiles `colour` field (OSM `building:colour`,
+ * or a palette colour derived from `building:material`) is mixed in. Raw OSM
+ * colours are often saturated CSS names, so they only tint the roof: about 25%
+ * on a light roof, falling to about 8% on a dark one so a tagged white facade
+ * does not glow in the dark theme. Unparseable values such as misspelt colour
+ * names leave the lifted roof untinted.
  */
 export function buildingExtrusionColor(
   roof: string | maplibregl.ExpressionSpecification,
@@ -110,33 +112,95 @@ export function buildingExtrusionColor(
     ],
     255,
   ];
+  const lifted = (channel: number): maplibregl.ExpressionSpecification => [
+    "+",
+    ["at", channel, ["var", "roof"]],
+    ["*", ["-", 255, ["at", channel, ["var", "roof"]]], ["var", "lift"]],
+  ];
   const [red, green, blue] = RGBA_CHANNELS.map(
     (channel): maplibregl.ExpressionSpecification => [
       "+",
       ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
-      ["*", ["at", channel, ["var", "roof"]], ["-", 1, ["var", "weight"]]],
+      ["*", ["at", channel, ["var", "lifted"]], ["-", 1, ["var", "weight"]]],
     ],
   );
 
+  // Each `let` sees only the bindings of the ones around it, hence the nesting.
   return [
-    "case",
-    ["has", "colour"],
+    "let",
+    "roof",
+    ["to-rgba", roofColor],
     [
       "let",
-      "roof",
-      ["to-rgba", roofColor],
+      "lift",
+      ["*", 0.3, roofLuminance],
+      "weight",
+      ["+", 0.08, ["*", 0.17, roofLuminance]],
       [
         "let",
-        // The rgba fallback keeps a height-graded roof expression typed as a colour.
-        "tag",
-        ["to-rgba", ["to-color", ["get", "colour"], ["var", "roof"]]],
-        "weight",
-        ["+", 0.12, ["*", 0.33, roofLuminance]],
-        ["rgb", red, green, blue],
+        "liftedColor",
+        ["rgb", lifted(0), lifted(1), lifted(2)],
+        [
+          "case",
+          ["has", "colour"],
+          [
+            "let",
+            "lifted",
+            ["to-rgba", ["var", "liftedColor"]],
+            // The fallback keeps a height-graded roof expression typed as a colour.
+            "tag",
+            ["to-rgba", ["to-color", ["get", "colour"], ["var", "liftedColor"]]],
+            ["rgb", red, green, blue],
+          ],
+          ["var", "liftedColor"],
+        ],
       ],
     ],
-    roofColor,
   ];
+}
+
+export const CONTACT_LAYER_ID = "openmapx-3d-buildings-contact";
+
+/** A roof darker than this means a dark style, where the rim needs more weight to show. */
+const DARK_ROOF_LUMINANCE = 0.35;
+
+function hexLuminance(color: string | null): number | null {
+  const match = color?.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return null;
+  const hex =
+    (match[1] as string).length === 3
+      ? [...(match[1] as string)].map((c) => c + c).join("")
+      : (match[1] as string);
+  const [r, g, b] = [0, 2, 4].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  return (0.2126 * (r as number) + 0.7152 * (g as number) + 0.0722 * (b as number)) / 255;
+}
+
+/**
+ * A soft dark rim on the ground around each building, drawn just below the
+ * extrusions so the building covers its inner half: a cheap stand-in for the
+ * contact shadow where walls meet the street.
+ */
+export function contactShadowPaint(
+  roofColor: string | null,
+  minZoom: number,
+): maplibregl.LineLayerSpecification["paint"] {
+  const luminance = hexLuminance(roofColor);
+  const peak = luminance !== null && luminance < DARK_ROOF_LUMINANCE ? 0.2 : 0.12;
+  const width: maplibregl.ExpressionSpecification = [
+    "interpolate",
+    ["exponential", 2],
+    ["zoom"],
+    17,
+    3,
+    20,
+    24,
+  ];
+  return {
+    "line-color": "#000000",
+    "line-width": width,
+    "line-blur": width,
+    "line-opacity": ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, peak],
+  };
 }
 
 export const EXTRUSION_COLOR: maplibregl.ExpressionSpecification = [

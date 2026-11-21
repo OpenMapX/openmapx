@@ -7,6 +7,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { type SceneLight, useSceneLight } from "@/integration-api/map/sceneLight";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { type GlobeSkyContent, GlobeSkyLayer, type GlobeSkyOptions } from "./globe/GlobeSkyLayer";
@@ -73,24 +74,17 @@ const FALLBACK_SATELLITE_ATMOSPHERE: SkySpecification["atmosphere-blend"] = [
   0,
 ];
 
-const LIGHT_SKY: SkySpecification = {
-  "sky-color": "#88C6FC",
-  "horizon-color": "#d6e8f7",
-  "fog-color": "#ffffff",
+// Vector bases take their sky colours from the scene light; the blends stay per theme.
+const LIGHT_SKY_BLEND: SkySpecification = {
   "sky-horizon-blend": 0.5,
   "horizon-fog-blend": 0.4,
   "fog-ground-blend": 0.1,
-  "atmosphere-blend": VECTOR_ATMOSPHERE,
 };
 
-const DARK_SKY: SkySpecification = {
-  "sky-color": "#0a0a1a",
-  "horizon-color": "#101828",
-  "fog-color": "#0a0a0a",
+const DARK_SKY_BLEND: SkySpecification = {
   "sky-horizon-blend": 0.6,
   "horizon-fog-blend": 0.4,
   "fog-ground-blend": 0.1,
-  "atmosphere-blend": VECTOR_ATMOSPHERE,
 };
 
 const SATELLITE_SKY: SkySpecification = {
@@ -103,8 +97,6 @@ const SATELLITE_SKY: SkySpecification = {
   "atmosphere-blend": SATELLITE_ATMOSPHERE,
 };
 
-const LIGHT_BG = "#d6e8f7";
-const DARK_BG = "#101828";
 const SATELLITE_BG = "#020306";
 
 /** City lights and the rest of the lighting are gone from this zoom. */
@@ -118,9 +110,22 @@ const ZOOM_OUT_THRESHOLD = 11;
 const ZOOM_OUT_TARGET = 3;
 const ZOOM_OUT_DURATION = 1500;
 
-function getSky(activeLayer: string, isDark: boolean, ownSky: boolean): SkySpecification {
+function getSky(
+  activeLayer: string,
+  isDark: boolean,
+  ownSky: boolean,
+  sceneSky: SceneLight["sky"],
+): SkySpecification {
   const satellite = activeLayer === "satellite";
-  const sky = satellite ? SATELLITE_SKY : isDark ? DARK_SKY : LIGHT_SKY;
+  const sky: SkySpecification = satellite
+    ? SATELLITE_SKY
+    : {
+        "sky-color": sceneSky.skyColor,
+        "horizon-color": sceneSky.horizonColor,
+        "fog-color": sceneSky.fogColor,
+        ...(isDark ? DARK_SKY_BLEND : LIGHT_SKY_BLEND),
+        "atmosphere-blend": VECTOR_ATMOSPHERE,
+      };
   if (ownSky) return sky;
   return {
     ...sky,
@@ -130,9 +135,10 @@ function getSky(activeLayer: string, isDark: boolean, ownSky: boolean): SkySpeci
 
 const NOTHING_DRAWN: GlobeSkyContent = { milkyWay: false, nightLights: false };
 
-function backgroundColor(activeLayer: string, isDark: boolean): string {
+/** Behind the globe: the scene's horizon colour, or deep space over imagery. */
+function backgroundColor(activeLayer: string, sceneSky: SceneLight["sky"]): string {
   if (activeLayer === "satellite") return SATELLITE_BG;
-  return isDark ? DARK_BG : LIGHT_BG;
+  return sceneSky.horizonColor;
 }
 
 function rgb(hex: string): [number, number, number] {
@@ -154,7 +160,8 @@ export function GlobeProjection() {
   // blends to flat mercator and the user wouldn't see the globe.
   const prevGlobeRef = useRef(false);
   const satellite = activeLayer === "satellite";
-  const background = backgroundColor(activeLayer, isDark);
+  const sceneSky = useSceneLight((light) => light.sky);
+  const background = backgroundColor(activeLayer, sceneSky);
   const skyZoom = useSkyZoom(globeView);
   const [skyUnavailable, setSkyUnavailable] = useState(false);
   const [drawn, setDrawn] = useState<GlobeSkyContent>(NOTHING_DRAWN);
@@ -190,7 +197,9 @@ export function GlobeProjection() {
       if ((map.getProjection()?.type ?? "mercator") !== projection) {
         map.setProjection({ type: projection });
       }
-      const sky = globeView ? getSky(activeLayer, isDark, ownSky) : { "atmosphere-blend": 0 };
+      const sky = globeView
+        ? getSky(activeLayer, isDark, ownSky, sceneSky)
+        : { "atmosphere-blend": 0 };
       const currentSky = map.getSky();
       if (
         Object.entries(sky).some(
@@ -208,7 +217,17 @@ export function GlobeProjection() {
       unsubscribe();
       container.style.backgroundColor = previousBackground;
     };
-  }, [globeView, activeLayer, isDark, ownSky, containerBackground, mapReady, styleVersion, mapRef]);
+  }, [
+    globeView,
+    activeLayer,
+    isDark,
+    ownSky,
+    sceneSky,
+    containerBackground,
+    mapReady,
+    styleVersion,
+    mapRef,
+  ]);
 
   // One sky layer while the globe is on: theme, base map, lighting and style
   // reloads update or re-add it rather than reloading its textures.

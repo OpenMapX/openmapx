@@ -6,54 +6,20 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import {
-  parseAttributionHtml,
-  useCurrentWeather,
-  useDebouncedCallback,
-  weatherCodeToInfo,
-} from "@openmapx/core";
-import { useCallback, useEffect, useState } from "react";
+import { parseAttributionHtml, weatherCodeToInfo } from "@openmapx/core";
 import { CHIP_ROW_END } from "@/components/search/floatingChipSx";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
-import { useMap } from "@/integration-api/map/MapContext";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { SEARCH_BAR_INSET, topInset } from "@/lib/layout";
+import { useMapCenterWeather } from "./useMapCenterWeather";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { mapRef, mapReady } = useMap();
-  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const [zoom, setZoom] = useState(0);
-
-  const updateCenter = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const c = map.getCenter();
-    setCenter({ lat: Math.round(c.lat * 10) / 10, lng: Math.round(c.lng * 10) / 10 });
-    setZoom(map.getZoom());
-  }, [mapRef]);
-
-  const debouncedUpdate = useDebouncedCallback(updateCenter, 2000);
-
-  useEffect(() => {
-    if (isMobile) return;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    updateCenter();
-    map.on("moveend", debouncedUpdate);
-    return () => {
-      map.off("moveend", debouncedUpdate);
-    };
-  }, [isMobile, mapRef, mapReady, updateCenter, debouncedUpdate]);
-
-  // Pass nulls on mobile so the underlying query is disabled — no fetch.
-  const { data } = useCurrentWeather(
-    !isMobile && center && zoom >= 8 ? center.lat : null,
-    !isMobile && center && zoom >= 8 ? center.lng : null,
-  );
+  // Disabled on mobile, so nothing is fetched there.
+  const { data, zoom } = useMapCenterWeather({ enabled: !isMobile });
 
   const resolve = useContributorResolver();
   const widgetVisible = !isMobile && !!data && zoom >= 8;

@@ -159,6 +159,7 @@ export {
   nearestGridBearing,
   type WeightedBearing,
 } from "./gridOrientation";
+export { lerpHex } from "./hexColor";
 export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
 export {
@@ -401,6 +402,7 @@ export {
   normalizeLongitude,
   type SolarPosition,
   solarAltitudeDeg,
+  solarAzimuthDeg,
   solarPosition,
   subsolarPoint,
   type TwilightBandOptions,

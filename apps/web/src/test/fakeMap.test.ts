@@ -2,6 +2,25 @@ import { Evented } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import { createFakeMap } from "./fakeMap";
 
+describe("fake map light", () => {
+  it("refuses a light while the style is not loaded", () => {
+    const fake = createFakeMap({ styleLoaded: false });
+    expect(() => fake.map.setLight({ intensity: 0.4 } as never)).toThrow(
+      "Style is not done loading.",
+    );
+    fake.state.styleLoaded = true;
+    fake.map.setLight({ intensity: 0.4 } as never);
+    expect(fake.map.getLight()).toEqual({ intensity: 0.4 });
+  });
+
+  it("drops the light with the style it belonged to", () => {
+    const fake = createFakeMap({ styleLoaded: true });
+    fake.map.setLight({ intensity: 0.4 } as never);
+    fake.map.setStyle({} as never);
+    expect(fake.state.light).toBeNull();
+  });
+});
+
 describe("fake map setStyle", () => {
   it("drops every source and layer the app added, and restores the base style", () => {
     const fake = createFakeMap({

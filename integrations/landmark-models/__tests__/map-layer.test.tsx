@@ -7,6 +7,12 @@ import {
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import {
+  NEUTRAL_SCENE_LIGHT,
+  NIGHT_SCENE_LIGHT,
+  sunVector,
+  useSceneLightStore,
+} from "@/integration-api/map/sceneLight";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import type { Candidate } from "../web/loader";
 import type { WireAsset } from "../wire";
@@ -45,7 +51,11 @@ const sceneMock = vi.hoisted(() => {
   const state = {
     created: 0,
     options: undefined as
-      | { onUnsupported(): void; onFrame(drawn: readonly string[]): void }
+      | {
+          lighting: { direction: number[]; color: string };
+          onUnsupported(): void;
+          onFrame(drawn: readonly string[]): void;
+        }
       | undefined,
     drawn: [] as string[],
     pick: null as string | null,
@@ -74,6 +84,7 @@ vi.mock("../web/scene", () => ({
       render: vi.fn(),
       setPlaced: vi.fn(),
       setNight: vi.fn(),
+      setLighting: vi.fn(),
       drawnAssetIds: () => sceneMock.drawn,
       pick: vi.fn(() => sceneMock.pick),
     };
@@ -97,12 +108,6 @@ vi.mock("../web/scene", () => ({
       dispose: sceneMock.dispose,
     };
   },
-}));
-
-const colorScheme = vi.hoisted(() => ({ mode: "light" as string, systemMode: "light" as string }));
-vi.mock("@mui/material/styles", async (original) => ({
-  ...(await original<typeof import("@mui/material/styles")>()),
-  useColorScheme: () => ({ mode: colorScheme.mode, systemMode: colorScheme.systemMode }),
 }));
 
 const catalogueMock = vi.hoisted(() => ({ candidates: [] as Candidate[] }));
@@ -193,6 +198,7 @@ function replacements() {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  useSceneLightStore.setState({ light: NEUTRAL_SCENE_LIGHT });
   styleVersion = 0;
   fake = createFakeMap({
     zoom: 16,
@@ -479,16 +485,31 @@ describe("LandmarkModelsLayer", () => {
     expect(hooks.attributionOptions?.resolveCustomContributors?.()).toEqual([RECEIPT]);
   });
 
-  it("uses night shading only in dark theme on a vector base map", async () => {
-    colorScheme.mode = "system";
-    colorScheme.systemMode = "dark";
+  it("creates the models' lights from the current scene light", async () => {
+    useSceneLightStore
+      .getState()
+      .publish({ ...NEUTRAL_SCENE_LIGHT, azimuthDeg: 120, sunColor: "#ffe8d0" });
     render(<LandmarkModelsLayer />);
     await activate();
+    expect(sceneMock.options?.lighting).toMatchObject({
+      direction: sunVector({ azimuthDeg: 120, polarDeg: NEUTRAL_SCENE_LIGHT.polarDeg }),
+      color: "#ffe8d0",
+    });
+  });
+
+  it("takes night and light from the scene light", async () => {
+    render(<LandmarkModelsLayer />);
+    await activate();
+    act(() => useSceneLightStore.getState().publish(NIGHT_SCENE_LIGHT));
     expect(sceneMock.layer.setNight).toHaveBeenLastCalledWith(true);
-    act(() => useLayerStore.setState({ activeLayer: "satellite" }));
-    await flush();
+    act(() => useSceneLightStore.getState().publish(NEUTRAL_SCENE_LIGHT));
     expect(sceneMock.layer.setNight).toHaveBeenLastCalledWith(false);
-    colorScheme.mode = "light";
-    colorScheme.systemMode = "light";
+    expect(sceneMock.layer.setLighting).toHaveBeenLastCalledWith({
+      direction: sunVector(NEUTRAL_SCENE_LIGHT),
+      color: "#fff4df",
+      intensity: 2.2,
+      ambientColor: "#ffffff",
+      ambientIntensity: 1.4,
+    });
   });
 });

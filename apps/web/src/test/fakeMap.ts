@@ -432,6 +432,8 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.paint.clear();
       state.layout.clear();
       state.filters.clear();
+      // The light belongs to the style, so a new style starts without the app's.
+      state.light = null;
       for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
       api.emit("style.load");
       api.emit("styledata");
@@ -476,9 +478,12 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     setMaxPitch: (maxPitch: number) => {
       state.maxPitch = maxPitch;
     },
+    // MapLibre refuses a light until the style has loaded.
     setLight: (light: Record<string, unknown>) => {
+      if (!state.styleLoaded) throw new Error("Style is not done loading.");
       state.light = light;
     },
+    getLight: () => state.light,
     getCenter: () => state.center,
     getBearing: () => state.bearing,
     getPadding: () => state.padding ?? { top: 0, bottom: 0, left: 0, right: 0 },

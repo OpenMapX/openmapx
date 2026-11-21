@@ -27,6 +27,7 @@ import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { RouteTrafficLayer } from "@/components/map/layers/RouteTrafficLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
+import { SceneLighting } from "@/components/map/layers/SceneLighting";
 import { SelectedStopInfrastructureLayer } from "@/components/map/layers/SelectedStopInfrastructureLayer";
 import { TerrainBaseLayer } from "@/components/map/layers/TerrainBaseLayer";
 import { TimelineMapLayer } from "@/components/map/layers/TimelineMapLayer";
@@ -90,6 +91,7 @@ export default function HomePage() {
             <MapCanvas />
             <MapPaddingSync />
             <GlobeProjection />
+            <SceneLighting />
             <BaseAttributions />
             <RasterBaseLayer
               sourceId="openmapx-satellite-source"

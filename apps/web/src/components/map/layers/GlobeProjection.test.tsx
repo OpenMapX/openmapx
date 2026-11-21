@@ -9,6 +9,11 @@ import {
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
+import {
+  NEUTRAL_SCENE_LIGHT,
+  NIGHT_SCENE_LIGHT,
+  useSceneLightStore,
+} from "@/integration-api/map/sceneLight";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap } from "@/test";
 import { GlobeProjection } from "./GlobeProjection";
@@ -26,7 +31,8 @@ const setSky = vi.fn((value: unknown) => {
 });
 const SKY_ID = "openmapx-globe-sky";
 
-vi.mock("@mui/material/styles", () => ({ useColorScheme: () => ({ mode: "dark" }) }));
+const scheme = vi.hoisted(() => ({ mode: "dark" as "light" | "dark" }));
+vi.mock("@mui/material/styles", () => ({ useColorScheme: () => ({ mode: scheme.mode }) }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => context }));
 
 interface FakeSky {
@@ -69,6 +75,9 @@ beforeEach(() => {
     setSky,
   });
   context = { mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 };
+  // The scene lighting publishes night for the dark theme these tests run in.
+  scheme.mode = "dark";
+  useSceneLightStore.setState({ light: NIGHT_SCENE_LIGHT });
   useLayerStore.setState({
     globeView: true,
     globeCameraBehavior: "reveal",
@@ -148,6 +157,81 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(container.style.backgroundColor).toBe("red");
     unmount();
     expect(fake.state.handlers.get("style.load")?.size ?? 0).toBe(0);
+  });
+
+  it("takes the globe's vector sky from the scene light", () => {
+    scheme.mode = "light";
+    useLayerStore.setState({ activeLayer: "default" });
+    useSceneLightStore.setState({ light: NEUTRAL_SCENE_LIGHT });
+    fake.state.zoom = 9;
+    render(<GlobeProjection />);
+    act(() =>
+      useSceneLightStore.getState().publish({
+        ...NEUTRAL_SCENE_LIGHT,
+        preset: "dusk",
+        sky: { skyColor: "#5d6fa8", horizonColor: "#e3b4a6", fogColor: "#c9c1d3" },
+      }),
+    );
+    expect(setSky).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        "sky-color": "#5d6fa8",
+        "horizon-color": "#e3b4a6",
+        "fog-color": "#c9c1d3",
+        "sky-horizon-blend": 0.5,
+      }),
+    );
+    expect(container.style.backgroundColor).toBe("rgb(227, 180, 166)");
+    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ themeSky: [227 / 255, 180 / 255, 166 / 255] }),
+    );
+  });
+
+  it("keeps today's sky for the neutral and night lights", () => {
+    scheme.mode = "light";
+    useLayerStore.setState({ activeLayer: "default" });
+    useSceneLightStore.setState({ light: NEUTRAL_SCENE_LIGHT });
+    fake.state.zoom = 9;
+    const { unmount } = render(<GlobeProjection />);
+    expect(sky).toMatchObject({
+      "sky-color": "#88c6fc",
+      "horizon-color": "#d6e8f7",
+      "fog-color": "#ffffff",
+      "sky-horizon-blend": 0.5,
+    });
+    unmount();
+
+    scheme.mode = "dark";
+    useSceneLightStore.setState({ light: NIGHT_SCENE_LIGHT });
+    render(<GlobeProjection />);
+    expect(sky).toMatchObject({
+      "sky-color": "#0a0a1a",
+      "horizon-color": "#101828",
+      "fog-color": "#0a0a0a",
+      "sky-horizon-blend": 0.6,
+    });
+  });
+
+  it("leaves the mercator sky alone", () => {
+    useLayerStore.setState({ globeView: false, activeLayer: "default" });
+    render(<GlobeProjection />);
+    act(() =>
+      useSceneLightStore.getState().publish({
+        ...NEUTRAL_SCENE_LIGHT,
+        sky: { skyColor: "#5d6fa8", horizonColor: "#e3b4a6", fogColor: "#c9c1d3" },
+      }),
+    );
+    expect(setSky).toHaveBeenLastCalledWith({ "atmosphere-blend": 0 });
+  });
+
+  it("leaves the satellite sky alone", () => {
+    render(<GlobeProjection />);
+    act(() =>
+      useSceneLightStore.getState().publish({
+        ...NEUTRAL_SCENE_LIGHT,
+        sky: { skyColor: "#5d6fa8", horizonColor: "#e3b4a6", fogColor: "#c9c1d3" },
+      }),
+    );
+    expect(sky).toMatchObject({ "sky-color": "#0a0a2e", "horizon-color": "#1a3a5e" });
   });
 
   it("updates the sky in place when lighting, the base map or the style changes", () => {

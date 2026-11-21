@@ -32,6 +32,7 @@ import {
 } from "@/components/map/layers/globe/globeLighting";
 import { localeNames, locales } from "@/i18n/config";
 import { useMapOptional } from "@/integration-api/map/MapContext";
+import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
@@ -79,6 +80,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
   const globeLighting = useGlobeLightingActive();
+  const threeDActive = useOverlayLayerVisible("3d-buildings");
 
   return useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -121,8 +123,8 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
       },
     });
 
-    // Day and night only applies to the globe, so it is offered only there.
-    if (globeView) {
+    // Day and night lights the globe and the 3D view, so it is offered with either.
+    if (globeView || threeDActive) {
       out.push({
         id: "layers.globe-lighting",
         group: "layers",
@@ -378,6 +380,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     setActiveLayer,
     globeView,
     globeLighting,
+    threeDActive,
     integrations,
     isSignedIn,
     parkedLocations,

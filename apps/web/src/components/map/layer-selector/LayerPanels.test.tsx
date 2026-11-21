@@ -2,7 +2,7 @@
 
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import { useLayerStore } from "@openmapx/core";
+import { createOverlayStore, useLayerStore } from "@openmapx/core";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -70,6 +70,15 @@ describe("layer panels", () => {
     expect(screen.getByRole("button", { name: "globeLighting" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
+  });
+
+  it("offers day and night in the 3D view", () => {
+    const threeD = createOverlayStore({ overlayId: "3d-buildings", extra: {} });
+    act(() => threeD.getState().setLayerVisible(true));
+    render(<LayerDetailsPanel variant="sheet" onClose={() => undefined} />);
+    expect(screen.getByRole("button", { name: "globeLighting" })).toBeTruthy();
+    act(() => threeD.getState().setLayerVisible(false));
+    expect(screen.queryByRole("button", { name: "globeLighting" })).toBeNull();
   });
 
   it("lets phone users operate both tools and select one basemap", () => {

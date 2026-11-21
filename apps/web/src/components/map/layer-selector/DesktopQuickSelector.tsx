@@ -18,6 +18,7 @@ import {
   useGlobeLightingActive,
 } from "@/components/map/layers/globe/globeLighting";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
+import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -103,6 +104,8 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
   const { isAvailable } = useCapabilities();
   const { quickDetails } = useLayerSelectorConfig();
   const globeView = useLayerStore((s) => s.globeView);
+  // Day and night lights the 3D view as well as the globe.
+  const threeDActive = useOverlayLayerVisible("3d-buildings");
 
   return (
     <Paper
@@ -144,7 +147,7 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
         ))}
 
       <GlobeTile />
-      {globeView ? <GlobeLightingTile /> : null}
+      {globeView || threeDActive ? <GlobeLightingTile /> : null}
 
       <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
         <LayerPreviewTile

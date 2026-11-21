@@ -9,6 +9,7 @@ import {
   AmbientLight,
   Box3,
   Camera,
+  Color,
   DirectionalLight,
   Frustum,
   type Material,
@@ -36,6 +37,16 @@ export interface PlacedModel {
   /** Clip everything below groundM (sunken models on a flat map). */
   clipBelowGround: boolean;
   receipts: readonly Attribution[];
+}
+
+/** The three.js side of the shared scene light. */
+export interface ModelLighting {
+  /** Towards the light, in scene space (x east, y north, z up). */
+  direction: [number, number, number];
+  color: string;
+  intensity: number;
+  ambientColor: string;
+  ambientIntensity: number;
 }
 
 /** Below this the globe has fully blended to the flat map at street zoom. */
@@ -74,18 +85,52 @@ export class LandmarkModelLayer implements CustomLayerInterface {
   private lastCamera: Float64Array | undefined;
   private unsupportedReported = false;
   private night = false;
+  private readonly sun = new DirectionalLight();
+  private readonly ambient = new AmbientLight();
 
   constructor(
     private readonly options: {
+      /** The scene light to start from; `setLighting` follows its changes. */
+      lighting: ModelLighting;
       onUnsupported(): void;
       onFrame?(drawn: readonly string[]): void;
     },
   ) {
-    this.scene.add(new AmbientLight(0xffffff, 1.4));
-    const sun = new DirectionalLight(0xfff4df, 2.2);
-    // Scene space is x east, y north, z up: light from the north-west and above.
-    sun.position.set(-1, 1, 2).normalize();
-    this.scene.add(sun);
+    this.scene.add(this.ambient, this.sun);
+    this.applyLighting(options.lighting);
+  }
+
+  /**
+   * Light the models with the shared scene light. Scene space is x east,
+   * y north, z up, the frame `direction` (towards the light) is given in.
+   */
+  setLighting(lighting: ModelLighting): void {
+    if (this.applyLighting(lighting)) this.map?.triggerRepaint();
+  }
+
+  private applyLighting({
+    direction,
+    color,
+    intensity,
+    ambientColor,
+    ambientIntensity,
+  }: ModelLighting): boolean {
+    const position = new Vector3(...direction).normalize();
+    const sunColor = new Color(color);
+    const skyColor = new Color(ambientColor);
+    const changed =
+      !this.sun.position.equals(position) ||
+      !this.sun.color.equals(sunColor) ||
+      this.sun.intensity !== intensity ||
+      !this.ambient.color.equals(skyColor) ||
+      this.ambient.intensity !== ambientIntensity;
+    if (!changed) return false;
+    this.sun.position.copy(position);
+    this.sun.color.copy(sunColor);
+    this.sun.intensity = intensity;
+    this.ambient.color.copy(skyColor);
+    this.ambient.intensity = ambientIntensity;
+    return true;
   }
 
   /** Repaints only when the placement changed; callers may call this every frame. */
@@ -108,6 +153,7 @@ export class LandmarkModelLayer implements CustomLayerInterface {
   }
 
   setNight(night: boolean): void {
+    if (night === this.night) return;
     this.night = night;
     for (const placed of this.placed) placed.model.setNight(night);
     this.map?.triggerRepaint();

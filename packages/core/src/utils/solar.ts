@@ -73,6 +73,22 @@ export function solarAltitudeDeg(date: Date, lat: number, lng: number): number {
   return Math.asin(Math.max(-1, Math.min(1, sinAltitude))) * RAD;
 }
 
+/** Solar azimuth in degrees clockwise from true north, in [0, 360). */
+export function solarAzimuthDeg(date: Date, lat: number, lng: number): number {
+  const { declinationDeg, greenwichHourAngleDeg } = solarPosition(date);
+  const hourAngle = (greenwichHourAngleDeg + lng) * DEG;
+  const phi = lat * DEG;
+  const dec = declinationDeg * DEG;
+  const azimuth =
+    Math.atan2(
+      Math.sin(hourAngle),
+      Math.cos(hourAngle) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi),
+    ) *
+      RAD +
+    180;
+  return norm360(azimuth);
+}
+
 export type ContourBranch = "pole" | "cap";
 
 export interface DarkRegionProperties {
