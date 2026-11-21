@@ -3,13 +3,8 @@ import type {
   CustomRenderMethodInput,
   Map as MapLibreMap,
 } from "maplibre-gl";
-import {
-  createStarCatalog,
-  STAR_COUNT,
-  STAR_STRIDE,
-  skyProjectionMatrix,
-  spaceOpacity,
-} from "./globeSpace";
+import { skyProjectionMatrix, spaceAmount as spaceOpacity } from "./globe/globeCamera";
+import { createStarCatalog, STAR_COUNT, STAR_STRIDE } from "./globe/starCatalog";
 
 const SKY_VERTEX = `#version 300 es
 uniform mat3 u_matrix;
