@@ -16,7 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { distDir, mobileRoot, readToolchains, readVersion } from "./context.ts";
 
 const version = readVersion();
@@ -93,7 +93,7 @@ if (!existsSync(built)) {
   process.exit(1);
 }
 
-const destination = resolve(output, built.split("/").pop() as string);
+const destination = resolve(output, basename(built));
 copyFileSync(built, destination);
 
 console.log(`\n[release:android] ${destination}`);

@@ -128,8 +128,7 @@ it.each([
 });
 it("bounds untrusted feed text and ignores impossible progress", () => {
   const s = ground();
-  (s.payload.startPackage.route.steps[0] as { instruction: string }).instruction =
-    `\n${"ä".repeat(400)}\u0000`;
+  nth(s.payload.startPackage.route.steps, 0).instruction = `\n${"ä".repeat(400)}\u0000`;
   s.payload.progress = {
     currentStepIndex: Infinity,
     distanceRemaining: -1,

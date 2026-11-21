@@ -39,7 +39,7 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-const waypoints: LngLat[] = [
+const waypoints: [LngLat, LngLat] = [
   [13.4, 52.5],
   [13.5, 52.6],
 ];
@@ -75,11 +75,10 @@ describe("routing planner cancellation", () => {
 
   it("aborts the superseded directions request when the trip changes", async () => {
     const { rerender } = renderHook(
-      ({ to }: { to: LngLat }) =>
-        useDirections({ waypoints: [waypoints[0] as LngLat, to], lang: "en" }),
+      ({ to }: { to: LngLat }) => useDirections({ waypoints: [waypoints[0], to], lang: "en" }),
       {
         wrapper: createQueryWrapper(),
-        initialProps: { to: waypoints[1] as LngLat },
+        initialProps: { to: waypoints[1] },
       },
     );
     await waitFor(() => expect(signals).toHaveLength(1));

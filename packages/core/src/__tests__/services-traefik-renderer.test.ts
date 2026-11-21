@@ -102,7 +102,8 @@ describe("generated Traefik file configuration", () => {
       // Same router set, same rules, entrypoints, priorities, and middlewares.
       expect(Object.keys(actual.http.routers).sort()).toEqual(Object.keys(expected.routers).sort());
       for (const [name, router] of Object.entries(actual.http.routers)) {
-        const labelRouter = expected.routers[name] as Record<string, string>;
+        const labelRouter = expected.routers[name];
+        assert(labelRouter, `labels declare router ${name}`);
         expect(router.rule).toBe(labelRouter.rule);
         // Labels interpolate the operator-run proxy's entrypoint and resolver;
         // the bundled Traefik is what their defaults describe.
@@ -144,7 +145,7 @@ describe("generated Traefik file configuration", () => {
     });
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
 
-    const duplicated = manifests[0] as ServiceManifest;
+    const duplicated = itemAt(manifests, 0);
     expect(() =>
       renderTraefikDynamicConfiguration([duplicated, duplicated], {
         domain: DOMAIN,
@@ -174,7 +175,7 @@ describe("generated Traefik file configuration", () => {
   });
 
   it("renders nothing for a service that declares no proxy", () => {
-    const manifest = { ...(manifests[0] as ServiceManifest), exposure: {} } as ServiceManifest;
+    const manifest = { ...itemAt(manifests, 0), exposure: {} } as ServiceManifest;
     expect(
       renderTraefikServiceConfiguration(manifest, {
         domain: DOMAIN,

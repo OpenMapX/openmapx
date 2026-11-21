@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { itemAt } from "@openmapx/core/item-at";
+import { assert, describe, expect, it, vi } from "vitest";
 import type { GithubIssueSink } from "../../src/jobs/github-issue-sink.js";
 import {
   type AlertLogger,
@@ -105,7 +106,7 @@ describe("detectStaleFeeds", () => {
     ]);
     const alerts = await detectStaleFeeds({ db: handle, now: () => NOW });
     expect(alerts).toHaveLength(1);
-    const alert = alerts[0] as FeedAlert;
+    const alert = itemAt(alerts, 0);
     expect(alert.kind).toBe("stale");
     expect(alert.region).toBe("de");
     expect(alert.name).toBe("vbb");
@@ -125,7 +126,7 @@ describe("detectStaleFeeds", () => {
     ]);
     const alerts = await detectStaleFeeds({ db: handle, now: () => NOW });
     expect(alerts).toHaveLength(1);
-    const alert = alerts[0] as FeedAlert;
+    const alert = itemAt(alerts, 0);
     expect(alert.kind).toBe("consecutive-failures");
     expect(alert.detail.consecutiveFailures).toBe(3);
     expect(alert.detail.validationMessage).toBe("missing feed_info.txt");
@@ -195,7 +196,8 @@ describe("emitFeedAlerts", () => {
     const log = buildLogger();
     await emitFeedAlerts({ alerts: [SAMPLE_ALERT], log });
     expect(log.warnCalls).toHaveLength(1);
-    const [msg, extra] = log.warnCalls[0] as [string, Record<string, unknown>];
+    const [msg, extra] = itemAt(log.warnCalls, 0);
+    assert(extra);
     expect(msg).toBe("transit feed alert");
     expect(extra.region).toBe("de");
     expect(extra.name).toBe("vbb");
@@ -242,7 +244,8 @@ describe("emitFeedAlerts", () => {
     const sink: GithubIssueSink = { createIssue };
     await emitFeedAlerts({ alerts: [SAMPLE_ALERT], log, githubIssue: sink });
     expect(log.errorCalls).toHaveLength(1);
-    const [errMsg, errExtra] = log.errorCalls[0] as [string, Record<string, unknown>];
+    const [errMsg, errExtra] = itemAt(log.errorCalls, 0);
+    assert(errExtra);
     expect(errMsg).toContain("GitHub issue failed");
     expect(errExtra.err).toBe("boom");
   });
@@ -373,7 +376,8 @@ describe("emitPipelineFailureAlert", () => {
       },
       log,
     });
-    const [, extra] = log.errorCalls[0] as [string, Record<string, unknown>];
+    const [, extra] = itemAt(log.errorCalls, 0);
+    assert(extra);
     expect(extra.reason).not.toContain("FAKELOGTOKEN");
   });
 
@@ -388,8 +392,9 @@ describe("emitPipelineFailureAlert", () => {
       log,
     });
     expect(log.debugCalls).toHaveLength(1);
-    const [, debugExtra] = log.debugCalls[0] as [string, Record<string, unknown>];
-    const [, errorExtra] = log.errorCalls[0] as [string, Record<string, unknown>];
+    const [, debugExtra] = itemAt(log.debugCalls, 0);
+    const [, errorExtra] = itemAt(log.errorCalls, 0);
+    assert(debugExtra && errorExtra);
     expect(debugExtra.reason).toContain("FAKEDEBUGTOKEN");
     expect(errorExtra.reason).not.toContain("FAKEDEBUGTOKEN");
   });

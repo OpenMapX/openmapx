@@ -45,8 +45,7 @@ function publicReach() {
   const entries = sourceFiles(APP).filter((file) => !file.startsWith(ADMIN_APP));
   const seen = new Set<string>();
   const queue = [...entries];
-  while (queue.length) {
-    const file = queue.pop() as string;
+  for (let file = queue.pop(); file !== undefined; file = queue.pop()) {
     if (seen.has(file)) continue;
     seen.add(file);
     for (const match of readFileSync(file, "utf8").matchAll(IMPORT)) {

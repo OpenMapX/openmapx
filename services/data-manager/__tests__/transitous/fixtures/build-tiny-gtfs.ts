@@ -53,7 +53,7 @@ export async function buildTinyGtfsFeeds(outputDir: string): Promise<TinyGtfsBui
   const { startDate, endDate } = todayWindowYyyymmdd(30);
 
   for (const feedName of feedNames) {
-    const region = feedName.split("_")[0] as TinyGtfsRegion;
+    const [region] = feedName.split("_");
     if (region !== "de" && region !== "ch" && region !== "at") {
       throw new Error(`buildTinyGtfsFeeds: unsupported region prefix in ${feedName}`);
     }

@@ -151,11 +151,9 @@ function parseFiles(value: unknown): IntegrationFileDigest[] {
     }
     return { path: entry.path, sha256: entry.sha256 };
   });
-  for (let index = 1; index < files.length; index += 1) {
-    if (
-      (files[index - 1] as IntegrationFileDigest).path >=
-      (files[index] as IntegrationFileDigest).path
-    ) {
+  for (const [index, file] of files.entries()) {
+    const previous = files[index - 1];
+    if (previous && previous.path >= file.path) {
       throw new Error();
     }
   }

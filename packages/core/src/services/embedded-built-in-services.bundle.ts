@@ -443,8 +443,9 @@ function embeddedSource(urls: Record<string, URL>): BuiltInManifestSource {
   return {
     ids: Object.keys(urls).sort(),
     manifestPath(id) {
-      if (!Object.hasOwn(urls, id)) throw new Error(`Unknown built-in manifest ${id}`);
-      return fileURLToPath(urls[id] as URL);
+      const url = Object.hasOwn(urls, id) ? urls[id] : undefined;
+      if (!url) throw new Error(`Unknown built-in manifest ${id}`);
+      return fileURLToPath(url);
     },
     embedded: true,
   };

@@ -646,10 +646,10 @@ export async function rotateManagedDawarichOidcSecret(
     await dependencies.getRuntimeState();
     const context = await resolveContext(input, dependencies);
     const clients = await matchingClients(dependencies, input.headers);
-    if (clients.length !== 1) {
+    const [client] = clients;
+    if (clients.length !== 1 || !client) {
       throw new ManagedDawarichProvisioningError("DAWARICH_OAUTH_CLIENT_CONFLICT");
     }
-    const client = clients[0] as ManagedOAuthClient;
     assertImmutableClientSecurity(client);
     await stageOidcRecoveryRequired(dependencies);
     const pendingGeneration = await stagePendingGeneration(dependencies);

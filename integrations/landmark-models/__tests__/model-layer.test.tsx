@@ -31,7 +31,6 @@ const fake = vi.hoisted(() => {
   }
   return { state, FakeRenderer };
 });
-type FakeRenderer = InstanceType<typeof fake.FakeRenderer>;
 const renderers = fake.state.renderers;
 
 vi.mock("three", async (original) => ({
@@ -156,7 +155,8 @@ describe("LandmarkModelLayer", () => {
     layer.onAdd(fakeMap(), {} as WebGL2RenderingContext);
     layer.setPlaced([placed("a")]);
     layer.render({} as WebGL2RenderingContext, renderArgs());
-    const renderer = renderers[0] as FakeRenderer;
+    const renderer = renderers[0];
+    assert(renderer, "the layer created a renderer");
     const order = [
       ...renderer.resetState.mock.invocationCallOrder,
       ...renderer.render.mock.invocationCallOrder,

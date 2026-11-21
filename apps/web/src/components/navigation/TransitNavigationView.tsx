@@ -9,7 +9,6 @@ import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { geoJsonBBox, useNavigationStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import { nextTransferFor } from "@openmapx/core/navigation";
-import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TransitLegChain } from "@/components/panels/directions/TransitLegChain";
@@ -94,7 +93,7 @@ export function TransitNavigationView() {
 
   const legs = itinerary.legs;
   const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
-  const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
+  const currentLeg = legs[currentLegIndex];
   const transfer = nextTransferFor(legs, currentLegIndex);
   // A walk leg with step-level directions gets turn-by-turn guidance; other legs
   // (and detail-less walks) use the standard leg banner.

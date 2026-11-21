@@ -105,8 +105,8 @@ function pathParameters(path: string): Record<string, unknown>[] {
 }
 
 function sortObject<T>(input: Record<string, T>, order?: readonly string[]): Record<string, T> {
-  const keys = Object.keys(input);
-  keys.sort((a, b) => {
+  const entries = Object.entries(input);
+  entries.sort(([a], [b]) => {
     if (order) {
       const rankA = order.indexOf(a);
       const rankB = order.indexOf(b);
@@ -118,9 +118,7 @@ function sortObject<T>(input: Record<string, T>, order?: readonly string[]): Rec
     }
     return a < b ? -1 : a > b ? 1 : 0;
   });
-  const sorted: Record<string, T> = {};
-  for (const key of keys) sorted[key] = input[key] as T;
-  return sorted;
+  return Object.fromEntries(entries);
 }
 
 function authFor(entries: Map<string, AuthLevel>, method: string, path: string): AuthLevel {

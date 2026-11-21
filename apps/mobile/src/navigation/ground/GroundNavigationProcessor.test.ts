@@ -276,7 +276,7 @@ describe("processGroundBatch cue selection", () => {
       nowMs: NOW + 5 * 60_000,
       cache: new GroundRouteCache(),
     });
-    expect(late.session.cueLedger.spoken).toContain((current[0] as { cueId: string }).cueId);
+    expect(late.session.cueLedger.spoken).toContain(nth(current, 0).cueId);
   });
 
   it("emits no audio at all when voice is disabled", () => {

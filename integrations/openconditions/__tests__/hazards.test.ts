@@ -5,6 +5,7 @@ import {
   createMockIntegrationContext,
   type FakeHttpRequest,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { assert, describe, expect, test } from "vitest";
@@ -908,9 +909,7 @@ describe("captured hazard contributor receipts", () => {
     ]);
     expect(result.sources).toEqual([VIIRS, MODIS]);
     a.name = "Changed upstream";
-    expect((result.cells[0] as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
-      "Publisher A",
-    );
+    expect(nth(result.cells, 0).contributors?.[0]?.name).toBe("Publisher A");
   });
 
   test("legacy density retains usable values with unknown per-cell receipts", async () => {

@@ -4,6 +4,7 @@ import {
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import {
   type ConfigurationHardlinksPreview,
   type ConfigurationSourcesInspection,
@@ -1750,6 +1751,10 @@ export async function prepareProspectiveConfiguration(input: {
                 ),
               }
             : null;
+        // Every change of an integration purpose names its integration.
+        const [firstChange] = overlay.changes;
+        const changedIntegrationId =
+          firstChange && "integrationId" in firstChange ? firstChange.integrationId : undefined;
         const operationForRevision = (revisionId: string, payloadDigest: string): OpsOperation =>
           ({
             kind,
@@ -1760,10 +1765,10 @@ export async function prepareProspectiveConfiguration(input: {
             coordinatorMode: overlay.coordinatorMode,
             ...(maintenanceId ? { maintenanceId, candidateId } : {}),
             ...(kind === "serviceConfig.apply" || kind === "vault.apply"
-              ? { serviceId: guaranteed(affectedServiceIds[0], "affected service") }
+              ? { serviceId: itemAt(affectedServiceIds, 0, "affected service") }
               : {}),
             ...(kind === "integrationConfig.apply"
-              ? { integrationId: (overlay.changes[0] as { integrationId: string }).integrationId }
+              ? { integrationId: guaranteed(changedIntegrationId, "integration change") }
               : {}),
           }) as OpsOperation;
         const sealed = prepareConfigurationCandidate({

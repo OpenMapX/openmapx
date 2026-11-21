@@ -174,18 +174,15 @@ function FieldControl({
   }
 
   const field = descriptor.field as OsmScalarEditableField;
-  const removed = draft.operations[field]?.kind === "remove";
+  const operation = draft.operations[field];
+  const removed = operation?.kind === "remove";
 
   if (descriptor.kind === "choice") {
     return (
       <FormControl component="fieldset" disabled={removed}>
         <FormLabel component="legend">{descriptor.label}</FormLabel>
         <RadioGroup
-          value={
-            draft.operations[field]?.kind === "set"
-              ? (draft.operations[field] as { value: string }).value
-              : (descriptor.currentValue ?? "")
-          }
+          value={operation?.kind === "set" ? operation.value : (descriptor.currentValue ?? "")}
           onChange={(event) => dispatch({ type: "setText", field, value: event.target.value })}
         >
           {descriptor.options.map((option) => (

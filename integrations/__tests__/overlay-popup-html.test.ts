@@ -79,8 +79,7 @@ function relativeImports(fileName: string, source: string): string[] {
 function collectMarkupFiles(files: string[]): string[] {
   const included = new Set<string>();
   const pending = files.filter((file) => hasHtmlSink(fs.readFileSync(file, "utf8")));
-  while (pending.length > 0) {
-    const file = pending.pop() as string;
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
     if (included.has(file) || !file.startsWith(INTEGRATIONS_DIR)) continue;
     included.add(file);
     pending.push(...relativeImports(file, fs.readFileSync(file, "utf8")));

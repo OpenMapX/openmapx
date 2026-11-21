@@ -86,6 +86,12 @@ const ROLE_OF_SERVICE: Record<string, Role> = {
   "ops-agent": "agent",
   "data-manager": "dm",
 };
+/** The role a fake container runs; the engine only starts the three role services. */
+function roleOf(service: string): Role {
+  const role = ROLE_OF_SERVICE[service];
+  if (!role) throw new Error(`No role runs service ${service}`);
+  return role;
+}
 const READINESS: Record<Role, string> = {
   api: "/health",
   agent: "/health",
@@ -333,10 +339,9 @@ export class CrashHost {
     if (!docker) throw new Error("The Docker CLI with Compose is required");
     this.engine = new FakeDockerEngine({
       realDocker: docker,
-      startRole: (service, container) =>
-        this.startRoleProcess(ROLE_OF_SERVICE[service] as Role, container),
-      stopRole: async (service) => this.stopRoleProcess(ROLE_OF_SERVICE[service] as Role),
-      roleState: (service) => this.roleState(ROLE_OF_SERVICE[service] as Role),
+      startRole: (service, container) => this.startRoleProcess(roleOf(service), container),
+      stopRole: async (service) => this.stopRoleProcess(roleOf(service)),
+      roleState: (service) => this.roleState(roleOf(service)),
       runContainer: (container, request) => this.runContainer(container, request.env),
     });
     this.proxies = {

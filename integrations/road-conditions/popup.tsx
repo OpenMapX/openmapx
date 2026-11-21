@@ -278,7 +278,10 @@ function lineEnds(geometry: RoadConditionEvent["geometry"]): [LngLat, LngLat] | 
         : [];
   const path: LngLat[] = [];
   for (const line of lines) {
-    const points = line.map((p) => [p[0], p[1]] as LngLat);
+    // A position without two coordinates has no place on the path.
+    const points = line.flatMap(([lng, lat]): LngLat[] =>
+      lng === undefined || lat === undefined ? [] : [[lng, lat]],
+    );
     const head = points[0];
     const tail = path[path.length - 1];
     if (!head) continue;
@@ -290,8 +293,10 @@ function lineEnds(geometry: RoadConditionEvent["geometry"]): [LngLat, LngLat] | 
   const last = path[path.length - 1];
   if (!first || !last || path.length < 2) return undefined;
   let length = 0;
-  for (let i = 1; i < path.length; i++) {
-    length += haversineDistance(path[i - 1] as LngLat, path[i] as LngLat);
+  let previous = first;
+  for (const point of path) {
+    length += haversineDistance(previous, point);
+    previous = point;
   }
   const chord = haversineDistance(first, last);
   return length > 0 && chord / length >= MIN_CHORD_SHARE ? [first, last] : undefined;

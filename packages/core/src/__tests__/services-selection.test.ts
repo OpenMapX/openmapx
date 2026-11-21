@@ -9,6 +9,7 @@ import {
   parseServiceIdList,
 } from "../services/selection";
 import type { LoadedService } from "../services/types";
+import { itemAt } from "../utils/itemAt";
 
 function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
   return {
@@ -109,8 +110,9 @@ describe("expandServiceSelection", () => {
 
     expect(selection.enabledIdsOrdered).toEqual(["primary", "worker", "scheduler"]);
     expect(selection.warnings).toEqual([]);
-    expect(services[0]?.manifest.container.dependsOn).toBeUndefined();
-    expect(renderServiceSnippet(services[0] as LoadedService, {}).depends_on).toBeUndefined();
+    const primary = itemAt(services, 0);
+    expect(primary.manifest.container.dependsOn).toBeUndefined();
+    expect(renderServiceSnippet(primary, {}).depends_on).toBeUndefined();
   });
 
   it("warns for unavailable companions and terminates mutual companion cycles", () => {

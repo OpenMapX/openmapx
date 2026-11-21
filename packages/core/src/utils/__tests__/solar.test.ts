@@ -170,7 +170,7 @@ describe("darkRegion", () => {
   it("contains the antisolar point and excludes the subsolar point", () => {
     for (const date of DATES) {
       for (const altitudeDeg of BAND_ALTITUDES) {
-        const ring = darkRegion(date, altitudeDeg).geometry.coordinates[0] as [number, number][];
+        const ring = outerRing(darkRegion(date, altitudeDeg).geometry);
         const sub = subsolarPoint(date);
         const anti = antisolarPoint(date);
         expect(pointInRing(ring, anti.lng, anti.lat)).toBe(true);

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
   DAWARICH_APP_SERVICE_ID,
@@ -322,7 +323,7 @@ describe("provisionManagedDawarich", () => {
       ),
     ).resolves.toMatchObject({ needsApply: false });
 
-    Object.assign(harness.clients[0] as ManagedOAuthClient, { client_name: "Drifted client" });
+    Object.assign(itemAt(harness.clients, 0), { client_name: "Drifted client" });
     const reconciled = await provision(harness.dependencies);
     const desiredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
     expect(desiredGeneration).toMatch(/^[0-9a-f]{32}$/);
@@ -437,7 +438,7 @@ describe("provisionManagedDawarich", () => {
   ] as const)("reports %s drift as OAuth-not-ready until reconciliation", async (_name, drift) => {
     const harness = createHarness();
     await provision(harness.dependencies);
-    Object.assign(harness.clients[0] as ManagedOAuthClient, drift);
+    Object.assign(itemAt(harness.clients, 0), drift);
 
     const status = await inspectManagedDawarichProvisioning(
       { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },

@@ -43,7 +43,7 @@ const nsiRoot = resolvePackageRoot("name-suggestion-index");
  */
 const QID_KEYS: { key: string; kind: BrandKind }[] = BRAND_QID_KEYS.map((key) => ({
   key,
-  kind: key.split(":")[0] as BrandKind,
+  kind: key.slice(0, key.indexOf(":")) as BrandKind,
 }));
 
 /** OSM keys that identify what kind of place this is, used for icon selection. */

@@ -102,7 +102,7 @@ function parse(source: string): Node[] {
   let index = 0;
   while (index < source.length) {
     const open = source.indexOf("{{", index);
-    const current = stack.at(-1) as (typeof stack)[number];
+    const current = itemAt(stack, stack.length - 1, "template scope");
     if (open < 0) {
       current.nodes.push({ type: "text", text: source.slice(index) });
       break;

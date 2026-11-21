@@ -136,8 +136,9 @@ function hourlySlotsNewestFirst(
   return Array.from({ length: count }, (_, hoursAgo) => {
     const expectedEnd = anchor - hoursAgo * 3_600_000;
     const matches = temporal.filter(({ end }) => end === expectedEnd);
-    if (matches.length !== 1) return null;
-    const { sample } = matches[0] as (typeof matches)[number];
+    const [match] = matches;
+    if (matches.length !== 1 || !match) return null;
+    const { sample } = match;
     return sample.valid &&
       sample.unit === unit &&
       Number.isFinite(sample.value) &&

@@ -3,6 +3,7 @@ import { fromVectorTileJs, GeoJSONWrapper } from "@maplibre/vt-pbf";
 import type { BuildingReplacement } from "@openmapx/core";
 import { PbfReader } from "pbf";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import {
   replacementsForTile,
   rewriteBuildingTile,
@@ -55,7 +56,7 @@ function decode(bytes: Uint8Array, layer = "building") {
       const ringArea = (ring: { x: number; y: number }[]) =>
         Math.abs(
           ring.reduce((sum, p, j) => {
-            const q = ring[(j + 1) % ring.length] as { x: number; y: number };
+            const q = nth(ring, (j + 1) % ring.length);
             return sum + p.x * q.y - q.x * p.y;
           }, 0) / 2,
         );

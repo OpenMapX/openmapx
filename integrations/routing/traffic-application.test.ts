@@ -8,6 +8,7 @@ import type {
   TrafficApplicationSnapshot,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boundEvent,
@@ -123,7 +124,7 @@ describe("engine application reconciliation", () => {
       { complete: false },
     ]) {
       const s = snapshot();
-      Object.assign(s.receipts[0] as object, patch);
+      Object.assign(nth(s.receipts, 0), patch);
       expect(covers(s), JSON.stringify(patch)).toBe(false);
     }
     expect(covers(snapshot(), new Set(["oc-parent"]))).toBe(false);
@@ -136,9 +137,9 @@ describe("engine application reconciliation", () => {
       [cap.id]: { ...snapshotEvidence(), effect_id: cap.id, effect_kind: "speed_limit" },
     };
     const s = snapshot();
-    Object.assign(s.receipts[0] as object, { observationId: "oc:1#oc:1/speed_limit" });
+    Object.assign(nth(s.receipts, 0), { observationId: "oc:1#oc:1/speed_limit" });
     expect(receiptCoversEffect(e, cap, s, proof, new Set(), NOW)).toBe(false);
-    Object.assign(s.receipts[0] as object, { effect: "speed_cap" });
+    Object.assign(nth(s.receipts, 0), { effect: "speed_cap" });
     expect(receiptCoversEffect(e, cap, s, proof, new Set(), NOW)).toBe(true);
   });
 

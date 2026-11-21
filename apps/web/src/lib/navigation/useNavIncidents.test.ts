@@ -4,6 +4,7 @@ import type { Route } from "@integrations/routing/types";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useNavIncidents } from "./useNavIncidents";
 
 // A straight ~444 m route at the equator.
@@ -32,10 +33,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 function startNav(r: Route = route) {
   useNavigationStore
     .getState()
-    .startGroundNavigation(r, "driving", [
-      geometry[0] as [number, number],
-      geometry[1] as [number, number],
-    ]);
+    .startGroundNavigation(r, "driving", [nth(geometry, 0), nth(geometry, 1)]);
 }
 
 async function flush() {

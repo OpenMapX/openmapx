@@ -2,7 +2,7 @@
 // https://github.com/alexwohlbruck/landmarks/tree/4d92e9c718f2f6e2ba5ff6c116d880271681614a
 import { classifyRings, VectorTile } from "@mapbox/vector-tile";
 import { type Feature, fromVectorTileJs, GeoJSONWrapper } from "@maplibre/vt-pbf";
-import { type BuildingReplacement, numberAt } from "@openmapx/core";
+import { type BuildingReplacement, itemAt, numberAt } from "@openmapx/core";
 import { PbfReader } from "pbf";
 import { difference, type Geom, intersection, union } from "polyclip-ts";
 
@@ -81,8 +81,8 @@ function boundsToPixels(bbox: Readonly<Bounds>, tile: TileCoordinate, extent: nu
 function ringArea(ring: Ring): number {
   let sum = 0;
   for (let i = 0; i < ring.length; i++) {
-    const [px, py] = ring[i] as Pair;
-    const [qx, qy] = ring[(i + 1) % ring.length] as Pair;
+    const [px, py] = itemAt(ring, i, "ring vertex");
+    const [qx, qy] = itemAt(ring, (i + 1) % ring.length, "ring vertex");
     sum += px * qy - qx * py;
   }
   return sum / 2;
@@ -116,8 +116,8 @@ function polygonBounds(polygon: Polygon): Bounds {
 function pointInRing([x, y]: Pair, ring: Ring): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i] as Pair;
-    const [xj, yj] = ring[j] as Pair;
+    const [xi, yi] = itemAt(ring, i, "ring vertex");
+    const [xj, yj] = itemAt(ring, j, "ring vertex");
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;

@@ -403,8 +403,7 @@ function integrationServerModules(): string[] {
       if (existsSync(start) && isProductionModule(start)) queue.push(resolve(start));
     }
   }
-  while (queue.length > 0) {
-    const path = queue.pop() as string;
+  for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
     if (seen.has(path)) continue;
     seen.add(path);
     for (const next of relativeImports(path, readFileSync(path, "utf8"))) {

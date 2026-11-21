@@ -132,7 +132,7 @@ function reconstructPositionFromFraction(
   const my = startY + ratio * (projectY(numberAt(segEnd, 1)) - startY);
   return [unprojectX(mx), unprojectY(my)];
 }
-function metersBetween(a: [number, number], b: [number, number]): number {
+function metersBetween(a: number[], b: number[]): number {
   return length(lineString([a, b]), { units: "kilometers" }) * 1000;
 }
 
@@ -195,7 +195,7 @@ describe("NavigationRouteLayer progress-driven gradients", () => {
         | undefined;
       if (!traveled) continue; // ratio 0: nothing traveled yet, nothing to reconstruct against.
       const coords = traveled.geometry.coordinates;
-      const cutPoint = coords[coords.length - 1] as [number, number];
+      const cutPoint = nth(coords, coords.length - 1);
       const reconstructed = reconstructPositionFromFraction(preparedRoute, f);
       expect(metersBetween(cutPoint, reconstructed)).toBeLessThan(1);
     }
