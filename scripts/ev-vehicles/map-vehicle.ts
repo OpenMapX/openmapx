@@ -80,7 +80,7 @@ const DEFAULT_TAPER_SOC_PCT = 80;
 // on Type 2, every CCS1 car on Type 1. Upstream only lists the DC port, and the
 // planner matches a station's standard against this set, so without the AC half
 // a CCS car could never use an AC charger and its maxAcKw would be dead weight.
-const CONNECTOR_MAP: Record<string, string[]> = {
+const CONNECTOR_MAP = {
   ccs2: ["ccs2", "type2"],
   ccs1: ["ccs1", "type1"],
   type2: ["type2"],
@@ -88,7 +88,12 @@ const CONNECTOR_MAP: Record<string, string[]> = {
   chademo: ["chademo"],
   gb_t_dc: ["gbt_dc"],
   gb_t_ac: ["gbt_ac"],
-};
+} satisfies Record<string, string[]>;
+
+/** Whether an upstream connector name is one `CONNECTOR_MAP` translates. */
+function isMappedConnector(connector: string): connector is keyof typeof CONNECTOR_MAP {
+  return Object.hasOwn(CONNECTOR_MAP, connector);
+}
 
 /** Markets where a NACS-badged car in this dataset physically charges on CCS2. */
 const EUROPEAN_MARKETS = new Set([
@@ -140,10 +145,10 @@ export function mapConnectors(raw: RawVehicle): string[] {
     const connector = port?.connector;
     if (!connector) continue;
     if (connector === "nacs") {
-      out.push("nacs", "tesla_ccs", ...(CONNECTOR_MAP[european ? "ccs2" : "ccs1"] ?? []));
+      out.push("nacs", "tesla_ccs", ...CONNECTOR_MAP[european ? "ccs2" : "ccs1"]);
       continue;
     }
-    out.push(...(CONNECTOR_MAP[connector] ?? []));
+    if (isMappedConnector(connector)) out.push(...CONNECTOR_MAP[connector]);
   }
   return [...new Set(out)];
 }
