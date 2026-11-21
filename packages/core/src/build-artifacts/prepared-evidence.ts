@@ -68,8 +68,9 @@ export function incompletePreparedLayout(
     return "The OSRM graph or required MLD companions are missing.";
   if (service === "otp" && !has("otp-graph/graph.obj"))
     return "The OTP graph.obj output is missing.";
-  if (service === "tileserver" && !has("tile-mbtiles/tiles.mbtiles"))
-    return "The tile MBTiles output is missing.";
+  // Every build writes street detail; the basemap file is absent in hosted-basemap mode.
+  if (service === "tileserver" && !has("tile-mbtiles/street_detail.mbtiles"))
+    return "The street detail MBTiles output is missing.";
   if (
     service === "motis" &&
     (!has("motis/live/motis-candidate-manifest.json") ||

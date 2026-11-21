@@ -42,6 +42,21 @@ it("requires concrete runtime companions instead of nonempty directories", () =>
   expect(
     incompletePreparedLayout("tileserver", [{ path: "tile-mbtiles/tiles.mbtiles", sizeBytes: 0 }]),
   ).toMatch(/MBTiles/);
+  // Street detail is built in every mode; the basemap file is absent in hosted-basemap mode.
+  expect(
+    incompletePreparedLayout("tileserver", [{ path: "tile-mbtiles/tiles.mbtiles", sizeBytes: 3 }]),
+  ).toBe("The street detail MBTiles output is missing.");
+  expect(
+    incompletePreparedLayout("tileserver", [
+      { path: "tile-mbtiles/street_detail.mbtiles", sizeBytes: 3 },
+    ]),
+  ).toBeNull();
+  expect(
+    incompletePreparedLayout("tileserver", [
+      { path: "tile-mbtiles/tiles.mbtiles", sizeBytes: 3 },
+      { path: "tile-mbtiles/street_detail.mbtiles", sizeBytes: 3 },
+    ]),
+  ).toBeNull();
   expect(
     incompletePreparedLayout("motis", [
       { path: "motis/live/motis-candidate-manifest.json", sizeBytes: 20 },

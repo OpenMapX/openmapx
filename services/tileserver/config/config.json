@@ -13,6 +13,9 @@
   "data": {
     "openmapx": {
       "mbtiles": "tiles.mbtiles"
+    },
+    "street_detail": {
+      "mbtiles": "street_detail.mbtiles"
     }
   }
 }
