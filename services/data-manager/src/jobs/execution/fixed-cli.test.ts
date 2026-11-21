@@ -197,7 +197,6 @@ it.skipIf(
     const agentAddress = agent.server.address();
     if (!agentAddress || typeof agentAddress === "string") throw Error("Agent address missing");
     const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agentAddress.port}`, tokenFile });
-    let id: string | undefined;
     try {
       const operation = { kind: "data.downloadFonts" as const },
         admittedAt = Date.now(),
@@ -217,7 +216,6 @@ it.skipIf(
       expect(admitted.execution).toBe("async");
       if (admitted.execution !== "async") throw Error("Async root required");
       const admittedId = admitted.operationId;
-      id = admittedId;
       try {
         await expect
           .poll(async () => await client.status(operation.kind, admittedId), {
