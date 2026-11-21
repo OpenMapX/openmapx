@@ -87,14 +87,14 @@ describe("buildProbeArgs", () => {
   });
 
   it("uses a real, pinned curl image", () => {
-    const args = buildProbeArgs("openmapx_openmapx", "http://app-api:3001/health");
+    const args = buildProbeArgs("openmapx_openmapx", "http://api:3001/health");
     // The old `alpine/wget:1.27.0` image does not exist on Docker Hub.
     expect(PROBE_IMAGE).toMatch(/^curlimages\/curl:\d+\.\d+\.\d+$/);
     expect(args).toContain(PROBE_IMAGE);
   });
 
   it("does not pass docker-compose-only flags to `docker run`", () => {
-    const args = buildProbeArgs("openmapx_openmapx", "http://app-api:3001/health");
+    const args = buildProbeArgs("openmapx_openmapx", "http://api:3001/health");
     // `--no-deps` is a `docker compose run` flag; `docker run` errors on it.
     expect(args).not.toContain("--no-deps");
   });
@@ -287,12 +287,12 @@ describe("deploymentUserProblems", () => {
         infraDir,
         processUid: owner.uid,
         composeServices: {
-          "app-api": { user: "4321:4321" },
+          api: { user: "4321:4321" },
           "ops-agent": { user: "4321:4321" },
           postgis: {},
         },
         runningUsers: new Map([
-          ["app-api", ""],
+          ["api", ""],
           ["ops-agent", "4321:4321"],
           ["postgis", ""],
         ]),
@@ -304,7 +304,7 @@ describe("deploymentUserProblems", () => {
         expect.stringContaining(
           `This check runs as uid ${owner.uid}, not as the deployment's user (UID=4321)`,
         ),
-        expect.stringContaining('app-api runs as its image\'s default user, not "4321:4321"'),
+        expect.stringContaining('api runs as its image\'s default user, not "4321:4321"'),
       ]);
       // postgis runs as its image's own user, which is not compared.
       expect(problems.join("\n")).not.toContain("postgis");
@@ -326,8 +326,8 @@ describe("deploymentUserProblems", () => {
         deploymentUserProblems({
           infraDir,
           processUid: checkoutOwner.uid,
-          composeServices: { "app-api": { user } },
-          runningUsers: new Map([["app-api", user]]),
+          composeServices: { api: { user } },
+          runningUsers: new Map([["api", user]]),
         }),
       ).toEqual([]);
     } finally {

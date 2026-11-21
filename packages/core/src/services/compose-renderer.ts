@@ -332,7 +332,7 @@ function resolveBindSource(
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
-  // how app-api opts into a "host path = container path" bind mount for
+  // how the API opts into a "host path = container path" bind mount for
   // Docker-outside-of-Docker admin control without having to bake the
   // operator's host path into the manifest.
   if (bm.source.startsWith("$")) {
@@ -558,7 +558,7 @@ export function serviceSecretName(serviceId: string, key: string): string {
 
 /**
  * Compose `file:` source for a service secret, relative to the compose-file
- * directory. The app-api render step writes the decrypted value to this exact
+ * directory. The API's render step writes the decrypted value to this exact
  * path so the rendered `secrets:` block and the on-disk files never drift.
  */
 export function serviceSecretFilePath(serviceId: string, key: string): string {
@@ -1181,7 +1181,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   }
 
   // Top-level `secrets:` block: one entry per (service, vault key) in the
-  // caller-supplied map, each a file source the app-api render step
+  // caller-supplied map, each a file source the API's render step
   // materialises. Deliberately NOT limited to the services rendered in this
   // pass: the DB-free CLI's only durable record of vault key names is this
   // block, so a narrowed render (`--services`/`--preset`) must keep carrying
@@ -1189,7 +1189,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // the next full CLI render silently strip those credentials (real prod
   // incident: every keyed road-conditions feed ran uncredentialed). Top-level
   // secrets unreferenced by any rendered service are inert to docker compose.
-  // The app-api render path only ever passes keys for enabled services, so its
+  // The API's render path only ever passes keys for enabled services, so its
   // output is unchanged.
   const composeSecrets: Record<string, { file: string }> = {};
   for (const [serviceId, keys] of ctx.serviceSecretKeys ?? []) {

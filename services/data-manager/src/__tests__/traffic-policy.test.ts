@@ -23,7 +23,7 @@ describe("traffic policy client", () => {
     ]) {
       await expect(
         fetchTrafficPolicy({
-          baseUrl: "http://app-api:3001",
+          baseUrl: "http://openmapx-api:3001",
           token: "test",
           fetch: async () => new Response(JSON.stringify(body)),
         }),
@@ -33,7 +33,7 @@ describe("traffic policy client", () => {
   it("uses service authentication, bounded leases and disallowed original source IDs", async () => {
     let sent: RequestInit | undefined;
     const policy = await fetchTrafficPolicy({
-      baseUrl: "http://app-api:3001",
+      baseUrl: "http://openmapx-api:3001",
       token: "test",
       fetch: async (_url, init) => {
         sent = init;
@@ -57,7 +57,7 @@ describe("traffic policy client", () => {
   });
   it("carries the operator's policy for unclear and non-commercial rights", async () => {
     const policy = await fetchTrafficPolicy({
-      baseUrl: "http://app-api:3001",
+      baseUrl: "http://openmapx-api:3001",
       token: "test",
       fetch: async () =>
         new Response(

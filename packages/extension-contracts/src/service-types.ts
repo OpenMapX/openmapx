@@ -26,7 +26,7 @@ export interface ServicePortMapping {
 /**
  * A secondary Traefik route attached to the same backend service. Used when
  * one container needs to handle multiple paths under the same host — e.g.
- * `app-api` serves `/api/*` (the primary) AND `/health` (an exact-match
+ * the `api` service serves `/api/*` (the primary) AND `/health` (an exact-match
  * secondary for external uptime probes).
  */
 export interface ServiceProxyAdditionalRoute {
@@ -54,7 +54,7 @@ export interface ServiceProxyExposure {
   authRequired?: boolean;
   /**
    * Traefik router priority. Higher wins when multiple rules could match the
-   * same path. Useful for catch-all routes like `app-web` (priority 1) so that
+   * same path. Useful for catch-all routes like the `web` service's (priority 1) so that
    * more specific routes take precedence.
    */
   priority?: number;
@@ -200,7 +200,7 @@ export interface ServiceContainer {
    * relative to the compose-file directory (`infra/docker/`). Intended for
    * services that want to forward every key from a user-maintained `.env`
    * without each one being explicitly enumerated in `environment`. Only the
-   * app-api and app-web manifests should use this — consumer containers
+   * `api` and `web` manifests should use this — consumer containers
    * should get an explicit environment list for auditability.
    */
   envFile?: string[];

@@ -8,14 +8,14 @@ import { repoPaths } from "./paths";
 
 export const API_SERVICE_ID = coreServices.CORE_SERVICE_ID.api;
 
-/** The app-api image's migration entry point, relative to its working directory. */
+/** The API image's migration entry point, relative to its working directory. */
 const MIGRATE_SCRIPT = "dist/migrate.js";
 /** Exit status of the migration container when its image has no migration entry point. */
 const NO_MIGRATION_STEP = 78;
 /** The migration cancels its statement within seconds of SIGTERM; allow for its rollback. */
 const STOP_TIMEOUT_SECONDS = "60";
 
-/** Marks migration containers among the one-off containers of app-api. */
+/** Marks migration containers among the one-off containers of the API service. */
 const MIGRATION_MARKER = `org.openmapx.migration=${API_SERVICE_ID}`;
 
 /**
@@ -51,7 +51,7 @@ async function stopMigrationContainers(ids: string[]): Promise<void> {
 
 /**
  * `sh` arguments that stop this stack's migration containers and then start
- * app-api with `docker <composeArgs> start`. The labels and the Compose
+ * the API with `docker <composeArgs> start`. The labels and the Compose
  * arguments are positional parameters, never part of the script text.
  */
 export function stopMigrationArgs(labels: [string, string], composeArgs: string[]): string[] {
@@ -68,15 +68,15 @@ export function stopMigrationArgs(labels: [string, string], composeArgs: string[
 }
 
 /**
- * Applies app-api's pending database migrations before app-api is replaced.
+ * Applies the API's pending database migrations before the API is replaced.
  *
- * The old app-api stops first, so it never runs against the migrated schema,
+ * The old API stops first, so it never runs against the migrated schema,
  * then a one-off container of the new image migrates the database. Its output
- * is this command's output. On failure the old app-api container starts again
+ * is this command's output. On failure the old API container starts again
  * and the nonzero status is returned: nothing has been recreated, and the
  * migration rolled back as a whole.
  *
- * Images without the migration entry point skip the step: app-api applies its
+ * Images without the migration entry point skip the step: the API applies its
  * migrations when it starts, as earlier releases did.
  */
 export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promise<number> {
@@ -89,14 +89,14 @@ export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promis
 
   const stopCode = await dockerComposeStream(["stop", API_SERVICE_ID]);
   if (stopCode !== 0) {
-    log.err("Could not stop app-api before migrating the database; nothing was replaced.");
+    log.err("Could not stop the API before migrating the database; nothing was replaced.");
     return stopCode;
   }
 
   // The `docker compose` client does not pass a stop request on to the
   // container it runs, and the operations agent kills this command shortly
   // after it asks it to stop. A separate process group outlives it: it stops
-  // the migration, which rolls back, and starts the previous app-api again.
+  // the migration, which rolls back, and starts the previous API again.
   const paths = repoPaths();
   const stopOnSignal = () => {
     spawn("sh", stopMigrationArgs(labels, coreServices.stackComposeArgs(paths)), {
@@ -112,7 +112,7 @@ export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promis
     process.once("SIGINT", stopOnSignal);
   }
 
-  log.dim("Applying database migrations before replacing app-api…");
+  log.dim("Applying database migrations before replacing the API…");
   let code: number;
   try {
     code = await dockerComposeStream([
@@ -133,12 +133,12 @@ export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promis
   }
 
   if (code === NO_MIGRATION_STEP) {
-    log.dim("This app-api image applies its migrations when it starts.");
+    log.dim("This API image applies its migrations when it starts.");
     return 0;
   }
   if (code !== 0) {
     log.err(
-      "The database migration did not complete, and whatever part of it ran was rolled back. Starting the previous app-api again; nothing was replaced.",
+      "The database migration did not complete, and whatever part of it ran was rolled back. Starting the previous API again; nothing was replaced.",
     );
     await dockerComposeStream(["start", API_SERVICE_ID]);
     return code;

@@ -545,7 +545,7 @@ describe("GET /admin/services/:id/logs", () => {
 });
 
 describe("POST /admin/services/:id/action", () => {
-  it.each(["app-api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
+  it.each(["api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
     mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
     mockExecuteAndWait.mockResolvedValueOnce({
       services: [
@@ -568,12 +568,12 @@ describe("POST /admin/services/:id/action", () => {
   });
 
   it("does not queue an unavailable core restart", async () => {
-    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "app-api" });
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "api" });
     mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
     const response = await app.inject({
       headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
-      url: "/admin/services/app-api/action",
+      url: "/admin/services/api/action",
       payload: { action: "restart" },
     });
     expect(response.statusCode).toBe(503);

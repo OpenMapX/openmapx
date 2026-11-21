@@ -77,12 +77,12 @@ const RELEASE_IMAGES = [
   "transitous-tools",
 ] as const;
 const SERVICE_OF_ROLE: Record<Role, string> = {
-  api: "app-api",
+  api: "api",
   agent: "ops-agent",
   dm: "data-manager",
 };
 const ROLE_OF_SERVICE: Record<string, Role> = {
-  "app-api": "api",
+  api: "api",
   "ops-agent": "agent",
   "data-manager": "dm",
 };
@@ -765,7 +765,7 @@ export class CrashHost {
       env.DATA_MANAGER_URL = this.proxies["api->dm"].url;
     } else if (role === "dm") {
       env.OPS_AGENT_URL = this.proxies["dm->agent"].url;
-      env.APP_API_BASE_URL = `http://127.0.0.1:${this.ports.api}`;
+      env.INTERNAL_API_URL = `http://127.0.0.1:${this.ports.api}`;
     } else {
       env.DATA_MANAGER_URL = this.proxies["agent->dm"].url;
     }

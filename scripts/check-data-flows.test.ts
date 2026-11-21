@@ -41,7 +41,7 @@ describe("registrable (host → eTLD+1)", () => {
 describe("isInternalHost (own-infra / test noise filter)", () => {
   it.each([
     // Single-label docker service names have no dot → internal.
-    ["app-api", true],
+    ["data-manager", true],
     ["nominatim", true],
     ["localhost", true],
     // IPv4 literals are non-routable noise.
@@ -106,7 +106,7 @@ describe("extractHosts (runtime hosts a file contacts)", () => {
   });
 
   it("filters out internal / docker-service hosts", () => {
-    const hosts = extractHosts('fetch("http://app-api/x"); fetch("https://localhost/y")');
+    const hosts = extractHosts('fetch("http://openmapx-api/x"); fetch("https://localhost/y")');
     expect(hosts.size).toBe(0);
   });
 

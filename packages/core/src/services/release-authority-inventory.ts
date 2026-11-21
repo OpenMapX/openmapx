@@ -12,8 +12,7 @@ import { type ReleaseServiceFiles, readEmbeddedReleaseServiceFiles } from "./rel
 import type { LoadedService, ServiceManifest } from "./types";
 
 export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
-  "app-api",
-  "app-web",
+  "api",
   "brouter",
   "data-manager",
   "dawarich-app",
@@ -41,6 +40,7 @@ export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
   "traefik",
   "transitous-runner",
   "valhalla",
+  "web",
   "well-known",
 ] as const);
 

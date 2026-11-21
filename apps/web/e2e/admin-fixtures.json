@@ -700,7 +700,7 @@
     },
     "services": [
       {
-        "id": "app-api",
+        "id": "api",
         "name": "Application API",
         "version": "2026.11.0",
         "description": "The OpenMapX API.",
@@ -1037,29 +1037,29 @@
     "presets": [
       {
         "id": "minimal",
-        "rootIds": ["app-api"],
-        "effectiveIds": ["app-api"],
+        "rootIds": ["api"],
+        "effectiveIds": ["api"],
         "missingIds": []
       },
       {
         "id": "routing",
-        "rootIds": ["app-api", "valhalla"],
-        "effectiveIds": ["app-api", "valhalla"],
+        "rootIds": ["api", "valhalla"],
+        "effectiveIds": ["api", "valhalla"],
         "missingIds": []
       },
       {
         "id": "full",
-        "rootIds": ["app-api", "valhalla", "pelias", "motis", "photon"],
-        "effectiveIds": ["app-api", "valhalla", "pelias", "motis"],
+        "rootIds": ["api", "valhalla", "pelias", "motis", "photon"],
+        "effectiveIds": ["api", "valhalla", "pelias", "motis"],
         "missingIds": ["photon"]
       }
     ]
   },
   "/api/admin/services/selection": {
     "source": "file",
-    "selectedRoots": ["app-api", "valhalla", "pelias", "motis"],
-    "requestedIds": ["app-api", "valhalla", "pelias", "motis"],
-    "effectiveIds": ["app-api", "valhalla", "pelias", "motis"],
+    "selectedRoots": ["api", "valhalla", "pelias", "motis"],
+    "requestedIds": ["api", "valhalla", "pelias", "motis"],
+    "effectiveIds": ["api", "valhalla", "pelias", "motis"],
     "warnings": [],
     "missingIds": [],
     "envVarName": "OPENMAPX_SERVICES",
@@ -1371,7 +1371,7 @@
     },
     "images": [
       {
-        "id": "app-api",
+        "id": "api",
         "name": "API",
         "image": "ghcr.io/openmapx/api:2026.11.1",
         "containerState": "running",

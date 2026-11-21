@@ -31,9 +31,9 @@ current_step="starting"
 
 # First-party image of each service, as the manifests name it; the five
 # services whose images this checkout builds.
-built_services=(app-api app-web ops-agent data-manager transitous-runner)
+built_services=(api web ops-agent data-manager transitous-runner)
 # The default selection and its dependencies.
-expected_services=(traefik well-known app-api app-web postgis redis data-manager ops-agent transitous-runner)
+expected_services=(traefik well-known api web postgis redis data-manager ops-agent transitous-runner)
 # Phrases of messages earlier releases printed while they converted or worked
 # around an older installation's files. A fresh install has nothing to
 # convert, so render and check must print none of them.
@@ -48,8 +48,8 @@ legacy_warning_phrases=(
 
 dockerfile_of() {
   case "$1" in
-    app-api) echo apps/api/Dockerfile ;;
-    app-web) echo apps/web/Dockerfile ;;
+    api) echo apps/api/Dockerfile ;;
+    web) echo apps/web/Dockerfile ;;
     ops-agent) echo apps/ops-agent/Dockerfile ;;
     data-manager) echo services/data-manager/Dockerfile ;;
     transitous-runner) echo apps/transitous-runner/Dockerfile ;;
@@ -342,7 +342,7 @@ assert_agent_without_checkout() {
 
 start_infrastructure() {
   step "Start the infrastructure services"
-  logged start openmapx services start postgis redis traefik app-api data-manager ||
+  logged start openmapx services start postgis redis traefik api data-manager ||
     fail "services start failed"
   logged status openmapx services status || fail "services status failed"
   assert_data_manager_status
@@ -373,7 +373,7 @@ case_retry_after_failed_start() {
   docker run --detach --name "$blocker" --publish 80:80 --entrypoint tail \
     "$(manifest_image redis)" -f /dev/null >/dev/null
   step "Start while port 80 is taken"
-  if logged blocked openmapx services start postgis redis traefik app-api data-manager; then
+  if logged blocked openmapx services start postgis redis traefik api data-manager; then
     fail "services start succeeded although port 80 was taken"
   fi
   grep -qiE 'already allocated|address already in use' "$work/blocked.log" ||

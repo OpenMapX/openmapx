@@ -12,8 +12,7 @@ import type { BuiltInManifestSource } from "./built-in-service-source";
  */
 export function embeddedBuiltInServiceManifests(): BuiltInManifestSource | null {
   return embeddedSource({
-    "app-api": new URL("../../../../services/app-api/service.json", import.meta.url),
-    "app-web": new URL("../../../../services/app-web/service.json", import.meta.url),
+    api: new URL("../../../../services/api/service.json", import.meta.url),
     brouter: new URL("../../../../services/brouter/service.json", import.meta.url),
     "data-manager": new URL("../../../../services/data-manager/service.json", import.meta.url),
     "dawarich-app": new URL("../../../../services/dawarich-app/service.json", import.meta.url),
@@ -56,6 +55,7 @@ export function embeddedBuiltInServiceManifests(): BuiltInManifestSource | null 
       import.meta.url,
     ),
     valhalla: new URL("../../../../services/valhalla/service.json", import.meta.url),
+    web: new URL("../../../../services/web/service.json", import.meta.url),
     "well-known": new URL("../../../../services/well-known/service.json", import.meta.url),
   });
 }

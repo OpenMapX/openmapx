@@ -27,7 +27,7 @@ export async function buildControlTestServer(options: BuildOpsAgentServerOptions
   const installation = openControlInstallation({
     infraDir: root,
     role: "ops-agent",
-    serviceIds: ["redis", "motis", "osrm", "valhalla", "postgis", "app-api", "traefik", "data-manager", "alpha"],
+    serviceIds: ["redis", "motis", "osrm", "valhalla", "postgis", "api", "traefik", "data-manager", "alpha"],
   });
   const app = buildOpsAgentServer({ ...options, controlInstallation: installation });
   app.addHook("onClose", async () => {

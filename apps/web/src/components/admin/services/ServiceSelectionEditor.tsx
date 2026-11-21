@@ -101,7 +101,7 @@ function SelectionEditor() {
           value={draft.values.roots ?? baseline}
           onChange={(event) => draft.setValues({ roots: event.target.value })}
           disabled={disabled}
-          placeholder="app-api, valhalla, osrm"
+          placeholder="api, valhalla, osrm"
         />
         {draft.conflicts.length > 0 && (
           <Alert

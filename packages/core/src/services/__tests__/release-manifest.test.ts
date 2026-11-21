@@ -42,7 +42,7 @@ describe("shared release manifest", () => {
     };
     const parsed = parseReleaseManifest(JSON.stringify(mixed));
     expect(parsed).toEqual(mixed);
-    expect(releaseServiceImages(parsed)["app-api"]).toBe(manifest.images.api);
+    expect(releaseServiceImages(parsed).api).toBe(manifest.images.api);
     expect(releaseServiceImages(parsed)["ops-agent"]).toBe(manifest.images["ops-agent"]);
   });
 

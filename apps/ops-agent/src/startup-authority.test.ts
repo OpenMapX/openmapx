@@ -40,7 +40,7 @@ describe("ops-agent startup authority gate", () => {
       source: "default",
       roots: [...services.DEFAULT_SELECTED_SERVICE_IDS],
     });
-    expect(enabled.has("app-api")).toBe(true);
+    expect(enabled.has("api")).toBe(true);
     expect(enabled.has("redis")).toBe(true);
     expect(enabled.has("dawarich-app")).toBe(false);
 

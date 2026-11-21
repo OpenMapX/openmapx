@@ -58,6 +58,24 @@ describe("core service IDs", () => {
     }
   });
 
+  it("reaches the API internally through its project-unique alias, never the bare service ID", () => {
+    const read = (id: string) =>
+      JSON.parse(readFileSync(join(REPOSITORY_ROOT, "services", id, "service.json"), "utf8")) as {
+        container: { networkAliases?: string[]; environment?: Record<string, string> };
+      };
+    const aliases = read(CORE_SERVICE_ID.api).container.networkAliases ?? [];
+    expect(aliases).not.toContain(CORE_SERVICE_ID.api);
+    const internalUrls = [
+      read(CORE_SERVICE_ID.web).container.environment?.INTERNAL_API_URL,
+      read(CORE_SERVICE_ID.dataManager).container.environment?.INTERNAL_API_URL,
+    ];
+    for (const value of internalUrls) {
+      const url = /https?:\/\/[^/:}]+:\d+/.exec(value ?? "")?.[0];
+      expect(url, value).toBeDefined();
+      expect(aliases).toContain(new URL(url ?? "").hostname);
+    }
+  });
+
   it("restarts only control-plane services through the core-restart workflow", () => {
     for (const id of CORE_RESTART_SERVICE_IDS) expect(CONTROL_PLANE_SERVICE_IDS).toContain(id);
   });

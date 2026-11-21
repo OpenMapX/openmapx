@@ -6,7 +6,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
 
 /**
- * Advisory lock key that serializes app-api instances migrating one database.
+ * Advisory lock key that serializes API instances migrating one database.
  * Drizzle's migrator takes no lock: two instances starting together would both
  * read the same last applied migration and run the pending ones twice.
  */
@@ -124,7 +124,7 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
       waitEvent: activity?.wait_event ? `${activity.wait_event_type}:${activity.wait_event}` : null,
     };
     if (phase === "waiting-for-lock") {
-      log.info(fields, "Still waiting for another app-api instance to finish migrating");
+      log.info(fields, "Still waiting for another API instance to finish migrating");
     } else if (activity?.wait_event_type === "Lock") {
       log.warn(fields, "Database migration is waiting for a lock another session holds");
     } else {
@@ -155,7 +155,7 @@ export function startMigrations(options: MigrationRunOptions): MigrationRun {
       "row from the migration lock query",
     );
     if (!locked) {
-      log.info({}, "Waiting for another app-api instance to finish migrating the database");
+      log.info({}, "Waiting for another API instance to finish migrating the database");
       await session`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY.toString()}::bigint)`;
     }
     phase = "migrating";

@@ -1,5 +1,5 @@
 {
-  "id": "app-api",
+  "id": "api",
   "name": "OpenMapX API",
   "version": "1.0.0",
   "description": "The OpenMapX application server: public, account, admin and integration API. The web app, native clients and data-manager call it directly.",
@@ -29,6 +29,7 @@
     "tag": "main",
     "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "expose": [3001],
+    "networkAliases": ["openmapx-api"],
     "envFile": [".env"],
     "environment": {
       "BASEMAP_PROVIDER": "${BASEMAP_PROVIDER:-}",

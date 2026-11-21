@@ -11,7 +11,7 @@ import type { LoadedService, ServiceManifest } from "../types";
 
 const servicesDir = resolve(import.meta.dirname, "../../../../../services");
 const expectedIds =
-  "app-api app-web brouter data-manager dawarich-app dawarich-postgis dawarich-redis dawarich-sidekiq elasticsearch local-ai martin motis motis-feed-proxy motis-staging nominatim ops-agent osrm otp overpass pelias pelias-pip pelias-placeholder photon postgis redis tileserver traefik transitous-runner valhalla well-known"
+  "api brouter data-manager dawarich-app dawarich-postgis dawarich-redis dawarich-sidekiq elasticsearch local-ai martin motis motis-feed-proxy motis-staging nominatim ops-agent osrm otp overpass pelias pelias-pip pelias-placeholder photon postgis redis tileserver traefik transitous-runner valhalla web well-known"
     .split(" ")
     .sort();
 function manifest(id: string): ServiceManifest {
@@ -157,7 +157,7 @@ describe("operator runtime resources", () => {
     ).toThrow();
   });
   it("validates supported settings and URL forms with the same trusted snapshot grammar", () => {
-    const schema = manifest("app-web").configSchema;
+    const schema = manifest("web").configSchema;
     expect(
       validateTrustedConfigurationValues(
         {

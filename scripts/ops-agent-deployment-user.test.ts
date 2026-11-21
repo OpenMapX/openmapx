@@ -45,7 +45,7 @@ import {
  * request: in the host update's order (the host's render, then the agent)
  * and in the panel self-update's (the new agent first). Only the host's render writes UID and GID; the agent and its fixed
  * CLI read .env and never change it. The fixture sends the configuration in
- * the request, as app-api does, under a truthful local bearer root.
+ * the request, as the API does, under a truthful local bearer root.
  *
  * Runs only on Linux where `OPENMAPX_TEST_DEPLOYMENT_USER` names the uid the
  * test runs as, which must not be 1000 and must own the repository, e.g. in a
@@ -261,7 +261,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       });
     }
 
-    /** A configuration apply as app-api sends it: the payload in the request. */
+    /** A configuration apply as the API sends it: the payload in the request. */
     async function submit(
       target: string,
       agent: { port: number; output: () => string },
@@ -324,7 +324,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const infra = join(target, "infra", "docker");
       expect(deploymentUser(target)).toEqual({ uid: EXPECTED_UID, gid: statSync(target).gid });
       expect(statSync(join(infra, ".env")).mode & 0o777).toBe(0o600);
-      // Every stack container that runs as the deployment's user, app-api now
+      // Every stack container that runs as the deployment's user, the API now
       // too, takes it from .env, with no fallback.
       const compose = readFileSync(
         join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),

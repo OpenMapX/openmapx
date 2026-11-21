@@ -74,7 +74,7 @@ describe("imperative guards", () => {
   });
 
   it("assertSlug", () => {
-    expect(() => assertSlug("app-api", "id")).not.toThrow();
+    expect(() => assertSlug("data-manager", "id")).not.toThrow();
     expect(() => assertSlug("foo bar", "id")).toThrow();
   });
 

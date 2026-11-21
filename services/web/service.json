@@ -1,5 +1,5 @@
 {
-  "id": "app-web",
+  "id": "web",
   "name": "OpenMapX Web",
   "version": "1.0.0",
   "description": "Next.js 16 frontend. MapLibre + MUI.",
@@ -18,7 +18,7 @@
     "environment": {
       "BASEMAP_PROVIDER": "${BASEMAP_PROVIDER:-}",
       "NEXT_PUBLIC_API_URL": "https://${DOMAIN:-localhost}",
-      "INTERNAL_API_URL": "http://app-api:3001",
+      "INTERNAL_API_URL": "http://openmapx-api:3001",
       "NEXT_PUBLIC_MAP_STYLE_URL": "${NEXT_PUBLIC_MAP_STYLE_URL:-}",
       "NEXT_PUBLIC_TILES_URL": "${NEXT_PUBLIC_TILES_URL:-}",
       "NEXT_PUBLIC_STYLE_PROVIDER": "${NEXT_PUBLIC_STYLE_PROVIDER:-openmapx}",
@@ -42,7 +42,7 @@
     "restart": "unless-stopped",
     "dependsOn": [
       {
-        "service": "app-api",
+        "service": "api",
         "condition": "service_healthy"
       }
     ]

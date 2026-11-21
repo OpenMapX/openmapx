@@ -23,7 +23,7 @@ export interface ServiceRegistryOptions {
   /**
    * Community services supplied by the caller instead of scanning
    * `communityDir` (or, from the ops-agent bundle, reading the agent's
-   * repository records). The app-api container has no host checkout, so it reads
+   * repository records). The API container has no host checkout, so it reads
    * them from the operations agent, which owns the community store. Each
    * must already have passed the community manifest rules.
    */

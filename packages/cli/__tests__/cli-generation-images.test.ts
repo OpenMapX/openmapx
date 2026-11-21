@@ -28,24 +28,24 @@ vi.mock("execa", async (original) => ({
 
 beforeEach(() => {
   calls.length = 0;
-  images = new Map([["example/app-api:1", id("a")]]);
+  images = new Map([["example/api:1", id("a")]]);
   pullable = new Map([["example/data-manager:1", id("d")]]);
 });
 
 const references = {
-  "app-api": "example/app-api:1",
+  api: "example/api:1",
   "data-manager": "example/data-manager:1",
   "local-ai": "example/local-ai:dev",
 };
 
 it("records only the images already on the host without pulling", async () => {
-  expect(await localImageIds(references)).toEqual({ "app-api": id("a") });
+  expect(await localImageIds(references)).toEqual({ api: id("a") });
   expect(calls.some((args) => args[0] === "pull")).toBe(false);
 });
 
 it("pulls the images a starting generation lacks and records them; an unpullable one stays out", async () => {
   expect(await pulledImageIds(references)).toEqual({
-    "app-api": id("a"),
+    api: id("a"),
     "data-manager": id("d"),
   });
   expect(calls.filter((args) => args[0] === "pull")).toEqual([
@@ -59,7 +59,7 @@ it("pulls nothing when every image is present", async () => {
   images.set("example/data-manager:1", id("d"));
   images.set("example/local-ai:dev", id("e"));
   expect(await pulledImageIds(references)).toEqual({
-    "app-api": id("a"),
+    api: id("a"),
     "data-manager": id("d"),
     "local-ai": id("e"),
   });

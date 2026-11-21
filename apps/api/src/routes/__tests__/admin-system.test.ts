@@ -9,7 +9,7 @@ const enqueue = vi.fn().mockResolvedValue("job-system-1");
 const findActive = vi.fn().mockResolvedValue(null);
 const audit = vi.fn().mockResolvedValue(undefined);
 const apiService = {
-  serviceId: "app-api",
+  serviceId: "api",
   containerState: "running",
   pinnedImage: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
   runningImageId: `sha256:${"b".repeat(64)}`,
@@ -81,7 +81,7 @@ describe("admin system routes", () => {
     ["/admin/system/diagnostics", { argv: ["--host", "/"] }],
     [
       "/admin/system/updates/apply",
-      { confirmation: "UPDATE OPENMAPX", createBackup: true, container: "app-api" },
+      { confirmation: "UPDATE OPENMAPX", createBackup: true, container: "api" },
     ],
   ])("rejects forbidden effect fields on %s before enqueue", async (url, payload) => {
     const response = await app.inject({ method: "POST", url, payload });
@@ -96,8 +96,8 @@ describe("admin system routes", () => {
     expect(response.json().deployment.maintenanceReady).toBe(true);
     expect(response.json().release).toEqual(systemInspection.release);
     expect(response.json().images[0]).toEqual({
-      id: "app-api",
-      name: "app-api",
+      id: "api",
+      name: "api",
       image: apiService.pinnedImage,
       containerState: "running",
       runningImageId: apiService.runningImageId,

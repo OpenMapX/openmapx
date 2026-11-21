@@ -53,8 +53,8 @@ it("loads only the exact checked canonical manifest and derives the finite pinne
     releaseId,
     manifestDigest,
     serviceImages: {
-      "app-api": `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
-      "app-web": `ghcr.io/openmapx/web@sha256:${"a".repeat(64)}`,
+      api: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
+      web: `ghcr.io/openmapx/web@sha256:${"a".repeat(64)}`,
       "ops-agent": `ghcr.io/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
       "data-manager": `ghcr.io/openmapx/data-manager@sha256:${"a".repeat(64)}`,
       "transitous-runner": `ghcr.io/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,

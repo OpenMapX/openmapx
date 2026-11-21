@@ -75,7 +75,7 @@ import {
   releaseServiceFiles,
   ServiceFileError,
 } from "./release-service-files";
-import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
+import { buildApiServiceEnv, expandServiceSelection } from "./selection";
 import { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 import {
   appliedServiceFilePath,
@@ -469,8 +469,7 @@ function resolveInput(
       validateConfig(entry.integrationId, entry.values, schema, ["enabled"]);
     }
   }
-  const appApi = enabled.find((service) => service.manifest.id === CORE_SERVICE_ID.api);
-  if (appApi) {
+  if (enabled.some((service) => service.manifest.id === CORE_SERVICE_ID.api)) {
     const passthroughKeys: string[] = [];
     for (const service of allServices) {
       const prefix = serviceConfigEnvPrefix(service.manifest.id);
@@ -486,11 +485,7 @@ function resolveInput(
     }
     serviceConfigs.set(
       CORE_SERVICE_ID.api,
-      buildAppApiServiceEnv(
-        enabled,
-        serviceConfigs.get(CORE_SERVICE_ID.api) ?? {},
-        passthroughKeys,
-      ),
+      buildApiServiceEnv(enabled, serviceConfigs.get(CORE_SERVICE_ID.api) ?? {}, passthroughKeys),
     );
   }
   const serviceSecrets = new Map<string, Record<string, string>>();

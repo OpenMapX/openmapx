@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 import { crashScenario } from "../scenario";
 
-// The configuration helper dies between recreating data-manager and app-api.
+// The configuration helper dies between recreating data-manager and the API.
 crashScenario({
   title: "an update whose helper is killed mid-recreate",
   name: "is not re-run, recreates nothing more, never succeeds and holds further updates",
@@ -12,7 +12,7 @@ crashScenario({
     const apiRecreate = host.blockDocker({
       command: "compose up",
       caller: "helper",
-      service: "app-api",
+      service: "api",
     });
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
@@ -29,9 +29,9 @@ crashScenario({
       .dockerEffects({ command: "compose up", caller: "helper", since: start })
       .filter((call) => call.code === 0)
       .map((call) => call.args.at(-1));
-    expect(recreated).not.toContain("app-api");
+    expect(recreated).not.toContain("api");
     expect(recreated).not.toContain("ops-agent");
-    expect(host.runningImages()["app-api"]).toBe(host.releaseImageId("current", "api"));
+    expect(host.runningImages().api).toBe(host.releaseImageId("current", "api"));
     expect((await host.submitUpdate()).status).toBe(409);
   },
 });

@@ -36,7 +36,7 @@ const boundedNumber = (raw: unknown, fallback: number, min: number, max: number)
 
 /**
  * Fetch the operator's published legal facts (hosting, supervisory authority,
- * log retention) from app-api, which resolves them env > admin-database >
+ * log retention) from the API, which resolves them env > admin-database >
  * default. Used by the public legal pages. Returns null when the API is
  * unreachable so callers can fall back to their web-process environment
  * without mistaking an intentionally empty API value for a fetch failure.

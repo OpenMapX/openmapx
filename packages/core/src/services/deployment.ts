@@ -282,7 +282,7 @@ export function readDesiredSelection(
 /**
  * The config schema of every integration in the checkout, by id: the same
  * set the ops-agent reads, so both renders pass the same integration settings
- * through to app-api.
+ * through to the API.
  */
 export function loadIntegrationSchemas(rootDir: string): Map<string, Record<string, unknown>> {
   const found = new Map<string, Record<string, unknown>>();

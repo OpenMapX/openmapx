@@ -880,7 +880,7 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
               actions: availableActions,
             },
             {
-              id: "app-api",
+              id: "api",
               name: "API",
               version: "1",
               quality: "built-in",
@@ -902,7 +902,7 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
   await chooseAction("Restart Selected");
   const button = screen.getByRole("button", { name: "Restart Selected" });
   expect(button).toBeDisabled();
-  expect(button).toHaveAttribute("title", expect.stringContaining("app-api"));
+  expect(button).toHaveAttribute("title", expect.stringMatching(/\bapi\b/));
 });
 
 it("selects server-defined preset roots for actions without persisting selection", async () => {

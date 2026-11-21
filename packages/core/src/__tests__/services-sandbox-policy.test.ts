@@ -130,8 +130,8 @@ describe("third-party static sandbox policy", () => {
 
   it("preserves first-party host-path mounts", () => {
     const firstParty = validateFirstParty({
-      id: "app-api",
-      name: "App API",
+      id: "api",
+      name: "API",
       version: "1.0.0",
       quality: "built-in",
       container: { image: "alpine", tag: "latest", memory: "256m" },
@@ -158,8 +158,8 @@ describe("third-party static sandbox policy", () => {
     expect(result.errors.join(" ")).toMatch(/container\.envFile/);
 
     const firstParty = validateFirstParty({
-      id: "app-api",
-      name: "App API",
+      id: "api",
+      name: "API",
       version: "1.0.0",
       quality: "built-in",
       container: { image: "alpine", tag: "latest", memory: "256m", envFile: [".env"] },

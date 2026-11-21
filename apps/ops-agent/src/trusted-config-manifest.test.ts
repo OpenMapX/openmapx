@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..", "..", "..");
 
-function manifest(id: "app-api" | "ops-agent") {
+function manifest(id: "api" | "ops-agent") {
   const directory = join(root, "services", id);
   return {
     directory,
@@ -17,13 +17,13 @@ function manifest(id: "app-api" | "ops-agent") {
 
 describe("trusted configuration deployment handoff", () => {
   it("runs both ends as the deployment's user and shares no configuration directory", () => {
-    const api = manifest("app-api");
+    const api = manifest("api");
     const agent = manifest("ops-agent");
     // Both run as UID:GID from .env, with no fallback uid: every render writes them.
     const user = `\${UID:?UID must be set, run pnpm openmapx compose render}:\${GID:?GID must be set, run pnpm openmapx compose render}`;
     expect(api.manifest.container.user).toBe(user);
     expect(agent.manifest.container.user).toBe(user);
-    // The payload travels in the authenticated request; app-api mounts no
+    // The payload travels in the authenticated request; the API mounts no
     // part of the agent's state but the integrations it loads.
     const apiAgentState = (api.manifest.bindMounts ?? [])
       .map((mount) => mount.source)

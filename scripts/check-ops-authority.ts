@@ -25,7 +25,7 @@ const AUTHORITY_SERVICE = "ops-agent";
 const AGENT_STATE = "infra/docker/state";
 
 /** The API service, the one service that may mount the agent's integration store. */
-const API_SERVICE = "app-api";
+const API_SERVICE = "api";
 /** The part of the agent's state the API may mount, read-only: the integrations the agent installed. */
 const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
 /** Data-manager's own private control records, which only it mounts. */

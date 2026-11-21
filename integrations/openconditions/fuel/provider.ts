@@ -12,7 +12,7 @@ const PAGE = 400;
  * The largest feature page read, in bytes. A station selling every grade from
  * two members not yet fused is about 33 kB with its readings, so a dense page
  * of 400 is about 13 MB, past the host's 8 MB default. A page parses to
- * several times its size on app-api's heap, which bounds it from above.
+ * several times its size on the API's heap, which bounds it from above.
  */
 const PAGE_MAX_BYTES = 16 * 1024 * 1024;
 const MAX_STATIONS = 2000;

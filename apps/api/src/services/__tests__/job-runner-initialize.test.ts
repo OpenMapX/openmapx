@@ -46,11 +46,11 @@ vi.mock("../../db", () => ({ db: dbMock.db }));
 const { jobRunner } = await import("../job-runner");
 
 const restartCheckpoint = {
-  phase: "awaiting-app-api-restart",
+  phase: "awaiting-api-restart",
   helperContainerId: "d".repeat(64),
   previousContainerId: "a".repeat(64),
   expectedImageId: `sha256:${"c".repeat(64)}`,
-  outcomeFile: "/repo/infra/docker/.maintenance/app-api-update-1.status",
+  outcomeFile: "/repo/infra/docker/.maintenance/api-update-1.status",
 };
 
 const replacementRuntime = {
@@ -78,7 +78,7 @@ describe("job runner restart initialization", () => {
 
     await jobRunner.initialize({
       completeRestartedUpdates: true,
-      currentAppApiRuntime: replacementRuntime,
+      currentApiRuntime: replacementRuntime,
       resolveReplacementOutcome: appliedOutcome,
       cleanupReplacementOutcome: cleanupOutcome,
     });
@@ -97,14 +97,14 @@ describe("job runner restart initialization", () => {
 
     await jobRunner.initialize({
       completeRestartedUpdates: false,
-      currentAppApiRuntime: replacementRuntime,
+      currentApiRuntime: replacementRuntime,
       resolveReplacementOutcome: appliedOutcome,
     });
 
     expect(dbMock.updates).toContainEqual(
       expect.objectContaining({
         status: "failed",
-        error: "Update replaced app-api, but database migrations did not complete",
+        error: "Update replaced the API, but database migrations did not complete",
       }),
     );
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
@@ -115,14 +115,14 @@ describe("job runner restart initialization", () => {
 
     await jobRunner.initialize({
       completeRestartedUpdates: true,
-      currentAppApiRuntime: { ...replacementRuntime, imageId: `sha256:${"f".repeat(64)}` },
+      currentApiRuntime: { ...replacementRuntime, imageId: `sha256:${"f".repeat(64)}` },
       resolveReplacementOutcome: appliedOutcome,
     });
 
     expect(dbMock.updates).toContainEqual(
       expect.objectContaining({
         status: "failed",
-        error: "Update restarted app-api with an unexpected container identity or image",
+        error: "Update restarted the API with an unexpected container identity or image",
       }),
     );
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
@@ -133,7 +133,7 @@ describe("job runner restart initialization", () => {
 
     await jobRunner.initialize({
       completeRestartedUpdates: true,
-      currentAppApiRuntime: {
+      currentApiRuntime: {
         ...replacementRuntime,
         imageId: `sha256:${"b".repeat(64)}`,
       },
@@ -143,18 +143,18 @@ describe("job runner restart initialization", () => {
     expect(dbMock.updates).toContainEqual(
       expect.objectContaining({
         status: "failed",
-        error: "Update failed; the previous app-api image was restored",
+        error: "Update failed; the previous API image was restored",
       }),
     );
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
   });
 
   it("does not accept the former phase-only checkpoint", async () => {
-    dbMock.rows.push({ id: "update-1", result: { phase: "awaiting-app-api-restart" } });
+    dbMock.rows.push({ id: "update-1", result: { phase: "awaiting-api-restart" } });
 
     await jobRunner.initialize({
       completeRestartedUpdates: true,
-      currentAppApiRuntime: replacementRuntime,
+      currentApiRuntime: replacementRuntime,
       resolveReplacementOutcome: appliedOutcome,
     });
 

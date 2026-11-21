@@ -36,7 +36,7 @@ vi.mock("../src/lib/docker", async (original) => {
 
 // The migration step's own Docker calls are api-migrations.test.ts's.
 vi.mock("../src/lib/api-migrations", () => ({
-  API_SERVICE_ID: "app-api",
+  API_SERVICE_ID: "api",
   migrateBeforeApiUpdate: vi.fn(async () => 0),
 }));
 
@@ -46,7 +46,7 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-cli-update-"));
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(root, "infra/docker"), { recursive: true });
-  const ids = ["ops-agent", "transitous-runner", "data-manager", "app-web", "app-api", "valhalla"];
+  const ids = ["ops-agent", "transitous-runner", "data-manager", "web", "api", "valhalla"];
   for (const id of ids) {
     const directory = join(root, "services", id);
     mkdirSync(directory, { recursive: true });
@@ -111,12 +111,10 @@ describe("services update pull failures", () => {
   });
 
   it("passes --no-deps only to ordinary target recreation", async () => {
-    await expect(update("--no-deps", "app-web", "transitous-runner", "app-api")).rejects.toThrow(
-      "exit:0",
-    );
+    await expect(update("--no-deps", "web", "transitous-runner", "api")).rejects.toThrow("exit:0");
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([
-      [["pull", "app-api", "app-web", "transitous-runner"]],
-      [["up", "-d", "--force-recreate", "--no-deps", "app-api", "app-web", "transitous-runner"]],
+      [["pull", "api", "transitous-runner", "web"]],
+      [["up", "-d", "--force-recreate", "--no-deps", "api", "transitous-runner", "web"]],
     ]);
   });
 
@@ -181,8 +179,8 @@ describe("services update and the operations agent", () => {
   });
 });
 
-describe("services update and app-api's database migrations", () => {
-  it("migrates after the pull and before recreation when app-api is replaced", async () => {
+describe("services update and the API's database migrations", () => {
+  it("migrates after the pull and before recreation when the API is replaced", async () => {
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       const [command] = args;
@@ -194,22 +192,22 @@ describe("services update and app-api's database migrations", () => {
       order.push("migrate");
       return 0;
     });
-    await expect(update("--no-deps", "app-web", "app-api")).rejects.toThrow("exit:0");
+    await expect(update("--no-deps", "web", "api")).rejects.toThrow("exit:0");
     expect(order).toEqual(["pull", "migrate", "up"]);
     expect(migrateBeforeApiUpdate).toHaveBeenCalledWith({ deps: false });
 
-    await expect(update("app-api")).rejects.toThrow("exit:0");
+    await expect(update("api")).rejects.toThrow("exit:0");
     expect(migrateBeforeApiUpdate).toHaveBeenLastCalledWith({ deps: true });
   });
 
   it("recreates nothing when the migration step fails", async () => {
     vi.mocked(migrateBeforeApiUpdate).mockResolvedValue(1);
-    await expect(update("--no-deps", "app-web", "app-api")).rejects.toThrow("exit:1");
-    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "app-api", "app-web"]]]);
+    await expect(update("--no-deps", "web", "api")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "api", "web"]]]);
   });
 
-  it("does not migrate when app-api is not among the services", async () => {
-    await expect(update("app-web")).rejects.toThrow("exit:0");
+  it("does not migrate when the API is not among the services", async () => {
+    await expect(update("web")).rejects.toThrow("exit:0");
     expect(migrateBeforeApiUpdate).not.toHaveBeenCalled();
   });
 });

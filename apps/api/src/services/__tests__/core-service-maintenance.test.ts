@@ -37,7 +37,7 @@ function context(service: string) {
   };
   return ctx;
 }
-it.each(["app-api", "traefik"])(
+it.each(["api", "traefik"])(
   "retains the exact %s restart condition before dispatch",
   async (service) => {
     execute.mockReset().mockResolvedValue({ changed: true, serviceId: service });

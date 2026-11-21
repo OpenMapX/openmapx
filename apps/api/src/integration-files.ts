@@ -6,7 +6,7 @@ import { processLogger } from "./process-logger";
 /**
  * Reads files from installed integration directories.
  *
- * With an operations agent, the agent owns the integration store app-api
+ * With an operations agent, the agent owns the integration store the API
  * mounts at `custom_integrations` and records
  * the SHA-256 of every file it installed there. The API reads a file from such
  * a directory only when it is one of those files and its bytes still match;

@@ -243,7 +243,7 @@ export async function renderComposeWithWriter(
   // The agent's state directories, owner-only, before a generation mounts one.
   prepareAgentStateDirectories(paths.infraDir);
   // The agent's stores, owner-only, before the generation mounts one into
-  // app-api.
+  // the API.
   coreServices.prepareAgentStores(paths.infraDir);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
@@ -453,14 +453,14 @@ export function registerComposeCommands(program: Command): void {
   compose
     .command("rotate-redis-password")
     .description("Atomically rotate Redis authentication files while Redis clients are stopped")
-    .option("--confirm-clients-stopped", "Confirm app-api is stopped before rotating")
+    .option("--confirm-clients-stopped", "Confirm the api service is stopped before rotating")
     .action((options: { confirmClientsStopped?: boolean }) => {
       try {
         const result = rotateRedisPasswordForRepo({
           confirmClientsStopped: options.confirmClientsStopped === true,
         });
         log.ok(`Rotated Redis authentication files → ${result.passwordPath}, ${result.aclPath}`);
-        log.dim("Recreate Redis, then restart app-api.");
+        log.dim("Recreate Redis, then restart the api service.");
       } catch (err) {
         log.err(`Redis password rotation failed: ${(err as Error).message}`);
         process.exit(1);

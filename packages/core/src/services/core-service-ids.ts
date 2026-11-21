@@ -7,8 +7,8 @@
  * This module imports nothing, so browser and server bundles can both use it.
  */
 export const CORE_SERVICE_ID = {
-  api: "app-api",
-  web: "app-web",
+  api: "api",
+  web: "web",
   dataManager: "data-manager",
   opsAgent: "ops-agent",
   transitousRunner: "transitous-runner",

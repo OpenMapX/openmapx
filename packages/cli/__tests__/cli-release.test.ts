@@ -99,7 +99,7 @@ async function pinnedInfra(release: services.ReleaseManifest | null) {
 
 describe("touchesReleasePinnedServices", () => {
   it("detects every release-pinned runtime service", () => {
-    expect(touchesReleasePinnedServices(["motis", "app-api"])).toBe(true);
+    expect(touchesReleasePinnedServices(["motis", "api"])).toBe(true);
     expect(touchesReleasePinnedServices(["ops-agent"])).toBe(true);
     expect(touchesReleasePinnedServices(["transitous-runner"])).toBe(true);
     expect(touchesReleasePinnedServices(["motis", "valhalla"])).toBe(false);

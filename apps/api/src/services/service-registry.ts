@@ -18,7 +18,7 @@ const warnings: string[] = [];
 
 /**
  * The services the applied generation enabled. Its render bakes them into
- * app-api; an API running on the host (development) reads the deployment
+ * the API container; an API running on the host (development) reads the deployment
  * itself, and before any render, the operator's selection.
  */
 function appliedServiceIds(
@@ -65,7 +65,7 @@ function scheduleCommunityRetry(): void {
 
 /**
  * Community services from the operations agent, which owns its community
- * store; the app-api container has no host checkout. While the
+ * store; the API container has no host checkout. While the
  * agent is unreachable the last reported list stays in use and a retry is
  * scheduled, unless `strict` asks for the failure instead. An API run on the
  * host without an agent configured (development) returns null and scans the

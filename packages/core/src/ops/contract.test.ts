@@ -280,7 +280,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "service.restart": { kind: "service.restart", serviceId: "motis" },
   "coreService.restart": {
     kind: "coreService.restart",
-    serviceId: "app-api",
+    serviceId: "api",
     expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
   },
   "service.recreate": {
@@ -902,7 +902,7 @@ describe("ops contract", () => {
       },
       services: [
         {
-          serviceId: "app-api",
+          serviceId: "api",
           containerState: "running",
           pinnedImage: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
           runningImageId: `sha256:${"b".repeat(64)}`,
@@ -915,7 +915,7 @@ describe("ops contract", () => {
     expect(parseOpsResult("system.inspect", result)).toEqual(result);
     const complete = {
       ...result,
-      services: ["app-api", "app-web", "data-manager", "ops-agent", "transitous-runner"].map(
+      services: ["api", "web", "data-manager", "ops-agent", "transitous-runner"].map(
         (serviceId) => ({ ...result.services[0], serviceId }),
       ),
     };
@@ -930,7 +930,7 @@ describe("ops contract", () => {
       { ...result, services: [{ ...result.services[0], state: "up-to-date" }] },
       { ...result, services: [{ ...result.services[0], localImageId: null }] },
       { ...result, release: { ...result.release, untrustedField: "unexpected" } },
-      { ...result, containerName: "app-api-1" },
+      { ...result, containerName: "openmapx-api-1" },
     ]) {
       expect(() => parseOpsResult("system.inspect", invalid)).toThrow();
     }

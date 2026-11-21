@@ -37,9 +37,9 @@ const apiJobId = "11111111-1111-4111-8111-111111111111";
 const handoffId = "66666666-6666-4666-8666-666666666666";
 const stepKey = "99999999-9999-4999-8999-999999999999";
 const revisionId = `cfg1_${"a".repeat(43)}`;
-const targets = ["app-api", "traefik"];
-const image = (id: string) => `sha256:${(id === "app-api" ? "2" : "3").repeat(64)}`;
-const container = (id: string) => (id === "app-api" ? "4" : "5").repeat(64);
+const targets = ["api", "traefik"];
+const image = (id: string) => `sha256:${(id === "api" ? "2" : "3").repeat(64)}`;
+const container = (id: string) => (id === "api" ? "4" : "5").repeat(64);
 
 function plan() {
   const deadlineAt = Date.now() + 600_000,
@@ -98,7 +98,7 @@ function plan() {
     candidateRecordDigest: "c".repeat(64),
     sourceAuthorityRevision: "registry-v1",
     previewDigest: "d".repeat(64),
-    serviceIds: ["app-api", "data-manager", "traefik"],
+    serviceIds: ["api", "data-manager", "traefik"],
     recreateServiceIds: [],
     hardlinkPlan: { prune: true, plan: [] },
     handoff: {
@@ -229,7 +229,7 @@ const host = (onReplace?: (serviceId: string) => Promise<void> | void): HandoffH
     await onReplace?.(serviceId);
     beforeEffect();
     replaced.push(serviceId);
-    return (serviceId === "app-api" ? "6" : "7").repeat(64);
+    return (serviceId === "api" ? "6" : "7").repeat(64);
   },
   verifyAll: async () => undefined,
 });

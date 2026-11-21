@@ -641,7 +641,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   // Installs the archive as `<integration store>/<integrationId>`. The previous
   // copy is kept until the transaction is settled. Without `extensionId` the
   // operator installs it (the host CLI). The owner is bookkeeping, not a
-  // boundary: app-api and the fixed CLI share the `api` principal.
+  // boundary: the API and the fixed CLI share the `api` principal.
   z.strictObject({
     kind: z.literal("catalogIntegration.publish"),
     integrationId: serviceIdSchema,

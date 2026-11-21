@@ -808,7 +808,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       hostControlConfigured: hostControlConfigured(),
       hostDir: hostDir ?? null,
       // True once a configuration generation is applied: its render bakes the
-      // applied services into app-api; a host-run API sees the generation.
+      // applied services into the API container; a host-run API sees the generation.
       composeRendered:
         coreServices.parseServiceIdList(process.env[coreServices.APPLIED_SERVICES_ENV]) !== null ||
         existsSync(

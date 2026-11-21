@@ -20,7 +20,7 @@ crashScenario({
 
     expect((await host.submitDataJob()).status).toBe(409);
     const before = host.mark();
-    const cli = await host.cli(["services", "start", "app-web"]);
+    const cli = await host.cli(["services", "start", "web"]);
     expect(cli.code).not.toBe(0);
     expect(host.dockerEffects({ caller: "host-cli", since: before })).toEqual([]);
 

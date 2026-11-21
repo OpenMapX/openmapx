@@ -801,12 +801,12 @@ describe("renderServiceSnippet", () => {
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("passes through ${VAR}-prefixed bindMount sources verbatim for compose substitution", () => {
-    // app-api opts into a host-path-agreeing bind mount (docker-outside-of-
+    // A service opts into a host-path-agreeing bind mount (docker-outside-of-
     // docker admin control) by pointing both sides at the same operator-set
     // env var. The renderer must not try to resolve `${OPENMAPX_HOST_DIR}`
     // relative to the service directory.
     const snippet = renderServiceSnippet(
-      svc("app-api", {
+      svc("api", {
         bindMounts: [
           {
             source: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
@@ -893,8 +893,8 @@ describe("renderServiceSnippet", () => {
   });
 
   it("reads env files from the infra root, wherever the compose file lives", () => {
-    const service = svc("app-api", {
-      container: { image: "t/app-api", tag: "latest", expose: [80], envFile: [".env"] },
+    const service = svc("api", {
+      container: { image: "t/api", tag: "latest", expose: [80], envFile: [".env"] },
     });
     expect(
       renderServiceSnippet(service, {
@@ -1181,7 +1181,7 @@ describe("renderCompose", () => {
 
   it("emits one Traefik router per additionalRoutes entry, all bound to the same backend", () => {
     const list = [
-      svc("app-api", {
+      svc("api", {
         container: { image: "ghcr.io/x/api", tag: "latest", expose: [3001] },
         exposure: {
           proxy: {
@@ -1193,11 +1193,11 @@ describe("renderCompose", () => {
       }),
     ];
     const result = renderCompose(list, { domain: "example.com" });
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api.rule");
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.api.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.api-r1.rule");
     expect(result.composeYaml).toContain("Path(`/health`)");
     // Secondary router routes to the SAME backend service.
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.service: app-api");
+    expect(result.composeYaml).toContain("traefik.http.routers.api-r1.service: api");
   });
 
   it("resolves @service:<slug>:<path> bindMounts against the named service's directory", () => {

@@ -292,14 +292,14 @@ it("uses only the synchronous typed snapshot for follow:false", async () => {
     value: { lines: ["one", "two"], truncated: true },
   }) as ApiOpsClient["execute"];
   const api = clientWithExecute(execute);
-  await dockerComposeLogs("app-api", out as never, {
+  await dockerComposeLogs("api", out as never, {
     client: api,
     tail: 200,
     follow: false,
     operationKey: "opk1_snapshotOnly000000",
   });
   expect(execute).toHaveBeenCalledWith(
-    { kind: "service.logs", serviceId: "app-api", tail: 200 },
+    { kind: "service.logs", serviceId: "api", tail: 200 },
     { signal: expect.any(AbortSignal) },
   );
   expect(api.events).not.toHaveBeenCalled();

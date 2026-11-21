@@ -8,7 +8,7 @@ crashScenario({
   enabled: process.env.OPENMAPX_RUN_DATABASE_TESTS === "1",
   timeout: 600_000,
   run: async (host) => {
-    const stopped = await host.serviceAction("app-web", "stop");
+    const stopped = await host.serviceAction("web", "stop");
     expect(stopped.status).toBe(200);
     expect((await host.waitForJob(stopped.jobId as string)).status).toBe("success");
 
@@ -16,9 +16,9 @@ crashScenario({
     const effect = host.blockDocker({
       command: "compose",
       caller: "agent",
-      service: "app-web",
+      service: "web",
     });
-    const started = await host.serviceAction("app-web", "start");
+    const started = await host.serviceAction("web", "start");
     expect(started.status).toBe(200);
     await Promise.race([
       effect.entered,
@@ -36,14 +36,14 @@ crashScenario({
       until: (view) => view.terminal || view.status === "cancel_pending",
     });
     expect(job.status).not.toBe("success");
-    // Exactly one Compose effect on app-web: the one in flight when the agent died.
-    expect(
-      host.dockerEffects({ command: "compose", service: "app-web", since: start }),
-    ).toHaveLength(1);
+    // Exactly one Compose effect on web: the one in flight when the agent died.
+    expect(host.dockerEffects({ command: "compose", service: "web", since: start })).toHaveLength(
+      1,
+    );
 
     // The target stays held: a host start is refused and changes nothing.
     const before = host.mark();
-    const cli = await host.cli(["services", "start", "app-web"]);
+    const cli = await host.cli(["services", "start", "web"]);
     expect(cli.code).not.toBe(0);
     expect(host.dockerEffects({ command: "compose", since: before })).toEqual([]);
   },

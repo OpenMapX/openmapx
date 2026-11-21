@@ -337,7 +337,7 @@ export { assertValidSecretKey, isValidSecretKey, SECRET_KEY_RE } from "./secret-
 export { computeServiceSecurityRating, type ServiceSecurityRating } from "./security-rating";
 export {
   APPLIED_SERVICES_ENV,
-  buildAppApiServiceEnv,
+  buildApiServiceEnv,
   type ExpandedServiceSelection,
   type ExpandServiceSelectionOptions,
   expandServiceSelection,

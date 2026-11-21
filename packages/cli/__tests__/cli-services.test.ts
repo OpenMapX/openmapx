@@ -77,9 +77,9 @@ describe("listServices", () => {
   });
 
   it("marks only the effective service selection as enabled", async () => {
-    writeManifest("app-api", {
+    writeManifest("api", {
       ...baseManifest,
-      id: "app-api",
+      id: "api",
       container: {
         ...baseManifest.container,
         dependsOn: [{ service: "postgis", condition: "service_healthy" }],
@@ -90,7 +90,7 @@ describe("listServices", () => {
 
     const enabled = await listServices({ rootDir: tmp, enabledOnly: true });
 
-    expect(enabled.map((s) => s.manifest.id).sort()).toEqual(["app-api", "postgis"]);
+    expect(enabled.map((s) => s.manifest.id).sort()).toEqual(["api", "postgis"]);
   });
 });
 
@@ -114,8 +114,8 @@ describe("service selection persistence", () => {
   it("enables and disables root selections in the agent's service-selection.json", async () => {
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
     writeManifest("well-known", { ...baseManifest, id: "well-known" });
-    writeManifest("app-api", { ...baseManifest, id: "app-api" });
-    writeManifest("app-web", { ...baseManifest, id: "app-web" });
+    writeManifest("api", { ...baseManifest, id: "api" });
+    writeManifest("web", { ...baseManifest, id: "web" });
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("redis", { ...baseManifest, id: "redis" });
     writeManifest("data-manager", { ...baseManifest, id: "data-manager" });
@@ -127,10 +127,10 @@ describe("service selection persistence", () => {
       "valhalla",
     );
 
-    await disableSelectedServices(["app-api"], tmp);
-    expect(readServiceSelection(tmp)?.selected).not.toContain("app-api");
+    await disableSelectedServices(["api"], tmp);
+    expect(readServiceSelection(tmp)?.selected).not.toContain("api");
     expect((await getServiceSelectionSummary(tmp)).selection.enabledIdsOrdered).not.toContain(
-      "app-api",
+      "api",
     );
   });
 });

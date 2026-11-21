@@ -285,19 +285,15 @@ describe("configuration helper container", () => {
 
 it("orders dependencies and the agent last without silently expanding frozen targets", () => {
   expect(
-    services.selfUpdateServiceOrder([
-      "ops-agent",
-      "traefik",
-      "app-api",
-      "redis",
-      "postgis",
-      "app-web",
-    ]),
-  ).toEqual(["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"]);
-  expect(
-    services.selfUpdateServiceOrder(["motis", "app-api", "data-manager", "ops-agent"]),
-  ).toEqual(["data-manager", "motis", "app-api", "ops-agent"]);
-  expect(() => services.selfUpdateServiceOrder(["app-api", "app-api"])).toThrow();
+    services.selfUpdateServiceOrder(["ops-agent", "traefik", "api", "redis", "postgis", "web"]),
+  ).toEqual(["postgis", "redis", "web", "api", "traefik", "ops-agent"]);
+  expect(services.selfUpdateServiceOrder(["motis", "api", "data-manager", "ops-agent"])).toEqual([
+    "data-manager",
+    "motis",
+    "api",
+    "ops-agent",
+  ]);
+  expect(() => services.selfUpdateServiceOrder(["api", "api"])).toThrow();
 });
 it("requires the actual old image's helper version before any launch", async () => {
   const calls: string[][] = [];

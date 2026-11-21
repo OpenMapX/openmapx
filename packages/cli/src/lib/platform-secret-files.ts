@@ -233,7 +233,7 @@ function readExistingSecret(
     if (!format.validate(value)) throw new Error(format.invalidMessage);
     // Docker Compose mounts source-file permissions unchanged. Ordinary shared
     // secrets use 0444 inside a protected parent; the exports ring uses 0400
-    // because app-api runs with the same configured uid as the host owner.
+    // because the API runs with the same configured uid as the host owner.
     fchmodSync(fd, format.finalMode);
     return value;
   } finally {

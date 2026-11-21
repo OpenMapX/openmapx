@@ -58,7 +58,7 @@ const noRelativeIntegrationsImports = {
 
 await build({
   // migrate.ts is the one-shot migration step `openmapx services update` runs
-  // before it replaces app-api.
+  // before it replaces the API container.
   entryPoints: ["src/server.ts", "src/migrate.ts"],
   bundle: true,
   platform: "node",

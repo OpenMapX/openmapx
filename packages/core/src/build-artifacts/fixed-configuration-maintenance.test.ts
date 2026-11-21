@@ -122,8 +122,8 @@ it.each(["body", "source", "parent", "foreign-target", "protected-target", "capa
     if (reason === "parent") source.prepare.deadlineAt++;
     if (reason === "foreign-target") source.recreateServiceIds = ["foreign"];
     if (reason === "protected-target") {
-      source.serviceIds = ["app-api", ...source.serviceIds];
-      source.recreateServiceIds = ["app-api"];
+      source.serviceIds = ["api", ...source.serviceIds];
+      source.recreateServiceIds = ["api"];
     }
     if (reason === "capacity") {
       source.serviceIds = [
@@ -199,8 +199,8 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
       canonicalManifest,
       imagePrefix: "ghcr.io/openmapx",
       serviceImages: {
-        "app-api": manifest.images.api,
-        "app-web": manifest.images.web,
+        api: manifest.images.api,
+        web: manifest.images.web,
         "data-manager": manifest.images["data-manager"],
         "ops-agent": manifest.images["ops-agent"],
         "transitous-runner": manifest.images["transitous-runner"],
@@ -221,9 +221,9 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     handoff = {
       handoffId: "77777777-7777-4777-8777-777777777777",
       previewFingerprint: "e".repeat(64),
-      serviceIds: ["app-api", "ops-agent"],
+      serviceIds: ["api", "ops-agent"],
       expectedImageIdentities: {
-        "app-api": `sha256:${"1".repeat(64)}`,
+        api: `sha256:${"1".repeat(64)}`,
         "ops-agent": `sha256:${"2".repeat(64)}`,
       },
       mode: { kind: "release" as const, releaseId: manifest.release, manifestDigest },
@@ -233,7 +233,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
       operation,
       prepare,
       apply,
-      serviceIds: ["app-api", "data-manager", "motis", "ops-agent"],
+      serviceIds: ["api", "data-manager", "motis", "ops-agent"],
       recreateServiceIds: [],
       handoff,
       release,
@@ -250,8 +250,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
 
   // A realistic stack must fit without relaxing the private-record limits.
   const names = [
-    "app-api",
-    "app-web",
+    "api",
     "brouter",
     "data-manager",
     "martin",
@@ -263,10 +262,11 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     "tileserver",
     "transitous-runner",
     "valhalla",
+    "web",
   ];
   const mountCounts: Record<string, number> = {
-    "app-api": 12,
-    "app-web": 0,
+    api: 12,
+    web: 0,
     "data-manager": 7,
     "ops-agent": 20,
     "transitous-runner": 5,
@@ -326,9 +326,9 @@ it("freezes protected handoff after the original generation and ordinary childre
   const handoff = {
     handoffId: "77777777-7777-4777-8777-777777777777",
     previewFingerprint: "e".repeat(64),
-    serviceIds: ["app-api", "ops-agent"],
+    serviceIds: ["api", "ops-agent"],
     expectedImageIdentities: {
-      "app-api": `sha256:${"1".repeat(64)}`,
+      api: `sha256:${"1".repeat(64)}`,
       "ops-agent": `sha256:${"2".repeat(64)}`,
     },
     mode: { kind: "configuration" as const },
@@ -338,7 +338,7 @@ it("freezes protected handoff after the original generation and ordinary childre
     apply,
     operation,
     prepare,
-    serviceIds: ["app-api", "data-manager", "motis", "ops-agent"],
+    serviceIds: ["api", "data-manager", "motis", "ops-agent"],
     handoff,
   };
   const plan = buildFixedConfigurationMaintenancePlan(args);
@@ -374,7 +374,7 @@ it("freezes protected handoff after the original generation and ordinary childre
   expect(() => assertFixedConfigurationMaintenancePlan(plan)).not.toThrow();
   const changed = structuredClone(plan);
   assert.exists(changed.handoff);
-  changed.handoff.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
+  changed.handoff.expectedImageIdentities.api = `sha256:${"3".repeat(64)}`;
   expect(() => assertFixedConfigurationMaintenancePlan(changed)).toThrow();
 });
 

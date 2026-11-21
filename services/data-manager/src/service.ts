@@ -201,7 +201,7 @@ if (transitousFeedProxyKeyFile) {
 
 const port = Number(process.env.PORT ?? 4000);
 // Bind to loopback by default. Docker-compose overrides this to 0.0.0.0 so
-// app-api can reach us over the service network; exposing on 0.0.0.0 without
+// the API can reach us over the service network; exposing on 0.0.0.0 without
 // the token guard would be an unauthenticated-mutation risk on multi-tenant
 // hosts.
 const host = process.env.HOST ?? "127.0.0.1";

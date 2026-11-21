@@ -46,9 +46,9 @@ afterEach(() => {
 
 describe("initServiceRegistry", () => {
   it("honors the persisted service-selection file when env selection is absent", async () => {
-    writeManifest("app-api", {
+    writeManifest("api", {
       ...baseManifest,
-      id: "app-api",
+      id: "api",
       container: {
         ...baseManifest.container,
         dependsOn: [{ service: "postgis", condition: "service_healthy" }],
@@ -58,11 +58,11 @@ describe("initServiceRegistry", () => {
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
     writeManifest("well-known", { ...baseManifest, id: "well-known" });
-    writeManifest("app-web", { ...baseManifest, id: "app-web" });
+    writeManifest("web", { ...baseManifest, id: "web" });
     writeManifest("redis", { ...baseManifest, id: "redis" });
     writeManifest("data-manager", { ...baseManifest, id: "data-manager" });
 
-    writeSelection({ selected: ["app-api", "valhalla"] });
+    writeSelection({ selected: ["api", "valhalla"] });
 
     await initServiceRegistry();
 
@@ -70,16 +70,16 @@ describe("initServiceRegistry", () => {
       .enabled()
       .map((service) => service.manifest.id)
       .sort();
-    expect(enabled).toEqual(["app-api", "postgis", "valhalla"]);
+    expect(enabled).toEqual(["api", "postgis", "valhalla"]);
   });
 
   it("prefers OPENMAPX_ENABLED_SERVICES over the persisted selection file", async () => {
-    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    writeManifest("api", { ...baseManifest, id: "api" });
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
 
     writeSelection({ selected: ["valhalla"] });
-    process.env.OPENMAPX_ENABLED_SERVICES = "app-api,postgis";
+    process.env.OPENMAPX_ENABLED_SERVICES = "api,postgis";
 
     await initServiceRegistry();
 
@@ -87,11 +87,11 @@ describe("initServiceRegistry", () => {
       .enabled()
       .map((service) => service.manifest.id)
       .sort();
-    expect(enabled).toEqual(["app-api", "postgis"]);
+    expect(enabled).toEqual(["api", "postgis"]);
   });
 
   it("follows the applied generation rather than the selection it has not applied yet", async () => {
-    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    writeManifest("api", { ...baseManifest, id: "api" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
     const loaded = new services.ServiceRegistry({ rootDir: tmp });
     await loaded.load();
@@ -106,7 +106,7 @@ describe("initServiceRegistry", () => {
         serviceSecrets: [],
       },
     });
-    writeSelection({ selected: ["app-api"] });
+    writeSelection({ selected: ["api"] });
 
     await initServiceRegistry();
 
@@ -117,11 +117,11 @@ describe("initServiceRegistry", () => {
     ).toEqual(["valhalla"]);
   });
 
-  it("takes the applied services its render baked into app-api", async () => {
-    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+  it("takes the applied services its render baked into the API container", async () => {
+    writeManifest("api", { ...baseManifest, id: "api" });
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
-    process.env.OPENMAPX_APPLIED_SERVICES = "app-api,postgis";
+    process.env.OPENMAPX_APPLIED_SERVICES = "api,postgis";
 
     await initServiceRegistry();
 
@@ -130,11 +130,11 @@ describe("initServiceRegistry", () => {
         .enabled()
         .map((service) => service.manifest.id)
         .sort(),
-    ).toEqual(["app-api", "postgis"]);
+    ).toEqual(["api", "postgis"]);
   });
 
   it("fails closed on a malformed or dangling trusted selection pointer", async () => {
-    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    writeManifest("api", { ...baseManifest, id: "api" });
     const infraDir = join(tmp, "infra", "docker");
     const current = join(infraDir, services.CURRENT_CONFIGURATION);
     mkdirSync(dirname(current), { recursive: true, mode: 0o700 });

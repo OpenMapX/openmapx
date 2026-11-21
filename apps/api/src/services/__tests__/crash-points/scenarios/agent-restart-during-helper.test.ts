@@ -12,7 +12,7 @@ crashScenario({
     const apiRecreate = host.blockDocker({
       command: "compose up",
       caller: "helper",
-      service: "app-api",
+      service: "api",
     });
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
@@ -28,6 +28,6 @@ crashScenario({
     expect(recreated.at(-1)).toBe("ops-agent");
     expect(new Set(recreated).size).toBe(recreated.length);
     expect(host.runningImages()["ops-agent"]).toBe(host.releaseImageId("next", "ops-agent"));
-    expect(host.runningImages()["app-api"]).toBe(host.releaseImageId("next", "api"));
+    expect(host.runningImages().api).toBe(host.releaseImageId("next", "api"));
   },
 });

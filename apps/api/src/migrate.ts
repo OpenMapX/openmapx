@@ -1,9 +1,9 @@
 /**
  * Applies the pending database migrations and exits.
  *
- * `openmapx services update` runs this in a one-off app-api container before
- * it replaces app-api, so a long migration is its own step with its own output
- * rather than part of app-api's startup and healthcheck. app-api still applies
+ * `openmapx services update` runs this in a one-off API container before
+ * it replaces the API, so a long migration is its own step with its own output
+ * rather than part of the API's startup and healthcheck. The API still applies
  * any pending migrations when it starts; after this step there are none.
  */
 import { existsSync } from "node:fs";

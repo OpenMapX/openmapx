@@ -20,7 +20,7 @@ const snapshot: OwnedServiceSnapshot = {
   },
 };
 describe("shared service action decisions", () => {
-  it.each(["app-api", "traefik"])(
+  it.each(["api", "traefik"])(
     "offers only the dedicated restart workflow for owned enabled %s",
     (serviceId) => {
       const current = { ...snapshot, serviceId };

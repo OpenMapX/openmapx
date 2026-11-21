@@ -11,9 +11,9 @@ crashScenario({
   timeout: 600_000,
   host: { smallStateFilesystem: true },
   run: async (host) => {
-    const appWeb = host.containerId("app-web");
-    const effect = host.blockDocker({ command: "effect", caller: "agent", contains: appWeb });
-    const stopped = await host.serviceAction("app-web", "stop");
+    const web = host.containerId("web");
+    const effect = host.blockDocker({ command: "effect", caller: "agent", contains: web });
+    const stopped = await host.serviceAction("web", "stop");
     expect(stopped.status).toBe(200);
     const entered = await effect.entered;
     host.fillStateFilesystem();
@@ -36,8 +36,6 @@ crashScenario({
       const state = (await host.operation(operation.operationId)).state;
       expect(state).not.toBe("succeeded");
     }
-    expect(host.dockerEffects({ caller: "agent", contains: appWeb, since: entered.seq })).toEqual(
-      [],
-    );
+    expect(host.dockerEffects({ caller: "agent", contains: web, since: entered.seq })).toEqual([]);
   },
 });

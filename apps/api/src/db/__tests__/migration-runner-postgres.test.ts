@@ -147,12 +147,11 @@ integration("startup migration runner", () => {
 
       await until(async () =>
         log.lines.some(
-          (line) =>
-            line.message === "Still waiting for another app-api instance to finish migrating",
+          (line) => line.message === "Still waiting for another API instance to finish migrating",
         ),
       );
       expect(log.lines[0]?.message).toBe(
-        "Waiting for another app-api instance to finish migrating the database",
+        "Waiting for another API instance to finish migrating the database",
       );
       expect(finished).toBe(false);
       const [table] = await control<{ exists: boolean }[]>`

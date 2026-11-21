@@ -11,7 +11,7 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
 
 /**
  * Where the operations agent keeps its own state: the job journal and the
- * configuration candidates app-api hands it.
+ * configuration candidates the API hands it.
  *
  * It lives in `infra/docker/state/ops-agent`, beside `infra/docker/data`
  * rather than inside it: data-manager mounts the whole data directory
@@ -24,7 +24,7 @@ export interface AgentStatePaths {
   configurationCandidates: string;
   /** The community service repositories the agent installed. */
   community: string;
-  /** The integrations the agent installed; app-api mounts it read-only. */
+  /** The integrations the agent installed; the API mounts it read-only. */
   customIntegrations: string;
   /** Traefik's dynamic configuration, which Traefik mounts read-only and watches. */
   traefikDynamic: string;

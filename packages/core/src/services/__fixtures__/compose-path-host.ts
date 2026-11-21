@@ -39,7 +39,7 @@ export async function composePathHost() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "openmapx-compose-paths-")));
   const infraDir = join(root, "infra/docker");
   mkdirSync(infraDir, { recursive: true });
-  const loaded: LoadedService[] = ["app-api", "alpha"].map((id) => {
+  const loaded: LoadedService[] = ["api", "alpha"].map((id) => {
     const directory = join(root, "services", id);
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "local-public.txt"), "public service fixture\n");
@@ -88,7 +88,7 @@ export async function composePathHost() {
       observedServiceContainerIds: ownership?.map((entry) => entry.containerId),
       input: {
         domain: "fixture.example.test",
-        selectedRoots: ["app-api", "alpha"],
+        selectedRoots: ["api", "alpha"],
         serviceConfigs: [],
         integrationConfigs: [],
         serviceSecrets: loaded.map((service) => ({

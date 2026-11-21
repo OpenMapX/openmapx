@@ -218,7 +218,7 @@ async function commitGeneration(
         // This generation mounts the agent's state from its own directory;
         // an earlier release's directories move there first.
         coreServices.prepareAgentStateDirectories(options.infraDir);
-        // And its stores, which the generation mounts into app-api.
+        // And its stores, which the generation mounts into the API.
         coreServices.prepareAgentStores(options.infraDir);
         // A release update's maintenance pins its frozen release in the generation
         // it commits; a coordinator update commits the image it pulled.

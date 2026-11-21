@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderServiceSnippet } from "../services/compose-renderer";
 import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/core-service-ids";
 import {
-  buildAppApiServiceEnv,
+  buildApiServiceEnv,
   expandServiceSelection,
   formatServiceIdList,
   normalizeServiceIds,
@@ -29,23 +29,23 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
 
 describe("service selection helpers", () => {
   it("normalizes comma and whitespace separated ids", () => {
-    expect(normalizeServiceIds([" app-api, app-web ", "redis\npostgis", "redis"])).toEqual([
-      "app-api",
-      "app-web",
+    expect(normalizeServiceIds([" api, web ", "redis\npostgis", "redis"])).toEqual([
+      "api",
+      "web",
       "redis",
       "postgis",
     ]);
     expect(parseServiceIdList(undefined)).toBeNull();
-    expect(parseServiceIdList("app-api app-web")).toEqual(["app-api", "app-web"]);
-    expect(formatServiceIdList(["app-api", "app-web"])).toBe("app-api,app-web");
+    expect(parseServiceIdList("api web")).toEqual(["api", "web"]);
+    expect(formatServiceIdList(["api", "web"])).toBe("api,web");
   });
 
   it("defines a small core default selection", () => {
     expect(DEFAULT_SELECTED_SERVICE_IDS).toEqual([
       "traefik",
       "well-known",
-      "app-api",
-      "app-web",
+      "api",
+      "web",
       "postgis",
       "redis",
       "data-manager",
@@ -53,11 +53,11 @@ describe("service selection helpers", () => {
   });
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
-  it("builds app-api env from the applied set and env references, never from env values", () => {
-    const env = buildAppApiServiceEnv(
+  it("builds the API's env from the applied set and env references, never from env values", () => {
+    const env = buildApiServiceEnv(
       [
-        svc("app-api", {
-          container: { image: "t/app-api", tag: "latest", expose: [3001] },
+        svc("api", {
+          container: { image: "t/api", tag: "latest", expose: [3001] },
         }),
         svc("osrm", {
           container: { image: "t/osrm", tag: "latest", expose: [5000] },
@@ -72,7 +72,7 @@ describe("service selection helpers", () => {
 
     expect(env).toEqual({
       EXISTING: "1",
-      OPENMAPX_APPLIED_SERVICES: "app-api,osrm,valhalla",
+      OPENMAPX_APPLIED_SERVICES: "api,osrm,valhalla",
       // Compose resolves these from infra/docker/.env when the stack starts.
       INTEGRATION_PHOTOS_FLICKR_APIKEY: "${INTEGRATION_PHOTOS_FLICKR_APIKEY:-}",
       SERVICE_VALHALLA_BUILD_ELEVATION: "${SERVICE_VALHALLA_BUILD_ELEVATION:-}",
@@ -80,9 +80,9 @@ describe("service selection helpers", () => {
   });
 
   it("points env-addressed backends at co-deployed services unless the host env names one", () => {
-    const env = buildAppApiServiceEnv(
+    const env = buildApiServiceEnv(
       [
-        svc("app-api"),
+        svc("api"),
         svc("overpass", { container: { image: "t/overpass", tag: "latest", expose: [80] } }),
         svc("nominatim", {
           container: { image: "t/nominatim", tag: "latest", expose: [8080] },
@@ -134,9 +134,9 @@ describe("expandServiceSelection", () => {
       svc("traefik"),
       svc("postgis"),
       svc("redis"),
-      svc("app-api", {
+      svc("api", {
         container: {
-          image: "t/app-api",
+          image: "t/api",
           tag: "latest",
           expose: [3001],
           dependsOn: [
@@ -154,14 +154,14 @@ describe("expandServiceSelection", () => {
       }),
     ];
 
-    const selection = expandServiceSelection(services, ["app-api", "valhalla"]);
+    const selection = expandServiceSelection(services, ["api", "valhalla"]);
 
     expect(selection.missingIds).toEqual([]);
     expect(selection.enabledIdsOrdered).toEqual([
       "traefik",
       "postgis",
       "redis",
-      "app-api",
+      "api",
       "data-manager",
       "valhalla",
     ]);
@@ -170,23 +170,22 @@ describe("expandServiceSelection", () => {
   it("never selects the bundled traefik behind an operator-run proxy", () => {
     const services = [
       svc("traefik"),
-      svc("app-web", { exposure: { proxy: { enabled: true, pathPrefix: "/" } } }),
+      svc("web", { exposure: { proxy: { enabled: true, pathPrefix: "/" } } }),
     ];
 
-    const selection = expandServiceSelection(services, ["traefik", "app-web"], {
+    const selection = expandServiceSelection(services, ["traefik", "web"], {
       externalProxyNetwork: "proxy",
     });
 
-    expect(selection.enabledIdsOrdered).toEqual(["app-web"]);
+    expect(selection.enabledIdsOrdered).toEqual(["web"]);
     expect(selection.missingIds).toEqual([]);
     expect(
-      expandServiceSelection(services, ["app-web"], { externalProxyNetwork: null })
-        .enabledIdsOrdered,
-    ).toEqual(["traefik", "app-web"]);
+      expandServiceSelection(services, ["web"], { externalProxyNetwork: null }).enabledIdsOrdered,
+    ).toEqual(["traefik", "web"]);
   });
 
   it("reports explicit missing roots but tolerates missing defaults when requested", () => {
-    const services = [svc("app-api")];
+    const services = [svc("api")];
 
     expect(expandServiceSelection(services, ["nope"]).missingIds).toEqual(["nope"]);
     expect(

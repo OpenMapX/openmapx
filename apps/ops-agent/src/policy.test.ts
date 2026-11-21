@@ -10,7 +10,7 @@ import {
 describe("operation-specific authority policy", () => {
   it("deselected owned service retains stop and logs but cannot start", async () => {
     const claimer = createRegistryResourceClaimer({
-      serviceIds: ["worker", "ops-agent", "app-api", "traefik"],
+      serviceIds: ["worker", "ops-agent", "api", "traefik"],
       enabledServiceIds: () => new Set(),
       integrationIds: [],
       trustedData: denyAllTrustedOpsData,
@@ -357,14 +357,14 @@ describe("operation-specific authority policy", () => {
   });
 
   it("tracks committed generation enable/disable state for lifecycle authority across restart", async () => {
-    let enabled = new Set(["worker", "app-api", "traefik", "ops-agent"]);
+    let enabled = new Set(["worker", "api", "traefik", "ops-agent"]);
     const claimer = createProductionRegistryResourceClaimer({
       services: [
         { serviceId: "worker", enabled: true, isBuiltIn: true },
         { serviceId: "motis", enabled: false, isBuiltIn: true },
         { serviceId: "community-enabled", enabled: true, isBuiltIn: false },
         { serviceId: "community-disabled", enabled: false, isBuiltIn: false },
-        { serviceId: "app-api", enabled: true, isBuiltIn: true },
+        { serviceId: "api", enabled: true, isBuiltIn: true },
         { serviceId: "traefik", enabled: true, isBuiltIn: true },
         { serviceId: "ops-agent", enabled: true, isBuiltIn: true },
       ],
@@ -386,7 +386,7 @@ describe("operation-specific authority policy", () => {
         "motis",
         "community-enabled",
         "community-disabled",
-        "app-api",
+        "api",
         "traefik",
         "ops-agent",
       ]) {
@@ -442,7 +442,7 @@ describe("operation-specific authority policy", () => {
 
   it("excludes the agent, edge proxy, and self-replaced API from generic lifecycle", async () => {
     const policy = createRegistryResourcePolicy({
-      serviceIds: ["worker", "ops-agent", "traefik", "app-api"],
+      serviceIds: ["worker", "ops-agent", "traefik", "api"],
       integrationIds: [],
       trustedData: denyAllTrustedOpsData,
     });
@@ -456,7 +456,7 @@ describe("operation-specific authority policy", () => {
         policy,
       ),
     ).resolves.toBe(true);
-    for (const serviceId of ["ops-agent", "traefik", "app-api"]) {
+    for (const serviceId of ["ops-agent", "traefik", "api"]) {
       await expect(
         authorizeOpsResources({ kind: "service.restart", serviceId }, policy),
       ).resolves.toBe(false);

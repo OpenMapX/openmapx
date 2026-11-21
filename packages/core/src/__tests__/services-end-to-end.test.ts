@@ -39,7 +39,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
   describe("OpenConditions bridge", () => {
     const bridges: Record<string, string[]> = {
       postgis: ["openconditions-ingest", "openconditions-contributions-api"],
-      "app-api": ["openconditions-ingest", "openconditions-contributions-api"],
+      api: ["openconditions-ingest", "openconditions-contributions-api"],
       "data-manager": ["openconditions-ingest"],
       overpass: ["openconditions-ingest"],
     };
@@ -133,9 +133,9 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
     const document = parseYaml(result.composeYaml) as {
       services: Record<string, { labels: Record<string, string> }>;
     };
-    const labels = document.services["app-api"]?.labels;
+    const labels = document.services.api?.labels;
     assert.isDefined(labels);
-    expect(labels["traefik.http.routers.app-api.rule"]).toContain("PathPrefix(`/api`)");
+    expect(labels["traefik.http.routers.api.rule"]).toContain("PathPrefix(`/api`)");
     const internal = Object.entries(labels).filter(
       ([key, value]) => key.endsWith(".rule") && value.includes("PathPrefix(`/api/internal`)"),
     );
@@ -276,7 +276,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
     const services = registry
       .list()
       .filter((service) =>
-        ["data-manager", "app-api", "transitous-runner"].includes(service.manifest.id),
+        ["data-manager", "api", "transitous-runner"].includes(service.manifest.id),
       );
     const result = renderCompose(services, {
       domain: "example.com",
@@ -527,7 +527,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
       );
     });
 
-    it("keeps every Dawarich container off openmapx and lets only Traefik and app-api reach the app", async () => {
+    it("keeps every Dawarich container off openmapx and lets only Traefik and the API reach the app", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();
       const render = (dawarich: boolean) => {
@@ -535,13 +535,16 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
           ...service,
           enabled: service.manifest.id.startsWith("dawarich-")
             ? dawarich
-            : ["traefik", "app-api", "postgis", "redis"].includes(service.manifest.id),
+            : ["traefik", "api", "postgis", "redis"].includes(service.manifest.id),
         }));
         return parseYaml(renderCompose(services, { domain: "example.com" }).composeYaml) as {
-          services: Record<string, { networks: string[] }>;
+          services: Record<string, { networks: string[] | Record<string, unknown> }>;
           networks: Record<string, unknown>;
         };
       };
+      // A service with network aliases lists its networks in Compose's long form.
+      const networkNames = (networks: string[] | Record<string, unknown> | undefined) =>
+        Array.isArray(networks) ? networks : Object.keys(networks ?? {});
 
       const doc = render(true);
       expect(doc.services["dawarich-app"]?.networks).toEqual([
@@ -551,9 +554,11 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
       for (const id of ["dawarich-sidekiq", "dawarich-postgis", "dawarich-redis"]) {
         expect(doc.services[id]?.networks).toEqual(["openmapx-private-dawarich"]);
       }
-      for (const id of ["traefik", "app-api"]) {
-        expect(doc.services[id]?.networks).toContain("openmapx-private-dawarich-ingress");
-        expect(doc.services[id]?.networks).not.toContain("openmapx-private-dawarich");
+      for (const id of ["traefik", "api"]) {
+        expect(networkNames(doc.services[id]?.networks)).toContain(
+          "openmapx-private-dawarich-ingress",
+        );
+        expect(networkNames(doc.services[id]?.networks)).not.toContain("openmapx-private-dawarich");
       }
       for (const id of ["postgis", "redis"]) {
         expect(doc.services[id]?.networks).toEqual(["openmapx"]);
@@ -561,7 +566,10 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
 
       const withoutDawarich = render(false);
       expect(withoutDawarich.services.traefik?.networks).toEqual(["openmapx"]);
-      expect(withoutDawarich.services["app-api"]?.networks).toEqual(["openmapx"]);
+      // The API's project-unique alias exists only on the internal network.
+      expect(withoutDawarich.services.api?.networks).toEqual({
+        openmapx: { aliases: ["openmapx-api"] },
+      });
       expect(Object.keys(withoutDawarich.networks)).toEqual(["openmapx"]);
     });
 

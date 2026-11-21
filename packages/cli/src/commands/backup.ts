@@ -1493,7 +1493,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     for (const id of [...stopped].reverse()) {
       if (id === coreServices.CORE_SERVICE_ID.api && !protectedDatabaseSafe) {
         log.warn(
-          "Leaving app-api stopped because the account database was not safely replayed after restore",
+          "Leaving the API stopped because the account database was not safely replayed after restore",
         );
         continue;
       }
