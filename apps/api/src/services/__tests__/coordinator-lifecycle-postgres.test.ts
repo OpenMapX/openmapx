@@ -478,6 +478,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       api.addHook("preHandler", async (request: FastifyRequest) => {
         request.adminSession = await requireAdmin(request);
       });
+      // The per-service action limiter is a module singleton that outlives
+      // each test's API, so an earlier test's action would otherwise count
+      // against this one. Every test starts with a fresh API's empty limiter.
+      (await import("../../utils/rate-limit")).serviceActionLimit.reset();
       const { adminServicesRoute } = await import("../../routes/admin-services");
       await api.register(adminServicesRoute, { prefix: "/api" });
       await api.ready();
