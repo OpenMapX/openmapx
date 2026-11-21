@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { afterAll, afterEach, it as base, beforeAll, describe, expect, vi } from "vitest";
@@ -354,7 +355,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const original = await state.fixture
         .sql`SELECT id,result FROM admin_job WHERE type='integration.binding.apply'`;
       expect(original).toHaveLength(1);
-      expect(original[0]!.result.integrationReload.state).toBe("attempted");
+      const job = itemAt(original, 0);
+      expect(job.result.integrationReload.state).toBe("attempted");
       await state.fixture.sql.unsafe(`DROP TRIGGER reject_binding_completion ON admin_job`);
       // The original call has returned. Expire only its fixture observation lease;
       // keep the exact nonce, candidate, source and all production claim checks.
@@ -369,9 +371,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const rows = await state.fixture
         .sql`SELECT id,status,result,protocol FROM admin_job WHERE type='integration.binding.apply'`;
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.id).toBe(original[0]!.id);
-      expect(rows[0]!.status).toBe("success");
-      expect(rows[0]!.protocol.execution.version).toBe(2);
+      const row = itemAt(rows, 0);
+      expect(row.id).toBe(job.id);
+      expect(row.status).toBe("success");
+      expect(row.protocol.execution.version).toBe(2);
     }, 90000);
     it("keeps disabled integrations pending instead of claiming an active provider", async () => {
       await state.fixture
@@ -460,7 +463,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const original = await state.fixture
         .sql`SELECT id,result FROM admin_job WHERE type='configuration.apply'`;
       expect(original).toHaveLength(1);
-      expect(original[0]!.result.integrationReload.state).toBe("attempted");
+      const job = itemAt(original, 0);
+      expect(job.result.integrationReload.state).toBe("attempted");
       await state.fixture.sql.unsafe(`DROP TRIGGER reject_credential_completion ON admin_job`);
       await state.fixture
         .sql`UPDATE admin_job SET protocol=jsonb_set(protocol,'{observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='configuration.apply'`;
@@ -470,7 +474,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(reload).toHaveBeenCalledTimes(1);
       const current = await state.fixture
         .sql`SELECT id,status FROM admin_job WHERE type='configuration.apply'`;
-      expect(current).toEqual([{ id: original[0]!.id, status: "success" }]);
+      expect(current).toEqual([{ id: job.id, status: "success" }]);
     }, 90000);
     it("locks real service host fields and resource knobs, then permits explicit adoption after removal", async () => {
       vi.stubEnv("SERVICE_MOTIS_REGION", "host-region");
@@ -526,8 +530,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       expect(adopted.statusCode, adopted.body).toBe(200);
       expect(
-        (await state.fixture.sql`SELECT config FROM service_config WHERE service_id='motis'`)[0]!
-          .config,
+        itemAt(
+          await state.fixture.sql`SELECT config FROM service_config WHERE service_id='motis'`,
+          0,
+        ).config,
       ).toEqual({ REGION: "new" });
     }, 90000);
     async function credentials() {

@@ -152,6 +152,13 @@ const COSTING_MAP: Record<string, string> = {
   motorcycle: "motorcycle",
 };
 
+/** The Valhalla costing for a travel mode; a mode Valhalla cannot route is refused. */
+function costingFor(mode: TravelMode): string {
+  const costing = COSTING_MAP[mode];
+  if (!costing) throw new Error(`Valhalla has no costing for ${mode}`);
+  return costing;
+}
+
 /**
  * Per-maneuver penalty (seconds) for motorised costings — nudges routes toward
  * fewer turns than Valhalla's turn-happy ~5s default.
@@ -263,25 +270,25 @@ async function refineWalkingRoutes(
     }),
   );
   const plans = await Promise.all(
-    legs.map(async ({ leg, routeLeg }) =>
-      planWalkingLeg(
+    legs.map(async ({ leg, routeLeg }) => ({
+      routeLeg,
+      plan: planWalkingLeg(
         leg.maneuvers,
         routeLeg.steps,
         routeLeg.geometry,
         await walkingEdges(client, leg.shape),
       ),
-    ),
+    })),
   );
   const lookups = plans
-    .flatMap((plan, p) => nameLookups(plan).map((lookup) => ({ p, ...lookup })))
+    .flatMap(({ plan }, p) => nameLookups(plan).map((lookup) => ({ p, ...lookup })))
     .slice(0, MAX_NAME_LOOKUPS);
   const names = await streetNamesNear(client, lookups);
-  plans.forEach((plan, p) => {
+  plans.forEach(({ plan, routeLeg: leg }, p) => {
     nameStretches(
       plan,
       lookups.flatMap((lookup, i) => (lookup.p === p ? [{ ...lookup, name: names[i] }] : [])),
     );
-    const leg = legs[p].routeLeg;
     leg.steps = composeWalkingSteps(plan, lang);
     const street = longestStreet(leg.steps);
     if (street) leg.summary = `via ${street}`;
@@ -807,7 +814,7 @@ function buildClosureSafeCostingOptions(
     !options.arriveBy;
   const costingOptions = buildCostingOptions(
     { ...options, useLiveTraffic: usesCurrentClosures },
-    COSTING_MAP[mode],
+    costingFor(mode),
   );
 
   // A current live tile contains closure bits as well as speeds. Valhalla
@@ -1047,8 +1054,8 @@ export function createValhallaService(
 
       const body: Record<string, unknown> = {
         locations,
-        costing: COSTING_MAP[mode],
-        costing_options: { [COSTING_MAP[mode]]: costingOptions },
+        costing: costingFor(mode),
+        costing_options: { [costingFor(mode)]: costingOptions },
         directions_options: {
           units: options.units === "imperial" ? "miles" : "km",
           language: options.lang ?? "en",
@@ -1059,7 +1066,7 @@ export function createValhallaService(
         ...buildExclusions(options),
         ...buildTrafficRequestExtras(
           effectiveTrafficOptions,
-          COSTING_MAP[mode],
+          costingFor(mode),
           costingOptions,
           waypoints.length,
           client.bidirectionalAlternates,
@@ -1099,7 +1106,7 @@ export function createValhallaService(
               data.openmapx_traffic_proof,
               requestId,
               "route",
-              COSTING_MAP[mode],
+              costingFor(mode),
               startedAt,
             )
           : undefined;
@@ -1139,8 +1146,8 @@ export function createValhallaService(
 
       const body: Record<string, unknown> = {
         locations,
-        costing: COSTING_MAP[mode],
-        costing_options: { [COSTING_MAP[mode]]: costingOptions },
+        costing: costingFor(mode),
+        costing_options: { [costingFor(mode)]: costingOptions },
         directions_options: {
           units: options.units === "imperial" ? "miles" : "km",
           language: options.lang ?? "en",
@@ -1167,7 +1174,7 @@ export function createValhallaService(
               data.openmapx_traffic_proof,
               requestId,
               "optimized_route",
-              COSTING_MAP[mode],
+              costingFor(mode),
               startedAt,
             )
           : undefined;
@@ -1220,7 +1227,7 @@ export function createValhallaService(
       const body = {
         shape,
         shape_match: options.shapeMatch ?? "walk_or_snap",
-        costing: COSTING_MAP[mode],
+        costing: costingFor(mode),
         filters: { attributes: TRACE_ATTRIBUTE_FILTER, action: "include" },
       };
 

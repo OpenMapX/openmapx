@@ -242,7 +242,7 @@ export async function withConfigurationGenerationWriter<T>(
   let writer: ConfigurationGenerationWriter | undefined;
   try {
     release = await acquireConfigurationOwnership(infraDir, signal);
-    writer = {
+    const ownWriter: ConfigurationGenerationWriter = {
       commit: (options) => {
         if (!active || pending) throw new Error("Configuration writer is not available");
         pending = commitOwnedConfigurationGeneration({
@@ -252,7 +252,7 @@ export async function withConfigurationGenerationWriter<T>(
         })
           .then((result) => {
             committed = result;
-            writerCommits.set(writer!, result);
+            writerCommits.set(ownWriter, result);
             return result;
           })
           .catch((error) => {
@@ -260,7 +260,7 @@ export async function withConfigurationGenerationWriter<T>(
               error instanceof ConfigurationGenerationError &&
               error.result.outcome === "committed"
             )
-              writerCommits.set(writer!, {
+              writerCommits.set(ownWriter, {
                 revisionId: error.result.revisionId,
                 enabledServiceIds: error.result.enabledServiceIds,
                 warnings: [],
@@ -304,6 +304,7 @@ export async function withConfigurationGenerationWriter<T>(
         return pending;
       },
     };
+    writer = ownWriter;
     liveWriters.add(writer);
     value = await run(writer);
   } catch (error) {

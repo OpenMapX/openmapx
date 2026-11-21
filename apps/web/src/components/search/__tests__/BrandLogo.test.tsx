@@ -2,6 +2,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -53,7 +54,7 @@ describe("BrandLogo", () => {
     expect(screen.getByText("Logo artist", { exact: false })).toBeVisible();
     expect(screen.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
       "href",
-      credited.licensing?.bindings[0].license.url,
+      nth(credited.licensing?.bindings ?? [], 0).license.url,
     );
     expect(screen.getByRole("link", { name: "Wikimedia Commons" })).toHaveAttribute(
       "href",

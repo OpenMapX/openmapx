@@ -95,7 +95,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     const [partial] = await pg.sql.unsafe(
       `SELECT count(*)::int AS count FROM overture_h3test.places WHERE h3_r8 IS NOT NULL AND h3_r8 <> 'prefilled'`,
     );
-    expect(partial.count).toBe(5000);
+    expect(partial?.count).toBe(5000);
     await pg.sql.unsafe("DROP TRIGGER fail_late ON overture_h3test.places");
     await ingestModule.backfillDerivedColumns(dataManagerSql, "overture_h3test");
     const rows = await pg.sql.unsafe<{ gers_id: string; h3_r8: string }[]>(

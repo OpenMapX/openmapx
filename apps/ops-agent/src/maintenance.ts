@@ -348,8 +348,7 @@ export class ConfigurationMaintenance {
     outcome: { value?: MaintenanceApplyOutcome["outcome"]; generation?: unknown } = {},
   ): Promise<typeof outcome> {
     const queue = [...effects];
-    while (queue.length) {
-      const effect = queue.shift()!;
+    for (let effect = queue.shift(); effect !== undefined; effect = queue.shift()) {
       const file = this.read(maintenanceId);
       switch (effect.type) {
         case "start_step":
@@ -364,7 +363,9 @@ export class ConfigurationMaintenance {
           }
           break;
         case "dispatch_step": {
-          const step = file.record.steps[effect.ordinal]!;
+          const step = file.record.steps[effect.ordinal];
+          if (!step)
+            throw Error(`Configuration maintenance step ${effect.ordinal} is not recorded`);
           if (step.phase === "maintenance-handoff") {
             this.launching.add(maintenanceId);
             try {

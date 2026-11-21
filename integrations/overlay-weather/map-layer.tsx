@@ -169,10 +169,10 @@ export function WeatherLayer() {
       const windowStart = Math.max(0, activeFrame - halfWindow);
       const windowEnd = Math.min(allFrames.length, windowStart + WINDOW_SIZE + preloadAhead);
 
-      for (let i = windowStart; i < windowEnd; i++) {
+      for (const [offset, frame] of allFrames.slice(windowStart, windowEnd).entries()) {
+        const i = windowStart + offset;
         const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
         const layerId = `${RADAR_LAYER_PREFIX}${i}`;
-        const frame = allFrames[i];
         mountedRadarFrames.current.set(i, frame.path);
 
         if (!map.getSource(sourceId)) {

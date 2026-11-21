@@ -37,10 +37,10 @@ it("keeps independently acquired piste and area credits on their own records", a
       ],
     });
   const result = await fetchWinterSportsFeatures(50, 8, 50.1, 8.1);
-  expect(result.pistes[0].contributors).toEqual([a]);
-  expect(result.areas[0].contributors).toEqual([b]);
+  expect(result.pistes[0]?.contributors).toEqual([a]);
+  expect(result.areas[0]?.contributors).toEqual([b]);
   a.name = "Changed";
   b.name = "Changed";
-  expect(result.pistes[0].contributors?.[0].name).toBe("Main archive");
-  expect(result.areas[0].contributors?.[0].name).toBe("Area archive");
+  expect(result.pistes[0]?.contributors?.[0]?.name).toBe("Main archive");
+  expect(result.areas[0]?.contributors?.[0]?.name).toBe("Area archive");
 });

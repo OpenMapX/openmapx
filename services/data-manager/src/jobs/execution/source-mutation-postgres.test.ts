@@ -134,7 +134,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       id = admitted.id;
       await expect
-        .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+        .poll(async () => (await runtime.inspect(admitted.id))?.status, { timeout: 15000 })
         .toBe("ok");
       expect(readFeedOverlay(overlayPath)?.patches).toEqual([
         { sourceId: "operator:de:local", skip: true },

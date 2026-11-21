@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
 import { startOpsAgentServer } from "./bootstrap";
 import { persistedJob } from "./test-fixtures/persisted-job";
@@ -27,7 +27,10 @@ it.each(["SIGTERM", "SIGINT"] as const)(
     });
     child.on("message", (message) => {
       const value = message as { event: string; port?: number };
-      if (value.event === "ready") ready.resolve(value.port!);
+      if (value.event === "ready") {
+        assert.isDefined(value.port, "the ready message carries no port");
+        ready.resolve(value.port);
+      }
       if (value.event === "working") working.resolve();
       if (value.event === "stopping") stopping.resolve();
     });

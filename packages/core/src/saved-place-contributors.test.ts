@@ -24,7 +24,7 @@ describe("saved field captures", () => {
     expect(captured).toEqual({ name: [original], address: [], lat: [other], lng: [other] });
     expect(savedPlaceContributors(captured, ["name", "address"])).toEqual([original]);
     original.name = "Changed catalogue";
-    expect(captured?.name?.[0].name).toBe("Original publisher");
+    expect(captured?.name?.[0]?.name).toBe("Original publisher");
     original.name = "Original publisher";
   });
 

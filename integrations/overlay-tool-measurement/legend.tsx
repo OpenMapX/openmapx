@@ -18,7 +18,7 @@ import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { type MeasurementMode, useMeasurementStore } from "./store";
+import { closedRing, type MeasurementMode, useMeasurementStore } from "./store";
 
 function computeTotalDistance(points: LngLat[]): number {
   if (points.length < 2) return 0;
@@ -26,15 +26,13 @@ function computeTotalDistance(points: LngLat[]): number {
 }
 
 function computePolygonArea(points: LngLat[]): number {
-  if (points.length < 3) return 0;
-  const ring = [...points, points[0]];
-  return area(turfPolygon([ring]));
+  const ring = closedRing(points);
+  return ring ? area(turfPolygon([ring])) : 0;
 }
 
 function computePerimeter(points: LngLat[]): number {
-  if (points.length < 3) return 0;
-  const ring = [...points, points[0]];
-  return length(lineString(ring), { units: "meters" });
+  const ring = closedRing(points);
+  return ring ? length(lineString(ring), { units: "meters" }) : 0;
 }
 
 /**

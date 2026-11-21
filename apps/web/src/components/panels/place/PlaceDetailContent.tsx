@@ -227,11 +227,11 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
   // Skip photos that already failed to load so the hero advances through any
   // remaining candidates and, when none load, falls back to the no-photo layout.
   const viableHeroPhotos = placePhotos.filter((p) => !failedHeroUrls.has(p.url));
+  const heroUrl = viableHeroPhotos[0]?.url;
   const hasPhoto =
     !isStopMode &&
-    viableHeroPhotos.length > 0 &&
-    (viableHeroPhotos[0].url.startsWith("https://") ||
-      viableHeroPhotos[0].url.startsWith("http://"));
+    heroUrl !== undefined &&
+    (heroUrl.startsWith("https://") || heroUrl.startsWith("http://"));
   // The hero is suppressed at peek (below) so the collapsed sheet shows the
   // marked [data-omx-peek] subtree — title + chips — instead of a cropped
   // slice of a 220px-tall photo sitting above it and uncounted toward the

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { applyFacetFilters } from "../../places/categoryFacets";
+import type { OverpassFilter } from "../../places/overpassFilter";
 import type { CategoryPlace } from "../../types/category";
-import { applyFacetFilters } from "../../utils/categoryFacets";
-import type { OverpassFilter } from "../../utils/overpassFilter";
 import { useCategoryFacetStore } from "../categoryFacetStore";
 import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../categorySearchStore";
 import { useOpeningHoursStore } from "../openingHoursStore";

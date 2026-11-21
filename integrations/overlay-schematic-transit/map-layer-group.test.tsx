@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildSchematicGroup, SCHEMATIC_SOURCE_ID } from "./map-layer-group";
 
 describe("buildSchematicGroup", () => {
   const group = buildSchematicGroup("https://api.example.org", "tram", "octi");
 
   it("points the vector source at the API proxy without a .mvt suffix", () => {
-    const source = group.sources[SCHEMATIC_SOURCE_ID] as { type: string; tiles: string[] };
-    expect(source.type).toBe("vector");
+    const source = group.sources[SCHEMATIC_SOURCE_ID];
+    assert(source?.type === "vector" && source.tiles, "the group declares a tiled vector source");
     expect(source.tiles).toEqual([
       "https://api.example.org/api/integrations/overlay-schematic-transit/tiles/tram/octi/{z}/{x}/{y}",
     ]);
@@ -25,7 +25,8 @@ describe("buildSchematicGroup", () => {
 
   it("rebuilds tile URLs when the variant changes", () => {
     const other = buildSchematicGroup("https://api.example.org", "rail", "geo");
-    const source = other.sources[SCHEMATIC_SOURCE_ID] as { tiles: string[] };
-    expect(source.tiles[0]).toContain("/tiles/rail/geo/");
+    expect(other.sources[SCHEMATIC_SOURCE_ID]).toMatchObject({
+      tiles: [expect.stringContaining("/tiles/rail/geo/")],
+    });
   });
 });

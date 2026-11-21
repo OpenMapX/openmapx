@@ -66,10 +66,11 @@ export async function cancelAdminDataChildren(
     (root) => isFixedSingleDataCommand(root.kind) || root.kind === "data.update",
   );
   if (!children.length && !candidates.length) return "none";
-  if (!options.context) return "pending";
+  const { context } = options;
+  if (!context) return "pending";
   const persist = async () => {
-    await options.context!.checkpoint({
-      ...options.context!.checkpointResult,
+    await context.checkpoint({
+      ...context.checkpointResult,
       _dataExecutions: children,
     });
   };

@@ -36,8 +36,8 @@ function* fields(bytes: Uint8Array): Generator<Field> {
     let result = 0;
     let scale = 1;
     for (let i = 0; i < 10; i += 1) {
-      if (offset >= bytes.length) throw new Error("truncated varint");
-      const byte = bytes[offset++] as number;
+      const byte = bytes[offset++];
+      if (byte === undefined) throw new Error("truncated varint");
       result += (byte & 0x7f) * scale;
       if ((byte & 0x80) === 0) {
         if (!Number.isSafeInteger(result)) throw new Error("varint out of range");

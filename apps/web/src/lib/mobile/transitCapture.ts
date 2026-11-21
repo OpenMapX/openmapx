@@ -14,6 +14,7 @@ import pMap from "p-map";
  * invent stops that would put someone off a train in the wrong place.
  */
 
+import { itemAt } from "@openmapx/core";
 import { transitStopAreaSchema, transitStopsNeedingAreas } from "@openmapx/core/navigation";
 import {
   type ApiClient,
@@ -172,7 +173,8 @@ export async function prepareTransitStart(
   const journeys: Record<string, readonly JourneyStopLike[] | undefined> = {};
   const outcomes: CaptureOutcome[] = [];
   for (const [index, tripId] of tripIds.entries()) {
-    const stops = fetched[index].stops;
+    // pMap returns one result per trip, in order.
+    const stops = itemAt(fetched, index, "journey result").stops;
     journeys[tripId] = stops;
     outcomes.push({ tripId, status: stops && stops.length > 0 ? "captured" : "missing" });
   }

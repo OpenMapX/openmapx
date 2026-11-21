@@ -166,12 +166,14 @@ function orderedRouteLines(route: RouteInfo, polylines: RoutePolyline[]): [numbe
     const polyline = polylines[segment.polyline];
     if (!polyline?.polyline?.points) continue;
     const decoded = decodePolyline(polyline.polyline.points, polyline.polyline.precision ?? 6);
-    if (decoded.length < 2) continue;
-    const previous = lines[lines.length - 1];
-    const previousEnd = previous?.[previous.length - 1];
-    if (previousEnd && coordinatesEqual(previousEnd, decoded[0])) {
+    const first = decoded[0];
+    const last = decoded.at(-1);
+    if (decoded.length < 2 || !first || !last) continue;
+    const previous = lines.at(-1);
+    const previousEnd = previous?.at(-1);
+    if (previous && previousEnd && coordinatesEqual(previousEnd, first)) {
       previous.push(...decoded.slice(1));
-    } else if (previousEnd && coordinatesEqual(previousEnd, decoded[decoded.length - 1])) {
+    } else if (previous && previousEnd && coordinatesEqual(previousEnd, last)) {
       // Shared polylines may be stored in the opposite traversal direction.
       previous.push(...decoded.slice(0, -1).reverse());
     } else {
@@ -201,7 +203,7 @@ export function mapMotisRoute(
     textColor: info?.textColor ? info.textColor.replace(/^#/, "") : undefined,
     operatorName: "",
     geometry:
-      lines.length === 1
+      lines.length === 1 && lines[0]
         ? { type: "LineString", coordinates: lines[0] }
         : lines.length > 1
           ? { type: "MultiLineString", coordinates: lines }
@@ -760,8 +762,9 @@ export async function getRouteStops(
         decodeMotisLineReference(route.id)?.r === line.r ||
         validateMotisRoutePatternEpoch(route.id, activeEpoch)?.r.includes(line.r),
     );
-    if (matchingPatterns.length !== 1) return [];
-    pattern = validateMotisRoutePatternEpoch(matchingPatterns[0].id, activeEpoch);
+    const [match, ...otherMatches] = matchingPatterns;
+    if (!match || otherMatches.length > 0) return [];
+    pattern = validateMotisRoutePatternEpoch(match.id, activeEpoch);
   }
   if (!pattern) return [];
   const response = await fetchRouteDetails(instance, pattern.i);
@@ -1033,8 +1036,9 @@ export function mapItinerary(
   const legs = it.legs.map((leg) => mapLeg(instance, leg, datasetEpoch));
   if (context) {
     for (const [index, raw] of it.legs.entries()) {
-      if (!raw.alternatives?.length) continue;
-      legs[index].alternatives = raw.alternatives.slice(0, 2).flatMap((chain) => {
+      const leg = legs[index];
+      if (!leg || !raw.alternatives?.length) continue;
+      leg.alternatives = raw.alternatives.slice(0, 2).flatMap((chain) => {
         const compact = mapAlternatives(instance, [chain])[0];
         if (!compact || !chain.every(legIsPlaceable)) return [];
         const replaces = alternativeReplacement(it, index, chain, context);
@@ -1474,9 +1478,11 @@ export async function getLegGeometry(
   for (const leg of transitLegs.slice(startLeg, endLeg + 1)) {
     if (!leg.legGeometry?.points) return null;
     const decoded = decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6);
-    if (decoded.length < 2) return null;
-    if (coordinates.length > 0) {
-      if (!coordinatesEqual(coordinates[coordinates.length - 1], decoded[0])) return null;
+    const [first] = decoded;
+    if (decoded.length < 2 || !first) return null;
+    const end = coordinates.at(-1);
+    if (end) {
+      if (!coordinatesEqual(end, first)) return null;
       coordinates.push(...decoded.slice(1));
     } else {
       coordinates.push(...decoded);
@@ -1507,8 +1513,7 @@ export async function getTrip(
   if (!legs?.length) return null;
   try {
     const journeyStops: VehicleJourneyStop[] = [];
-    for (let i = 0; i < legs.length; i++) {
-      const leg = legs[i];
+    for (const [i, leg] of legs.entries()) {
       // A stop without coordinates cannot be drawn on the journey; it is left out.
       const places = [...(i === 0 ? [leg.from] : []), ...(leg.intermediateStops ?? []), leg.to];
       for (const place of places) {

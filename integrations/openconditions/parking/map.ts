@@ -138,9 +138,9 @@ function countsOf(
   const statusValue = oneOf<ParkingStatus>(STATUSES, rec(status?.result)["value"]);
   const trendValue = oneOf<ParkingTrend>(TRENDS, rec(trend?.result)["value"]);
   const used = [
-    ...(free !== undefined ? [available!] : []),
-    ...(statusValue !== undefined ? [status!] : []),
-    ...(trendValue !== undefined ? [trend!] : []),
+    ...(free !== undefined && available ? [available] : []),
+    ...(statusValue !== undefined && status ? [status] : []),
+    ...(trendValue !== undefined && trend ? [trend] : []),
   ];
   const times = used
     .map((r) => instantOf(r.phenomenonTime))
@@ -271,9 +271,10 @@ export function recordToParkingSite(
       contributors: readingCredits(...own.used),
     };
     const held = areas.findIndex((a) => a.key === area.key);
+    const current = areas[held];
     // Two areas under one key are one area: a counted one replaces one that only says it exists.
-    if (held === -1) areas.push(area);
-    else if (!counted(areas[held]!) && counted(area)) areas[held] = area;
+    if (!current) areas.push(area);
+    else if (!counted(current) && counted(area)) areas[held] = area;
     else continue;
   }
 

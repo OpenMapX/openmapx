@@ -336,7 +336,7 @@ domain deliberately does not replace the
 geocoding fallback chain; `SearchBar` merges both responses after each has
 applied its own semantics.
 
-The client merge in `packages/core/src/utils/searchSuggestion.ts` gives exact
+The client merge in `packages/core/src/search/searchSuggestion.ts` gives exact
 result IDs and shared external identities precedence over spatial heuristics.
 Ordinary POIs require independent source-record namespaces, equivalent concrete
 address context and compatible category/entity evidence; same name and proximity

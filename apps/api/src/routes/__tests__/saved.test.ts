@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
@@ -9,6 +10,7 @@ import {
   orderByArgs,
   whereArgs,
 } from "../../test/db.js";
+import { callArg } from "../../test/mock-calls";
 
 const USER_ID = "user-A";
 
@@ -191,11 +193,15 @@ describe("GET /api/saved/lists", () => {
   it("seeds default lists for a first-time user when none exist", async () => {
     dbMock.db.select.mockImplementationOnce(() => makeQueryChain([]));
     dbMock.db.select.mockImplementationOnce(() => {
-      const inserted = (
-        dbMock.db.insert.mock.results[0].value as {
-          values: { mock: { calls: [{ userId: string }[]][] } };
-        }
-      ).values.mock.calls[0][0];
+      const inserted = callArg(
+        (
+          itemAt(dbMock.db.insert.mock.results, 0).value as {
+            values: { mock: { calls: [{ userId: string }[]][] } };
+          }
+        ).values,
+        0,
+        0,
+      );
       return makeQueryChain(
         inserted.map(({ userId: _userId, ...row }) => ({
           ...row,
@@ -282,9 +288,15 @@ describe("POST /api/saved/lists", () => {
 
     // The inserted row must carry the caller's userId — never a client value.
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    const insertedValues = (
-      dbMock.db.insert.mock.results[0].value as { values: { mock: { calls: unknown[][] } } }
-    ).values.mock.calls[0][0] as { userId: string };
+    const insertedValues = callArg(
+      (
+        itemAt(dbMock.db.insert.mock.results, 0).value as {
+          values: { mock: { calls: unknown[][] } };
+        }
+      ).values,
+      0,
+      0,
+    ) as { userId: string };
     expect(insertedValues.userId).toBe(USER_ID);
   });
 
@@ -409,9 +421,12 @@ describe("PATCH /api/saved/lists/:id", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const setArg = (
-      dbMock.db.update.mock.results[0].value as { set: { mock: { calls: unknown[][] } } }
-    ).set.mock.calls[0][0] as Record<string, unknown>;
+    const setArg = callArg(
+      (itemAt(dbMock.db.update.mock.results, 0).value as { set: { mock: { calls: unknown[][] } } })
+        .set,
+      0,
+      0,
+    ) as Record<string, unknown>;
     expect(setArg).not.toHaveProperty("name");
     expect(setArg.sortOrder).toBe(5);
   });
@@ -630,9 +645,15 @@ describe("PUT /api/saved/labels/:label", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().label).toBe("home");
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    const insertedValues = (
-      dbMock.db.insert.mock.results[0].value as { values: { mock: { calls: unknown[][] } } }
-    ).values.mock.calls[0][0] as { userId: string };
+    const insertedValues = callArg(
+      (
+        itemAt(dbMock.db.insert.mock.results, 0).value as {
+          values: { mock: { calls: unknown[][] } };
+        }
+      ).values,
+      0,
+      0,
+    ) as { userId: string };
     expect(insertedValues.userId).toBe(USER_ID);
     // The existence lookup is scoped to the caller.
     const where = whereArgs(dbMock, "select", 0);

@@ -152,7 +152,7 @@ it("returns the durable apply identity without putting session proof material in
     { client },
   );
   expect(result.status).toBe(202);
-  expect(unwrapAdminResponse(result)).toEqual(await mocks.apply.mock.results[0].value);
+  expect(unwrapAdminResponse(result)).toEqual(await mocks.apply.mock.results[0]?.value);
   expect(mocks.apply).toHaveBeenCalledWith(
     expect.objectContaining({ ...body, actorId: "test-admin-id" }),
   );

@@ -64,7 +64,7 @@ export function journeysToRefetch(session: TransitMobileSession): string[] {
   const tripIds: string[] = [];
   for (let index = from; index < legs.length; index += 1) {
     const leg = legs[index];
-    if (leg.mode === "walking" || !leg.route || !leg.tripId) continue;
+    if (!leg || leg.mode === "walking" || !leg.route || !leg.tripId) continue;
     if (!tripIds.includes(leg.tripId)) tripIds.push(leg.tripId);
   }
   return tripIds;

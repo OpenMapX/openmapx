@@ -140,10 +140,11 @@ function conciseAddress(label: string, sublabel?: string): string | undefined {
   if (parts.length < 2 || parts.some((part) => !part)) return sublabel;
 
   const same = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
-  const remaining = same(parts[0], label.trim()) ? parts.slice(1) : parts;
-  const distinct = remaining.filter(
-    (part, index) => index === 0 || !same(part, remaining[index - 1]),
-  );
+  const remaining = parts[0] !== undefined && same(parts[0], label.trim()) ? parts.slice(1) : parts;
+  const distinct = remaining.filter((part, index) => {
+    const previous = remaining[index - 1];
+    return previous === undefined || !same(part, previous);
+  });
   if (remaining.length === parts.length && distinct.length === remaining.length) return sublabel;
   return distinct.join(", ") || undefined;
 }

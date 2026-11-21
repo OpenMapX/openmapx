@@ -92,8 +92,8 @@ export function bindMapLongPress(
       longPressReleasedAt = Number.NEGATIVE_INFINITY;
     }
     cancel();
-    if (event.touches.length !== 1 || event.target !== canvas) return;
     const touch = event.touches[0];
+    if (event.touches.length !== 1 || !touch || event.target !== canvas) return;
     start = { x: touch.clientX, y: touch.clientY };
     timer = setTimeout(() => {
       timer = null;

@@ -14,13 +14,13 @@ describe("CSV parser", () => {
   it('handles quoted fields with embedded commas (airport names like "Hartsfield-Jackson Atlanta International, GA")', () => {
     const text = ["id,name", '1,"Hartsfield-Jackson Atlanta International, GA"'].join("\n");
     const rows = parseCsv(text);
-    expect(rows[0].name).toBe("Hartsfield-Jackson Atlanta International, GA");
+    expect(rows[0]?.name).toBe("Hartsfield-Jackson Atlanta International, GA");
   });
 
   it("handles doubled quotes inside quoted fields", () => {
     const text = ["id,name", '1,"He said ""hi"" today"'].join("\n");
     const rows = parseCsv(text);
-    expect(rows[0].name).toBe('He said "hi" today');
+    expect(rows[0]?.name).toBe('He said "hi" today');
   });
 
   it("tolerates trailing blank lines", () => {

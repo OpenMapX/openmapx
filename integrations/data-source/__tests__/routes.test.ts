@@ -6,9 +6,10 @@ import type {
 } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
+  nth,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
 const FRESHNESS = { fetchedAt: "2026-10-04T10:00:00.000Z", hasRealtimeData: false, isStale: false };
@@ -76,7 +77,9 @@ function reply() {
 }
 
 function route(ctx: ReturnType<typeof ctxWith>, path: string) {
-  return ctx.registered.routes.find((r) => r.method === "GET" && r.path === path)!.handler;
+  const registered = ctx.registered.routes.find((r) => r.method === "GET" && r.path === path);
+  assert.isDefined(registered, `no GET ${path} route`);
+  return registered.handler;
 }
 
 async function search(ctx: ReturnType<typeof ctxWith>) {
@@ -136,7 +139,7 @@ describe("data-source list route", () => {
     const list = async () => {
       const res = reply();
       await route(ctx, "/")(routeRequest({ query: {} }), res);
-      return (res.send.mock.calls[0]![0] as { sources: { id: string }[] }).sources;
+      return (nth(res.send.mock.calls, 0)[0] as { sources: { id: string }[] }).sources;
     };
 
     expect(await list()).toEqual([]);
@@ -152,8 +155,10 @@ describe("data-source list route", () => {
     const list = async () => {
       const res = reply();
       await route(ctx, "/")(routeRequest({ query: {} }), res);
-      return (res.send.mock.calls[0]![0] as { sources: { filters: { id: string }[] }[] })
-        .sources[0]!.filters;
+      return nth(
+        (nth(res.send.mock.calls, 0)[0] as { sources: { filters: { id: string }[] }[] }).sources,
+        0,
+      ).filters;
     };
 
     expect((await list()).map((f) => f.id)).toEqual(["old"]);
@@ -165,7 +170,7 @@ describe("data-source list route", () => {
     const ctx = ctxWith(provider());
     const res = reply();
     await route(ctx, "/")(routeRequest({ query: {} }), res);
-    expect(res.send.mock.calls[0]![0]).toMatchObject({ sources: [{ id: "fuel" }] });
+    expect(nth(res.send.mock.calls, 0)[0]).toMatchObject({ sources: [{ id: "fuel" }] });
   });
 });
 
@@ -189,7 +194,7 @@ describe("data-source detail route", () => {
   }
 
   const sent = (res: ReturnType<typeof reply>) =>
-    (res.send.mock.calls[0]![0] as { data: DataSourceDetail }).data;
+    (nth(res.send.mock.calls, 0)[0] as { data: DataSourceDetail }).data;
 
   afterEach(() => {
     vi.useRealTimers();

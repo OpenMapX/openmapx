@@ -1,6 +1,7 @@
 import {
   createFencedMemoryCache,
   createMockIntegrationContext,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "../index";
@@ -35,7 +36,11 @@ function honoringUpstream(boxes: Box[], sensorCommunity: unknown[] = []) {
     if (u.includes("opensensemap")) {
       const match = /bbox=([^&]+)/.exec(u);
       if (!match) throw new Error(`openSenseMap URL without bbox: ${u}`);
-      const [west, south, east, north] = match[1].split(",").map(Number);
+      const bbox = nth(match, 1).split(",").map(Number);
+      const west = nth(bbox, 0);
+      const south = nth(bbox, 1);
+      const east = nth(bbox, 2);
+      const north = nth(bbox, 3);
       const inside = (b: Box) => {
         const [lng, lat] = b.currentLocation.coordinates;
         return lat >= south && lat <= north && lng >= west && lng <= east;
@@ -100,7 +105,7 @@ it("serves each viewport sharing a cache key the stations inside its own bbox", 
 
   const calls = openSenseMapCalls(fetch);
   expect(calls).toHaveLength(1);
-  expect(String(calls[0][0])).toContain("bbox=6.4,50.4,6.5,50.5");
+  expect(String(calls[0]?.[0])).toContain("bbox=6.4,50.4,6.5,50.5");
 });
 
 it("does not cache a failed upstream read, so the next request retries and returns data", async () => {

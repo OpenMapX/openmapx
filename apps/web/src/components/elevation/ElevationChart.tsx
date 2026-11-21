@@ -123,9 +123,9 @@ export function ElevationChart({ points, mode, units }: ElevationChartProps) {
   // Pre-build a lookup from display point distance to original index (avoids O(n*m) indexOf)
   const chartData = useMemo<ChartDatum[]>(() => {
     const distToIndex = new Map<number, number>();
-    for (let i = 0; i < points.length; i++) {
-      distToIndex.set(points[i].distance, i);
-    }
+    points.forEach((point, i) => {
+      distToIndex.set(point.distance, i);
+    });
     return displayPoints.map((p) => ({
       distance: p.distance,
       elevation: p.elevation,
@@ -137,9 +137,9 @@ export function ElevationChart({ points, mode, units }: ElevationChartProps) {
 
   // Build gradient stops based on slope steepness
   const gradientStops = useMemo(() => {
-    if (mode === "driving" || chartData.length < 2) return null;
-    const totalDist = chartData[chartData.length - 1].distance;
-    if (totalDist <= 0) return null;
+    const totalDist = chartData.at(-1)?.distance;
+    if (mode === "driving" || chartData.length < 2 || totalDist === undefined || totalDist <= 0)
+      return null;
 
     const stops: Array<{ offset: string; color: string }> = [];
     for (const d of chartData) {
@@ -169,9 +169,8 @@ export function ElevationChart({ points, mode, units }: ElevationChartProps) {
     // biome-ignore lint/suspicious/noExplicitAny: Recharts event type varies across versions
     (state: any) => {
       const idx = state?.activeTooltipIndex;
-      if (idx != null && idx >= 0 && idx < chartData.length) {
-        setHoveredIndex(chartData[idx].originalIndex);
-      }
+      const datum = idx != null && idx >= 0 ? chartData[idx] : undefined;
+      if (datum) setHoveredIndex(datum.originalIndex);
     },
     [chartData, setHoveredIndex],
   );

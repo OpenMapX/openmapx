@@ -1,5 +1,6 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
 import { isOpenMapXNotificationId } from "../../notifications/notificationIds";
+import { nth } from "../../testing/nth";
 import {
   type AlightAlertCopy,
   alertHasChanged,
@@ -20,7 +21,7 @@ const COPY: AlightAlertCopy = {
 /** A session riding the transit leg, with the capture times a feed would supply. */
 function riding(overrides: Partial<TransitMobileSession> = {}): TransitMobileSession {
   const base = transitSessionFixture(overrides);
-  const capture = base.payload.startPackage.captures[0];
+  const capture = nth(base.payload.startPackage.captures, 0);
   return {
     ...base,
     // The fixture itinerary carries 2026 ISO times, so the session's own clock
@@ -59,8 +60,8 @@ describe("computeAlightAlert", () => {
 
   it("prefers a live expected departure over the scheduled one", () => {
     const session = riding();
-    const capture = session.payload.startPackage.captures[0];
-    capture.stops[2].expectedDeparture = new Date(ARRIVAL_MS - 2 * 60_000).toISOString();
+    const capture = nth(session.payload.startPackage.captures, 0);
+    nth(capture.stops, 2).expectedDeparture = new Date(ARRIVAL_MS - 2 * 60_000).toISOString();
 
     expect(computeAlightAlert(session, NOW, COPY)?.triggerAtMs).toBe(ARRIVAL_MS - 2 * 60_000);
   });
@@ -89,7 +90,7 @@ describe("computeAlightAlert", () => {
     const legs = (
       session.payload.startPackage.itinerary as { legs: Array<{ to: Record<string, unknown> }> }
     ).legs;
-    legs[1].to.platformCode = "7";
+    nth(legs, 1).to.platformCode = "7";
 
     const alert = computeAlightAlert(session, NOW, COPY);
 
@@ -101,7 +102,7 @@ describe("computeAlightAlert", () => {
     const first = computeAlightAlert(riding(), NOW, COPY);
 
     const shifted = riding();
-    shifted.payload.startPackage.captures[0].stops[2].expectedDeparture = new Date(
+    nth(nth(shifted.payload.startPackage.captures, 0).stops, 2).expectedDeparture = new Date(
       ARRIVAL_MS - 2 * 60_000,
     ).toISOString();
     const second = computeAlightAlert(shifted, NOW, COPY);
@@ -140,7 +141,7 @@ describe("computeAlightAlert", () => {
     const legs = (
       session.payload.startPackage.itinerary as { legs: Array<Record<string, unknown>> }
     ).legs;
-    legs[1].cancelled = true;
+    nth(legs, 1).cancelled = true;
 
     expect(computeAlightAlert(session, NOW, COPY)).toBeNull();
   });
@@ -171,7 +172,7 @@ describe("computeAlightAlert", () => {
     const legs = (
       nameless.payload.startPackage.itinerary as { legs: Array<{ to: { name?: string } }> }
     ).legs;
-    legs[1].to.name = undefined;
+    nth(legs, 1).to.name = undefined;
 
     expect(computeAlightAlert(nameless, NOW, COPY)).toBeNull();
   });
@@ -182,8 +183,7 @@ describe("computeAlightAlert", () => {
     const legs = (
       timeless.payload.startPackage.itinerary as { legs: Array<Record<string, unknown>> }
     ).legs;
-    legs[1].endTime = undefined;
-    legs[1].scheduledEndTime = undefined;
+    Object.assign(nth(legs, 1), { endTime: undefined, scheduledEndTime: undefined });
 
     expect(computeAlightAlert(timeless, NOW, COPY)).toBeNull();
   });

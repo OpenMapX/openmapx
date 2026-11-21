@@ -169,7 +169,7 @@ it("copies nested receipts when a field is renamed without widening missing owne
   );
   expect(copied).toEqual({ labels: [], "labels.de": [a], "labels.en": [] });
   a.name = "Changed";
-  expect(copied["labels.de"]?.[0].name).toBe("Original");
+  expect(copied["labels.de"]?.[0]?.name).toBe("Original");
 });
 
 it("converts only trusted static credit metadata without carrying provider controls", async () => {
@@ -214,7 +214,7 @@ it("captures independent field receipts when attaching a record receipt at acqui
     [parent],
   );
   field.name = "Changed";
-  expect(captured.fieldContributors.name[0].name).toBe("Original field");
+  expect(captured.fieldContributors.name?.[0]?.name).toBe("Original field");
   expect(captured.fieldContributors.hidden).toEqual([]);
 });
 
@@ -224,22 +224,20 @@ it("resolves nested displayed fields from the closest canonical child with index
     contributors: [a],
     fieldContributors: { legs: [a], "legs.0.steps.1.instruction": [b] },
   };
-  const legacy = [
-    { field: "legs.0", record: {} },
-    { field: "steps.1", record: {} },
-  ];
+  const stepsLegacy = { field: "steps.1", record: {} };
+  const legacy = [{ field: "legs.0", record: {} }, stepsLegacy];
   expect(contributorsForNestedRecordFields(root, legacy, ["instruction"])).toEqual([b]);
   expect(
     contributorsForNestedRecordFields(
       root,
-      [{ field: "legs.0", record: { contributors: [] } }, legacy[1]],
+      [{ field: "legs.0", record: { contributors: [] } }, stepsLegacy],
       ["instruction"],
     ),
   ).toEqual([]);
   expect(
     contributorsForNestedRecordFields(
       root,
-      [{ field: "legs.0", record: { fieldContributors: {} } }, legacy[1]],
+      [{ field: "legs.0", record: { fieldContributors: {} } }, stepsLegacy],
       ["instruction"],
     ),
   ).toEqual([]);

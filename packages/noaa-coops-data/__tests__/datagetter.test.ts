@@ -1,6 +1,6 @@
 import type { Logger } from "@openmapx/integration-framework";
 import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import {
   fetchHighLowPredictions,
   fetchLatestMet,
@@ -46,9 +46,14 @@ afterEach(() => {
 });
 
 // Extract the `begin_date=YYYYMMDD` value from the URL the source built.
-function beginDateFromCall(call: unknown[]): string {
-  const url = new URL(call[0] as string);
-  return url.searchParams.get("begin_date") ?? "";
+function requestUrl(call: unknown[] | undefined): URL {
+  const [url] = call ?? [];
+  assert(typeof url === "string", "fetch was not called with a URL");
+  return new URL(url);
+}
+
+function beginDateFromCall(call: unknown[] | undefined): string {
+  return requestUrl(call).searchParams.get("begin_date") ?? "";
 }
 
 describe("utcDateMinusOneDay (via begin_date param)", () => {
@@ -210,7 +215,7 @@ describe("fetchHighLowPredictions", () => {
 
     await fetchHighLowPredictions(http, "9410230", makeLogger());
 
-    const url = new URL(mockFetch.mock.calls[0][0] as string);
+    const url = requestUrl(mockFetch.mock.calls[0]);
     expect(url.searchParams.get("station")).toBe("9410230");
     expect(url.searchParams.get("product")).toBe("predictions");
     expect(url.searchParams.get("interval")).toBe("hilo");
@@ -263,7 +268,7 @@ describe("fetchTideCurve", () => {
 
     await fetchTideCurve(http, "9410230", makeLogger(), 24);
 
-    const url = new URL(mockFetch.mock.calls[0][0] as string);
+    const url = requestUrl(mockFetch.mock.calls[0]);
     expect(url.searchParams.get("range")).toBe("24");
     expect(url.searchParams.get("interval")).toBe("30");
   });
@@ -273,7 +278,7 @@ describe("fetchTideCurve", () => {
 
     await fetchTideCurve(http, "9410230", makeLogger());
 
-    const url = new URL(mockFetch.mock.calls[0][0] as string);
+    const url = requestUrl(mockFetch.mock.calls[0]);
     expect(url.searchParams.get("range")).toBe("48");
   });
 
@@ -402,7 +407,7 @@ describe("fetchLatestWaterLevel", () => {
 
     await fetchLatestWaterLevel(http, "9410230", makeLogger());
 
-    const url = new URL(mockFetch.mock.calls[0][0] as string);
+    const url = requestUrl(mockFetch.mock.calls[0]);
     expect(url.searchParams.get("product")).toBe("water_level");
     expect(url.searchParams.get("date")).toBe("latest");
   });

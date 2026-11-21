@@ -116,8 +116,9 @@ async function loadEmailConfig(): Promise<EmailConfig> {
 
 /** Parse "Name <addr>" or plain "addr" into { name, address }. */
 function parseFrom(raw: string): { name: string; address: string } {
-  const match = raw.match(/^(.+?)\s*<(.+)>$/);
-  if (match) return { name: match[1].trim(), address: match[2].trim() };
+  const [, name, address] = raw.match(/^(.+?)\s*<(.+)>$/) ?? [];
+  if (name !== undefined && address !== undefined)
+    return { name: name.trim(), address: address.trim() };
   return { name: "", address: raw.trim() };
 }
 

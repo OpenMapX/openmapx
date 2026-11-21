@@ -88,7 +88,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       const applied =
         await fixture.sql`SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations`;
-      expect(applied[0].count).toBe(journal.entries.length);
+      expect(applied[0]?.count).toBe(journal.entries.length);
     });
     it("applies the new migration to historical encrypted and plaintext development rows", async () => {
       const initialSql = await readFile(
@@ -113,13 +113,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           if (statement.trim()) await sql.unsafe(statement);
         const rows = await sql`SELECT * FROM mangrove_keypair`;
         expect(rows).toHaveLength(1);
-        expect(rows[0].user_id).toBe("encrypted");
-        expect(rows[0].revision).toBeTypeOf("string");
-        expect(rows[0].passphrase_ciphertext).toBe("retained");
+        expect(rows[0]?.user_id).toBe("encrypted");
+        expect(rows[0]?.revision).toBeTypeOf("string");
+        expect(rows[0]?.passphrase_ciphertext).toBe("retained");
         expect(rows[0]).not.toHaveProperty("private_jwk");
         const wraps = await sql`SELECT * FROM mangrove_keypair_wrap`;
         expect(wraps).toHaveLength(1);
-        expect(wraps[0].user_id).toBe("encrypted");
+        expect(wraps[0]?.user_id).toBe("encrypted");
         await sql`DROP SCHEMA mangrove_migration_fixture CASCADE`;
       });
     });

@@ -98,9 +98,9 @@ export async function ambientPlacesRoute(
     async (request, reply) => {
       reply.header("Cache-Control", "no-store");
       const { generation } = request.params;
-      const { z, x, y } = Object.fromEntries(
-        ["z", "x", "y"].map((k) => [k, Number(request.params[k as "z" | "x" | "y"])]),
-      );
+      const z = Number(request.params.z);
+      const x = Number(request.params.x);
+      const y = Number(request.params.y);
       if (
         ![request.params.z, request.params.x, request.params.y].every((v) => /^\d+$/.test(v)) ||
         !validAmbientTile(generation, z, x, y)

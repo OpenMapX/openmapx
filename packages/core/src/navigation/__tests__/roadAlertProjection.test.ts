@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawRoadAlert, RoadAlertRoad } from "../../api/roadAlerts";
 import type { LngLat } from "../../types/geometry";
-import { cumulativeDistances } from "../deadReckon";
+import { cumulativeDistances, distanceAtVertex } from "../deadReckon";
 import { projectRoadAlertsOntoRoute } from "../roadAlertProjection";
 
 const BASE_LAT = 51.23;
@@ -43,7 +43,7 @@ function project(alerts: RawRoadAlert[], geometry: LngLat[]) {
   const cum = cumulativeDistances(geometry);
   return projectRoadAlertsOntoRoute(alerts, geometry, cum, {
     fromMeters: 0,
-    toMeters: cum[cum.length - 1],
+    toMeters: distanceAtVertex(cum, cum.length - 1),
   });
 }
 
@@ -71,7 +71,7 @@ describe("projectRoadAlertsOntoRoute", () => {
     const route = line([150, 0], [42, 0], [7, 0], [0, 0], [0, 100]);
     const [projected] = project([alert([SIDE_STREET_STOP])], route);
     expect(projected).toMatchObject({ id: "stop:1", type: "stop" });
-    expect(projected.alongMeters).toBeCloseTo(143, 0);
+    expect(projected?.alongMeters).toBeCloseTo(143, 0);
   });
 
   it("does not attach it to a route leaving the junction along the side street", () => {
@@ -191,7 +191,7 @@ describe("projectRoadAlertsOntoRoute", () => {
       1,
     );
     const [projected] = project([alert([street])], route);
-    expect(projected.alongMeters).toBeCloseTo(3, 0);
+    expect(projected?.alongMeters).toBeCloseTo(3, 0);
   });
 
   it("survives duplicate route vertices", () => {
@@ -206,7 +206,7 @@ describe("projectRoadAlertsOntoRoute", () => {
     );
     const projected = project([alert([street])], route);
     expect(projected).toHaveLength(1);
-    expect(Number.isFinite(projected[0].alongMeters)).toBe(true);
+    expect(Number.isFinite(projected[0]?.alongMeters)).toBe(true);
   });
 
   it("ignores an alert without roads and alerts outside the window", () => {

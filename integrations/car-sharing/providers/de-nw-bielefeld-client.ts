@@ -15,9 +15,9 @@ const WFS_URL =
 
 /** Parse WKT POINT geometry → [lng, lat]. */
 function parseWktPoint(wkt: string): [number, number] | null {
-  const match = wkt.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/);
-  if (!match) return null;
-  return [Number.parseFloat(match[1]), Number.parseFloat(match[2])];
+  const [, lng, lat] = wkt.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/) ?? [];
+  if (lng === undefined || lat === undefined) return null;
+  return [Number.parseFloat(lng), Number.parseFloat(lat)];
 }
 
 export function parseDeNwBielefeldCsv(body: string): SharedMobilityStation[] {

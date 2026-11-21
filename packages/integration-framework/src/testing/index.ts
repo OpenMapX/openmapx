@@ -54,6 +54,7 @@ import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
 import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
+import { storedRouteHandler } from "../route-handler";
 
 export interface FakeMobilityHttpRequest {
   kind: "json" | "text";
@@ -605,7 +606,7 @@ export function createMockIntegrationContext(
       registered.gtfsCatalog.push(p);
     },
     registerRoute: (method, path, handler, options) => {
-      registered.routes.push({ method, path, handler, options });
+      registered.routes.push({ method, path, handler: storedRouteHandler(handler), options });
     },
     registerHealthCheck: (fn) => {
       registered.healthChecks.push(fn);
@@ -700,3 +701,5 @@ export function loadFixture(baseDir: string, ...segments: string[]): string {
 export function loadJsonFixture<T = unknown>(baseDir: string, ...segments: string[]): T {
   return JSON.parse(loadFixture(baseDir, ...segments)) as T;
 }
+
+export { nth } from "./nth";

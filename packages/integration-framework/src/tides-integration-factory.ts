@@ -142,7 +142,7 @@ export function createTidesIntegration<S extends TideStationBase>(
     ((stations: S[], param: string) => config.findStationById(stations, param));
 
   registerPlaceResolver(config.scheme, async (value, resolveCtx) => {
-    const id = value.split(":")[0].trim();
+    const id = (value.split(":")[0] ?? "").trim();
     if (!id) return null;
     const stations = await config.loadStations(ctx);
     const station = config.findStationById(stations, id);

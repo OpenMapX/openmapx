@@ -23,9 +23,10 @@ export function mergeAttributions(
 }
 
 export function mergeFreshness(...values: Freshness[]): Freshness {
-  if (values.length === 0) return freshnessNow();
+  const [first] = values;
+  if (!first) return freshnessNow();
 
-  let fetchedAt = values[0].fetchedAt;
+  let fetchedAt = first.fetchedAt;
   let hasRealtimeData = false;
   let isStale = false;
   let isPartial = false;

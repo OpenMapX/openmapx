@@ -1,4 +1,4 @@
-import { readBoundedJsonResponse, readBoundedResponseText } from "../utils/fetchJson";
+import { readBoundedJsonResponse, readBoundedResponseText } from "../http/fetchJson";
 import { consumeAdminBytes } from "./admin-byte-reader";
 import {
   type ApiClient,
@@ -130,7 +130,8 @@ export function createOperationBinder<const Operations extends Record<string, Ap
   registry: Operations,
 ) {
   return (operationId: keyof Operations) => {
-    const operation: ApiOperation = registry[operationId];
+    const operation: ApiOperation | undefined = registry[operationId];
+    if (!operation) throw new Error(`Unknown API operation ${String(operationId)}`);
     assertOperationContract(operation);
     return async <T = OperationResponse>(
       url: string,

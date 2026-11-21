@@ -69,10 +69,10 @@ integration("single-extension component ownership migration", () => {
     );
 
     // Nothing was removed or reassigned.
-    const [{ count }] = await sql<{ count: string }[]>`
+    const [components] = await sql<{ count: string }[]>`
       SELECT count(*)::text AS count FROM installed_extension_component
     `;
-    expect(count).toBe("5");
+    expect(components?.count).toBe("5");
     const indexes = await sql<{ indexname: string }[]>`
       SELECT indexname FROM pg_indexes
       WHERE indexname = 'installedExtensionComponent_kind_componentId_key'

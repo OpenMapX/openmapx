@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../src/cache.js";
 import { buildEnturGeofencingMapContext, enrichEnturMobilityItems } from "../src/entur-mobility.js";
 import type { GbfsCatalogClient } from "../src/gbfs-catalog.js";
@@ -192,10 +192,10 @@ describe("Entur receipt acquisition", () => {
         resolveContributors: () => [next],
       },
     );
-    expect(JSON.parse(String(first?.geojson.features[0].properties?._mapAttributions))).toEqual([
+    expect(JSON.parse(String(first?.geojson.features[0]?.properties?._mapAttributions))).toEqual([
       old,
     ]);
-    expect(JSON.parse(String(second?.geojson.features[0].properties?._mapAttributions))).toEqual([
+    expect(JSON.parse(String(second?.geojson.features[0]?.properties?._mapAttributions))).toEqual([
       old,
     ]);
     expect(http.fetchJson).toHaveBeenCalledTimes(1);
@@ -258,7 +258,11 @@ it("does not invent current registry receipts for a historical raw geofence cach
       resolveContributors: () => [next],
     },
   );
-  expect(unknown?.geojson.features[0].properties?._mapAttributions).toBeUndefined();
-  expect(retained?.geojson.features[0].properties?._mapAttributions).toBeUndefined();
+  const unknownFeature = unknown?.geojson.features[0];
+  const retainedFeature = retained?.geojson.features[0];
+  assert.isDefined(unknownFeature);
+  assert.isDefined(retainedFeature);
+  expect(unknownFeature.properties?._mapAttributions).toBeUndefined();
+  expect(retainedFeature.properties?._mapAttributions).toBeUndefined();
   expect(http.fetchJson).toHaveBeenCalledTimes(1);
 });

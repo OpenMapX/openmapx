@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadOsmConfig } from "../../../utils/osm-config.js";
 import { createOsmApiClient } from "../osm-client.js";
 import { isOsmUpstreamError, type OsmUpstreamError, type OsmWritableElement } from "../types.js";
@@ -34,7 +34,10 @@ function text(body: string, init: ResponseInit = {}): Response {
 
 function lastRequest(): { url: string; init: RequestInit } {
   const call = fetchMock.mock.calls.at(-1);
-  return { url: call?.[0] as string, init: (call?.[1] ?? {}) as RequestInit };
+  assert.isDefined(call, "fetch was not called");
+  const [url, init = {}] = call;
+  assert(typeof url === "string", "fetch was not called with a URL string");
+  return { url, init: init as RequestInit };
 }
 
 function headerOf(init: RequestInit, name: string): string | undefined {

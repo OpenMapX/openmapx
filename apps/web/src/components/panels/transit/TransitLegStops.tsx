@@ -123,7 +123,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
                     >
                       {stop.name}
                     </Typography>
-                    {stop.alerts && stop.alerts.length > 0 && (
+                    {stop.alerts?.[0] && (
                       <Tooltip title={stop.alerts[0].title} placement="top" arrow>
                         <WarningAmberIcon sx={{ fontSize: 13, color: "#E65100", flexShrink: 0 }} />
                       </Tooltip>

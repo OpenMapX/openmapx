@@ -513,8 +513,9 @@ export function failedSourceIdsFromPipelineError(feed: FeedFileEntry, message: s
     return [...names].map((name) => sourceIdForFailure(feed.country, name, feed.id));
   }
 
-  if (feed.activeScheduleSources.length === 1) {
-    return [feed.activeScheduleSources[0].id];
+  const [onlySource] = feed.activeScheduleSources;
+  if (feed.activeScheduleSources.length === 1 && onlySource) {
+    return [onlySource.id];
   }
   return [feed.id];
 }

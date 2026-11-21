@@ -49,8 +49,8 @@ const coords = (p: { lat: number; lng: number }): [number, number] => [p.lng, p.
 const validPoint = (p: { lat: number; lng: number }) => latLngOrNull(p.lat, p.lng) !== null;
 /** Never confuse the public line number (RE9) with the operational number (10935). */
 function trainNumber(value: string | undefined): string | undefined {
-  const m = /^(?:[A-Za-z]+\s+)?(\d{1,8})$/.exec(value?.trim() ?? "");
-  return m ? m[1].replace(/^0+(?=\d)/, "") : undefined;
+  const digits = /^(?:[A-Za-z]+\s+)?(\d{1,8})$/.exec(value?.trim() ?? "")?.[1];
+  return digits?.replace(/^0+(?=\d)/, "");
 }
 function departureNumber(d: Departure): string | undefined {
   if (d.serviceInfo?.trainNumber !== undefined) return trainNumber(d.serviceInfo.trainNumber);
@@ -138,10 +138,12 @@ export async function resolveSharedTravelPlan(
       departure: strictInstant(l.departure, plan.timeZone),
       arrival: strictInstant(l.arrival, plan.timeZone),
     }));
-    for (let i = 0; i < instants.length; i++) {
+    const firstInstant = instants[0] ?? fail("invalid");
+    for (const [i, instant] of instants.entries()) {
+      const previous = instants[i - 1];
       if (
-        instants[i].arrival <= instants[i].departure ||
-        (i > 0 && instants[i].departure < instants[i - 1].arrival)
+        instant.arrival <= instant.departure ||
+        (previous && instant.departure < previous.arrival)
       )
         fail("invalid");
     }
@@ -154,14 +156,15 @@ export async function resolveSharedTravelPlan(
       Array.from({ length: Math.min(3, stationNames.length) }, async () => {
         while (nextStation < stationNames.length) {
           const name = stationNames[nextStation++];
+          if (name === undefined) break;
           check();
           const raw = await acquire(() => port.searchStops(name, signal));
           check();
           const stops = raw.filter(
             (s) => s.id && validPoint(s) && travelStationKey(s.name) === travelStationKey(name),
           );
-          if (!stops.length) fail("not-found");
-          if (stops.some((s) => haversineDistance(coords(s), coords(stops[0])) > 1500))
+          const anchor = stops[0] ?? fail("not-found");
+          if (stops.some((s) => haversineDistance(coords(s), coords(anchor)) > 1500))
             fail("ambiguous");
           // Parent boards include their platforms; platform aliases must not spend
           // the station/call budget or make an ordinary large station ambiguous.
@@ -187,7 +190,7 @@ export async function resolveSharedTravelPlan(
     }> = [];
     for (const [index, shared] of plan.legs.entries()) {
       check();
-      const { departure, arrival } = instants[index];
+      const { departure, arrival } = instants[index] ?? fail("invalid");
       const fromStops = stationCache.get(shared.from) ?? fail("invalid"),
         toStops = stationCache.get(shared.to) ?? fail("invalid");
       for (const [stops, time] of [
@@ -243,8 +246,7 @@ export async function resolveSharedTravelPlan(
             trainNumber(journey.serviceInfo.trainNumber) !== trainNumber(shared.trainNumber))
         )
           continue;
-        for (let a = 0; a < journey.stops.length; a++) {
-          const from = journey.stops[a];
+        for (const [a, from] of journey.stops.entries()) {
           if (
             !from.stopId ||
             !sameTime(from.scheduledDeparture, departure) ||
@@ -252,8 +254,7 @@ export async function resolveSharedTravelPlan(
             (d.stop?.id && d.stop.id !== from.stopId)
           )
             continue;
-          for (let b = a + 1; b < journey.stops.length; b++) {
-            const to = journey.stops[b];
+          for (const to of journey.stops.slice(a + 1)) {
             if (
               to.stopId &&
               sameTime(to.scheduledArrival, arrival) &&
@@ -263,9 +264,8 @@ export async function resolveSharedTravelPlan(
           }
         }
       }
-      if (!matches.length) fail("not-found");
-      if (matches.length !== 1) fail("ambiguous");
-      const match = matches[0],
+      if (matches.length > 1) fail("ambiguous");
+      const match = matches[0] ?? fail("not-found"),
         d = match.departure;
       const first = match.from,
         last = match.to;
@@ -281,7 +281,7 @@ export async function resolveSharedTravelPlan(
         to: last,
       });
     }
-    const from = verified[0].from,
+    const from = verified[0]?.from ?? fail("invalid"),
       to = verified.at(-1)?.to ?? fail("invalid");
     const prefixes = new Set(
       verified.flatMap(({ reference: r }) =>
@@ -297,7 +297,7 @@ export async function resolveSharedTravelPlan(
     const request: TransitPlanParams = {
       origin: coords(from),
       destination: coords(to),
-      time: new Date(instants[0].departure - 120000).toISOString(),
+      time: new Date(firstInstant.departure - 120000).toISOString(),
       numItineraries: 3,
       transferBuffer: "standard",
       capabilityEpoch: options.capabilityEpoch,

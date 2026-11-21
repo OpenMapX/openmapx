@@ -224,7 +224,7 @@ describe("bakePredicted", () => {
     // by an earlier, unrelated job is what made a production bake emit 33 of
     // 2,787 rows.
     expect(refreshWaysCalls).toHaveLength(1);
-    expect([...refreshWaysCalls[0]].sort()).toEqual([3001]);
+    expect([...(refreshWaysCalls[0] ?? [])].sort()).toEqual([3001]);
 
     const maintenanceIndex = callOrder.indexOf("ops:valhalla.traffic.maintain");
 
@@ -278,6 +278,60 @@ describe("bakePredicted", () => {
     expect(result.matchRatePct).toBe(100);
   });
 
+  it("skips and counts profiles without a full week of hourly speeds", async () => {
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [1, [edgeAt(10)]],
+      [2, [edgeAt(11)]],
+      [3, [edgeAt(12)]],
+    ]);
+    const warn = vi.fn();
+    const result = await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => [
+          profileFor("1"),
+          { ...profileFor("2"), hourly: Array<number>(24).fill(80) },
+          { ...profileFor("3"), hourly: Array<number>(169).fill(80) },
+        ],
+        loadWaysToEdges: async () => waysToEdges,
+        logger: { info: () => {}, warn },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      segments: 3,
+      malformed: 2,
+      resolvable: 1,
+      matched: 1,
+      rows: 1,
+      matchRatePct: 100,
+      coverageRatePct: 100,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "bake-predicted: skipped profiles without a full week of hourly speeds",
+      { segments: 3, malformed: 2 },
+    );
+    const csv = readFileSync(join(csvDir, "0/003/196.csv"), "utf8");
+    expect(csv).toBe(`0/3196/10,100,90,${expectedBase64(80, 100)}\n`);
+  });
+
+  it("fails before refreshing or baking when every profile lacks a full week", async () => {
+    await expect(
+      bakePredicted(
+        makeDeps({
+          fetchProfiles: async () => [
+            { ...profileFor("1"), hourly: Array<number>(24).fill(80) },
+            { ...profileFor("2"), hourly: Array<number>(167).fill(80) },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(
+      "bake-predicted: all 2 profiles from http://openconditions.local/segments/profiles.json lack a full week of hourly speeds",
+    );
+    expect(refreshWaysCalls).toHaveLength(0);
+    expect(opsCalls).toHaveLength(0);
+  });
+
   it("warns when the rate falls below fifty percent", async () => {
     // Four resolvable ways; only one has an edge in the profile's direction.
     const waysToEdges = new Map<number, WayEdge[]>([
@@ -301,7 +355,7 @@ describe("bakePredicted", () => {
     );
 
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][1]).toMatchObject({ resolvable: 4, matched: 1, matchRatePct: 25 });
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ resolvable: 4, matched: 1, matchRatePct: 25 });
   });
 
   it("does not warn at a healthy rate", async () => {
@@ -331,7 +385,7 @@ describe("bakePredicted", () => {
     expect(result.matchRatePct).toBe(100);
     expect(result.coverageRatePct).toBe(2);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain("covers too little");
+    expect(warn.mock.calls[0]?.[0]).toContain("covers too little");
   });
 
   it("skips the bake tool and the extract rebuild when nothing matched, but keeps the refresh", async () => {

@@ -7,8 +7,7 @@ const unavailable = () => Error("Service creation dependencies unavailable");
 function closure(targets: readonly string[], dependencies: ReadonlyMap<string, readonly string[]>) {
   const found = new Set<string>(),
     pending = [...targets];
-  for (let index = 0; index < pending.length; index++) {
-    const current = pending[index]!;
+  for (let index = 0, current = pending[0]; current !== undefined; current = pending[++index]) {
     if (!id.test(current)) throw unavailable();
     if (found.has(current)) continue;
     found.add(current);

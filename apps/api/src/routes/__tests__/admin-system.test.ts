@@ -8,6 +8,15 @@ const requireAdmin = vi.fn().mockResolvedValue(session);
 const enqueue = vi.fn().mockResolvedValue("job-system-1");
 const findActive = vi.fn().mockResolvedValue(null);
 const audit = vi.fn().mockResolvedValue(undefined);
+const apiService = {
+  serviceId: "app-api",
+  containerState: "running",
+  pinnedImage: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
+  runningImageId: `sha256:${"b".repeat(64)}`,
+  localImageId: `sha256:${"a".repeat(64)}`,
+  releaseMember: true,
+  state: "update_available",
+};
 const systemInspection = {
   dockerReachable: true,
   composeReady: true,
@@ -19,17 +28,7 @@ const systemInspection = {
     availableVersion: "0.1.0-alpha.1",
     availableDigest: "a".repeat(64),
   },
-  services: [
-    {
-      serviceId: "app-api",
-      containerState: "running",
-      pinnedImage: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
-      runningImageId: `sha256:${"b".repeat(64)}`,
-      localImageId: `sha256:${"a".repeat(64)}`,
-      releaseMember: true,
-      state: "update_available",
-    },
-  ],
+  services: [apiService],
 };
 const executeAndWait = vi.fn(
   async (_client: unknown, _operation: { kind: string }) => systemInspection,
@@ -99,10 +98,10 @@ describe("admin system routes", () => {
     expect(response.json().images[0]).toEqual({
       id: "app-api",
       name: "app-api",
-      image: systemInspection.services[0].pinnedImage,
+      image: apiService.pinnedImage,
       containerState: "running",
-      runningImageId: systemInspection.services[0].runningImageId,
-      localImageId: systemInspection.services[0].localImageId,
+      runningImageId: apiService.runningImageId,
+      localImageId: apiService.localImageId,
       updateAvailable: true,
       releaseMember: true,
       status: "update-available",
@@ -124,7 +123,7 @@ describe("admin system routes", () => {
         ...systemInspection,
         services: [
           {
-            ...systemInspection.services[0],
+            ...apiService,
             state,
             ...(state === "not_running" || state === "unknown"
               ? { runningImageId: undefined }

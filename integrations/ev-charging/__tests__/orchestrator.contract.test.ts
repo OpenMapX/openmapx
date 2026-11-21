@@ -7,6 +7,7 @@ import type {
   Evse,
   IntegrationContext,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, test, vi } from "vitest";
 import { createEvChargingDataSource } from "../data-source.js";
 
@@ -144,7 +145,7 @@ describe("ev-charging orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.data.map((r) => r.id)).toEqual(["a:ok"]);
-    const query = vi.mocked(a.searchSites).mock.calls[0][1] as ChargingSiteQuery;
+    const query = nth(vi.mocked(a.searchSites).mock.calls, 0)[1] as ChargingSiteQuery;
     expect(query.excludedSourceIds).toEqual(["src-blocked"]);
 
     expect((await source.getDetail("a:merged")).data).toBeNull();
@@ -244,7 +245,7 @@ describe("ev-charging orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
-    expect(result.data[2].contributors).toEqual([
+    expect(result.data[2]?.contributors).toEqual([
       {
         sourceId: "src-c",
         name: "MobiData BW",
@@ -290,7 +291,7 @@ describe("ev-charging orchestrator", () => {
       ["hide_out_of_service", "toggle", false, undefined],
       ["available_now", "toggle", true, undefined],
     ]);
-    expect(filters[0].options?.find((o) => o.id === "nacs")?.label).toBe("NACS / Tesla");
+    expect(filters[0]?.options?.find((o) => o.id === "nacs")?.label).toBe("NACS / Tesla");
   });
 
   test("the NACS option keeps Tesla and SAE J3400 sites", async () => {

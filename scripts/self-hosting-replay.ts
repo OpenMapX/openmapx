@@ -136,20 +136,30 @@ export function counterDelta(before: Counters, after: Counters) {
   if (before.reset !== after.reset) throw new Error("Database counter reset invalidates replay");
   return Object.fromEntries(
     Object.entries(before.values).map(([key, value]) => {
-      if (!(key in after.values)) throw new Error("Missing counter");
-      const delta = BigInt(after.values[key]) - BigInt(value);
+      const next = Object.hasOwn(after.values, key) ? after.values[key] : undefined;
+      if (next === undefined) throw new Error("Missing counter");
+      const delta = BigInt(next) - BigInt(value);
       if (delta < 0n) throw new Error("Counter decreased during replay");
       return [key, delta.toString()];
     }),
   );
+}
+/** The baseline and candidate entries of a two-arm list; throws unless both are present. */
+function arms<T>(values: readonly (T | undefined)[]): readonly [T, T] {
+  const [baseline, candidate] = values;
+  if (values.length !== 2 || baseline === undefined || candidate === undefined)
+    throw new Error("Replay needs exactly a baseline and a candidate");
+  return [baseline, candidate];
 }
 export function summarize(values: number[]) {
   if (!values.length || values.some((value) => !Number.isFinite(value)))
     throw new Error("Finite samples required");
   const sorted = [...values].sort((a, b) => a - b);
   const midpoint = Math.floor(sorted.length / 2);
+  const upper = sorted[midpoint] ?? Number.NaN;
+  const lower = sorted[midpoint - 1] ?? Number.NaN;
   return {
-    median: sorted.length % 2 ? sorted[midpoint] : (sorted[midpoint - 1] + sorted[midpoint]) / 2,
+    median: sorted.length % 2 ? upper : (lower + upper) / 2,
     p95: sorted[Math.ceil(sorted.length * 0.95) - 1],
     min: sorted[0],
     max: sorted.at(-1),
@@ -318,7 +328,9 @@ async function replay(
   invocation: ReplayInvocation,
 ): Promise<ReplayCompletion> {
   phase = "worktree identity";
-  const identities = [identifyWorktree(options.baseline), identifyWorktree(options.candidate)];
+  const baselineIdentity = identifyWorktree(options.baseline);
+  const candidateIdentity = identifyWorktree(options.candidate);
+  const identities = [baselineIdentity, candidateIdentity];
   phase = "serialized OC builds";
   const builds =
     invocation.previousReport !== undefined
@@ -383,7 +395,8 @@ async function replay(
       };
     }),
   );
-  if (implementations[0].fixtureHash !== implementations[1].fixtureHash)
+  const [baselineImplementation, candidateImplementation] = arms(implementations);
+  if (baselineImplementation.fixtureHash !== candidateImplementation.fixtureHash)
     throw new Error("Baseline and candidate fixtures differ");
   const report: Record<string, unknown> = {
     identities,
@@ -400,9 +413,9 @@ async function replay(
       features: 32,
       firstRegisterFeaturesPerSource: 128,
       componentsPerFeature: 3,
-      hash: implementations[0].fixtureHash,
+      hash: baselineImplementation.fixtureHash,
     },
-    control: identities[0].revision === identities[1].revision,
+    control: baselineIdentity.revision === candidateIdentity.revision,
     thresholds: {
       unexplainedDifferences: 0,
       unaffectedMedianRegressionPercent: 5,
@@ -464,7 +477,7 @@ async function replay(
           const pair: { logical: unknown; result: Record<string, unknown> }[] = [];
           const order = Math.random() < 0.5 ? [0, 1] : [1, 0];
           for (const index of order) {
-            const implementation = implementations[index];
+            const implementation = index === 0 ? baselineImplementation : candidateImplementation;
             const database = `replay_${sequence++}`;
             await admin.unsafe(`CREATE DATABASE ${database}`);
             let sql: ReturnType<typeof postgres> | undefined;
@@ -846,23 +859,27 @@ async function replay(
               }
             }
           }
-          if (pair[0].result.inputHash !== pair[1].result.inputHash)
+          const [baselineRun, candidateRun] = arms(pair);
+          if (baselineRun.result.inputHash !== candidateRun.result.inputHash)
             throw new Error("Replay input identity differs");
           const correctness = comparePair(
             {
-              revision: identities[0].revision,
-              fixtureHash: implementations[0].fixtureHash,
-              inputHash: String(pair[0].result.inputHash),
-              logical: pair[0].logical,
+              revision: baselineIdentity.revision,
+              fixtureHash: baselineImplementation.fixtureHash,
+              inputHash: String(baselineRun.result.inputHash),
+              logical: baselineRun.logical,
             },
             {
-              revision: identities[1].revision,
-              fixtureHash: implementations[1].fixtureHash,
-              inputHash: String(pair[1].result.inputHash),
-              logical: pair[1].logical,
+              revision: candidateIdentity.revision,
+              fixtureHash: candidateImplementation.fixtureHash,
+              inputHash: String(candidateRun.result.inputHash),
+              logical: candidateRun.logical,
             },
           );
-          results.push({ ...pair[0].result, correctness }, { ...pair[1].result, correctness });
+          results.push(
+            { ...baselineRun.result, correctness },
+            { ...candidateRun.result, correctness },
+          );
           invocation.writeRuns({ ...report, results });
           if (!correctness.equal)
             throw new Error(
@@ -882,7 +899,7 @@ async function replay(
     }
   }
   for (const [index, identity] of identities.entries()) {
-    if (digest(artifactHashes(identity.path)) !== digest(builds[index].artifacts))
+    if (digest(artifactHashes(identity.path)) !== digest(builds[index]?.artifacts))
       throw new Error("Built artifacts changed during replay");
     if (identifyWorktree(identity.path).revision !== identity.revision)
       throw new Error("OC revision changed during replay");

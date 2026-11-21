@@ -150,7 +150,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         ),
       ) as { services: Record<string, { volumes: string[] }> };
       expect(
-        generated.services["ops-agent"].volumes.filter((volume) =>
+        generated.services["ops-agent"]?.volumes.filter((volume) =>
           /^\$\{OPENMAPX_HOST_DIR[^}]*\}:/.test(volume),
         ),
       ).toEqual([]);
@@ -244,8 +244,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         )
       )
         .trim()
-        .split("\n")
-        .at(-1) as string;
+        .replace(/^.*\n/s, "");
       const port = Number((await docker("port", id, "4300/tcp")).trim().split(":").at(-1));
       return { id, baseUrl: `http://127.0.0.1:${port}` };
     }

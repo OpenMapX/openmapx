@@ -1,5 +1,5 @@
 import type { HttpClient, ResponseOptions } from "@openmapx/integration-framework";
-import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createEnturClient } from "../client";
 import { EnturRequestError } from "../errors";
 import { createEnturGeocoder, type EnturGeocoder, type EnturGeocoderPolicy } from "./client";
@@ -28,6 +28,11 @@ const body = () => ({
     timestamp: "2026-10-19T09:50:00Z",
   },
 });
+function firstFeature(value: ReturnType<typeof body>) {
+  const [feature] = value.features;
+  assert.isDefined(feature);
+  return feature;
+}
 function fixture() {
   const calls: { url: string; options: ResponseOptions }[] = [];
   let value: unknown = body();
@@ -191,7 +196,7 @@ describe("bounded generated Entur Geocoder", () => {
     const f = fixture();
     const value = body();
     Object.assign(value, { future: true });
-    value.features[0].properties.stopPlaceRole = "future-role";
+    firstFeature(value).properties.stopPlaceRole = "future-role";
     f.setBody(value);
     const result = await createEnturGeocoder(f.client).autocomplete({ q: "x" }, signal());
     expect(result).not.toHaveProperty("future");
@@ -202,10 +207,11 @@ describe("bounded generated Entur Geocoder", () => {
     async (field) => {
       const f = fixture();
       const value = body();
-      if (field === "names") delete (value.features[0].properties as { names?: unknown }).names;
-      if (field === "source") value.features[0].properties.source = "unknown";
-      if (field === "role") Object.assign(value.features[0].properties, { stopPlaceRole: 42 });
-      if (field === "coordinates") value.features[0].geometry.coordinates = [200, 100];
+      const feature = firstFeature(value);
+      if (field === "names") delete (feature.properties as { names?: unknown }).names;
+      if (field === "source") feature.properties.source = "unknown";
+      if (field === "role") Object.assign(feature.properties, { stopPlaceRole: 42 });
+      if (field === "coordinates") feature.geometry.coordinates = [200, 100];
       f.setBody(value);
       await expect(
         createEnturGeocoder(f.client).autocomplete({ q: "x" }, signal()),
@@ -238,7 +244,7 @@ describe("bounded generated Entur Geocoder", () => {
     ).rejects.toMatchObject({ kind: "policy" });
     expect(f.calls).toHaveLength(2);
     const value = body();
-    value.features[0].properties.source = "openstreetmap";
+    firstFeature(value).properties.source = "openstreetmap";
     f.setBody(value);
     await expect(sdk.reverse({ lat: 0, lon: 0 }, signal())).rejects.toMatchObject({
       kind: "policy",

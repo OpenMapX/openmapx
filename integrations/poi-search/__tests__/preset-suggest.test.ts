@@ -61,7 +61,7 @@ describe("GET /preset-suggest", () => {
     await handler({ query: { q: "eisdiele", lang: "de" } }, reply);
 
     const payload = reply.payload as { matches: Array<{ id: string }> };
-    expect(payload.matches[0].id).toBe("amenity/ice_cream");
+    expect(payload.matches[0]?.id).toBe("amenity/ice_cream");
   });
 
   it("returns empty matches for queries shorter than 2 chars", async () => {

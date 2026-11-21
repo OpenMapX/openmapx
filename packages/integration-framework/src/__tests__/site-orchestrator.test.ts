@@ -109,7 +109,10 @@ describe("site orchestrator", () => {
     const sites = orchestrator(ctxWith([a], ["src-x"]));
 
     expect((await sites.search(BBOX, { hint: "h" })).sites.map((s) => s.id)).toEqual(["ok"]);
-    expect(vi.mocked(a.list).mock.calls[0][1]).toEqual({ hint: "h", excludedSourceIds: ["src-x"] });
+    expect(vi.mocked(a.list).mock.calls[0]?.[1]).toEqual({
+      hint: "h",
+      excludedSourceIds: ["src-x"],
+    });
     expect(await sites.find("merged")).toBeNull();
     expect(a.one).toHaveBeenCalledWith("merged", { excludedSourceIds: ["src-x"] });
     expect((await sites.find("ok"))?.id).toBe("ok");

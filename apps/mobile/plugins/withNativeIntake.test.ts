@@ -11,7 +11,7 @@ import {
 
 describe("native intake CNG", () => {
   it("restricts geographic document types without exposing the container", () => {
-    expect(intakeDocumentTypes()[0].LSItemContentTypes).toEqual([
+    expect(intakeDocumentTypes()[0]?.LSItemContentTypes).toEqual([
       "com.topografix.gpx",
       "public.geojson",
       "com.google.earth.kml",

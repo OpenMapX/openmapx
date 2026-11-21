@@ -11,6 +11,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join, posix } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { renderGoTemplate } from "./go-template";
 
 export interface Invocation {
@@ -520,9 +521,9 @@ export class FakeDockerEngine {
           const [key, ...value] = filter.split("=");
           const expected = value.join("=");
           if (key === "label") {
-            const [name, ...labelValue] = expected.split("=");
-            const actual = container.Config.Labels[name as string];
-            return labelValue.length ? actual === labelValue.join("=") : actual !== undefined;
+            const eq = expected.indexOf("=");
+            const actual = container.Config.Labels[eq < 0 ? expected : expected.slice(0, eq)];
+            return eq < 0 ? actual !== undefined : actual === expected.slice(eq + 1);
           }
           if (key === "name") return container.Name.replace(/^\//, "").includes(expected);
           if (key === "id") return container.Id.startsWith(expected);
@@ -904,7 +905,7 @@ export class FakeDockerEngine {
       values[flag] = [...(values[flag] ?? []), value];
     };
     while (index < args.length) {
-      const arg = args[index] as string;
+      const arg = itemAt(args, index);
       if (!arg.startsWith("-")) break;
       if (booleanFlags.has(arg)) {
         index++;
@@ -916,11 +917,14 @@ export class FakeDockerEngine {
         index++;
         continue;
       }
-      if (!valueFlags.includes(arg)) return this.unsupportedAnswer(["run", ...args]);
-      add(arg, args[index + 1] as string);
+      const value = args[index + 1];
+      if (!valueFlags.includes(arg) || value === undefined)
+        return this.unsupportedAnswer(["run", ...args]);
+      add(arg, value);
       index += 2;
     }
-    const imageReference = args[index] as string;
+    const imageReference = args[index];
+    if (imageReference === undefined) return this.unsupportedAnswer(["run", ...args]);
     const cmd = args.slice(index + 1);
     // `docker run` pulls a missing image first, as `--pull missing` does.
     if (
@@ -948,10 +952,12 @@ export class FakeDockerEngine {
     const mounts: ContainerRecord["Mounts"] = [];
     for (const volume of [...(values["--volume"] ?? []), ...(values["-v"] ?? [])]) {
       const [source, destination, mode] = volume.split(":");
+      if (source === undefined || destination === undefined)
+        return this.unsupportedAnswer(["run", ...args]);
       mounts.push({
         Type: "bind",
-        Source: source as string,
-        Destination: destination as string,
+        Source: source,
+        Destination: destination,
         RW: mode !== "ro",
         Mode: mode ?? "",
       });
@@ -1022,10 +1028,10 @@ export class FakeDockerEngine {
       "--progress",
       "--parallel",
     ]);
-    while (index < args.length && (args[index] as string).startsWith("-")) {
-      const arg = args[index] as string;
-      if (globalValue.has(arg)) {
-        global.push(arg, args[index + 1] as string);
+    for (let arg = args[index]; arg?.startsWith("-"); arg = args[index]) {
+      const value = args[index + 1];
+      if (globalValue.has(arg) && value !== undefined) {
+        global.push(arg, value);
         index += 2;
       } else if (arg.includes("=") && globalValue.has(arg.slice(0, arg.indexOf("=")))) {
         global.push(arg);
@@ -1105,7 +1111,8 @@ export class FakeDockerEngine {
         .filter(Boolean)
         .map((line) => {
           const [service, value] = line.trim().split(/\s+/);
-          return [service as string, value as string];
+          if (!service || !value) throw new Error(`Unexpected compose hash line: ${line}`);
+          return [service, value];
         }),
     );
     const files = flagValuesFrom(global, ["-f", "--file"]);
@@ -1119,6 +1126,14 @@ export class FakeDockerEngine {
       directory,
       project: flagValuesFrom(global, ["-p", "--project-name"])[0] ?? model.name ?? PROJECT,
     };
+  }
+
+  /** The compose service a compose container runs; compose labels every container it makes. */
+  private serviceOf(container: ContainerRecord): string {
+    const service = container.Config.Labels["com.docker.compose.service"];
+    if (service === undefined)
+      throw new Error(`Compose container ${container.Id} has no service label`);
+    return service;
   }
 
   private composeContainers(project: string, service?: string): ContainerRecord[] {
@@ -1149,7 +1164,7 @@ export class FakeDockerEngine {
     ]);
     const services: string[] = [];
     for (let i = 0; i < args.length; i++) {
-      const arg = args[i] as string;
+      const arg = itemAt(args, i);
       if (valueFlags.has(arg)) i++;
       else if (!arg.startsWith("-")) services.push(arg);
     }
@@ -1303,11 +1318,7 @@ export class FakeDockerEngine {
     const quiet = args.includes("-q") || args.includes("--quiet");
     const rows = this.composeContainers(project)
       .filter((c) => all || c.State.Running)
-      .filter(
-        (c) =>
-          !services.length ||
-          services.includes(c.Config.Labels["com.docker.compose.service"] as string),
-      );
+      .filter((c) => !services.length || services.includes(this.serviceOf(c)));
     if (quiet) return { code: 0, stdout: rows.map((c) => `${c.Id}\n`).join("") };
     const format = flagValue(args, "--format");
     const objects = rows.map((c) => ({
@@ -1335,7 +1346,7 @@ export class FakeDockerEngine {
   private servicesOf(args: string[], skipValue: string[]): string[] {
     const services: string[] = [];
     for (let i = 0; i < args.length; i++) {
-      const arg = args[i] as string;
+      const arg = itemAt(args, i);
       if (skipValue.includes(arg)) i++;
       else if (!arg.startsWith("-")) services.push(arg);
     }
@@ -1346,7 +1357,7 @@ export class FakeDockerEngine {
     const { project } = await this.composeModel(global, request);
     const services = this.servicesOf(args, ["-t", "--timeout", "-s", "--signal"]);
     for (const container of this.composeContainers(project)) {
-      const service = container.Config.Labels["com.docker.compose.service"] as string;
+      const service = this.serviceOf(container);
       if (services.length && !services.includes(service)) continue;
       if (ROLE_SERVICES.has(service)) await this.hooks.stopRole(service);
       this.markExited(container, 0);
@@ -1358,7 +1369,7 @@ export class FakeDockerEngine {
     const { project } = await this.composeModel(global, request);
     const services = this.servicesOf(args, []);
     for (const container of this.composeContainers(project)) {
-      const service = container.Config.Labels["com.docker.compose.service"] as string;
+      const service = this.serviceOf(container);
       if (services.length && !services.includes(service)) continue;
       this.markRunning(container);
       if (ROLE_SERVICES.has(service)) await this.hooks.startRole(service, container);
@@ -1370,7 +1381,7 @@ export class FakeDockerEngine {
     const { project } = await this.composeModel(global, request);
     const services = this.servicesOf(args, ["-t", "--timeout", "--rmi"]);
     for (const container of this.composeContainers(project)) {
-      const service = container.Config.Labels["com.docker.compose.service"] as string;
+      const service = this.serviceOf(container);
       if (services.length && !services.includes(service)) continue;
       if (ROLE_SERVICES.has(service)) await this.hooks.stopRole(service);
       this.containers.delete(container.Id);
@@ -1466,8 +1477,7 @@ export function isEffect(args: readonly string[]): boolean {
 }
 
 function flagValue(args: readonly string[], flag: string): string | undefined {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i] as string;
+  for (const [i, arg] of args.entries()) {
     if (arg === flag) return args[i + 1];
     if (arg.startsWith(`${flag}=`)) return arg.slice(flag.length + 1);
   }
@@ -1476,9 +1486,9 @@ function flagValue(args: readonly string[], flag: string): string | undefined {
 
 function flagValues(args: readonly string[], flag: string): string[] {
   const values: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i] as string;
-    if (arg === flag && args[i + 1] !== undefined) values.push(args[i + 1] as string);
+  for (const [i, arg] of args.entries()) {
+    const next = args[i + 1];
+    if (arg === flag && next !== undefined) values.push(next);
     else if (arg.startsWith(`${flag}=`)) values.push(arg.slice(flag.length + 1));
   }
   return values;
@@ -1492,7 +1502,7 @@ function flagValuesFrom(args: readonly string[], flags: string[]): string[] {
 function positional(args: readonly string[], valueFlags: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i] as string;
+    const arg = itemAt(args, i);
     if (valueFlags.includes(arg)) i++;
     else if (arg.startsWith("-")) continue;
     else out.push(arg);

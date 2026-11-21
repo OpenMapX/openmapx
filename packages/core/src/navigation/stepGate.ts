@@ -51,6 +51,7 @@ export function advanceStepGate(
   // travel to spend on it. The loop still stops at the next non-zero step.
   while (committed < lastIndex) {
     const end = ends[committed];
+    if (end === undefined) break;
     if (!entered && alongMeters >= end - entryMeters) entered = true;
     if (entered && alongMeters >= end + exitMeters) {
       committed += 1;

@@ -49,9 +49,12 @@ function segmentDistance(p: [number, number], a: [number, number], b: [number, n
 
 function insideRing(p: [number, number], ring: [number, number][]): boolean {
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+  let previous = ring.at(-1);
+  for (const current of ring) {
+    if (!previous) break;
+    const [xi, yi] = current;
+    const [xj, yj] = previous;
+    previous = current;
     if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) {
       inside = !inside;
     }
@@ -68,14 +71,16 @@ function geometryDistance(shape: TransitStopAreaShape, point: LngLat): number {
     return Math.hypot(q[0], q[1]);
   }
   const coords = shape.coordinates.map((c) => project(c, point));
-  if (coords.length === 0) return Number.POSITIVE_INFINITY;
-  if (coords.length === 1) return Math.hypot(coords[0][0], coords[0][1]);
+  const [first] = coords;
+  if (!first) return Number.POSITIVE_INFINITY;
+  if (coords.length === 1) return Math.hypot(first[0], first[1]);
   if (shape.type === "polygon" && coords.length >= 3 && insideRing(p, coords)) return 0;
   let best = Number.POSITIVE_INFINITY;
   const closed = shape.type === "polygon";
-  const segments = closed ? coords.length : coords.length - 1;
-  for (let i = 0; i < segments; i++) {
-    best = Math.min(best, segmentDistance(p, coords[i], coords[(i + 1) % coords.length]));
+  const ends = closed ? [...coords.slice(1), first] : coords.slice(1);
+  for (const [i, end] of ends.entries()) {
+    const start = coords[i];
+    if (start) best = Math.min(best, segmentDistance(p, start, end));
   }
   return best;
 }
@@ -134,31 +139,28 @@ export function convexHull(points: readonly LngLat[]): LngLat[] {
   const kx = Math.cos((refLat * Math.PI) / 180);
   const cross = (o: LngLat, a: LngLat, b: LngLat) =>
     (a[0] - o[0]) * kx * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]) * kx;
+  // Drops the last point of `chain` while it and the one before it turn away from `p`.
+  const extend = (chain: LngLat[], p: LngLat): void => {
+    for (let a = chain.at(-2), b = chain.at(-1); a && b; a = chain.at(-2), b = chain.at(-1)) {
+      if (cross(a, b, p) > 0) break;
+      chain.pop();
+    }
+    chain.push(p);
+  };
   const lower: LngLat[] = [];
-  for (const p of unique) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
-      lower.pop();
-    }
-    lower.push(p);
-  }
+  for (const p of unique) extend(lower, p);
   const upper: LngLat[] = [];
-  for (let i = unique.length - 1; i >= 0; i--) {
-    const p = unique[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
-      upper.pop();
-    }
-    upper.push(p);
-  }
+  for (const p of [...unique].reverse()) extend(upper, p);
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
 /** Largest distance in metres between any two of the points. */
 export function spanMeters(points: readonly LngLat[]): number {
   let span = 0;
-  for (let i = 0; i < points.length; i++) {
-    for (let j = i + 1; j < points.length; j++) {
-      const project = projector(points[i][1]);
-      const d = project(points[j], points[i]);
+  for (const [i, from] of points.entries()) {
+    const project = projector(from[1]);
+    for (const to of points.slice(i + 1)) {
+      const d = project(to, from);
       span = Math.max(span, Math.hypot(d[0], d[1]));
     }
   }
@@ -236,21 +238,24 @@ export function resolveTransitLegTargets(
 
   legs.forEach((leg, index) => {
     const next = legs[index + 1];
+    const legTargets = targets[index];
+    if (!legTargets) return;
     if (isTransit(leg)) {
-      targets[index].board ??= stopTarget(leg.from, leg.mode, areas);
-      targets[index].end = leg.to.stopId ? stopTarget(leg.to, leg.mode, areas) : null;
+      legTargets.board ??= stopTarget(leg.from, leg.mode, areas);
+      legTargets.end = leg.to.stopId ? stopTarget(leg.to, leg.mode, areas) : null;
       return;
     }
-    if (isTransit(next) && next.from.stopId) {
+    if (next && isTransit(next) && next.from.stopId) {
       const start = leg.geometry?.coordinates?.[0] as LngLat | undefined;
       const target = stopTarget(next.from, next.mode, areas, start);
-      targets[index].end = target;
-      targets[index + 1].board = target;
+      legTargets.end = target;
+      const nextTargets = targets[index + 1];
+      if (nextTargets) nextTargets.board = target;
       return;
     }
     if (!next) {
       const located = Number.isFinite(leg.to.lat) && Number.isFinite(leg.to.lng);
-      targets[index].end = leg.to.stopId
+      legTargets.end = leg.to.stopId
         ? stopTarget(leg.to, legs[index - 1]?.mode, areas)
         : !located
           ? null

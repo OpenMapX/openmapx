@@ -1,4 +1,5 @@
 import type { DirectionsResult, RoutingOptions, TravelMode } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedProvider } from "../orchestrator.js";
 import { runSchedulePlan } from "../schedule-plan.js";
@@ -21,7 +22,7 @@ function fixedRoute(seconds: number, waypoints: [number, number][]): Route {
     legs: waypoints.slice(1).map((point, index) => ({
       distance: seconds * 15,
       duration: seconds,
-      geometry: [waypoints[index], point],
+      geometry: [nth(waypoints, index), point],
       steps: [],
     })),
     steps: [],
@@ -164,7 +165,7 @@ describe("scheduled directions end to end", () => {
             _mode: TravelMode,
             _options?: RoutingOptions,
           ): Promise<DirectionsResult> => {
-            if (waypoints[0][0] === BONN[0]) throw new Error("engine down");
+            if (nth(waypoints, 0)[0] === BONN[0]) throw new Error("engine down");
             return { waypoints, routes: [fixedRoute(HOUR, waypoints)], activeRouteIndex: 0 };
           },
         ),
@@ -186,7 +187,7 @@ describe("scheduled directions end to end", () => {
       to: "osrm",
     });
     expect(result.routes).toHaveLength(1);
-    expect(result.routes[0].legs).toHaveLength(2);
+    expect(result.routes[0]?.legs).toHaveLength(2);
     expect(result.schedule.violations).toEqual([]);
   });
 });

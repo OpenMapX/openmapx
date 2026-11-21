@@ -41,9 +41,16 @@ const profiles: OtpProfile[] = [
     endpoint: "https://otp281.trufi.app/otp/transmodel/v3",
     sourceId: "trufi",
   },
-  ...["finland", "hsl", "varely", "waltti"].map(
-    (region, index): OtpProfile => ({
-      id: ["fi/digitransit-otp", "fi/helsinki-otp", "fi/varely-otp", "fi/waltti-otp"][index],
+  ...(
+    [
+      ["finland", "fi/digitransit-otp"],
+      ["hsl", "fi/helsinki-otp"],
+      ["varely", "fi/varely-otp"],
+      ["waltti", "fi/waltti-otp"],
+    ] as const
+  ).map(
+    ([region, id]): OtpProfile => ({
+      id,
       family: "digitransit",
       catalogEndpoint: `https://api.digitransit.fi/routing/v2/${region}/gtfs/v1`,
       endpoint: `https://api.digitransit.fi/routing/v2/${region}/gtfs/v1`,

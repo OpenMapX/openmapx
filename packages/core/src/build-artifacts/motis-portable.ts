@@ -146,9 +146,9 @@ function configRoutes(config: Record<string, unknown>, vars?: FeedProxyVars): Se
     let key: string | undefined;
     if (vars) key = Object.entries(vars).find(([, value]) => value.url === feed.url)?.[0];
     if (!key) {
-      const match = /^http:\/\/motis-feed-proxy\/feed\/([a-zA-Z0-9_.%-]+)$/.exec(feed.url);
-      if (!match) throw invalid();
-      key = decodeURIComponent(match[1]);
+      const encoded = /^http:\/\/motis-feed-proxy\/feed\/([a-zA-Z0-9_.%-]+)$/.exec(feed.url)?.[1];
+      if (encoded === undefined) throw invalid();
+      key = decodeURIComponent(encoded);
     }
     token.parse(key);
     if (!vars && feed.headers !== undefined) throw invalid();
@@ -250,8 +250,8 @@ async function resolveRoutes(
     const feed = await read("catalog", `feeds/${route.region}.json`);
     if (!Array.isArray(feed.sources)) throw invalid();
     const matches = feed.sources.map(object).filter((s) => s.name === route.sourceName);
-    if (matches.length !== 1) throw invalid();
-    const source = matches[0];
+    const [source] = matches;
+    if (matches.length !== 1 || !source) throw invalid();
     if (source.skip === true || source["url-override"] || source["api-key"]) throw invalid();
     const prefix = `${route.region}-${route.sourceName}`;
     let url: unknown,
@@ -289,9 +289,9 @@ async function resolveRoutes(
       const dmfr = await read("atlas", `feeds/.openmapx-atlas-id/${atlasId}`);
       if (!Array.isArray(dmfr.feeds)) throw invalid();
       const entries = dmfr.feeds.map(object).filter((f) => f.id === atlasId);
-      if (entries.length !== 1) throw invalid();
-      const entry = entries[0],
-        urls = object(entry.urls);
+      const [entry] = entries;
+      if (entries.length !== 1 || !entry) throw invalid();
+      const urls = object(entry.urls);
       url = urls[route.endpoint];
       gbfs = route.endpoint === "gbfs_auto_discovery";
       const rt = ["realtime_trip_updates", "realtime_vehicle_positions", "realtime_alerts"].filter(
@@ -462,11 +462,13 @@ export async function inspectPortableMotisRecipe(input: {
     );
     if (!Array.isArray(feed.sources)) throw invalid();
     const matching = feed.sources.map(object).filter((entry) => entry.name === source.name);
+    const [catalogEntry] = matching;
     if (
       matching.length !== 1 ||
-      matching[0].skip === true ||
+      !catalogEntry ||
+      catalogEntry.skip === true ||
       source.sourceId !==
-        (matching[0]["openmapx-source-id"] ?? `catalog:${source.region}:${source.name}`) ||
+        (catalogEntry["openmapx-source-id"] ?? `catalog:${source.region}:${source.name}`) ||
       source.artifact.relativePath !== `${source.region}_${source.name}.${source.format}.zip`
     )
       throw Error("MOTIS source provenance does not match the approved pinned catalog");
@@ -512,6 +514,12 @@ export async function producePortableMotisRecipe(input: {
     );
     const config = object(loadYaml(read("config.yml")));
     const used = configRoutes(config, actualVars);
+    // Every used key names an entry of the bundle's own variables.
+    const actualVar = (key: string) => {
+      const value = actualVars[key];
+      if (!value) throw invalid();
+      return value;
+    };
     const routes: PortableMotisRecipe["routes"] = [];
     // Locate each actual key using the pinned catalog source names, not bundle supplied endpoints.
     for (const key of [...used].sort()) {
@@ -532,7 +540,7 @@ export async function producePortableMotisRecipe(input: {
             try {
               const resolved = await resolveRoutes([proposed], input.pins, input.readBlob);
               const expected = renderVars(resolved, input.credentials);
-              if (equalVars(expected, { [key]: actualVars[key] })) {
+              if (equalVars(expected, { [key]: actualVar(key) })) {
                 found.set(JSON.stringify(proposed), proposed);
               }
             } catch {
@@ -541,8 +549,9 @@ export async function producePortableMotisRecipe(input: {
           }
         }
       }
-      if (found.size !== 1) throw invalid();
-      routes.push([...found.values()][0]);
+      const [route] = found.values();
+      if (found.size !== 1 || !route) throw invalid();
+      routes.push(route);
     }
     const sourceManifest = document(read("transit-source-manifest.json"));
     if (Array.isArray(sourceManifest.sources))
@@ -591,7 +600,7 @@ export async function producePortableMotisRecipe(input: {
     if (
       !equalVars(
         renderVars(inspected.routes, input.credentials),
-        Object.fromEntries([...used].map((key) => [key, actualVars[key]])),
+        Object.fromEntries([...used].map((key) => [key, actualVar(key)])),
       )
     )
       throw invalid();

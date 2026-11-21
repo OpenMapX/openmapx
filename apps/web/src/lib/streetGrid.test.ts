@@ -1,6 +1,6 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import {
   ALIGN_MIN_WEIGHT_PX,
   ALIGN_MIN_ZOOM,
@@ -95,8 +95,8 @@ describe("streetGrid", () => {
     ]);
     const samples = sampleRoadSegments(fake.map);
     expect(samples).toHaveLength(1);
-    expect(samples[0].weight).toBeCloseTo(1000, 3);
-    expect(samples[0].bearing).toBeCloseTo(0, 3);
+    expect(nth(samples, 0).weight).toBeCloseTo(1000, 3);
+    expect(nth(samples, 0).bearing).toBeCloseTo(0, 3);
   });
 
   it("scales equally long segments by their road class", () => {

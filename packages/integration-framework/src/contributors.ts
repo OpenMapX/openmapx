@@ -116,9 +116,12 @@ export function resolveCapturedContributors(
   const captured = readCapturedContributors(evidence.contributors);
   if (captured !== undefined) return snapshotContributors(captured);
   const declared = catalogue.declaredByIntegration.get(integrationId) ?? [];
+  const [onlyDeclared] = declared;
   const sourceIds =
     evidence.sourceIds ??
-    (uniformDeclaredSupplier && declared.length === 1 ? [declared[0].sourceId] : []);
+    (uniformDeclaredSupplier && declared.length === 1 && onlyDeclared
+      ? [onlyDeclared.sourceId]
+      : []);
   return contributorsForRecords(
     Array.from(new Set(sourceIds), (id) => {
       const matching = declared.filter((receipt) => receipt.sourceId === id);

@@ -1,4 +1,5 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
+import { nth } from "../../testing/nth";
 import {
   FIXTURE_TOKEN,
   transitSessionFixture,
@@ -108,9 +109,9 @@ describe("createTransitPreparingSession", () => {
     const source = transitStartPackageFixture();
     const session = createTransitPreparingSession(source as never, IDENTITY, NOW);
 
-    source.captures[0].stops.push({ stopId: "x", name: "X", lat: 0, lng: 0 });
+    nth(source.captures, 0).stops.push({ stopId: "x", name: "X", lat: 0, lng: 0 });
 
-    expect(session.payload.startPackage.captures[0].stops).toHaveLength(4);
+    expect(session.payload.startPackage.captures[0]?.stops).toHaveLength(4);
   });
 });
 
@@ -156,8 +157,8 @@ describe("transitProfileFor", () => {
           ...base.payload.startPackage,
           captures: [
             {
-              ...base.payload.startPackage.captures[0],
-              stops: base.payload.startPackage.captures[0].stops.map((stop, index) => ({
+              ...nth(base.payload.startPackage.captures, 0),
+              stops: nth(base.payload.startPackage.captures, 0).stops.map((stop, index) => ({
                 ...stop,
                 departed: index < 2,
               })),

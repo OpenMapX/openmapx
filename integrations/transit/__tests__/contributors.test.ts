@@ -71,7 +71,7 @@ describe("transit contributor receipts", () => {
       base,
       { stopId: "s" },
     );
-    expect(base.data[1].platform).toBe("1");
+    expect(base.data[1]?.platform).toBe("1");
     expect(out.data.map((row) => row.contributors)).toEqual([[a], [a, c]]);
     expect(out.attributions).toEqual([a, c]);
   });

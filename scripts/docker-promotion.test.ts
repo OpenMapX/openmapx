@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 const apps = ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"];
 const prefix = "example.invalid/openmapx";
@@ -20,12 +20,13 @@ const scripts = [
   ...workflow
     .slice(workflow.indexOf("  promote:\n"))
     .matchAll(/^ {8}run: \|\n((?:^ {10}.*\n|^\n)*)/gm),
-].map((match) =>
-  match[1]
+].map(([, body]) => {
+  assert.isDefined(body, "a promotion run block has no script");
+  return body
     .split("\n")
     .map((line) => line.slice(10))
-    .join("\n"),
-);
+    .join("\n");
+});
 
 function promote(
   failMatch = "",
@@ -41,7 +42,9 @@ function promote(
     for (const app of apps) {
       const dir = join(temp, "digests", `docker-digest-${app}-1`);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, digests[app].slice(7)), "");
+      const digest = digests[app];
+      if (!digest) throw new Error(`No fixture digest for ${app}`);
+      writeFileSync(join(dir, digest.slice(7)), "");
     }
     // The release's migration journal, as the workflow checks it out beside the plan.
     mkdirSync(join(temp, "source/apps/api/src/db/migrations/meta"), { recursive: true });
@@ -135,7 +138,12 @@ if (args[2] === "inspect" && args.includes("--format")) {
 }
 
 const destinations = (args: string[]) =>
-  args.flatMap((arg, index) => (arg === "--tag" ? [args[index + 1]] : []));
+  args.flatMap((arg, index) => {
+    if (arg !== "--tag") return [];
+    const tag = args[index + 1];
+    assert.isDefined(tag, `--tag has no value in ${args.join(" ")}`);
+    return [tag];
+  });
 const destination = (args: string[]) =>
   args.includes("--tag") ? args[args.indexOf("--tag") + 1] : undefined;
 

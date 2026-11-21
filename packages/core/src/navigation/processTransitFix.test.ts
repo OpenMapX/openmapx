@@ -1,5 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
@@ -9,6 +9,14 @@ import {
 } from "./processTransitFix";
 
 const NOW = 1700000000000;
+
+/** The ride leg of the fixture itinerary. */
+function rideOf(trip: TripItinerary) {
+  const ride = trip.legs[1];
+  assert.isDefined(ride);
+  return ride;
+}
+
 function itinerary(): TripItinerary {
   return {
     duration: 1500,
@@ -230,8 +238,8 @@ describe("rider-owned ride boundaries", () => {
   });
   it("flags a changed platform once", () => {
     const trip = itinerary();
-    trip.legs[1].from.platformCode = "4";
-    trip.legs[1].from.scheduledPlatformCode = "3";
+    rideOf(trip).from.platformCode = "4";
+    rideOf(trip).from.scheduledPlatformCode = "3";
     const r = tick({
       itinerary: trip,
       state: { ...atRide(), phase: "waiting-to-board" },
@@ -286,7 +294,7 @@ it.each(["realtime", "correction", "schedule"] as const)(
   "uses captured %s platform evidence for alerts, independently of delay",
   (kind) => {
     const trip = itinerary();
-    trip.legs[1].from.platformCode = "78";
+    rideOf(trip).from.platformCode = "78";
     const input = {
       itinerary: trip,
       state: { ...atRide(), phase: "waiting-to-board" as const },

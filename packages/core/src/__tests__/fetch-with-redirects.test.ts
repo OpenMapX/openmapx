@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchWithRedirects } from "../utils/fetchWithRedirects.js";
-import { createPinnedFetchTransport } from "../utils/pinned-fetch.js";
+import { fetchWithRedirects } from "../http/fetchWithRedirects.js";
+import { createPinnedFetchTransport } from "../http/pinned-fetch.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -84,7 +84,9 @@ describe("fetchWithRedirects", () => {
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(fetchMock.mock.invocationCallOrder[1]);
+    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+      fetchMock.mock.invocationCallOrder[1] ?? Number.NEGATIVE_INFINITY,
+    );
     expect(await response.json()).toEqual({ ok: true });
   });
 

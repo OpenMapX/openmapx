@@ -6,7 +6,7 @@ import {
   type OpsResourcePolicy,
   parseControlRootOperationKey,
 } from "@openmapx/core/ops";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import {
   buildControlTestServer as buildOpsAgentServer,
@@ -211,7 +211,9 @@ describe("ops-agent request boundary", () => {
         errorClass: "runtime",
       }),
     ]);
-    expect(Object.keys(events[0]).sort()).toEqual(
+    const [event] = events;
+    assert.isDefined(event);
+    expect(Object.keys(event).sort()).toEqual(
       ["durationMs", "errorClass", "kind", "resourceId", "result", "role"].sort(),
     );
     expect(JSON.stringify({ events, response: response.json() })).not.toContain(secret);

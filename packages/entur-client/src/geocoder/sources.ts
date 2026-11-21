@@ -43,21 +43,17 @@ export function createEnturGeocoderSources(options: {
   for (const [sourceId, receipts] of Object.entries(options.contributors))
     catalogue[sourceId] = freeze(structuredClone(receipts) as Attribution[]);
   freeze(catalogue);
-  const declared = suppliers.filter((source) =>
-    Object.hasOwn(catalogue, ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source]),
-  );
   const isSourceAllowed = options.isSourceAllowed;
-  const receipts = new Map(
-    declared.map((source) => [
+  const receipts = new Map<EnturGeocoderSource, readonly Attribution[]>();
+  for (const source of suppliers) {
+    const supplierReceipts = catalogue[ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source]];
+    if (!supplierReceipts) continue;
+    receipts.set(
       source,
-      freeze(
-        snapshotContributors(
-          catalogue["entur-geocoder"] ?? [],
-          catalogue[ENTUR_GEOCODER_SUPPLIER_SOURCE_IDS[source]],
-        ),
-      ),
-    ]),
-  );
+      freeze(snapshotContributors(catalogue["entur-geocoder"] ?? [], supplierReceipts)),
+    );
+  }
+  const declared = [...receipts.keys()];
   return Object.freeze({
     async allowedSources(signal: AbortSignal) {
       const allowed: EnturGeocoderSource[] = [];

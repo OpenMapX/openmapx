@@ -6,16 +6,18 @@ export interface ImageStagePlatform {
   variant?: string;
 }
 export function imageStagePlatform(raw: string): ImageStagePlatform {
-  const match = /^([a-z][a-z0-9]*)\/([a-z0-9_]+)(?:\/([a-z0-9]+))?$/.exec(raw.trim());
-  if (!match || raw.length > 80) throw Error("Docker platform is unavailable");
+  const [, os, machine, machineVariant] =
+    /^([a-z][a-z0-9]*)\/([a-z0-9_]+)(?:\/([a-z0-9]+))?$/.exec(raw.trim()) ?? [];
+  if (os === undefined || machine === undefined || raw.length > 80)
+    throw Error("Docker platform is unavailable");
   const aliases: Record<string, [string, string?]> = {
     x86_64: ["amd64"],
     aarch64: ["arm64"],
     armv7l: ["arm", "v7"],
     armv6l: ["arm", "v6"],
   };
-  const [architecture, variant] = aliases[match[2]!] ?? [match[2]!, match[3]];
-  return { os: match[1]!, architecture, ...(variant ? { variant } : {}) };
+  const [architecture, variant] = aliases[machine] ?? [machine, machineVariant];
+  return { os, architecture, ...(variant ? { variant } : {}) };
 }
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)

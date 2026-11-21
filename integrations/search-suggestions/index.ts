@@ -9,8 +9,7 @@ import { createSearchSuggestionsOrchestrator } from "./orchestrator.js";
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createSearchSuggestionsOrchestrator(ctx);
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const rawQuery =
-      typeof scalarQueries(req.query).q === "string" ? scalarQueries(req.query).q : "";
+    const rawQuery = scalarQueries(req.query).q ?? "";
     const normalized = normalizeSearchTerm(rawQuery);
     if (normalized.replace(/[^\p{L}\p{N}]/gu, "").length < 2) {
       reply.header("Cache-Control", "public, max-age=60");
@@ -40,10 +39,7 @@ export function setup(ctx: IntegrationContext): void {
 
     const query: SearchSuggestionQuery = {
       query: rawQuery,
-      lang:
-        typeof scalarQueries(req.query).lang === "string" && scalarQueries(req.query).lang
-          ? scalarQueries(req.query).lang
-          : "en",
+      lang: scalarQueries(req.query).lang || "en",
       limit,
       ...(latProvided ? { proximity: [lng, lat] as [number, number] } : {}),
     };

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
@@ -56,12 +57,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(Object.isFrozen(stage)).toBe(true);
       expect(Object.isFrozen(stage.value)).toBe(true);
       expect(() => assertRetainedMigrationStage(structuredClone(stage))).toThrow();
-      const row = (
+      const row = itemAt(
         await state.fixture.db
           .select()
           .from(configurationMigrationPreview)
-          .where(eq(configurationMigrationPreview.id, stage.previewId))
-      )[0]!;
+          .where(eq(configurationMigrationPreview.id, stage.previewId)),
+        0,
+      );
       expect(JSON.stringify(row)).not.toContain("private synthetic credential");
       expect(
         (

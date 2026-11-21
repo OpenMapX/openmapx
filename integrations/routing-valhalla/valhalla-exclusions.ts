@@ -7,7 +7,7 @@
  * callers such as the EV planner that construct RoutingOptions directly.
  */
 
-import type { DirectedExclusion, LngLat } from "@openmapx/core";
+import { type DirectedExclusion, itemAt, type LngLat } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
 
 export type { LngLat } from "@openmapx/core";
@@ -74,7 +74,7 @@ function subsampleEvenly<T>(items: T[], max: number): T[] {
   const stride = items.length / max;
   const out: T[] = [];
   for (let i = 0; i < max; i++) {
-    out.push(items[Math.floor(i * stride)] as T);
+    out.push(itemAt(items, Math.floor(i * stride), "subsampled exclusion"));
   }
   return out;
 }
@@ -88,19 +88,21 @@ function normalizeRing(raw: LngLat[], index: number): LngLat[] {
   const cleaned: LngLat[] = [];
   for (const [pointIndex, point] of raw.entries()) {
     const normalized = validPoint(point, `exclusion polygon ${index} vertex ${pointIndex}`);
-    if (!cleaned.at(-1) || !samePoint(cleaned.at(-1) as LngLat, normalized)) {
+    const previous = cleaned.at(-1);
+    if (!previous || !samePoint(previous, normalized)) {
       cleaned.push(normalized);
     }
   }
 
-  if (cleaned.length > 1 && samePoint(cleaned[0] as LngLat, cleaned.at(-1) as LngLat)) {
+  const [first] = cleaned;
+  const last = cleaned.at(-1);
+  if (cleaned.length > 1 && first && last && samePoint(first, last)) {
     cleaned.pop();
   }
-  if (cleaned.length < 3) {
+  if (!first || cleaned.length < 3) {
     throw new ValhallaExclusionError(`Exclusion polygon ${index} has fewer than three vertices`);
   }
 
-  const first = cleaned[0] as LngLat;
   return [...cleaned, first];
 }
 
@@ -135,15 +137,20 @@ function simplifyOpenRing(points: LngLat[], toleranceMetres: number): LngLat[] {
   const stack: Array<[number, number]> = [[0, points.length - 1]];
   const toleranceSquared = toleranceMetres * toleranceMetres;
 
-  while (stack.length > 0) {
-    const [startIndex, endIndex] = stack.pop() as [number, number];
+  for (let range = stack.pop(); range; range = stack.pop()) {
+    const [startIndex, endIndex] = range;
     let furthestIndex = -1;
     let furthestDistanceSquared = toleranceSquared;
-    const start = points[startIndex] as LngLat;
-    const end = points[endIndex] as LngLat;
+    const start = itemAt(points, startIndex, "ring vertex");
+    const end = itemAt(points, endIndex, "ring vertex");
 
     for (let i = startIndex + 1; i < endIndex; i++) {
-      const distance = perpendicularDistance(points[i] as LngLat, start, end, referenceLatitude);
+      const distance = perpendicularDistance(
+        itemAt(points, i, "ring vertex"),
+        start,
+        end,
+        referenceLatitude,
+      );
       if (distance * distance > furthestDistanceSquared) {
         furthestIndex = i;
         furthestDistanceSquared = distance * distance;
@@ -166,7 +173,7 @@ function subsampleOpenRing(points: LngLat[], maxVertices: number): LngLat[] {
   const out: LngLat[] = [];
   for (let i = 0; i < maxOpenVertices; i++) {
     const index = Math.round((i * (points.length - 1)) / (maxOpenVertices - 1));
-    out.push(points[index] as LngLat);
+    out.push(itemAt(points, index, "ring vertex"));
   }
   return out;
 }
@@ -191,8 +198,7 @@ function simplifyRing(ring: LngLat[], maxVertices: number): LngLat[] {
     simplified = subsampleOpenRing(open, maxVertices);
   }
 
-  const first = simplified[0] as LngLat;
-  return [...simplified, first];
+  return [...simplified, itemAt(simplified, 0, "ring vertex")];
 }
 
 function capPolygonBudget(polygons: LngLat[][]): LngLat[][] {

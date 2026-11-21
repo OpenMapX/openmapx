@@ -1,4 +1,4 @@
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -10,25 +10,24 @@ import {
 import { prepareTransitProgress } from "./transitProgress";
 
 const now = 1800000000000;
+const tripLeg: TripLeg = {
+  mode: "bus",
+  tripId: "t1",
+  route: { shortName: "12", longName: "" },
+  startTime: new Date(now - 600000).toISOString(),
+  endTime: new Date(now + 600000).toISOString(),
+  from: { name: "A", stopId: "a", lng: 0, lat: 0 },
+  to: { name: "B", stopId: "b", lng: 0.02, lat: 0 },
+  geometry: {
+    type: "LineString",
+    coordinates: [
+      [0, 0],
+      [0.02, 0],
+    ],
+  },
+};
 const trip = {
-  legs: [
-    {
-      mode: "bus",
-      tripId: "t1",
-      route: { shortName: "12" },
-      startTime: new Date(now - 600000).toISOString(),
-      endTime: new Date(now + 600000).toISOString(),
-      from: { name: "A", stopId: "a", lng: 0, lat: 0 },
-      to: { name: "B", stopId: "b", lng: 0.02, lat: 0 },
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [0, 0],
-          [0.02, 0],
-        ],
-      },
-    },
-  ],
+  legs: [tripLeg],
   startTime: "",
   endTime: "",
   duration: 1200,
@@ -85,7 +84,7 @@ describe("selected transit journey", () => {
   it("does not announce arrival from a distant projection onto a final walk", () => {
     const walking = {
       ...trip,
-      legs: [{ ...trip.legs[0], mode: "walking", tripId: undefined, route: undefined }],
+      legs: [{ ...tripLeg, mode: "walking", tripId: undefined, route: undefined }],
     } as TripItinerary;
     const r = tick({
       itinerary: walking,
@@ -110,14 +109,12 @@ it("does not treat a journey missing the selected endpoints as captured", async 
     { t1: [{ stopId: "elsewhere", lat: 0, lng: 0 }] },
     now,
   );
-  expect(c[0].status).toBe("missing");
-  expect(c[0].stops).toEqual([]);
+  expect(c[0]?.status).toBe("missing");
+  expect(c[0]?.stops).toEqual([]);
 });
 it("requires a separate confirmation for adjacent rides and can continue on an interlined service", () => {
-  const two = {
-    ...trip,
-    legs: [trip.legs[0], { ...trip.legs[0], tripId: "t2", interlineWithPrevious: true }],
-  };
+  const interlined = { ...tripLeg, tripId: "t2", interlineWithPrevious: true };
+  const two = { ...trip, legs: [tripLeg, interlined] };
   const boarded = tick({ itinerary: two, action: { type: "board", legIndex: 0 } }).state;
   const continued = tick({
     itinerary: two,
@@ -125,7 +122,7 @@ it("requires a separate confirmation for adjacent rides and can continue on an i
     action: { type: "continue", legIndex: 0 },
   });
   expect(continued.state).toMatchObject({ currentLegIndex: 1, phase: "riding" });
-  const normal = { ...two, legs: [two.legs[0], { ...two.legs[1], interlineWithPrevious: false }] };
+  const normal = { ...two, legs: [tripLeg, { ...interlined, interlineWithPrevious: false }] };
   expect(
     tick({ itinerary: normal, state: boarded, action: { type: "continue", legIndex: 0 } })
       .actionRejected,
@@ -177,7 +174,7 @@ it("uses the next actual stop area even when the service shape is inaccurate", (
     ...trip,
     legs: [
       {
-        ...trip.legs[0],
+        ...tripLeg,
         geometry: {
           type: "LineString" as const,
           coordinates: [
@@ -281,7 +278,7 @@ it("resynchronizes stop progress after a detour and after a single forward GPS j
   expect(state.progressConfidence).toBe("gps");
 });
 it("clears an early-alight recovery warning on boarding the next selected service", () => {
-  const next = { ...trip, legs: [trip.legs[0], { ...trip.legs[0], tripId: "t2" }] };
+  const next = { ...trip, legs: [tripLeg, { ...tripLeg, tripId: "t2" }] };
   const board = tick({
     itinerary: next,
     action: { type: "board", legIndex: 0 },

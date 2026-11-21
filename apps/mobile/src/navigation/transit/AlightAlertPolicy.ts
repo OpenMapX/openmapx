@@ -68,8 +68,8 @@ function triggerFor(
     (entry) => entry.legIndex === legIndex,
   );
 
-  if (capture?.status === "captured" && capture.stops.length >= 2) {
-    const penultimate = capture.stops[capture.stops.length - 2];
+  const penultimate = capture?.status === "captured" ? capture.stops.at(-2) : undefined;
+  if (penultimate) {
     const atMs =
       parseTime(penultimate.expectedDeparture) ?? parseTime(penultimate.scheduledDeparture);
     if (atMs !== null) return { atMs, basis: "captured" };

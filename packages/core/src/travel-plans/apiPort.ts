@@ -41,8 +41,8 @@ export function createTravelPlanPort(client: ApiClient = apiClient): TravelPlanP
           (!s.modes.length || s.modes.includes("rail")) &&
           travelStationKey(s.name) === travelStationKey(name),
       );
-      if (!anchors.length) return [];
-      const first = anchors[0];
+      const [first] = anchors;
+      if (!first) return [];
       if (anchors.some((s) => haversineDistance([first.lng, first.lat], [s.lng, s.lat]) > 1500))
         throw new TravelPlanResolutionError("ambiguous");
       const nearby = await client.get<MobilityEnvelope<TransitStop[]>>(

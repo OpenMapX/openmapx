@@ -1,7 +1,8 @@
 import type { Route } from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useNavLaneGuidanceStore } from "./laneGuidanceStore";
 import { useNavLaneGuidance } from "./useNavLaneGuidance";
 
@@ -129,7 +130,7 @@ describe("useNavLaneGuidance", () => {
 
   it("uses the graph approach even when a different approach matches the engine count", async () => {
     const graph = {
-      ...holz.lookup.approach[0],
+      ...nth(holz.lookup.approach, 0),
       geometry: holz.route.geometry as [number, number][],
     };
     const farther = {
@@ -163,7 +164,8 @@ describe("useNavLaneGuidance", () => {
     await waitFor(() =>
       expect(useNavLaneGuidanceStore.getState().guidanceByStep.get(1)).toBeDefined(),
     );
-    const model = useNavLaneGuidanceStore.getState().guidanceByStep.get(1)!;
+    const model = useNavLaneGuidanceStore.getState().guidanceByStep.get(1);
+    assert.isDefined(model);
     expect(model.lanes).toHaveLength(4);
     expect(model.preferredLanes).toEqual([]);
   });
@@ -199,18 +201,20 @@ describe("useNavLaneGuidance", () => {
     start();
     renderHook(() => useNavLaneGuidance());
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(1));
-    const sent = fetchJunctionLookups.mock.calls[0][0] as {
+    const sent = nth(fetchJunctionLookups.mock.calls, 0)[0] as {
       lng: number;
       lat: number;
       bearing: number;
       trace: [number, number][];
     }[];
     expect(sent).toHaveLength(1);
-    expect(sent[0].trace).toHaveLength(6);
+    const { trace } = nth(sent, 0);
+    expect(trace).toHaveLength(6);
+    const lngAt = (index: number) => nth(trace, index)[0];
     // Oldest first: the trace runs 400 m upstream → the point → 30 m past it.
-    expect(sent[0].trace[0][0]).toBeGreaterThan(sent[0].trace[4][0]);
-    expect(sent[0].trace[4][0]).toBeCloseTo(6.6768, 3);
-    expect(sent[0].trace[5][0]).toBeLessThan(sent[0].trace[4][0]);
+    expect(lngAt(0)).toBeGreaterThan(lngAt(4));
+    expect(lngAt(4)).toBeCloseTo(6.6768, 3);
+    expect(lngAt(5)).toBeLessThan(lngAt(4));
 
     await waitFor(() => {
       const guidance = useNavLaneGuidanceStore.getState().guidanceByStep.get(1);
@@ -229,7 +233,7 @@ describe("useNavLaneGuidance", () => {
     });
     renderHook(() => useNavLaneGuidance());
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(1));
-    expect(fetchJunctionLookups.mock.calls[0][0]).toHaveLength(40);
+    expect(nth(fetchJunctionLookups.mock.calls, 0)[0]).toHaveLength(40);
     await flush();
 
     // Ten looked-up exits still ahead: nothing more yet.
@@ -243,11 +247,11 @@ describe("useNavLaneGuidance", () => {
       useNavigationStore.setState({ progress: progress(31) });
     });
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(2));
-    const second = fetchJunctionLookups.mock.calls[1][0] as { lat: number }[];
+    const second = nth(fetchJunctionLookups.mock.calls, 1)[0] as { lat: number }[];
     expect(second).toHaveLength(20);
     // Nearest first: the batch continues where the first one stopped.
     // (Within 55 m: the route's distances are great-circle, the fixture's spacing a flat guess.)
-    expect(second[0].lat).toBeCloseTo(geometry[41][1], 3);
+    expect(nth(second, 0).lat).toBeCloseTo(nth(geometry, 41)[1], 3);
   });
 
   it("does not refetch or reset when only the step index advances", async () => {
@@ -284,15 +288,15 @@ describe("useNavLaneGuidance", () => {
 
   it("discards a stale response from a replaced route", async () => {
     let resolveFirst: ((value: unknown) => void) | undefined;
+    const lookup = nth(fixtureResponse, 0);
+    const approach = nth(lookup.approach, 0);
     fetchJunctionLookups.mockImplementation(() =>
       resolveFirst
         ? Promise.resolve([
             {
-              ...fixtureResponse[0],
-              outgoingApproachWayId: fixtureResponse[0].approach[0].wayId,
-              approach: [
-                { ...fixtureResponse[0].approach[0], tags: { lanes: 2, turnLanes: "left|right" } },
-              ],
+              ...lookup,
+              outgoingApproachWayId: approach.wayId,
+              approach: [{ ...approach, tags: { lanes: 2, turnLanes: "left|right" } }],
             },
           ])
         : new Promise((resolve) => {
@@ -354,7 +358,7 @@ describe("useNavLaneGuidance", () => {
     });
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(2));
     // Every exit still ahead rides the retry.
-    expect(fetchJunctionLookups.mock.calls[1][0]).toHaveLength(19);
+    expect(nth(fetchJunctionLookups.mock.calls, 1)[0]).toHaveLength(19);
 
     // Answered now: the next step asks for nothing.
     await flush();
@@ -382,14 +386,14 @@ describe("useNavLaneGuidance", () => {
     });
     renderHook(() => useNavLaneGuidance());
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(1));
-    const first = fetchJunctionLookups.mock.calls[0][0] as { lat: number }[];
+    const first = nth(fetchJunctionLookups.mock.calls, 0)[0] as { lat: number }[];
     await flush();
 
     act(() => {
       useNavigationStore.setState({ progress: progress(1) });
     });
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(2));
-    const retry = fetchJunctionLookups.mock.calls[1][0] as { lat: number }[];
+    const retry = nth(fetchJunctionLookups.mock.calls, 1)[0] as { lat: number }[];
     expect(retry).toEqual([first[3]]);
   });
 

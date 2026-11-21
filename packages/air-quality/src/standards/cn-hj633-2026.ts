@@ -77,7 +77,7 @@ export function calculateHjSubIndex(
   for (let index = 0; index < breakpoints.length - 1; index += 1) {
     const low = breakpoints[index];
     const high = breakpoints[index + 1];
-    if (low === null || high === null) continue;
+    if (typeof low !== "number" || typeof high !== "number") continue;
     if (normalized >= low && normalized <= high) {
       const indexLow = iaqi[index];
       const indexHigh = iaqi[index + 1];

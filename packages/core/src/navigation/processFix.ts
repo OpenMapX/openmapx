@@ -27,7 +27,9 @@ function bearingBetween(a: LngLat, b: LngLat): number {
 function bearingAt(geometry: LngLat[], segmentIndex: number): number {
   if (geometry.length < 2) return 0;
   const i = Math.max(0, Math.min(segmentIndex, geometry.length - 2));
-  return bearingBetween(geometry[i], geometry[i + 1]);
+  const from = geometry[i];
+  const to = geometry[i + 1];
+  return from && to ? bearingBetween(from, to) : 0;
 }
 
 /** Smallest absolute angle (deg, 0–180) between two bearings. */

@@ -1,4 +1,5 @@
 import { encodePolyline } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -267,7 +268,7 @@ describe("MOTIS static route adapter", () => {
     });
     const routes = await getRoutesForStop(instance, "ms:root", "epoch");
     expect(routes.map((candidate) => candidate.shortName)).toEqual(["11"]);
-    expect(mocks.routes.mock.calls[0][0].query.zoom).toBe(11);
+    expect(nth(mocks.routes.mock.calls, 0)[0].query.zoom).toBe(11);
     expect(mocks.stoptimes).toHaveBeenCalledTimes(1);
   });
 
@@ -350,7 +351,7 @@ describe("MOTIS routes-for-stop probe sharing", () => {
 
     const box = routeProbeBox(47.005, 8.005);
     expect(mocks.routes).toHaveBeenCalledTimes(1);
-    expect(mocks.routes.mock.calls[0][0].query).toEqual({
+    expect(nth(mocks.routes.mock.calls, 0)[0].query).toEqual({
       min: "46.999000,7.999000",
       max: "47.011000,8.011000",
       zoom: 11,
@@ -409,8 +410,12 @@ describe("MOTIS routes-for-stop probe sharing", () => {
     [52.5251, 13.3694],
   ])("snaps (%f, %f) to a probe box containing its ±0.001° box", (lat, lon) => {
     const { min, max } = routeProbeBox(lat, lon);
-    const [minLat, minLon] = min.split(",").map(Number);
-    const [maxLat, maxLon] = max.split(",").map(Number);
+    const minParts = min.split(",").map(Number);
+    const maxParts = max.split(",").map(Number);
+    const minLat = nth(minParts, 0);
+    const minLon = nth(minParts, 1);
+    const maxLat = nth(maxParts, 0);
+    const maxLon = nth(maxParts, 1);
     expect(minLat).toBeLessThanOrEqual(lat - 0.001 + 1e-9);
     expect(minLon).toBeLessThanOrEqual(lon - 0.001 + 1e-9);
     expect(maxLat).toBeGreaterThanOrEqual(lat + 0.001 - 1e-9);
@@ -538,12 +543,12 @@ describe("MOTIS stops, platforms, and civil-day timetable", () => {
       });
     const departures = await getStopTimetable(instance, "ms:root", "2026-03-29", "epoch");
     expect(departures).toHaveLength(1);
-    expect(decodeMotisLineReference(departures[0].route.id)).toMatchObject({
+    expect(decodeMotisLineReference(nth(departures, 0).route.id)).toMatchObject({
       e: "epoch",
       r: "de_feed_route",
     });
-    expect(mocks.stoptimes.mock.calls[1][0].query.time).toBe("2026-03-28T23:00:00.000Z");
-    expect(mocks.stoptimes.mock.calls[2][0].query.pageCursor).toBe("next");
+    expect(nth(mocks.stoptimes.mock.calls, 1)[0].query.time).toBe("2026-03-28T23:00:00.000Z");
+    expect(nth(mocks.stoptimes.mock.calls, 2)[0].query.pageCursor).toBe("next");
   });
 
   it("includes an event 24.5 hours into a 25-hour fall-back civil day", async () => {
@@ -594,7 +599,7 @@ describe("MOTIS stops, platforms, and civil-day timetable", () => {
       .mockResolvedValueOnce({ data: { place: stop("root", 13.369, 52.525) } })
       .mockResolvedValueOnce({ data: { stopTimes: [event], nextPageCursor: "" } });
     expect(await getStopTimetable(instance, "ms:root", "2026-07-30", "epoch")).toHaveLength(1);
-    expect(mocks.stoptimes.mock.calls[1][0].query.time).toBe("2026-07-29T22:00:00.000Z");
+    expect(nth(mocks.stoptimes.mock.calls, 1)[0].query.time).toBe("2026-07-29T22:00:00.000Z");
   });
 
   it("caps a civil-day timetable at 300 accepted events", async () => {
@@ -776,7 +781,7 @@ describe("MOTIS adapter regression guards", () => {
       });
     const departures = await getStopTimetable(instance, "ms:root", "2026-01-01", "epoch");
     expect(departures).toHaveLength(1);
-    expect(departures[0].tripId).toBe("ms:delayed");
+    expect(nth(departures, 0).tripId).toBe("ms:delayed");
   });
 
   it("drops only the unencodable pattern from a bbox response, not the whole overlay", async () => {
@@ -808,7 +813,7 @@ describe("MOTIS adapter regression guards", () => {
     });
     const mapped = await getRoutesInBbox(instance, [1, 1, 2, 2], "epoch");
     expect(mapped).toHaveLength(1);
-    expect(mapped[0].shortName).toBe("1");
+    expect(nth(mapped, 0).shortName).toBe("1");
   });
 
   it("encodes a provider-scoped sentinel line reference when no epoch is available", async () => {
@@ -826,7 +831,7 @@ describe("MOTIS adapter regression guards", () => {
     });
     const departures = await getDepartures(instance, "ms:root", 60);
     expect(departures).toHaveLength(1);
-    expect(decodeMotisLineReference(departures[0].route.id)).toMatchObject({
+    expect(decodeMotisLineReference(nth(departures, 0).route.id)).toMatchObject({
       e: "ms-unversioned",
       r: "de_feed_route",
     });

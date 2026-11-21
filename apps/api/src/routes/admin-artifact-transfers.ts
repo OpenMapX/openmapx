@@ -95,7 +95,8 @@ export async function adminArtifactTransfersRoute(app: FastifyInstance): Promise
   );
   register(app, "uploadAdminArtifactTransferContent", async (req, reply) => {
     if (
-      req.headers["content-type"]?.split(";")[0].trim().toLowerCase() !== "application/octet-stream"
+      req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
+      "application/octet-stream"
     )
       return reply.code(415).send({ error: "Artifact upload requires application/octet-stream" });
     const controller = new AbortController();

@@ -66,9 +66,8 @@ export function setup(ctx: IntegrationContext): void {
   // OSM primary-id dispatch: when a Place.id arrives as `osm:node/123`,
   // resolve it via Nominatim's OSM-ref detail lookup.
   registerPlaceResolver("osm", async (value, resolverCtx) => {
-    const match = value.match(/^(node|way|relation)\/(\d+)/);
-    if (!match) return null;
-    const [, osmType, osmId] = match;
+    const [, osmType, osmId] = value.match(/^(node|way|relation)\/(\d+)/) ?? [];
+    if (osmType === undefined || osmId === undefined) return null;
     return lookupByOsmRef(osmType, osmId, `osm:${value}`, resolverCtx.lang);
   });
 
@@ -85,8 +84,8 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      const lat = Number.parseFloat(scalarQueries(req.query).lat);
-      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+      const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
       const proximity: [number, number] | undefined =
         Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : undefined;
 
@@ -134,8 +133,8 @@ export function setup(ctx: IntegrationContext): void {
     "GET",
     "/geocode/reverse",
     async (req, reply) => {
-      const lat = Number.parseFloat(scalarQueries(req.query).lat);
-      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+      const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
       const lang = scalarQueries(req.query).lang;
 
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -171,8 +170,8 @@ export function setup(ctx: IntegrationContext): void {
     "GET",
     "/geocode/country",
     async (req, reply) => {
-      const lat = Number.parseFloat(scalarQueries(req.query).lat);
-      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+      const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         reply.status(400).send({ error: "lat and lng must be valid numbers" });
         return;

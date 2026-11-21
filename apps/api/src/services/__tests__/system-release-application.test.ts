@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobContext } from "../job-runner";
 
@@ -159,7 +160,7 @@ describe("guarded release image acquisition", () => {
     });
     expect(pull?.[2]).toBe("admin-job.release.images");
     expect(previewConfiguration.mock.invocationCallOrder[0]).toBeGreaterThan(
-      executeAdminOperation.mock.invocationCallOrder[1]!,
+      itemAt(executeAdminOperation.mock.invocationCallOrder, 1),
     );
     expect(host.runningRelease).toBe(releaseId);
   });

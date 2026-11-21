@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { resolveContributors } from "../contributors";
 import { captureHazardFeatures } from "../hazards-features";
 
@@ -26,8 +26,10 @@ describe("hazard feature acquisition", () => {
       resolve,
       (feature) => feature.properties?.sources ?? [],
     );
-    captured[0]!.publisher.name = "Changed operator";
-    expect(result.features[0]?.properties?.contributors[0].publisher.name).toBe(
+    const [receipt] = captured;
+    assert.isDefined(receipt);
+    receipt.publisher.name = "Changed operator";
+    expect(result.features[0]?.properties?.contributors[0]?.publisher.name).toBe(
       "Original operator",
     );
     expect(JSON.parse(result.features[0]?.properties?._mapAttributions)[0].publisher.name).toBe(

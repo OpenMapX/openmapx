@@ -94,7 +94,9 @@ export function AmbientPlacesLayer() {
       return place.fieldContributors === undefined
         ? ambientPlaceContributors(place, locale)
         : contributorsForRecordFields(place, [
-            place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name",
+            place.names[locale.replace(/-.*/s, "")]
+              ? `names.${locale.replace(/-.*/s, "")}`
+              : "name",
             "gersId",
           ]);
     },

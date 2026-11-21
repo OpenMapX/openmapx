@@ -5,7 +5,7 @@ import type { LngLat } from "../types/geometry";
 
 const ALPHABET = "23456789CFGHJMPQRVWX";
 // Degree resolution for each of the 5 character pairs
-const PAIR_RESOLUTIONS = [20.0, 1.0, 0.05, 0.0025, 0.000125];
+const PAIR_RESOLUTIONS = [20.0, 1.0, 0.05, 0.0025, 0.000125] as const;
 
 // Valid Plus Code characters pattern (for regex character classes)
 const PC_CHARS = "23456789CFGHJMPQRVWX";
@@ -28,7 +28,7 @@ export function computePlusCode([lng, lat]: LngLat): string {
     const lngDigit = Math.floor(lngVal / res) % 20;
     latVal -= latDigit * res;
     lngVal -= lngDigit * res;
-    code += ALPHABET[latDigit] + ALPHABET[lngDigit];
+    code += ALPHABET.charAt(latDigit) + ALPHABET.charAt(lngDigit);
   }
   return `${code.slice(0, 8)}+${code.slice(8)}`;
 }
@@ -66,10 +66,9 @@ export function decodePlusCode(code: string): LngLat | null {
 
   let latLow = 0;
   let lngLow = 0;
-  for (let i = 0; i < 5; i++) {
-    const res = PAIR_RESOLUTIONS[i];
-    latLow += ALPHABET.indexOf(digits[i * 2]) * res;
-    lngLow += ALPHABET.indexOf(digits[i * 2 + 1]) * res;
+  for (const [i, res] of PAIR_RESOLUTIONS.entries()) {
+    latLow += ALPHABET.indexOf(digits.charAt(i * 2)) * res;
+    lngLow += ALPHABET.indexOf(digits.charAt(i * 2 + 1)) * res;
   }
 
   const res = PAIR_RESOLUTIONS[4];
@@ -129,9 +128,10 @@ function recoverShortPlusCode(shortCode: string, refLat: number, refLng: number)
  */
 export function detectShortPlusCodeCity(input: string): { code: string; city: string } | null {
   const trimmed = input.trim();
-  const m = trimmed.match(new RegExp(`^([${PC_CHARS}]{4,6}\\+[${PC_CHARS}]{2,})[,\\s]+(.+)$`, "i"));
-  if (!m) return null;
-  return { code: m[1].toUpperCase(), city: m[2].trim() };
+  const [, code, city] =
+    trimmed.match(new RegExp(`^([${PC_CHARS}]{4,6}\\+[${PC_CHARS}]{2,})[,\\s]+(.+)$`, "i")) ?? [];
+  if (code === undefined || city === undefined) return null;
+  return { code: code.toUpperCase(), city: city.trim() };
 }
 
 /**
@@ -160,17 +160,17 @@ export function parsePlusCodeInput(
   const upper = trimmed.toUpperCase();
 
   // Full code: exactly 8 valid chars + '+' + 2+ valid chars, nothing after
-  const fullMatch = upper.match(new RegExp(`^([${PC_CHARS}]{8}\\+[${PC_CHARS}]{2,})$`));
-  if (fullMatch) {
-    const lngLat = decodePlusCode(fullMatch[1]);
-    if (lngLat) return { lngLat, label: fullMatch[1] };
+  const fullCode = upper.match(new RegExp(`^([${PC_CHARS}]{8}\\+[${PC_CHARS}]{2,})$`))?.[1];
+  if (fullCode !== undefined) {
+    const lngLat = decodePlusCode(fullCode);
+    if (lngLat) return { lngLat, label: fullCode };
   }
 
   // Short code without city: 4–6 valid chars + '+' + 2+ valid chars, nothing after
-  const shortMatch = upper.match(new RegExp(`^([${PC_CHARS}]{4,6}\\+[${PC_CHARS}]{2,})$`));
-  if (shortMatch && refLngLat) {
-    const lngLat = decodeShortPlusCode(shortMatch[1], refLngLat);
-    if (lngLat) return { lngLat, label: shortMatch[1] };
+  const shortCode = upper.match(new RegExp(`^([${PC_CHARS}]{4,6}\\+[${PC_CHARS}]{2,})$`))?.[1];
+  if (shortCode !== undefined && refLngLat) {
+    const lngLat = decodeShortPlusCode(shortCode, refLngLat);
+    if (lngLat) return { lngLat, label: shortCode };
   }
 
   return null;

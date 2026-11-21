@@ -258,8 +258,7 @@ describe("SessionRepository", () => {
 
       const quarantined = await repository.listQuarantined();
       expect(quarantined).toHaveLength(1);
-      expect(quarantined[0].sessionId).toBe("session-1");
-      expect(quarantined[0].reason).toBe("invalid-session");
+      expect(quarantined[0]).toMatchObject({ sessionId: "session-1", reason: "invalid-session" });
 
       // The second load finds nothing to quarantine, so it cannot crash-loop.
       expect(await repository.loadActive(NOW)).toBeNull();
@@ -279,7 +278,7 @@ describe("SessionRepository", () => {
       );
 
       expect(await repository.loadActive(NOW)).toBeNull();
-      expect((await repository.listQuarantined())[0].reason).toBe("unsupported-schema");
+      expect((await repository.listQuarantined())[0]?.reason).toBe("unsupported-schema");
     });
 
     it("never stores the original session JSON", async () => {
@@ -316,7 +315,7 @@ describe("SessionRepository", () => {
       const { database, repository } = await freshRepository();
       await repository.quarantineCorruptSession("s", "x".repeat(500), NOW);
 
-      expect((await repository.listQuarantined())[0].reason).toHaveLength(64);
+      expect((await repository.listQuarantined())[0]?.reason).toHaveLength(64);
     });
   });
 
@@ -385,7 +384,7 @@ describe("SessionRepository", () => {
 
       await repository.markAlert("a1", "fired", NOW + 100);
 
-      expect((await repository.listScheduledAlerts("session-1"))[0].state).toBe("fired");
+      expect((await repository.listScheduledAlerts("session-1"))[0]?.state).toBe("fired");
     });
   });
 

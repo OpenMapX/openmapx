@@ -1,5 +1,6 @@
 import { createApiClient } from "@openmapx/core";
 import { afterEach, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { exportSavedList } from "./exportSavedList";
 
 const client = createApiClient({ baseUrl: "https://saved.example", credentials: "include" });
@@ -45,17 +46,17 @@ it.each([
     );
     vi.stubGlobal("fetch", fetch);
     await exportSavedList("list/1", format, `Trip.${format}`, { client });
-    expect(fetch.mock.calls[0][0]).toBe(
+    expect(nth(fetch.mock.calls, 0)[0]).toBe(
       `https://saved.example/api/saved/lists/list%2F1/export?format=${format}`,
     );
     expect(downloaded).toBe(`Trip.${format}`);
     expect(blobs).toHaveLength(1);
-    expect(blobs[0].type.split(";", 1)[0]).toBe(media);
+    expect(nth(blobs, 0).type.split(";", 1)[0]).toBe(media);
     const text = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
-      reader.readAsText(blobs[0]);
+      reader.readAsText(nth(blobs, 0));
     });
     expect(text).toBe(content);
     expect(revoked).toEqual(["blob:https://saved.example/export"]);

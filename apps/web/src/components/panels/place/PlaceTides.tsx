@@ -5,13 +5,15 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type {
-  MetObservation,
-  TideCurvePoint,
-  TideDatum,
-  TideEvent,
-  TidesResponse,
-  WaterLevelObservation,
+import {
+  compassPoint,
+  type MetObservation,
+  numberAt,
+  type TideCurvePoint,
+  type TideDatum,
+  type TideEvent,
+  type TidesResponse,
+  type WaterLevelObservation,
 } from "@openmapx/core";
 import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
@@ -312,17 +314,11 @@ function CurrentLevelBlock({
   );
 }
 
-const CARDINALS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-
-function windDirection(deg: number): string {
-  const idx = Math.round((deg % 360) / 45) % 8;
-  return CARDINALS[idx] ?? "";
-}
-
 function MetBlock({ met, t }: { met: MetObservation; t: ReturnType<typeof useTranslations> }) {
   const parts: string[] = [];
   if (met.windKnots !== undefined) {
-    const dir = met.windDirDeg !== undefined ? windDirection(met.windDirDeg) : "";
+    // The message reads without a direction when there is none to name.
+    const dir = (met.windDirDeg === undefined ? undefined : compassPoint(met.windDirDeg)) ?? "";
     parts.push(
       met.windGustKnots !== undefined
         ? t("windWithGust", { speed: met.windKnots, gust: met.windGustKnots, dir })
@@ -372,7 +368,9 @@ function TideChart({
   const points = curve
     .map((p) => ({ t: parseLocalTime(p.time).getTime(), v: p.valueFt }))
     .filter((p) => p.t >= windowStart && p.t <= windowEnd);
-  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points.at(-1);
+  if (points.length < 2 || !first || !last) return null;
 
   const minV = Math.min(...points.map((p) => p.v));
   const maxV = Math.max(...points.map((p) => p.v));
@@ -387,9 +385,9 @@ function TideChart({
     .map((p, i) => `${i === 0 ? "M" : "L"}${xFor(p.t).toFixed(1)} ${yFor(p.v).toFixed(1)}`)
     .join(" ");
   // Closed area path for the soft fill underneath.
-  const area = `${path} L${xFor(points[points.length - 1].t).toFixed(1)} ${(
-    CHART_PAD_Y + innerH
-  ).toFixed(1)} L${xFor(points[0].t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(1)} Z`;
+  const area = `${path} L${xFor(last.t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(
+    1,
+  )} L${xFor(first.t).toFixed(1)} ${(CHART_PAD_Y + innerH).toFixed(1)} Z`;
 
   const visibleEvents = events.filter(
     (e) => e.parsed.getTime() >= windowStart && e.parsed.getTime() <= windowEnd,
@@ -464,10 +462,14 @@ function parseLocalTime(timeStr: string): Date {
   if (/T\d{2}:\d{2}/.test(timeStr) && /Z|[+-]\d{2}:?\d{2}$/.test(timeStr)) {
     return new Date(timeStr);
   }
-  const [datePart, timePart = "00:00"] = timeStr.split(" ");
-  const [y, m, d] = datePart.split("-").map(Number);
+  const space = timeStr.indexOf(" ");
+  const datePart = space === -1 ? timeStr : timeStr.slice(0, space);
+  const timePart = space === -1 ? "00:00" : timeStr.slice(space + 1);
+  const dateFields = datePart.split("-").map(Number);
+  const [, m, d] = dateFields;
   const [hh, mm] = timePart.split(":").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
+  // `split` always yields a first field; an unparsable year is NaN, an Invalid Date.
+  return new Date(numberAt(dateFields, 0), (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
 }
 
 function todayLocalDate(): Date {

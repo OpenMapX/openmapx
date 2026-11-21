@@ -8,7 +8,7 @@ import {
 } from "@openmapx/core/ambient-places-server";
 import Fastify from "fastify";
 import { PbfReader } from "pbf";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { registerAmbientPlacesApi } from "../../src/jobs/ambient-places/api.js";
 import { buildAmbientPlaces, resumePlanetPlaces } from "../../src/jobs/ambient-places/build.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
@@ -48,6 +48,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
         }),
       ).rejects.toThrow("stop");
       const [stage] = await pg.sql.unsafe("SELECT generation FROM ambient_places.planet_builds");
+      assert.isDefined(stage);
       const restarted = Fastify();
       registerAmbientPlacesApi(restarted, pg.sql);
       try {
@@ -81,15 +82,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       expect(resolved?.place.coordinates[1]).toBeCloseTo(35.7, 7);
       for (const x of [0, 8191]) {
         const bytes = await readAmbientTile(pg.sql, manifest.generation, 13, x, 4096);
-        const layer = new VectorTile(new PbfReader(bytes!)).layers.ambient_places;
+        assert.exists(bytes);
+        const layer = new VectorTile(new PbfReader(bytes)).layers.ambient_places;
+        assert.isDefined(layer);
         expect(layer.length).toBe(2);
         const features = Array.from({ length: layer.length }, (_, i) => layer.feature(i));
         expect(features.map((f) => f.properties.id).sort()).toEqual(["osm:node/1", "osm:node/2"]);
         expect(features.map((f) => f.properties.name)).toEqual(
           expect.arrayContaining(["病院 East", "病院 West"]),
         );
-        for (const f of features) expect(f.loadGeometry()[0][0].x).toBeGreaterThanOrEqual(-64);
-        expect(bytes!.length).toBeLessThanOrEqual(128 * 1024);
+        for (const f of features) expect(f.loadGeometry()[0]?.[0]?.x).toBeGreaterThanOrEqual(-64);
+        expect(bytes.length).toBeLessThanOrEqual(128 * 1024);
       }
     } finally {
       await pg.stop();
@@ -127,9 +130,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
         bytes = await readAmbientTile(pg.sql, first.generation, z, x, y);
         times.push(performance.now() - t);
       }
-      const layer = new VectorTile(new PbfReader(bytes!)).layers.ambient_places;
+      assert.exists(bytes);
+      const layer = new VectorTile(new PbfReader(bytes)).layers.ambient_places;
+      assert.isDefined(layer);
       expect(layer.length).toBe(256);
-      expect(bytes!.length).toBeLessThanOrEqual(128 * 1024);
+      expect(bytes.length).toBeLessThanOrEqual(128 * 1024);
       const plan = await pg.sql.unsafe(
         `EXPLAIN (FORMAT JSON) SELECT id FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
         [first.generation, z, x, y],
@@ -141,6 +146,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       const [size] = await pg.sql.unsafe("SELECT pg_total_relation_size($1)::TEXT AS bytes", [
         `ambient_places.planet_${first.generation.replaceAll("-", "")}`,
       ]);
+      assert.isDefined(size);
       const report = {
         fixtureOnly: true,
         sourceRows: 10001,
@@ -150,10 +156,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
         publicationMs,
         indexedGenerationBytes: Number(size.bytes),
         denseTileFeatures: layer.length,
-        denseTileBytes: bytes!.length,
+        denseTileBytes: bytes.length,
         warmTileMs: times,
         warmP95Ms: [...times].sort((a, b) => a - b)[18],
-        plan: plan[0]["QUERY PLAN"],
+        plan: plan[0]?.["QUERY PLAN"],
       };
       if (process.env.OPENMAPX_GLOBAL_ACCEPTANCE_PATH)
         await writeFile(

@@ -26,7 +26,7 @@ export interface LayerCapability {
 
 export type Capabilities = Record<string, LayerCapability>;
 
-export const GIBS_LAYERS: GibsLayerDef[] = [
+export const GIBS_LAYERS: readonly [GibsLayerDef, ...GibsLayerDef[]] = [
   {
     id: "trueColor",
     identifier: "MODIS_Terra_CorrectedReflectance_TrueColor",

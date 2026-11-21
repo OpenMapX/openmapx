@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteFuelPrices } from "@/lib/navigation/useRouteFuelPrices";
+import { nth } from "@/test";
 
 const fixture = vi.hoisted(() => ({
   results: [] as AlongRoutePoi<CategoryPlace>[],
@@ -46,7 +47,7 @@ vi.mock("./RouteSearchResultsLayer", () => ({
     results: AlongRoutePoi<CategoryPlace>[];
     onSelect: (poi: AlongRoutePoi<CategoryPlace>) => void;
   }) => (
-    <button type="button" onClick={() => onSelect(results[0])}>
+    <button type="button" onClick={() => onSelect(nth(results, 0))}>
       Select stop
     </button>
   ),

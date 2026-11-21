@@ -17,7 +17,8 @@ import {
 } from "@openmapx/core";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 type PaddedRouteAheadBounds = typeof import("@openmapx/core").paddedRouteAheadBounds;
 
@@ -112,7 +113,9 @@ function makeRoute(overrides: Partial<Route> = {}): Route {
 
 function start(route: Route, alongMeters = 0, speedMps = 20) {
   useNavigationStore.getState().stopNavigation();
-  useNavigationStore.getState().startGroundNavigation(route, "driving", [geometry[0], geometry[1]]);
+  useNavigationStore
+    .getState()
+    .startGroundNavigation(route, "driving", [nth(geometry, 0), nth(geometry, 1)]);
   useNavigationStore.getState().applyProgress({
     snapped: geometry[0],
     alongMeters,
@@ -393,8 +396,8 @@ describe("useNavAlerts — acquisition covers the selector's approach windows", 
     const window = paddedRouteAheadBoundsSpy.mock.calls.find(
       (args) => args[0] === longGeometry && Number(args[1]) > 0,
     );
-    expect(window).toBeDefined();
-    const horizon = Number(window?.[2]) - PROGRESS_BUCKET_METERS;
+    assert.isDefined(window, "the route-ahead bounds were never padded for the long route");
+    const horizon = Number(window[2]) - PROGRESS_BUCKET_METERS;
     expect(horizon).toBeGreaterThanOrEqual(0);
     for (const type of upstreamTypes) {
       const beyond: RoadAlert = { id: type, type, coord: [0, 0], alongMeters: horizon + 1 };

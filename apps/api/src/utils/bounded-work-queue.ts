@@ -182,8 +182,9 @@ export class BoundedWorkQueue {
   }
 
   #pump(): void {
-    while (this.#active < this.#concurrency && this.#queue.length > 0) {
-      const job = this.#queue.shift() as Job;
+    while (this.#active < this.#concurrency) {
+      const job = this.#queue.shift();
+      if (!job) return;
       if (Date.now() >= job.deadlineAt) {
         this.#reject(job, new WorkAdmissionError("deadline", this.#retryAfterMs));
         continue;

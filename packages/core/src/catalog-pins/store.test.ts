@@ -19,7 +19,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { heldTargets } from "../build-artifacts/__fixtures__/held-targets";
 import type { ControlInstallation } from "../build-artifacts/control-records";
 import { retainAdmittedControlExecution } from "../build-artifacts/execution-record";
@@ -220,7 +220,8 @@ it("refuses symlinked locks and replacements between descriptor checks", async (
   await expect(initializeCatalogPinSet({ rootDir: root, lease })).rejects.toThrow();
   fs.unlinkSync(join(docker, "transitous.lock.json"));
   renameSync(join(docker, "saved.json"), join(docker, "transitous.lock.json"));
-  const read = vi.mocked(fs.readSync).getMockImplementation()!;
+  const read = vi.mocked(fs.readSync).getMockImplementation();
+  assert.isDefined(read);
   let seen = 0;
   const target = fs.statSync(join(docker, "transitous.lock.json"));
   vi.spyOn(fs, "readSync").mockImplementation(((...args: Parameters<typeof read>) => {

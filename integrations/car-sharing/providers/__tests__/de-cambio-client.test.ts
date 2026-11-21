@@ -1,6 +1,10 @@
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import { createSharedMobilityContributorResolver } from "@openmapx/integration-framework/shared-mobility-provider";
-import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import {
+  createPassthroughCache,
+  fakeHttpClient,
+  nth,
+} from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "../../manifest.json";
@@ -98,7 +102,7 @@ describe("Cambio credits", () => {
         { id, name: "Station", geoposition: { latitude: lat, longitude: lng } },
       ]);
 
-      const [station] = await search(bboxAround(lat, lng));
+      const station = nth(await search(bboxAround(lat, lng)), 0);
 
       expect(station.id).toBe(`de-cambio/${code}/${id}`);
       expect(station.sources).toEqual([`${source}/${code}`]);
@@ -144,7 +148,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX, searchContext());
+    const station = nth(await deCambioClient.search(BIELEFELD_BBOX, searchContext()), 0);
 
     expect(station).toMatchObject({
       id: "de-cambio/BIL/19-17",
@@ -168,7 +172,7 @@ describe("Cambio stations", () => {
       },
     ]);
 
-    const [station] = await deCambioClient.search(BIELEFELD_BBOX, searchContext());
+    const station = nth(await deCambioClient.search(BIELEFELD_BBOX, searchContext()), 0);
 
     expect(station.capacity).toBe(0);
     expect(station.availableVehicles).toBeUndefined();
@@ -194,9 +198,10 @@ describe("Cambio stations", () => {
       ].join("\n"),
     );
 
-    const [merged, ...rest] = mergeRegionalStations([...cambio, ...bielefeld]);
+    const stations = mergeRegionalStations([...cambio, ...bielefeld]);
 
-    expect(rest).toEqual([]);
+    expect(stations).toHaveLength(1);
+    const merged = nth(stations, 0);
     expect(merged.id).toBe("de-cambio/BIL/19-2");
     expect(merged.capacity).toBe(2);
     expect(merged.website).toBe("https://example.com/book");

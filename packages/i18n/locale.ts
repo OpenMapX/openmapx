@@ -14,7 +14,7 @@ export function resolveLocale(value?: string | null): Locale {
   if (!value) return defaultLocale;
   let candidate: string;
   try {
-    candidate = Intl.getCanonicalLocales(value)[0].toLowerCase();
+    candidate = Intl.getCanonicalLocales(value)[0]?.toLowerCase() ?? "";
   } catch {
     return defaultLocale;
   }

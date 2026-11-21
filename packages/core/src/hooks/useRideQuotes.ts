@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { rideQuoteBody } from "../deep-links/rideLink";
 import type { RideAttribution, RideQuote, RideQuoteRequest } from "../types/ride";
-import { rideQuoteBody } from "../utils/rideLink";
 
 export interface RideQuoteResult {
   providerId: string;

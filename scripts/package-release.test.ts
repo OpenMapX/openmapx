@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
+import { nth } from "./fixtures/nth.ts";
 import * as releaseAPI from "./package-release.mjs";
 import {
   planPackageRelease,
@@ -11,7 +12,10 @@ import {
 } from "./package-release.mjs";
 
 const sha = "a".repeat(40);
-const names = ["@openmapx/extension-contracts", "@openmapx/extension-cli"];
+const names: readonly [string, string] = [
+  "@openmapx/extension-contracts",
+  "@openmapx/extension-cli",
+];
 function input(operation = "publish") {
   return {
     operation,
@@ -76,7 +80,7 @@ describe("qualified package batch planning", () => {
   });
   it("qualifies declared bootstrap versions without CI or publication authority", () => {
     const data = input("qualify");
-    data.packages[0].version = "0.1.0";
+    nth(data.packages, 0).version = "0.1.0";
     const batch = planPackageRelease({
       ...data,
       ci: null,
@@ -180,7 +184,7 @@ describe("qualified package batch planning", () => {
     [
       "different versions",
       (d: ReturnType<typeof input>) => {
-        d.packages[0].version = "0.2.0";
+        nth(d.packages, 0).version = "0.2.0";
       },
     ],
     [
@@ -192,31 +196,33 @@ describe("qualified package batch planning", () => {
     [
       "changed allowlist",
       (d: ReturnType<typeof input>) => {
-        d.packages[0].name = "@other/name";
+        nth(d.packages, 0).name = "@other/name";
       },
     ],
     [
       "private package",
       (d: ReturnType<typeof input>) => {
-        d.packages[0].private = true;
+        nth(d.packages, 0).private = true;
       },
     ],
     [
       "outside batch",
       (d: ReturnType<typeof input>) => {
-        d.nativePlan.plan[0].push({ ...d.nativePlan.plan[0][0], name: names[1], version: "0.1.0" });
+        const batch = nth(d.nativePlan.plan, 0);
+        batch.push({ ...nth(batch, 0), name: names[1], version: "0.1.0" });
       },
     ],
     [
       "tag-only",
       (d: ReturnType<typeof input>) => {
-        d.nativePlan.plan[0][0].kind = "tag-only";
+        nth(nth(d.nativePlan.plan, 0), 0).kind = "tag-only";
       },
     ],
     [
       "duplicate",
       (d: ReturnType<typeof input>) => {
-        d.nativePlan.plan[0].push(d.nativePlan.plan[0][0]);
+        const batch = nth(d.nativePlan.plan, 0);
+        batch.push(nth(batch, 0));
       },
     ],
     [
@@ -238,7 +244,7 @@ describe("qualified package batch planning", () => {
   });
   it("fails unsupported future public runtime dependency topology", () => {
     const data = input();
-    data.packages[1].dependencies = { [names[0]]: "^0.1.0" };
+    nth(data.packages, 1).dependencies = { [names[0]]: "^0.1.0" };
     expect(() => planPackageRelease(data)).toThrow(/topology/);
   });
 });
@@ -295,7 +301,7 @@ describe("qualification and protected publishing", () => {
     await publishPackageRelease(f.request, f.ports);
     await publishPackageRelease(f.request, f.ports);
     expect(f.ports.publishTarball).toHaveBeenCalledTimes(1);
-    expect(f.ports.publishTarball.mock.calls[0][0]).toEqual(f.candidate.packages[0]);
+    expect(f.ports.publishTarball.mock.calls[0]?.[0]).toEqual(f.candidate.packages[0]);
     expect(f.ports.verifyPublished).toHaveBeenCalledTimes(2);
   });
   it.each(["validateArtifact", "assertNpm", "registryVersion", "readTag"] as const)(

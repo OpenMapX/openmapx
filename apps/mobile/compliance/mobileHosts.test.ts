@@ -82,8 +82,8 @@ function withoutComments(source: string): string {
 
 function hostsIn(source: string): string[] {
   const hosts: string[] = [];
-  for (const match of withoutComments(source).matchAll(/https?:\/\/([A-Za-z0-9._-]+)/g)) {
-    hosts.push(match[1].toLowerCase());
+  for (const [, host] of withoutComments(source).matchAll(/https?:\/\/([A-Za-z0-9._-]+)/g)) {
+    if (host) hosts.push(host.toLowerCase());
   }
   return hosts;
 }

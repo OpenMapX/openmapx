@@ -27,12 +27,15 @@ const FORECAST_LIMIT = 5_000;
 const CURRENT_VALIDITY_MS = 2 * 60 * 60_000;
 const FORECAST_VALIDITY_MS = 60 * 60_000;
 
+const licensing = parseLicensing(sourceManifest.dataSources[0]?.licensing);
+if (!licensing) throw new Error("air-quality-eccc manifest declares no valid source licensing");
+
 const source: AirQualitySourceRef = {
   sourceId: SOURCE_ID,
   name: "ECCC GeoMet AQHI observations and forecasts",
   url: "https://api.weather.gc.ca/collections/aqhi-observations-realtime",
   owner: "Environment and Climate Change Canada",
-  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
+  licensing,
   methodologyUrl: "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
   attribution: "Environment and Climate Change Canada",
 };

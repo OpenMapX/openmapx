@@ -6,5 +6,8 @@
  */
 export function toYYMMDD(isoDate: string): string {
   const [y, m, d] = isoDate.split("-");
+  if (y === undefined || m === undefined || d === undefined) {
+    throw new RangeError(`Not a YYYY-MM-DD date: ${isoDate}`);
+  }
   return `${y.slice(2)}${m}${d}`;
 }

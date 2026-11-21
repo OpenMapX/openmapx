@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import fixture from "./fixtures/re1-26839-transitous-trip.json";
@@ -69,16 +70,17 @@ describe("DELFI passenger platforms", () => {
       routeId: "de-DELFI_de:nrw:re1:_100",
       feedTag: "de-DELFI",
     });
-    expect(journey?.stops[6].platform).toBeUndefined();
-    expect(journey?.stops[7].platform).toBeUndefined();
+    expect(nth(journey?.stops ?? [], 6).platform).toBeUndefined();
+    expect(nth(journey?.stops ?? [], 7).platform).toBeUndefined();
   });
   it.each(["multi-leg", "unknown-feed", "train-name", "wrong-source"])(
     "does not authorize enrichment for %s",
     async (reason) => {
       const data = structuredClone(fixture);
-      if (reason === "multi-leg") data.legs.push(data.legs[0]);
-      if (reason === "train-name") data.legs[0].tripShortName = "RE1";
-      if (reason === "wrong-source") data.legs[0].source = "other.gtfs.zip/stop_times.txt:1:2";
+      const leg = nth(data.legs, 0);
+      if (reason === "multi-leg") data.legs.push(leg);
+      if (reason === "train-name") leg.tripShortName = "RE1";
+      if (reason === "wrong-source") leg.source = "other.gtfs.zip/stop_times.txt:1:2";
       trip.mockResolvedValue({ data });
       expect(
         (

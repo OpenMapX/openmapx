@@ -166,7 +166,7 @@ viewport and zoom rules. Placement follows the reviewed contract below.
 The portable implementation is in `packages/extension-contracts/src/licensing.ts`
 and `attribution.ts`; `@openmapx/mobility-core` re-exports the licensing contract.
 Placement defaults live in `packages/mobility-core/src/attribution-placement.ts`,
-and host HTML rendering lives in `packages/core/src/utils/attribution.ts`.
+and host HTML rendering lives in `packages/core/src/attribution/attribution.ts`.
 
 ## Location tables
 

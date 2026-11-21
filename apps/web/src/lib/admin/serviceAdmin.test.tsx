@@ -4,7 +4,7 @@ import { ADMIN_COMPOSE_REVISION_HEADER } from "@openmapx/core/api-contracts";
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
+import { act, cleanup, createTestQueryClient, nth, renderHookWithQuery, waitFor } from "@/test";
 import {
   invalidateServiceAdministration,
   serviceAdminQueries,
@@ -151,14 +151,14 @@ describe("service administration query acquisition", () => {
             expect(counts.get(name)).toBe(unaffected.has(name) ? 1 : 2);
         });
         for (const [name, queryKey] of Object.entries(keys)) {
-          expect(signals.get(name)?.[0].aborted).toBe(!unaffected.has(name));
+          expect(nth(signals.get(name) ?? [], 0).aborted).toBe(!unaffected.has(name));
           if (!unaffected.has(name)) {
-            expect(signals.get(name)?.[1].aborted).toBe(false);
+            expect(nth(signals.get(name) ?? [], 1).aborted).toBe(false);
             expect(qc.getQueryData(queryKey)).toBe("post-effect");
           } else expect(qc.getQueryState(queryKey)?.isInvalidated).toBe(false);
         }
         expect(counts.get("inactive")).toBe(1);
-        expect(signals.get("inactive")?.[0].aborted).toBe(true);
+        expect(signals.get("inactive")?.[0]?.aborted).toBe(true);
         expect(qc.getQueryState(inactive)?.isInvalidated).toBe(true);
         expect(qc.getQueryState(inactiveSettled)?.isInvalidated).toBe(true);
         expect(qc.getQueryData(inactiveSettled)).toBe("cached");
@@ -349,10 +349,10 @@ describe("service administration query acquisition", () => {
     expect((await qc.fetchQuery(second.detail("selection"))).manifest.name).toBe("SECOND_");
     expect((await qc.fetchQuery(first.config("selection"))).envPrefix).toBe("FIRST_");
     expect((await qc.fetchQuery(second.config("selection"))).envPrefix).toBe("SECOND_");
-    expect((await qc.fetchQuery(first.credentials("selection"))).credentials[0].title).toBe(
+    expect((await qc.fetchQuery(first.credentials("selection"))).credentials[0]?.title).toBe(
       "FIRST_",
     );
-    expect((await qc.fetchQuery(second.credentials("selection"))).credentials[0].title).toBe(
+    expect((await qc.fetchQuery(second.credentials("selection"))).credentials[0]?.title).toBe(
       "SECOND_",
     );
     expect(qc.getQueryData(first.detail("selection").queryKey)?.manifest).toEqual({

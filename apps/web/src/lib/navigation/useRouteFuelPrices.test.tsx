@@ -9,7 +9,7 @@ import {
 } from "@openmapx/core";
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHookWithQuery } from "@/test";
+import { nth, renderHookWithQuery } from "@/test";
 
 interface Pending {
   bbox: BoundingBox;
@@ -71,7 +71,7 @@ const station = (
   contributors: [{ sourceId: "tankerkoenig", name: "Tankerkönig" }],
 });
 const answer = async (index: number, data: DataSourceResult[]) => {
-  await act(async () => lookup.pending[index].resolve({ data }));
+  await act(async () => nth(lookup.pending, index).resolve({ data }));
 };
 
 beforeEach(() => {
@@ -84,7 +84,7 @@ describe("fuelLookupCells", () => {
   it("groups nearby stops into one padded grid box, in stop order", () => {
     const cells = fuelLookupCells([stop("b", 30), stop("a", 0.1), stop("a2", 0.3)]);
     expect(cells.map((cell) => cell.placeIds)).toEqual([["b"], ["a", "a2"]]);
-    const [, first] = cells;
+    const first = nth(cells, 1);
     expect(first.bbox.west).toBeLessThan(9);
     expect(first.bbox.east - first.bbox.west).toBeGreaterThan(0.02);
     expect(first.bbox.north - first.bbox.south).toBeLessThan(0.022);
@@ -125,7 +125,7 @@ describe("useRouteFuelPrices", () => {
     const { result } = renderHookWithQuery(() => useRouteFuelPrices(places, true));
     await waitFor(() => expect(lookup.pending).toHaveLength(2));
     await answer(0, [station("osm-a", at(0.1, 5), {})]);
-    await act(async () => lookup.pending[1].reject(new Error("down")));
+    await act(async () => nth(lookup.pending, 1).reject(new Error("down")));
     await waitFor(() => expect(lookup.pending).toHaveLength(3));
     await answer(2, []);
     await waitFor(() => expect(result.current?.size).toBe(0));
@@ -158,7 +158,7 @@ describe("useRouteFuelPrices", () => {
     const places = [stop("a", 0.1)];
     const { result } = renderHookWithQuery(() => useRouteFuelPrices(places, true));
     await waitFor(() => expect(lookup.pending).toHaveLength(1));
-    expect(lookup.pending[0].filters).toEqual({ fuelType: ["e10", "e5"] });
+    expect(nth(lookup.pending, 0).filters).toEqual({ fuelType: ["e10", "e5"] });
     await answer(0, [station("tk", at(0.1, 5), { diesel: 1.5, e10: 1.7 })]);
     await waitFor(() => expect(result.current?.get("a")?.status).toBe("priced"));
   });
@@ -168,14 +168,14 @@ describe("useRouteFuelPrices", () => {
     useDataSourceStore.getState().setFilter("fuelType", ["e10"]);
     renderHookWithQuery(() => useRouteFuelPrices([stop("a", 0.1)], true));
     await waitFor(() => expect(lookup.pending).toHaveLength(1));
-    expect(lookup.pending[0].filters).toEqual({});
+    expect(nth(lookup.pending, 0).filters).toEqual({});
   });
 
   it("marks stops unknown when their lookup fails, and keeps the others", async () => {
     const places = [stop("a", 0.1), stop("b", 30)];
     const { result } = renderHookWithQuery(() => useRouteFuelPrices(places, true));
     await waitFor(() => expect(lookup.pending).toHaveLength(2));
-    await act(async () => lookup.pending[0].reject(new Error("down")));
+    await act(async () => nth(lookup.pending, 0).reject(new Error("down")));
     await answer(1, [station("tk-b", at(30, 5))]);
     await waitFor(() => expect(result.current?.get("a")).toEqual({ status: "unknown" }));
     expect(result.current?.get("b")?.status).toBe("priced");
@@ -187,7 +187,7 @@ describe("useRouteFuelPrices", () => {
     await waitFor(() => expect(lookup.pending).toHaveLength(FUEL_LOOKUP_CONCURRENCY));
     await act(async () => {});
     expect(lookup.pending).toHaveLength(2);
-    expect(lookup.pending[0].bbox.west).toBeLessThan(lookup.pending[1].bbox.west);
+    expect(nth(lookup.pending, 0).bbox.west).toBeLessThan(nth(lookup.pending, 1).bbox.west);
     await answer(0, []);
     await waitFor(() => expect(lookup.pending).toHaveLength(3));
     await answer(1, []);
@@ -207,7 +207,7 @@ describe("useRouteFuelPrices", () => {
     expect(lookup.pending).toHaveLength(2);
     await answer(0, []);
     await waitFor(() => expect(lookup.pending).toHaveLength(3));
-    expect(lookup.pending[2].bbox.west).toBeLessThan(9);
+    expect(nth(lookup.pending, 2).bbox.west).toBeLessThan(9);
   });
 
   it("does not ask again for cells it has answered when the view re-renders or remounts", async () => {

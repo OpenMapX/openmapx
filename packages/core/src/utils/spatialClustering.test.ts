@@ -35,7 +35,7 @@ describe("clusterSpatialItems", () => {
     const result = clusterSpatialItems([point], options);
 
     expect(result).toEqual([[point]]);
-    expect(result[0][0]).toBe(point);
+    expect(result[0]?.[0]).toBe(point);
   });
 
   it("finds compatible points across adjacent buckets", () => {

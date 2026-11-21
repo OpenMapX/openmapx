@@ -43,7 +43,7 @@ function cell(revision: string, assets: WireAsset[]): CellResponse {
 
 function fakeFetch(routes: Map<string, () => unknown>) {
   return vi.fn(async (url: string, _init?: RequestInit) => {
-    const handler = routes.get(url.split("?")[0] as string);
+    const handler = routes.get(url.replace(/\?.*$/s, ""));
     if (!handler) return new Response("", { status: 404 });
     return new Response(JSON.stringify(handler()), { status: 200 });
   });

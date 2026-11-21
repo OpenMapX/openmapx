@@ -112,10 +112,11 @@ function selectDay(
 ): DawarichTimelineDay {
   if (response.days.length === 0) return emptyDay(date, distanceUnit);
   const matches = response.days.filter((day) => day.date === date);
-  if (matches.length !== 1 || response.days.length !== 1) {
+  const [match] = matches;
+  if (matches.length !== 1 || response.days.length !== 1 || !match) {
     throw new TimelineConnectionError("TIMELINE_RESPONSE_INVALID");
   }
-  return matches[0] as DawarichTimelineDay;
+  return match;
 }
 
 interface TracksResult {

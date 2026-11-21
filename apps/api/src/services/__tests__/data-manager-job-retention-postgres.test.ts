@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, like } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { db } from "../../db/index.js";
 import {
   dataManagerJobStages,
@@ -64,6 +64,7 @@ async function insertJob(kind: string, fixture: Fixture): Promise<string> {
         : {}),
     })
     .returning({ id: dataManagerJobs.id });
+  assert.isDefined(row);
   await db.insert(dataManagerJobStages).values({
     jobId: row.id,
     stage: "fetch",
@@ -178,6 +179,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await pruneDataManagerJobs(30);
       expect(await remaining([heldApi, heldManual, newest])).toHaveLength(3);
 
+      assert.isDefined(holds[0]);
       await releasePreservation({ id: holds[0].id, database: db });
 
       await pruneDataManagerJobs(30);

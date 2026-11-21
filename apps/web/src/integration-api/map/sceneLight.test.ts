@@ -204,7 +204,9 @@ describe("computeSceneLight", () => {
       const light = computeSceneLight(input({ center, date: new Date(start + minute * 60_000) }));
       const direction = sunVector(light);
       if (previous) {
-        const cosine = previous.reduce((sum, value, i) => sum + value * (direction[i] ?? 0), 0);
+        const [px, py, pz] = previous;
+        const [x, y, z] = direction;
+        const cosine = px * x + py * y + pz * z;
         const step = (Math.acos(Math.min(1, cosine)) * 180) / Math.PI;
         largestStep = Math.max(largestStep, step);
       }

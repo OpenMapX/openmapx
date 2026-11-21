@@ -1,4 +1,9 @@
-import { isRailwayStationCategory, normalizeSearchTerm, type SearchResult } from "@openmapx/core";
+import {
+  beforeFirst,
+  isRailwayStationCategory,
+  normalizeSearchTerm,
+  type SearchResult,
+} from "@openmapx/core";
 import { expandSearchQuery } from "./query-expansion.js";
 
 const STATION_WORDS = new Set(["hauptbahnhof", "bahnhof", "station", "centraal"]);
@@ -64,7 +69,7 @@ export function rankForwardResults(query: string, results: SearchResult[]): Sear
     required.every((word) => name.includes(word));
   const scored = results.map((result, index) => {
     // Older/other adapters can still supply a plain name as the first label segment.
-    const names = [result.name ?? result.label.split(",")[0], ...(result.aliases ?? [])].map(
+    const names = [result.name ?? beforeFirst(result.label, ","), ...(result.aliases ?? [])].map(
       tokens,
     );
     const localities = (result.localities ?? []).map(tokens);
@@ -74,7 +79,7 @@ export function rankForwardResults(query: string, results: SearchResult[]): Sear
       names.some((name) => localities.some((locality) => covers([...name, ...locality], words)));
     const localityMatch =
       placeWords.length > 0 && localities.some((locality) => covers(locality, placeWords));
-    const score = complete
+    const score: [number, number, number, number] = complete
       ? [
           1,
           Number(localityMatch),
@@ -84,12 +89,13 @@ export function rankForwardResults(query: string, results: SearchResult[]): Sear
       : [0, 0, 0, 0];
     return { result, score, index };
   });
-  scored.sort((a, b) => {
-    for (let i = 0; i < a.score.length; i++) {
-      const difference = b.score[i] - a.score[i];
-      if (difference) return difference;
-    }
-    return a.index - b.index;
-  });
+  scored.sort(
+    (a, b) =>
+      b.score[0] - a.score[0] ||
+      b.score[1] - a.score[1] ||
+      b.score[2] - a.score[2] ||
+      b.score[3] - a.score[3] ||
+      a.index - b.index,
+  );
   return scored.map(({ result }) => result);
 }

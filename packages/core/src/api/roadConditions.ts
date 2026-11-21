@@ -1,5 +1,9 @@
 import { parseContributors } from "@openmapx/mobility-core/contributors";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
+import {
+  readRoadConditionEffects,
+  roadConditionValiditySchema,
+} from "../road-conditions/roadConditionEffects";
 import type { BBox } from "../types/geometry";
 import {
   type LocalizedText,
@@ -11,10 +15,6 @@ import {
   type RouteFlowResponse,
   type RouteFlowSpan,
 } from "../types/roadConditions";
-import {
-  readRoadConditionEffects,
-  roadConditionValiditySchema,
-} from "../utils/roadConditionEffects";
 import { type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 

@@ -407,9 +407,11 @@ export class ModelStore {
   }
 
   private evictsBefore(a: string, b: string): boolean {
-    const [ra, rb] = [this.rank(a), this.rank(b)];
-    for (let i = 0; i < 3; i++) if (ra[i] !== rb[i]) return (ra[i] as number) > (rb[i] as number);
-    return false;
+    const [a0, a1, a2] = this.rank(a);
+    const [b0, b1, b2] = this.rank(b);
+    if (a0 !== b0) return a0 > b0;
+    if (a1 !== b1) return a1 > b1;
+    return a2 > b2;
   }
 
   private evict(keep: string): void {

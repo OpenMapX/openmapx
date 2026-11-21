@@ -12,6 +12,7 @@ import type {
 
 import {
   type AutocompleteResult,
+  beforeFirst,
   fetchJson,
   type LngLat,
   type PlaceAddressComponents,
@@ -235,7 +236,7 @@ export const nominatimService: GeocodingProviderImpl = {
       const short =
         r.name?.trim() ||
         (r.address && formatStreetLine(r.address)) ||
-        r.display_name.split(",")[0].trim();
+        beforeFirst(r.display_name, ",").trim();
       return {
         id: makeId(r),
         addressEvidence: {

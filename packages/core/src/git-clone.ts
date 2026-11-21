@@ -6,8 +6,7 @@
 // bounded by time, entry count, total bytes, per-file bytes, path length, and
 // file type before anything is allowed to use it.
 
-import { randomBytes } from "node:crypto";
-import { existsSync, lstatSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { assertAllowedGitUrl } from "./git-url";
@@ -124,8 +123,7 @@ export function assertCloneWithinBudget(root: string): void {
   let entries = 0;
   let totalBytes = 0;
   const stack: string[] = [root];
-  while (stack.length > 0) {
-    const directory = stack.pop() as string;
+  for (let directory = stack.pop(); directory !== undefined; directory = stack.pop()) {
     for (const name of readdirSync(directory)) {
       const absolute = join(directory, name);
       const relativePath = relative(root, absolute);
@@ -196,9 +194,13 @@ export async function gitShallowCloneSnapshot(
 ): Promise<GitShallowCloneResult> {
   // Validated here rather than at each call site so no caller can bypass it.
   const allowed = assertAllowedGitUrl(opts.url);
-  const tmp = opts.targetDir ?? join(tmpdir(), `openmapx-git-${randomBytes(4).toString("hex")}`);
-  if (existsSync(tmp)) throw new Error("Clone target already exists");
   if (opts.ref !== undefined) assertSafeGitRef(opts.ref);
+  if (opts.targetDir !== undefined && existsSync(opts.targetDir)) {
+    throw new Error("Clone target already exists");
+  }
+  // mkdtemp creates the directory atomically, owner-only and with an unpredictable
+  // name, so no other local user can claim or swap the path before the clone.
+  const tmp = opts.targetDir ?? mkdtempSync(join(tmpdir(), "openmapx-git-"));
   const timeout = AbortSignal.timeout(GIT_CLONE_TIMEOUT_MS);
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
   const env = safeGitEnvironment();

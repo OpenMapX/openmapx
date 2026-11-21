@@ -441,13 +441,13 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.redis.networks).toEqual(["openmapx"]);
-    expect(doc.services["weather-feed"].networks).toEqual(["openmapx-community-weather-feed"]);
-    expect(doc.services["bike-share"].networks).toEqual(["openmapx-community-bike-share"]);
+    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
+    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
+    expect(doc.services["bike-share"]?.networks).toEqual(["openmapx-community-bike-share"]);
     expect(doc.networks).toHaveProperty("openmapx-community-weather-feed");
     expect(doc.networks).toHaveProperty("openmapx-community-bike-share");
-    expect(doc.services["weather-feed"].networks).not.toContain("openmapx");
-    expect(doc.services["bike-share"].networks).not.toContain("openmapx");
+    expect(doc.services["weather-feed"]?.networks).not.toContain("openmapx");
+    expect(doc.services["bike-share"]?.networks).not.toContain("openmapx");
   });
 
   it("lets only an audited built-in explicitly join a named community network", () => {
@@ -460,11 +460,11 @@ describe("renderServiceSnippet", () => {
       services: Record<string, { networks: string[] }>;
     };
 
-    expect(doc.services["audited-bridge"].networks).toEqual([
+    expect(doc.services["audited-bridge"]?.networks).toEqual([
       "openmapx",
       "openmapx-community-weather-feed",
     ]);
-    expect(doc.services["weather-feed"].networks).toEqual(["openmapx-community-weather-feed"]);
+    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
   });
 
   it("skips an audited bridge target that is disabled or not installed, silently", () => {
@@ -478,7 +478,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services["audited-bridge"].networks).toEqual(["openmapx"]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(["openmapx"]);
     expect(doc.networks).not.toHaveProperty("openmapx-community-weather-feed");
     expect(result.warnings).toBeUndefined();
   });
@@ -501,7 +501,7 @@ describe("renderServiceSnippet", () => {
     const doc = parseYaml(result.composeYaml) as {
       services: Record<string, { networks: string[] }>;
     };
-    expect(doc.services["audited-bridge"].networks).toEqual([
+    expect(doc.services["audited-bridge"]?.networks).toEqual([
       "openmapx",
       "openmapx-community-weather-feed",
     ]);
@@ -535,16 +535,16 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, { enable_ipv6?: boolean; ipam?: { config: { subnet: string }[] } }>;
     };
 
-    expect(doc.services["bundle-web"].networks).toEqual([
+    expect(doc.services["bundle-web"]?.networks).toEqual([
       "openmapx-private-bundle",
       "openmapx-private-bundle-ingress",
     ]);
-    expect(doc.services["bundle-worker"].networks).toEqual(["openmapx-private-bundle"]);
-    expect(doc.services["bundle-db"].networks).toEqual({
+    expect(doc.services["bundle-worker"]?.networks).toEqual(["openmapx-private-bundle"]);
+    expect(doc.services["bundle-db"]?.networks).toEqual({
       "openmapx-private-bundle": { aliases: ["db"] },
     });
-    expect(doc.services.gateway.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
-    expect(doc.services.redis.networks).toEqual(["openmapx"]);
+    expect(doc.services.gateway?.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
+    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
     const bundleNet = doc.networks["openmapx-private-bundle"];
     const ingressNet = doc.networks["openmapx-private-bundle-ingress"];
     expect(bundleNet?.enable_ipv6).toBe(true);
@@ -563,7 +563,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.gateway.networks).toEqual(["openmapx"]);
+    expect(doc.services.gateway?.networks).toEqual(["openmapx"]);
     expect(doc.networks).not.toHaveProperty("openmapx-private-bundle-ingress");
   });
 
@@ -1049,8 +1049,8 @@ describe("renderCompose", () => {
     });
     const parsed = parseYaml(result.composeYaml) as Record<string, { environment?: unknown }>;
     const composeServices = parsed.services as Record<string, { environment?: unknown }>;
-    expect(composeServices.alpha.environment).toEqual({ LOG_LEVEL: "debug", NEW_KEY: "x" });
-    expect(composeServices.beta.environment).toEqual({ SOMETHING: "y" });
+    expect(composeServices.alpha?.environment).toEqual({ LOG_LEVEL: "debug", NEW_KEY: "x" });
+    expect(composeServices.beta?.environment).toEqual({ SOMETHING: "y" });
   });
 
   it("orders producers before consumers and emits the matching default-instance hardlink and mount", () => {
@@ -1077,7 +1077,7 @@ describe("renderCompose", () => {
     };
     const ids = Object.keys(doc.services);
     expect(ids.indexOf("data-manager")).toBeLessThan(ids.indexOf("valhalla"));
-    expect(doc.services.valhalla.volumes).toContain("./data/valhalla/osm-data:/custom_files");
+    expect(doc.services.valhalla?.volumes).toContain("./data/valhalla/osm-data:/custom_files");
   });
 
   it("records each consumer's hardlink target for render to create, built-in and community", () => {

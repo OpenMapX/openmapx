@@ -125,7 +125,7 @@ it("captures origin and canonical role expectation for every write", async () =>
     { "idempotency-key": expect.any(String) },
     { client: expect.any(Object) },
   );
-  const options = state.methods.setRole.mock.calls[0]?.[3] as
+  const options = state.methods.setRole?.mock.calls[0]?.[3] as
     | { client: { connectionTarget: (path: string) => unknown } }
     | undefined;
   expect(options?.client.connectionTarget("/api/admin/accounts")).toEqual({

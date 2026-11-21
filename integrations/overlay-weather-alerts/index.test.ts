@@ -143,8 +143,8 @@ describe("GET /events", () => {
     expect(sent.headers["Cache-Control"]).toBe("no-cache");
     const body = sent.body as ReturnType<typeof alertsToFeatureCollection>;
     expect(body.sources).toEqual(["de-dwd-alerts", "eu-meteoalarm-alerts"]);
-    expect(body.features[0].properties.notices).toEqual([NOTICE]);
-    expect(body.features[0].properties.senderName).toBe("AEMET");
+    expect(body.features[0]?.properties.notices).toEqual([NOTICE]);
+    expect(body.features[0]?.properties.senderName).toBe("AEMET");
   });
 
   it("reads any language other than German as English", async () => {

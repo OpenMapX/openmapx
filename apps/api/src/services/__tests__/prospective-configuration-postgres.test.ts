@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { itemAt } from "@openmapx/core/item-at";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import * as schema from "../../db/schema";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
 import type { JobContext } from "../job-runner";
@@ -95,8 +96,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(owned.integrationIds).toEqual(["alpha", "zeta"]);
         const state = subject.administrativeConfigurationState(owned);
         pids.push(
-          (await state.connection.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))[0]!
-            .pid,
+          itemAt(
+            await state.connection.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`),
+            0,
+          ).pid,
         );
         await subject.withAdministrativeConfigurationWriter(
           { actorId: first.jobId, operationKey: owned.operationKey, integrationIds: ["alpha"] },
@@ -113,8 +116,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const b = writer(second, ["alpha", "zeta"], async (owned) => {
         const state = subject.administrativeConfigurationState(owned);
         pids.push(
-          (await state.connection.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))[0]!
-            .pid,
+          itemAt(
+            await state.connection.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`),
+            0,
+          ).pid,
         );
         order.push("second");
       });
@@ -130,13 +135,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const ctx = await job();
       await writer(ctx, [], async (owned) => {
         const state = subject.administrativeConfigurationState(owned);
-        const [owner] = await state.connection.execute<{ pid: number }>(
-          sql`select pg_backend_pid() as pid`,
+        const owner = itemAt(
+          await state.connection.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`),
+          0,
         );
         await expect(
           subject.withConfigurationWriteTransaction(owned, async (tx) => {
-            const [actual] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-            expect(actual!.pid).toBe(owner!.pid);
+            const actual = itemAt(
+              await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`),
+              0,
+            );
+            expect(actual.pid).toBe(owner.pid);
             await tx
               .insert(schema.serviceConfig)
               .values({ id: randomUUID(), serviceId: "rollback-fixture", config: { WORKERS: 4 } });
@@ -201,7 +210,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ),
         ).rejects.toThrow();
       });
-      expect(() => subject.administrativeConfigurationState(expired!)).toThrow();
+      const stale = expired;
+      assert.isDefined(stale, "the writer callback did not run");
+      expect(() => subject.administrativeConfigurationState(stale)).toThrow();
     });
 
     it("retains a durable unresolved candidate fence after the physical session lock releases", async () => {

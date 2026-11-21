@@ -1,6 +1,7 @@
 import { degreesToRadians, earthRadius, radiansToDegrees } from "@turf/helpers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { assert, beforeEach, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
+import { itemAt } from "../../utils/itemAt";
 import {
   asRouteMatcher,
   inspectRouteMatcher,
@@ -50,7 +51,9 @@ function vectorToLngLat(v: [number, number, number]): LngLat {
   ];
 }
 
-function angleBetween(a: readonly number[], b: readonly number[]): number {
+type Vector = readonly [number, number, number];
+
+function angleBetween(a: Vector, b: Vector): number {
   const cx = a[1] * b[2] - a[2] * b[1];
   const cy = a[2] * b[0] - a[0] * b[2];
   const cz = a[0] * b[1] - a[1] * b[0];
@@ -360,8 +363,7 @@ describe("route matcher differential fixtures", () => {
 
   it("matches the oracle on a long curved route at every kind of offset", () => {
     const geometry = curvedRoute([13.4, 52.5], 400);
-    for (let i = 0; i < geometry.length; i++) {
-      const v = geometry[i];
+    for (const [i, v] of geometry.entries()) {
       expectSameSnap(geometry, v, `vertex ${i}`);
       expectSameSnap(geometry, [v[0] + 0.00004, v[1] - 0.00004], `near ${i}`);
       expectSameSnap(geometry, [v[0] + 0.05, v[1] + 0.05], `far ${i}`);
@@ -375,7 +377,7 @@ describe("route matcher differential fixtures", () => {
     const a = prepareRouteMatcher(first);
     const b = prepareRouteMatcher(second);
     expect(a).not.toBe(b);
-    for (const raw of [first[40], second[40], [2.4, 48.87] as LngLat]) {
+    for (const raw of [itemAt(first, 40), itemAt(second, 40), [2.4, 48.87] as LngLat]) {
       expect(snapPreparedRoute(a, raw)).toEqual(snapToRoute(first, raw));
       expect(snapPreparedRoute(b, raw)).toEqual(snapToRoute(second, raw));
     }
@@ -394,7 +396,7 @@ describe("route matcher randomized differential matrix", () => {
         // antimeridian, and southern hemisphere routes.
         const baseLng = rand() * 360 - 180;
         const baseLat = (rand() * 2 - 1) * 88;
-        const scale = [0.00002, 0.0004, 0.006, 0.09][Math.floor(rand() * 4)];
+        const scale = itemAt([0.00002, 0.0004, 0.006, 0.09], Math.floor(rand() * 4));
         // Every fourth route mixes edge lengths by two orders of magnitude, which
         // is what splits a route across the indexed tree and the always-evaluate
         // list; the rest keep one scale throughout.
@@ -425,16 +427,13 @@ describe("route matcher randomized differential matrix", () => {
           const mode = rand();
           let raw: LngLat;
           if (mode < 0.25) {
-            raw = geometry[Math.floor(rand() * geometry.length)];
+            raw = itemAt(geometry, Math.floor(rand() * geometry.length));
           } else if (mode < 0.5) {
             const i = Math.floor(rand() * (geometry.length - 1));
-            raw = alongArc(geometry[i], geometry[i + 1], rand());
+            raw = alongArc(itemAt(geometry, i), itemAt(geometry, i + 1), rand());
           } else if (mode < 0.85) {
-            const i = Math.floor(rand() * geometry.length);
-            raw = [
-              geometry[i][0] + (rand() - 0.5) * scale * 6,
-              geometry[i][1] + (rand() - 0.5) * scale * 6,
-            ];
+            const [vertexLng, vertexLat] = itemAt(geometry, Math.floor(rand() * geometry.length));
+            raw = [vertexLng + (rand() - 0.5) * scale * 6, vertexLat + (rand() - 0.5) * scale * 6];
           } else {
             raw = [rand() * 360 - 180, (rand() * 2 - 1) * 89];
           }
@@ -468,7 +467,7 @@ describe("route matcher randomized differential matrix", () => {
     const matcher = prepareRouteMatcher(geometry);
     let seed = 0;
     for (let i = 0; i < 600; i++) {
-      const v = geometry[Math.floor(rand() * geometry.length)];
+      const v = itemAt(geometry, Math.floor(rand() * geometry.length));
       const raw: LngLat = [v[0] + (rand() - 0.5) * 0.002, v[1] + (rand() - 0.5) * 0.002];
       const oracle = snapToRoute(geometry, raw);
       expect(snapPreparedRoute(matcher, raw, seed)).toEqual(oracle);
@@ -480,10 +479,10 @@ describe("route matcher randomized differential matrix", () => {
 
 describe("route matcher spherical bounds", () => {
   const containmentFixtures: { name: string; geometry: LngLat[] }[] = [
-    { name: "latitude 80 bow", geometry: FIXTURES[10].geometry },
-    { name: "near polar ring", geometry: FIXTURES[11].geometry },
-    { name: "antimeridian", geometry: FIXTURES[9].geometry },
-    { name: "long edges", geometry: FIXTURES[12].geometry },
+    { name: "latitude 80 bow", geometry: itemAt(FIXTURES, 10).geometry },
+    { name: "near polar ring", geometry: itemAt(FIXTURES, 11).geometry },
+    { name: "antimeridian", geometry: itemAt(FIXTURES, 9).geometry },
+    { name: "long edges", geometry: itemAt(FIXTURES, 12).geometry },
     { name: "curved city route", geometry: curvedRoute([4.9, 52.37], 200) },
   ];
 
@@ -498,7 +497,9 @@ describe("route matcher spherical bounds", () => {
         const ancestors = shape.ancestorCaps(edge);
         expect(ancestors.length).toBeGreaterThan(0);
         for (let s = 0; s <= 20; s++) {
-          const sample = unitVector(alongArc(geometry[edge], geometry[edge + 1], s / 20));
+          const sample = unitVector(
+            alongArc(itemAt(geometry, edge), itemAt(geometry, edge + 1), s / 20),
+          );
           expect(
             angleBetween(sample, [cap.x, cap.y, cap.z]),
             `${name} edge ${edge}`,
@@ -519,7 +520,7 @@ describe("route matcher spherical bounds", () => {
     expect(bowed[1]).toBeGreaterThan(80);
     // A bound derived from the endpoints' latitudes would exclude the arc's own
     // midpoint; the spherical cap contains it.
-    const shape = inspectRouteMatcher(prepareRouteMatcher(FIXTURES[10].geometry));
+    const shape = inspectRouteMatcher(prepareRouteMatcher(itemAt(FIXTURES, 10).geometry));
     const cap = shape.edgeCap(0);
     expect(cap).not.toBeNull();
     if (cap) {
@@ -528,9 +529,9 @@ describe("route matcher spherical bounds", () => {
   });
 
   it("puts unbounded edges on the always-evaluate list rather than in the tree", () => {
-    const antipodal = inspectRouteMatcher(prepareRouteMatcher(FIXTURES[14].geometry));
+    const antipodal = inspectRouteMatcher(prepareRouteMatcher(itemAt(FIXTURES, 14).geometry));
     expect(Array.from(antipodal.always)).toContain(0);
-    const longEdges = inspectRouteMatcher(prepareRouteMatcher(FIXTURES[12].geometry));
+    const longEdges = inspectRouteMatcher(prepareRouteMatcher(itemAt(FIXTURES, 12).geometry));
     expect(longEdges.always.length + longEdges.indexed.length).toBe(longEdges.edges);
   });
 
@@ -540,7 +541,7 @@ describe("route matcher spherical bounds", () => {
     for (let i = 1; i < geometry.length; i++) {
       // Snapping a vertex onto the prefix of the route it ends returns exactly
       // that vertex's cumulative distance through the untouched Turf path.
-      const oracle = snapToRoute(geometry.slice(0, i + 1), geometry[i]);
+      const oracle = snapToRoute(geometry.slice(0, i + 1), itemAt(geometry, i));
       expect(shape.prefix[i]).toBe(oracle.alongMeters);
     }
   });
@@ -549,7 +550,7 @@ describe("route matcher spherical bounds", () => {
     const rand = mulberry32(0xd157);
     for (let i = 0; i < 4000; i++) {
       const a: LngLat = [rand() * 360 - 180, (rand() * 2 - 1) * 89.9];
-      const scale = [1e-7, 1e-4, 0.01, 3, 60][Math.floor(rand() * 5)];
+      const scale = itemAt([1e-7, 1e-4, 0.01, 3, 60], Math.floor(rand() * 5));
       const b: LngLat = [a[0] + (rand() - 0.5) * scale, a[1] + (rand() - 0.5) * scale];
       // Snapping an edge's end point onto that edge short-circuits to the end
       // point, so Turf's reported along-distance *is* its own segment length.
@@ -570,7 +571,7 @@ describe("route matcher spherical bounds", () => {
 describe("route matcher lower-bound conservatism", () => {
   /** Turf's exact per-edge result, i.e. what a leaf evaluation produces. */
   function edgeSnap(geometry: LngLat[], edge: number, raw: LngLat) {
-    return snapToRoute([geometry[edge], geometry[edge + 1]], raw);
+    return snapToRoute([itemAt(geometry, edge), itemAt(geometry, edge + 1)], raw);
   }
 
   function boundMeters(cap: { x: number; y: number; z: number; r: number }, raw: LngLat): number {
@@ -584,7 +585,7 @@ describe("route matcher lower-bound conservatism", () => {
     let tightest = Number.POSITIVE_INFINITY;
 
     for (let r = 0; r < 60; r++) {
-      const scale = [0.00003, 0.0005, 0.008, 0.4][Math.floor(rand() * 4)];
+      const scale = itemAt([0.00003, 0.0005, 0.008, 0.4], Math.floor(rand() * 4));
       const geometry: LngLat[] = [];
       let lng = rand() * 360 - 180;
       let lat = (rand() * 2 - 1) * 87;
@@ -600,16 +601,13 @@ describe("route matcher lower-bound conservatism", () => {
 
       const queries: LngLat[] = [];
       for (let q = 0; q < 12; q++) {
-        const pick = Math.floor(rand() * geometry.length);
+        const pick = itemAt(geometry, Math.floor(rand() * geometry.length));
         queries.push(
           rand() < 0.7
-            ? [
-                geometry[pick][0] + (rand() - 0.5) * scale * 8,
-                geometry[pick][1] + (rand() - 0.5) * scale * 8,
-              ]
+            ? [pick[0] + (rand() - 0.5) * scale * 8, pick[1] + (rand() - 0.5) * scale * 8]
             : [rand() * 360 - 180, (rand() * 2 - 1) * 89],
         );
-        queries.push(geometry[pick]);
+        queries.push(pick);
       }
 
       for (const raw of queries) {
@@ -753,7 +751,8 @@ describe("route matcher ownership", () => {
     const first = prepareRouteMatcher(geometry);
     for (let i = 0; i < 500; i++) {
       expect(prepareRouteMatcher(geometry)).toBe(first);
-      snapPreparedRoute(first, [geometry[i % 200][0] + 0.0001, geometry[i % 200][1]]);
+      const [lng, lat] = itemAt(geometry, i % 200);
+      snapPreparedRoute(first, [lng + 0.0001, lat]);
     }
     expect(readRouteMatcherCounters().preparations).toBe(1);
     expect(readRouteMatcherCounters().snaps).toBe(500);
@@ -796,7 +795,7 @@ describe("route matcher ownership", () => {
     const matcher = prepareRouteMatcher(geometry);
     resetRouteMatcherCounters();
     for (let i = 0; i < 200; i++) {
-      const v = geometry[(i * 23) % geometry.length];
+      const v = itemAt(geometry, (i * 23) % geometry.length);
       snapPreparedRoute(matcher, [v[0] + 0.00002, v[1] + 0.00002]);
     }
     const evaluated = readRouteMatcherCounters().evaluatedEdges / 200;
@@ -826,7 +825,7 @@ describe("route matcher scaling", () => {
     const near: LngLat[] = [];
     const far: LngLat[] = [];
     for (let i = 0; i < 200; i++) {
-      const v = geometry[(i * 97) % geometry.length];
+      const v = itemAt(geometry, (i * 97) % geometry.length);
       near.push([v[0] + 0.00003, v[1] - 0.00003]);
       far.push([v[0] + 0.4, v[1] - 0.4]);
     }
@@ -858,7 +857,7 @@ describe("route matcher scaling", () => {
 
     const oracleRuns = points >= 20_000 ? 20 : 60;
     const oracleStart = performance.now();
-    for (let i = 0; i < oracleRuns; i++) snapToRoute(geometry, near[i % near.length]);
+    for (let i = 0; i < oracleRuns; i++) snapToRoute(geometry, itemAt(near, i % near.length));
     const oracleUsPerSnap = ((performance.now() - oracleStart) * 1000) / oracleRuns;
 
     return {
@@ -885,6 +884,7 @@ describe("route matcher scaling", () => {
       }
     }
     const [small, mid, large] = probes;
+    assert(small && mid && large);
     // Twenty times the route must not cost anything like twenty times the work.
     expect(large.evaluatedPerNearFix).toBeLessThan(small.evaluatedPerNearFix * 4 + 40);
     expect(mid.evaluatedPerNearFix).toBeLessThan(small.evaluatedPerNearFix * 4 + 40);

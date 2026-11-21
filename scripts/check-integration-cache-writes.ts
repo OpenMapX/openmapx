@@ -131,7 +131,7 @@ export function findDirectCacheWrites(sourceText: string, fileName: string): Dir
   const writes: DirectCacheWrite[] = [];
   const record = (node: ts.Node) => {
     const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-    writes.push({ line: line + 1, text: node.getText(source).split("\n")[0] as string });
+    writes.push({ line: line + 1, text: node.getText(source).replace(/\n.*$/s, "") });
   };
   const visit = (node: ts.Node): void => {
     if (ts.isPropertyAccessExpression(node) && node.name.text === "set") {

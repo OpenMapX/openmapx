@@ -2,6 +2,7 @@ import {
   composeSchedule,
   fidelityFor,
   isoWithOffsetInZone,
+  itemAt,
   planScheduledTrip,
   type ResolvedSchedule,
   requiredTemporalSemantics,
@@ -91,7 +92,8 @@ export async function runSchedulePlan(
 
   const semantics = requiredTemporalSemantics(resolved);
   const eligible = eligibleProviders(chain, semantics);
-  if (eligible.length === 0) throw new NoScheduleProviderError(semantics, request.travelMode);
+  const [primary] = eligible;
+  if (!primary) throw new NoScheduleProviderError(semantics, request.travelMode);
 
   const warnings: SchedulePlanWarning[] = resolved.stops
     .filter((stop) => stop.dwellIgnored)
@@ -185,8 +187,14 @@ export async function runSchedulePlan(
   }
 
   const oracle = async (legIndex: number, instantMs: number, pinArrival: boolean) => {
-    const pair: [number, number][] = [request.waypoints[legIndex], request.waypoints[legIndex + 1]];
-    const zone = resolved.stops[pinArrival ? legIndex + 1 : legIndex].timeZone;
+    const from = itemAt(request.waypoints, legIndex, "scheduled leg start waypoint");
+    const to = itemAt(request.waypoints, legIndex + 1, "scheduled leg end waypoint");
+    const pair: [number, number][] = [from, to];
+    const zone = itemAt(
+      resolved.stops,
+      pinArrival ? legIndex + 1 : legIndex,
+      "resolved stop",
+    ).timeZone;
     const call = await callChain(pair, {
       ...request.routingOptions,
       ...(pinArrival
@@ -200,7 +208,7 @@ export async function runSchedulePlan(
     resolved,
     forward: (legIndex, departureMs) => oracle(legIndex, departureMs, false),
     backward: (legIndex, arrivalMs) => oracle(legIndex, arrivalMs, true),
-    providerId: eligible[0].resolved.integrationId,
+    providerId: primary.resolved.integrationId,
   });
 
   const retained = planned.legPayloads.filter(

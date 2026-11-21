@@ -9,6 +9,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { itemAt } from "@openmapx/core";
 import {
   applyAdminCredentialTransfer,
   chooseAdminCredentialTransferFields,
@@ -186,7 +187,10 @@ export function CredentialTransferDialog({
               passphrase,
               confirmed: true,
             },
-            { ...options(signal), headers: { "x-admin-reauth-proof": proofs[0]!.challengeId } },
+            {
+              ...options(signal),
+              headers: { "x-admin-reauth-proof": itemAt(proofs, 0).challengeId },
+            },
           ),
         );
         if (!signal.aborted)
@@ -200,7 +204,7 @@ export function CredentialTransferDialog({
             { envelope, passphrase },
             {
               "idempotency-key": crypto.randomUUID(),
-              "x-admin-reauth-proof": proofs[0]!.challengeId,
+              "x-admin-reauth-proof": itemAt(proofs, 0).challengeId,
             },
             options(signal),
           ),
@@ -217,8 +221,8 @@ export function CredentialTransferDialog({
               previewId: preview.previewId,
               intentFingerprint: preview.intentFingerprint,
               expectedCurrentRevisionId: preview.expectedCurrentRevisionId,
-              importProofToken: proofs[0]!.challengeId,
-              ...(preview.feedMap ? { transitProofToken: proofs[1]!.challengeId } : {}),
+              importProofToken: itemAt(proofs, 0).challengeId,
+              ...(preview.feedMap ? { transitProofToken: itemAt(proofs, 1).challengeId } : {}),
             },
             { "idempotency-key": crypto.randomUUID() },
             options(signal),
@@ -235,6 +239,8 @@ export function CredentialTransferDialog({
   const validPass =
     new TextEncoder().encode(passphrase).length >= 12 &&
     new TextEncoder().encode(passphrase).length <= 1024;
+  // The apply ceremony opens only from a preview; without one it does not render.
+  const applying = ceremony === "apply" ? preview : null;
   return (
     <>
       <Dialog open onClose={close} fullWidth maxWidth="sm">
@@ -463,18 +469,19 @@ export function CredentialTransferDialog({
         </DialogActions>
       </Dialog>
       {ceremony &&
-        (ceremony === "apply" && preview?.feedMap ? (
+        (ceremony !== "apply" || applying) &&
+        (applying?.feedMap ? (
           <AdminReauthenticationDialog
             purposes={[
               {
                 purpose: "credentials.import",
-                targetId: preview.previewId,
-                intentFingerprint: preview.intentFingerprint,
+                targetId: applying.previewId,
+                intentFingerprint: applying.intentFingerprint,
               },
               {
                 purpose: "transit.credentials",
-                targetId: preview.feedMap.catalogRevisionId,
-                intentFingerprint: preview.intentFingerprint,
+                targetId: applying.feedMap.catalogRevisionId,
+                intentFingerprint: applying.intentFingerprint,
               },
             ]}
             onCompleted={(proofs) => void authorize(proofs)}
@@ -483,9 +490,9 @@ export function CredentialTransferDialog({
         ) : (
           <AdminReauthenticationDialog
             purpose={ceremony === "export" ? "credentials.export" : "credentials.import"}
-            targetId={ceremony === "apply" ? preview!.previewId : "vault-transfer"}
-            {...(ceremony === "apply"
-              ? { intentFingerprint: preview!.intentFingerprint }
+            targetId={applying ? applying.previewId : "vault-transfer"}
+            {...(applying
+              ? { intentFingerprint: applying.intentFingerprint }
               : ceremony === "preview"
                 ? { intentFingerprint: CREDENTIAL_TRANSFER_PREVIEW_INTENT }
                 : {})}

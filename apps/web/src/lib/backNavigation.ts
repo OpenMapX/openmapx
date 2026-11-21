@@ -109,11 +109,14 @@ function segmentKind(segment: string): string {
 export function historyStep(current: NavigationPath, next: NavigationPath): HistoryStep {
   if (samePath(current, next) || isStrictPrefix(next, current)) return "replace";
   const lastIndex = current.length - 1;
+  const currentLast = current.at(-1);
+  const nextLast = next.at(-1);
   if (
-    current.length > 0 &&
+    currentLast !== undefined &&
+    nextLast !== undefined &&
     current.length === next.length &&
     samePath(current.slice(0, lastIndex), next.slice(0, lastIndex)) &&
-    segmentKind(current[lastIndex]) === segmentKind(next[lastIndex])
+    segmentKind(currentLast) === segmentKind(nextLast)
   ) {
     return "replace";
   }

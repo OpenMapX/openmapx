@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { safeHref } from "./format";
+import { beforeFirst, safeHref } from "./format";
+
+describe("beforeFirst", () => {
+  it("keeps the text before the first separator, across lines", () => {
+    expect(beforeFirst("Berlin, Germany, Europe", ",")).toBe("Berlin");
+    expect(beforeFirst("nextbike/362/1234", "/")).toBe("nextbike");
+    expect(beforeFirst("Line one\nline two, rest", ",")).toBe("Line one\nline two");
+  });
+
+  it("keeps the whole text without a separator and nothing before a leading one", () => {
+    expect(beforeFirst("de", "-")).toBe("de");
+    expect(beforeFirst(".hidden", ".")).toBe("");
+  });
+});
 
 describe("safeHref", () => {
   it("passes through http(s), mailto, tel, and relative URLs", () => {

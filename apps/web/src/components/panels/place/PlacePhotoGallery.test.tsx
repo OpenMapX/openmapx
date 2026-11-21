@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { PlacePhotoGallery } from "./PlacePhotoGallery";
 
@@ -67,7 +68,7 @@ describe("gallery file credits", () => {
   it("keeps thumbnail captions out of the strip and opens an unselected file's complete credits", () => {
     photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 3.0")];
     open();
-    const thumbnail = screen.getAllByTestId("gallery-thumbnail")[1];
+    const thumbnail = nth(screen.getAllByTestId("gallery-thumbnail"), 1);
     expect(within(thumbnail).queryByText(/Two artist/)).toBeNull();
     expect(within(thumbnail).queryByRole("link")).toBeNull();
     fireEvent.click(within(thumbnail).getByRole("button", { name: "Photo credits" }));
@@ -139,7 +140,7 @@ it.each(["selected", "thumbnail"] as const)(
     open(onClose);
     const trigger = within(
       owner === "thumbnail"
-        ? screen.getAllByTestId("gallery-thumbnail")[0]
+        ? nth(screen.getAllByTestId("gallery-thumbnail"), 0)
         : screen.getByTestId("gallery-information"),
     ).getByRole("button", {
       name: "Photo credits",
@@ -156,7 +157,7 @@ it.each(["selected", "thumbnail"] as const)(
 it("updates the full selected-photo caption when a clean thumbnail is selected", () => {
   photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 4.0")];
   open();
-  fireEvent.click(screen.getAllByRole("button", { name: "Show photo 2" })[0]);
+  fireEvent.click(nth(screen.getAllByRole("button", { name: "Show photo 2" }), 0));
   expect(screen.getByTestId("gallery-information")).toHaveTextContent("Two artist");
   expect(screen.getByTestId("gallery-information")).not.toHaveTextContent("One artist");
 });

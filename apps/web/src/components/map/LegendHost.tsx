@@ -143,7 +143,8 @@ export function LegendHost() {
     const before = new Set(prevOpenKey.split(","));
     const added = openIds.filter((id) => !before.has(id));
     setPrevOpenKey(openKey);
-    if (added.length > 0) setSelected(added[added.length - 1]);
+    const newest = added.at(-1);
+    if (newest !== undefined) setSelected(newest);
   }
   const current = open.find((l) => l.overlayId === selected) ?? open[open.length - 1];
 

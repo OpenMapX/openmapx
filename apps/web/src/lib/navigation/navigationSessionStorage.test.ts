@@ -1,6 +1,7 @@
 import type { Route } from "@openmapx/core";
 import { createNavigationSessionSnapshot } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import {
   createNavigationSessionStorage,
   NAVIGATION_SESSION_STORAGE_KEY,
@@ -84,7 +85,7 @@ type Snapshot = {
 
 function onStep(field: string, value: unknown) {
   return (snapshot: Snapshot) => {
-    snapshot.route.steps[0][field] = value;
+    nth(snapshot.route.steps, 0)[field] = value;
   };
 }
 
@@ -157,7 +158,7 @@ describe("navigation session storage", () => {
   it("refuses to persist a snapshot with malformed nested step data", async () => {
     const { map, storage } = harness();
     const snapshot = structuredClone(makeSnapshot()) as unknown as Snapshot;
-    snapshot.route.steps[0].lanes = {};
+    nth(snapshot.route.steps, 0).lanes = {};
     let error: unknown;
     try {
       await storage.write(snapshot as never);

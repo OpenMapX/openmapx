@@ -5,6 +5,7 @@ import {
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { describe, expect, it, vi } from "vitest";
 
@@ -83,7 +84,7 @@ describe("bikeSharingProvider.search", () => {
     expect(searchDbBikes).toHaveBeenCalledOnce();
     expect(fetchMotisRentals).toHaveBeenCalledOnce();
     expect(results.length).toBeGreaterThan(0);
-    const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
+    const dedupCall = nth(vi.mocked(dedupStations).mock.calls, 0)[0] as SharedMobilityStation[];
     expect(dedupCall.map((station) => station.id)).toEqual([
       "mo1",
       "nb1",
@@ -135,7 +136,7 @@ describe("bikeSharingProvider.search", () => {
     const results = (await bikeSharingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("gbfs1");
+    expect(results[0]?.id).toBe("gbfs1");
   });
 
   it("all 6 sources fail → returns empty array", async () => {

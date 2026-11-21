@@ -6,9 +6,24 @@ import type { ElevationPoint, ElevationProfile, ElevationStats } from "../types/
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "./coordinates";
 
+/** Cumulative distance from the start of the geometry to each of its vertices. */
+function cumulativeGeometryDistances(geometry: LngLat[]): number[] {
+  const distances = [0];
+  let total = 0;
+  let previous = geometry[0];
+  for (const vertex of geometry.slice(1)) {
+    if (previous) total += haversineDistance(previous, vertex);
+    distances.push(total);
+    previous = vertex;
+  }
+  return distances;
+}
+
 /**
  * Build an ElevationProfile from inline Valhalla elevation data.
  * Elevation values are sampled at regular intervals along the route geometry.
+ * Without a geometry there is no coordinate to place a sample at, so the
+ * profile is empty.
  */
 export function buildElevationProfile(
   geometry: LngLat[],
@@ -17,18 +32,15 @@ export function buildElevationProfile(
   provenance?: ContributingRecord & { contributorCoverage?: "partial" },
 ): ElevationProfile {
   // Compute cumulative distances along the geometry
-  const geoDist: number[] = [0];
-  for (let i = 1; i < geometry.length; i++) {
-    geoDist.push(geoDist[i - 1] + haversineDistance(geometry[i - 1], geometry[i]));
-  }
-  const totalGeoDist = geoDist[geoDist.length - 1];
+  const geoDist = cumulativeGeometryDistances(geometry);
+  const totalGeoDist = geoDist.at(-1) ?? 0;
 
   // Map each elevation sample (at regular intervals) to a coordinate on the geometry
   const points: ElevationPoint[] = [];
-  for (let i = 0; i < elevation.length; i++) {
+  for (const [i, sample] of elevation.entries()) {
     const dist = i * interval;
     const lngLat = interpolateAlongGeometry(geometry, geoDist, Math.min(dist, totalGeoDist));
-    points.push({ distance: dist, elevation: elevation[i], lngLat });
+    if (lngLat) points.push({ distance: dist, elevation: sample, lngLat });
   }
 
   return {
@@ -54,17 +66,13 @@ export function buildElevationProfileFromApi(
   apiPoints: Array<{ distance: number; elevation: number }>,
   provenance?: ContributingRecord & { contributorCoverage?: "partial" },
 ): ElevationProfile {
-  const geoDist: number[] = [0];
-  for (let i = 1; i < geometry.length; i++) {
-    geoDist.push(geoDist[i - 1] + haversineDistance(geometry[i - 1], geometry[i]));
-  }
-  const totalGeoDist = geoDist[geoDist.length - 1];
+  const geoDist = cumulativeGeometryDistances(geometry);
+  const totalGeoDist = geoDist.at(-1) ?? 0;
 
-  const points: ElevationPoint[] = apiPoints.map(({ distance, elevation }) => ({
-    distance,
-    elevation,
-    lngLat: interpolateAlongGeometry(geometry, geoDist, Math.min(distance, totalGeoDist)),
-  }));
+  const points: ElevationPoint[] = apiPoints.flatMap(({ distance, elevation }) => {
+    const lngLat = interpolateAlongGeometry(geometry, geoDist, Math.min(distance, totalGeoDist));
+    return lngLat ? [{ distance, elevation, lngLat }] : [];
+  });
 
   return {
     points,
@@ -80,37 +88,56 @@ export function buildElevationProfileFromApi(
   };
 }
 
-/** Interpolate a point along a geometry at a given cumulative distance. */
+/** Interpolate a point along a geometry at a given cumulative distance; none for an empty geometry. */
 function interpolateAlongGeometry(
   geometry: LngLat[],
   cumulativeDist: number[],
   targetDist: number,
-): LngLat {
-  if (targetDist <= 0) return geometry[0];
-  if (targetDist >= cumulativeDist[cumulativeDist.length - 1]) {
-    return geometry[geometry.length - 1];
-  }
+): LngLat | undefined {
+  const first = geometry[0];
+  const last = geometry.at(-1);
+  if (!first || !last) return undefined;
+  if (targetDist <= 0) return first;
+  if (targetDist >= (cumulativeDist.at(-1) ?? 0)) return last;
 
   // Binary search for the segment containing targetDist
   let lo = 0;
   let hi = cumulativeDist.length - 1;
   while (lo < hi - 1) {
     const mid = (lo + hi) >> 1;
-    if (cumulativeDist[mid] <= targetDist) lo = mid;
+    const midDist = cumulativeDist[mid];
+    if (midDist !== undefined && midDist <= targetDist) lo = mid;
     else hi = mid;
   }
 
-  const segLen = cumulativeDist[hi] - cumulativeDist[lo];
-  const t = segLen > 0 ? (targetDist - cumulativeDist[lo]) / segLen : 0;
-  const [lng0, lat0] = geometry[lo];
-  const [lng1, lat1] = geometry[hi];
+  const from = geometry[lo];
+  const to = geometry[hi];
+  const fromDist = cumulativeDist[lo];
+  const toDist = cumulativeDist[hi];
+  // One distance per vertex, so both ends of the found segment exist.
+  if (!from || !to || fromDist === undefined || toDist === undefined) return last;
+  const segLen = toDist - fromDist;
+  const t = segLen > 0 ? (targetDist - fromDist) / segLen : 0;
+  const [lng0, lat0] = from;
+  const [lng1, lat1] = to;
 
   return [lng0 + (lng1 - lng0) * t, lat0 + (lat1 - lat0) * t];
 }
 
 /** Compute elevation statistics from an array of ElevationPoints. */
 export function computeElevationStats(points: ElevationPoint[]): ElevationStats {
-  if (points.length === 0) {
+  // Apply light smoothing to reduce DEM noise before computing grades
+  const smoothed = smoothElevations(
+    points.map((p) => p.elevation),
+    3,
+  );
+  const samples = points.map((point, i) => ({
+    distance: point.distance,
+    elevation: smoothed[i] ?? point.elevation,
+  }));
+  const first = samples[0];
+  const last = samples.at(-1);
+  if (!first || !last) {
     return {
       totalAscent: 0,
       totalDescent: 0,
@@ -121,33 +148,29 @@ export function computeElevationStats(points: ElevationPoint[]): ElevationStats 
     };
   }
 
-  // Apply light smoothing to reduce DEM noise before computing grades
-  const smoothed = smoothElevations(
-    points.map((p) => p.elevation),
-    3,
-  );
-
   let totalAscent = 0;
   let totalDescent = 0;
-  let maxElevation = smoothed[0];
-  let minElevation = smoothed[0];
+  let maxElevation = first.elevation;
+  let minElevation = first.elevation;
   let maxGrade = 0;
 
-  for (let i = 1; i < smoothed.length; i++) {
-    const diff = smoothed[i] - smoothed[i - 1];
+  let previous = first;
+  for (const sample of samples.slice(1)) {
+    const diff = sample.elevation - previous.elevation;
     if (diff > 0) totalAscent += diff;
     else totalDescent += Math.abs(diff);
-    if (smoothed[i] > maxElevation) maxElevation = smoothed[i];
-    if (smoothed[i] < minElevation) minElevation = smoothed[i];
+    if (sample.elevation > maxElevation) maxElevation = sample.elevation;
+    if (sample.elevation < minElevation) minElevation = sample.elevation;
 
-    const segDist = points[i].distance - points[i - 1].distance;
+    const segDist = sample.distance - previous.distance;
     if (segDist > 0) {
       const grade = Math.abs(diff / segDist) * 100;
       if (grade > maxGrade) maxGrade = grade;
     }
+    previous = sample;
   }
 
-  const totalDist = points[points.length - 1].distance - points[0].distance;
+  const totalDist = last.distance - first.distance;
   const averageGrade = totalDist > 0 ? (totalAscent / totalDist) * 100 : 0;
 
   return {
@@ -168,7 +191,7 @@ function smoothElevations(elevations: number[], windowSize: number): number[] {
     const start = Math.max(0, i - half);
     const end = Math.min(elevations.length - 1, i + half);
     let sum = 0;
-    for (let j = start; j <= end; j++) sum += elevations[j];
+    for (const value of elevations.slice(start, end + 1)) sum += value;
     return sum / (end - start + 1);
   });
 }
@@ -176,13 +199,15 @@ function smoothElevations(elevations: number[], windowSize: number): number[] {
 /** Compute per-segment grades (%) from elevation points. */
 export function computeGrades(points: ElevationPoint[]): number[] {
   const grades: number[] = [0]; // first point has no preceding segment
-  for (let i = 1; i < points.length; i++) {
-    const dist = points[i].distance - points[i - 1].distance;
-    if (dist > 0) {
-      grades.push(((points[i].elevation - points[i - 1].elevation) / dist) * 100);
+  let previous = points[0];
+  for (const point of points.slice(1)) {
+    const dist = previous ? point.distance - previous.distance : 0;
+    if (previous && dist > 0) {
+      grades.push(((point.elevation - previous.elevation) / dist) * 100);
     } else {
       grades.push(0);
     }
+    previous = point;
   }
   return grades;
 }
@@ -193,12 +218,15 @@ export function computeGrades(points: ElevationPoint[]): number[] {
  */
 export function downsampleLTTB(points: ElevationPoint[], targetCount: number): ElevationPoint[] {
   if (points.length <= targetCount) return points;
-  if (targetCount < 3) return [points[0], points[points.length - 1]];
+  const first = points[0];
+  const last = points.at(-1);
+  if (!first || !last) return points;
+  if (targetCount < 3) return [first, last];
 
-  const sampled: ElevationPoint[] = [points[0]];
+  const sampled: ElevationPoint[] = [first];
   const bucketSize = (points.length - 2) / (targetCount - 2);
 
-  let prevIndex = 0;
+  let previous = first;
   for (let i = 0; i < targetCount - 2; i++) {
     const bucketStart = Math.floor((i + 1) * bucketSize) + 1;
     const bucketEnd = Math.min(Math.floor((i + 2) * bucketSize) + 1, points.length - 1);
@@ -209,42 +237,42 @@ export function downsampleLTTB(points: ElevationPoint[], targetCount: number): E
     let avgX: number;
     let avgY: number;
     if (nextStart > nextEnd || nextStart >= points.length) {
-      const last = points[points.length - 1];
       avgX = last.distance;
       avgY = last.elevation;
     } else {
       avgX = 0;
       avgY = 0;
-      let count = 0;
-      for (let j = nextStart; j <= nextEnd && j < points.length; j++) {
-        avgX += points[j].distance;
-        avgY += points[j].elevation;
-        count++;
+      const nextBucket = points.slice(nextStart, nextEnd + 1);
+      for (const point of nextBucket) {
+        avgX += point.distance;
+        avgY += point.elevation;
       }
-      avgX /= count;
-      avgY /= count;
+      avgX /= nextBucket.length;
+      avgY /= nextBucket.length;
     }
 
     // Find point in current bucket with max triangle area
     let maxArea = -1;
-    let maxIndex = bucketStart;
-    const px = points[prevIndex].distance;
-    const py = points[prevIndex].elevation;
+    let chosen = points[bucketStart];
+    const px = previous.distance;
+    const py = previous.elevation;
 
-    for (let j = bucketStart; j <= bucketEnd && j < points.length; j++) {
+    for (const point of points.slice(bucketStart, bucketEnd + 1)) {
       const area = Math.abs(
-        (px - avgX) * (points[j].elevation - py) - (px - points[j].distance) * (avgY - py),
+        (px - avgX) * (point.elevation - py) - (px - point.distance) * (avgY - py),
       );
       if (area > maxArea) {
         maxArea = area;
-        maxIndex = j;
+        chosen = point;
       }
     }
 
-    sampled.push(points[maxIndex]);
-    prevIndex = maxIndex;
+    if (chosen) {
+      sampled.push(chosen);
+      previous = chosen;
+    }
   }
 
-  sampled.push(points[points.length - 1]);
+  sampled.push(last);
   return sampled;
 }

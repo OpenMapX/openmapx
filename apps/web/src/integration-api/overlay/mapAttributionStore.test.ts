@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { dedupeAttributionHtml, projectMapAttributions } from "./mapAttributionStore";
 
 describe("dedupeAttributionHtml", () => {
@@ -73,7 +74,9 @@ it("merges a compact publisher link into a fuller visible notice without losing 
     { fullHtml: full, visibleHtml: full, logos: [] },
   ]);
   expect(result.visible).toHaveLength(1);
-  expect(result.visible[0].html).toContain('href="https://www.openstreetmap.org/copyright"');
-  expect(result.visible[0].html).toContain('href="https://opendatacommons.org/licenses/odbl/1-0/"');
-  expect(result.visible[0].html.match(/OpenStreetMap contributors/g)).toHaveLength(1);
+  expect(nth(result.visible, 0).html).toContain('href="https://www.openstreetmap.org/copyright"');
+  expect(nth(result.visible, 0).html).toContain(
+    'href="https://opendatacommons.org/licenses/odbl/1-0/"',
+  );
+  expect(nth(result.visible, 0).html.match(/OpenStreetMap contributors/g)).toHaveLength(1);
 });

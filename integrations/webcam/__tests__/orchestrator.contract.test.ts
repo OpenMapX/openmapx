@@ -6,6 +6,7 @@ import type {
   CameraView,
   IntegrationContext,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, test, vi } from "vitest";
 import { createWebcamDataSource } from "../data-source.js";
 
@@ -133,7 +134,7 @@ describe("webcam orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.data.map((r) => r.id)).toEqual(["a:ok"]);
-    const query = vi.mocked(a.searchCameras).mock.calls[0][1] as CameraQuery;
+    const query = nth(vi.mocked(a.searchCameras).mock.calls, 0)[1] as CameraQuery;
     expect(query.excludedSourceIds).toEqual(["windy-cameras"]);
 
     expect((await source.getDetail("a:merged")).data).toBeNull();
@@ -230,7 +231,7 @@ describe("webcam orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
-    expect(result.data[2].contributors).toEqual([
+    expect(nth(result.data, 2).contributors).toEqual([
       {
         sourceId: "src-c",
         name: "Trafikverket",
@@ -255,7 +256,7 @@ describe("webcam orchestrator", () => {
       (await source.search(BBOX, filters)).data.map((r) => r.id);
 
     expect(await ids({ category: ["traffic", "beach"] })).toEqual(["t", "b"]);
-    expect(vi.mocked(a.searchCameras).mock.calls[0][1]).toEqual(
+    expect(nth(vi.mocked(a.searchCameras).mock.calls, 0)[1]).toEqual(
       expect.objectContaining({ types: ["traffic", "beach"] }),
     );
     expect(await ids({ category: "weather" })).toEqual(["w"]);
@@ -275,7 +276,7 @@ describe("webcam orchestrator", () => {
         ["landscape", "traffic", "city", "weather", "beach", "other"],
       ],
     ]);
-    expect(filters[0].label).toBe("Category");
+    expect(nth(filters, 0).label).toBe("Category");
   });
 
   test("a camera whose every view is offline is listed, dimmed", async () => {
@@ -290,7 +291,7 @@ describe("webcam orchestrator", () => {
       ]),
     );
 
-    const [result] = (await source.search(BBOX)).data;
+    const result = nth((await source.search(BBOX)).data, 0);
 
     expect(result.id).toBe("down");
     expect(result.status).toBe("non-operational");

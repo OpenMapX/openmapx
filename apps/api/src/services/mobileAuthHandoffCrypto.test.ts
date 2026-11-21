@@ -35,7 +35,7 @@ describe("mobile auth handoff token encryption", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", SECRET);
     const encrypted = encryptHandoffToken("same-token", "handoff-row-1");
     const modifiedTag = Buffer.from(encrypted.tag, "base64");
-    modifiedTag[0] ^= 1;
+    modifiedTag.writeUInt8(modifiedTag.readUInt8(0) ^ 1, 0);
 
     expect(() =>
       decryptHandoffToken({ ...encrypted, tag: modifiedTag.toString("base64") }, "handoff-row-1"),

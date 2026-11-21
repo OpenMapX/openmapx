@@ -15,7 +15,7 @@ export function defaultHotelDates(now: Date): { checkIn: string; checkOut: strin
 
 /** The `YYYY-MM-DD` one day after the given `YYYY-MM-DD` string. */
 function addDayStr(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
+  const [y = Number.NaN, m = Number.NaN, d = Number.NaN] = date.split("-").map(Number);
   const dt = new Date(y, m - 1, d + 1);
   return ymd(dt);
 }

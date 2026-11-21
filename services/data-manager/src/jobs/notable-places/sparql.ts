@@ -158,9 +158,9 @@ export function parseEntity(cell: string): string | undefined {
 
 /** A TSV literal's text: `"Tour Eiffel"@fr` → `Tour Eiffel`, escapes undone. */
 export function parseLiteral(cell: string): string | undefined {
-  const match = /^"((?:[^"\\]|\\.)*)"(?:@[\w-]+|\^\^<[^>]+>)?$/.exec(cell);
-  if (!match) return undefined;
-  return match[1].replace(/\\(.)/g, (_, escaped: string) => {
+  const [, text] = /^"((?:[^"\\]|\\.)*)"(?:@[\w-]+|\^\^<[^>]+>)?$/.exec(cell) ?? [];
+  if (text === undefined) return undefined;
+  return text.replace(/\\(.)/g, (_, escaped: string) => {
     if (escaped === "t") return "\t";
     if (escaped === "n") return "\n";
     if (escaped === "r") return "\r";

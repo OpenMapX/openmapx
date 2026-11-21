@@ -57,12 +57,14 @@ export function TransitWalkBanner({
   // "Continue, then continue".
   const shown = nextWalkManeuver(steps, currentStepIndex, distanceToNextStepMeters);
   const then = shown.index === null ? null : nextWalkManeuver(steps, shown.index, 0);
-  const shownInfo = shown.index === null ? null : walkStepInfo(steps[shown.index]);
+  const shownStep = shown.index === null ? undefined : steps[shown.index];
+  const shownInfo = shownStep ? walkStepInfo(shownStep) : null;
   const maneuver = shownInfo ? shownInfo.maneuver : { type: "arrive" };
   const shownInstruction = shownInfo
     ? composeWalkInstruction(shownInfo, t)
     : t("walkDir.arrive", { place: destination });
-  const nextInfo = then?.index != null ? walkStepInfo(steps[then.index]) : null;
+  const thenStep = then?.index != null ? steps[then.index] : undefined;
+  const nextInfo = thenStep ? walkStepInfo(thenStep) : null;
   const nextInstruction = nextInfo
     ? composeWalkInstruction(nextInfo, t)
     : then

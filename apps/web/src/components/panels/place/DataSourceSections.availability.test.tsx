@@ -13,6 +13,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { buildGeoJson } from "@/integration-api/map/dataSourceFeatures";
+import { nth } from "@/test";
 
 import carSharingEn from "../../../../../../integrations/car-sharing/strings/en.json";
 
@@ -83,12 +84,10 @@ describe("car-sharing station without published availability", () => {
       inactiveOpacity: 0.5,
       iconPath: "M0 0",
     };
-    const [feature] = buildGeoJson(
-      [staticResult],
-      resolverFor("en"),
-      undefined,
-      markerStyle,
-    ).features;
+    const feature = nth(
+      buildGeoJson([staticResult], resolverFor("en"), undefined, markerStyle).features,
+      0,
+    );
 
     expect(feature.properties).toMatchObject({
       variant: "unknown",

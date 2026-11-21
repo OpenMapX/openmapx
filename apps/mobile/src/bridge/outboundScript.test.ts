@@ -3,9 +3,9 @@ import { BASE64_LITERAL, buildChannelBootstrapScript, buildOutboundScript } from
 
 /** Extracts the one substituted value from the generated program. */
 function base64Literal(script: string): string {
-  const match = script.match(/atob\("([^"]*)"\)/);
-  if (!match) throw new Error("generated script has no base64 literal");
-  return match[1];
+  const literal = script.match(/atob\("([^"]*)"\)/)?.[1];
+  if (literal === undefined) throw new Error("generated script has no base64 literal");
+  return literal;
 }
 
 describe("base64", () => {

@@ -156,7 +156,7 @@ function parseGeoLink(url: URL): DeepLinkIntent | null {
   if (url.host || url.hash) return null;
   const [point, ...attributes] = url.pathname.split(";");
   if (attributes.some((part) => part.startsWith("crs=") && part !== "crs=wgs84")) return null;
-  const base = readGeoPoint(point);
+  const base = point === undefined ? null : readGeoPoint(point);
   if (!base) return null;
   const params = new URLSearchParams();
   const query = url.searchParams.get("q")?.trim();

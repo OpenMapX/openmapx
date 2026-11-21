@@ -450,10 +450,11 @@ export const createMangroveProvider = (
   async submit(signedJwt: string): Promise<{ id: string }> {
     // Extract signature from the signed JWT for our return value.
     const parts = signedJwt.split(".");
-    if (parts.length !== 3) throw new Error("Invalid JWT structure");
+    const [, , signature] = parts;
+    if (parts.length !== 3 || signature === undefined) throw new Error("Invalid JWT structure");
     await mangroveSubmit(signedJwt);
     // The signature segment is also the review id in Mangrove.
-    return { id: parts[2] };
+    return { id: signature };
   },
 
   async uploadImage(file: Blob, filename: string): Promise<{ src: string }> {

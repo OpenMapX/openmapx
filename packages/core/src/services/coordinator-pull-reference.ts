@@ -16,7 +16,7 @@ export function coordinatorPullReferenceIdentity(reference: string): string {
   if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(tag))
     throw Error("Unsupported coordinator image tag");
   const parts = name.split("/"),
-    first = parts[0]!;
+    first = parts[0] ?? name;
   let registry = "docker.io",
     repository = name;
   if (parts.length > 1 && (first === "localhost" || /[.:]/.test(first))) {

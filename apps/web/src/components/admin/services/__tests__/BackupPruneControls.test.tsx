@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { cleanup, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import { cleanup, createQueryWrapper, fireEvent, nth, render, screen, waitFor } from "@/test";
 import { BackupPruneControls } from "../BackupPruneControls";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
@@ -83,9 +83,9 @@ it("previews before confirmation and preserves the exact proof and key after a l
   expect(writes.map((request) => JSON.parse(String(request.init.body)))).toEqual(
     [1, 2].map(() => ({ proof, confirmation: "PRUNE EXPIRED BACKUPS" })),
   );
-  expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBeTruthy();
-  expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBe(
-    new Headers(writes[1].init.headers).get("idempotency-key"),
+  expect(new Headers(nth(writes, 0).init.headers).get("idempotency-key")).toBeTruthy();
+  expect(new Headers(nth(writes, 0).init.headers).get("idempotency-key")).toBe(
+    new Headers(nth(writes, 1).init.headers).get("idempotency-key"),
   );
 });
 it("refuses an expired preview and links to the single source-aware policy editor", async () => {

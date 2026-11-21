@@ -1,6 +1,7 @@
 import { migrateSessionSchema } from "../storage/migrations";
 import { SessionRepository } from "../storage/SessionRepository";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
+import { nth } from "../testing/nth";
 import {
   DIAGNOSTIC_FIELDS,
   DiagnosticRepository,
@@ -29,7 +30,7 @@ describe("DiagnosticRepository", () => {
     const outcome = await diagnostics.record("location.batch", { accepted: 3, rejected: 1 });
 
     expect(outcome).toEqual({ written: true, rejected: [] });
-    expect((await diagnostics.list())[0].fields).toEqual({ accepted: 3, rejected: 1 });
+    expect(nth(await diagnostics.list(), 0).fields).toEqual({ accepted: 3, rejected: 1 });
     await close();
   });
 
@@ -51,7 +52,7 @@ describe("DiagnosticRepository", () => {
       const outcome = await diagnostics.record("location.batch", fields);
 
       expect(outcome.rejected).toEqual(Object.keys(fields));
-      const stored = (await diagnostics.list())[0].fields;
+      const stored = nth(await diagnostics.list(), 0).fields;
       expect(Object.keys(stored)).toEqual(["droppedFieldCount"]);
       expect(JSON.stringify(stored)).not.toContain("50.11");
       expect(JSON.stringify(stored)).not.toContain("tok_secret");
@@ -74,7 +75,7 @@ describe("DiagnosticRepository", () => {
 
       await diagnostics.record("engine.timing", { stage: "tick", secretName: "x", other: "y" });
 
-      const stored = (await diagnostics.list())[0].fields;
+      const stored = nth(await diagnostics.list(), 0).fields;
       expect(stored).toEqual({ stage: "tick", droppedFieldCount: 2 });
       expect(JSON.stringify(stored)).not.toContain("secretName");
       await close();
@@ -96,7 +97,7 @@ describe("DiagnosticRepository", () => {
 
     await diagnostics.record("typed.error", { code: "c".repeat(500) });
 
-    const stored = (await diagnostics.list())[0].fields as { code: string };
+    const stored = nth(await diagnostics.list(), 0).fields as { code: string };
     expect(stored.code).toHaveLength(MAX_DIAGNOSTIC_VALUE_LENGTH);
     await close();
   });

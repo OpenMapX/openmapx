@@ -120,10 +120,9 @@ function buildProfile(entry: RegistryEntry): Record<string, any> {
   if (opts.micMacSalt) profile.micMacSalt = opts.micMacSalt;
 
   if (entry.timezone) profile.timezone = entry.timezone;
-  if (entry.supportedLanguages[0]) profile.defaultLanguage = entry.supportedLanguages[0];
-  profile.locale = entry.supportedLanguages[0]
-    ? `${entry.supportedLanguages[0]}-${entry.id.split("/")[0].toUpperCase()}`
-    : "en";
+  const [language] = entry.supportedLanguages;
+  if (language) profile.defaultLanguage = language;
+  profile.locale = language ? `${language}-${entry.id.replace(/\/.*/s, "").toUpperCase()}` : "en";
 
   const rawProducts = (opts.products ?? []) as TransportApiProduct[];
   if (rawProducts.length > 0) {

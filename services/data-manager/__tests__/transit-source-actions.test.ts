@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, assert, expect, it } from "vitest";
 import { readFeedOverlay, writeFeedOverlayAtomic } from "../src/jobs/transitous-feeds-overlay.js";
 import {
   listTransitSources,
@@ -13,6 +13,11 @@ const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+function currentOverlay(path: string) {
+  const overlay = readFeedOverlay(path);
+  assert.exists(overlay, "the feeds overlay was not written");
+  return overlay;
+}
 function fixture() {
   const dataDir = mkdtempSync(join(tmpdir(), "openmapx-source-actions-"));
   roots.push(dataDir);
@@ -67,7 +72,7 @@ it("re-enables a retained disabled operator source without losing its URL, attri
 });
 it("removes an operator source together with its patches and quarantine, leaving unrelated records", () => {
   const fx = fixture(),
-    overlay = readFeedOverlay(fx.overlayPath)!;
+    overlay = currentOverlay(fx.overlayPath);
   writeFeedOverlayAtomic(fx.overlayPath, {
     ...overlay,
     patches: [...overlay.patches, { sourceId: "catalog:de:catalog", skip: false }],
@@ -98,7 +103,7 @@ it("refuses catalog removal without changing desired state", () => {
 it("does not overwrite an unrelated source edit made after preparation", () => {
   const fx = fixture(),
     prepared = prepareEnableTransitSource(fx),
-    overlay = readFeedOverlay(fx.overlayPath)!;
+    overlay = currentOverlay(fx.overlayPath);
   writeFeedOverlayAtomic(fx.overlayPath, {
     ...overlay,
     patches: [...overlay.patches, { sourceId: "catalog:de:catalog", skip: true }],
@@ -131,8 +136,9 @@ it("keeps exact source provenance across disable and enable materialization", as
   for (const enabled of [true, false, true]) {
     prepareSetTransitSourceEnabled({ ...fx, enabled }).persist();
     const feeds = [{ region: "de", sources: [] as Record<string, unknown>[] }];
-    applyFeedOverlay(feeds, readFeedOverlay(fx.overlayPath)!);
-    const source = feeds[0]!.sources[0]!;
+    applyFeedOverlay(feeds, currentOverlay(fx.overlayPath));
+    const source = feeds[0]?.sources[0];
+    assert.isDefined(source);
     expect(source).toMatchObject({
       url: fx.source.url,
       skip: !enabled,

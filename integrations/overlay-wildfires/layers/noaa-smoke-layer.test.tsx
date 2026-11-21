@@ -2,7 +2,7 @@ import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
-import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, render, waitFor } from "@/test";
 import type { WildfirePopupController } from "../popup-controller";
 import { NOAA_SMOKE_DENSITY_STYLE } from "../presentation";
 import { useWildfireStore } from "../store";
@@ -171,9 +171,10 @@ describe("NOAA smoke response validation", () => {
     ["invalid optional timestamp", { startedAt: "2026-08-12" }],
   ])("rejects NOAA properties with %s", (_label, propertyOverride) => {
     const collection = smokeCollection();
+    const feature = nth(collection.features, 0);
     collection.features[0] = {
-      ...collection.features[0],
-      properties: { ...collection.features[0].properties, ...propertyOverride },
+      ...feature,
+      properties: { ...feature.properties, ...propertyOverride },
     } as (typeof collection.features)[number];
     expect(isNoaaSmokeFeatureCollection(collection)).toBe(false);
   });

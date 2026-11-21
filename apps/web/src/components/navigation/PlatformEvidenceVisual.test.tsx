@@ -7,6 +7,7 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { cleanup, render } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import wire from "../../../../../integrations/transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json";
 import messages from "../../../../../packages/i18n/locales/en.json";
 import { TransitJourneyControls } from "./TransitJourneyControls";
@@ -48,11 +49,8 @@ interface CapturedPlace {
   arrival?: string;
   departure?: string;
 }
-const raw: CapturedPlace[] = [
-  wire.legs[0].from,
-  ...wire.legs[0].intermediateStops,
-  wire.legs[0].to,
-].slice(0, 9);
+const wireLeg = nth(wire.legs, 0);
+const raw: CapturedPlace[] = [wireLeg.from, ...wireLeg.intermediateStops, wireLeg.to].slice(0, 9);
 const base: Array<VehicleJourneyStop & { lat: number; lng: number }> = raw.map((place) => ({
   stopId: place.stopId ?? "",
   name: place.name ?? "",
@@ -77,8 +75,8 @@ const leg: TripLeg = {
   mode: "rail",
   startTime: "2026-11-06T20:51:00Z",
   endTime: "2026-11-06T21:44:00Z",
-  from: { ...base[0] },
-  to: { ...base[8] },
+  from: { ...nth(base, 0) },
+  to: { ...nth(base, 8) },
   route: { shortName: "RE1", longName: "", color: "E40000", textColor: "FFFFFF" },
   headsign: "Hamm (Westf) Hbf",
   tripShortName: "026839",
@@ -101,16 +99,16 @@ it("renders comparable RE1 platform states from the production banner and journe
     if (state !== "before")
       stops.forEach((stop, i) => {
         stop.departurePlatform = {
-          code: codes[i],
+          code: nth(codes, i),
           kind: i === 6 || i === 7 ? "correction" : "schedule",
           sourceId: "delfi-siri-et-rhein-ruhr",
           recordedAt: "2026-11-06T18:30:58.165Z",
         };
-        stop.platform = codes[i];
-        stop.scheduledPlatform = codes[i];
+        stop.platform = nth(codes, i);
+        stop.scheduledPlatform = nth(codes, i);
       });
     if (state === "realtime")
-      stops[0].departurePlatform = {
+      nth(stops, 0).departurePlatform = {
         code: "4 A-C",
         scheduledCode: "2",
         kind: "realtime",
@@ -168,8 +166,8 @@ it("renders captured boarding guidance while walking toward Horrem", () => {
   for (const state of ["before", "after"] as const) {
     const ride: TripLeg = {
       ...leg,
-      from: { ...base[6], platformCode: "37" },
-      startTime: base[6].scheduledDeparture ?? leg.startTime,
+      from: { ...nth(base, 6), platformCode: "37" },
+      startTime: nth(base, 6).scheduledDeparture ?? leg.startTime,
     };
     const walk: TripLeg = {
       mode: "walking",
@@ -188,7 +186,7 @@ it("renders captured boarding guidance while walking toward Horrem", () => {
     const chosen = { ...itinerary, legs: [walk, ride] };
     const stops = structuredClone(base.slice(6));
     if (state === "after")
-      stops[0].departurePlatform = {
+      nth(stops, 0).departurePlatform = {
         code: "3",
         kind: "correction",
         sourceId: "delfi-siri-et-rhein-ruhr",

@@ -7,8 +7,9 @@ import {
 import { en } from "@openmapx/i18n";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import * as savedPlaceActions from "@/lib/openSavedPlace";
+import { nth } from "@/test";
 
 const LEGACY_CUSTOM_LIST = "$trip";
 const state = vi.hoisted(() => ({
@@ -73,7 +74,7 @@ describe("saved list name ownership", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "Taken" } });
     fireEvent.blur(input);
-    const options = state.update.mock.calls[0][1] as { onError: (error: unknown) => void };
+    const options = nth(state.update.mock.calls, 0)[1] as { onError: (error: unknown) => void };
     act(() =>
       options.onError(
         new ApiClientError(409, { error: "taken", code: "SAVED_LIST_NAME_TAKEN" }, null),
@@ -88,9 +89,9 @@ describe("saved list name ownership", () => {
       state.name = name;
       renderDetail();
       expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-      expect(
-        screen.getByText(en.saved[name.slice(1) as keyof typeof en.saved] as string),
-      ).toBeInTheDocument();
+      const label = en.saved[name.slice(1) as keyof typeof en.saved];
+      assert(typeof label === "string", `${name} has no translated label`);
+      expect(screen.getByText(label)).toBeInTheDocument();
     },
   );
 });
@@ -244,7 +245,7 @@ describe("saved note editor ownership", () => {
   it("keeps a second place's editor opened from a blurred save", () => {
     state.places = [notePlace("a"), notePlace("b")];
     renderDetail();
-    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "Add note" }), 0));
     draft("Saved A");
     fireEvent.blur(screen.getByPlaceholderText("Note"));
     fireEvent.click(screen.getByRole("button", { name: "Add note" }));
@@ -275,13 +276,13 @@ describe("saved note editor ownership", () => {
     draft("First and more");
     settle(0);
     expect(screen.getByPlaceholderText("Note")).toHaveValue("First and more");
-    expect(state.updatePlace.mock.calls[0][0]).toEqual({ id: "a", note: "First" });
+    expect(nth(state.updatePlace.mock.calls, 0)[0]).toEqual({ id: "a", note: "First" });
   });
 
   it("lets only the matching save close its editor and ignores a late duplicate completion", () => {
     state.places = [notePlace("a"), notePlace("b")];
     renderDetail();
-    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "Add note" }), 0));
     draft("Saved A");
     fireEvent.blur(screen.getByPlaceholderText("Note"));
     fireEvent.click(screen.getByRole("button", { name: "Add note" }));
@@ -292,13 +293,13 @@ describe("saved note editor ownership", () => {
     settle(1);
     expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "Add note" }), 0));
     draft("Again");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
     fireEvent.blur(screen.getByPlaceholderText("Note"));
     settle(2);
     expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]);
+    fireEvent.click(nth(screen.getAllByRole("button", { name: "Add note" }), 0));
     draft("Reopened");
     settle(3);
     expect(screen.getByPlaceholderText("Note")).toHaveValue("Reopened");
@@ -312,7 +313,7 @@ describe("saved note editor ownership", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
     draft("   ");
     fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
-    expect(state.updatePlace.mock.calls[0][0]).toEqual({ id: "a", note: null });
+    expect(nth(state.updatePlace.mock.calls, 0)[0]).toEqual({ id: "a", note: null });
     settle(0);
     expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
 

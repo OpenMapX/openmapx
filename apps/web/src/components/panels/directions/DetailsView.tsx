@@ -89,7 +89,7 @@ export function DetailsView({
         contributorsForNestedRecordFields(
           creditRoot,
           [
-            ...(legIndex === undefined
+            ...(legIndex === undefined || !route.legs[legIndex]
               ? []
               : [{ field: `legs.${legIndex}`, record: route.legs[legIndex] }]),
             { field: `steps.${index}`, record: step },

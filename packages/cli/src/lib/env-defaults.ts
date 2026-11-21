@@ -106,8 +106,8 @@ export function resolveTransitousCountries(
     const values = [
       ...new Set(
         parseCsvList(env.MOTIS_FEED_ALLOW_LIST).flatMap((id) => {
-          const match = /^([a-z]{2,3})_/.exec(id.toLowerCase());
-          return match ? [match[1]!] : [];
+          const [, country] = /^([a-z]{2,3})_/.exec(id.toLowerCase()) ?? [];
+          return country ? [country] : [];
         }),
       ),
     ].sort();

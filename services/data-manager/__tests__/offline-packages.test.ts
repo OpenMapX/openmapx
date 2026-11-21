@@ -20,7 +20,7 @@ import {
   type OfflinePackageRequest,
   type OfflinePackageSourceDescriptor,
 } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { MemoryOfflinePackageAccountingStore } from "../src/offline-packages/accounting.js";
 import {
   OfflinePackageGenerator,
@@ -962,17 +962,19 @@ describe("offline worker tracking", () => {
       return await originalExtraction(options);
     });
     const worker = generator as unknown as { reloadRunnableJobs(): Promise<void>; drain(): void };
+    const queued = jobs[1];
+    assert.isDefined(queued);
     try {
       await worker.reloadRunnableJobs();
       await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
-      expect((await generator.getJob(principal, jobs[1].jobId))?.status).toBe("preparing");
+      expect((await generator.getJob(principal, queued.jobId))?.status).toBe("preparing");
     } finally {
       gate.resolve();
       // Also releases the queued first job when the regression is still red.
       worker.drain();
       await vi.waitFor(
         async () => {
-          expect((await generator.getJob(principal, jobs[1].jobId))?.status).toBe(
+          expect((await generator.getJob(principal, queued.jobId))?.status).toBe(
             "ready-to-download",
           );
           expect(generator.pendingCount()).toBe(0);

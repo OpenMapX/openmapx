@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import {
   type BuildPeliasDataOptions,
   buildPeliasData,
@@ -56,6 +56,14 @@ function composeCall(composeFile: string, ...args: string[]) {
   };
 }
 
+/** The file a recorded `docker compose -f <file>` call names. */
+function composeFileOf(call: { args: string[] } | undefined): string {
+  assert.isDefined(call, "docker compose was not called");
+  const file = call.args[call.args.indexOf("-f") + 1];
+  assert(call.args.includes("-f") && file !== undefined, "the compose call names no file");
+  return file;
+}
+
 /** Fakes the containers by writing what each step would produce. */
 function fakePeliasRunner(
   buildDir: string,
@@ -99,8 +107,7 @@ describe("buildPeliasData", () => {
       ...images,
       runner: fakePeliasRunner(buildDir, calls, {
         onUp: () => {
-          const up = calls.at(-1)?.args ?? [];
-          composeFile = up[up.indexOf("-f") + 1] as string;
+          composeFile = composeFileOf(calls.at(-1));
           compose = JSON.parse(readFileSync(composeFile, "utf-8"));
         },
       }),
@@ -205,8 +212,7 @@ describe("buildPeliasData", () => {
     );
     expect(existsSync(`${peliasDir}.next`)).toBe(false);
     expect(calls.at(-1)?.args.slice(-2)).toEqual(["down", "--remove-orphans"]);
-    const down = calls.at(-1)?.args ?? [];
-    expect(existsSync(dirname(down[down.indexOf("-f") + 1] as string))).toBe(false);
+    expect(existsSync(dirname(composeFileOf(calls.at(-1))))).toBe(false);
   });
 
   it("requires a region when multiple OSM PBFs exist", async () => {

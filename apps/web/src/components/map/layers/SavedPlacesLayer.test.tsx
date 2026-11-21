@@ -12,7 +12,7 @@ import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
 import { findStylePoiAtPoint } from "../mapStylePoiTarget";
 import { loadListMarkerImage, SavedPlacesLayer } from "./SavedPlacesLayer";
@@ -27,7 +27,7 @@ const fields = {
   lat: [{ sourceId: "coordinate", name: "Acquired coordinate receipt" }],
   lng: [],
 };
-const originalPlaces: SavedPlace[] = [
+const originalPlaces: [SavedPlace] = [
   {
     id: "saved",
     listId: "list",
@@ -78,7 +78,7 @@ it("credits only painted saved coordinates and releases ownership on unmount", (
   useMapAttributionStore.setState({ byLayer: {} });
   const view = render(<SavedPlacesLayer />);
   const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
-  expect(JSON.parse(data.features[0].properties?._mapAttributions)).toEqual(fields.lat);
+  expect(JSON.parse(nth(data.features, 0).properties?._mapAttributions)).toEqual(fields.lat);
   const html = () =>
     Object.values(useMapAttributionStore.getState().byLayer)
       .flat()
@@ -231,7 +231,8 @@ it("keeps the hover pin on its place while the pointer is on the pin over a neig
   ];
   render(<SavedPlacesLayer />);
   const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
-  const [first, neighbour] = renderedFeatures(data, "saved-places-layer");
+  const features = renderedFeatures(data, "saved-places-layer");
+  const [first, neighbour] = [nth(features, 0), nth(features, 1)];
   fake.setRenderedFeatures("saved-places-layer", [first]);
   act(() => fake.emit("mousemove", { point: { x: 20, y: 20 } }));
   expect(pin.mock.calls.at(-1)?.[1]).toBe("Saved point");
@@ -381,16 +382,16 @@ it("replaces the opened list marker image with its complete emoji", () => {
   try {
     const original = fake.state.sources.get("saved-places-source")
       ?.data as GeoJSON.FeatureCollection;
-    const originalImage = original.features[0].properties?.imageId;
+    const originalImage = nth(original.features, 0).properties?.imageId;
     listIcon = "🏕️";
     view.rerender(<SavedPlacesLayer />);
     const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
-    const imageId = data.features[0].properties?.imageId;
+    const imageId = nth(data.features, 0).properties?.imageId;
     expect(imageId).not.toBe(originalImage);
     expect(data.features).toHaveLength(2);
     expect(data.features.every((feature) => feature.properties?.imageId === imageId)).toBe(true);
     expect(images).toHaveLength(1);
-    images[0].onload?.(new Event("load"));
+    nth(images, 0).onload?.(new Event("load"));
     expect(context.drawImage).toHaveBeenCalledWith(images[0], 0, 0);
     expect(context.fillText).toHaveBeenCalledWith("🏕️", 32, 34, 40);
     expect(addImage).toHaveBeenCalledWith(imageId, pixels, { pixelRatio: 2 });

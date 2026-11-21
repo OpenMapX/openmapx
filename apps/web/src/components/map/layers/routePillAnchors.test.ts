@@ -1,5 +1,6 @@
 import type { LngLat } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { routePillAnchors } from "./routePillAnchors";
 
 const viewport = { width: 1280, height: 800, insets: { left: 0, right: 0, top: 0, bottom: 0 } };
@@ -90,9 +91,10 @@ describe("dense route-pill geometry", () => {
     const denseResult = select(dense);
     expect(denseResult.map((anchor) => anchor.routeIndex)).toEqual([0, 2]);
     expect(sparseResult.map((anchor) => anchor.routeIndex)).toEqual([0, 2]);
-    for (let i = 0; i < denseResult.length; i++) {
-      expect(denseResult[i].coordinate[0]).toBeCloseTo(sparseResult[i].coordinate[0], 6);
-      expect(denseResult[i].coordinate[1]).toBeCloseTo(sparseResult[i].coordinate[1], 6);
+    for (const [i, { coordinate }] of denseResult.entries()) {
+      const sparse = nth(sparseResult, i).coordinate;
+      expect(coordinate[0]).toBeCloseTo(sparse[0], 6);
+      expect(coordinate[1]).toBeCloseTo(sparse[1], 6);
     }
   });
 });

@@ -1,6 +1,6 @@
 import { sanitizeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   captureFieldContributors,
   captureIntegrationContributorCatalogue,
@@ -20,8 +20,10 @@ describe("exact contributor resolution", () => {
   it("resolves only explicitly named identities and copies metadata", () => {
     const result = resolveSourceContributors(["unknown", "a", "a"], resolver);
     expect(result).toEqual([a]);
-    expect(result[0]).not.toBe(a);
-    expect(result[0].publisher).not.toBe(a.publisher);
+    const [copy] = result;
+    assert.isDefined(copy);
+    expect(copy).not.toBe(a);
+    expect(copy.publisher).not.toBe(a.publisher);
     expect(resolveSourceContributors(["unknown"], resolver)).toEqual([]);
   });
   it("prefers an authoritative snapshot including empty over current catalogue metadata", () => {
@@ -102,8 +104,9 @@ describe("portable companion contributor contract", () => {
     const receipts = parseContributors(
       String.raw`[{"sourceId":"community-feed","name":"Feed","attributionText":"© <a href=\"https://publisher.example/\" onclick=\"run()\">Publisher</a> <img src=x onerror=run()> &amp; <a href=\"javascript:run()\">contributors</a>"}]`,
     );
-    expect(receipts).toBeDefined();
-    expect(sanitizeAttributionHtml(receipts?.[0].attributionText ?? "")).toBe(
+    const attributionText = receipts?.[0]?.attributionText;
+    assert.isDefined(attributionText, "the receipt keeps its attribution text");
+    expect(sanitizeAttributionHtml(attributionText)).toBe(
       '© <a href="https://publisher.example/" target="_blank" rel="noopener noreferrer">Publisher</a>  &amp; contributors',
     );
   });
@@ -165,8 +168,10 @@ describe("portable companion contributor contract", () => {
       return resolveCapturedContributors(catalogue, "adapter", row);
     }
     const acquisition = acquire();
-    metadata[0].name = "Replacement";
-    if (metadata[0].publisher) metadata[0].publisher.name = "New publisher";
+    const [row] = metadata;
+    assert.isDefined(row);
+    row.name = "Replacement";
+    if (row.publisher) row.publisher.name = "New publisher";
     const retained = await acquisition;
     expect(retained).toEqual([
       {

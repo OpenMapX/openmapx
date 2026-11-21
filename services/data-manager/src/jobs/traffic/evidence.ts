@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atomicWriteFile } from "../../utils/atomic-write.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
@@ -74,11 +74,18 @@ export function trafficEvidencePath(statePath: string): string {
 
 export async function loadTrafficEvidence(path: string): Promise<TrafficEvidenceLoad> {
   try {
-    const metadata = await stat(path);
-    if (metadata.size > MAX_TRAFFIC_EVIDENCE_BYTES) {
-      throw new Error("traffic evidence exceeds the bounded file size");
+    // One handle for the size check and the read, so the file cannot be swapped between them.
+    const handle = await open(path, "r");
+    let text: string;
+    try {
+      if ((await handle.stat()).size > MAX_TRAFFIC_EVIDENCE_BYTES) {
+        throw new Error("traffic evidence exceeds the bounded file size");
+      }
+      text = await handle.readFile("utf8");
+    } finally {
+      await handle.close();
     }
-    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+    const parsed = JSON.parse(text) as unknown;
     if (!parsed || typeof parsed !== "object" || (parsed as { version?: unknown }).version !== 1) {
       throw new Error("traffic evidence must have version 1");
     }
@@ -104,11 +111,8 @@ export async function loadTrafficEvidence(path: string): Promise<TrafficEvidence
           throw new Error("invalid traffic timestamp");
       }
       for (const key of ["total", "matched", "written", "outOfBounds"] as const) {
-        if (
-          stream[key] !== null &&
-          stream[key] !== undefined &&
-          (!Number.isSafeInteger(stream[key]) || (stream[key] as number) < 0)
-        )
+        const count = stream[key];
+        if (count !== null && count !== undefined && (!Number.isSafeInteger(count) || count < 0))
           throw new Error("invalid traffic count");
       }
       for (const key of ["activeVersion", "lastAttemptMessage"] as const) {

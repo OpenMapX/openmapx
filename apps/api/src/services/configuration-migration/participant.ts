@@ -148,7 +148,7 @@ export async function prepareStagedMigrationParticipant(input: {
   const overlay = structuredClone(plan.overlay),
     credential = stage.kind === "credentials" ? (plan as CredentialPlan) : undefined;
   if (plan.platformPreview) {
-    const p = plan.platformPreview!,
+    const p = plan.platformPreview,
       authorization = input.platformAuthorization;
     if (
       input.mode === "apply" &&
@@ -192,8 +192,11 @@ export async function prepareStagedMigrationParticipant(input: {
     };
   };
   if (credential?.feedPreview && credential.feedChanges?.length) {
-    if (!input.proof?.transitProofToken) throw new MigrationConflict();
-    patch = await prepareFeedCredentialImportPatch({
+    const { proof } = input;
+    const { feedPreview } = credential;
+    if (!proof?.transitProofToken) throw new MigrationConflict();
+    const { transitProofToken } = proof;
+    const preparedPatch = await prepareFeedCredentialImportPatch({
       actorId: writer.actorId,
       transfer: true,
       catalogRevisionId: credential.feedPreview.catalogRevisionId,
@@ -204,17 +207,18 @@ export async function prepareStagedMigrationParticipant(input: {
       importPreviewId: stage.previewId,
       previewOperationKey: credential.feedOperationKey,
     });
+    patch = preparedPatch;
     await withTransitCredentialProofContext(
-      { actorId: writer.actorId, sessionId: input.proof.sessionId, nonce: input.proof.nonce },
+      { actorId: writer.actorId, sessionId: proof.sessionId, nonce: proof.nonce },
       () =>
         authorizePreparedFeedCredentialPatch({
-          patch: patch!,
+          patch: preparedPatch,
           writer,
-          preview: credential.feedPreview!,
+          preview: feedPreview,
           authorization: {
             kind: "credential-import",
-            transitProofToken: input.proof!.transitProofToken!,
-            importProofToken: input.proof!.importProofToken,
+            transitProofToken,
+            importProofToken: proof.importProofToken,
             importPreviewId: stage.previewId,
             importFingerprint: stage.fingerprint,
           },
@@ -303,6 +307,9 @@ export async function prepareStagedMigrationParticipant(input: {
             });
         const groups = new Set(config.document.bindings.map((b) => b.integrationId));
         for (const id of groups) {
+          // The preview versions every integration its document binds.
+          const version = config.bindingVersions[id];
+          if (version === undefined) throw new MigrationConflict();
           const before = await withAdministrativeConfigurationRead({}, async (read) =>
             capturedBindingState(read, id),
           );
@@ -325,10 +332,10 @@ export async function prepareStagedMigrationParticipant(input: {
               });
           await tx
             .insert(integrationBindingRevision)
-            .values({ integrationId: id, version: config.bindingVersions[id]! })
+            .values({ integrationId: id, version })
             .onConflictDoUpdate({
               target: integrationBindingRevision.integrationId,
-              set: { version: config.bindingVersions[id]!, updatedAt: new Date() },
+              set: { version, updatedAt: new Date() },
             });
         }
       }

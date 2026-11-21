@@ -1,4 +1,5 @@
 import type { AuthorityObservation, CoverageRegion, StreamEvidence } from "@openmapx/core/coverage";
+import { itemAt } from "@openmapx/core/item-at";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 
@@ -136,6 +137,33 @@ describe("CoverageService", () => {
     expect(getEvents).not.toHaveBeenCalled();
   });
 
+  it("does not touch operational evidence on a provider of another kind", async () => {
+    const read = vi.fn();
+    const geocoder = integration();
+    const provider = {
+      id: "geocoder",
+      search: async () => [],
+      get getOperationalEvidence() {
+        return read();
+      },
+    };
+    geocoder.providers = new Map([["geocoding", [provider]]]);
+    await collectCoverageData({
+      now: () => new Date("2026-09-11T12:00:00Z"),
+      integrations: [geocoder],
+      dataManager: {
+        read: async () => {
+          throw new Error("Unavailable");
+        },
+      },
+      loadBindings: async () => new Map(),
+      loadPolicy: async () => ({ allowGreyArea: true, allowNonCommercial: true }),
+      providerHealth: null,
+      integrationHealth: () => ({ updatedAt: null, results: [] }),
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("retains API evidence when data-manager is unavailable", async () => {
     const parking = integration();
     parking.manifest.domains = ["parking-sites"];
@@ -163,16 +191,13 @@ describe("CoverageService", () => {
     both.id = "openconditions";
     both.manifest.id = "openconditions";
     both.manifest.domains = ["road-conditions", "fuel-stations", "parking-sites", "charging-sites"];
+    const template = itemAt(both.manifest.dataSources ?? [], 0);
     both.manifest.dataSources = [
-      { ...both.manifest.dataSources![0]!, sourceId: "nl-ndw-events", name: "NDW" },
-      { ...both.manifest.dataSources![0]!, sourceId: "osm-fuel", domain: "fuel-stations" },
+      { ...template, sourceId: "nl-ndw-events", name: "NDW" },
+      { ...template, sourceId: "osm-fuel", domain: "fuel-stations" },
+      { ...template, sourceId: "de-bw-mobidata-parking", domain: "parking-sites" },
       {
-        ...both.manifest.dataSources![0]!,
-        sourceId: "de-bw-mobidata-parking",
-        domain: "parking-sites",
-      },
-      {
-        ...both.manifest.dataSources![0]!,
+        ...template,
         sourceId: "de-bw-mobidata-charging",
         domain: "charging-sites",
       },
@@ -334,7 +359,7 @@ describe("CoverageService", () => {
     charging.manifest.domains = ["charging-sites"];
     charging.manifest.dataSources = [
       {
-        ...charging.manifest.dataSources![0]!,
+        ...itemAt(charging.manifest.dataSources ?? [], 0),
         sourceId: "de-bw-mobidata-charging",
         domain: "charging-sites",
       },
@@ -397,7 +422,7 @@ describe("CoverageService", () => {
     mixed.id = "openconditions";
     mixed.manifest.id = "openconditions";
     mixed.manifest.domains = ["charging-sites", "parking-sites", "road-conditions"];
-    const template = mixed.manifest.dataSources![0]!;
+    const template = itemAt(mixed.manifest.dataSources ?? [], 0);
     mixed.manifest.dataSources = [
       { ...template, sourceId: "z-charging", domain: "charging-sites" },
       { ...template, sourceId: "a-parking", domain: "parking-sites" },

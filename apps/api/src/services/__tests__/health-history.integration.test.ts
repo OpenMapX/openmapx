@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { performance } from "node:perf_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type PostgisFixture,
   startPostgis,
@@ -239,9 +239,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     );
 
     it("keeps per-result samples, nullable fields and database insertion-time timestamps beyond 100 samples", async () => {
-      const [{ before }] = await pg.sql.unsafe<{ before: Date }[]>(
+      const [start] = await pg.sql.unsafe<{ before: Date }[]>(
         "SELECT clock_timestamp()::timestamp AS before",
       );
+      assert.isDefined(start);
+      const { before } = start;
       const samples = Array.from({ length: 105 }, (_, i) => ({
         serviceId: `sample-${i}`,
         status: ["healthy", "unhealthy", "degraded", "error"][i % 4] ?? "error",
@@ -251,9 +253,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await Promise.all(
         samples.map((s) => recordHealthResult(s.serviceId, s.status, s.responseTime, s.error)),
       );
-      const [{ after }] = await pg.sql.unsafe<{ after: Date }[]>(
+      const [end] = await pg.sql.unsafe<{ after: Date }[]>(
         "SELECT clock_timestamp()::timestamp AS after",
       );
+      assert.isDefined(end);
+      const { after } = end;
       const rows = await pg.sql.unsafe<
         {
           service_id: string;

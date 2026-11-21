@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { resolveOperationsProfile } from "@openmapx/transitous-core";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, expect, it } from "vitest";
 
 let root: string;
 const sha = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
@@ -33,11 +33,11 @@ function fixture() {
     mkdirSync(dirname(join(root, path)), { mode: 0o755, recursive: true });
     writeFileSync(join(root, path), bytes, { mode: 0o644 });
   }
-  const artifact = (path: string) => ({
-    path,
-    sha256: sha(files[path]!),
-    sizeBytes: Buffer.byteLength(files[path]!),
-  });
+  const artifact = (path: string) => {
+    const bytes = files[path];
+    assert.isDefined(bytes, path);
+    return { path, sha256: sha(bytes), sizeBytes: Buffer.byteLength(bytes) };
+  };
   const manifest = {
     schemaVersion: 1,
     epoch: "epoch-fixture",
@@ -88,10 +88,12 @@ it.each(["traversal", "duplicate", "digest", "size", "empty", "shape"])(
   "refuses malformed %s inventory before validation",
   async (kind) => {
     const manifest = fixture();
-    if (kind === "traversal") manifest.artifacts.datasets[0]!.path = "../outside";
-    if (kind === "duplicate") manifest.artifacts.datasets.push(manifest.artifacts.datasets[0]!);
-    if (kind === "digest") manifest.artifacts.datasets[0]!.sha256 = "x".repeat(64);
-    if (kind === "size") manifest.artifacts.datasets[0]!.sizeBytes = -1;
+    const [dataset] = manifest.artifacts.datasets;
+    assert.isDefined(dataset);
+    if (kind === "traversal") dataset.path = "../outside";
+    if (kind === "duplicate") manifest.artifacts.datasets.push(dataset);
+    if (kind === "digest") dataset.sha256 = "x".repeat(64);
+    if (kind === "size") dataset.sizeBytes = -1;
     if (kind === "empty") manifest.artifacts.datasets = [];
     if (kind === "shape") manifest.expectations.timetableDatasets = -1;
     writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest), {

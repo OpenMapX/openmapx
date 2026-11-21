@@ -1,5 +1,5 @@
 import type { RegistryEntry } from "@integrations/transit-dynamic-registry/registry-types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mocks (must be at top level)
 
@@ -61,12 +61,12 @@ describe("getStopsNearby", () => {
     const stops = await hafasMgateAdapter.getStopsNearby(MOCK_ENTRY, 48.185, 16.376, 1000);
 
     expect(stops).toHaveLength(1);
-    expect(stops[0].id).toBe("oebb:8100002");
-    expect(stops[0].name).toBe("Wien Hbf");
-    expect(stops[0].lat).toBe(48.185);
-    expect(stops[0].lng).toBe(16.376);
-    expect(stops[0].modes).toContain("rail");
-    expect(stops[0].provider).toBe("oebb");
+    expect(stops[0]?.id).toBe("oebb:8100002");
+    expect(stops[0]?.name).toBe("Wien Hbf");
+    expect(stops[0]?.lat).toBe(48.185);
+    expect(stops[0]?.lng).toBe(16.376);
+    expect(stops[0]?.modes).toContain("rail");
+    expect(stops[0]?.provider).toBe("oebb");
   });
 
   it("reports a failed nearby() instead of answering no stops", async () => {
@@ -96,9 +96,9 @@ describe("searchByName", () => {
     const stops = (await hafasMgateAdapter.searchByName?.(MOCK_ENTRY, "Wien", 10)) ?? [];
 
     expect(stops).toHaveLength(1);
-    expect(stops[0].id).toBe("oebb:8100002");
-    expect(stops[0].name).toBe("Wien Hbf");
-    expect(stops[0].provider).toBe("oebb");
+    expect(stops[0]?.id).toBe("oebb:8100002");
+    expect(stops[0]?.name).toBe("Wien Hbf");
+    expect(stops[0]?.provider).toBe("oebb");
   });
 
   it("reports a failed search as unavailable instead of no matches", async () => {
@@ -193,20 +193,20 @@ describe("getDepartures", () => {
     );
 
     expect(deps).toHaveLength(1);
-    expect(deps[0].tripId).toBe("oebb:trip-oebb-1");
-    expect(deps[0].headsign).toBe("Salzburg Hbf");
-    expect(deps[0].delaySeconds).toBe(120);
-    expect(deps[0].canceled).toBe(false);
-    expect(deps[0].platform).toBe("3");
-    expect(deps[0].route.mode).toBe("rail");
-    expect(deps[0].route.shortName).toBe("RJ 101");
+    expect(deps[0]?.tripId).toBe("oebb:trip-oebb-1");
+    expect(deps[0]?.headsign).toBe("Salzburg Hbf");
+    expect(deps[0]?.delaySeconds).toBe(120);
+    expect(deps[0]?.canceled).toBe(false);
+    expect(deps[0]?.platform).toBe("3");
+    expect(deps[0]?.route.mode).toBe("rail");
+    expect(deps[0]?.route.shortName).toBe("RJ 101");
 
     // Remarks mapping: "hint" → "info", "warning" → "warning"
-    expect(deps[0].remarks).toHaveLength(2);
-    expect(deps[0].remarks?.[0].type).toBe("info");
-    expect(deps[0].remarks?.[0].text).toContain("Track change");
-    expect(deps[0].remarks?.[1].type).toBe("warning");
-    expect(deps[0].remarks?.[1].text).toContain("Disruption");
+    expect(deps[0]?.remarks).toHaveLength(2);
+    expect(deps[0]?.remarks?.[0]?.type).toBe("info");
+    expect(deps[0]?.remarks?.[0]?.text).toContain("Track change");
+    expect(deps[0]?.remarks?.[1]?.type).toBe("warning");
+    expect(deps[0]?.remarks?.[1]?.text).toContain("Disruption");
   });
 
   it("computes expectedAt from scheduledAt + delay", async () => {
@@ -230,10 +230,12 @@ describe("getDepartures", () => {
       30,
     );
 
+    const [dep] = deps;
     expect(deps).toHaveLength(1);
-    expect(deps[0].delaySeconds).toBe(300);
-    const scheduled = new Date(deps[0].scheduledAt).getTime();
-    const expected = new Date(deps[0].expectedAt as string).getTime();
+    assert.isDefined(dep?.expectedAt);
+    expect(dep.delaySeconds).toBe(300);
+    const scheduled = new Date(dep.scheduledAt).getTime();
+    const expected = new Date(dep.expectedAt).getTime();
     expect(expected - scheduled).toBe(300 * 1000);
   });
 
@@ -289,10 +291,10 @@ describe("getArrivals", () => {
     );
 
     expect(arrivals).toHaveLength(1);
-    expect(arrivals[0].tripId).toBe("oebb:trip-arr-1");
-    expect(arrivals[0].route.mode).toBe("rail");
-    expect(arrivals[0].canceled).toBe(true);
-    expect(arrivals[0].delaySeconds).toBe(60);
+    expect(arrivals[0]?.tripId).toBe("oebb:trip-arr-1");
+    expect(arrivals[0]?.route.mode).toBe("rail");
+    expect(arrivals[0]?.canceled).toBe(true);
+    expect(arrivals[0]?.delaySeconds).toBe(60);
   });
 
   it("strips prefix before calling hafas-client", async () => {
@@ -341,12 +343,12 @@ describe("getAlerts", () => {
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
-    expect(alerts[0].id).toBe("w1");
-    expect(alerts[0].severity).toBe("warning");
-    expect(alerts[0].title).toBe("Disruption");
-    expect(alerts[0].description).toBe("Delays on Railjet services");
-    expect(alerts[0].providers).toContain("oebb");
-    expect(alerts[0].affectedRouteIds).toContain("oebb:rj-101");
+    expect(alerts[0]?.id).toBe("w1");
+    expect(alerts[0]?.severity).toBe("warning");
+    expect(alerts[0]?.title).toBe("Disruption");
+    expect(alerts[0]?.description).toBe("Delays on Railjet services");
+    expect(alerts[0]?.providers).toContain("oebb");
+    expect(alerts[0]?.affectedRouteIds).toContain("oebb:rj-101");
   });
 
   it("filters out non-warning remarks", async () => {
@@ -363,7 +365,7 @@ describe("getAlerts", () => {
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
-    expect(alerts[0].id).toBe("w2");
+    expect(alerts[0]?.id).toBe("w2");
   });
 
   it("returns empty array when remarks() throws (graceful degradation)", async () => {
@@ -395,7 +397,7 @@ describe("getAlerts", () => {
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
-    expect(alerts[0].severity).toBe("severe");
+    expect(alerts[0]?.severity).toBe("severe");
   });
 });
 
@@ -421,14 +423,14 @@ describe("getVehicleRadar", () => {
       (await hafasMgateAdapter.getVehicleRadar?.(MOCK_ENTRY, [16.2, 48.1, 16.5, 48.3])) ?? [];
 
     expect(vehicles).toHaveLength(1);
-    expect(vehicles[0].id).toBe("oebb:t1");
-    expect(vehicles[0].provider).toBe("oebb");
-    expect(vehicles[0].tripId).toBe("oebb:t1");
-    expect(vehicles[0].lat).toBe(48.2);
-    expect(vehicles[0].lng).toBe(16.38);
-    expect(vehicles[0].label).toBe("U1");
-    expect(vehicles[0].currentStopId).toBe("oebb:s1");
-    expect(vehicles[0].routeId).toBe("oebb:u1-line");
+    expect(vehicles[0]?.id).toBe("oebb:t1");
+    expect(vehicles[0]?.provider).toBe("oebb");
+    expect(vehicles[0]?.tripId).toBe("oebb:t1");
+    expect(vehicles[0]?.lat).toBe(48.2);
+    expect(vehicles[0]?.lng).toBe(16.38);
+    expect(vehicles[0]?.label).toBe("U1");
+    expect(vehicles[0]?.currentStopId).toBe("oebb:s1");
+    expect(vehicles[0]?.routeId).toBe("oebb:u1-line");
   });
 
   it("returns empty array when radar() throws (graceful degradation)", async () => {
@@ -467,7 +469,7 @@ describe("getVehicleRadar", () => {
       (await hafasMgateAdapter.getVehicleRadar?.(MOCK_ENTRY, [16.2, 48.1, 16.5, 48.3])) ?? [];
 
     expect(vehicles).toHaveLength(1);
-    expect(vehicles[0].id).toBe("oebb:t-valid");
+    expect(vehicles[0]?.id).toBe("oebb:t-valid");
   });
 });
 
@@ -532,7 +534,8 @@ describe("planJourney", () => {
     expect(result).not.toBeNull();
     if (!result) throw new Error("result was null");
     expect(result.itineraries).toHaveLength(1);
-    const leg = result.itineraries[0].legs[0];
+    const leg = result.itineraries[0]?.legs[0];
+    assert.isDefined(leg);
     expect(leg.mode).toBe("walking");
     expect(leg.route).toBeUndefined();
   });
@@ -591,7 +594,8 @@ describe("planJourney", () => {
 
     expect(result).not.toBeNull();
     if (!result) throw new Error("result was null");
-    const leg = result.itineraries[0].legs[0];
+    const leg = result.itineraries[0]?.legs[0];
+    assert.isDefined(leg);
     expect(leg.mode).toBe("rail");
     expect(leg.route).toBeDefined();
     expect(leg.route?.shortName).toBe("RJ 101");

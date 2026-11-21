@@ -18,6 +18,7 @@ import type { BakePredictedResult } from "../jobs/traffic/bake-predicted.js";
 // instead of silently leaving the fixture a shape production never returns.
 const RESULT: BakePredictedResult = {
   segments: 12613,
+  malformed: 0,
   rows: 2787,
   tiles: 11,
   resolvable: 2569,

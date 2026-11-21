@@ -147,7 +147,7 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
   if (url.username || url.password) return { kind: "unsupported", reason: "unsupported" };
   if (url.protocol === "geo:") {
     if (url.host || url.hash) return { kind: "unsupported", reason: "unsupported" };
-    const [coords, ...attributes] = url.pathname.split(";");
+    const [coords = "", ...attributes] = url.pathname.split(";");
     const base = point(coords);
     if (
       !base ||
@@ -190,25 +190,25 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     ) {
       const q = url.searchParams.get("query") || url.searchParams.get("q");
       if (q) return point(q) ?? search(q);
-      const place = /^\/maps\/place\/([^/]+)/.exec(url.pathname);
+      const place = /^\/maps\/place\/([^/]+)/.exec(url.pathname)?.[1];
       let name = "";
       try {
-        if (place) name = decodeURIComponent(place[1].replaceAll("+", " "));
+        if (place !== undefined) name = decodeURIComponent(place.replaceAll("+", " "));
       } catch {
         return { kind: "unsupported", reason: "unsupported" };
       }
       // The explicit @ segment is a viewport, not necessarily the selected place.
       // Retain its label and location without claiming a fetched place identity.
       const center = /\/@([^/,]+),([^/,]+)(?:,|\/|$)/.exec(url.pathname);
-      if (center && (place || url.pathname.startsWith("/maps/@")))
+      if (center && (place !== undefined || url.pathname.startsWith("/maps/@")))
         return (
           point(`${center[1]},${center[2]}`, name) ?? { kind: "unsupported", reason: "unsupported" }
         );
       if (name) return search(name);
-      const m = /^\/maps\/search\/([^/]+)(?:\/@[^/]*)?\/?$/.exec(url.pathname);
-      if (m) {
+      const searchText = /^\/maps\/search\/([^/]+)(?:\/@[^/]*)?\/?$/.exec(url.pathname)?.[1];
+      if (searchText !== undefined) {
         try {
-          const value = decodeURIComponent(m[1]);
+          const value = decodeURIComponent(searchText);
           return point(value) ?? search(value);
         } catch {
           /* invalid encoding */

@@ -71,13 +71,14 @@ export async function verifyMangroveReview(
     return { ok: false, reason: "malformed-jwt" };
   }
   const parts = input.jwt.split(".");
-  if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
+  const [headerSegment, payloadSegment, signatureSegment] = parts;
+  if (parts.length !== 3 || !headerSegment || !payloadSegment || !signatureSegment) {
     return { ok: false, reason: "malformed-jwt" };
   }
 
   let header: Record<string, unknown>;
   try {
-    const decoded = decodeJsonSegment(parts[0]);
+    const decoded = decodeJsonSegment(headerSegment);
     if (!isRecord(decoded)) return { ok: false, reason: "malformed-jwt" };
     header = decoded;
   } catch {
@@ -87,7 +88,7 @@ export async function verifyMangroveReview(
   if (header.alg !== "ES256") {
     return { ok: false, reason: "unsupported-alg" };
   }
-  if (input.signature !== undefined && input.signature !== parts[2]) {
+  if (input.signature !== undefined && input.signature !== signatureSegment) {
     return { ok: false, reason: "signature-mismatch" };
   }
 
@@ -148,8 +149,8 @@ export async function verifyMangroveReview(
     signatureValid = await subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       key,
-      base64UrlToBytes(parts[2]),
-      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+      base64UrlToBytes(signatureSegment),
+      new TextEncoder().encode(`${headerSegment}.${payloadSegment}`),
     );
   } catch {
     return { ok: false, reason: "bad-signature" };
@@ -158,7 +159,7 @@ export async function verifyMangroveReview(
 
   let payload: Record<string, unknown>;
   try {
-    const decoded = decodeJsonSegment(parts[1]);
+    const decoded = decodeJsonSegment(payloadSegment);
     if (!isRecord(decoded)) return { ok: false, reason: "malformed-payload" };
     payload = decoded;
   } catch {

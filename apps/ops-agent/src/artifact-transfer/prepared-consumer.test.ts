@@ -10,7 +10,7 @@ import {
   opsOperationFingerprint,
   opsOperationSchema,
 } from "@openmapx/core/ops";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, assert, expect, it } from "vitest";
 
 import type { OpsExecutionContext } from "../runtime";
 import { ArtifactTransferStore } from "./store";
@@ -194,7 +194,9 @@ it("refuses exact manifest capacity before extracting payload and retains conser
     name.startsWith("prepared-"),
   );
   expect(names).toHaveLength(1);
-  expect(readdirSync(join(f.root, "stages", f.stage.stageId, names[0]!))).toEqual([]);
+  const [prepared] = names;
+  assert.isDefined(prepared);
+  expect(readdirSync(join(f.root, "stages", f.stage.stageId, prepared))).toEqual([]);
   expect(await f.store.reservedBytes()).toBeGreaterThan(0);
 });
 
@@ -250,7 +252,8 @@ it("retains all prepared content and accounting when a descendant was replaced b
   const f = await fixture();
   await f.store.validatePreparedArtifact(await f.context());
   const retained = join(f.root, "stages", f.stage.stageId);
-  const extraction = readdirSync(retained).find((name) => name.startsWith("prepared-"))!;
+  const extraction = readdirSync(retained).find((name) => name.startsWith("prepared-"));
+  assert.isDefined(extraction);
   const graph = join(retained, extraction, "osrm-graph", "region.osrm");
   rmSync(graph);
   symlinkSync(join(f.root, "source", "osrm-graph", "region.osrm"), graph);

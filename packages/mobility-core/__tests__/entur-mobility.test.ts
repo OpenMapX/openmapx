@@ -151,10 +151,8 @@ describe("buildEnturGeofencingMapContext", () => {
     });
 
     expect(context?.geojson.features).toHaveLength(1);
-    const ring =
-      context?.geojson.features[0].geometry.type === "Polygon"
-        ? context.geojson.features[0].geometry.coordinates[0]
-        : [];
+    const geometry = context?.geojson.features[0]?.geometry;
+    const ring = geometry?.type === "Polygon" ? (geometry.coordinates[0] ?? []) : [];
     expect(ring).toHaveLength(5);
     for (const [lng, lat] of ring) {
       expect(lng).toBeGreaterThanOrEqual(bbox.west);
@@ -293,7 +291,7 @@ describe("buildEnturGeofencingMapContext", () => {
     });
 
     expect(filterCatalogByBbox).toHaveBeenCalledWith(expect.any(Array), bbox);
-    expect(context?.geojson.features[0].properties?.systemId).toBe("oslobysykkel");
+    expect(context?.geojson.features[0]?.properties?.systemId).toBe("oslobysykkel");
   });
 
   it("returns null when explicit systemIds are not Entur-hosted", async () => {
@@ -416,8 +414,8 @@ describe("enrichEnturMobilityItems", () => {
 
     await enrichEnturMobilityItems(stations, [], dependencies());
 
-    expect(stations[0].pricingSummary).toBe("1.50 EUR unlock");
-    expect(stations[0].pricingDetails).toEqual([
+    expect(stations[0]?.pricingSummary).toBe("1.50 EUR unlock");
+    expect(stations[0]?.pricingDetails).toEqual([
       {
         name: "Existing unlock",
         currency: "EUR",

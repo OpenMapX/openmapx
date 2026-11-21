@@ -1,4 +1,5 @@
 import type { AttributionIndexHandle } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { TransitStop, TripItinerary } from "@openmapx/mobility-core/transit";
@@ -95,9 +96,9 @@ describe("transit-motis feed attribution", () => {
     };
     const wrapped = __testing.wrapLocal(stop, fakeIndex);
     expect(wrapped.attributions).toHaveLength(1);
-    expect(wrapped.attributions[0].sourceId).toBe("de_DELFI");
-    expect(wrapped.attributions[0].name).toBe("DELFI Germany");
-    expect(wrapped.attributions[0].publisher?.name).toBe("DELFI e.V.");
+    expect(nth(wrapped.attributions, 0).sourceId).toBe("de_DELFI");
+    expect(nth(wrapped.attributions, 0).name).toBe("DELFI Germany");
+    expect(nth(wrapped.attributions, 0).publisher?.name).toBe("DELFI e.V.");
     expect(wrapped.freshness.hasRealtimeData).toBe(false);
   });
 
@@ -242,9 +243,9 @@ describe("transit-motis feed attribution", () => {
       ],
     };
 
-    const [annotated] = annotateLegsWithAttribution([itinerary], fakeIndex);
-    expect(annotated.legs[0].attributions?.map((a) => a.sourceId)).toEqual(["de_DELFI"]);
-    expect(annotated.legs[1].attributions?.map((a) => a.sourceId)).toEqual(["ch_SBB"]);
+    const annotated = nth(annotateLegsWithAttribution([itinerary], fakeIndex), 0);
+    expect(nth(annotated.legs, 0).attributions?.map((a) => a.sourceId)).toEqual(["de_DELFI"]);
+    expect(nth(annotated.legs, 1).attributions?.map((a) => a.sourceId)).toEqual(["ch_SBB"]);
   });
 
   it("annotateLegsWithAttribution returns input unchanged when no AttributionIndex is supplied", () => {
@@ -272,7 +273,7 @@ describe("transit-motis feed attribution", () => {
       ],
     };
     const out = annotateLegsWithAttribution([itinerary], undefined);
-    expect(out[0].legs[0].attributions).toBeUndefined();
+    expect(nth(nth(out, 0).legs, 0).attributions).toBeUndefined();
   });
 
   it("annotateLegsWithAttribution leaves a leg unchanged when no feed tag matches", () => {
@@ -300,6 +301,6 @@ describe("transit-motis feed attribution", () => {
       ],
     };
     const out = annotateLegsWithAttribution([itinerary], fakeIndex);
-    expect(out[0].legs[0].attributions).toBeUndefined();
+    expect(nth(nth(out, 0).legs, 0).attributions).toBeUndefined();
   });
 });

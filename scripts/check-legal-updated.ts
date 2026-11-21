@@ -85,21 +85,17 @@ function parseDate(
 ): { y: number; m: number; d: number; raw: string } | null {
   const en = text.match(EN_DATE);
   const de = text.match(DE_DATE);
-  let day: number;
-  let monthName: string;
-  let year: string;
-  if (en) {
-    monthName = en[1];
-    day = Number(en[2]);
-    year = en[3];
-  } else if (de) {
-    day = Number(de[1]);
-    monthName = de[2];
-    year = de[3];
-  } else {
+  const parts = en
+    ? { monthName: en[1], day: en[2], year: en[3] }
+    : de
+      ? { day: de[1], monthName: de[2], year: de[3] }
+      : undefined;
+  if (!parts?.monthName || !parts.day || !parts.year) {
     problems.push(`${label}: no "Last updated: <day Month YYYY>" line found`);
     return null;
   }
+  const { monthName, year } = parts;
+  const day = Number(parts.day);
   const m = MONTHS[monthName.toLowerCase()];
   if (!m) {
     problems.push(`${label}: unrecognized month "${monthName}"`);

@@ -10,8 +10,8 @@ export function setup(ctx: IntegrationContext): void {
   const orchestrator = createWeatherOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/current", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       reply.status(400).send({ error: "Invalid coordinates" });
@@ -40,8 +40,8 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/forecast", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       reply.status(400).send({ error: "Invalid coordinates" });

@@ -8,7 +8,7 @@ import {
   type SafeDownloadOptions,
   type SafeDownloadResult,
   safeDownload,
-} from "@openmapx/core/utils/safe-download";
+} from "@openmapx/core/http/safe-download";
 
 export const OPERATOR_FEED_MAX_BYTES = 512 * 1024 * 1024;
 export const OPERATOR_FEED_RELAY_TTL_MS = 10 * 60_000;

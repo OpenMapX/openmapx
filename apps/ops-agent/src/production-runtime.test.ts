@@ -21,7 +21,7 @@ import {
   parseOpsResult,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
 import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
@@ -36,6 +36,11 @@ import { buildOpsAgentServer } from "./server";
 import { initializeTrustedConfigurationRuntime } from "./trusted-config-runtime";
 
 const roots: string[] = [];
+function currentRevision(infraDir: string): string {
+  const revision = services.currentConfigurationGeneration(infraDir);
+  assert.isNotNull(revision, "no configuration generation is current");
+  return revision;
+}
 async function fixture(options: Parameters<typeof ownedServiceHost>[0] = {}) {
   const host = await ownedServiceHost({
     ...options,
@@ -63,14 +68,16 @@ describe("assembled production service authority", () => {
         selectedRoots: ids,
       });
       host.setRows(
-        ids.map((id, index) => ({
-          ...host.row,
-          Id: String(index + 1).repeat(64),
-          ConfigImage: services.serviceContainerImageReference(
-            host.loaded.find((service) => service.manifest.id === id)!.manifest.container,
-          ),
-          Labels: { ...host.row.Labels, "com.docker.compose.service": id },
-        })),
+        ids.map((id, index) => {
+          const loaded = host.loaded.find((service) => service.manifest.id === id);
+          assert.isDefined(loaded, `service ${id} is not loaded`);
+          return {
+            ...host.row,
+            Id: String(index + 1).repeat(64),
+            ConfigImage: services.serviceContainerImageReference(loaded.manifest.container),
+            Labels: { ...host.row.Labels, "com.docker.compose.service": id },
+          };
+        }),
       );
       const runtime = await createProductionOpsRuntime({
         rootDir: host.root,
@@ -155,8 +162,10 @@ describe("assembled production service authority", () => {
     expect(cleared).not.toBe(pinned);
     expect(services.readAppliedRelease(host.infraDir)).toBeNull();
     // A generation without pins has no release to roll back from.
-    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared!)).toBeNull();
-    expect(services.readGenerationRelease(host.infraDir, pinned!)?.manifest.release).toBe(
+    assert.isNotNull(cleared);
+    assert.isNotNull(pinned);
+    expect(services.readPreviousReleaseGeneration(host.infraDir, cleared)).toBeNull();
+    expect(services.readGenerationRelease(host.infraDir, pinned)?.manifest.release).toBe(
       "checked-pin",
     );
     expect(
@@ -264,8 +273,8 @@ describe("assembled production service authority", () => {
         (args) => args.includes("pull") || args.includes("--force-recreate"),
       );
       expect(effects).toHaveLength(2);
-      expect(effects[0]!.slice(-2)).toEqual(["pull", "motis"]);
-      expect(effects[1]!.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
+      expect(effects[0]?.slice(-2)).toEqual(["pull", "motis"]);
+      expect(effects[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
       expect(calls.some((args) => args.includes("config"))).toBe(true);
       expect(
         JSON.parse(
@@ -521,7 +530,7 @@ describe("assembled production service authority", () => {
     const operation = {
       kind: "service.start",
       serviceId: "motis",
-      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+      expectedConfigurationRevisionId: currentRevision(host.infraDir),
     } as const;
     const context = await host.context(operation);
     await host.deselect();
@@ -713,7 +722,7 @@ async function installedCommunity() {
   const start = {
     kind: "service.start",
     serviceId: "community-live",
-    expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+    expectedConfigurationRevisionId: currentRevision(host.infraDir),
   } as const;
   const checkout = join(services.agentStatePaths(host.infraDir).community, publication.repository);
   const record = join(
@@ -777,7 +786,7 @@ describe("settlement and cancellation at the installed lifecycle boundary", () =
     ).rejects.toThrow("Contained process failed");
     const global = {
       kind: "stack.start",
-      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+      expectedConfigurationRevisionId: currentRevision(host.infraDir),
     } as const;
     await expect(
       dispatchOpsOperation(host.runtime, global, await host.context(global)),

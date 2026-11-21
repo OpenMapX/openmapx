@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { createControlRootOperationKey } from "../ops/control-root-key";
 import {
   type ExecutionRef,
@@ -150,6 +150,13 @@ it("admits a120s fixed phase after hours of original-root work without a new roo
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** The first child reservation of an admission input, failing the test when it has none. */
+function firstReservation(input: { reservations?: readonly control.ControlChildReservation[] }) {
+  const [reservation] = input.reservations ?? [];
+  assert.isDefined(reservation);
+  return reservation;
+}
 
 async function fixture(exact = false, services = ["motis", "motis-staging"]) {
   const root = mkdtempSync(join(tmpdir(), "omx-phase-state-"));
@@ -559,10 +566,10 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
   const f = await fixture();
   try {
     const reservations = Array.from({ length: 65 }, (_, ordinal) => ({
-      ...f.input.reservations![0]!,
+      ...firstReservation(f.input),
       ordinal,
       execution: {
-        ...f.input.reservations![0]!.execution,
+        ...firstReservation(f.input).execution,
         operationKey: control.controlChildOperationKey(
           f.execution.operationKey,
           "stop-primary",
@@ -597,7 +604,7 @@ it("refuses an execution row above its capacity before writing it", async () => 
           nonce: randomBytes(16),
         }),
       },
-      base = f.input.reservations![0]!,
+      base = firstReservation(f.input),
       reservations = Array.from({ length: 64 }, (_, ordinal) => ({
         ...base,
         ordinal,
@@ -709,7 +716,7 @@ async function deadlineFixture(
     execution,
     cliAuthority,
     cliExecution: bound.execution,
-    slot: plan.cliReservations[0]!,
+    slot: firstReservation({ reservations: plan.cliReservations }),
     close() {
       control.closeControlInstallation(cli);
       control.closeControlInstallation(dm);

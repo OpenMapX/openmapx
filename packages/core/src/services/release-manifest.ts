@@ -96,9 +96,10 @@ export function releaseManifestImage(): string {
 /** Docker pull's digest is an OCI identity, not the local image configuration ID. */
 export function releaseDigestFromPull(output: string): string {
   const matches = [...output.matchAll(/^Digest: (sha256:[a-f0-9]{64})\r?$/gm)];
-  if (matches.length !== 1)
+  const digest = matches[0]?.[1];
+  if (matches.length !== 1 || digest === undefined)
     throw new Error("Docker pull did not return one unambiguous release manifest digest");
-  return matches[0][1];
+  return digest;
 }
 export function validateResolvedSelection(
   selection: ReleaseSelection,

@@ -1,5 +1,5 @@
 import { haversineDistance, type LngLat } from "@openmapx/core";
-import { loadJsonFixture } from "@openmapx/integration-framework/testing";
+import { loadJsonFixture, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import {
   type AlertOverpassElement,
@@ -88,11 +88,11 @@ describe("mapAlertElements — Kaarst, Maubisstraße × Grünstraße / Matthias-
     const road = byId(alerts, "stop:8557831413")?.roads[0];
     expect(road).toBeDefined();
     if (!road) return;
-    const anchor = road.line[road.anchorIndex];
+    const anchor = nth(road.line, road.anchorIndex);
     expect(haversineDistance(anchor, [6.6193297, 51.2295553])).toBeLessThan(0.05);
     // The way starts 6.7 m before the sign, at Maubisstraße.
-    expect(haversineDistance(road.line[0], [6.6192329, 51.2295545])).toBeLessThan(0.05);
-    const last = road.line[road.line.length - 1];
+    expect(haversineDistance(nth(road.line, 0), [6.6192329, 51.2295545])).toBeLessThan(0.05);
+    const last = nth(road.line, -1);
     expect(haversineDistance(anchor, last)).toBeCloseTo(ROAD_CONTEXT_REACH_M, 0);
   });
 });
@@ -304,7 +304,7 @@ describe("mapAlertElements — other hazards", () => {
     const road = byId(alerts, "speed_camera:50")?.roads[0];
     expect(road?.wayId).toBe(1);
     if (!road) return;
-    const anchor = road.line[road.anchorIndex] as LngLat;
+    const anchor = nth(road.line, road.anchorIndex) as LngLat;
     const expected = at(30, 0);
     expect(haversineDistance(anchor, [expected.lon, expected.lat])).toBeLessThan(0.1);
   });
@@ -326,15 +326,28 @@ describe("mapAlertElements — other hazards", () => {
     const road = byId(alerts, "traffic_calming:60")?.roads[0];
     expect(road).toBeDefined();
     if (!road) return;
-    const anchor = road.line[road.anchorIndex];
+    const anchor = nth(road.line, road.anchorIndex);
     // Forward traffic reaches the closing node from the way's last segment.
     expect(road.anchorIndex).toBeGreaterThan(0);
-    expect(haversineDistance(road.line[0], anchor)).toBeGreaterThan(30);
-    expect(haversineDistance(road.line[road.line.length - 1], anchor)).toBeGreaterThan(30);
+    expect(haversineDistance(nth(road.line, 0), anchor)).toBeGreaterThan(30);
+    expect(haversineDistance(nth(road.line, -1), anchor)).toBeGreaterThan(30);
   });
 
   it("drops a hazard beside no road", () => {
     expect(mapAlertElements([node(50, 30, 20, { highway: "speed_camera" }), street])).toEqual([]);
+  });
+
+  it("does not take a highway value that names an object property for a road", () => {
+    const notARoad = way(
+      7,
+      [
+        [8, -100, 0],
+        [9, 0, 0],
+        [10, 100, 0],
+      ],
+      { highway: "constructor" },
+    );
+    expect(mapAlertElements([node(9, 0, 0, { traffic_calming: "bump" }), notARoad])).toEqual([]);
   });
 
   it("drops a stop sign standing between two roads", () => {
@@ -378,10 +391,10 @@ describe("mapAlertElements — hazards beside the road", () => {
     const roadAlert = byId(alerts, "speed_camera:50")?.roads[0];
     expect(roadAlert?.wayId).toBe(1);
     if (!roadAlert) return;
-    const anchor = roadAlert.line[roadAlert.anchorIndex];
+    const anchor = nth(roadAlert.line, roadAlert.anchorIndex);
     const expected = at(4990, 0);
     expect(haversineDistance(anchor, [expected.lon, expected.lat])).toBeLessThan(0.1);
-    expect(haversineDistance(roadAlert.line[0], anchor)).toBeCloseTo(ROAD_CONTEXT_REACH_M, 0);
+    expect(haversineDistance(nth(roadAlert.line, 0), anchor)).toBeCloseTo(ROAD_CONTEXT_REACH_M, 0);
   });
 
   it("does not attach a camera close to a way's bounding box but far from the way", () => {
@@ -440,11 +453,11 @@ describe("mapAlertElements — hazards beside the road", () => {
         .map((r) => {
           const cum = [0];
           for (let i = 1; i < r.coords.length; i++) {
-            cum.push(cum[i - 1] + haversineDistance(r.coords[i - 1], r.coords[i]));
+            cum.push(nth(cum, i - 1) + haversineDistance(nth(r.coords, i - 1), nth(r.coords, i)));
           }
-          let best = { distance: Number.POSITIVE_INFINITY, along: 0, point: r.coords[0] };
+          let best = { distance: Number.POSITIVE_INFINITY, along: 0, point: nth(r.coords, 0) };
           for (let i = 0; i < r.coords.length - 1; i++) {
-            const [a, b] = [r.coords[i], r.coords[i + 1]];
+            const [a, b] = [nth(r.coords, i), nth(r.coords, i + 1)];
             const ax = (a[0] - position[0]) * kx;
             const ay = (a[1] - position[1]) * ky;
             const dx = (b[0] - position[0]) * kx - ax;
@@ -458,7 +471,7 @@ describe("mapAlertElements — hazards beside the road", () => {
             if (distance < best.distance) {
               best = {
                 distance,
-                along: cum[i] + t * (cum[i + 1] - cum[i]),
+                along: nth(cum, i) + t * (nth(cum, i + 1) - nth(cum, i)),
                 point: [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])],
               };
             }
@@ -469,7 +482,7 @@ describe("mapAlertElements — hazards beside the road", () => {
         .sort((a, b) => a.best.distance - b.best.distance);
       if (nearRoads.length === 0) return [];
       const candidates = nearRoads.filter(
-        ({ best }) => best.distance <= nearRoads[0].best.distance + 3,
+        ({ best }) => best.distance <= nth(nearRoads, 0).best.distance + 3,
       );
       if (type === "stop" && candidates.length > 1) return [];
       return candidates.map(({ r, best }) => ({
@@ -522,9 +535,10 @@ describe("mapAlertElements — hazards beside the road", () => {
               y += Math.sin(heading) * step;
             }
           }
-          const highway = ["residential", "cycleway", "footway", "primary"][
-            Math.floor(random() * 4)
-          ];
+          const highway = nth(
+            ["residential", "cycleway", "footway", "primary"],
+            Math.floor(random() * 4),
+          );
           elements.push({ ...road(id, positions), tags: { highway } });
           if (highway !== "footway") {
             trafficRoads.push({ id, coords: positions.map((p) => [p.lon, p.lat]) });
@@ -538,7 +552,7 @@ describe("mapAlertElements — hazards beside the road", () => {
         for (let n = 0; n < nodeCount; n++) {
           // Outside the way node ids, so the node stands beside every road.
           const id = 9_000_000_000 + layout * 100 + n;
-          const wayElement = elements[Math.floor(random() * elements.length)];
+          const wayElement = nth(elements, Math.floor(random() * elements.length));
           const vertex =
             wayElement.geometry?.[Math.floor(random() * (wayElement.geometry?.length ?? 1))];
           if (!vertex) continue;
@@ -558,9 +572,11 @@ describe("mapAlertElements — hazards beside the road", () => {
         const alerts = mapAlertElements(elements);
         expect(alerts.map((alert) => alert.id)).toEqual(expected.map((e) => e.id));
         alerts.forEach((alert, i) => {
-          expect(alert.roads.map((r) => r.wayId)).toEqual(expected[i].roads.map((r) => r.wayId));
+          expect(alert.roads.map((r) => r.wayId)).toEqual(
+            nth(expected, i).roads.map((r) => r.wayId),
+          );
           alert.roads.forEach((r, j) => {
-            const reference = expected[i].roads[j];
+            const reference = nth(nth(expected, i).roads, j);
             expect(r.line[r.anchorIndex]).toEqual([
               round7(reference.anchor[0]),
               round7(reference.anchor[1]),
@@ -568,7 +584,7 @@ describe("mapAlertElements — hazards beside the road", () => {
             // The slice reaches back along the road from the reference's along-distance.
             let back = 0;
             for (let k = 1; k <= r.anchorIndex; k++)
-              back += haversineDistance(r.line[k - 1], r.line[k]);
+              back += haversineDistance(nth(r.line, k - 1), nth(r.line, k));
             expect(Math.abs(back - Math.min(reference.along, ROAD_CONTEXT_REACH_M))).toBeLessThan(
               0.2,
             );

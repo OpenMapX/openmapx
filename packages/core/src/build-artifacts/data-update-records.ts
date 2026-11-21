@@ -36,8 +36,8 @@ export function dataUpdateAddress(key: string, purpose: string) {
     .update(`openmapx-data-update-v1\0${key}\0${purpose}`)
     .digest()
     .subarray(0, 16);
-  b[6] = (b[6]! & 15) | 64;
-  b[8] = (b[8]! & 63) | 128;
+  b[6] = (b.readUInt8(6) & 15) | 64;
+  b[8] = (b.readUInt8(8) & 63) | 128;
   const h = b.toString("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }

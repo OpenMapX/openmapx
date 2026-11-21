@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 vi.mock("@motis-project/motis-client", () => ({
   stops: vi.fn(),
@@ -64,13 +64,13 @@ describe("getStops", () => {
     const result = await getStops(testInstance, [13.0, 52.0, 14.0, 53.0]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("test:de:12345");
-    expect(result[0].name).toBe("Berlin Hbf");
-    expect(result[0].lat).toBe(52.525);
-    expect(result[0].lng).toBe(13.369);
-    expect(result[0].modes).toContain("rail");
-    expect(result[0].modes).toContain("subway");
-    expect(result[0].provider).toBe("test-provider");
+    expect(result[0]?.id).toBe("test:de:12345");
+    expect(result[0]?.name).toBe("Berlin Hbf");
+    expect(result[0]?.lat).toBe(52.525);
+    expect(result[0]?.lng).toBe(13.369);
+    expect(result[0]?.modes).toContain("rail");
+    expect(result[0]?.modes).toContain("subway");
+    expect(result[0]?.provider).toBe("test-provider");
   });
 
   it("passes bbox as min/max query params in south,west / north,east format", async () => {
@@ -102,7 +102,7 @@ describe("getStops", () => {
 
     const result = await getStops(testInstance, [13.0, 52.0, 14.0, 53.0]);
 
-    expect(result[0].parentStationId).toBe("test:parent:1");
+    expect(result[0]?.parentStationId).toBe("test:parent:1");
   });
 
   it("returns empty array when data is null", async () => {
@@ -209,12 +209,12 @@ describe("searchByName", () => {
     const result = await searchByName(testInstance, "München", 10);
 
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe("test:de:99999");
-    expect(result[0].name).toBe("München Hbf");
-    expect(result[0].lat).toBe(48.14);
-    expect(result[0].lng).toBe(11.56);
-    expect(result[0].modes).toEqual([]);
-    expect(result[0].provider).toBe("test-provider");
+    expect(result[0]?.id).toBe("test:de:99999");
+    expect(result[0]?.name).toBe("München Hbf");
+    expect(result[0]?.lat).toBe(48.14);
+    expect(result[0]?.lng).toBe(11.56);
+    expect(result[0]?.modes).toEqual([]);
+    expect(result[0]?.provider).toBe("test-provider");
   });
 
   it("also accepts PLACE type results", async () => {
@@ -226,7 +226,7 @@ describe("searchByName", () => {
     const result = await searchByName(testInstance, "Test", 10);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("test:place:1");
+    expect(result[0]?.id).toBe("test:place:1");
   });
 
   it("filters out results without an id", async () => {
@@ -241,7 +241,7 @@ describe("searchByName", () => {
     const result = await searchByName(testInstance, "stop", 10);
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("test:de:11111");
+    expect(result[0]?.id).toBe("test:de:11111");
   });
 
   it("respects the limit parameter", async () => {
@@ -324,6 +324,7 @@ describe("getDepartures", () => {
 
     expect(result).toHaveLength(1);
     const dep = result[0];
+    assert.isDefined(dep);
     expect(dep.tripId).toBe("test:trip:1");
     expect(decodeMotisLineReference(dep.route.id)).toEqual({ e: "epoch-1", r: "route:1", v: 1 });
     expect(dep.route.shortName).toBe("S1");
@@ -369,8 +370,8 @@ describe("getDepartures", () => {
 
     const result = await getDepartures(testInstance, "test:de:12345", 60);
 
-    expect(result[0].delaySeconds).toBe(180);
-    expect(result[0].expectedAt).toBe("2026-03-21T10:03:00Z");
+    expect(result[0]?.delaySeconds).toBe(180);
+    expect(result[0]?.expectedAt).toBe("2026-03-21T10:03:00Z");
   });
 
   it("does not set delay when realTime is false", async () => {
@@ -406,8 +407,9 @@ describe("getDepartures", () => {
 
     const result = await getDepartures(testInstance, "test:de:12345", 60);
 
-    expect(result[0].delaySeconds).toBeUndefined();
-    expect(result[0].expectedAt).toBeUndefined();
+    expect(result[0]).toBeDefined();
+    expect(result[0]?.delaySeconds).toBeUndefined();
+    expect(result[0]?.expectedAt).toBeUndefined();
   });
 
   it("sets canceled to true when cancelled flag is set", async () => {
@@ -443,7 +445,7 @@ describe("getDepartures", () => {
 
     const result = await getDepartures(testInstance, "test:de:12345", 60);
 
-    expect(result[0].canceled).toBe(true);
+    expect(result[0]?.canceled).toBe(true);
   });
 
   it("strips instance prefix before querying and uses arriveBy=false", async () => {
@@ -506,9 +508,9 @@ describe("getArrivals", () => {
     const result = await getArrivals(testInstance, "test:de:12345", 60);
 
     expect(result).toHaveLength(1);
-    expect(result[0].scheduledAt).toBe("2026-03-21T10:00:00Z");
-    expect(result[0].expectedAt).toBe("2026-03-21T10:02:00Z");
-    expect(result[0].delaySeconds).toBe(120);
+    expect(result[0]?.scheduledAt).toBe("2026-03-21T10:00:00Z");
+    expect(result[0]?.expectedAt).toBe("2026-03-21T10:02:00Z");
+    expect(result[0]?.delaySeconds).toBe(120);
   });
 
   it("queries with arriveBy=true", async () => {
@@ -607,15 +609,18 @@ describe("planTrip", () => {
     expect(result.itineraries).toHaveLength(1);
 
     const itin = result.itineraries[0];
+    assert.isDefined(itin);
     expect(itin.duration).toBe(1200);
     expect(itin.transfers).toBe(1);
 
     const walkLeg = itin.legs[0];
+    assert.isDefined(walkLeg);
     expect(walkLeg.mode).toBe("walking");
     expect(walkLeg.route).toBeUndefined();
     expect(walkLeg.to.stopId).toBe("test:de:stop1");
 
     const tramLeg = itin.legs[1];
+    assert.isDefined(tramLeg);
     expect(tramLeg.mode).toBe("tram");
     expect(tramLeg.route).toBeDefined();
     expect(tramLeg.route?.shortName).toBe("M1");
@@ -674,8 +679,8 @@ describe("planTrip", () => {
 
     const result = await planTrip(testInstance, 52.5, 13.4, 52.52, 13.42, "2026-03-21", "10:00:00");
 
-    expect(result?.itineraries[0].legs[0].startTime).toBe("2026-03-21T10:00:00Z");
-    expect(result?.itineraries[0].legs[0].endTime).toBe("2026-03-21T10:10:00Z");
+    expect(result?.itineraries[0]?.legs[0]?.startTime).toBe("2026-03-21T10:00:00Z");
+    expect(result?.itineraries[0]?.legs[0]?.endTime).toBe("2026-03-21T10:10:00Z");
   });
 
   it("returns null when itineraries are empty", async () => {
@@ -819,15 +824,15 @@ describe("getTrip", () => {
     expect(result.provider).toBe("test-provider");
     expect(result.stops).toHaveLength(3);
 
-    expect(result.stops[0].stopId).toBe("test:stop:origin");
-    expect(result.stops[0].name).toBe("Berlin Hbf");
-    expect(result.stops[0].platform).toBe("5");
+    expect(result.stops[0]?.stopId).toBe("test:stop:origin");
+    expect(result.stops[0]?.name).toBe("Berlin Hbf");
+    expect(result.stops[0]?.platform).toBe("5");
 
-    expect(result.stops[1].stopId).toBe("test:stop:mid");
-    expect(result.stops[1].name).toBe("Wannsee");
+    expect(result.stops[1]?.stopId).toBe("test:stop:mid");
+    expect(result.stops[1]?.name).toBe("Wannsee");
 
-    expect(result.stops[2].stopId).toBe("test:stop:dest");
-    expect(result.stops[2].name).toBe("Potsdam Hbf");
+    expect(result.stops[2]?.stopId).toBe("test:stop:dest");
+    expect(result.stops[2]?.name).toBe("Potsdam Hbf");
   });
 
   it("strips instance prefix before querying", async () => {
@@ -921,7 +926,7 @@ describe("getTrip", () => {
 
     const result = await getTrip(testInstance, "test:trip:u1-10");
 
-    expect(result?.stops[0].delaySeconds).toBe(180);
+    expect(result?.stops[0]?.delaySeconds).toBe(180);
   });
 
   it("returns null when legs are missing", async () => {

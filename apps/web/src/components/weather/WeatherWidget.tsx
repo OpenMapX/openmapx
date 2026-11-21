@@ -6,14 +6,13 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { parseAttributionHtml, weatherCodeToInfo } from "@openmapx/core";
+import { compassPoint, parseAttributionHtml, weatherCodeToInfo } from "@openmapx/core";
 import { CHIP_ROW_END } from "@/components/search/floatingChipSx";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { SEARCH_BAR_INSET, topInset } from "@/lib/layout";
 import { useMapCenterWeather } from "./useMapCenterWeather";
-import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
   const theme = useTheme();
@@ -40,7 +39,9 @@ export function WeatherWidget() {
   if (current.humidity != null) readings.push(`H:${current.humidity}%`);
   if (current.windSpeed != null) {
     readings.push(`W:${Math.round(current.windSpeed)}km/h`);
-    if (current.windDirection != null) readings.push(windDirectionLabel(current.windDirection));
+    const direction =
+      current.windDirection == null ? undefined : compassPoint(current.windDirection);
+    if (direction) readings.push(direction);
   }
 
   return (

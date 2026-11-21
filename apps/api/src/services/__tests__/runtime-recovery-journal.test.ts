@@ -52,12 +52,17 @@ describe("runtime recovery journal", () => {
     const base = root();
     const target = join(base, "target");
     writeFileSync(target, JSON.stringify({ version: 1, recovery: record }), { mode: 0o600 });
-    const invalid: string[] = [];
-    for (const name of ["malformed", "symlink", "hardlink", "oversized"]) {
+    const journalIn = (name: string) => {
       const directory = join(base, name);
       mkdirSync(directory, { mode: 0o700 });
-      invalid.push(join(directory, "runtime-recovery-v1.json"));
-    }
+      return join(directory, "runtime-recovery-v1.json");
+    };
+    const invalid = [
+      journalIn("malformed"),
+      journalIn("symlink"),
+      journalIn("hardlink"),
+      journalIn("oversized"),
+    ] as const;
     writeFileSync(invalid[0], "not-json", { mode: 0o600 });
     symlinkSync(target, invalid[1]);
     const hardlinkTarget = join(base, "hardlink-target");

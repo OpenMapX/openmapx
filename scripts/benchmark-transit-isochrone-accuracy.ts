@@ -30,11 +30,18 @@ export interface SampleClassification {
  */
 const INVARIANT_CELLS = 2;
 
+/** The longitude and latitude at `index` of a ring; throws for a missing or short position. */
+function lngLatAt(ring: readonly number[][], index: number): [number, number] {
+  const [lng, lat] = ring[index] ?? [];
+  if (lng === undefined || lat === undefined) throw new RangeError(`no position ${index} in ring`);
+  return [lng, lat];
+}
+
 function inRing(point: SamplePoint, ring: number[][]): boolean {
   let contained = false;
   for (let i = 0, j = ring.length - 2; i < ring.length - 1; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+    const [xi, yi] = lngLatAt(ring, i);
+    const [xj, yj] = lngLatAt(ring, j);
     if (
       yi > point.lat !== yj > point.lat &&
       point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi
@@ -55,7 +62,9 @@ export function classifySamplePoints(
     ...point,
     insidePolygon: polygons.some(
       ([exterior, ...holes]) =>
-        inRing(point, exterior) && !holes.some((hole) => inRing(point, hole)),
+        exterior !== undefined &&
+        inRing(point, exterior) &&
+        !holes.some((hole) => inRing(point, hole)),
     ),
   }));
 }
@@ -97,8 +106,8 @@ export function distanceToBoundaryDegrees(
   for (const polygon of polygons) {
     for (const ring of polygon) {
       for (let i = 0; i < ring.length - 1; i += 1) {
-        const [x1, y1] = ring[i];
-        const [x2, y2] = ring[i + 1];
+        const [x1, y1] = lngLatAt(ring, i);
+        const [x2, y2] = lngLatAt(ring, i + 1);
         const dx = x2 - x1;
         const dy = y2 - y1;
         const lengthSquared = dx * dx + dy * dy;

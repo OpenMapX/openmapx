@@ -41,7 +41,7 @@ function sameCoordinates(owned: RouteGeometry, candidate: RouteGeometry): boolea
   for (let index = 0; index < owned.length; index += 1) {
     const a = owned[index];
     const b = candidate[index];
-    if (a.length !== b.length) return false;
+    if (!a || !b || a.length !== b.length) return false;
     for (let axis = 0; axis < a.length; axis += 1) if (a[axis] !== b[axis]) return false;
   }
   return true;
@@ -243,9 +243,9 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
   // Speak at most the newest cue, and only while it still describes something
   // ahead. An older cue in the same batch is already recorded as spoken, so it
   // will not be re-announced later either.
-  if (startPackage.settings.voiceEnabled && cueCandidates.length > 0) {
-    const newest = cueCandidates[cueCandidates.length - 1];
-    if (nowMs - newest.atMs <= MAX_CUE_AGE_MS) effects.push(newest.effect);
+  const newest = cueCandidates.at(-1);
+  if (startPackage.settings.voiceEnabled && newest && nowMs - newest.atMs <= MAX_CUE_AGE_MS) {
+    effects.push(newest.effect);
   }
 
   if (offRouteEpisodeStart !== null) {

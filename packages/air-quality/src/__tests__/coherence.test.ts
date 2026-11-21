@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { deriveCoherenceKey, validateCoherentSeries } from "../normalize/coherence";
 import { builtInStandardAdapters } from "../standards/builtins";
 
@@ -103,8 +103,11 @@ describe("coherence", () => {
     }));
 
     expect(validateCoherentSeries(series)).toMatchObject({ coherent: true, endSkewMinutes: 0 });
+    const [first, second] = series;
+    assert.isDefined(first);
+    assert.isDefined(second);
     expect(
-      validateCoherentSeries([{ ...series[0], spatialSupportId: "station-2" }, series[1]]).coherent,
+      validateCoherentSeries([{ ...first, spatialSupportId: "station-2" }, second]).coherent,
     ).toBe(false);
   });
 

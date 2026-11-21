@@ -65,7 +65,8 @@ export function NavManeuverArrowLayer() {
     const alongMeters = maneuverStartMeters(route, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
     const line = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
-    if (!line || line.length < 2) return EMPTY_FEATURE_COLLECTION;
+    const tip = line?.at(-1);
+    if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
     return {
       type: "FeatureCollection" as const,
@@ -78,7 +79,7 @@ export function NavManeuverArrowLayer() {
         {
           type: "Feature" as const,
           properties: { bearing },
-          geometry: { type: "Point" as const, coordinates: line[line.length - 1] },
+          geometry: { type: "Point" as const, coordinates: tip },
         },
       ],
     };

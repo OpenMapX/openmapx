@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import { internalMetricsRoute } from "../../../routes/internal-metrics.js";
 import {
   getMetrics,
@@ -353,8 +353,8 @@ describe("OSM contribution metrics", () => {
       "osm_contribution_operation_duration_ms_sum{",
     ]) {
       const line = exposition.split("\n").find((row) => row.startsWith(prefix));
-      expect(line).toBeDefined();
-      const labels = line!.slice(line!.indexOf("{"), line!.indexOf("}"));
+      assert.isDefined(line, `no ${prefix} line in the exposition`);
+      const labels = line.slice(line.indexOf("{"), line.indexOf("}"));
       expect(
         [...labels.matchAll(/([A-Za-z_][A-Za-z0-9_]*)="/g)].map((match) => match[1]).sort(),
       ).toEqual(["operation", "otel_scope_name", "outcome"]);

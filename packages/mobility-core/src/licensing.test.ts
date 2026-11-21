@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   canonicalLicenseExpression,
   dataLicenseExpression,
@@ -63,16 +63,20 @@ describe("portable licensing", () => {
         },
       ],
     };
-    const captured = parseLicensing(raw)!;
-    raw.bindings[0].license.name = "Later registry revision";
-    raw.bindings[0].conditions.push("Later condition");
-    expect(captured.bindings[0].license).toMatchObject({
+    const captured = parseLicensing(raw);
+    const [rawBinding] = raw.bindings;
+    assert.isDefined(rawBinding);
+    rawBinding.license.name = "Later registry revision";
+    rawBinding.conditions.push("Later condition");
+    const [binding] = captured?.bindings ?? [];
+    assert.isDefined(binding);
+    expect(binding.license).toMatchObject({
       namespace: "extension:one",
       name: "Captured API terms",
       version: "v1",
     });
-    expect(captured.bindings[0].conditions).toEqual(["Preserve the logo"]);
-    expect(captured.bindings[0].notice).toBe("Required publisher notice");
+    expect(binding.conditions).toEqual(["Preserve the logo"]);
+    expect(binding.notice).toBe("Required publisher notice");
   });
 
   it("validates the whole receipt rather than dropping malformed binding fields", () => {
@@ -146,7 +150,8 @@ describe("portable licensing", () => {
           license: { kind: "spdx", expression: "CC0-1.0" },
         },
       ],
-    })!;
+    });
+    assert.isDefined(states);
     expect(states.bindings.map((b) => b.license.kind)).toEqual([
       "unknown",
       "per-item",
@@ -160,7 +165,8 @@ describe("portable licensing", () => {
 
 describe("shared licence presentation", () => {
   it("projects the data grant separately from the engine licence", () => {
-    const captured = parseLicensing(routeLicensing)!;
+    const captured = parseLicensing(routeLicensing);
+    assert.isDefined(captured);
     expect(dataLicenseExpression(captured)).toBe("ODbL-1.0");
     expect(formatLicensing(captured, { scopes: ["data"] })).toBe("ODbL-1.0");
     expect(formatLicensing(captured, { fullNames: true, scopes: ["software"] })).toBe(
@@ -180,8 +186,10 @@ describe("shared licence presentation", () => {
           license: { kind: "spdx", expression: "CC-BY-4.0 OR NLOD-2.0" },
         },
       ],
-    })!;
+    });
+    assert.isDefined(captured);
     const [shown] = licensingLinks(captured);
+    assert.isDefined(shown);
     expect(shown.label).toBe("CC-BY-4.0 OR NLOD-2.0");
     expect(shown.url).toBeUndefined();
     expect(shown.licenses?.map((l) => l.label)).toEqual(["CC-BY-4.0", "NLOD-2.0"]);
@@ -204,7 +212,8 @@ describe("shared licence presentation", () => {
           },
         },
       ],
-    })!;
+    });
+    assert.isDefined(captured);
     expect(licensingLinks(captured)[0]).toMatchObject({
       label: "Dataset terms",
       url: "https://example.test/data/terms",
@@ -220,13 +229,13 @@ describe("conservative upstream declaration acquisition", () => {
       ),
     ).toBe("DL-DE-ZERO-2.0");
     expect(
-      licensingFromDeclaration("MIT (software); CC BY 4.0 (data)").bindings[0].license,
+      licensingFromDeclaration("MIT (software); CC BY 4.0 (data)").bindings[0]?.license,
     ).toEqual({
       kind: "unknown",
       raw: "MIT (software); CC BY 4.0 (data)",
     });
-    expect(licensingFromDeclaration("ODbL 2.0").bindings[0].license.kind).toBe("unknown");
-    expect(licensingFromDeclaration("Per-file (copyright holder)").bindings[0].license.kind).toBe(
+    expect(licensingFromDeclaration("ODbL 2.0").bindings[0]?.license.kind).toBe("unknown");
+    expect(licensingFromDeclaration("Per-file (copyright holder)").bindings[0]?.license.kind).toBe(
       "per-item",
     );
   });
@@ -240,7 +249,7 @@ it("keeps original declarations as evidence while deriving canonical display ide
 });
 
 it("recognizes a pure declared standard expression without interpreting prose composites", () => {
-  expect(licensingFromDeclaration("CC-BY-4.0 OR NLOD-2.0").bindings[0].license).toEqual({
+  expect(licensingFromDeclaration("CC-BY-4.0 OR NLOD-2.0").bindings[0]?.license).toEqual({
     kind: "spdx",
     expression: "CC-BY-4.0 OR NLOD-2.0",
   });

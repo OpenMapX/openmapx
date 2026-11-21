@@ -106,7 +106,7 @@ describe("enrichDeparturesWithRealtime", () => {
     const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
       stopId: "ms:s",
     });
-    expect(out.data[0].expectedAt).toBe("2026-05-22T08:03:00Z");
+    expect(out.data[0]?.expectedAt).toBe("2026-05-22T08:03:00Z");
     expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: true });
     expect(out.freshness.dataAsOf).toBeUndefined();
   });
@@ -271,7 +271,7 @@ describe("enrichDeparturesWithRealtime", () => {
     const out = await enrichDeparturesWithRealtime({ ctx, timed }, base, {
       stopId: "ms:DE:8000105",
     });
-    expect(out.data[0].canceled).toBe(true);
+    expect(out.data[0]?.canceled).toBe(true);
     expect(out.freshness.hasRealtimeData).toBe(true);
   });
 

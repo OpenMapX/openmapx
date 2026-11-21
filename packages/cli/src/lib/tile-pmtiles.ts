@@ -101,7 +101,7 @@ function readVarint(buffer: Buffer, offset: number): { value: bigint; next: numb
   let shift = 0n;
   let cursor = offset;
   while (cursor < buffer.length) {
-    const byte = buffer[cursor++];
+    const byte = buffer.readUInt8(cursor++);
     value |= BigInt(byte & 0x7f) << shift;
     if ((byte & 0x80) === 0) return { value, next: cursor };
     shift += 7n;
@@ -402,9 +402,11 @@ function buildDirectorySections(entries: TileEntry[]): DirectorySections {
     const rootEntries: TileEntry[] = [];
     for (let start = 0; start < entries.length; start += chunkSize) {
       const leafEntries = entries.slice(start, start + chunkSize);
+      const [firstEntry] = leafEntries;
+      if (!firstEntry) break;
       const leaf = encodeDirectory(leafEntries);
       rootEntries.push({
-        tileId: leafEntries[0].tileId,
+        tileId: firstEntry.tileId,
         offset: BigInt(leafDirectories.reduce((total, current) => total + current.length, 0)),
         length: leaf.length,
         runLength: 0,

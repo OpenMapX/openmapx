@@ -13,5 +13,6 @@ export async function installPinnedCredentialCatalog(root: string, installation:
  git(catalog,["init"]);writeFileSync(join(catalog,"feeds/de.json"),JSON.stringify({sources:[{name:"A","transitland-atlas-id":"auth"}]}));git(catalog,["add","feeds"]);git(catalog,["update-index","--add","--cacheinfo",`160000,${atlasSha},transitland-atlas`]);git(catalog,["commit","-m","Transitous"]);const sha=git(catalog,["rev-parse","HEAD"]);
  writeFileSync(join(infraDir,"transitous.lock.json"),JSON.stringify({ref:`main@${sha}`,submodules:{"transitland-atlas":atlasSha},lockedAt:"2026-10-23T00:00:00.000Z",lockedBy:"fixture"}));const gbfs="b".repeat(40);
  writeFileSync(join(infraDir,"gbfs-catalog.lock.json"),JSON.stringify({schemaVersion:1,source:"mobilitydata-gbfs",commit:gbfs,url:`https://raw.githubusercontent.com/MobilityData/gbfs/${gbfs}/systems.csv`,sha256:"c".repeat(64),lockedAt:"2026-10-23T00:00:00.000Z",lockedBy:"fixture"}));
- await initializeManagedCatalogPins({rootDir:root,installation});return readCatalogPinSet(root)!;
+ await initializeManagedCatalogPins({rootDir:root,installation});const pins=readCatalogPinSet(root);
+ if(!pins)throw Error("Fixture catalog pins were not initialized");return pins;
 }

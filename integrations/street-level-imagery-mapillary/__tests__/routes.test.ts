@@ -1,6 +1,6 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
-import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
-import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { fakeHttpClient, httpStatus, nth } from "@openmapx/integration-framework/testing";
+import { assert, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "../index";
 import manifest from "../manifest.json";
 
@@ -155,12 +155,13 @@ describe("street-level-imagery-mapillary /nearest", () => {
     );
 
     const spans = fetchMock.mock.calls.map((call) => {
-      const bbox = new URL(String(call[0])).searchParams.get("bbox") as string;
-      const [west, , east] = bbox.split(",").map(Number);
-      return (east as number) - (west as number);
+      const bbox = new URL(String(call[0])).searchParams.get("bbox");
+      assert.exists(bbox, "the request has no bbox");
+      const edges = bbox.split(",").map(Number);
+      return nth(edges, 2) - nth(edges, 0);
     });
     expect(spans.length).toBeGreaterThan(1);
-    expect(spans[spans.length - 1]).toBeGreaterThan(spans[0] as number);
+    expect(nth(spans, -1)).toBeGreaterThan(nth(spans, 0));
   });
 
   it("returns 404 when no images are found even after expanding the bbox", async () => {
@@ -219,15 +220,18 @@ describe("street-level-imagery-mapillary /search", () => {
       makeRequest({ lng: "6.676", lat: "51.179", radius: "400", after: "2018-01-01" }),
       makeReply(),
     );
-    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    const url = new URL(String(nth(fetchMock.mock.calls, 0)[0]));
     expect(url.searchParams.get("start_captured_at")).toBe("2018-01-01T00:00:00.000Z");
     const bbox = (url.searchParams.get("bbox") ?? "").split(",").map(Number);
+    expect(bbox).toHaveLength(4);
+    const latitudeSpan = nth(bbox, 3) - nth(bbox, 1);
+    const longitudeSpan = nth(bbox, 2) - nth(bbox, 0);
     // 400 m either side of the centre: ~0.0072° of latitude and ~0.0115° of
     // longitude at 51° N — a photo 300 m upstream must fall inside.
-    expect(bbox[3] - bbox[1]).toBeCloseTo(0.00721, 4);
-    expect(bbox[2] - bbox[0]).toBeCloseTo(0.01143, 4);
+    expect(latitudeSpan).toBeCloseTo(0.00721, 4);
+    expect(longitudeSpan).toBeCloseTo(0.01143, 4);
     // Well under the documented 0.01 deg² ceiling for a bbox query.
-    expect((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).toBeLessThan(0.01);
+    expect(longitudeSpan * latitudeSpan).toBeLessThan(0.01);
     expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(50);
   });
 
@@ -253,13 +257,13 @@ describe("street-level-imagery-mapillary /search", () => {
       makeRequest({ lng: "6.676", lat: "51.179", radius: "200" }),
       reply,
     );
-    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    const url = new URL(String(nth(fetchMock.mock.calls, 0)[0]));
     expect(url.searchParams.get("fields")).toContain("thumb_1024_url");
-    const sent = (reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+    const sent = nth((reply.send as ReturnType<typeof vi.fn>).mock.calls, 0)[0] as {
       assets: { thumb?: string; sd?: string };
     }[];
-    expect(sent[0].assets.thumb).toBe("https://scontent.example/1024.jpg");
-    expect(sent[0].assets.sd).toBe("https://scontent.example/2048.jpg");
+    expect(nth(sent, 0).assets.thumb).toBe("https://scontent.example/1024.jpg");
+    expect(nth(sent, 0).assets.sd).toBe("https://scontent.example/2048.jpg");
   });
 
   it("filters results by heading in the route and caches for an hour", async () => {

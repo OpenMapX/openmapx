@@ -3,7 +3,7 @@ import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, renderHook, waitFor } from "@/test";
+import { act, cleanup, createTestQueryClient, nth, renderHook, waitFor } from "@/test";
 import { deferred, installed } from "@/test/extensionAdmin";
 import {
   useAddExtensionSource,
@@ -61,7 +61,7 @@ describe("extension browser acquisition through the real generated SDK", () => {
         }),
       );
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      const url = new URL(calls[0].url);
+      const url = new URL(nth(calls, 0).url);
       expect(url.origin).toBe(base ? new URL(base).origin : window.location.origin);
       expect(Object.fromEntries(url.searchParams)).toEqual({
         q: "a & b",
@@ -70,11 +70,11 @@ describe("extension browser acquisition through the real generated SDK", () => {
         type: "service",
         sort: "updated",
       });
-      expect(calls[0].init).toMatchObject({
+      expect(nth(calls, 0).init).toMatchObject({
         credentials: "include",
         signal: expect.any(AbortSignal),
       });
-      expect(qc.getQueryCache().getAll()[0].queryKey).toEqual([
+      expect(nth(qc.getQueryCache().getAll(), 0).queryKey).toEqual([
         "admin",
         "extensions",
         base,
@@ -247,12 +247,14 @@ describe("extension browser acquisition through the real generated SDK", () => {
       });
       expect(calls).toHaveLength(1);
       if (["update", "remove", "refresh"].includes(kind)) {
-        expect(calls[0].init.body).toBeUndefined();
-        expect(new Headers(calls[0].init.headers).has("content-type")).toBe(false);
+        expect(nth(calls, 0).init.body).toBeUndefined();
+        expect(new Headers(nth(calls, 0).init.headers).has("content-type")).toBe(false);
       }
       if (kind === "removeSource")
-        expect(JSON.parse(String(calls[0].init.body))).toEqual({ url: "https://catalog.test" });
-      if (kind === "update") expect(calls[0].url).toContain("update/x%2Fy");
+        expect(JSON.parse(String(nth(calls, 0).init.body))).toEqual({
+          url: "https://catalog.test",
+        });
+      if (kind === "update") expect(nth(calls, 0).url).toContain("update/x%2Fy");
     },
   );
   it.each(["installed", "sources"] as const)(
@@ -401,7 +403,7 @@ describe("removal execution ownership beyond a view observer", () => {
       let attempts = 0;
       vi.stubGlobal("fetch", (url: string, init: RequestInit) =>
         init.method === "DELETE"
-          ? responses[attempts++].promise
+          ? nth(responses, attempts++).promise
           : Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" })),
       );
       const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
@@ -415,8 +417,8 @@ describe("removal execution ownership beyond a view observer", () => {
       });
       await waitFor(() => expect(attempts).toBe(2));
       await act(async () => {
-        responses[0].resolve(removalReply(kind));
-        responses[1].resolve(removalReply(kind));
+        nth(responses, 0).resolve(removalReply(kind));
+        nth(responses, 1).resolve(removalReply(kind));
         await Promise.all([workA, workB]);
       });
     },
@@ -431,7 +433,7 @@ describe("removal execution ownership beyond a view observer", () => {
           return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
         origins.push(new URL(url).origin);
         return origins.length <= 2
-          ? responses[origins.length - 1].promise
+          ? nth(responses, origins.length - 1).promise
           : Response.json({ error: "Duplicate reached transport" }, { status: 400 });
       });
       const useRemoval = kind === "extension" ? useRemoveExtension : useRemoveExtensionSource;
@@ -462,8 +464,8 @@ describe("removal execution ownership beyond a view observer", () => {
         expect(origins).toEqual(["http://admin.test", "http://admin.test"]);
       } finally {
         await act(async () => {
-          responses[0].resolve(removalReply(kind));
-          responses[1].resolve(removalReply(kind));
+          nth(responses, 0).resolve(removalReply(kind));
+          nth(responses, 1).resolve(removalReply(kind));
           await Promise.all([workA, workB]);
         });
       }
@@ -476,7 +478,7 @@ describe("removal execution ownership beyond a view observer", () => {
       if (init.method !== "DELETE")
         return Response.json(job({ id: new URL(url).pathname.split("/").at(-1) ?? "missing" }));
       paths.push(new URL(url).pathname);
-      return replies[paths.length - 1].promise;
+      return nth(replies, paths.length - 1).promise;
     });
     const { result } = mount(() => ({
       extension: useRemoveExtension(),
@@ -492,8 +494,8 @@ describe("removal execution ownership beyond a view observer", () => {
       expect(paths).toEqual(["/api/admin/extensions/same-target", "/api/admin/extensions/sources"]),
     );
     await act(async () => {
-      replies[0].resolve(removalReply("extension"));
-      replies[1].resolve(removalReply("source"));
+      nth(replies, 0).resolve(removalReply("extension"));
+      nth(replies, 1).resolve(removalReply("source"));
       await Promise.all([a, b]);
     });
   });

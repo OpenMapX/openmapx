@@ -3,6 +3,7 @@ import {
   bearingBetween,
   type DirectedExclusion,
   haversineDistance,
+  itemAt,
   type LngLat,
   type RoadConditionRouteImpact,
   type Route,
@@ -101,8 +102,8 @@ const CELL_DEG = 0.005;
 function segmentIndex(geometry: readonly LngLat[]): Map<string, number[]> {
   const cells = new Map<string, number[]>();
   for (let i = 0; i + 1 < geometry.length; i++) {
-    const a = geometry[i] as LngLat;
-    const b = geometry[i + 1] as LngLat;
+    const a = itemAt(geometry, i, "route vertex");
+    const b = itemAt(geometry, i + 1, "route vertex");
     const x0 = Math.floor(Math.min(a[0], b[0]) / CELL_DEG);
     const x1 = Math.floor(Math.max(a[0], b[0]) / CELL_DEG);
     const y0 = Math.floor(Math.min(a[1], b[1]) / CELL_DEG);
@@ -142,8 +143,9 @@ function travels(
   for (let x = cx - 1; x <= cx + 1; x++) {
     for (let y = cy - 1; y <= cy + 1; y++) {
       for (const i of cells.get(`${x}:${y}`) ?? []) {
-        const a = geometry[i] as LngLat;
-        const b = geometry[i + 1] as LngLat;
+        // The index holds only segments that start below the last vertex.
+        const a = itemAt(geometry, i, "route vertex");
+        const b = itemAt(geometry, i + 1, "route vertex");
         if (a[0] === b[0] && a[1] === b[1]) continue;
         if (distanceToSegment(p, a, b) > ON_ROUTE_DISTANCE_M) continue;
         if (angularDifference(bearingBetween(a, b), sample.heading) <= ON_ROUTE_HEADING_DEG)

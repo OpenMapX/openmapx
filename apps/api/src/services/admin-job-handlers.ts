@@ -278,11 +278,16 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
       | "service.stop"
       | "service.restart"
       | "service.update";
+    // Start and update prepared a revision above; stop and restart never read one.
+    const requiredRevision = () => {
+      if (revisionId === undefined) throw new Error(`Bulk ${action} has no prepared revision`);
+      return revisionId;
+    };
     for (const [index, serviceId] of serviceIds.entries()) {
       if (kind === "service.start") {
         await executeAdminJobOperation(
           ctx,
-          { kind, serviceId, expectedConfigurationRevisionId: revisionId! },
+          { kind, serviceId, expectedConfigurationRevisionId: requiredRevision() },
           `admin-job.service.${action}`,
           { durableIdentity: serviceId },
         );
@@ -291,15 +296,20 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
           revisionId = (
             await publishServiceGeneration(ctx, "bulk-update", {
               coordinatorMode: "ensure-running",
-              expectedCurrentRevisionId: revisionId!,
+              expectedCurrentRevisionId: requiredRevision(),
             })
           ).revisionId;
           ordinarySeedPublished = true;
         }
         const updated =
           serviceId === "data-manager"
-            ? await applyCoordinatorService(ctx, index, revisionId!)
-            : await updatePreparedService(ctx, serviceId, revisionId!, payload.noDeps === true);
+            ? await applyCoordinatorService(ctx, index, requiredRevision())
+            : await updatePreparedService(
+                ctx,
+                serviceId,
+                requiredRevision(),
+                payload.noDeps === true,
+              );
         revisionId = updated.revisionId;
       } else
         await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {

@@ -2,7 +2,7 @@ import { apiClient, useDirectionsStore } from "@openmapx/core";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, createTestQueryClient } from "@/test";
+import { createQueryWrapper, createTestQueryClient, nth } from "@/test";
 import {
   signTransitPageToken,
   transitRequestFingerprint,
@@ -364,12 +364,12 @@ describe("transit planning controller", () => {
       useDirectionsStore.getState().setWaypoint(1, [15, 54], "New destination");
       view.rerender(snapshot());
       await waitFor(() => expect(releases.length).toBe(2));
-      await act(async () => releases[1]({ data: response([b]), attributions: [] }));
+      await act(async () => nth(releases, 1)({ data: response([b]), attributions: [] }));
       await waitFor(() =>
         expect(view.result.current.itineraries.map((item) => item.id)).toEqual(["b"]),
       );
       const published = view.result.current.itineraries;
-      await act(async () => releases[0]({ data: response([a]), attributions: [] }));
+      await act(async () => nth(releases, 0)({ data: response([a]), attributions: [] }));
       expect(view.result.current.itineraries).toBe(published);
     } finally {
       view.unmount();
@@ -620,9 +620,9 @@ describe("transit paging through the real query cache and signed tokens", () => 
   async function release(index: number) {
     await act(async () => {
       try {
-        requests[index].resolve(serve(requests[index].params));
+        nth(requests, index).resolve(serve(nth(requests, index).params));
       } catch (error) {
-        requests[index].reject(error);
+        nth(requests, index).reject(error);
       }
     });
   }
@@ -696,8 +696,8 @@ describe("transit paging through the real query cache and signed tokens", () => 
 
       view.rerender(snapshot({ wheelchairRequired: true }));
       await waitFor(() => expect(requests.length).toBe(3));
-      expect(requests[2].params.page_token).toBeUndefined();
-      expect(requests[2].params.wheelchair).toBe("true");
+      expect(nth(requests, 2).params.page_token).toBeUndefined();
+      expect(nth(requests, 2).params.wheelchair).toBe("true");
       await release(2);
       await waitFor(() => expect(ids(view)).toEqual(["z"]));
       const published = view.result.current.itineraries;
@@ -786,7 +786,7 @@ function seedSelection() {
   const selection = providerPlanSelection({
     bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
   });
-  const target = selection.plan.data.itineraries[0];
+  const target = nth(selection.plan.data.itineraries, 0);
   selection.plan.data.itineraries = [{ ...target, id: "other", duration: 1000 }, target];
   mocks.capabilities.mockReturnValue({
     data: {
@@ -843,7 +843,7 @@ it("fences an old mounted-panel result through debounce, then selects the seeded
   expect(view.result.current.planQuery.isLoading).toBe(true);
   const seeded = useDirectionsStore.getState().transitItineraries;
   expect(
-    view.result.current.selectAlternative(seeded[0], { ...seeded[0], id: undefined }),
+    view.result.current.selectAlternative(nth(seeded, 0), { ...nth(seeded, 0), id: undefined }),
   ).toBeNull();
   expect(useDirectionsStore.getState().transitItineraries).toBe(seeded);
   expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);

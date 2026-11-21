@@ -59,7 +59,7 @@ describe("toMdbCatalogFeed", () => {
         },
       }),
     );
-    expect(row?.licensing.bindings[0].license).toEqual({
+    expect(row?.licensing.bindings[0]?.license).toEqual({
       kind: "unknown",
       url: "https://operator.example/terms",
     });
@@ -144,5 +144,5 @@ it("does not identify a grant from an unrelated URL containing a licence path", 
       },
     }),
   );
-  expect(row?.licensing?.bindings[0].license).toMatchObject({ kind: "unknown" });
+  expect(row?.licensing?.bindings[0]?.license).toMatchObject({ kind: "unknown" });
 });

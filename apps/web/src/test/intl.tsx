@@ -87,6 +87,33 @@ export async function mockNextIntlWithCatalog(overrides: Record<string, unknown>
 }
 
 /**
+ * A `next-intl/server` module mock for server components rendered in jsdom:
+ * `getTranslations` resolves keys against the real English catalogue, and a
+ * namespace or key missing from it throws instead of rendering nothing.
+ *
+ *   vi.mock("next-intl/server", async () =>
+ *     (await import("@/test/intl")).mockNextIntlServerWithCatalog(),
+ *   );
+ */
+export async function mockNextIntlServerWithCatalog() {
+  const { vi } = await import("vitest");
+  const { createTranslator } = await vi.importActual<typeof import("next-intl")>("next-intl");
+  // biome-ignore lint/style/noRestrictedImports: test helpers are never bundled.
+  const { default: messages } = await import("@openmapx/i18n/locales/en.json");
+  return {
+    getTranslations: async (namespace: string) =>
+      createTranslator({
+        locale: "en",
+        messages,
+        namespace: namespace as never,
+        onError: (error) => {
+          throw error;
+        },
+      }),
+  };
+}
+
+/**
  * Render with a real NextIntlClientProvider (for tests that want actual
  * formatting against a supplied `messages` catalog). Most unit tests should
  * prefer {@link mockNextIntl}; reach for this only when real ICU formatting is

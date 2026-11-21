@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 
 afterEach(() => {
   vi.resetModules();
@@ -26,7 +27,7 @@ describe("TomTom traffic tile acquisition", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
 
     await service.getFlowTile(2, 1, 1, caller.signal);
-    const options = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const options = callArg(fetchMock, 0, 1) as RequestInit;
     const signal = options.signal as AbortSignal;
     caller.abort(new Error("client disconnected"));
 

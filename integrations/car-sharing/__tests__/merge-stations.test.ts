@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
@@ -33,8 +34,8 @@ describe("mergeRegionalStations", () => {
     });
     const result = mergeRegionalStations([station]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("c1");
-    expect(result[0].name).toBe("Cambio Station");
+    expect(nth(result, 0).id).toBe("c1");
+    expect(nth(result, 0).name).toBe("Cambio Station");
     expect(result[0]).not.toBe(station); // cloned
     expect(result[0]).toEqual(station);
   });
@@ -74,7 +75,7 @@ describe("mergeRegionalStations", () => {
     const result = mergeRegionalStations([primary, secondary]);
     expect(result).toHaveLength(1);
 
-    const merged = result[0];
+    const merged = nth(result, 0);
     // Identity and availability from primary (NOT overridden)
     expect(merged.id).toBe("de-cambio-1");
     expect(merged.name).toBe("Cambio Alexanderplatz");
@@ -138,7 +139,7 @@ describe("mergeRegionalStations", () => {
     });
 
     const result = mergeRegionalStations([primary, secondary]);
-    const merged = result[0];
+    const merged = nth(result, 0);
 
     // Primary keeps all its own fields
     expect(merged.id).toBe("p1");
@@ -175,8 +176,8 @@ describe("mergeRegionalStations", () => {
 
     const result = mergeRegionalStations([a, b]);
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe("a");
-    expect(result[1].id).toBe("b");
+    expect(nth(result, 0).id).toBe("a");
+    expect(nth(result, 1).id).toBe("b");
   });
 
   it("three sources at same location: first is primary, second+third enrich", () => {
@@ -208,7 +209,7 @@ describe("mergeRegionalStations", () => {
     const result = mergeRegionalStations([live, openA, openB]);
     expect(result).toHaveLength(1);
 
-    const merged = result[0];
+    const merged = nth(result, 0);
     // Identity from first (live)
     expect(merged.id).toBe("live-1");
     expect(merged.name).toBe("Live Station");
@@ -268,7 +269,7 @@ describe("mergeRegionalStations", () => {
       isActive: true,
     });
 
-    const [merged] = mergeRegionalStations([staticStation, live]);
+    const merged = nth(mergeRegionalStations([staticStation, live]), 0);
 
     expect(merged.id).toBe("de-stadtteilauto/1");
     expect(merged.availableVehicles).toBe(1);
@@ -295,7 +296,7 @@ describe("mergeRegionalStations", () => {
       capacity: 3,
     };
 
-    const [merged] = mergeRegionalStations([live, staticStation]);
+    const merged = nth(mergeRegionalStations([live, staticStation]), 0);
 
     expect(merged.availableVehicles).toBe(0);
     expect(merged.isActive).toBe(false);
@@ -321,8 +322,9 @@ it("credits a captured regional supplement only when its fields survive priority
     contributors: [b],
     availableVehicles: 99,
   };
-  expect(mergeRegionalStations([first, duplicate])[0].contributors).toEqual([a]);
-  expect(mergeRegionalStations([first, duplicate])[0].sources).toEqual(["de-cambio/region"]);
+  const merged = nth(mergeRegionalStations([first, duplicate]), 0);
+  expect(merged.contributors).toEqual([a]);
+  expect(merged.sources).toEqual(["de-cambio/region"]);
   const gap = { ...first, address: undefined };
-  expect(mergeRegionalStations([gap, duplicate])[0].contributors).toEqual([a, b]);
+  expect(nth(mergeRegionalStations([gap, duplicate]), 0).contributors).toEqual([a, b]);
 });

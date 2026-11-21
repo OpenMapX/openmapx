@@ -91,6 +91,13 @@ const EUROPEAN_SOURCES = {
   grid: SOURCES.eeaGrid,
 };
 
+const EU_BENCHMARK = region("EU", "EUR", [1.75, 1.65, 0.2872, 230], EUROPEAN_SOURCES);
+const GLOBAL_BENCHMARK = region("GLOBAL", "EUR", [1.7, 1.6, 0.3, 350], {
+  fuel: SOURCES.global,
+  electricity: SOURCES.global,
+  grid: SOURCES.global,
+});
+
 export const REGIONAL_BENCHMARKS: Readonly<Record<string, Readonly<RegionalBenchmark>>> = {
   DE: region("DE", "EUR", [1.78, 1.66, 0.3835, 380], EUROPEAN_SOURCES),
   FR: region("FR", "EUR", [1.82, 1.71, 0.27, 55], EUROPEAN_SOURCES),
@@ -115,12 +122,8 @@ export const REGIONAL_BENCHMARKS: Readonly<Record<string, Readonly<RegionalBench
     electricity: SOURCES.norwayEnergy,
     grid: SOURCES.norwayEnergy,
   }),
-  EU: region("EU", "EUR", [1.75, 1.65, 0.2872, 230], EUROPEAN_SOURCES),
-  GLOBAL: region("GLOBAL", "EUR", [1.7, 1.6, 0.3, 350], {
-    fuel: SOURCES.global,
-    electricity: SOURCES.global,
-    grid: SOURCES.global,
-  }),
+  EU: EU_BENCHMARK,
+  GLOBAL: GLOBAL_BENCHMARK,
 };
 
 const EU_COUNTRY_CODES = new Set([
@@ -160,9 +163,10 @@ export function getRegionalBenchmark(
   const normalizedCountry = countryCode?.trim().toUpperCase();
   if (normalizedCountry) {
     const mappedCountry = normalizedCountry === "UK" ? "GB" : normalizedCountry;
-    if (mappedCountry in REGIONAL_BENCHMARKS) return REGIONAL_BENCHMARKS[mappedCountry];
-    if (EU_COUNTRY_CODES.has(mappedCountry)) return REGIONAL_BENCHMARKS.EU;
-    return REGIONAL_BENCHMARKS.GLOBAL;
+    const own = REGIONAL_BENCHMARKS[mappedCountry];
+    if (own) return own;
+    if (EU_COUNTRY_CODES.has(mappedCountry)) return EU_BENCHMARK;
+    return GLOBAL_BENCHMARK;
   }
 
   const currencyRegion: Readonly<Record<string, string>> = {
@@ -173,5 +177,5 @@ export function getRegionalBenchmark(
     EUR: "EU",
   };
   const mappedCurrency = currency ? currencyRegion[currency.trim().toUpperCase()] : undefined;
-  return mappedCurrency ? REGIONAL_BENCHMARKS[mappedCurrency] : REGIONAL_BENCHMARKS.GLOBAL;
+  return (mappedCurrency ? REGIONAL_BENCHMARKS[mappedCurrency] : undefined) ?? GLOBAL_BENCHMARK;
 }

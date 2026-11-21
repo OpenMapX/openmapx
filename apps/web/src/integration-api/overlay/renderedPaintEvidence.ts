@@ -149,6 +149,13 @@ export function createRenderedPaintEvidence(map: MapLibreMap) {
           if (!position) continue;
           if (allowTransparent) return true;
           const [left, top, right, bottom] = position.tlbr;
+          if (
+            left === undefined ||
+            top === undefined ||
+            right === undefined ||
+            bottom === undefined
+          )
+            continue;
           for (let y = Math.max(0, top); y < Math.min(atlas.image.height, bottom); y++) {
             for (let x = Math.max(0, left); x < Math.min(atlas.image.width, right); x++) {
               if ((atlas.image.data[(y * atlas.image.width + x) * 4 + 3] ?? 0) > 0) return true;

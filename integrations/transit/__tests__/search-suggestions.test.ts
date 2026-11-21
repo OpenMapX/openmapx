@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
@@ -36,7 +37,7 @@ describe("transit search suggestion adapter", () => {
       searchMatch: { kind: "authoritative_code", value: "8000207", namespace: "eva" },
       transitStop: stop,
     });
-    expect(response.suggestions[0].searchMatch.value).not.toContain("db:");
+    expect(nth(response.suggestions, 0).searchMatch.value).not.toContain("db:");
     expect(response.attributions).toEqual(result.attributions);
   });
 
@@ -48,7 +49,7 @@ describe("transit search suggestion adapter", () => {
       { query: "Hamburg", lang: "de", limit: 3 },
       { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
     );
-    expect(response.suggestions[0].searchMatch).toMatchObject({
+    expect(response.suggestions[0]?.searchMatch).toMatchObject({
       kind: "name",
       value: "Hamburg Hbf",
     });

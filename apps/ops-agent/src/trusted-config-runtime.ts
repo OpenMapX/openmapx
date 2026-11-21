@@ -428,7 +428,8 @@ export function installTrustedConfigurationRuntime(
         )
       ) {
         const agent = originalContainers.find((value) => value.serviceId === "ops-agent");
-        if (!options.rootDir || !options.execFile || !agent || agent.state !== "running")
+        const execFile = options.execFile;
+        if (!options.rootDir || !execFile || !agent || agent.state !== "running")
           throw new OpsHostUpdateRequiredError();
         await inspectConfigurationHandoffPrerequisite({
           rootDir: options.rootDir,
@@ -437,7 +438,7 @@ export function installTrustedConfigurationRuntime(
           signal: context.signal,
           runDocker: async (args, command) =>
             (
-              await options.execFile!("docker", args, {
+              await execFile("docker", args, {
                 signal: command.signal,
                 timeout: 15000,
                 maxBuffer: 65536,

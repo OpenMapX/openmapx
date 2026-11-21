@@ -66,6 +66,10 @@
       "types": "./src/http/retry-after.ts",
       "default": "./src/http/retry-after.ts"
     },
+    "./item-at": {
+      "types": "./src/utils/itemAt.ts",
+      "default": "./src/utils/itemAt.ts"
+    },
     "./coordinates": {
       "types": "./src/utils/coordinates.ts",
       "default": "./src/utils/coordinates.ts"
@@ -150,33 +154,33 @@
       "types": "./src/services/trusted-integration-schemas.ts",
       "default": "./src/services/trusted-integration-schemas.ts"
     },
-    "./utils/brandFilter": {
-      "types": "./src/utils/brandFilter.ts",
-      "default": "./src/utils/brandFilter.ts"
+    "./places/brandFilter": {
+      "types": "./src/places/brandFilter.ts",
+      "default": "./src/places/brandFilter.ts"
     },
-    "./utils/poiConflation": {
-      "types": "./src/utils/poiConflation.ts",
-      "default": "./src/utils/poiConflation.ts"
+    "./places/poiConflation": {
+      "types": "./src/places/poiConflation.ts",
+      "default": "./src/places/poiConflation.ts"
     },
-    "./utils/safe-download": {
-      "types": "./src/utils/safe-download.ts",
-      "default": "./src/utils/safe-download.ts"
+    "./http/safe-download": {
+      "types": "./src/http/safe-download.ts",
+      "default": "./src/http/safe-download.ts"
     },
     "./utils/geo-server": {
       "types": "./src/utils/geo-server.ts",
       "default": "./src/utils/geo-server.ts"
     },
-    "./utils/overtureCategoryMap": {
-      "types": "./src/utils/overtureCategoryMap.ts",
-      "default": "./src/utils/overtureCategoryMap.ts"
+    "./places/overtureCategoryMap": {
+      "types": "./src/places/overtureCategoryMap.ts",
+      "default": "./src/places/overtureCategoryMap.ts"
     },
-    "./utils/overtureSource": {
-      "types": "./src/utils/overtureSource.ts",
-      "default": "./src/utils/overtureSource.ts"
+    "./places/overtureSource": {
+      "types": "./src/places/overtureSource.ts",
+      "default": "./src/places/overtureSource.ts"
     },
-    "./utils/osmCategoryFilters": {
-      "types": "./src/utils/osmCategoryFilters.ts",
-      "default": "./src/utils/osmCategoryFilters.ts"
+    "./places/osmCategoryFilters": {
+      "types": "./src/places/osmCategoryFilters.ts",
+      "default": "./src/places/osmCategoryFilters.ts"
     },
     "./test/query": {
       "types": "./src/test/queryWrapper.tsx",
@@ -195,8 +199,8 @@
       "default": "./src/server/ambient-places.ts"
     },
     "./attribution": {
-      "types": "./src/utils/attribution-api.ts",
-      "default": "./src/utils/attribution-api.ts"
+      "types": "./src/attribution/attribution-api.ts",
+      "default": "./src/attribution/attribution-api.ts"
     },
     "./api-sdk": {
       "types": "./src/api/generated/runtime-metadata.generated.ts",

@@ -37,7 +37,7 @@ describe("Transitous runner capabilities", () => {
 
   it("rejects a token whose payload was altered after signing", () => {
     const capability = mintTransitousCapability(KEY, { now: NOW, run: RUN });
-    const [prefix, issuedAt, nonce, mac] = capability.split("_");
+    const [prefix, issuedAt, nonce = "", mac] = capability.split("_");
     // Still a well-formed nonce, so this must fail on the signature rather than
     // on the shape check.
     const flipped = nonce.endsWith("0") ? "1" : "0";

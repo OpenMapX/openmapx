@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useContext } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AdminDraftContext, AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
-import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { cleanup, createTestQueryClient, fireEvent, nth, render, screen, waitFor } from "@/test";
 import { PlatformConfiguration } from "./PlatformConfiguration";
 import { PlatformPreviewLifecycle } from "./PlatformPreviewLifecycle";
 import type { PlatformScope } from "./platformScope";
@@ -121,14 +121,14 @@ it("locks host fields until explicit adoption, previews without saving and binds
   expect(mocks.apply).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
   await screen.findByText("Review platform changes");
-  expect(mocks.preview.mock.calls[0][0]).toMatchObject({
+  expect(nth(mocks.preview.mock.calls, 0)[0]).toMatchObject({
     expectedCurrentRevisionId: null,
     changes: { version: 1, backupRetentionDays: { source: "database", value: 60 } },
   });
   expect(mocks.apply).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Apply reviewed changes" }));
   await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(1));
-  expect(mocks.apply.mock.calls[0][0]).toEqual({
+  expect(nth(mocks.apply.mock.calls, 0)[0]).toEqual({
     expectedCurrentRevisionId: null,
     previewFingerprint: preview.previewFingerprint,
     confirmations,
@@ -185,11 +185,11 @@ it("reuses the same apply intent after an unconfirmed transport outcome", async 
   await screen.findByText(/Apply was not confirmed/);
   fireEvent.click(screen.getByRole("button", { name: "Apply reviewed changes" }));
   await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(2));
-  const headers = mocks.apply.mock.calls[0][1] as Record<string, unknown>;
+  const headers = nth(mocks.apply.mock.calls, 0)[1] as Record<string, unknown>;
   expect(headers["idempotency-key"]).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   );
-  expect(mocks.apply.mock.calls[0][1]).toEqual(mocks.apply.mock.calls[1][1]);
+  expect(nth(mocks.apply.mock.calls, 0)[1]).toEqual(nth(mocks.apply.mock.calls, 1)[1]);
 });
 it("copies the fresh full baseline before overlaying a retention edit", async () => {
   const fresh = {
@@ -227,7 +227,7 @@ it("copies the fresh full baseline before overlaying a retention edit", async ()
   fireEvent.change(screen.getByLabelText("Backup retention (days)"), { target: { value: "60" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
   await screen.findByText("Review platform changes");
-  expect((mocks.preview.mock.calls[0][0] as { changes: unknown }).changes).toEqual({
+  expect((nth(mocks.preview.mock.calls, 0)[0] as { changes: unknown }).changes).toEqual({
     ...fresh.configuration,
     backupRetentionDays: { source: "database", value: 60 },
   });

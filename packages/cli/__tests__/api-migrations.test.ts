@@ -1,5 +1,5 @@
 import { execa } from "execa";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { migrateBeforeApiUpdate, stopMigrationArgs } from "../src/lib/api-migrations";
 import { cliControlContext } from "../src/lib/control-context";
 import { dockerCompose, dockerComposeStream } from "../src/lib/docker";
@@ -53,6 +53,7 @@ describe("migrateBeforeApiUpdate", () => {
 
     const [stop, run] = composeCalls();
     expect(stop).toEqual(["stop", "app-api"]);
+    assert.isDefined(run);
     expect(run.slice(0, 4)).toEqual(["run", "--rm", "-T", "--no-deps"]);
     expect(run[run.indexOf("--label") + 1]).toBe(MARKER);
     expect(run.slice(run.indexOf("app-api"))).toEqual([

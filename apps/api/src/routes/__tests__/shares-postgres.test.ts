@@ -233,7 +233,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect((await sdk.revokeShare("foreign-share", { client })).status).toBe(404);
         expect(
           (await fixture.db.select().from(shareLink).where(eq(shareLink.id, "foreign-share")))[0]
-            .tokenHash,
+            ?.tokenHash,
         ).toBe(hashShareToken("F".repeat(43)));
       } finally {
         vi.unstubAllGlobals();

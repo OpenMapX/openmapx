@@ -4,6 +4,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveBetterAuthSecret } from "../../../auth-secret";
 import { sql } from "../../../db";
 import { handleServiceBulkJob } from "../../admin-job-handlers";
 import { serviceApply } from "../../admin-ops";
@@ -30,9 +31,11 @@ if (input.filesystemFault !== undefined && input.filesystemFault !== "after-reti
 // The candidate lives in the agent's store: pause this API right after the
 // typed operation that discards it.
 if (input.filesystemFault !== undefined) {
+  const rootDir = process.env.OPENMAPX_ROOT_DIR;
+  if (!rootDir) throw Error("Fixture root directory unavailable");
   const fetchImpl = globalThis.fetch;
   const pause = (name: string, bytes: string | Buffer = "paused") => {
-    const marker = join(process.env.OPENMAPX_ROOT_DIR!, name);
+    const marker = join(rootDir, name);
     writeFileSync(`${marker}.partial`, bytes, { mode: 0o600, flag: "wx" });
     renameSync(`${marker}.partial`, marker);
     return new Promise<never>(() => {});
@@ -47,7 +50,7 @@ if (input.filesystemFault !== undefined) {
       kind === "configuration.candidate.discard"
         ? readFileSync(
             join(
-              process.env.OPENMAPX_ROOT_DIR!,
+              rootDir,
               "infra/docker/state/ops-agent/configuration-candidates",
               `${request?.operation?.operationKey}.json`,
             ),
@@ -85,7 +88,7 @@ try {
       const context = await auth.$context;
       const session = await context.internalAdapter.createSession(input.actorId);
       if (!session) throw Error("Fixture session unavailable");
-      const signature = createHmac("sha256", process.env.BETTER_AUTH_SECRET!)
+      const signature = createHmac("sha256", resolveBetterAuthSecret())
         .update(session.token)
         .digest("base64");
       const app = Fastify();

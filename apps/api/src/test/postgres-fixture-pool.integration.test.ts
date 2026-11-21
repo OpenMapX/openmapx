@@ -18,7 +18,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await left.stop();
         const fresh = await pool.create();
         const tables = await fresh.sql`SELECT to_regclass('public.isolated_probe') AS name`;
-        expect(tables[0].name).toBeNull();
+        expect(tables[0]?.name).toBeNull();
         // Deliberately leave right/fresh open: the worker teardown owns both.
         await pool.stop();
         await expect(pool.create()).rejects.toThrow(/closed/);

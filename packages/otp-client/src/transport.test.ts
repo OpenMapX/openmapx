@@ -39,7 +39,7 @@ describe("OTP generated SDK host transport", () => {
         contentTypes: ["application/json", "application/graphql-response+json"],
       },
     });
-    expect(f.http.calls[0].body).toMatchObject({
+    expect(f.http.calls[0]?.body).toMatchObject({
       query: expect.stringContaining("query OtpReadiness"),
     });
   });

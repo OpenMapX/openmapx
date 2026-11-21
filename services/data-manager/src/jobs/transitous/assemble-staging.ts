@@ -14,6 +14,7 @@ import {
   PORTABLE_MOTIS_FILENAME,
   producePortableMotisRecipe,
 } from "@openmapx/core/build-artifacts/motis-portable";
+import { pinnedAtlasCommit, pinnedTransitousCommit } from "@openmapx/core/catalog-pins";
 import { parseFeedCredentialMapJson } from "@openmapx/transitous-core/feed-credentials";
 import { CANDIDATE_PROXY_DIRNAME, createCandidateManifestAsync } from "./candidate.js";
 import { GTFS_ARCHIVE_RE, resolveTransitousApiKeysPath } from "./internal.js";
@@ -232,8 +233,8 @@ export const run: StageFn = async (ctx) => {
     if (ctx.state.catalogPins && missingFeeds.length === 0 && osmSource !== "missing") {
       try {
         const pins = {
-          transitousCommit: ctx.state.catalogPins.transitous.ref.split("@").at(-1) ?? "",
-          atlasCommit: ctx.state.catalogPins.transitous.submodules["transitland-atlas"] ?? "",
+          transitousCommit: pinnedTransitousCommit(ctx.state.catalogPins.transitous),
+          atlasCommit: pinnedAtlasCommit(ctx.state.catalogPins.transitous),
         };
         const keysPath = resolveTransitousApiKeysPath(ctx.apiKeysPath);
         const credentials = existsSync(keysPath)

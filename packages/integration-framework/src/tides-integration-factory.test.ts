@@ -1,6 +1,6 @@
 import type { Place, TidesPayload } from "@openmapx/core";
 import { getPlaceResolver } from "@openmapx/place-ids";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { setup as canada } from "../../../integrations/knowledge-tides-canada/index";
 import { setup as ioc } from "../../../integrations/knowledge-tides-ioc/index";
 import { setup as norway } from "../../../integrations/knowledge-tides-norway/index";
@@ -284,12 +284,19 @@ describe.each(cases)("$name acquisition", (adapter) => {
     for (const key of h.values.keys()) if (key.startsWith("tides:")) h.values.delete(key);
     h.terms("Replacement predictions");
     const replaced = await h.read({ station: adapter.id });
-    expect(replaced.fieldContributors?.station?.[0].name).toBe("Acquired terms");
-    expect(replaced.fieldContributors?.events?.[0].name).toBe("Replacement predictions");
-    const scheme = { Norway: "kartverket", Canada: "ca-iwls", IOC: "ioc", Pegelonline: "pegel" }[
-      adapter.name
-    ]!;
-    const resolved = await getPlaceResolver<Place>(scheme)!(adapter.id, {});
+    expect(replaced.fieldContributors?.station?.[0]?.name).toBe("Acquired terms");
+    expect(replaced.fieldContributors?.events?.[0]?.name).toBe("Replacement predictions");
+    const schemes: Record<string, string> = {
+      Norway: "kartverket",
+      Canada: "ca-iwls",
+      IOC: "ioc",
+      Pegelonline: "pegel",
+    };
+    const scheme = schemes[adapter.name];
+    assert.isDefined(scheme);
+    const resolver = getPlaceResolver<Place>(scheme);
+    assert.exists(resolver);
+    const resolved = await resolver(adapter.id, {});
     expect(resolved?.contributors?.map((receipt) => receipt.name)).toEqual(["Acquired terms"]);
   });
 });
@@ -330,6 +337,7 @@ it("refreshes Canadian current-level ownership without relabelling predictions o
   vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
   const h = host();
   const adapter = cases[1];
+  assert.isDefined(adapter);
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
     const url = String(input);
     return new Response(
@@ -347,8 +355,8 @@ it("refreshes Canadian current-level ownership without relabelling predictions o
   for (const key of h.values.keys()) if (key.startsWith("obs:")) h.values.delete(key);
   h.terms("Fresh observation terms");
   const refreshed = await h.read({ lat: "54", lng: "10" });
-  expect(refreshed.fieldContributors?.events?.[0].name).toBe("Acquired terms");
-  expect(refreshed.fieldContributors?.currentLevel?.[0].name).toBe("Fresh observation terms");
+  expect(refreshed.fieldContributors?.events?.[0]?.name).toBe("Acquired terms");
+  expect(refreshed.fieldContributors?.currentLevel?.[0]?.name).toBe("Fresh observation terms");
   expect(refreshed.contributors?.map((receipt) => receipt.name)).toEqual([
     "Acquired terms",
     "Fresh observation terms",

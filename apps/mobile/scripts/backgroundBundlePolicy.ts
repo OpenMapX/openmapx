@@ -80,8 +80,8 @@ export function resolvedVersionsOf(sources: readonly string[], packageName: stri
   const pattern = new RegExp(`[/\\\\]\\.pnpm[/\\\\]${escaped}@([^_/\\\\]+)`);
   const versions = new Set<string>();
   for (const source of sources) {
-    const match = source.match(pattern);
-    if (match) versions.add(match[1]);
+    const version = source.match(pattern)?.[1];
+    if (version) versions.add(version);
   }
   return [...versions].sort();
 }

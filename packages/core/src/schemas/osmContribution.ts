@@ -546,9 +546,10 @@ const CANONICAL_OSM_ID = /^(node|way|relation)\/([1-9][0-9]{0,18})$/;
  */
 export function parseOsmElementId(value: string | undefined | null): OsmElementRef | null {
   if (typeof value !== "string") return null;
-  const match = CANONICAL_OSM_ID.exec(value);
-  if (!match) return null;
-  const id = Number(match[2]);
+  const [, rawType, rawId] = CANONICAL_OSM_ID.exec(value) ?? [];
+  const type = osmElementTypeSchema.safeParse(rawType);
+  if (!type.success) return null;
+  const id = Number(rawId);
   if (!Number.isSafeInteger(id) || id <= 0) return null;
-  return { type: match[1] as OsmElementType, id };
+  return { type: type.data, id };
 }

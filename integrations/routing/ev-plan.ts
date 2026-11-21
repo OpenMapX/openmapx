@@ -349,13 +349,18 @@ export async function runEvPlan(
     // doesn't currently expose, and is a future enhancement, not this fix.
     let finalRoute = baseRoute;
     if (plan.stops.length > 0) {
+      const origin = args.waypoints[0];
+      const destination = args.waypoints.at(-1);
+      if (!origin || !destination) throw new Error("EV routing needs an origin and a destination");
       const wps: [number, number][] = [
-        args.waypoints[0],
+        origin,
         ...plan.stops.map((s) => s.coordinates),
-        args.waypoints[args.waypoints.length - 1],
+        destination,
       ];
       const rerouted = await routingProvider.getRoute(wps, "driving", routingOpts);
-      finalRoute = rerouted.routes[rerouted.activeRouteIndex] ?? rerouted.routes[0];
+      const routed = rerouted.routes[rerouted.activeRouteIndex] ?? rerouted.routes[0];
+      if (!routed) throw new Error("Routing via the charging stops returned no route");
+      finalRoute = routed;
     }
 
     // Whole-trip re-validation: `planCharges` sizes charge amounts against the

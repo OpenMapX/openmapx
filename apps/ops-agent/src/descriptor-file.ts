@@ -156,9 +156,10 @@ export function readDescriptorAnchoredUtf8(
   try {
     const shared = options.allowGroupWritable === true;
     const minimumBytes = options.minimumBytes ?? 0;
+    const filename = components.at(-1);
     if (
       !isAbsolute(rootDir) ||
-      components.length < 1 ||
+      filename === undefined ||
       components.length > MAX_PATH_COMPONENTS ||
       components.some(
         (component) =>
@@ -195,8 +196,7 @@ export function readDescriptorAnchoredUtf8(
 
     const expectedUid = rootIdentity.uid;
     let parentDescriptor = rootDescriptor;
-    for (let index = 0; index < components.length - 1; index += 1) {
-      const name = components[index] as string;
+    for (const [index, name] of components.slice(0, -1).entries()) {
       const pathname = anchoredPath(descriptorAnchorRoot, parentDescriptor, name);
       const descriptor = openSync(
         pathname,
@@ -211,7 +211,6 @@ export function readDescriptorAnchoredUtf8(
       parentDescriptor = descriptor;
     }
 
-    const filename = components.at(-1) as string;
     const pathname = anchoredPath(descriptorAnchorRoot, parentDescriptor, filename);
     const descriptor = openSync(
       pathname,
@@ -280,9 +279,10 @@ export function hashDescriptorAnchoredFile(
     kind: "directory" | "file";
   }> = [];
   try {
+    const filename = components.at(-1);
     if (
       !isAbsolute(rootDir) ||
-      components.length < 1 ||
+      filename === undefined ||
       components.length > MAX_PATH_COMPONENTS ||
       components.some(
         (component) =>
@@ -313,8 +313,7 @@ export function hashDescriptorAnchoredFile(
       kind: "directory",
     });
     let parentDescriptor = rootDescriptor;
-    for (let index = 0; index < components.length - 1; index += 1) {
-      const name = components[index] as string;
+    for (const name of components.slice(0, -1)) {
       const descriptor = openSync(
         anchoredPath(anchor, parentDescriptor, name),
         constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
@@ -330,7 +329,6 @@ export function hashDescriptorAnchoredFile(
       });
       parentDescriptor = descriptor;
     }
-    const filename = components.at(-1) as string;
     const pathname = anchoredPath(anchor, parentDescriptor, filename);
     const descriptor = openSync(
       pathname,
@@ -431,8 +429,7 @@ export function listDescriptorAnchoredDirectory(
     options.hooks?.descriptorOpened?.(rootDescriptor);
     options.hooks?.afterRootOpen?.();
     let descriptor = rootDescriptor;
-    for (let index = 0; index < components.length; index += 1) {
-      const name = components[index] as string;
+    for (const [index, name] of components.entries()) {
       const pathname = anchoredPath(anchor, descriptor, name);
       descriptor = openSync(
         pathname,

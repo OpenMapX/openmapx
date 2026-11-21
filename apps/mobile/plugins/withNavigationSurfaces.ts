@@ -99,6 +99,9 @@ const withNavigationSurfaces: ConfigPlugin = (config) => {
     const list = project.pbxXCConfigurationList()[target.pbxNativeTarget.buildConfigurationList];
     for (const entry of list.buildConfigurations) {
       const extensionConfig = configs[entry.value];
+      if (!extensionConfig) {
+        throw new Error(`navigation surface build configuration ${entry.value} is missing`);
+      }
       const host = Object.values(configs).find(
         (c) =>
           c &&

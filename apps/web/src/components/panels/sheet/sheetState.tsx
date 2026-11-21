@@ -93,7 +93,7 @@ export function useSheetSentinel(): { ref: RefCallback<HTMLElement>; passed: boo
 
   useEffect(() => {
     if (!el) return;
-    const io = new IntersectionObserver(([entry]) => setPassed(!entry.isIntersecting), {
+    const io = new IntersectionObserver(([entry]) => entry && setPassed(!entry.isIntersecting), {
       threshold: 0,
     });
     io.observe(el);

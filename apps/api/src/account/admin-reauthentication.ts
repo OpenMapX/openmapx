@@ -138,10 +138,10 @@ export class AdminActionReauthentication {
           ),
         )
         .for("update");
-      const family =
-        input.nonce && !input.restart
-          ? rows.filter((r) => nonceMatchesDigest(input.nonce!, r.nonceDigest))
-          : [];
+      const requestedNonce = input.restart ? undefined : input.nonce;
+      const family = requestedNonce
+        ? rows.filter((r) => nonceMatchesDigest(requestedNonce, r.nonceDigest))
+        : [];
       if (family.some((r) => r.state === "completed")) deny("REAUTH_GROUP_RESTART_REQUIRED");
       const others = family.filter((r) => r.purpose !== input.purpose),
         pair = new Set([input.purpose, ...others.map((r) => r.purpose)]);
@@ -153,7 +153,9 @@ export class AdminActionReauthentication {
           !pair.has("transit.credentials"))
       )
         deny("REAUTH_GROUP_RESTART_REQUIRED");
-      const nonce = family.length ? input.nonce! : createReauthenticationNonce(),
+      // A non-empty family was matched by the requested nonce.
+      const nonce =
+          family.length && requestedNonce ? requestedNonce : createReauthenticationNonce(),
         expiresAt = family[0]?.expiresAt ?? new Date(now.getTime() + REAUTH_TTL_MS);
       await tx
         .update(challenge)

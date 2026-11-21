@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import type { BridgeClient } from "./bridgeClient";
 import { browserForegroundFix, nativeForegroundFix } from "./foregroundLocation";
 
@@ -115,10 +116,10 @@ describe("nativeForegroundFix", () => {
     const result = await nativeForegroundFix(client, "r1", { accuracy: "balanced" });
 
     expect(result).toEqual({ status: "ok", fix });
-    expect(sent[0].type).toBe("location.request");
-    expect(sent[0].payload).toMatchObject({ requestId: "r1", accuracy: "balanced" });
+    expect(nth(sent, 0).type).toBe("location.request");
+    expect(nth(sent, 0).payload).toMatchObject({ requestId: "r1", accuracy: "balanced" });
     // No watch option exists to set: there is one location producer.
-    expect(sent[0].payload.watch).toBeUndefined();
+    expect(nth(sent, 0).payload.watch).toBeUndefined();
   });
 
   it("ignores an answer to a request it is no longer waiting on", async () => {
@@ -154,7 +155,7 @@ describe("nativeForegroundFix", () => {
 
     // So the shell's own answer wins the race and the page reports what really
     // happened rather than a generic timeout.
-    expect(sent[0].payload.timeoutMs).toBe(5_000);
-    expect(sent[0].options).toEqual({ timeoutMs: 7_000 });
+    expect(nth(sent, 0).payload.timeoutMs).toBe(5_000);
+    expect(nth(sent, 0).options).toEqual({ timeoutMs: 7_000 });
   });
 });

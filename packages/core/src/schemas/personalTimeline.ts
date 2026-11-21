@@ -101,7 +101,8 @@ const position = z
   .array(finite)
   .min(2)
   .refine(
-    (value) => value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90,
+    ([longitude = Number.NaN, latitude = Number.NaN]) =>
+      longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90,
     "Invalid longitude/latitude",
   );
 const featureCollection = <T extends z.ZodType>(geometry: T) =>

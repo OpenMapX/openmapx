@@ -4,6 +4,7 @@ import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 
 // Upstream fetch + Google Photos resolution are mocked so the proxy never hits
 // the network; the variables are `mock`-prefixed so Vitest's hoisting allows
@@ -517,7 +518,7 @@ describe("image-proxy route", () => {
 
     await inject({ referer: ALLOWED_REFERER });
 
-    const sent = new Headers(mockFetchWithRedirects.mock.calls[0][1].headers);
+    const sent = new Headers(mockFetchWithRedirects.mock.calls[0]?.[1].headers);
     expect(sent.get("accept-encoding")).toBe("identity");
     expect(sent.get("user-agent")).toBe("test-agent");
   });
@@ -701,7 +702,7 @@ describe("image-proxy route", () => {
     declareCameraHosts(CAMERA_HOSTS);
     mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
     await inject({ referer: ALLOWED_REFERER, url: TFL_STILL });
-    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
+    const opts = callArg(mockFetchWithRedirects, 0, 1) as {
       validateRedirectUrl: (url: URL) => boolean;
     };
     expect(
@@ -749,7 +750,7 @@ describe("image-proxy route", () => {
   it("pins every hop's socket to the addresses it checked", async () => {
     mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 404, headers: new Headers() });
     await inject({ referer: ALLOWED_REFERER });
-    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as Record<string, unknown>;
+    const opts = callArg(mockFetchWithRedirects, 0, 1) as Record<string, unknown>;
     expect(typeof opts.resolveConnectionAddresses).toBe("function");
     expect(typeof opts.pinnedFetchImplementation).toBe("function");
     expect(typeof opts.releaseResponse).toBe("function");
@@ -758,7 +759,7 @@ describe("image-proxy route", () => {
   it("re-checks redirect targets against the allowlist", async () => {
     mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
     await inject({ referer: ALLOWED_REFERER });
-    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
+    const opts = callArg(mockFetchWithRedirects, 0, 1) as {
       validateRedirectUrl: (url: URL) => boolean;
     };
     expect(opts.validateRedirectUrl(new URL("https://upload.wikimedia.org/next"))).toBe(true);
@@ -783,7 +784,7 @@ describe("image-proxy route", () => {
       mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
       await inject({ referer: ALLOWED_REFERER, url });
       const validate = (
-        mockFetchWithRedirects.mock.calls[0]?.[1] as {
+        callArg(mockFetchWithRedirects, 0, 1) as {
           validateRedirectUrl: (next: URL, previous?: URL) => boolean;
         }
       ).validateRedirectUrl;
@@ -865,7 +866,7 @@ describe("image-proxy route", () => {
       url: "https://photos.app.goo.gl/valid-share-id",
     });
 
-    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
+    const opts = callArg(mockFetchWithRedirects, 0, 1) as {
       validateRedirectUrl: (url: URL) => boolean;
     };
     expect(opts.validateRedirectUrl(new URL("https://lh4.googleusercontent.com/next"))).toBe(true);

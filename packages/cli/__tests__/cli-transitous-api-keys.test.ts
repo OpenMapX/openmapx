@@ -25,7 +25,7 @@ import {
   retainCatalogProposal,
 } from "@openmapx/core/catalog-pins";
 import { services } from "@openmapx/core/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ensureTransitousApiKeysFile,
   generateTransitousApiKeys,
@@ -294,7 +294,8 @@ it("uses actual active pin A while upstream is B and preserves unrelated credent
     serviceIds: ["motis"],
   });
   const proposalId = "00000000-0000-4000-8000-000000000003";
-  const active = readCatalogPinSet(tmp)!;
+  const active = readCatalogPinSet(tmp);
+  assert.exists(active);
   const pins = createCatalogPinSet(
     { ...active.transitous, ref: `main@${proposedSha}` },
     active.gbfs,

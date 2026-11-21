@@ -3,6 +3,7 @@
 import type { PersonalVehicle, Route } from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 const useCountryFromCoordinatesSpy = vi.fn();
 const useAmbientFuelPricesSpy = vi.fn();
@@ -139,9 +140,9 @@ describe("useRouteImpacts", () => {
 
     expect(useCountryFromCoordinatesSpy).toHaveBeenCalledWith(destination, true);
     expect(useAmbientFuelPricesSpy).toHaveBeenCalledWith(destination, true);
-    expect(result.current.impacts[0].cost.currency).toBe("EUR");
-    expect(result.current.impacts[0].cost.energyCost).toBeCloseTo(0.65 * 1.7, 3);
-    expect(result.current.impacts[0].cost.energyCostProvenance.kind).toBe("provider");
+    expect(nth(result.current.impacts, 0).cost.currency).toBe("EUR");
+    expect(nth(result.current.impacts, 0).cost.energyCost).toBeCloseTo(0.65 * 1.7, 3);
+    expect(nth(result.current.impacts, 0).cost.energyCostProvenance.kind).toBe("provider");
   });
 
   it("enables live pricing outside Germany and lets the provider decide coverage", () => {
@@ -172,8 +173,8 @@ describe("useRouteImpacts", () => {
     );
 
     expect(useAmbientFuelPricesSpy).toHaveBeenCalledWith(destination, false);
-    expect(result.current.impacts[0].cost.currency).toBe("CHF");
-    expect(result.current.impacts[0].cost.energyCostProvenance.kind).toBe("user_override");
+    expect(nth(result.current.impacts, 0).cost.currency).toBe("CHF");
+    expect(nth(result.current.impacts, 0).cost.energyCostProvenance.kind).toBe("user_override");
   });
 
   it("keeps user assumptions across recalculations", () => {
@@ -189,9 +190,9 @@ describe("useRouteImpacts", () => {
 
     act(() => result.current.updateAssumptions({ occupancy: 3, fuelPricePerLiter: 2 }));
 
-    expect(result.current.impacts[0].occupancy).toBe(3);
-    expect(result.current.impacts[0].cost.energyCost).toBeCloseTo(0.65 * 2, 3);
-    expect(result.current.impacts[0].cost.energyCostProvenance.kind).toBe("user_override");
+    expect(nth(result.current.impacts, 0).occupancy).toBe(3);
+    expect(nth(result.current.impacts, 0).cost.energyCost).toBeCloseTo(0.65 * 2, 3);
+    expect(nth(result.current.impacts, 0).cost.energyCostProvenance.kind).toBe("user_override");
   });
 
   it("ignores an incompatible default bicycle for a driving route", () => {
@@ -208,8 +209,8 @@ describe("useRouteImpacts", () => {
       }),
     );
 
-    expect(result.current.impacts[0].vehicleId).toBe("petrol");
-    expect(result.current.impacts[0].energy.fuelLiters).toBeGreaterThan(0);
+    expect(nth(result.current.impacts, 0).vehicleId).toBe("petrol");
+    expect(nth(result.current.impacts, 0).energy.fuelLiters).toBeGreaterThan(0);
   });
 
   it("selects a motorcycle only for motorcycle routes", () => {
@@ -224,7 +225,7 @@ describe("useRouteImpacts", () => {
       }),
     );
 
-    expect(result.current.impacts[0].vehicleId).toBe("motorcycle");
+    expect(nth(result.current.impacts, 0).vehicleId).toBe("motorcycle");
   });
 
   it("suppresses meaningless impact badges for active travel", () => {

@@ -7,6 +7,7 @@ import {
   subscribeMapObstructions,
 } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
+import { nth } from "@/test";
 import { settleHistory } from "@/test/history";
 import { detentIndex, PLACE_DETENTS } from "./detents";
 import { MobileBottomSheet } from "./MobileBottomSheet";
@@ -137,7 +138,7 @@ describe("snap marker keying", () => {
     // place — its DOM node is reused (see the identity assertions below), so
     // reading the attribute off that same reference after the rerender would
     // just show the new value twice.
-    const beforePeekStyle = beforeMarkers[1].getAttribute("style");
+    const beforePeekStyle = nth(beforeMarkers, 1).getAttribute("style");
 
     rerender(
       <MobileBottomSheet id="test-sheet" zIndex={1} detents={after}>
@@ -151,7 +152,7 @@ describe("snap marker keying", () => {
     // value has changed.
     expect(afterMarkers[0]).toBe(beforeMarkers[0]);
     expect(afterMarkers[1]).toBe(beforeMarkers[1]);
-    expect(afterMarkers[1].getAttribute("style")).not.toBe(beforePeekStyle);
+    expect(nth(afterMarkers, 1).getAttribute("style")).not.toBe(beforePeekStyle);
   });
 });
 

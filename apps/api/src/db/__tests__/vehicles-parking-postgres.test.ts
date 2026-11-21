@@ -140,9 +140,9 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
 
     const rows = await db.select().from(parkedLocation).where(eq(parkedLocation.userId, TEST_USER));
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe("p1");
-    expect(rows[0].lat).toBeCloseTo(48.13);
-    expect(rows[0].source).toBe("device");
+    expect(rows[0]?.id).toBe("p1");
+    expect(rows[0]?.lat).toBeCloseTo(48.13);
+    expect(rows[0]?.source).toBe("device");
   });
 
   it("lets an assigned and an unassigned record coexist", async () => {
@@ -165,8 +165,8 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
 
     const rows = await db.select().from(parkedLocation).where(eq(parkedLocation.userId, TEST_USER));
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe("p-null");
-    expect(rows[0].vehicleId).toBeNull();
+    expect(rows[0]?.id).toBe("p-null");
+    expect(rows[0]?.vehicleId).toBeNull();
   });
 
   it("cascades both tables when the account is deleted", async () => {
@@ -207,6 +207,6 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
       .select()
       .from(personalVehicle)
       .where(and(eq(personalVehicle.id, "v-ev"), eq(personalVehicle.userId, TEST_USER)));
-    expect(row.ev).toEqual(ev);
+    expect(row?.ev).toEqual(ev);
   });
 });

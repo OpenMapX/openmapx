@@ -1,7 +1,10 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { Geometry, LineString } from "geojson";
-import type { RoadConditionEffect, VehicleApplicability } from "../utils/roadConditionEffects";
+import type {
+  RoadConditionEffect,
+  VehicleApplicability,
+} from "../road-conditions/roadConditionEffects";
 
 export type { RoadConditionEffect, VehicleApplicability };
 

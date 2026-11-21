@@ -32,16 +32,15 @@ function fail(lines: string[]): never {
 /** Every `<uses-permission>` in the merged manifest. */
 function androidPermissions(manifestPath: string): string[] {
   const manifest = readFileSync(manifestPath, "utf8");
-  return (
-    [...manifest.matchAll(/<uses-permission[^>]*android:name="([^"]+)"/g)]
-      .map((match) => match[1])
-      // `tools:node="remove"` marks a permission the merge strips rather than one
-      // the app requests.
-      .filter((_id, index) => {
-        const occurrence = [...manifest.matchAll(/<uses-permission[^>]*\/?>/g)][index]?.[0] ?? "";
-        return !occurrence.includes('tools:node="remove"');
-      })
-  );
+  const permissions: string[] = [];
+  for (const [element] of manifest.matchAll(/<uses-permission[^>]*\/?>/g)) {
+    // `tools:node="remove"` marks a permission the merge strips rather than one
+    // the app requests.
+    if (element.includes('tools:node="remove"')) continue;
+    const name = element.match(/android:name="([^"]+)"/)?.[1];
+    if (name) permissions.push(name);
+  }
+  return permissions;
 }
 
 /** The Info.plist keys and background modes, read without a plist parser. */
@@ -49,13 +48,13 @@ function iosSurface(
   plistPath: string,
 ): Pick<PermissionSurface, "iosUsageDescriptionKeys" | "iosBackgroundModes"> {
   const plist = readFileSync(plistPath, "utf8");
-  const keys = [...plist.matchAll(/<key>([A-Za-z]+UsageDescription)<\/key>/g)].map(
-    (match) => match[1],
+  const keys = [...plist.matchAll(/<key>([A-Za-z]+UsageDescription)<\/key>/g)].flatMap(
+    ([, key]) => key ?? [],
   );
 
-  const modesBlock = plist.match(/<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/);
+  const modesBlock = plist.match(/<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1];
   const modes = modesBlock
-    ? [...modesBlock[1].matchAll(/<string>([^<]+)<\/string>/g)].map((match) => match[1])
+    ? [...modesBlock.matchAll(/<string>([^<]+)<\/string>/g)].flatMap(([, mode]) => mode ?? [])
     : [];
 
   return { iosUsageDescriptionKeys: keys, iosBackgroundModes: modes };

@@ -1,4 +1,4 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import {
   DISCOVERY,
@@ -19,7 +19,7 @@ function providerWith(extra: Record<string, unknown> = {}) {
   const docs: Record<string, unknown> = { ...FEED_DOCUMENTS, ...extra };
   const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {} });
   const fetchJson = vi.fn(async (url: string) => {
-    const base = url.split("?")[0];
+    const base = url.replace(/\?.*/, "");
     if (base === "https://feed.example/realtime_booking") return REALTIME_BOOKING;
     if (base === "https://feed.example/wait_time") {
       return { data: { wait_times: [{ brand_id: "large", wait_time: 600 }] } };
@@ -37,8 +37,8 @@ describe("getAvailability", () => {
     expect(result.data.available).toBe(true);
     expect(result.data.coverageChecked).toBe(true);
     expect(result.data.products.map((p) => p.id)).toEqual(["regular", "large"]);
-    expect(result.data.products[0].name).toBe("Regular Ride");
-    expect(result.data.products[0].color).toBe("#0055AA");
+    expect(nth(result.data.products, 0).name).toBe("Regular Ride");
+    expect(nth(result.data.products, 0).color).toBe("#0055AA");
   });
 
   it("is unavailable outside every zone", async () => {
@@ -77,7 +77,7 @@ describe("getAvailability", () => {
   it("attributes to the feed's system name", async () => {
     const { provider } = providerWith();
     const result = await provider.getAvailability({ pickup: inZone });
-    expect(result.attributions[0].name).toBe("Example Taxi Registry");
+    expect(nth(result.attributions, 0).name).toBe("Example Taxi Registry");
   });
 });
 
@@ -514,7 +514,7 @@ describe("against the live Freebee feed shape", () => {
   function leanProvider() {
     const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {} });
     const fetchJson = vi.fn(async (url: string) => {
-      const base = url.split("?")[0];
+      const base = url.replace(/\?.*/, "");
       const doc = LEAN_FEED_DOCUMENTS[base];
       if (!doc) throw new Error(`404 ${base}`);
       return doc;
@@ -537,8 +537,8 @@ describe("against the live Freebee feed shape", () => {
       pickup: LEAN_IN_ZONE,
       pickupAt: "2026-08-11T09:00",
     });
-    expect(result.data.products[0].color).toBe("#042553");
-    expect(result.data.products[0].textColor).toBe("#FFFFFF");
+    expect(nth(result.data.products, 0).color).toBe("#042553");
+    expect(nth(result.data.products, 0).textColor).toBe("#FFFFFF");
   });
 
   it("takes seats and accessibility from the rule's vehicle types", async () => {
@@ -546,8 +546,8 @@ describe("against the live Freebee feed shape", () => {
       pickup: LEAN_IN_ZONE,
       pickupAt: "2026-08-11T09:00",
     });
-    expect(result.data.products[0].seats).toBe(6);
-    expect(result.data.products[0].wheelchairAccessible).toBe(false);
+    expect(nth(result.data.products, 0).seats).toBe(6);
+    expect(nth(result.data.products, 0).wheelchairAccessible).toBe(false);
   });
 
   it("is unavailable outside the HH:MM:SS pickup window", async () => {
@@ -575,9 +575,10 @@ describe("against the live Freebee feed shape", () => {
       route: { distanceMeters: 5000, durationSeconds: 600 },
     });
     expect(result?.data).toHaveLength(1);
-    expect(result?.data[0].pickupEtaSeconds).toBe(300);
+    const estimate = nth(result?.data ?? [], 0);
+    expect(estimate.pickupEtaSeconds).toBe(300);
     // The feed publishes no fares, so there is nothing to price against.
-    expect(result?.data[0].fare).toBeUndefined();
+    expect(estimate.fare).toBeUndefined();
   });
 
   it("falls back to the system URL for a feed with no booking rules", async () => {
@@ -647,7 +648,7 @@ describe("static feed lifetime across provider operations", () => {
       failing,
       waits,
       fetchJson: vi.fn(async (url: string) => {
-        const base = url.split("?")[0];
+        const base = url.replace(/\?.*/, "");
         fetched.push(base);
         if (base === REALTIME_URL) {
           const hook = source.onRealtime;
@@ -861,7 +862,7 @@ describe("static feed lifetime across provider operations", () => {
         const provider = providerOver(source);
 
         const result = await provider[method]?.({ pickup: outOfZone, pickupAt });
-        expect(result?.attributions[0].name).toBe("Example Taxi Registry");
+        expect(result?.attributions[0]?.name).toBe("Example Taxi Registry");
         const fetches = source.takeFetches();
         expect(fetches).toHaveLength(STATIC_FILE_COUNT);
         expect(countOf(fetches, STATIC_URLS.gofs)).toBe(1);
@@ -907,13 +908,13 @@ describe("static feed lifetime across provider operations", () => {
       expect(largeA?.product.name).toBe("Large Ride");
       expect(largeA?.pickupEtaSeconds).toBe(600);
       expect(largeA?.fare?.amount).toBeCloseTo(27.25, 2);
-      expect(resultA?.attributions[0].name).toBe("Example Taxi Registry");
+      expect(resultA?.attributions[0]?.name).toBe("Example Taxi Registry");
 
       const largeB = resultB?.data.find((q) => q.productId === "large");
       expect(largeB?.product.name).toBe("Large Ride Plus");
       expect(largeB?.pickupEtaSeconds).toBe(300);
       expect(largeB?.fare?.amount).toBeCloseTo(35.25, 2);
-      expect(resultB?.attributions[0].name).toBe("Example Taxi Registry v2");
+      expect(resultB?.attributions[0]?.name).toBe("Example Taxi Registry v2");
     });
   });
 

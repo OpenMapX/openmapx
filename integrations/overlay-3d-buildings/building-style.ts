@@ -25,11 +25,12 @@ export function findBuildingSourceReference(map: maplibregl.Map): BuildingSource
     }
 
     const source = sources[layer.source];
-    if (source?.type !== "vector") continue;
+    const sourceLayer = layer["source-layer"];
+    if (source?.type !== "vector" || sourceLayer === undefined) continue;
 
     matches.push({
       source: layer.source,
-      sourceLayer: layer["source-layer"] as string,
+      sourceLayer,
       hidden: layer.layout?.visibility === "none",
     });
   }
@@ -44,8 +45,7 @@ export function findBuildingRoofColor(
   reference: BuildingSourceReference,
 ): string | null {
   const layers = map.getStyle().layers ?? [];
-  for (let index = layers.length - 1; index >= 0; index--) {
-    const layer = layers[index];
+  for (const layer of [...layers].reverse()) {
     if (
       layer.type !== "fill" ||
       layer.source !== reference.source ||
@@ -117,13 +117,12 @@ export function buildingExtrusionColor(
     ["at", channel, ["var", "roof"]],
     ["*", ["-", 255, ["at", channel, ["var", "roof"]]], ["var", "lift"]],
   ];
-  const [red, green, blue] = RGBA_CHANNELS.map(
-    (channel): maplibregl.ExpressionSpecification => [
-      "+",
-      ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
-      ["*", ["at", channel, ["var", "lifted"]], ["-", 1, ["var", "weight"]]],
-    ],
-  );
+  const mix = (channel: (typeof RGBA_CHANNELS)[number]): maplibregl.ExpressionSpecification => [
+    "+",
+    ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
+    ["*", ["at", channel, ["var", "lifted"]], ["-", 1, ["var", "weight"]]],
+  ];
+  const [red, green, blue] = [mix(RGBA_CHANNELS[0]), mix(RGBA_CHANNELS[1]), mix(RGBA_CHANNELS[2])];
 
   // Each `let` sees only the bindings of the ones around it, hence the nesting.
   return [
@@ -165,14 +164,11 @@ export const CONTACT_LAYER_ID = "openmapx-3d-buildings-contact";
 const DARK_ROOF_LUMINANCE = 0.35;
 
 function hexLuminance(color: string | null): number | null {
-  const match = color?.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!match) return null;
-  const hex =
-    (match[1] as string).length === 3
-      ? [...(match[1] as string)].map((c) => c + c).join("")
-      : (match[1] as string);
-  const [r, g, b] = [0, 2, 4].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
-  return (0.2126 * (r as number) + 0.7152 * (g as number) + 0.0722 * (b as number)) / 255;
+  const digits = color?.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (digits === undefined) return null;
+  const hex = digits.length === 3 ? [...digits].map((c) => c + c).join("") : digits;
+  const channel = (at: number) => Number.parseInt(hex.slice(at, at + 2), 16);
+  return (0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)) / 255;
 }
 
 /**

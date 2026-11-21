@@ -2,6 +2,7 @@ import { integrationManifestSchema } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index";
@@ -110,7 +111,7 @@ describe("self-hosted generated OTP planning", () => {
     const f = fixture();
     expect(f.http.calls).toHaveLength(0);
     const result = await f.plan(request);
-    expect(result.data[0].itineraries[0]).toMatchObject({
+    expect(nth(nth(result.data, 0).itineraries, 0)).toMatchObject({
       duration: 900,
       startTime: "2026-10-25T00:15:00.000Z",
       endTime: "2026-10-25T00:30:00.000Z",
@@ -128,10 +129,12 @@ describe("self-hosted generated OTP planning", () => {
         },
       ],
     });
-    expect(result.data[0].itineraries[0].legs[0].geometry.coordinates).toHaveLength(3);
+    expect(nth(nth(nth(result.data, 0).itineraries, 0).legs, 0).geometry.coordinates).toHaveLength(
+      3,
+    );
     expect(result.attributions.length).toBeGreaterThan(0);
     expect(f.http.calls).toHaveLength(1);
-    expect(f.http.calls[0].body).toMatchObject({
+    expect(nth(f.http.calls, 0).body).toMatchObject({
       variables: { dateTime: { earliestDeparture: start }, first: 3 },
     });
   });
@@ -143,7 +146,7 @@ describe("self-hosted generated OTP planning", () => {
       modes: ["REGIONAL_RAIL", "SUBURBAN", "TRAM", "COACH"],
       numItineraries: 5,
     });
-    expect(f.http.calls[0].body).toMatchObject({
+    expect(nth(f.http.calls, 0).body).toMatchObject({
       variables: {
         dateTime: { latestArrival: end },
         first: 5,
@@ -162,15 +165,15 @@ describe("self-hosted generated OTP planning", () => {
     await a.shutdown();
     await expect(a.plan(request)).rejects.toThrow("OTP request cancelled");
     await b.plan(request);
-    expect(a.http.calls[0].url).toBe("http://otp.one:8080/otp/gtfs/v1");
-    expect(b.http.calls[0].url).toBe("http://otp.two:8080/otp/gtfs/v1");
+    expect(nth(a.http.calls, 0).url).toBe("http://otp.one:8080/otp/gtfs/v1");
+    expect(nth(b.http.calls, 0).url).toBe("http://otp.two:8080/otp/gtfs/v1");
   });
   it("recovers after a failed initial health probe", async () => {
     const f = fixture();
     const post = vi.spyOn(f.http, "postResponse");
     post.mockRejectedValueOnce(new Error("starting"));
-    expect(await f.ctx.registered.healthChecks[0]()).toMatchObject({ status: "down" });
-    expect(await f.ctx.registered.healthChecks[0]()).toEqual({ status: "up" });
+    expect(await nth(f.ctx.registered.healthChecks, 0)()).toMatchObject({ status: "down" });
+    expect(await nth(f.ctx.registered.healthChecks, 0)()).toEqual({ status: "up" });
     expect((await f.plan(request)).data).toHaveLength(1);
   });
   it("retains D-ticket exclusion and distinguishes genuine no-journey from routing failure", async () => {
@@ -180,7 +183,7 @@ describe("self-hosted generated OTP planning", () => {
     const empty = fixture(undefined, () => ({
       data: { planConnection: { edges: [], routingErrors: [] } },
     }));
-    expect((await empty.plan(request)).data[0].itineraries).toEqual([]);
+    expect(nth((await empty.plan(request)).data, 0).itineraries).toEqual([]);
     const fail = fixture(undefined, () => ({
       data: { planConnection: { edges: [], routingErrors: [{ code: "NO_TRANSIT_CONNECTION" }] } },
     }));
@@ -190,8 +193,8 @@ describe("self-hosted generated OTP planning", () => {
     "rejects malformed canonical data: %s",
     async (problem) => {
       const data = payload();
-      const itinerary = data.data.planConnection.edges[0].node;
-      const leg = itinerary.legs[0];
+      const itinerary = nth(data.data.planConnection.edges, 0).node;
+      const leg = nth(itinerary.legs, 0);
       if (problem === "coordinate") leg.from.lat = 100;
       if (problem === "timestamp") leg.start.scheduledTime = "invalid";
       if (problem === "polyline") leg.legGeometry.points = "?";
@@ -220,9 +223,9 @@ describe("OTP routing diagnostics", () => {
     Object.assign(response.data.planConnection, {
       routingErrors: [{ code: "WALKING_BETTER_THAN_TRANSIT" }],
     });
-    response.data.planConnection.edges[0].node.legs[0].mode = "WALK";
+    nth(nth(response.data.planConnection.edges, 0).node.legs, 0).mode = "WALK";
     const result = await fixture(undefined, () => response).plan(request);
-    expect(result.data[0].itineraries).toHaveLength(1);
+    expect(nth(result.data, 0).itineraries).toHaveLength(1);
   });
 });
 
@@ -239,7 +242,7 @@ describe("OTP result realtime evidence", () => {
     "derives realtime evidence from retained %s legs",
     async (kind) => {
       const data = payload();
-      const leg = data.data.planConnection.edges[0].node.legs[0];
+      const leg = nth(nth(data.data.planConnection.edges, 0).node.legs, 0);
       Object.assign(leg, {
         tripOnServiceDate: {
           realTimeTripState: { canceled: kind === "cancelled", updated: kind === "updated" },
@@ -255,7 +258,7 @@ describe("OTP result realtime evidence", () => {
       expect(result.freshness.hasRealtimeData).toBe(
         ["estimated", "updated", "cancelled"].includes(kind),
       );
-      expect(result.data[0].itineraries[0].legs[0].realtime).toBe(
+      expect(nth(nth(nth(result.data, 0).itineraries, 0).legs, 0).realtime).toBe(
         ["estimated", "updated", "cancelled"].includes(kind),
       );
     },

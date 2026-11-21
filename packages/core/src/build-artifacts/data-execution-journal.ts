@@ -451,9 +451,9 @@ export function createDataExecutionControlJournal(
     const matches = children.filter(
       (child) => child.phase === "paired-pin-commit" && child.ordinal === 0,
     );
-    if (matches.length !== 1) throw Error("Original paired approval required");
-    const child = matches[0]!,
-      operation = pairedPinApprovalInputSchema.parse(child.operation),
+    const [child] = matches;
+    if (matches.length !== 1 || !child) throw Error("Original paired approval required");
+    const operation = pairedPinApprovalInputSchema.parse(child.operation),
       result = pairedPinApprovalResultSchema.parse(child.result);
     const physical = await inspectRetainedOwnedArtifactTargetChildSettlement(
       authority,

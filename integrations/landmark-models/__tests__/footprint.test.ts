@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { nth } from "@openmapx/integration-framework/testing";
+import { assert, describe, expect, it } from "vitest";
 import { acceptableHull, derivedHull, featureIdsFor, toReplacement } from "../web/footprint";
 
 const ANCHOR: [number, number] = [-73.9796, 40.7592];
@@ -13,24 +14,26 @@ function box(): Float32Array {
 
 function areaM2(ring: number[][]): number {
   const lat0 = ANCHOR[1];
-  const xy = ring.map(([lng, lat]) => [
-    ((lng as number) - ANCHOR[0]) * 111_320 * Math.cos((lat0 * Math.PI) / 180),
-    ((lat as number) - lat0) * 110_574,
+  const xy = ring.map((position): [number, number] => [
+    (nth(position, 0) - ANCHOR[0]) * 111_320 * Math.cos((lat0 * Math.PI) / 180),
+    (nth(position, 1) - lat0) * 110_574,
   ]);
   let sum = 0;
-  for (let i = 0; i < xy.length - 1; i++)
-    sum +=
-      (xy[i]?.[0] as number) * (xy[i + 1]?.[1] as number) -
-      (xy[i + 1]?.[0] as number) * (xy[i]?.[1] as number);
+  for (let i = 0; i < xy.length - 1; i++) {
+    const [x0, y0] = nth(xy, i);
+    const [x1, y1] = nth(xy, i + 1);
+    sum += x0 * y1 - x1 * y0;
+  }
   return Math.abs(sum / 2);
 }
 
 describe("derivedHull", () => {
   it("hull of a box model is its base rectangle", () => {
     const hull = derivedHull(box(), ANCHOR);
-    expect(hull?.type).toBe("Polygon");
-    expect(areaM2(hull?.coordinates[0] as number[][])).toBeGreaterThan(800 * 0.99);
-    expect(areaM2(hull?.coordinates[0] as number[][])).toBeLessThan(800 * 1.01);
+    assert(hull?.type === "Polygon", "expected a polygon hull");
+    const ring = nth(hull.coordinates, 0);
+    expect(areaM2(ring)).toBeGreaterThan(800 * 0.99);
+    expect(areaM2(ring)).toBeLessThan(800 * 1.01);
   });
 
   it("returns null for fewer than three ground vertices", () => {
@@ -39,18 +42,26 @@ describe("derivedHull", () => {
 });
 
 describe("acceptableHull", () => {
-  const hull = () => derivedHull(box(), ANCHOR) as NonNullable<ReturnType<typeof derivedHull>>;
+  const hullOf = (positions: Float32Array) => {
+    const hull = derivedHull(positions, ANCHOR);
+    assert.exists(hull, "expected a hull");
+    return hull;
+  };
+  const hull = () => hullOf(box());
 
   it("accepts a hull within its asset bounds", () => {
     expect(acceptableHull(hull(), [-73.98, 40.7591, -73.9792, 40.7593])).toBe(true);
   });
 
   it("rejects a hull smaller than 4 m²", () => {
-    const tiny = derivedHull(
-      new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]),
-      ANCHOR,
-    ) as NonNullable<ReturnType<typeof derivedHull>>;
+    const tiny = hullOf(new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]));
     expect(acceptableHull(tiny, [-73.98, 40.759, -73.979, 40.76])).toBe(false);
+  });
+
+  it("rejects a hull with a position missing a coordinate", () => {
+    const broken = structuredClone(hull());
+    nth(broken.coordinates, 0).splice(1, 1, [-73.9796]);
+    expect(acceptableHull(broken, [-73.98, 40.7591, -73.9792, 40.7593])).toBe(false);
   });
 
   it("rejects a hull larger than 1.5 times the bounds", () => {
@@ -89,6 +100,19 @@ describe("toReplacement", () => {
     expect(replacement.footprint?.type).toBe("MultiPolygon");
     expect(replacement.bbox).toEqual([1, 1, 2, 2]);
     expect(replacement.featureIds).toEqual([12]);
+  });
+
+  it("leaves a footprint position without two coordinates out of the bbox", () => {
+    const replacement = toReplacement(
+      "c",
+      {
+        type: "Polygon",
+        coordinates: [[[1, 1], [2, 1], [9], [2, 2], [1, 1]]],
+      },
+      ["way/1"],
+      [0, 0, 3, 3],
+    );
+    expect(replacement.bbox).toEqual([1, 1, 2, 2]);
   });
 
   it("uses the asset bounds without a footprint", () => {

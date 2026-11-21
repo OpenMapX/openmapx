@@ -56,7 +56,9 @@ export const SESSION_MIGRATIONS: readonly Migration[] = [
   { version: 3, statements: [DROP_NAVIGATION_EVENTS] },
 ];
 
-export const LATEST_SCHEMA_VERSION = SESSION_MIGRATIONS[SESSION_MIGRATIONS.length - 1].version;
+export const LATEST_SCHEMA_VERSION = Math.max(
+  ...SESSION_MIGRATIONS.map((migration) => migration.version),
+);
 
 /**
  * Applies every migration this database has not recorded yet.

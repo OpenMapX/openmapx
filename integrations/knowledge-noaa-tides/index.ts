@@ -153,7 +153,7 @@ export function setup(ctx: IntegrationContext): void {
   // station's coords; the PlaceTides widget (driven by lat/lng) then matches
   // that exact station via the nearest-station lookup.
   registerPlaceResolver("coops", async (value) => {
-    const id = value.split(":")[0].trim();
+    const id = value.replace(/:.*/s, "").trim();
     if (!id) return null;
     const stations = await loadStations(ctx.http, ctx.cache, ctx.log);
     const station = findStationById(stations, id);

@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { createFakeMap, expectStyleSwapIsLossless, nth } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -106,7 +106,7 @@ describe("RouteTrafficLayer", () => {
     const source = fake.state.sources.get("route-traffic-source");
     const data = source?.data as GeoJSON.FeatureCollection;
     expect(data.features.length).toBeGreaterThan(0);
-    expect(data.features[0].properties?.variant).toBe("active");
+    expect(nth(data.features, 0).properties?.variant).toBe("active");
   });
 
   it("widens bands and moves the active route's current span into the current-span source while navigating", () => {
@@ -117,7 +117,7 @@ describe("RouteTrafficLayer", () => {
         [8, 50],
         [8, 50.02],
       ],
-      [{ ...NAV_ROUTE, geometry: drawn.routes[1].geometry } as Route],
+      [{ ...NAV_ROUTE, geometry: nth(drawn.routes, 1).geometry } as Route],
     );
     useNavigationStore.getState().applyProgress({ alongMeters: 300 } as NavProgress);
 
@@ -141,7 +141,8 @@ describe("RouteTrafficLayer", () => {
     expect(staticActive?.properties?.startMeters).toBe(200);
     const staticAlt = staticData.features.find((feature) => feature.properties?.variant === "alt");
     expect(staticAlt?.properties?.startMeters).toBe(200);
-    expect((staticAlt?.geometry as GeoJSON.LineString).coordinates[0][0]).toBeLessThan(8.0035);
+    const altStart = nth((staticAlt?.geometry as GeoJSON.LineString).coordinates, 0);
+    expect(nth(altStart, 0)).toBeLessThan(8.0035);
 
     // The active layer's filter must exclude that same span (its startMeters,
     // 200, is behind alongMeters, 300) so it is not drawn twice.
@@ -159,8 +160,8 @@ describe("RouteTrafficLayer", () => {
       300,
     );
     expect(currentData.features).toHaveLength(1);
-    expect((currentData.features[0].geometry as GeoJSON.LineString).coordinates).toEqual(
-      (trimmed[0].geometry as GeoJSON.LineString).coordinates,
+    expect((nth(currentData.features, 0).geometry as GeoJSON.LineString).coordinates).toEqual(
+      (nth(trimmed, 0).geometry as GeoJSON.LineString).coordinates,
     );
   });
 

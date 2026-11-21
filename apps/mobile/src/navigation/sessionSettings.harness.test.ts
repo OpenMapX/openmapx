@@ -5,6 +5,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  straightRoutePoint,
   WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 
@@ -31,7 +32,7 @@ async function announcementIndexes(from: number, to: number): Promise<Record<str
   for (let index = from; index < to; index += 1) {
     harness.phone.clock.advance(1_000);
     const before = harness.phone.speech.cueIds.length;
-    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[index])]);
+    await harness.deliver([rawFix(harness.phone.clock, straightRoutePoint(index))]);
     for (const cueId of harness.phone.speech.cueIds.slice(before)) {
       const stage = cueId.match(/:1:(far|near|now)$/)?.[1];
       if (stage) at[stage] = index;

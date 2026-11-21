@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import {
   CONFIGURATION_RELEASE_IMAGE_NAMES,
   type ConfigurationReleaseDownloads,
@@ -24,7 +25,7 @@ function host(local: Set<string>, registryDown = false) {
   const pulled: string[] = [];
   const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
     if (args[0] === "image" && args[1] === "inspect") {
-      const reference = args[4] as string;
+      const reference = itemAt(args, 4);
       if (!local.has(reference)) throw Error("No such image");
       return {
         stdout: JSON.stringify({
@@ -39,8 +40,9 @@ function host(local: Set<string>, registryDown = false) {
     if (args[0] === "image" && args[1] === "pull") {
       if (registryDown) throw Error("registry unavailable");
       expect(args.slice(2, 4)).toEqual(["--platform", "linux/amd64"]);
-      pulled.push(args[4] as string);
-      local.add(args[4] as string);
+      const reference = itemAt(args, 4);
+      pulled.push(reference);
+      local.add(reference);
       return { stdout: "", stderr: "" };
     }
     throw Error(`Unexpected Docker call: ${args.join(" ")}`);

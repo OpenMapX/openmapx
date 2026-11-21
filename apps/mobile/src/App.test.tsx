@@ -191,9 +191,9 @@ describe("App bridge channel", () => {
 
   const bootstrap = () => String(mockWebViewProps.injectedJavaScriptBeforeContentLoaded);
   const nonceIn = (script: string) => {
-    const match = script.match(/nonce:"([^"]+)"/);
-    if (!match) throw new Error("bootstrap script publishes no nonce");
-    return match[1];
+    const nonce = script.match(/nonce:"([^"]+)"/)?.[1];
+    if (!nonce) throw new Error("bootstrap script publishes no nonce");
+    return nonce;
   };
 
   const decodedMessages = (): Array<{
@@ -210,6 +210,13 @@ describe("App bridge channel", () => {
         },
       ];
     });
+
+  /** The `at` parameter of a delivered deep link; the test fails if the link carries no query. */
+  const deepLinkAt = (message: { payload?: Record<string, unknown> } | undefined) => {
+    const query = message?.payload?.query;
+    if (typeof query !== "string") throw new Error("the delivered deep link has no query");
+    return new URLSearchParams(query).get("at");
+  };
 
   const post = async (nonce: string, message: Record<string, unknown>) => {
     await emitAsync(mockWebViewProps.onMessage, {
@@ -247,11 +254,11 @@ describe("App bridge channel", () => {
     });
     const intent = decodedMessages().find((m) => m.type === "deep-link.open");
     expect(intent?.payload?.kind).toBe("map");
-    expect(new URLSearchParams(intent?.payload?.query as string).get("at")).toBe("48.137,11.575");
+    expect(deepLinkAt(intent)).toBe("48.137,11.575");
     await act(async () => receiveUrl({ url: "geo:52.52,13.405" }));
     const warm = decodedMessages().filter((m) => m.type === "deep-link.open");
     expect(warm).toHaveLength(2);
-    expect(new URLSearchParams(warm[1].payload?.query as string).get("at")).toBe("52.52,13.405");
+    expect(deepLinkAt(warm[1])).toBe("52.52,13.405");
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com/" });
   });
 

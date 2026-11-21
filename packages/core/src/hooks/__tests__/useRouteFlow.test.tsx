@@ -39,7 +39,7 @@ describe("useRouteFlow", () => {
       wrapper: createQueryWrapper(),
     });
     await waitFor(() => expect(result.current.r0).toBeDefined());
-    expect(result.current.r0[0].los).toBe("heavy");
+    expect(result.current.r0?.[0]?.los).toBe("heavy");
     spy.mockRestore();
   });
 

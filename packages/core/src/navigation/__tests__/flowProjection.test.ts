@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../../types/roadConditions";
 import { haversineDistance } from "../../utils/coordinates";
+import { itemAt } from "../../utils/itemAt";
 import { angularDifference, bearingBetween, routeBearingAt } from "../bearing";
 import {
   type FlowOverlapCounters,
@@ -70,14 +71,15 @@ function hairpinRoute(radiusM: number): [number, number][] {
  * route between them.
  */
 function detourRoute(): [number, number][] {
-  return [
+  const corners: [number, number][] = [
     [0, -50],
     [0, 0],
     [150, 0],
     [150, 100],
     [0, 100],
     [0, 150],
-  ].map(([x, y]) => localToLngLat(x, y));
+  ];
+  return corners.map(([x, y]) => localToLngLat(x, y));
 }
 
 function segment(
@@ -107,11 +109,11 @@ describe("projectFlowToRoute", () => {
       route,
     );
     expect(spans).toHaveLength(1);
-    expect(spans[0].startMeters).toBeGreaterThan(450);
-    expect(spans[0].startMeters).toBeLessThan(550);
-    expect(spans[0].endMeters).toBeGreaterThan(950);
-    expect(spans[0].endMeters).toBeLessThan(1050);
-    expect(spans[0].los).toBe("queuing");
+    expect(spans[0]?.startMeters).toBeGreaterThan(450);
+    expect(spans[0]?.startMeters).toBeLessThan(550);
+    expect(spans[0]?.endMeters).toBeGreaterThan(950);
+    expect(spans[0]?.endMeters).toBeLessThan(1050);
+    expect(spans[0]?.los).toBe("queuing");
   });
 
   it("rejects a parallel road outside the corridor", () => {
@@ -166,7 +168,7 @@ describe("projectFlowToRoute", () => {
       route,
     );
     expect(spans).toHaveLength(1);
-    expect(spans[0].endMeters).toBeGreaterThan(850);
+    expect(spans[0]?.endMeters).toBeGreaterThan(850);
   });
 
   it("lets the worse level win where two spans overlap", () => {
@@ -229,10 +231,10 @@ describe("projectFlowToRoute", () => {
     ]);
     const spans = projectFlowToRoute([wanderer], route);
     expect(spans).toHaveLength(2);
-    expect(spans[0].startMeters).toBeGreaterThan(350);
-    expect(spans[0].endMeters).toBeLessThan(550);
-    expect(spans[1].startMeters).toBeGreaterThan(650);
-    expect(spans[1].endMeters).toBeLessThan(850);
+    expect(spans[0]?.startMeters).toBeGreaterThan(350);
+    expect(spans[0]?.endMeters).toBeLessThan(550);
+    expect(spans[1]?.startMeters).toBeGreaterThan(650);
+    expect(spans[1]?.endMeters).toBeLessThan(850);
     // The diverged middle must not be claimed by either span.
     expect(spans.some((s) => s.startMeters <= 600 && s.endMeters >= 600)).toBe(false);
   });
@@ -339,8 +341,8 @@ describe("projectFlowToRoute", () => {
       route,
     );
     expect(spans).toHaveLength(1);
-    expect(spans[0].startMeters).toBeGreaterThan(450);
-    expect(spans[0].endMeters).toBeLessThan(1550);
+    expect(spans[0]?.startMeters).toBeGreaterThan(450);
+    expect(spans[0]?.endMeters).toBeLessThan(1550);
   });
 
   it("does not let a straight chord across a route detour claim the whole loop", () => {
@@ -479,14 +481,14 @@ function oracleSegmentSpans(
   };
 
   for (const sample of oracleSampleIndices(coords.length)) {
-    const here = coords[sample];
+    const here = itemAt(coords, sample);
     const snap = snapToRoute(route, here);
     if (snap.deviationMeters > corridor) {
       closeRun();
       continue;
     }
-    const ahead = coords[Math.min(sample + 1, coords.length - 1)];
-    const behind = coords[Math.max(sample - 1, 0)];
+    const ahead = itemAt(coords, Math.min(sample + 1, coords.length - 1));
+    const behind = itemAt(coords, Math.max(sample - 1, 0));
     if (
       angularDifference(bearingBetween(behind, ahead), routeBearingAt(route, snap.segmentIndex)) >
       tolerance
@@ -527,10 +529,9 @@ function legacyResolveOverlaps(
     (a, b) => a - b,
   );
   const intervals: RankedFlowSpan[] = [];
-  for (let i = 1; i < bounds.length; i++) {
+  for (const [i, end] of bounds.entries()) {
     const start = bounds[i - 1];
-    const end = bounds[i];
-    if (end - start <= 0) continue;
+    if (start === undefined || end - start <= 0) continue;
     const mid = (start + end) / 2;
     let winner: RankedFlowSpan | null = null;
     for (const span of raw) {
@@ -587,7 +588,7 @@ const POLAR_BOW_ROUTE: LngLat[] = [
 /** Samples straddling the top of that bow, all sitting on the route itself. */
 function polarBowSegment(): RoadFlowSegment {
   const coords = Array.from({ length: 7 }, (_, i) =>
-    greatCirclePoint(POLAR_BOW_ROUTE[0], POLAR_BOW_ROUTE[1], 0.4 + i * 0.03),
+    greatCirclePoint(itemAt(POLAR_BOW_ROUTE, 0), itemAt(POLAR_BOW_ROUTE, 1), 0.4 + i * 0.03),
   );
   return segment(coords, { id: "bow", los: "queuing" });
 }
@@ -752,8 +753,10 @@ describe("projectFlowToRoute against direct Turf snapping", () => {
     }
     const spans = projectFlowToRoute([seg], POLAR_BOW_ROUTE);
     expect(spans).toHaveLength(1);
-    expect(spans[0].los).toBe("queuing");
-    expect(spans[0].endMeters - spans[0].startMeters).toBeGreaterThan(6000);
+    const [span] = spans;
+    assert.isDefined(span);
+    expect(span.los).toBe("queuing");
+    expect(span.endMeters - span.startMeters).toBeGreaterThan(6000);
   });
 
   it("matches the oracle on seeded random routes and observations", () => {
@@ -798,13 +801,16 @@ function randomRawSpan(
   end: number,
   ordinal: number,
 ): RankedFlowSpan {
-  const los = RANDOM_LOS[Math.floor(rand() * RANDOM_LOS.length)];
+  const los = itemAt(RANDOM_LOS, Math.floor(rand() * RANDOM_LOS.length));
   const speedRatio = rand() < 0.3 ? undefined : Math.round(rand() * 20) / 20;
   return {
     startMeters: start,
     endMeters: end,
     los,
-    confidence: (["measured", "estimated", "typical", "unknown"] as const)[Math.floor(rand() * 4)],
+    confidence: itemAt(
+      ["measured", "estimated", "typical", "unknown"] as const,
+      Math.floor(rand() * 4),
+    ),
     rank: flowSeverityRank(los, speedRatio),
     ...(speedRatio !== undefined && { speedRatio }),
     ...(ordinal % 3 === 0 && { currentSpeedKph: 10 + ordinal }),
@@ -832,8 +838,8 @@ function rawSpanSet(shape: string, rand: () => number, count: number): RankedFlo
         break;
       case "identical":
         // Every span starts and ends on one of four shared coordinates.
-        start = [0, 100, 200, 300][Math.floor(rand() * 4)];
-        end = start + [0, 100, 200, 300][Math.floor(rand() * 4)];
+        start = itemAt([0, 100, 200, 300], Math.floor(rand() * 4));
+        end = start + itemAt([0, 100, 200, 300], Math.floor(rand() * 4));
         break;
       case "zeroLength":
         start = Math.floor(rand() * 500);
@@ -852,7 +858,7 @@ function shuffled<T>(items: readonly T[], rand: () => number): T[] {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
+    [out[i], out[j]] = [itemAt(out, j), itemAt(out, i)];
   }
   return out;
 }
@@ -871,7 +877,7 @@ describe("resolveFlowOverlaps against the previous all-pairs resolver", () => {
             [40, 60],
             [0, 0],
             [10, 500],
-          ]) {
+          ] as const) {
             expect(
               resolveFlowOverlaps(raw, minSpan, mergeGap),
               `${shape}/${iteration}/${minSpan}`,
@@ -1019,10 +1025,13 @@ describe("captured flow attribution boundaries", () => {
       { fieldContributors: { ratio: [{ ...a }], los: [{ ...b }] } },
     );
     const [span] = projectFlowToRoute([input], route);
+    assert.isDefined(span);
     expect(span.fieldContributors).toEqual({ ratio: [a], los: [b] });
     expect(span.fieldContributors).not.toBe(input.fieldContributors);
-    input.fieldContributors!.ratio![0].name = "Changed after projection";
-    expect(span.fieldContributors?.ratio?.[0].name).toBe("A");
+    const ratioReceipt = input.fieldContributors?.ratio?.[0];
+    assert.isDefined(ratioReceipt);
+    ratioReceipt.name = "Changed after projection";
+    expect(span.fieldContributors?.ratio?.[0]?.name).toBe("A");
   });
   it("does not join equal-looking intervals supplied by different sources", () => {
     const spans = resolveFlowOverlaps(

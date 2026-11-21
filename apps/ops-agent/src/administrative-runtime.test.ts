@@ -10,9 +10,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
 import { services as coreServices, services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { testExecution } from "./__fixtures__/execution";
 import {
@@ -731,7 +732,8 @@ describe("administrative build runtime", () => {
             buildCommand: serviceId,
           })),
         runFixedCli: async (args) => {
-          const id = args[2]!;
+          const [, , id] = args;
+          assert.isDefined(id);
           calls.push(id);
           if (mode === "all-failed") throw Error("build failed");
           if (id === "beta") {
@@ -793,7 +795,9 @@ describe("administrative build runtime", () => {
           buildCommand: serviceId,
         })),
       runFixedCli: async (args) => {
-        calls.push(args[2]!);
+        const [, , id] = args;
+        assert.isDefined(id);
+        calls.push(id);
       },
     });
     const ctx = context("services.buildAll");
@@ -871,7 +875,8 @@ describe("administrative release runtime", () => {
         expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
         return "a".repeat(64);
       }
-      if (args[0] === "cp") writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
+      if (args[0] === "cp")
+        writeFileSync(itemAt(args, args.length - 1), manifestText, { mode: 0o600 });
       return "";
     };
     const context = {
@@ -1104,8 +1109,12 @@ describe("administrative release runtime", () => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) return "";
-        const ps = /ps -q ([a-z-]+)$/.exec(joined);
-        if (ps) return containers[ps[1]].repeat(64);
+        const [, psService] = /ps -q ([a-z-]+)$/.exec(joined) ?? [];
+        if (psService !== undefined) {
+          const container = containers[psService];
+          assert.isDefined(container, `no fixture container for ${psService}`);
+          return container.repeat(64);
+        }
         if (args.includes("{{.Image}}"))
           return `sha256:${String(args.at(-1)).slice(0, 1).repeat(64)}`;
         if (args.includes("{{json .RepoDigests}}")) {

@@ -10,8 +10,8 @@ import {
 export function setup(ctx: IntegrationContext): void {
   ctx.registerPhotoProvider(createOsmImagePhotoProvider(ctx));
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.status(400).send({ error: "Invalid coordinates" });

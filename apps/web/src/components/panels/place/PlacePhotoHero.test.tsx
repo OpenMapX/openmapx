@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { PlacePhotoHero } from "./PlacePhotoHero";
 
@@ -58,7 +59,7 @@ describe("PlacePhotoHero", () => {
     expect(container.textContent).not.toContain("&amp;");
     expect(screen.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
       "href",
-      photo.licensing?.bindings[0].license.url,
+      nth(photo.licensing?.bindings ?? [], 0).license.url,
     );
   });
   it("defers incomplete Commons bytes even when labeled as Wikipedia", () => {

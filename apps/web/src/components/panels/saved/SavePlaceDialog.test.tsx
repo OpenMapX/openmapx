@@ -2,7 +2,7 @@ import { API_ENDPOINTS, createPlace, type SavedList, type SavedPlace } from "@op
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, userEvent, waitFor } from "@/test";
+import { cleanup, nth, render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
   useSession: () => ({ data: { user: { id: "u1" } } }),
@@ -372,7 +372,7 @@ describe("saved-place failure and creation reconciliation", () => {
       );
       expect(fixture.rows).toHaveLength(outcome === "save failure" ? 0 : 1);
       if (outcome === "switch place") {
-        expect(fixture.rows[0].placeId).toBe(place.id);
+        expect(nth(fixture.rows, 0).placeId).toBe(place.id);
         expect(fixture.client.getQueryData(["savedCheck", other.id])).toEqual([]);
         expect(
           screen
@@ -428,15 +428,15 @@ it("captures immutable name/address/coordinate field winners at the save action"
   await waitFor(() => expect(screen.getByText("Trip")).toBeInTheDocument());
   await userEvent.click(screen.getByText("Trip"));
   await waitFor(() => expect(fixture.post).toHaveBeenCalled());
-  expect(fixture.post.mock.calls[0][1]).toEqual(
+  expect(nth(fixture.post.mock.calls, 0)[1]).toEqual(
     expect.objectContaining({
       fieldContributors: { name: [name], address: [], lat: [geometry], lng: [geometry] },
     }),
   );
   name.name = "Changed catalogue";
   expect(
-    (fixture.post.mock.calls[0][1] as { fieldContributors: { name: { name: string }[] } })
-      .fieldContributors.name[0].name,
+    (nth(fixture.post.mock.calls, 0)[1] as { fieldContributors: { name: { name: string }[] } })
+      .fieldContributors.name[0]?.name,
   ).toBe("Original name supplier");
   await act(async () => fixture.finishPost());
 });

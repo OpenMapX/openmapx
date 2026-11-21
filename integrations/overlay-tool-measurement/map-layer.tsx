@@ -13,7 +13,7 @@ import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useMeasurementStore } from "./store";
+import { closedRing, useMeasurementStore } from "./store";
 
 const SOURCE_ID = "measurement-source";
 const LINE_CASING_LAYER = "measurement-line-casing";
@@ -52,8 +52,8 @@ function totalLineLength(points: LngLat[]): number {
 }
 
 function polygonArea(points: LngLat[]): number {
-  if (points.length < 3) return 0;
-  const ring = [...points, points[0]];
+  const ring = closedRing(points);
+  if (!ring) return 0;
   const poly = turfPolygon([ring]);
   return area(poly);
 }
@@ -114,8 +114,8 @@ function buildGeoJSON(
   }
 
   // Polygon
-  if (mode === "polygon" && points.length >= 3) {
-    const ring = [...points, points[0]];
+  const ring = closedRing(points);
+  if (mode === "polygon" && ring) {
     polygonGeoJSON.features.push({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: [ring] },
@@ -137,12 +137,11 @@ function buildGeoJSON(
   }
 
   // Segment labels
-  const segmentPoints =
-    mode === "polygon" && points.length >= 3 && isFinalized ? [...points, points[0]] : points;
+  const segmentPoints = mode === "polygon" && ring && isFinalized ? ring : points;
 
-  for (let i = 0; i < segmentPoints.length - 1; i++) {
-    const a = segmentPoints[i];
-    const b = segmentPoints[i + 1];
+  for (const [i, b] of segmentPoints.entries()) {
+    const a = segmentPoints[i - 1];
+    if (!a) continue;
     const dist = segmentDistance(a, b);
     const mid = midpoint(a, b);
     labelsGeoJSON.features.push({
@@ -153,9 +152,9 @@ function buildGeoJSON(
   }
 
   // Total / area label
-  if (mode === "line" && points.length >= 2) {
+  const lastPoint = points.at(-1);
+  if (mode === "line" && points.length >= 2 && lastPoint) {
     const total = totalLineLength(points);
-    const lastPoint = points[points.length - 1];
     labelsGeoJSON.features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: lastPoint },
@@ -350,7 +349,9 @@ export function MeasurementLayer() {
   const updateRubberBand = useCallback(
     (cursorPos: LngLat | null) => {
       const { points: pts, isFinalized: fin, mode: m } = useMeasurementStore.getState();
-      if (!cursorPos || pts.length === 0 || fin) {
+      const firstPt = pts[0];
+      const lastPt = pts.at(-1);
+      if (!cursorPos || !firstPt || !lastPt || fin) {
         publishGeoJson([
           {
             sourceId: RUBBERBAND_SOURCE,
@@ -360,7 +361,6 @@ export function MeasurementLayer() {
         return;
       }
 
-      const lastPt = pts[pts.length - 1];
       const features: GeoJSON.Feature[] = [
         {
           type: "Feature",
@@ -373,7 +373,7 @@ export function MeasurementLayer() {
       if (m === "polygon" && pts.length >= 2) {
         features.push({
           type: "Feature",
-          geometry: { type: "LineString", coordinates: [cursorPos, pts[0]] },
+          geometry: { type: "LineString", coordinates: [cursorPos, firstPt] },
           properties: {},
         });
       }

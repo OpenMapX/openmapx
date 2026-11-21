@@ -43,7 +43,7 @@ describe("shared SIRI feed acquisition", () => {
     const f = fixture();
     const client = createSiriClient(f.ctx, f.now);
     await client.refresh();
-    expect((await client.get("2026-11-06", "26839"))?.records[0].calls).toHaveLength(27);
+    expect((await client.get("2026-11-06", "26839"))?.records[0]?.calls).toHaveLength(27);
     expect(f.fetch).toHaveBeenCalledTimes(1);
     const values = [...f.runtime.values.values()].map((v) => JSON.stringify(v.value));
     expect(values.some((v) => v.includes("<Siri"))).toBe(false);
@@ -115,7 +115,7 @@ it("uses conditional requests and renews compact buckets on 304 without fresheni
   await client.refresh();
   expect(f.fetch).toHaveBeenCalledTimes(2);
   expect(f.fetch.mock.calls[1]?.[1]?.headers).toMatchObject({ "If-None-Match": '"v1"' });
-  expect((await client.get("2026-11-06", "26839"))?.records[0].recordedAt).toBe(
+  expect((await client.get("2026-11-06", "26839"))?.records[0]?.recordedAt).toBe(
     "2026-11-06T18:30:58.165Z",
   );
 });

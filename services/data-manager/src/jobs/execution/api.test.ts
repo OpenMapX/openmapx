@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import { afterEach, expect, it } from "vitest";
 import { registerApi } from "../../api.js";
@@ -15,7 +16,9 @@ it("keeps observation and mutation routes closed without a durable receiver", as
     "ops-agent": "synthetic-execution-token",
     "host-cli": "synthetic-execution-token-cli",
   });
-  registerApi(app, { dataDir: "/tmp/openmapx-nonexistent-execution-fixture" });
+  registerApi(app, {
+    dataDir: fileURLToPath(new URL("./missing-execution-data-dir/", import.meta.url)),
+  });
   const headers = { authorization: "Bearer synthetic-execution-token" };
   const id = "00000000-0000-4000-8000-000000000001";
   for (const request of [

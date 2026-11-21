@@ -21,8 +21,8 @@ const ALLOWED_IMAGE_MIMES: ReadonlySet<string> = new Set([
 ]);
 
 function parseSubject(query: Record<string, string>): ReviewSubject | null {
-  const lat = Number.parseFloat(query.lat);
-  const lng = Number.parseFloat(query.lng);
+  const lat = Number.parseFloat(query.lat ?? "");
+  const lng = Number.parseFloat(query.lng ?? "");
   const name = query.name?.trim();
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
@@ -143,12 +143,11 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(400).send({ error: "Missing dataUrl in request body" });
         return;
       }
-      const match = body.dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
-      if (!match) {
+      const [, mimeType, base64] = body.dataUrl.match(/^data:([^;,]+);base64,(.+)$/) ?? [];
+      if (mimeType === undefined || base64 === undefined) {
         reply.status(400).send({ error: "dataUrl must be a base64 data URL" });
         return;
       }
-      const [, mimeType, base64] = match;
       const normalizedMime = mimeType.toLowerCase();
       if (!ALLOWED_IMAGE_MIMES.has(normalizedMime)) {
         reply.status(415).send({ error: "Unsupported image type" });

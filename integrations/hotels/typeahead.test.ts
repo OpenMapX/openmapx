@@ -8,9 +8,9 @@ describe("parseTripcomKeywords", () => {
     // 2 keywords in the fixture: one tripType "H" (id 2565026) + one "LM"
     // landmark with a null hotelId — only the hotel survives.
     expect(cands).toHaveLength(1);
-    expect(cands[0].id).toBe("2565026");
-    expect(cands[0].lat).toBeCloseTo(31.2, 1);
-    expect(cands[0].lng).toBeCloseTo(29.9, 1);
+    expect(cands[0]?.id).toBe("2565026");
+    expect(cands[0]?.lat).toBeCloseTo(31.2, 1);
+    expect(cands[0]?.lng).toBeCloseTo(29.9, 1);
   });
 });
 

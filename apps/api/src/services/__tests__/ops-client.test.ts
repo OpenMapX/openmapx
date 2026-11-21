@@ -343,7 +343,11 @@ describe("bounded async ops helpers", () => {
       },
     ];
     const client = fakeClient({
-      status: vi.fn(async () => statuses.shift() as OpsJobStatusFor<OpsOperationKind>),
+      status: vi.fn(async (): Promise<OpsJobStatusFor<OpsOperationKind>> => {
+        const status = statuses.shift();
+        if (!status) throw new Error("The test polled more statuses than it scripted");
+        return status;
+      }),
     });
 
     await expect(

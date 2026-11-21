@@ -1,5 +1,6 @@
 import {
   type CurrentWeather,
+  itemAt,
   lerpHex,
   solarAltitudeDeg,
   solarAzimuthDeg,
@@ -197,13 +198,13 @@ function roundAngle(degrees: number): number {
 }
 
 function keyframeAt(altitudeDeg: number): Omit<Keyframe, "altitudeDeg"> {
-  const first = SCENE_KEYFRAMES[0] as Keyframe;
-  const last = SCENE_KEYFRAMES[SCENE_KEYFRAMES.length - 1] as Keyframe;
+  const first = itemAt(SCENE_KEYFRAMES, 0);
+  const last = itemAt(SCENE_KEYFRAMES, SCENE_KEYFRAMES.length - 1);
   if (altitudeDeg <= first.altitudeDeg) return first;
   if (altitudeDeg >= last.altitudeDeg) return last;
   for (let i = 1; i < SCENE_KEYFRAMES.length; i++) {
-    const low = SCENE_KEYFRAMES[i - 1] as Keyframe;
-    const high = SCENE_KEYFRAMES[i] as Keyframe;
+    const low = itemAt(SCENE_KEYFRAMES, i - 1);
+    const high = itemAt(SCENE_KEYFRAMES, i);
     if (altitudeDeg > high.altitudeDeg) continue;
     const t = (altitudeDeg - low.altitudeDeg) / (high.altitudeDeg - low.altitudeDeg);
     return {

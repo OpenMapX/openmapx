@@ -1,5 +1,5 @@
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { routeJsonSchema } from "../schema";
 import {
   savedCreateListSchema,
@@ -104,8 +104,10 @@ it("can emit reused saved receipt structures as references without changing thei
   expect(schema.definitions).toBeDefined();
   const properties = schema.properties as Record<string, { $ref: string }>;
   const definitions = schema.definitions as Record<string, { items: { $ref: string } }>;
-  const name = definitions[properties.name.$ref.split("/").at(-1) ?? ""];
-  const latitude = definitions[properties.lat.$ref.split("/").at(-1) ?? ""];
+  const name = definitions[properties.name?.$ref.split("/").at(-1) ?? ""];
+  const latitude = definitions[properties.lat?.$ref.split("/").at(-1) ?? ""];
+  assert.isDefined(name);
+  assert.isDefined(latitude);
   expect(name.items.$ref).toBeTruthy();
   expect(latitude.items.$ref).toBe(name.items.$ref);
 });

@@ -692,9 +692,9 @@ function normalizeExtractedArtifactRoot(extractRoot: string, promoted: string): 
   const entries = readdirSync(extractRoot, { withFileTypes: true }).filter(
     (entry) => !entry.name.startsWith("."),
   );
-  const dirs = entries.filter((entry) => entry.isDirectory());
-  if (entries.length === 1 && dirs.length === 1) {
-    const nested = join(extractRoot, dirs[0].name);
+  const [onlyEntry, ...otherEntries] = entries;
+  if (onlyEntry?.isDirectory() && otherEntries.length === 0) {
+    const nested = join(extractRoot, onlyEntry.name);
     if (existsSync(join(nested, "manifest.json"))) {
       renameSync(nested, promoted);
       rmSync(extractRoot, { recursive: true, force: true });
@@ -1576,6 +1576,12 @@ function publicationState(handle: IntegrationPublication) {
   if (!state) throw Error("Unverified integration publication");
   return state;
 }
+/** Releases the component lock a live publication holds; settling one without it is refused. */
+function releasePublicationLock(state: { lock: IntegrationComponentLock | null }): void {
+  if (!state.lock) throw Error("Unverified integration component lock");
+  releaseIntegrationComponentLock(state.lock);
+  state.lock = null;
+}
 export function assertIntegrationPublicationJournal(
   publication: IntegrationPublication,
   journal: IntegrationPublicationJournal,
@@ -1686,7 +1692,8 @@ export async function publishPreparedIntegration(
         : input.expectedPreviousIdentity !== null)
     )
       throw Error("Integration destination identity changed since inspection");
-    const lockState = componentLocks.get(lock)!;
+    const lockState = componentLocks.get(lock);
+    if (!lockState) throw Error("Unverified integration component lock");
     receipt = {
       version: 1,
       transactionId: input.transactionId,
@@ -1937,10 +1944,7 @@ export async function settleIntegrationPublication(
           false,
         );
       }
-      if (state.lock) {
-        releaseIntegrationComponentLock(state.lock!);
-        state.lock = null;
-      }
+      if (state.lock) releasePublicationLock(state);
       return {
         outcome: receipt.outcome as "committed" | "restored",
         contentDigest:
@@ -1965,8 +1969,7 @@ export async function settleIntegrationPublication(
         );
       receipt.outcome = "committed";
       writePublication(state.context, receipt);
-      releaseIntegrationComponentLock(state.lock!);
-      state.lock = null;
+      releasePublicationLock(state);
       return { outcome: "committed", contentDigest: receipt.preparation.contentDigest };
     }
     if (receipt.outcome === "commit-requested")
@@ -2073,8 +2076,7 @@ export async function settleIntegrationPublication(
     }
     removeOwned("rejected", receipt.preparation.content, receipt.preparation.contentDigest, false);
     removeOwned("content", receipt.preparation.content, receipt.preparation.contentDigest, false);
-    releaseIntegrationComponentLock(state.lock!);
-    state.lock = null;
+    releasePublicationLock(state);
     return { outcome: "restored", contentDigest: receipt.previousContentDigest };
   } finally {
     if (guard) {

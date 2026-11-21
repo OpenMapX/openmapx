@@ -2,7 +2,7 @@ import {
   createMockIntegrationContext,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, test } from "vitest";
+import { assert, describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { setup } from "../index.js";
 
@@ -32,12 +32,13 @@ describe("createOpenConditionsClient", () => {
     const client = createOpenConditionsClient(
       { ...URL_ONLY, OPENCONDITIONS_OPERATOR_TOKEN: " s3cret " },
       http,
-    )!;
+    );
+    assert.exists(client);
     expect(client.baseUrl).toBe("http://oc.test:4100");
     await client.get("/situations", { bbox: "1,2,3,4", limit: 10, kind: undefined });
     expect(http.calls).toHaveLength(1);
-    expect(http.calls[0]!.url).toBe("http://oc.test:4100/situations");
-    expect(http.calls[0]!.options).toMatchObject({
+    expect(http.calls[0]?.url).toBe("http://oc.test:4100/situations");
+    expect(http.calls[0]?.options).toMatchObject({
       params: { bbox: "1,2,3,4", limit: 10 },
       headers: { Authorization: "Bearer s3cret" },
     });
@@ -48,21 +49,27 @@ describe("createOpenConditionsClient", () => {
     const client = createOpenConditionsClient(
       { ...URL_ONLY, OPENCONDITIONS_OPERATOR_TOKEN: "" },
       http,
-    )!;
+    );
+    assert.exists(client);
     await client.get("/feeds/status");
-    const headers = (http.calls[0]!.options?.headers ?? {}) as Record<string, string>;
+    const [call] = http.calls;
+    assert.isDefined(call);
+    const headers = (call.options?.headers ?? {}) as Record<string, string>;
     expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain("authorization");
   });
 
   test("the client passes its timeout and response cap and never asks for a shared cache", async () => {
     const http = fakeHttpClient({ "/segments/conditions.json": {} });
-    const client = createOpenConditionsClient(URL_ONLY, http)!;
+    const client = createOpenConditionsClient(URL_ONLY, http);
+    assert.exists(client);
     await client.get("/segments/conditions.json", undefined, {
       timeoutMs: 2000,
       maxResponseBytes: 1024,
     });
-    expect(http.calls[0]!.options).toMatchObject({ timeoutMs: 2000, maxResponseBytes: 1024 });
-    expect(http.calls[0]!.options?.cache).toBeUndefined();
+    const [call] = http.calls;
+    assert.isDefined(call);
+    expect(call.options).toMatchObject({ timeoutMs: 2000, maxResponseBytes: 1024 });
+    expect(call.options?.cache).toBeUndefined();
   });
 
   test("an optional read is null on 404 and fails on any other error status", async () => {
@@ -76,18 +83,21 @@ describe("createOpenConditionsClient", () => {
     const client = createOpenConditionsClient(
       { ...URL_ONLY, OPENCONDITIONS_OPERATOR_TOKEN: "s3cret" },
       http,
-    )!;
+    );
+    assert.exists(client);
 
     expect(await client.getOptional("/features/missing")).toBeNull();
     await expect(client.getOptional("/features/broken")).rejects.toThrow(/500/);
     expect(await client.getOptional("/features/x", { expand: "latest" })).toEqual({
       record: { id: "x" },
     });
-    expect(http.calls[2]!.options).toMatchObject({
+    const third = http.calls[2];
+    assert.isDefined(third);
+    expect(third.options).toMatchObject({
       params: { expand: "latest" },
       headers: { Authorization: "Bearer s3cret" },
       contentTypes: ["application/json"],
     });
-    expect(http.calls[2]!.options?.cache).toBeUndefined();
+    expect(third.options?.cache).toBeUndefined();
   });
 });

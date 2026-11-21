@@ -87,9 +87,9 @@ export function simulatePositions(geometry: LngLat[], options: SimulateOptions =
 
   const fixes: FixInput[] = [];
   let t = 0;
-  for (let i = 0; i < geometry.length - 1; i++) {
-    const a = geometry[i];
-    const b = geometry[i + 1];
+  for (const [i, b] of geometry.entries()) {
+    const a = geometry[i - 1];
+    if (!a) continue;
     const segLen = haversine(a, b);
     if (segLen === 0) continue;
     const heading = segmentBearing(a, b);
@@ -105,8 +105,9 @@ export function simulatePositions(geometry: LngLat[], options: SimulateOptions =
       t++;
     }
   }
-  const last = geometry[geometry.length - 1];
-  const prev = geometry[geometry.length - 2] ?? last;
+  const last = geometry.at(-1);
+  if (!last) return fixes;
+  const prev = geometry.at(-2) ?? last;
   const lastHeading = segmentBearing(prev, last);
   fixes.push({
     coords: applyPerpOffset(last, lastHeading, offsetMeters),

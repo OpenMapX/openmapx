@@ -1,5 +1,5 @@
 import { haversineDistance, type LngLat } from "@openmapx/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoundCondition, BoundSpan } from "../jobs/traffic/conditions-to-edges.js";
 import { plannedClosures, sampleSpan } from "../jobs/traffic/planned-closures.js";
 import { boundCondition, effect, evidence } from "./fixtures/road-condition.js";
@@ -34,11 +34,17 @@ describe("sampleSpan", () => {
   it("spaces samples at most 100 m apart, clear of both ends, in travel direction", () => {
     const samples = sampleSpan(NORTH);
     expect(samples.length).toBe(4);
-    const along = samples.map((s) => haversineDistance(NORTH[0]!, [s.lon, s.lat]));
+    const [start, end] = NORTH;
+    assert.isDefined(start);
+    assert.isDefined(end);
+    const along = samples.map((s) => haversineDistance(start, [s.lon, s.lat]));
     expect(along[0]).toBeCloseTo(15, 0);
-    expect(along.at(-1)).toBeCloseTo(haversineDistance(NORTH[0]!, NORTH[1]!) - 15, 0);
-    for (let i = 1; i < along.length; i++)
-      expect(along[i]! - along[i - 1]!).toBeLessThanOrEqual(100);
+    expect(along.at(-1)).toBeCloseTo(haversineDistance(start, end) - 15, 0);
+    let previous: number | undefined;
+    for (const metres of along) {
+      if (previous !== undefined) expect(metres - previous).toBeLessThanOrEqual(100);
+      previous = metres;
+    }
     expect(samples.every((s) => s.heading === 0)).toBe(true);
     const south = sampleSpan([...NORTH].reverse());
     expect(south.every((s) => s.heading === 180)).toBe(true);
@@ -55,7 +61,9 @@ describe("sampleSpan", () => {
   });
 
   it("never takes a heading from a zero-length segment", () => {
-    expect(sampleSpan([NORTH[0]!, NORTH[0]!])).toEqual([]);
+    const [start] = NORTH;
+    assert.isDefined(start);
+    expect(sampleSpan([start, start])).toEqual([]);
   });
 });
 
@@ -110,7 +118,9 @@ describe("plannedClosures", () => {
       closure({}, effect("fr1/lanes", "lane_restriction", { vehicleImpact: "one_lane_closed" })),
       closure({ origin: "crowd", routingEligible: false }),
     ];
-    conditions[1]!.routingEvidence = evidence({
+    const [, laneRestriction] = conditions;
+    assert.isDefined(laneRestriction);
+    laneRestriction.routingEvidence = evidence({
       effect_id: "fr1/lanes",
       effect_kind: "lane_restriction",
     });

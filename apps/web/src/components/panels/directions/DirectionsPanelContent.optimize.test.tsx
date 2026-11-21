@@ -5,6 +5,7 @@ import {
   createQueryWrapper,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   waitFor,
@@ -84,7 +85,7 @@ async function startOptimize() {
   render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
   fireEvent.click(screen.getByRole("button", { name: /directions.optimizeStopOrder/ }));
   await waitFor(() => expect(optimizeRequests).toHaveLength(1));
-  return optimizeRequests[0];
+  return nth(optimizeRequests, 0);
 }
 
 /** Answers the pending request and waits until the mutation and its callbacks have settled. */

@@ -1,4 +1,8 @@
-import { createPassthroughCache, fakeHttpClient } from "@openmapx/integration-framework/testing";
+import {
+  createPassthroughCache,
+  fakeHttpClient,
+  nth,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseDeNwBielefeldCsv } from "../de-nw-bielefeld-client.js";
 import { parseDeNwWuppertalGeoJson } from "../de-nw-wuppertal-client.js";
@@ -26,9 +30,12 @@ describe("static car-sharing feeds", () => {
       ),
     );
 
-    const [station] = await deStadtteilautoClient.search(
-      { west: 7.5, south: 51.9, east: 7.7, north: 52 },
-      { cache: createPassthroughCache(), http: fakeHttpClient() },
+    const station = nth(
+      await deStadtteilautoClient.search(
+        { west: 7.5, south: 51.9, east: 7.7, north: 52 },
+        { cache: createPassthroughCache(), http: fakeHttpClient() },
+      ),
+      0,
     );
 
     expect(station.capacity).toBe(3);
@@ -37,20 +44,21 @@ describe("static car-sharing feeds", () => {
   });
 
   it("maps a Bielefeld station's capacity without claiming availability", () => {
-    const [station] = parseDeNwBielefeldCsv(
+    const stations = parseDeNwBielefeldCsv(
       [
         "WKT;gid;website;name;addr_street;addr_housenumber;level;capacity;description",
         '"POINT (8.5233383 52.0284764)";2;https://example.com/book;Siggi;Weststraße;68;;2;"Hinter dem Kiosk."',
       ].join("\n"),
     );
 
+    const station = nth(stations, 0);
     expect(station.capacity).toBe(2);
     expect(station.availableVehicles).toBeUndefined();
     expect(station.isActive).toBeUndefined();
   });
 
   it("keeps a Wuppertal station with no listed vehicles active-unknown and leaves a missing operator absent", () => {
-    const [station] = parseDeNwWuppertalGeoJson(
+    const stations = parseDeNwWuppertalGeoJson(
       JSON.stringify({
         type: "FeatureCollection",
         features: [
@@ -63,6 +71,7 @@ describe("static car-sharing feeds", () => {
       }),
     );
 
+    const station = nth(stations, 0);
     expect(station.capacity).toBe(0);
     expect(station.availableVehicles).toBeUndefined();
     expect(station.isActive).toBeUndefined();

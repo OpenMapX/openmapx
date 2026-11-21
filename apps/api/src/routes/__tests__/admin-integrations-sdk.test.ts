@@ -577,7 +577,7 @@ describe("actual integration producers through generated SDK", () => {
         await reached.promise;
         resume.resolve();
         expect(await ordinary).toMatchObject({ status: 500 });
-        expect(configDb.rows[0].config).toEqual({ label: "old", enabled: kind === "disable" });
+        expect(configDb.rows[0]?.config).toEqual({ label: "old", enabled: kind === "disable" });
         expect(configDb.writes).toBe(0);
       } finally {
         resume.resolve();

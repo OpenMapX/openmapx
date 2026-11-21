@@ -4,6 +4,7 @@ import {
   resolveToken,
   sharedStrings,
 } from "@openmapx/integration-framework/strings";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { MessageSign } from "@openmapx/mobility-core/message-sign";
 import { describe, expect, it } from "vitest";
 import { mapSignToDetail, mapSignToResult, variantOf } from "../mapper.js";
@@ -83,17 +84,20 @@ describe("mapSignToResult", () => {
 describe("mapSignToDetail", () => {
   it("shows each page with its numbered lines, the first with when it was shown", () => {
     const detail = mapSignToDetail(sign());
-    const [first, second, info] = detail.sections;
-    expect(text(first!.title)).toBe("Page 1 of 2");
-    expect(first!.rows?.map(([label, line]) => [text(label), line])).toEqual([
+    expect(detail.sections).toHaveLength(3);
+    const first = nth(detail.sections, 0);
+    const second = nth(detail.sections, 1);
+    const info = nth(detail.sections, 2);
+    expect(text(first.title)).toBe("Page 1 of 2");
+    expect(first.rows?.map(([label, line]) => [text(label), line])).toEqual([
       ["Line 1", "CRASH AHEAD"],
       ["Line 2", "EXIT 7"],
     ]);
-    expect(text(first!.caption)).toBe("Shown since");
-    expect(first!.captionTimestamp).toBe(AT);
-    expect(text(second!.title, "de")).toBe("Seite 2 von 2");
-    expect(second!.caption).toBeUndefined();
-    expect(info!.rows?.map(([label, value]) => [text(label), text(value)])).toEqual([
+    expect(text(first.caption)).toBe("Shown since");
+    expect(first.captionTimestamp).toBe(AT);
+    expect(text(second.title, "de")).toBe("Seite 2 von 2");
+    expect(second.caption).toBeUndefined();
+    expect(info.rows?.map(([label, value]) => [text(label), text(value)])).toEqual([
       ["Road", "I-81"],
       ["Facing traffic", "Northbound"],
       ["Location", "I-81 N at MP 6.0"],
@@ -110,10 +114,10 @@ describe("mapSignToDetail", () => {
   it("says what a sign without a message is doing", () => {
     const blank = mapSignToDetail(sign({ status: "blank", pages: [] }));
     expect(blank.sections[0]).toMatchObject({ type: "text", captionTimestamp: AT });
-    expect(text(blank.sections[0]!.content)).toBe("The sign is blank.");
+    expect(text(nth(blank.sections, 0).content)).toBe("The sign is blank.");
     const failed = mapSignToDetail(sign({ status: "fault", pages: [], updatedAt: undefined }));
-    expect(text(failed.sections[0]!.content, "de")).toBe("Die Tafel ist außer Betrieb.");
-    expect(failed.sections[0]!.caption).toBeUndefined();
+    expect(text(nth(failed.sections, 0).content, "de")).toBe("Die Tafel ist außer Betrieb.");
+    expect(nth(failed.sections, 0).caption).toBeUndefined();
   });
 });
 

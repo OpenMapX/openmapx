@@ -1,4 +1,5 @@
 import type { RoutingOptions } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { valhallaHarness } from "./__tests__/valhalla-http.js";
 import {
@@ -278,14 +279,14 @@ describe("transformTrip motorway flag and bearings", () => {
   };
 
   it("maps highway and bearings on the motorway maneuver", () => {
-    const step = transformTrip(trip, "driving").steps[0];
+    const step = nth(transformTrip(trip, "driving").steps, 0);
     expect(step.motorway).toBe(true);
     expect(step.bearingBefore).toBeUndefined();
     expect(step.bearingAfter).toBe(298);
   });
 
   it("keeps the exit maneuver unflagged and carries its bearings", () => {
-    const step = transformTrip(trip, "driving").steps[1];
+    const step = nth(transformTrip(trip, "driving").steps, 1);
     expect(step.motorway).toBeUndefined();
     expect(step.bearingBefore).toBe(283);
     expect(step.bearingAfter).toBe(300);
@@ -811,7 +812,7 @@ describe("getRoute near a road closed to all but local access", () => {
     let i = 0;
     valhalla.answer = vi.fn(async (_url: string, init?: RequestInit) => {
       bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
-      const respond = responses[Math.min(i++, responses.length - 1)]!;
+      const respond = nth(responses, Math.min(i++, responses.length - 1));
       return respond();
     });
     const result = await valhalla.service.getRoute(WPS, "driving", options);
@@ -820,14 +821,14 @@ describe("getRoute near a road closed to all but local access", () => {
 
   it("lets the destination snap onto the road and reach a street behind it", async () => {
     const { bodies } = await run([ok], { useLiveTraffic: true, localAccess });
-    const [body] = bodies;
-    const locations = body!["locations"] as Record<string, unknown>[];
+    const body = nth(bodies, 0);
+    const locations = body["locations"] as Record<string, unknown>[];
     expect(locations[0]).not.toHaveProperty("search_filter");
     expect(locations[1]).toMatchObject({
       search_filter: { exclude_closures: false },
       minimum_reachability: 0,
     });
-    expect(body!["prioritize_bidirectional"]).toBe(true);
+    expect(body["prioritize_bidirectional"]).toBe(true);
   });
 
   it("only relaxes reachability for an end that must not snap onto the road", async () => {
@@ -835,7 +836,7 @@ describe("getRoute near a road closed to all but local access", () => {
       useLiveTraffic: true,
       localAccess: { origin: { snapOntoClosure: false, accessPoints: [onStreet] } },
     });
-    const locations = bodies[0]!["locations"] as Record<string, unknown>[];
+    const locations = nth(bodies, 0)["locations"] as Record<string, unknown>[];
     expect(locations[0]).toEqual({ lon: 13.3, lat: 52.5, type: "break", minimum_reachability: 0 });
   });
 
@@ -849,14 +850,14 @@ describe("getRoute near a road closed to all but local access", () => {
       return ok();
     });
     await valhalla.service.getRoute(WPS, mode, { ...options, localAccess });
-    const locations = bodies[0]!["locations"] as Record<string, unknown>[];
+    const locations = nth(bodies, 0)["locations"] as Record<string, unknown>[];
     expect(locations[1]).toEqual({ lon: 13.486, lat: 52.4373, type: "break" });
   });
 
   it("reaches an end behind the road through its nearest point when there is no path", async () => {
     const { bodies, result } = await run([noPath, ok], { useLiveTraffic: true, localAccess });
     expect(bodies).toHaveLength(2);
-    const locations = bodies[1]!["locations"] as Record<string, unknown>[];
+    const locations = nth(bodies, 1)["locations"] as Record<string, unknown>[];
     expect(locations).toEqual([
       expect.objectContaining({ lon: 13.3, lat: 52.5, type: "break" }),
       { lon: 13.486, lat: 52.437, type: "through", search_filter: { exclude_closures: false } },
@@ -871,7 +872,7 @@ describe("getRoute near a road closed to all but local access", () => {
       localAccess,
     });
     const inserted = bodies.slice(1, 5).map((b) => {
-      const l = (b["locations"] as Record<string, unknown>[])[1]!;
+      const l = nth(b["locations"] as Record<string, unknown>[], 1);
       return [l["type"], l["lat"]];
     });
     expect(inserted).toEqual([
@@ -880,7 +881,7 @@ describe("getRoute near a road closed to all but local access", () => {
       ["through", 52.4369],
       ["via", 52.4369],
     ]);
-    const last = bodies[5]!["locations"] as Record<string, unknown>[];
+    const last = nth(bodies, 5)["locations"] as Record<string, unknown>[];
     expect(last).toHaveLength(2);
     expect(last[1]).toEqual({ lon: 13.486, lat: 52.4373, type: "break" });
   });

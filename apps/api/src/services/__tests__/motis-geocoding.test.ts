@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockMotisGeocode = vi.fn();
 const mockMotisReverseGeocode = vi.fn();
@@ -66,12 +66,12 @@ describe("geocode", () => {
     const results = await motisGeocodingService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("mo:stop123");
-    expect(results[0].label).toBe("Berlin Hauptbahnhof");
-    expect(results[0].coordinates).toEqual([13.37, 52.52]);
-    expect(results[0].type).toBe("address");
-    expect(results[0].confidence).toBe(0.9);
-    expect(results[0].rawCategory).toBe("train_station");
+    expect(results[0]?.id).toBe("mo:stop123");
+    expect(results[0]?.label).toBe("Berlin Hauptbahnhof");
+    expect(results[0]?.coordinates).toEqual([13.37, 52.52]);
+    expect(results[0]?.type).toBe("address");
+    expect(results[0]?.confidence).toBe(0.9);
+    expect(results[0]?.rawCategory).toBe("train_station");
   });
 
   it('maps non-ADDRESS type to "poi"', async () => {
@@ -80,8 +80,8 @@ describe("geocode", () => {
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("poi");
-    expect(results[0].confidence).toBe(0.7);
+    expect(results[0]?.type).toBe("poi");
+    expect(results[0]?.confidence).toBe(0.7);
   });
 
   it("computes confidence as score / 100", async () => {
@@ -90,7 +90,7 @@ describe("geocode", () => {
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.geocode("test");
-    expect(results[0].confidence).toBeCloseTo(0.42);
+    expect(results[0]?.confidence).toBeCloseTo(0.42);
   });
 
   it("returns empty array on error", async () => {
@@ -121,8 +121,8 @@ describe("autocomplete", () => {
     const results = await motisGeocodingService.autocomplete("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].type).toBe("transit_stop");
-    expect(results[0].transitStop).toEqual({
+    expect(results[0]?.type).toBe("transit_stop");
+    expect(results[0]?.transitStop).toEqual({
       id: "mo:stop123",
       name: "Berlin Hauptbahnhof",
       lat: 52.52,
@@ -130,7 +130,7 @@ describe("autocomplete", () => {
       modes: ["bus", "rail"],
       provider: "mo",
     });
-    expect(results[0].rawCategory).toBe("train_station");
+    expect(results[0]?.rawCategory).toBe("train_station");
   });
 
   it("calls uniqueModes with the match modes", async () => {
@@ -149,8 +149,8 @@ describe("autocomplete", () => {
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.autocomplete("Alexanderplatz 1");
-    expect(results[0].type).toBe("address");
-    expect(results[0].transitStop).toBeUndefined();
+    expect(results[0]?.type).toBe("address");
+    expect(results[0]?.transitStop).toBeUndefined();
   });
 
   it('maps non-STOP non-ADDRESS type to "poi" in autocomplete', async () => {
@@ -159,7 +159,7 @@ describe("autocomplete", () => {
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.autocomplete("park");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it("returns empty array on error", async () => {
@@ -177,11 +177,13 @@ describe("autocomplete", () => {
     await motisGeocodingService.autocomplete("Hbf", "de", { proximity: [13.37, 52.52], zoom: 12 });
     await motisGeocodingService.autocomplete("Hbf", "de");
 
-    expect(mockMotisGeocode.mock.calls[0][0].query).toMatchObject({
+    expect(mockMotisGeocode.mock.calls[0]?.[0].query).toMatchObject({
       text: "Hbf",
       place: "52.52,13.37",
     });
-    expect(mockMotisGeocode.mock.calls[1][0].query.place).toBeUndefined();
+    const secondCall = mockMotisGeocode.mock.calls[1];
+    assert.isDefined(secondCall);
+    expect(secondCall[0].query.place).toBeUndefined();
   });
 });
 

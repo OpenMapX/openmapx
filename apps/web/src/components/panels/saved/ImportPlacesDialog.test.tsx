@@ -5,6 +5,7 @@ import { strToU8, zipSync } from "fflate";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParsedImport, ParseOptions } from "@/lib/savedPlacesImport/types";
+import { nth } from "@/test";
 
 const state = vi.hoisted(() => ({
   parse: vi.fn(),
@@ -122,7 +123,7 @@ describe("import dialog", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Not found/)).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(state.resolve.mock.calls[0][0]).toEqual([
+    expect(nth(state.resolve.mock.calls, 0)[0]).toEqual([
       expect.objectContaining({ places: [expect.objectContaining({ name: "Synthetic Cafe" })] }),
     ]);
   });
@@ -156,7 +157,7 @@ describe("import dialog", () => {
     fireEvent.click(screen.getByLabelText(/Include approximate/));
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(state.mutate).toHaveBeenCalled());
-    expect(state.mutate.mock.calls[0][0]).toMatchObject({
+    expect(nth(state.mutate.mock.calls, 0)[0]).toMatchObject({
       target: { listId: "trip" },
       places: [
         expect.objectContaining({ name: "Exact" }),
@@ -166,7 +167,7 @@ describe("import dialog", () => {
   });
   it("defaults recognized saved lists to an existing system list", async () => {
     const input = parsed();
-    input.lists[0].systemList = "$favorites";
+    nth(input.lists, 0).systemList = "$favorites";
     state.parse.mockResolvedValue(input);
     mount();
     await screen.findByDisplayValue("Trip");
@@ -179,7 +180,7 @@ describe("import dialog", () => {
   });
   it("chunks more than 2000 places into the created list", async () => {
     const input = parsed();
-    input.lists[0].places = Array.from({ length: 2001 }, (_, i) => ({
+    nth(input.lists, 0).places = Array.from({ length: 2001 }, (_, i) => ({
       name: `Place ${i}`,
       lat: 52,
       lng: 13,
@@ -190,8 +191,8 @@ describe("import dialog", () => {
     await screen.findByDisplayValue("Trip");
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(state.mutate).toHaveBeenCalledTimes(2));
-    expect((state.mutate.mock.calls[0][0] as ImportPlacesInput).places).toHaveLength(2000);
-    expect(state.mutate.mock.calls[1][0]).toMatchObject({
+    expect((nth(state.mutate.mock.calls, 0)[0] as ImportPlacesInput).places).toHaveLength(2000);
+    expect(nth(state.mutate.mock.calls, 1)[0]).toMatchObject({
       target: { listId: "created" },
       places: [{ name: "Place 2000", lat: 52, lng: 13 }],
     });
@@ -200,8 +201,9 @@ describe("import dialog", () => {
     const receipt = { sourceId: "test-source", name: "Test source" };
     const hidden = { sourceId: "hidden-name", name: "Unused geocoder name" };
     const input = parsed();
-    input.lists[0].places[0] = {
-      ...input.lists[0].places[0],
+    const { places } = nth(input.lists, 0);
+    places[0] = {
+      ...nth(places, 0),
       status: "located",
       fieldContributors: { lat: [receipt], lng: [] },
       geocoder: {
@@ -213,7 +215,7 @@ describe("import dialog", () => {
         contributors: [hidden],
       },
     };
-    input.lists[0].places[1].fieldContributors = { lat: [hidden] };
+    nth(places, 1).fieldContributors = { lat: [hidden] };
     state.parse.mockResolvedValue(input);
     mount();
     expect(await screen.findByText("Geocoder credit")).toBeInTheDocument();
@@ -231,7 +233,7 @@ describe("import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(state.mutate).toHaveBeenCalled());
     expect(
-      (state.mutate.mock.calls[0][0] as ImportPlacesInput).places[0].fieldContributors,
+      nth((nth(state.mutate.mock.calls, 0)[0] as ImportPlacesInput).places, 0).fieldContributors,
     ).toEqual({
       lat: [receipt],
       lng: [],
@@ -240,7 +242,8 @@ describe("import dialog", () => {
   it("preserves and displays validated credits imported from a file", async () => {
     const receipt = { sourceId: "file", name: "File publisher" };
     const input = parsed();
-    input.lists[0].places[0].fieldContributors = { name: [receipt], lat: [], lng: [] };
+    const place = nth(nth(input.lists, 0).places, 0);
+    place.fieldContributors = { name: [receipt], lat: [], lng: [] };
     state.parse.mockResolvedValue(input);
     mount();
     await screen.findByText("Geocoder credit");
@@ -250,20 +253,20 @@ describe("import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(state.mutate).toHaveBeenCalled());
     expect(
-      (state.mutate.mock.calls[0][0] as ImportPlacesInput).places[0].fieldContributors,
-    ).toEqual(input.lists[0].places[0].fieldContributors);
+      nth((nth(state.mutate.mock.calls, 0)[0] as ImportPlacesInput).places, 0).fieldContributors,
+    ).toEqual(place.fieldContributors);
   });
   it("aborts parsing/lookup when unmounted", async () => {
     state.resolve.mockImplementation(() => new Promise(() => {}));
     const { unmount } = mount();
     await waitFor(() => expect(state.resolve).toHaveBeenCalled());
-    const signal = (state.resolve.mock.calls[0][1] as { signal: AbortSignal }).signal;
+    const signal = (nth(state.resolve.mock.calls, 0)[1] as { signal: AbortSignal }).signal;
     unmount();
     expect(signal.aborted).toBe(true);
   });
   it("reports a partial import if a later chunk fails", async () => {
     const input = parsed();
-    input.lists[0].places = Array.from({ length: 2001 }, (_, i) => ({
+    nth(input.lists, 0).places = Array.from({ length: 2001 }, (_, i) => ({
       name: `Place ${i}`,
       lat: 52,
       lng: 13,
@@ -299,7 +302,7 @@ describe("import dialog", () => {
       await vi.advanceTimersByTimeAsync(6_000);
       await screen.findByText(/Imported 1/);
       expect(state.mutate).toHaveBeenCalledTimes(2);
-      expect(state.mutate.mock.calls[1][0]).toEqual(state.mutate.mock.calls[0][0]);
+      expect(nth(state.mutate.mock.calls, 1)[0]).toEqual(nth(state.mutate.mock.calls, 0)[0]);
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

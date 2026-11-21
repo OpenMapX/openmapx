@@ -180,8 +180,8 @@ function facebookUrlFromPath(url: URL): string | undefined {
     return `https://www.facebook.com/${parts.map((part) => encodeURIComponent(part)).join("/")}`;
   }
 
-  if (parts.length !== 1) return undefined;
-  const slug = parts[0];
+  const [slug] = parts;
+  if (parts.length !== 1 || slug === undefined) return undefined;
   if (FACEBOOK_RESERVED_PATHS.has(slug.toLowerCase())) return undefined;
   if (!FACEBOOK_SLUG_RE.test(slug)) return undefined;
   return `https://www.facebook.com/${encodeURIComponent(slug)}`;

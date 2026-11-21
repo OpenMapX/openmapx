@@ -228,12 +228,12 @@ it("keeps duplicate no-op supplements uncredited but credits retained gap fills"
   const noOp = mergeMotisFirstInventory({ stations: [primary], vehicles: [] }, [
     { stations: [duplicate], vehicles: [] },
   ]);
-  expect(noOp.stations[0].sources).toEqual(["a"]);
-  expect(noOp.stations[0].contributors).toEqual([a]);
+  expect(noOp.stations[0]?.sources).toEqual(["a"]);
+  expect(noOp.stations[0]?.contributors).toEqual([a]);
   const gap = station({ sources: ["a"], contributors: [a] });
   const filled = mergeMotisFirstInventory({ stations: [gap], vehicles: [] }, [
     { stations: [duplicate], vehicles: [] },
   ]);
-  expect(filled.stations[0].address).toEqual({ street: "Known" });
-  expect(filled.stations[0].contributors).toEqual([a, b]);
+  expect(filled.stations[0]?.address).toEqual({ street: "Known" });
+  expect(filled.stations[0]?.contributors).toEqual([a, b]);
 });

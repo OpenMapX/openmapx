@@ -139,9 +139,8 @@ describe("mobility package boundaries", () => {
         const relativeFile = relative(integrationRoot, file);
         if (relativeFile.includes("__tests__") || relativeFile.includes(".test.")) continue;
         const source = readFileSync(file, "utf8");
-        for (const match of source.matchAll(/@integrations\/([^/"']+)(?:\/[^"']*)?/g)) {
-          const target = match[1];
-          if (target !== entry.name && !dependencies.has(target)) {
+        for (const [, target] of source.matchAll(/@integrations\/([^/"']+)(?:\/[^"']*)?/g)) {
+          if (target && target !== entry.name && !dependencies.has(target)) {
             violations.push(`${entry.name}/${relativeFile} -> ${target}`);
           }
         }

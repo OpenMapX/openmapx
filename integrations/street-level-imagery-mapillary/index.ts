@@ -105,7 +105,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
     const found = await upstream(ctx, reply, "Mapillary imagery", () => provider.getImage(id));
     if (!found.ok) return;
     const image = found.value;
@@ -122,7 +122,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
     const found = await upstream(ctx, reply, "Mapillary imagery links", () =>
       provider.getLinks(id),
     );

@@ -35,7 +35,7 @@ describe("composeBackwardTransitSchedule", () => {
       violations: [],
     });
     expect(schedule.arrival).toBe(end.replace("Z", "+00:00"));
-    expect(schedule.legs[0].arrival).toBe(schedule.arrival);
+    expect(schedule.legs[0]?.arrival).toBe(schedule.arrival);
     expect(schedule.totalTravelSeconds).toBe(seconds);
     expect(schedule.totalDwellSeconds).toBe(0);
     expect(schedule.totalWaitSeconds).toBe(0);
@@ -158,7 +158,8 @@ describe("composeBackwardTransitSchedule", () => {
     });
     expect(schedule.stops.map((s) => s.waypointIndex)).toEqual([1, 2]);
     expect(schedule.stops[0]).toMatchObject({ dwellSeconds: 0, waitSeconds: 0 });
-    expect(schedule.stops[0].arrival).toBeUndefined();
+    expect(schedule.stops[0]).toBeDefined();
+    expect(schedule.stops[0]?.arrival).toBeUndefined();
     expect(schedule.totalDwellSeconds).toBe(0);
     expect(schedule.violations).toContainEqual(
       expect.objectContaining({ kind: "early-departure", waypointIndex: 1, shortfallSeconds: 900 }),

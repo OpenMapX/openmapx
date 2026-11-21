@@ -1,5 +1,5 @@
 import { cumulativeDistances, type LngLat, projectRoadAlertsOntoRoute } from "@openmapx/core";
-import { loadJsonFixture } from "@openmapx/integration-framework/testing";
+import { loadJsonFixture, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { type AlertOverpassElement, mapAlertElements } from "../navigation-alerts.js";
 
@@ -69,7 +69,7 @@ function alertsAlong(route: LngLat[]): string[] {
   const cum = cumulativeDistances(route);
   return projectRoadAlertsOntoRoute(raw, route, cum, {
     fromMeters: 0,
-    toMeters: cum[cum.length - 1],
+    toMeters: nth(cum, -1),
   })
     .map((alert) => alert.id)
     .sort();

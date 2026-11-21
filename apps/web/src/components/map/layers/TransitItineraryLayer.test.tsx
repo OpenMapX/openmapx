@@ -1,7 +1,7 @@
 import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
-import { act, createFakeMap, type FakeMap, render } from "@/test";
+import { act, createFakeMap, type FakeMap, nth, render } from "@/test";
 
 const state = vi.hoisted(() => {
   const walk = {
@@ -57,14 +57,19 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
   useRenderedMapAttributions: vi.fn(),
 }));
-vi.mock("@openmapx/core", () => ({
-  API_ENDPOINTS: { transitLegGeometry: "/leg-geometry" },
-  apiClient: { get: state.get },
-  MODE_COLORS: { walking: "#757575" },
-  routeColor: (route: { color?: string }, fallback: string) => route.color ?? fallback,
-  useDirectionsStore: () => state.directions,
-  useNavigationStore: (selector: (s: unknown) => unknown) => selector(state.navigation),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const { itemAt, numberAt } = await importOriginal<typeof import("@openmapx/core")>();
+  return {
+    itemAt,
+    numberAt,
+    API_ENDPOINTS: { transitLegGeometry: "/leg-geometry" },
+    apiClient: { get: state.get },
+    MODE_COLORS: { walking: "#757575" },
+    routeColor: (route: { color?: string }, fallback: string) => route.color ?? fallback,
+    useDirectionsStore: () => state.directions,
+    useNavigationStore: (selector: (s: unknown) => unknown) => selector(state.navigation),
+  };
+});
 
 import { TransitItineraryLayer } from "./TransitItineraryLayer";
 
@@ -108,10 +113,19 @@ describe("TransitItineraryLayer", () => {
       status: "navigating",
       kind: "transit",
       transitProgress: { currentLegIndex: 1 },
-      itinerary: state.directions.transitItineraries[0],
+      itinerary: nth(state.directions.transitItineraries, 0),
     };
     rerender(<TransitItineraryLayer />);
     expect(state.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws nothing and keeps the camera for an itinerary without legs", () => {
+    state.directions = { ...state.directions, transitItineraries: [{ legs: [] }] };
+    render(<TransitItineraryLayer />);
+
+    expect(features("transit-itinerary-source")).toEqual([]);
+    expect(features("transit-itinerary-points-source")).toEqual([]);
+    expect(state.fitBounds).not.toHaveBeenCalled();
   });
 
   it("removes its layers and sources when the itinerary is cleared", () => {
@@ -127,8 +141,8 @@ describe("TransitItineraryLayer", () => {
 });
 
 it("draws the restored native walking leg instead of the old directions preview", () => {
-  const restored = structuredClone(state.directions.transitItineraries[0]);
-  restored.legs[0].geometry.coordinates = [
+  const restored = structuredClone(nth(state.directions.transitItineraries, 0));
+  nth(restored.legs, 0).geometry.coordinates = [
     [9, 51],
     [9.01, 51.01],
   ];
@@ -157,7 +171,7 @@ it("draws the restored native walking leg instead of the old directions preview"
   expect(state.fitBounds).not.toHaveBeenCalled();
 });
 it("changes walking progress paint without replacing its geometry and removes it at boarding", () => {
-  const itinerary = state.directions.transitItineraries[0];
+  const itinerary = nth(state.directions.transitItineraries, 0);
   state.navigation = {
     status: "navigating",
     kind: "transit",
@@ -198,7 +212,7 @@ it("changes walking progress paint without replacing its geometry and removes it
 });
 
 it("retains walked progress across an equivalent uncertain full snapshot and resets for repair", () => {
-  const itinerary = structuredClone(state.directions.transitItineraries[0]);
+  const itinerary = structuredClone(nth(state.directions.transitItineraries, 0));
   state.navigation = {
     status: "navigating",
     kind: "transit",
@@ -226,7 +240,7 @@ it("retains walked progress across an equivalent uncertain full snapshot and res
   view.rerender(<TransitItineraryLayer />);
   expect(gradient()).toEqual(trusted);
   const repaired = structuredClone(itinerary);
-  repaired.legs[0].geometry.coordinates.splice(1, 0, [8.02, 50]);
+  nth(repaired.legs, 0).geometry.coordinates.splice(1, 0, [8.02, 50]);
   state.navigation = { ...state.navigation, itinerary: repaired };
   view.rerender(<TransitItineraryLayer />);
   expect(gradient()).toEqual([
@@ -239,8 +253,8 @@ it("retains walked progress across an equivalent uncertain full snapshot and res
 });
 
 it("keeps the preview fallback and stop point when a walk has no drawable line", () => {
-  const itinerary = structuredClone(state.directions.transitItineraries[0]);
-  itinerary.legs[0].geometry.coordinates = [[8, 50]];
+  const itinerary = structuredClone(nth(state.directions.transitItineraries, 0));
+  nth(itinerary.legs, 0).geometry.coordinates = [[8, 50]];
   state.navigation = {
     status: "navigating",
     kind: "transit",
@@ -258,7 +272,10 @@ it("keeps the preview fallback and stop point when a walk has no drawable line",
 });
 
 it("refines and credits a native-restored trip without a directions preview", async () => {
-  const bus = { ...state.directions.transitItineraries[0].legs[1], tripId: "restored-bus" };
+  const bus = {
+    ...nth(nth(state.directions.transitItineraries, 0).legs, 1),
+    tripId: "restored-bus",
+  };
   const restored = { legs: [bus] };
   state.get.mockResolvedValue({
     data: {

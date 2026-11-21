@@ -1,5 +1,5 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
-import type { OsmFilter } from "../utils/overpass.service";
+import type { OsmFilter } from "../places/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
 import type { OpeningHoursInfo } from "./openingHoursInfo";

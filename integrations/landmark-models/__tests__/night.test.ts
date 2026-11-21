@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { BufferAttribute, BufferGeometry, Color, MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
 import { nightColor, nightVertexColors } from "../web/night";
@@ -24,8 +25,8 @@ describe("nightColor", () => {
     const flood = linear("#ffeacf");
     const ambient = [0.012, 0.016, 0.03];
     const expected = [0, 1, 2].map((i) => {
-      const dim = 0.16 + (ambient[i] as number);
-      return dim + ((flood[i] as number) - dim) * 0.9;
+      const dim = 0.16 + nth(ambient, i);
+      return dim + (nth(flood, i) - dim) * 0.9;
     });
     expect(round(nightColor([1, 1, 1], "stone", 1, 1))).toEqual(round(expected));
   });
@@ -47,7 +48,7 @@ describe("nightVertexColors", () => {
     const colors = nightVertexColors(geometry, material);
     expect(colors).toHaveLength(8);
     // Brighter where floodlit.
-    expect(colors[4] as number).toBeGreaterThan(colors[0] as number);
+    expect(nth(colors, 4)).toBeGreaterThan(nth(colors, 0));
     expect(colors[3]).toBe(1);
   });
 });

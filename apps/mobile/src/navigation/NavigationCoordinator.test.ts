@@ -9,6 +9,7 @@ import { migrateSessionSchema } from "../storage/migrations";
 import { SessionRepository } from "../storage/SessionRepository";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
+import { nth } from "../testing/nth";
 import { EffectRunner } from "./effects";
 import {
   type CommandResponse,
@@ -48,19 +49,18 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
         expiresAtMs: context.nowMs + 60 * 60_000,
       }),
     }),
-    processFixes: (session, fixes, nowMs) => ({
-      session: {
-        ...session,
-        revision: session.revision + 1,
-        updatedAtMs: nowMs,
-        lastAcceptedFix: {
-          coords: fixes[fixes.length - 1].coords,
-          accuracy: fixes[fixes.length - 1].accuracy,
-          timestampMs: fixes[fixes.length - 1].timestampMs,
+    processFixes: (session, fixes, nowMs) => {
+      const { coords, accuracy, timestampMs } = nth(fixes, -1);
+      return {
+        session: {
+          ...session,
+          revision: session.revision + 1,
+          updatedAtMs: nowMs,
+          lastAcceptedFix: { coords, accuracy, timestampMs },
         },
-      },
-      effects: [{ kind: "publish-snapshot", immediate: false }],
-    }),
+        effects: [{ kind: "publish-snapshot", immediate: false }],
+      };
+    },
     replace: (session, _replacement, nowMs) => ({
       session: { ...session, revision: session.revision + 1, updatedAtMs: nowMs },
       effects: [{ kind: "publish-snapshot", immediate: true }],
@@ -456,7 +456,7 @@ describe("NavigationCoordinator commands", () => {
       ["session.prepared", "prep-1"],
       ["native.error", "prep-1"],
     ]);
-    expect(context.sent[1].payload).toEqual({ code: "internal-error" });
+    expect(context.sent[1]?.payload).toEqual({ code: "internal-error" });
     await context.close();
   });
 });
@@ -1248,7 +1248,7 @@ describe("transit refresh answers", () => {
   it("adopts a refreshed itinerary for the same journey with its rotated token", async () => {
     const { context } = await awaitingRefresh();
     const itinerary = transitItineraryFixture();
-    itinerary.legs[1].endTime = "2026-08-09T08:44:00Z";
+    nth(itinerary.legs, 1).endTime = "2026-08-09T08:44:00Z";
     try {
       await context.coordinator.applyTransitRefresh(
         answer({ itinerary: { ...itinerary, refreshToken: "tok_next" } }),
@@ -1259,8 +1259,10 @@ describe("transit refresh answers", () => {
       expect(session.payload.navigationDataRevision).toBe(1);
       expect(session.payload.refresh).toMatchObject({ status: "ready", generation: 3 });
       expect(
-        (session.payload.startPackage.itinerary as { legs: Array<{ endTime: string }> }).legs[1]
-          .endTime,
+        nth(
+          (session.payload.startPackage.itinerary as { legs: Array<{ endTime: string }> }).legs,
+          1,
+        ).endTime,
       ).toBe("2026-08-09T08:44:00Z");
       expect(context.effectLog).toEqual(["alerts.reconcile", "publish.snapshot"]);
     } finally {
@@ -1284,7 +1286,7 @@ describe("transit refresh answers", () => {
 
   it("updates the captured stops' predictions from the refetched journeys", async () => {
     const { context } = await awaitingRefresh();
-    const stops = transitStartPackageFixture().captures[0].stops.map((stop) => ({ ...stop }));
+    const stops = nth(transitStartPackageFixture().captures, 0).stops.map((stop) => ({ ...stop }));
     const journey = stops.map((stop) =>
       stop.stopId === "stop-d"
         ? { ...stop, expectedArrival: "2026-08-09T08:44:00Z", platform: "7" }
@@ -1292,7 +1294,7 @@ describe("transit refresh answers", () => {
     );
     try {
       await context.coordinator.applyTransitRefresh(answer({ journeys: { "trip-1": journey } }));
-      const capture = (await saved(context)).payload.startPackage.captures[0];
+      const capture = nth((await saved(context)).payload.startPackage.captures, 0);
       expect(capture.stops.map((stop) => stop.stopId)).toEqual(stops.map((stop) => stop.stopId));
       expect(capture.stops[3]).toMatchObject({
         expectedArrival: "2026-08-09T08:44:00Z",
@@ -1306,7 +1308,7 @@ describe("transit refresh answers", () => {
   it("refuses an itinerary for a different journey and keeps the one being followed", async () => {
     const { context, session: before } = await awaitingRefresh();
     const itinerary = transitItineraryFixture();
-    itinerary.legs[1].tripId = "trip-2";
+    nth(itinerary.legs, 1).tripId = "trip-2";
     try {
       await context.coordinator.applyTransitRefresh(answer({ itinerary }));
       const session = await saved(context);
@@ -1375,7 +1377,7 @@ describe("transit refresh answers", () => {
       session.payload.tickState.currentWalkStepIndex = 2;
     });
     const itinerary = transitItineraryFixture();
-    Object.assign(itinerary.legs[0], {
+    Object.assign(nth(itinerary.legs, 0), {
       steps: [{ instruction: "DEPART", distanceMeters: 120 }],
     });
     try {
@@ -1399,10 +1401,10 @@ describe("transit refresh answers", () => {
       session.payload.tickState.currentWalkStepIndex = 2;
       const legs = (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] })
         .legs;
-      legs[0].geometry = repaired;
+      nth(legs, 0).geometry = repaired;
     });
     const itinerary = transitItineraryFixture();
-    Object.assign(itinerary.legs[0], {
+    Object.assign(nth(itinerary.legs, 0), {
       geometry: { type: "LineString", coordinates: [[8.7, 50.2]] },
     });
     try {
@@ -1410,7 +1412,7 @@ describe("transit refresh answers", () => {
       const session = await saved(context);
       const legs = (session.payload.startPackage.itinerary as { legs: Record<string, unknown>[] })
         .legs;
-      expect(legs[0].geometry).toEqual(repaired);
+      expect(nth(legs, 0).geometry).toEqual(repaired);
       expect(session.payload.tickState).toMatchObject({ currentWalkStepIndex: 2, walkRevision: 1 });
     } finally {
       await context.close();

@@ -57,8 +57,8 @@ describe("composeSchedule forward", () => {
       direction: "forward",
     });
     expect(schedule.departure).toBe("2026-09-01T09:00:00+02:00");
-    expect(schedule.stops[1].arrival).toBe("2026-09-01T10:00:00+02:00");
-    expect(schedule.stops[1].departure).toBe("2026-09-01T10:30:00+02:00");
+    expect(schedule.stops[1]?.arrival).toBe("2026-09-01T10:00:00+02:00");
+    expect(schedule.stops[1]?.departure).toBe("2026-09-01T10:30:00+02:00");
     expect(schedule.arrival).toBe("2026-09-01T12:30:00+02:00");
     expect(schedule.totalTravelSeconds).toBe(3 * HOUR);
     expect(schedule.totalDwellSeconds).toBe(1800);
@@ -94,9 +94,9 @@ describe("composeSchedule forward", () => {
       anchorMs: NINE_AM_BERLIN,
       direction: "forward",
     });
-    expect(schedule.stops[1].arrival).toBe("2026-09-01T10:00:00+02:00");
-    expect(schedule.stops[1].departure).toBe("2026-09-01T12:00:00+02:00");
-    expect(schedule.stops[1].waitSeconds).toBe(2 * HOUR - 600);
+    expect(schedule.stops[1]?.arrival).toBe("2026-09-01T10:00:00+02:00");
+    expect(schedule.stops[1]?.departure).toBe("2026-09-01T12:00:00+02:00");
+    expect(schedule.stops[1]?.waitSeconds).toBe(2 * HOUR - 600);
     expect(schedule.totalWaitSeconds).toBe(2 * HOUR - 600);
   });
 
@@ -130,10 +130,10 @@ describe("composeSchedule forward", () => {
       anchorMs: NINE_AM_BERLIN,
       direction: "forward",
     });
-    expect(schedule.stops[0].departure).toBe("2026-09-01T09:00:00+02:00");
-    expect(schedule.stops[0].utcOffsetMinutes).toBe(120);
-    expect(schedule.stops[1].arrival).toBe("2026-09-01T11:00:00-04:00");
-    expect(schedule.stops[1].utcOffsetMinutes).toBe(-240);
+    expect(schedule.stops[0]?.departure).toBe("2026-09-01T09:00:00+02:00");
+    expect(schedule.stops[0]?.utcOffsetMinutes).toBe(120);
+    expect(schedule.stops[1]?.arrival).toBe("2026-09-01T11:00:00-04:00");
+    expect(schedule.stops[1]?.utcOffsetMinutes).toBe(-240);
   });
 
   it("flags a trip that crosses midnight into the next local day", () => {
@@ -177,7 +177,7 @@ describe("composeSchedule forward", () => {
     expect(schedule.totalTravelSeconds).toBe(18 * HOUR);
     expect(schedule.totalDwellSeconds).toBe(24 * HOUR);
     // 09:00 day 1 plus 18 h travel and 24 h dwell lands at 03:00 on day 3.
-    expect(schedule.stops[2].departure).toBe("2026-09-02T21:00:00+02:00");
+    expect(schedule.stops[2]?.departure).toBe("2026-09-02T21:00:00+02:00");
     expect(schedule.arrival).toBe("2026-09-03T03:00:00+02:00");
   });
 
@@ -203,8 +203,8 @@ describe("composeSchedule backward", () => {
       direction: "backward",
     });
     expect(schedule.arrival).toBe("2026-09-01T18:00:00+02:00");
-    expect(schedule.stops[1].departure).toBe("2026-09-01T16:00:00+02:00");
-    expect(schedule.stops[1].arrival).toBe("2026-09-01T15:30:00+02:00");
+    expect(schedule.stops[1]?.departure).toBe("2026-09-01T16:00:00+02:00");
+    expect(schedule.stops[1]?.arrival).toBe("2026-09-01T15:30:00+02:00");
     expect(schedule.departure).toBe("2026-09-01T14:30:00+02:00");
     expect(schedule.violations).toEqual([]);
   });
@@ -221,9 +221,9 @@ describe("composeSchedule backward", () => {
       anchorMs: deadline,
       direction: "backward",
     });
-    expect(schedule.stops[1].arrival).toBe("2026-09-01T14:00:00+02:00");
-    expect(schedule.stops[1].departure).toBe("2026-09-01T16:00:00+02:00");
-    expect(schedule.stops[1].waitSeconds).toBe(2 * HOUR);
+    expect(schedule.stops[1]?.arrival).toBe("2026-09-01T14:00:00+02:00");
+    expect(schedule.stops[1]?.departure).toBe("2026-09-01T16:00:00+02:00");
+    expect(schedule.stops[1]?.waitSeconds).toBe(2 * HOUR);
     expect(schedule.violations).toEqual([]);
   });
 

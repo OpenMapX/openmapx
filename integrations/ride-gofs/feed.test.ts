@@ -81,7 +81,7 @@ describe("loadStatic", () => {
     // not caching.
     const cache = memoryCache();
     const fetchJson = vi.fn(async (url: string) => {
-      const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
+      const doc = LEAN_FEED_DOCUMENTS[url.replace(/\?.*/, "")];
       if (!doc) throw new Error(`404 ${url}`);
       return doc;
     });
@@ -104,7 +104,7 @@ describe("loadStatic", () => {
     // without a per-client memo that is three full downloads of every file.
     const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {} });
     const fetchJson = vi.fn(async (url: string) => {
-      const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
+      const doc = LEAN_FEED_DOCUMENTS[url.replace(/\?.*/, "")];
       if (!doc) throw new Error(`404 ${url}`);
       return doc;
     });
@@ -123,7 +123,7 @@ describe("loadStatic", () => {
         failFirst = false;
         throw new Error("transient");
       }
-      const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
+      const doc = LEAN_FEED_DOCUMENTS[url.replace(/\?.*/, "")];
       if (!doc) throw new Error(`404 ${url}`);
       return doc;
     });
@@ -160,7 +160,7 @@ describe("fetchRealtimeBooking", () => {
     expect(url.searchParams.get("pickup_lon")).toBe("-73.57");
     expect(url.searchParams.get("drop_off_lat")).toBe("45.52");
     expect(url.searchParams.get("drop_off_lon")).toBe("-73.6");
-    expect(entries[0].brand_id).toBe("regular");
+    expect(entries[0]?.brand_id).toBe("regular");
   });
 
   it("returns an empty list when the feed publishes no realtime_booking", async () => {

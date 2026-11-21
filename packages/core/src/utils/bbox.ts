@@ -17,9 +17,8 @@ export function geoJsonBBox(input: GeoJSON.GeoJSON): BBox | null {
 
   const visitPositions = (coords: unknown): void => {
     if (!Array.isArray(coords)) return;
-    if (typeof coords[0] === "number" && typeof coords[1] === "number") {
-      const lng = coords[0] as number;
-      const lat = coords[1] as number;
+    const [lng, lat] = coords;
+    if (typeof lng === "number" && typeof lat === "number") {
       found = true;
       if (lng < west) west = lng;
       if (lng > east) east = lng;

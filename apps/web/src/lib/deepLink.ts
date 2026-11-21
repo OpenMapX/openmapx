@@ -18,6 +18,30 @@ import {
 export const DEEPLINK_OPEN_EVENT = "openmapx:deeplink:open";
 export const DEEPLINK_UPDATE_EVENT = "openmapx:deeplink:update";
 
+/** The overlay parameters, each passed through as its raw string. */
+const OVERLAY_SETTING_PARAMS = [
+  "weather",
+  "sat",
+  "date",
+  "opacity",
+  "eq",
+  "fire",
+  "neDays",
+  "neCat",
+  "alertSev",
+  "envSensor",
+  "sli",
+  "trail",
+  "winter",
+  "cycleAuto",
+  "ltProviders",
+  "ltModes",
+  "ltCodes",
+  "ltVehicle",
+] as const;
+
+type OverlaySettingParam = (typeof OVERLAY_SETTING_PARAMS)[number];
+
 export const DEEPLINK_PARAMS = new Set([
   "map",
   "base",
@@ -55,24 +79,7 @@ export const DEEPLINK_PARAMS = new Set([
   "iso",
   "isoAt",
   "isoMins",
-  "weather",
-  "sat",
-  "date",
-  "opacity",
-  "eq",
-  "fire",
-  "neDays",
-  "neCat",
-  "alertSev",
-  "envSensor",
-  "sli",
-  "trail",
-  "winter",
-  "cycleAuto",
-  "ltProviders",
-  "ltModes",
-  "ltCodes",
-  "ltVehicle",
+  ...OVERLAY_SETTING_PARAMS,
 ]);
 
 export interface CameraDeepLink {
@@ -147,7 +154,8 @@ export interface ParsedDeepLink {
     origin?: LngLat;
     minutes: number[];
   };
-  overlaySettings: Record<string, string>;
+  /** Every overlay parameter, empty when the link does not carry it. */
+  overlaySettings: Record<OverlaySettingParam, string>;
 }
 
 export type ShareCurrentUrlResult = "shared" | "copied" | "cancelled" | "unavailable";
@@ -586,26 +594,10 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
             .filter((value) => Number.isFinite(value) && value > 0),
         }
       : undefined,
-    overlaySettings: {
-      weather: params.get("weather") ?? "",
-      sat: params.get("sat") ?? "",
-      date: params.get("date") ?? "",
-      opacity: params.get("opacity") ?? "",
-      eq: params.get("eq") ?? "",
-      fire: params.get("fire") ?? "",
-      neDays: params.get("neDays") ?? "",
-      neCat: params.get("neCat") ?? "",
-      alertSev: params.get("alertSev") ?? "",
-      envSensor: params.get("envSensor") ?? "",
-      sli: params.get("sli") ?? "",
-      trail: params.get("trail") ?? "",
-      winter: params.get("winter") ?? "",
-      cycleAuto: params.get("cycleAuto") ?? "",
-      ltProviders: params.get("ltProviders") ?? "",
-      ltModes: params.get("ltModes") ?? "",
-      ltCodes: params.get("ltCodes") ?? "",
-      ltVehicle: params.get("ltVehicle") ?? "",
-    },
+    // An entry for every parameter in the tuple, so the record is complete.
+    overlaySettings: Object.fromEntries(
+      OVERLAY_SETTING_PARAMS.map((name) => [name, params.get(name) ?? ""]),
+    ) as Record<OverlaySettingParam, string>,
   };
 }
 

@@ -151,7 +151,7 @@ describe("hazards orchestrator", () => {
     ).alerts([5, 45, 15, 55]);
 
     expect(answer.alerts.map((a) => a.id)).toEqual(["ok"]);
-    expect(getAlerts.mock.calls[0][1]).toEqual({ excludedSourceIds: ["eu-meteoalarm-alerts"] });
+    expect(getAlerts.mock.calls[0]?.[1]).toEqual({ excludedSourceIds: ["eu-meteoalarm-alerts"] });
   });
 
   test("passes the language and the other query fields to the providers unchanged", async () => {
@@ -164,8 +164,8 @@ describe("hazards orchestrator", () => {
     await hazards.alerts([5, 45, 15, 55], { lang: "de", simplifyDeg: 0.01 });
     await hazards.naturalHazards([5, 45, 15, 55], { types: ["volcano"], lang: "de-AT" });
 
-    expect(getAlerts.mock.calls[0][1]).toEqual({ lang: "de", simplifyDeg: 0.01 });
-    expect(getNaturalHazards.mock.calls[0][1]).toEqual({ types: ["volcano"], lang: "de-AT" });
+    expect(getAlerts.mock.calls[0]?.[1]).toEqual({ lang: "de", simplifyDeg: 0.01 });
+    expect(getNaturalHazards.mock.calls[0]?.[1]).toEqual({ types: ["volcano"], lang: "de-AT" });
   });
 });
 

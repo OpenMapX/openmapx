@@ -32,7 +32,8 @@ export async function planetOsmBatch(
     `SELECT osm_type,osm_id::TEXT,name,lng,lat,category,tags,importance FROM osm_search.places WHERE (osm_type,osm_id)>($1,$2::BIGINT) ORDER BY osm_type,osm_search.places.osm_id LIMIT ${AMBIENT_LIMITS.countryBatch}`,
     [checkpoint.osmType, checkpoint.osmId],
   );
-  if (!rows.length)
+  const last = rows.at(-1);
+  if (!last)
     return {
       places: [],
       checkpoint: { ...checkpoint, phase: release ? "overture" : "validate" },
@@ -67,7 +68,6 @@ export async function planetOsmBatch(
     rows.map((r) => `osm:${r.osm_type}/${r.osm_id}`).filter((id) => !eligibleIds.has(id)),
   );
   const places = mergeAmbientPlaces(osm, overture, links, excluded, identityEvidence);
-  const last = rows[rows.length - 1];
   return {
     places,
     rows: rows.length,
@@ -102,8 +102,8 @@ export async function planetOvertureBatch(
    ORDER BY o.gers_id`,
     [checkpoint.gers, release],
   );
-  if (!rows.length)
-    return { places: [], checkpoint: { ...checkpoint, phase: "validate" }, rows: 0 };
+  const last = rows.at(-1);
+  if (!last) return { places: [], checkpoint: { ...checkpoint, phase: "validate" }, rows: 0 };
   let count = 0;
   const places = rows.flatMap((r) => {
     const p = eligible(r, release);
@@ -131,7 +131,7 @@ export async function planetOvertureBatch(
     rows: rows.length,
     checkpoint: {
       ...checkpoint,
-      gers: rows[rows.length - 1].gers_id,
+      gers: last.gers_id,
       overtureCount: checkpoint.overtureCount + count,
       overtureProcessed: checkpoint.overtureProcessed + rows.length,
     },

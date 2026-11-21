@@ -183,8 +183,8 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     }
     // Only reachable once something is parked; otherwise the command would open
     // a panel that immediately closes itself.
-    if (parkedLocations && parkedLocations.length > 0) {
-      const first = parkedLocations[0];
+    const first = parkedLocations?.[0];
+    if (first) {
       out.push({
         id: "panels.parking",
         group: "panels",

@@ -1,4 +1,5 @@
 import type { SearchIntent } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import type { SemanticCategoryDocument } from "@openmapx/presets";
 import { describe, expect, it, vi } from "vitest";
 import type { SemanticCategoryIndex } from "../semantic-category-index.js";
@@ -136,7 +137,7 @@ describe("semantic taxonomy policy", () => {
     expect(result.applied).toBe(true);
     expect(result.intent).not.toBe(original);
     expect(original.filter.selectors).toEqual([]);
-    expect(result.intent.filter.selectors).toEqual(catalog[0].filter.selectors);
+    expect(result.intent.filter.selectors).toEqual(nth(catalog, 0).filter.selectors);
     expect(result.intent.filter.require).toBe(original.filter.require);
     expect(result.intent.filter.exclude).toBe(original.filter.exclude);
     expect(result.intent.filter.elementTypes).toBe(original.filter.elementTypes);
@@ -148,7 +149,7 @@ describe("semantic taxonomy policy", () => {
   });
 
   it("corroborates identical low-confidence selectors and rejects conflicts", () => {
-    const matching = intent(catalog[0].filter.selectors, 0.2);
+    const matching = intent(nth(catalog, 0).filter.selectors, 0.2);
     const corroborated = planSemanticResolution({
       query: "quiet place for study",
       intent: matching,
@@ -158,7 +159,7 @@ describe("semantic taxonomy policy", () => {
       shadow: false,
     });
     expect(corroborated).toMatchObject({ kind: "decided", applied: true });
-    const conflict = intent(catalog[1].filter.selectors, 0.2);
+    const conflict = intent(nth(catalog, 1).filter.selectors, 0.2);
     const rejected = planSemanticResolution({
       query: "quiet place for study",
       intent: conflict,

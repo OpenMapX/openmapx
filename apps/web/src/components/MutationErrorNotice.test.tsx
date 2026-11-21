@@ -15,6 +15,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthPromptStore } from "@/stores/authPromptStore";
+import { nth } from "@/test";
 import { createQueryWrapper, createTestQueryClient } from "@/test/query";
 
 const state = vi.hoisted(() => ({
@@ -285,7 +286,7 @@ describe("failed saves on personal data surfaces", () => {
     ];
     renderWithNotice(<VehiclesDialog open onClose={() => {}} />);
 
-    const [, second] = screen.getAllByRole("radio", { name: en.vehicles.makeDefault });
+    const second = nth(screen.getAllByRole("radio", { name: en.vehicles.makeDefault }), 1);
     await userEvent.click(second);
     expect(await screen.findByRole("alert")).toHaveTextContent(FAILED);
   });

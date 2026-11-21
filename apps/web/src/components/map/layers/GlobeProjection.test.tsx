@@ -15,7 +15,7 @@ import {
   useSceneLightStore,
 } from "@/integration-api/map/sceneLight";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { GlobeProjection } from "./GlobeProjection";
 
 let fake: ReturnType<typeof createFakeMap>;
@@ -181,7 +181,7 @@ describe("GlobeProjection sky lifecycle", () => {
       }),
     );
     expect(container.style.backgroundColor).toBe("rgb(227, 180, 166)");
-    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+    expect(nth(skies, 0).setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ themeSky: [227 / 255, 180 / 255, 166 / 255] }),
     );
   });
@@ -236,7 +236,7 @@ describe("GlobeProjection sky lifecycle", () => {
 
   it("updates the sky in place when lighting, the base map or the style changes", () => {
     const { rerender } = render(<GlobeProjection />);
-    const setOptions = skies[0].setOptions;
+    const setOptions = nth(skies, 0).setOptions;
     act(() => useLayerStore.getState().setGlobeLighting(false));
     expect(setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ lighting: false, base: "satellite", dark: true }),
@@ -248,7 +248,7 @@ describe("GlobeProjection sky lifecycle", () => {
     context.styleVersion++;
     rerender(<GlobeProjection />);
     expect(skies).toHaveLength(1);
-    expect(skies[0].dispose).not.toHaveBeenCalled();
+    expect(nth(skies, 0).dispose).not.toHaveBeenCalled();
     expect(fake.state.counts.addLayer.get(SKY_ID)).toBe(1);
   });
 
@@ -264,13 +264,13 @@ describe("GlobeProjection sky lifecycle", () => {
     act(() => {
       runOverlayTransaction("sun-time", { panelOpen: true }, { kind: "user" });
     });
-    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+    expect(nth(skies, 0).setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ lighting: false }),
     );
     act(() => {
       runOverlayTransaction("sun-time", { panelOpen: false }, { kind: "user" });
     });
-    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+    expect(nth(skies, 0).setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ lighting: true }),
     );
   });
@@ -280,7 +280,7 @@ describe("GlobeProjection sky lifecycle", () => {
     useLayerStore.setState({ activeLayer: "default" });
     render(<GlobeProjection />);
     expect(container.style.backgroundColor).toBe("rgb(2, 3, 6)");
-    act(() => skies[0].events.onUnavailable?.());
+    act(() => nth(skies, 0).events.onUnavailable?.());
     expect(sky["atmosphere-blend"]).toEqual([
       "interpolate",
       ["linear"],
@@ -377,11 +377,11 @@ describe("GlobeProjection sky lifecycle", () => {
     const { unmount } = render(<GlobeProjection />);
     expect(credits()).toEqual([]);
 
-    act(() => skies[0].events.onContent?.({ milkyWay: true, nightLights: true }));
+    act(() => nth(skies, 0).events.onContent?.({ milkyWay: true, nightLights: true }));
     expect(credits().some((entry) => entry.includes("ESO/S. Brunier"))).toBe(true);
     expect(credits().some((entry) => entry.includes("NASA Earth Observatory"))).toBe(true);
 
-    act(() => skies[0].events.onContent?.({ milkyWay: true, nightLights: false }));
+    act(() => nth(skies, 0).events.onContent?.({ milkyWay: true, nightLights: false }));
     expect(credits().some((entry) => entry.includes("ESO/S. Brunier"))).toBe(true);
     expect(credits().some((entry) => entry.includes("NASA Earth Observatory"))).toBe(false);
 

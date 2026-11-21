@@ -339,8 +339,8 @@ function resolveBindSource(
     return { src: bm.source, absoluteHostPath: null };
   }
   // Literal special sources (e.g. @docker-socket) — emit the concrete path.
-  if (SPECIAL_BIND_SOURCE_PATHS[bm.source]) {
-    const concrete = SPECIAL_BIND_SOURCE_PATHS[bm.source];
+  const concrete = SPECIAL_BIND_SOURCE_PATHS[bm.source];
+  if (concrete) {
     return { src: concrete, absoluteHostPath: concrete };
   }
 

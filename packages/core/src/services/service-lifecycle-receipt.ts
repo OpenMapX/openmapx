@@ -25,6 +25,7 @@ import {
   hardlinkApplySummarySchema,
   serviceLifecycleFailureEvidenceSchema,
 } from "../ops/service-results";
+import { strictlyAscending } from "../utils/strictlyAscending";
 import {
   assertConfigurationGenerationWriter,
   type ConfigurationGenerationWriter,
@@ -39,7 +40,7 @@ const ids = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .min(1)
   .max(256)
-  .refine((values) => values.every((value, index) => index === 0 || values[index - 1]! < value));
+  .refine(strictlyAscending);
 export const serviceLifecycleReceiptSchema = serviceLifecycleFailureEvidenceSchema
   .extend({
     version: z.literal(1),

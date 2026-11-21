@@ -165,27 +165,25 @@ export async function materializedMotisBundle(
   try {
     // The consumer root is a separate copy. Candidate verification continues to
     // own its own .openmapx-feed-proxy files inside the live candidate.
-    for (const name of ["feed-proxy-vars.json", "conf/default.conf"]) {
+    for (const { name, folder, leaf } of [
+      { name: "feed-proxy-vars.json", folder: [], leaf: "feed-proxy-vars.json" },
+      { name: "conf/default.conf", folder: ["conf"], leaf: "default.conf" },
+    ]) {
       const sourcePath = `.openmapx-feed-proxy/${name}`,
         expected = generated.generatedArtifacts.find((file) => file.path === sourcePath);
       if (!expected) throw Error("Materialized MOTIS proxy proof missing");
       const bytes = withDirectories(
         root,
-        ["motis", "live", ".openmapx-feed-proxy", ...(name.startsWith("conf/") ? ["conf"] : [])],
+        ["motis", "live", ".openmapx-feed-proxy", ...folder],
         false,
-        (dir) => dir.read(name.split("/").at(-1)!, MAX_MOTIS_MATERIALIZATION_BYTES, false),
+        (dir) => dir.read(leaf, MAX_MOTIS_MATERIALIZATION_BYTES, false),
       );
       if (
         bytes.length !== expected.sizeBytes ||
         createHash("sha256").update(bytes).digest("hex") !== expected.sha256
       )
         throw Error("Materialized MOTIS proxy changed");
-      withDirectories(
-        root,
-        ["motis-feed-proxy", ...(name.startsWith("conf/") ? ["conf"] : [])],
-        true,
-        (dir) => dir.write(name.split("/").at(-1)!, bytes),
-      );
+      withDirectories(root, ["motis-feed-proxy", ...folder], true, (dir) => dir.write(leaf, bytes));
       files.set(`motis-feed-proxy/${name}`, {
         path: `motis-feed-proxy/${name}`,
         sha256: expected.sha256,

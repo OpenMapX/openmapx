@@ -1,4 +1,4 @@
-import { fakeHttpClient, httpStatus } from "@openmapx/integration-framework/testing";
+import { fakeHttpClient, httpStatus, nth } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createFlickrPhotoProvider } from "./provider.js";
@@ -97,7 +97,7 @@ describe("Flickr photo provider", () => {
       }),
     );
 
-    const [photo] = await flickrPhotoProvider.search(QUERY);
+    const photo = nth(await flickrPhotoProvider.search(QUERY), 0);
 
     // url_m is the next available size; url_sq missing → constructed `_q` thumb.
     expect(photo.url).toBe("https://live.staticflickr.com/65535/53000000001_abc123_m.jpg");
@@ -120,7 +120,7 @@ describe("Flickr photo provider", () => {
       }),
     );
 
-    const [photo] = await flickrPhotoProvider.search(QUERY);
+    const photo = nth(await flickrPhotoProvider.search(QUERY), 0);
 
     expect(photo.url).toBe("https://live.staticflickr.com/65535/53000000001_abc123_b.jpg");
     expect(photo.thumbnailUrl).toBe("https://live.staticflickr.com/65535/53000000001_abc123_q.jpg");
@@ -131,13 +131,13 @@ describe("Flickr photo provider", () => {
       mockOk({ photos: { photo: [flickrPhoto({ license: "99" })] } }),
     );
 
-    const [photo] = await flickrPhotoProvider.search(QUERY);
+    const photo = nth(await flickrPhotoProvider.search(QUERY), 0);
 
-    expect(photo.licensing?.bindings[0].license).toMatchObject({
+    expect(photo.licensing?.bindings[0]?.license).toMatchObject({
       kind: "unknown",
       raw: "License 99",
     });
-    expect(photo.licensing?.bindings[0].license.url).toBeUndefined();
+    expect(nth(photo.licensing?.bindings ?? [], 0).license.url).toBeUndefined();
   });
 
   it("falls back to the owner nsid when no display name is present", async () => {
@@ -147,7 +147,7 @@ describe("Flickr photo provider", () => {
       }),
     );
 
-    const [photo] = await flickrPhotoProvider.search(QUERY);
+    const photo = nth(await flickrPhotoProvider.search(QUERY), 0);
 
     expect(photo.author).toBe("12345@N00");
     expect(photo.capturedAt).toBeUndefined();

@@ -141,48 +141,91 @@ export interface DatabaseClient {
   ): Promise<T>;
 }
 
-export type RouteHandler = (
-  req: {
-    query: RouteQuery;
-    /**
-     * Path params, already decoded exactly once by the host (an encoded `/`
-     * stays inside its param). Handlers must not decode them again.
-     */
-    params: Record<string, string>;
-    body: unknown;
-    /**
-     * Authenticated user id. Populated when the route was registered with
-     * `{ requireAuth: true }`, where the host rejects unauthenticated callers
-     * with 401 before invoking the handler, so this field is non-null inside
-     * auth-required handlers. A route registered with `{ optionalAuth: true }`
-     * sees it only when the caller presented a valid session.
-     */
-    userId?: string;
-    /**
-     * Opaque key for the caller's network, derived by the host from the same
-     * trusted address its own rate limits use (an IPv4 address or an IPv6 /64,
-     * read through configured proxies only). It is stable across requests and
-     * replicas, cannot be chosen by the caller and cannot be turned back into
-     * the address. Use it for per-client quotas, never as an identity: several
-     * people can share one network.
-     */
-    clientKey: string;
-    /**
-     * The incoming request's HTTP headers, forwarded as-is from Fastify.
-     * Node lowercases every header name when parsing the request, so read
-     * `if-none-match`, not `If-None-Match`.
-     */
-    headers: Record<string, string | string[] | undefined>;
-    /** Aborts when the caller disconnects. */
-    signal?: AbortSignal;
-  },
-  reply: {
-    send: (data: unknown) => void;
-    status: (code: number) => { send: (data: unknown) => void };
-    header: (name: string, value: string) => void;
-    type: (contentType: string) => void;
-  },
+/** A `:name` segment's param name, without a `.png`-style or `-` suffix after it. */
+type RouteParamName<Segment extends string> = Segment extends `${infer Name}.${string}`
+  ? RouteParamName<Name>
+  : Segment extends `${infer Name}-${string}`
+    ? RouteParamName<Name>
+    : Segment;
+
+/** Each `:name` segment of a literal path and `*` for a trailing wildcard; `unknown` when there are none. */
+type DeclaredRouteParams<Path extends string> =
+  (Path extends `${string}:${infer Segment}/${infer Rest}`
+    ? { [Name in RouteParamName<Segment>]: string } & DeclaredRouteParams<Rest>
+    : Path extends `${string}:${infer Segment}`
+      ? { [Name in RouteParamName<Segment>]: string }
+      : unknown) &
+    (Path extends `${string}*` ? { "*": string } : unknown);
+
+/** One object type with the properties of every member of an intersection. */
+type Flatten<T> = { [Key in keyof T]: T[Key] };
+
+/**
+ * The params a literal route path declares: each `:name` segment, and `*` for a
+ * trailing wildcard. A literal path without any declares none, and a path only
+ * known as `string` declares any param.
+ */
+export type RouteParams<Path extends string> = string extends Path
+  ? Record<string, string>
+  : unknown extends DeclaredRouteParams<Path>
+    ? Record<string, never>
+    : Flatten<DeclaredRouteParams<Path>>;
+
+/** A request to a route whose literal path declares no params, such as `/stops/search`. */
+export type ParamlessRouteRequest = RouteRequest<RouteParams<"/">>;
+
+/**
+ * A route handler. Its request is compared contravariantly, so `registerRoute`
+ * refuses a handler that reads a param its literal path does not declare, while
+ * a handler typed with the default params fits any path.
+ */
+export type RouteHandler<Params = Record<string, string>> = (
+  req: RouteRequest<Params>,
+  reply: RouteReply,
 ) => Promise<void> | void;
+
+export interface RouteRequest<Params = Record<string, string>> {
+  query: RouteQuery;
+  /**
+   * Path params, already decoded exactly once by the host (an encoded `/`
+   * stays inside its param). Handlers must not decode them again. A handler
+   * passed to `registerRoute` sees exactly the params its path declares.
+   */
+  params: Params;
+  body: unknown;
+  /**
+   * Authenticated user id. Populated when the route was registered with
+   * `{ requireAuth: true }`, where the host rejects unauthenticated callers
+   * with 401 before invoking the handler, so this field is non-null inside
+   * auth-required handlers. A route registered with `{ optionalAuth: true }`
+   * sees it only when the caller presented a valid session.
+   */
+  userId?: string;
+  /**
+   * Opaque key for the caller's network, derived by the host from the same
+   * trusted address its own rate limits use (an IPv4 address or an IPv6 /64,
+   * read through configured proxies only). It is stable across requests and
+   * replicas, cannot be chosen by the caller and cannot be turned back into
+   * the address. Use it for per-client quotas, never as an identity: several
+   * people can share one network.
+   */
+  clientKey: string;
+  /**
+   * The incoming request's HTTP headers, forwarded as-is from Fastify.
+   * Node lowercases every header name when parsing the request, so read
+   * `if-none-match`, not `If-None-Match`.
+   */
+  headers: Record<string, string | string[] | undefined>;
+  /** Aborts when the caller disconnects. */
+  signal?: AbortSignal;
+}
+
+export interface RouteReply {
+  send: (data: unknown) => void;
+  status: (code: number) => { send: (data: unknown) => void };
+  header: (name: string, value: string) => void;
+  type: (contentType: string) => void;
+}
 
 export interface RouteOptions {
   /** Require a valid session; respond 401 before invoking the handler otherwise. */
@@ -614,7 +657,12 @@ export interface IntegrationContext {
   registerKnowledgeProvider(provider: KnowledgeProvider): void;
   /** Typed registrar for GTFS catalog providers. Stored under the `gtfs-catalog` key. */
   registerGtfsCatalogProvider(provider: GtfsCatalogProvider): void;
-  registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
+  registerRoute<Path extends string>(
+    method: string,
+    path: Path,
+    handler: RouteHandler<RouteParams<Path>>,
+    options?: RouteOptions,
+  ): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
   registerDisclosure(disclosure: Disclosure): void;
   /**

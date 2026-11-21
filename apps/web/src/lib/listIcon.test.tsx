@@ -10,6 +10,13 @@ it("uses the saved-panel glyph for markers", () => {
   });
 });
 
+it.each(["constructor", "toString", "unknown", null])(
+  "falls back to the bookmark glyph for %s",
+  (icon) => {
+    expect(listMarkerIcon(icon)).toEqual(listMarkerIcon("bookmark"));
+  },
+);
+
 it.each(["🏕️", "👩🏽‍🚀", "1️⃣"])("keeps the complete emoji %s", (emoji) => {
   const view = render(resolveListIcon(emoji));
   expect(view.container.textContent).toBe(emoji);

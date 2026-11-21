@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { fakeHttpClient } from "@openmapx/integration-framework/testing";
+import { fakeHttpClient, nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { createOpenAQClient, OpenAQClientError } from "./openaq-client.js";
 import { MemoryUpstreamRuntime } from "./test-helpers.js";
@@ -35,7 +35,7 @@ describe("OpenAQ v3 client", () => {
     expect(result.items.map((item) => item.id)).toEqual([2178, 3001, 3002]);
     expect(result.truncated).toBe(false);
     expect(http.calls).toHaveLength(2);
-    const url = new URL(http.calls[0].url);
+    const url = new URL(nth(http.calls, 0).url);
     expect(url.origin).toBe("https://api.openaq.org");
     expect(url.pathname).toBe("/v3/locations");
     expect(url.searchParams.get("bbox")).toBe("-107,35,-106,36");
@@ -73,7 +73,7 @@ describe("OpenAQ v3 client", () => {
       "2026-08-30T10:00:00Z",
       "2026-08-30T11:00:00Z",
     ]);
-    expect(hours.items[0].flagInfo.hasFlags).toBe(true);
+    expect(hours.items[0]?.flagInfo.hasFlags).toBe(true);
   });
 
   it("retains license permissions and the official terms URL", async () => {
@@ -166,13 +166,13 @@ describe("OpenAQ v3 client", () => {
     const controller = new AbortController();
     const { client: openaq, http } = client(() => fixture("locations-page-2.json"));
     await openaq.listLocations({ bbox: [-1, -1, 1, 1], pollutants: ["pm25"] }, controller.signal);
-    expect(http.calls[0].options).toMatchObject({
+    expect(http.calls[0]?.options).toMatchObject({
       signal: controller.signal,
       maxBytes: expect.any(Number),
       contentTypes: ["application/json"],
       redirect: "error",
     });
-    expect(http.calls[0].options).toMatchObject({
+    expect(http.calls[0]?.options).toMatchObject({
       responseHeaders: expect.arrayContaining([
         "retry-after",
         "x-ratelimit-reset",

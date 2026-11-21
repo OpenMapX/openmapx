@@ -2,6 +2,7 @@
 
 import type * as maplibregl from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { bindMapLongPress, cameFromTouch, consumeLongPressClick, LONG_PRESS_MS } from "./mapTouch";
 
 function touch(target: EventTarget, type: string, points: Array<[number, number]>): void {
@@ -47,7 +48,7 @@ describe("bindMapLongPress", () => {
     touch(canvas, "touchstart", [[30, 40]]);
     vi.advanceTimersByTime(LONG_PRESS_MS);
     expect(onLongPress).toHaveBeenCalledTimes(1);
-    expect(onLongPress.mock.calls[0][0]).toEqual([30, 40]);
+    expect(nth(onLongPress.mock.calls, 0)[0]).toEqual([30, 40]);
   });
 
   it("tolerates a little jitter", () => {

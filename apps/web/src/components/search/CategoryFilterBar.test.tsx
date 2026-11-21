@@ -1,7 +1,7 @@
 import type { CategoryPlace, OverpassFilter } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { act, cleanup, createQueryWrapper, render, screen, userEvent } from "@/test";
+import { act, cleanup, createQueryWrapper, nth, render, screen, userEvent } from "@/test";
 
 const isMobileRef = { current: true };
 const localeRef = vi.hoisted(() => ({ current: "mock" }));
@@ -358,7 +358,7 @@ describe("CategoryFilterBar natural language predicates", () => {
     renderBar();
     const chips = screen.getAllByText("Barrierefrei");
     expect(chips).toHaveLength(2);
-    await user.click(chips[1].closest(".MuiChip-root")?.querySelector("svg") as SVGElement);
+    await user.click(nth(chips, 1).closest(".MuiChip-root")?.querySelector("svg") as SVGElement);
     expect(useCategorySearchStore.getState().adHocFilter?.require).toEqual([filter.require[0]]);
   });
 

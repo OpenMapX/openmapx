@@ -3,6 +3,7 @@ import { freshTransitTickState } from "@openmapx/core/navigation";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
@@ -98,12 +99,15 @@ it("repairs walking to the same stop without replacing the selected bus", async 
   nextFix();
   await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
   await waitFor(() =>
-    expect(useNavigationStore.getState().itinerary?.legs[0].steps?.[0].instructionText).toBe(
+    expect(useNavigationStore.getState().itinerary?.legs[0]?.steps?.[0]?.instructionText).toBe(
       "Continue",
     ),
   );
   expect(useNavigationStore.getState().itinerary?.legs[1]).toBe(original.legs[1]);
-  expect(get.mock.calls[0][1]).toMatchObject({ mode: "walking", waypoints: "0.001,0.001;0.002,0" });
+  expect(nth(get.mock.calls, 0)[1]).toMatchObject({
+    mode: "walking",
+    waypoints: "0.001,0.001;0.002,0",
+  });
 });
 it("keeps an accessibility requirement rather than querying a provider without that contract", () => {
   start(true);

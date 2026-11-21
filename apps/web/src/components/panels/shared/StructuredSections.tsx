@@ -204,7 +204,7 @@ function PricingRow({ row }: { row: (string | number)[] }) {
         )}
       </Box>
       <Typography variant="body2" sx={{ fontWeight: 500, flexShrink: 0, textAlign: "right" }}>
-        <FormattedValue value={price} />
+        {price !== undefined && <FormattedValue value={price} />}
       </Typography>
     </Box>
   );
@@ -260,7 +260,7 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
             textAlign: "right",
           }}
         >
-          <FormattedValue value={value} />
+          {value !== undefined && <FormattedValue value={value} />}
         </Typography>
       )}
     </Box>

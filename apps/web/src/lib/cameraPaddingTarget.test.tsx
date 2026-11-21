@@ -1,6 +1,6 @@
 import { useNavigationStore } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { getCameraPaddingTarget, subscribeCameraPaddingTarget } from "./cameraPadding";
 import { publishMapObstruction } from "./mapObstructions";
 
@@ -95,7 +95,7 @@ describe("subscribeCameraPaddingTarget", () => {
 
     const resize = fake.state.listenerCalls.filter((call) => call.event === "resize");
     expect(resize.map((call) => call.method)).toEqual(["on", "off"]);
-    expect(resize[1].handler).toBe(resize[0].handler);
+    expect(nth(resize, 1).handler).toBe(nth(resize, 0).handler);
     expect(fake.state.handlers.get("resize")?.size ?? 0).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { panoramaxPhotoProvider } from "./provider";
 
@@ -52,9 +53,9 @@ describe("Panoramax gallery creator receipts", () => {
         }),
       ),
     );
-    const [photo] = await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 });
+    const photo = nth(await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 }), 0);
     expect(photo.author).toBe(author);
-    expect(photo.contributors?.[0].publisher).toEqual(
+    expect(photo.contributors?.[0]?.publisher).toEqual(
       author ? { name: author, url: undefined } : undefined,
     );
     expect(photo.pageUrl).toBe("https://panoramax.xyz/#focus=pic&pic=photo-1");
@@ -84,7 +85,7 @@ describe("Panoramax gallery images", () => {
         }),
       ),
     );
-    const [photo] = await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 });
+    const photo = nth(await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 }), 0);
     expect(photo.url).toBe(`https://api.panoramax.xyz/api/pictures/${id}/sd.jpg`);
     expect(photo.thumbnailUrl).toBe(`https://api.panoramax.xyz/api/pictures/${id}/thumb.jpg`);
   });
@@ -94,7 +95,7 @@ describe("Panoramax gallery images", () => {
       "fetch",
       vi.fn(async () => Response.json({ type: "FeatureCollection", features: [item] })),
     );
-    const [photo] = await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 });
+    const photo = nth(await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 }), 0);
     expect(photo.url).toBe("https://example.test/photo.jpg");
   });
 });

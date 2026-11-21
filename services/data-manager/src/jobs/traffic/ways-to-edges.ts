@@ -88,9 +88,9 @@ function parseWayEdgesLine(
 
   const edges: WayEdge[] = [];
   for (let i = 1; i + 1 < parts.length; i += 2) {
-    const forward = parts[i] === "1";
-    const graphId = BigInt(parts[i + 1]);
-    edges.push({ forward, ...decodeGraphId(graphId) });
+    const graphId = parts[i + 1];
+    if (graphId === undefined) break;
+    edges.push({ forward: parts[i] === "1", ...decodeGraphId(BigInt(graphId)) });
   }
   return { wayId, edges };
 }

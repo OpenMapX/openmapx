@@ -66,12 +66,9 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
         return result ? captureTransitContributors(result.data, result.attributions) : [];
       }),
     );
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === "rejected") {
-        ctx.log.warn(
-          `live-transit source ${providers[i].id} failed`,
-          (results[i] as PromiseRejectedResult).reason,
-        );
+    for (const [i, result] of results.entries()) {
+      if (result.status === "rejected") {
+        ctx.log.warn(`live-transit source ${providers[i]?.id} failed`, result.reason);
       }
     }
     if (providers.length > 0 && results.every((result) => result.status === "rejected"))
@@ -90,12 +87,9 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
         return result ? captureTransitContributors(result.data, result.attributions) : [];
       }),
     );
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === "rejected") {
-        ctx.log.warn(
-          `live-transit source ${providers[i].id} failed`,
-          (results[i] as PromiseRejectedResult).reason,
-        );
+    for (const [i, result] of results.entries()) {
+      if (result.status === "rejected") {
+        ctx.log.warn(`live-transit source ${providers[i]?.id} failed`, result.reason);
       }
     }
     if (providers.length > 0 && results.every((result) => result.status === "rejected"))

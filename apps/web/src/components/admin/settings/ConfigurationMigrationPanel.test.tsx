@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { cleanup, createTestQueryClient, fireEvent, render, screen } from "@/test";
 import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
 
@@ -79,7 +79,8 @@ it("shows a valid server preview when browser metadata storage is blocked", asyn
         <ConfigurationMigrationPanel />
       </QueryClientProvider>,
     );
-    const input = screen.getByText("Review configuration file").querySelector("input")!;
+    const input = screen.getByText("Review configuration file").querySelector("input");
+    assert.exists(input);
     fireEvent.change(input, {
       target: {
         files: [

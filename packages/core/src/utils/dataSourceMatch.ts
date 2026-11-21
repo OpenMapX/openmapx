@@ -64,8 +64,9 @@ export function matchDataSourceResults<T extends DataSourceMatchTarget>(
   const taken = new Set<number>();
   for (const pair of pairs) {
     const candidate = candidates[pair.candidate];
-    if (matches.has(candidate.id) || taken.has(pair.result)) continue;
-    matches.set(candidate.id, results[pair.result]);
+    const result = results[pair.result];
+    if (!candidate || !result || matches.has(candidate.id) || taken.has(pair.result)) continue;
+    matches.set(candidate.id, result);
     taken.add(pair.result);
   }
   return matches;

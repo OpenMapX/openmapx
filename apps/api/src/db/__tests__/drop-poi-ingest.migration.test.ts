@@ -5,7 +5,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres, { type Sql } from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const LAST_BEFORE_DROP = "0038_better_auth_account_issuer_cleanup";
@@ -95,6 +95,7 @@ integration("dropping the POI-ingest pipeline's database state", () => {
       const [kept] = await sql<{ id: string }[]>`
         INSERT INTO data_manager.jobs (kind, status) VALUES ('transitous-sync', 'ok') RETURNING id
       `;
+      assert.isDefined(kept);
       for (const job of [...ingestJobs, kept]) {
         await sql`
           INSERT INTO data_manager.job_stages (job_id, stage, status, started_at, finished_at, duration_ms)
@@ -136,10 +137,10 @@ integration("dropping the POI-ingest pipeline's database state", () => {
         WHERE table_schema = 'data_manager' AND table_name = 'poi_feed_state'
       `;
       expect(tables).toHaveLength(0);
-      const [{ count }] = await sql<{ count: string }[]>`
+      const [countRow] = await sql<{ count: string }[]>`
         SELECT count(*)::text AS count FROM data_manager.jobs
       `;
-      expect(count).toBe("0");
+      expect(countRow?.count).toBe("0");
       expect(await jobStagesIndexes(sql)).toEqual([JOB_STAGES_INDEX_DEF]);
     } finally {
       await sql.end({ timeout: 5 });

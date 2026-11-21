@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { registerComposeCommands } from "../src/commands/compose";
 import {
@@ -61,7 +61,9 @@ function fakeDocker(manifest = manifestJson): ReleaseDockerRunner {
       args[1] === `${"f".repeat(64)}:/release-manifest.json`
     ) {
       const { writeFileSync } = await import("node:fs");
-      writeFileSync(args[2], manifest);
+      const [, , destination] = args;
+      assert.isDefined(destination);
+      writeFileSync(destination, manifest);
       return { stdout: "", stderr: "", exitCode: 0 };
     }
     if (args[0] === "rm" && args[1] === "-f" && args[2] === "f".repeat(64))
@@ -177,7 +179,11 @@ it("extracts the manifest from the frozen local image ID after a mutable pointer
       expect(args[1]).toBe(`sha256:${"2".repeat(64)}`);
       return { stdout: "f".repeat(64), stderr: "", exitCode: 0 };
     }
-    if (args[0] === "cp") writeFileSync(args[2], manifestJson);
+    if (args[0] === "cp") {
+      const [, , destination] = args;
+      assert.isDefined(destination);
+      writeFileSync(destination, manifestJson);
+    }
     return { stdout: "", stderr: "", exitCode: 0 };
   };
   expect((await resolveReleaseManifest(docker)).release).toBe("deadbeef");

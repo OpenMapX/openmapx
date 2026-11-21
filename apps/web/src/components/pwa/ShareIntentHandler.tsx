@@ -83,7 +83,7 @@ function parseGeoUri(raw: string): string | null {
   }
 
   const body = value.slice(4);
-  const [coords, rest] = body.split("?");
+  const [coords = "", rest] = body.split("?");
   if (rest) {
     const inner = new URLSearchParams(rest);
     const q = inner.get("q");

@@ -30,7 +30,7 @@ export type TransitSurfaceKind = "estimated" | "polygons";
 /** A frozen request for a polygon run: `[west, south, east, north]`. */
 export type TransitPolygonBbox = [number, number, number, number];
 
-export const TRAVEL_TIME_PRESETS: Record<TravelTimeMode, number[]> = {
+export const TRAVEL_TIME_PRESETS: Record<TravelTimeMode, readonly [number, ...number[]]> = {
   walking: [5, 10, 15, 20, 30, 60],
   cycling: [5, 10, 15, 20, 30, 45, 60, 90],
   driving: [5, 10, 15, 30, 45, 60],

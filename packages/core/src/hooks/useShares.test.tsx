@@ -59,10 +59,10 @@ it("returns the creation receipt and encodes opaque IDs for rotate/revoke", asyn
     await result.current.rotate.mutateAsync("a / café");
     await result.current.revoke.mutateAsync("a / café");
   });
-  expect(fetcher.mock.calls[1][0]).toBe(
+  expect(fetcher.mock.calls[1]?.[0]).toBe(
     "https://sharing.example/api/shares/a%20%2F%20caf%C3%A9/rotate",
   );
-  expect(fetcher.mock.calls[2][0]).toBe("https://sharing.example/api/shares/a%20%2F%20caf%C3%A9");
+  expect(fetcher.mock.calls[2]?.[0]).toBe("https://sharing.example/api/shares/a%20%2F%20caf%C3%A9");
 });
 it("refreshes owner inventory after a mutation even when the initial read is still pending", async () => {
   let firstSignal: AbortSignal | null | undefined;

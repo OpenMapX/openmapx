@@ -254,7 +254,7 @@ describe("ambient generation lifecycle", () => {
       ["en", "Cologne Cathedral"],
       ["de", "Dom zu Köln"],
       ["en", "Cologne Cathedral"],
-    ]) {
+    ] as const) {
       textField = localizeTextField(textField, locale);
       const expression = createExpression(
         textField,
@@ -518,15 +518,17 @@ describe("ambient generation lifecycle", () => {
     );
     render(<AmbientPlacesLayer />);
     await waitFor(() => expect(test.group).not.toBeNull());
-    const handlers = () =>
-      Object.fromEntries(
-        test.map.on.mock.calls.map(([event, handler]) => [event, handler]),
-      ) as Record<string, (event?: unknown) => void>;
+    // The latest handler registered for the event; the test fails if there is none.
+    const handler = (event: string) => {
+      const registered = test.map.on.mock.calls.findLast(([name]) => name === event)?.[1];
+      if (!registered) throw new Error(`No ${event} handler is registered`);
+      return registered as (event?: unknown) => void;
+    };
     test.map.queryRenderedFeatures.mockImplementation((...args: unknown[]) => {
       const options = args[1] as { layers?: string[] } | undefined;
       return options?.layers?.includes("ambient-places-labels") ? [feature] : [];
     });
-    act(() => handlers().click({ point: { x: 1, y: 2 } }));
+    act(() => handler("click")({ point: { x: 1, y: 2 } }));
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
       id: "osm:node/9007199254740993",
       ids: { gers: "gers-a", overture: "gers-a" },
@@ -539,8 +541,8 @@ describe("ambient generation lifecycle", () => {
     );
     const prior = test.map.setFilter.mock.calls.length;
     act(() => {
-      handlers()["style.load"]();
-      handlers().idle();
+      handler("style.load")();
+      handler("idle")();
     });
     expect(test.map.setFilter.mock.calls.length).toBeGreaterThan(prior);
   });

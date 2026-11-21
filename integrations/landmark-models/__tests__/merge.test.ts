@@ -1,4 +1,5 @@
 import type { LandmarkAsset, OsmElementRef } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import {
   cellsForBounds,
@@ -176,7 +177,7 @@ describe("cells", () => {
     const a = asset({ contributors: [receipt] });
     const b = asset({ contributors: [{ ...receipt }] });
     const index = mergeProviders([snap(BARRELMAN, [a, b])], none, none);
-    const cell = [...index.cells.keys()][0] as string;
+    const cell = nth([...index.cells.keys()], 0);
     const response = toCellResponse(index, cell);
     expect(response.receipts).toEqual([receipt]);
     expect(response.assets.map((x) => x.receipts)).toEqual([[0], [0]]);
@@ -192,7 +193,7 @@ describe("cells", () => {
       detailZoom: 17,
     });
     const index = mergeProviders([snap(BARRELMAN, [a])], none, none);
-    const wire = toCellResponse(index, [...index.cells.keys()][0] as string).assets[0];
+    const wire = toCellResponse(index, nth([...index.cells.keys()], 0)).assets[0];
     expect(wire?.id).toBe(`${BARRELMAN}:${a.providerAssetId}`);
     expect(wire?.models).toEqual({
       low: `/api/integrations/landmark-models/models/${BARRELMAN}/${SHA(901)}.glb`,

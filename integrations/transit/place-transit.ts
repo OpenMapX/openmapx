@@ -414,9 +414,9 @@ function linkWords(text: string): { words: string[]; station: boolean } {
   let station = false;
   const words = stopNameWords(text).flatMap((spelt) => {
     const word = STATION_SPELLINGS[spelt] ?? spelt;
-    const side = SIDE_STATION.exec(word);
-    if (side || STATION_WORDS.has(word)) station = true;
-    if (side) return [side[1]];
+    const [, side] = SIDE_STATION.exec(word) ?? [];
+    if (side !== undefined || STATION_WORDS.has(word)) station = true;
+    if (side !== undefined) return [side];
     if (GENERIC_LINK_WORDS.has(word)) return [];
     return [word.replace(/ß/g, "ss").replace(/str$/, "strasse")];
   });
@@ -427,10 +427,12 @@ function linkName(name: string): LinkName {
   const { words, station } = linkWords(name);
   const parts = name.split(",");
   const withoutCommaTown: string[][] = [];
-  if (parts.length > 1) {
+  const firstPart = parts[0];
+  const lastPart = parts.at(-1);
+  if (parts.length > 1 && firstPart !== undefined && lastPart !== undefined) {
     for (const [town, rest] of [
-      [parts[0], parts.slice(1)],
-      [parts[parts.length - 1], parts.slice(0, -1)],
+      [firstPart, parts.slice(1)],
+      [lastPart, parts.slice(0, -1)],
     ] as const) {
       if (linkWords(town).words.length <= MAX_TOWN_WORDS) {
         withoutCommaTown.push(linkWords(rest.join(",")).words);
@@ -718,10 +720,10 @@ export function createPlaceTransit(
     // operator catalog) regardless of whether they contribute displayed lines.
     const allFresh: Freshness[] = [stopsRes.freshness];
 
-    for (let i = 0; i < stops.length; i++) {
+    for (const [i, stop] of stops.entries()) {
       const result = routeResults[i];
-      if (result.status !== "fulfilled") continue;
-      const providerName = stops[i].provider;
+      if (result?.status !== "fulfilled") continue;
+      const providerName = stop.provider;
       allFresh.push(result.value.freshness);
 
       for (const route of captureTransitContributors(
@@ -737,7 +739,7 @@ export function createPlaceTransit(
           byKey.set(k, {
             ...route,
             providers: [providerName],
-            hintStopId: stops[i].id,
+            hintStopId: stop.id,
           } as MergedRoute);
         } else {
           let contributed = false;
@@ -749,7 +751,7 @@ export function createPlaceTransit(
           }
           if (!existing.hintStopId) {
             retainFieldReceipt(existing, "hintStopId", route.contributors ?? []);
-            existing.hintStopId = stops[i].id;
+            existing.hintStopId = stop.id;
             contributed = true;
           }
           // Prefer entry with color data
@@ -928,10 +930,10 @@ export function createPlaceTransit(
         );
     }
 
-    for (let i = 0; i < stops.length; i++) {
+    for (const [i, stop] of stops.entries()) {
       const result = results[i];
-      if (result.status !== "fulfilled") continue;
-      const stopProvider = stops[i].provider;
+      if (result?.status !== "fulfilled") continue;
+      const stopProvider = stop.provider;
       allFresh.push(result.value.freshness);
 
       for (const dep of captureTransitContributors(
@@ -972,7 +974,7 @@ export function createPlaceTransit(
         }
 
         const part: FoldedDeparture = {
-          stop: departureStop(dep, stops[i]),
+          stop: departureStop(dep, stop),
           provider: stopProvider,
           tripId: dep.tripId ?? "",
           scheduledAt: dep.scheduledAt,

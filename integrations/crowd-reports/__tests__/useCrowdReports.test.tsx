@@ -1,6 +1,6 @@
 import { CALLER_SHOWS_ERRORS, isErrorShownByCaller } from "@openmapx/core";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { renderHookWithQuery, waitFor } from "@/test";
+import { nth, renderHookWithQuery, waitFor } from "@/test";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
@@ -63,13 +63,13 @@ describe("useSubmitReport", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [enrollUrl, enrollInit] = fetchMock.mock.calls[0];
+    const [enrollUrl, enrollInit] = nth(fetchMock.mock.calls, 0);
     expect(enrollUrl).toBe(ENROLL_URL);
     const enrollBody = JSON.parse(enrollInit.body as string);
     expect(typeof enrollBody.pubJwk).toBe("object");
     expect(typeof enrollBody.proof.keyId).toBe("string");
 
-    const [submitUrl, submitInit] = fetchMock.mock.calls[1];
+    const [submitUrl, submitInit] = nth(fetchMock.mock.calls, 1);
     expect(submitUrl).toBe(REPORTS_URL);
     const sent = JSON.parse(submitInit.body as string);
     expect(sent.reportingGrant).toBe("GRANT-FROM-ENROLL");
@@ -89,7 +89,7 @@ describe("useSubmitReport", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [submitUrl, submitInit] = fetchMock.mock.calls[0];
+    const [submitUrl, submitInit] = nth(fetchMock.mock.calls, 0);
     expect(submitUrl).toBe(REPORTS_URL);
     expect(JSON.parse(submitInit.body as string).reportingGrant).toBe("CACHED-GRANT");
   });
@@ -102,7 +102,7 @@ describe("useSubmitReport", () => {
     result.current.mutate(CLAIM);
     await waitFor(() => expect(result.current.isError).toBe(true));
 
-    const [mutation] = queryClient.getMutationCache().getAll();
+    const mutation = nth(queryClient.getMutationCache().getAll(), 0);
     expect(isErrorShownByCaller(mutation.options.meta)).toBe(true);
   });
 
@@ -134,8 +134,8 @@ describe("useSubmitReport", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][0]).toBe(ENROLL_URL);
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).reportingGrant).toBe(
+    expect(nth(fetchMock.mock.calls, 0)[0]).toBe(ENROLL_URL);
+    expect(JSON.parse(nth(fetchMock.mock.calls, 1)[1].body as string).reportingGrant).toBe(
       "GRANT-FROM-ENROLL",
     );
   });
@@ -151,7 +151,7 @@ describe("useVote", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = nth(fetchMock.mock.calls, 0);
     expect(url).toBe(
       "https://api.test/api/integrations/crowd-reports/reports/situation/sit%3A42/confirm",
     );
@@ -173,7 +173,7 @@ describe("useVote", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = nth(fetchMock.mock.calls, 0);
     expect(url).toBe(
       "https://api.test/api/integrations/crowd-reports/reports/feature/feature%3A1/negate?component=lane%201",
     );

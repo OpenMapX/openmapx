@@ -2,6 +2,7 @@ import {
   angularDifference,
   bearingBetween,
   haversineDistance,
+  itemAt,
   type JunctionLookupPoint,
   type JunctionLookupResult,
   type JunctionWay,
@@ -154,9 +155,11 @@ function distanceToPolyline(node: LngLat, polyline: LngLat[]): number {
     (lat - node[1]) * 111_320,
   ];
   let best = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < polyline.length - 1; i += 1) {
-    const [ax, ay] = toLocal(polyline[i]);
-    const [bx, by] = toLocal(polyline[i + 1]);
+  for (const [i, b] of polyline.entries()) {
+    const a = polyline[i - 1];
+    if (!a) continue;
+    const [ax, ay] = toLocal(a);
+    const [bx, by] = toLocal(b);
     const dx = bx - ax;
     const dy = by - ay;
     const lengthSq = dx * dx + dy * dy;
@@ -180,36 +183,42 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
   // segment leaving it (or arriving at it, at the way's end): a ramp curves
   // away within a few nodes, so its far end says nothing about the split.
   let nearest = 0;
-  for (let i = 1; i < nodes.length; i += 1) {
-    if (haversineDistance(nodes[i], centre) < haversineDistance(nodes[nearest], centre))
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const [i, node] of nodes.entries()) {
+    const distance = haversineDistance(node, centre);
+    if (distance < nearestDistance) {
       nearest = i;
+      nearestDistance = distance;
+    }
   }
+  const wayNode = `node of way ${element.id}`;
   const bearing =
     nearest === nodes.length - 1
-      ? bearingBetween(nodes[nearest - 1], nodes[nearest])
-      : bearingBetween(nodes[nearest], nodes[nearest + 1]);
+      ? bearingBetween(itemAt(nodes, nearest - 1, wayNode), itemAt(nodes, nearest, wayNode))
+      : bearingBetween(itemAt(nodes, nearest, wayNode), itemAt(nodes, nearest + 1, wayNode));
 
   // Signed distance of the way's travel end: positive when the way leads into
   // the point (its end lies upstream of it), negative when it runs away from it.
-  const end = nodes[nodes.length - 1];
+  const end = itemAt(nodes, nodes.length - 1, wayNode);
   const endDistance = haversineDistance(end, centre);
-  const endBearing = bearingBetween(nodes[nodes.length - 2], end);
+  const endBearing = bearingBetween(itemAt(nodes, nodes.length - 2, wayNode), end);
   const leadsIn =
     endDistance < END_ON_POINT_METERS ||
     angularDifference(bearingBetween(end, centre), endBearing) <= 90;
 
-  const localSegments = nodes.flatMap((node, i) =>
-    i < nodes.length - 1 && distanceToPolyline(centre, [node, nodes[i + 1]]) <= 500
-      ? [i, i + 1]
-      : [],
-  );
-  const first = localSegments.length ? localSegments[0] : 0;
-  const last = localSegments.length ? localSegments[localSegments.length - 1] : nodes.length - 1;
+  const localSegments = nodes.flatMap((node, i) => {
+    const next = nodes[i + 1];
+    return next && distanceToPolyline(centre, [node, next]) <= 500 ? [i, i + 1] : [];
+  });
+  const first = localSegments[0] ?? 0;
+  const last = localSegments.at(-1) ?? nodes.length - 1;
   const local = nodes.slice(first, last + 1);
   const geometry =
     local.length <= 128
       ? local
-      : Array.from({ length: 128 }, (_, i) => local[Math.round((i * (local.length - 1)) / 127)]);
+      : Array.from({ length: 128 }, (_, i) =>
+          itemAt(nodes, first + Math.round((i * (local.length - 1)) / 127), wayNode),
+        );
   return {
     wayId: element.id,
     highway: tags.highway ?? "",
@@ -217,7 +226,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     ...(tags.name ? { name: tags.name } : {}),
     bearing,
     endDistanceMeters: leadsIn ? endDistance : -endDistance,
-    startDistanceMeters: haversineDistance(nodes[0], centre),
+    startDistanceMeters: haversineDistance(itemAt(nodes, 0, wayNode), centre),
     tags: laneTags(tags),
     geometry,
   };

@@ -299,6 +299,26 @@ describe("TransitFieldLayer WebGL lifecycle", () => {
       textures: 1,
     });
   });
+  it("saves and restores around a frame on a lost context, whose parameters are all null", () => {
+    const gl = new FakeWebGL2RenderingContext();
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [{ lng: 13.4, lat: 52.5, arrivalSeconds: 0 }],
+      thresholdsMinutes: [15, 30],
+    });
+    layer.onAdd({ triggerRepaint: vi.fn() } as never, gl as never);
+    vi.spyOn(gl, "getParameter").mockReturnValue(null);
+    const viewport = vi.spyOn(gl, "viewport");
+    const clearColor = vi.spyOn(gl, "clearColor");
+    const args = { modelViewProjectionMatrix: new Float32Array(16) } as never;
+
+    expect(() => layer.prerender(gl as never, args)).not.toThrow();
+    expect(() => layer.render(gl as never)).not.toThrow();
+    // Nothing is restored from a null reading, so no call receives a missing value.
+    expect([...viewport.mock.calls, ...clearColor.mock.calls].flat().every(Number.isFinite)).toBe(
+      true,
+    );
+  });
   it("credits only seed receipts with proven positive winning field pixels", () => {
     const gl = new FakeWebGL2RenderingContext();
     const map = { triggerRepaint: vi.fn() };

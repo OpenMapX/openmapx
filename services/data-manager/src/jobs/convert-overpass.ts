@@ -111,13 +111,13 @@ export async function convertPbfToBz2ForRegion(
   opts: ConvertOverpassForRegionOptions,
 ): Promise<ConvertOverpassForRegionResult> {
   const osmEntries = opts.store.getAll().filter((d) => d.type === "osm-pbf");
-  if (osmEntries.length === 0) {
+  let [picked] = osmEntries;
+  if (!picked) {
     throw new Error(
       "no osm-pbf downloads found — run `pnpm openmapx data download osm <region>` first",
     );
   }
 
-  let picked = osmEntries[0];
   if (opts.region) {
     const match = osmEntries.find((d) => d.region === opts.region || d.id === opts.region);
     if (!match) {

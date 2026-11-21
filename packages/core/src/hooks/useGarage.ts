@@ -47,8 +47,8 @@ export function useVehicles() {
 /** The flagged default, or the sole vehicle when nothing is flagged. */
 export function useDefaultVehicle(): PersonalVehicle | null {
   const { data } = useVehicles();
-  if (!data || data.length === 0) return null;
-  return data.find((v) => v.isDefault) ?? (data.length === 1 ? data[0] : null);
+  if (!data) return null;
+  return data.find((v) => v.isDefault) ?? (data.length === 1 ? (data[0] ?? null) : null);
 }
 
 export function useParkedLocations() {
@@ -132,8 +132,9 @@ export function useDeleteVehicle(options: MutationHookOptions = {}) {
       const remaining = readLocalVehicles().filter((vehicle) => vehicle.id !== id);
       // A garage with no default silently deselects the user's car; promote the
       // oldest survivor, mirroring the server.
-      if (remaining.length > 0 && !remaining.some((v) => v.isDefault)) {
-        remaining[0] = { ...remaining[0], isDefault: true };
+      const [oldest] = remaining;
+      if (oldest && !remaining.some((v) => v.isDefault)) {
+        remaining[0] = { ...oldest, isDefault: true };
       }
       writeLocalVehicles(remaining);
       // The server cascades; locally the same rule has to be applied by hand.

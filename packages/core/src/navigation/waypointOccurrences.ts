@@ -1,6 +1,6 @@
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "../utils/coordinates";
-import { cumulativeDistances, positionAt } from "./deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "./deadReckon";
 import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
 
 /** Project onto the future suffix, rather than an earlier visit to the same road. */
@@ -16,7 +16,7 @@ export function projectWaypointAfter(
   const total = cumulative.at(-1) ?? 0;
   const from = Math.min(fromAlongMeters, total);
   const start = positionAt(geometry, cumulative, from).point;
-  const suffix = [start, ...geometry.filter((_, i) => cumulative[i] > from)];
+  const suffix = [start, ...geometry.filter((_, i) => distanceAtVertex(cumulative, i) > from)];
   if (suffix.length < 2)
     return {
       snapped: start,

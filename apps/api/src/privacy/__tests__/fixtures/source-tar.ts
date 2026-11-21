@@ -41,7 +41,7 @@ export function invalidTarCases(path: string): Array<[string, Buffer, string]> {
   const padding = Buffer.from(input);
   padding[513] = 1;
   const checksum = Buffer.from(input);
-  checksum[100] ^= 1;
+  checksum.writeUInt8(checksum.readUInt8(100) ^ 1, 100);
   const type = (value: number) =>
     changeTarHeader(input, (header) => {
       header[156] = value;
@@ -51,7 +51,7 @@ export function invalidTarCases(path: string): Array<[string, Buffer, string]> {
     [
       "high-bit magic",
       changeTarHeader(input, (h) => {
-        h[257] |= 128;
+        h.writeUInt8(h.readUInt8(257) | 128, 257);
       }),
       "invalid_header",
     ],

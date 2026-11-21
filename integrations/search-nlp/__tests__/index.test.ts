@@ -6,6 +6,7 @@ import type {
   RouteHandler,
   UpstreamRuntime,
 } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __buildProviders,
@@ -124,7 +125,7 @@ function fakeRuntime(options: { unavailable?: boolean } = {}) {
       }
       const keys = input.windows.map((window) => `${input.bucket}:${window.id}`);
       const denied = input.windows.some(
-        (window, index) => (used.get(keys[index] as string) ?? 0) + input.cost > window.limit,
+        (window, index) => (used.get(nth(keys, index)) ?? 0) + input.cost > window.limit,
       );
       if (denied) return { allowed: false, remaining: {}, retryAt: Date.now() + 1_000 };
       for (const key of keys) used.set(key, (used.get(key) ?? 0) + input.cost);

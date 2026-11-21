@@ -1,4 +1,4 @@
-import type { LngLat, Route } from "@openmapx/core";
+import { itemAt, type LngLat, type Route } from "@openmapx/core";
 import type { MapInsets } from "@/lib/mapObstructions";
 
 interface Point {
@@ -116,7 +116,7 @@ function indexSegments(segments: Segment[], start = 0, end = segments.length): S
     node.bottom = Math.max(a.bottom, b.bottom);
   } else {
     for (let i = start; i < end; i++) {
-      const { a, b } = segments[i];
+      const { a, b } = itemAt(segments, i);
       node.left = Math.min(node.left, a.x, b.x);
       node.right = Math.max(node.right, a.x, b.x);
       node.top = Math.min(node.top, a.y, b.y);
@@ -151,7 +151,7 @@ function distanceToRoute(point: Point, route: PreparedRoute): number {
       return;
     }
     for (let i = node.start; i < node.end; i++) {
-      const { a, b } = route.segments[i];
+      const { a, b } = itemAt(route.segments, i);
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const lengthSquared = dx * dx + dy * dy;
@@ -232,10 +232,12 @@ export function routePillAnchors(
     for (let step = 1; step <= 39; step++) {
       const progress = step / 40;
       const target = progress * total;
-      while (partIndex < visible.length - 1 && target > traversed + visible[partIndex].length) {
-        traversed += visible[partIndex++].length;
+      let part = itemAt(visible, partIndex);
+      while (partIndex < visible.length - 1 && target > traversed + part.length) {
+        traversed += part.length;
+        partIndex += 1;
+        part = itemAt(visible, partIndex);
       }
-      const part = visible[partIndex];
       const t = part.start + ((target - traversed) / part.length) * (part.end - part.start);
       const coordinate = interpolate(part.segment.from, part.segment.to, t);
       candidates.push({ coordinate, point: project(coordinate), progress });

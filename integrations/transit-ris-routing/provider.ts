@@ -6,7 +6,7 @@
  * Uses the shared DB RIS client for authentication.
  */
 
-import { decodePolyline, isoWithOffsetInZone } from "@openmapx/core";
+import { decodePolyline, isoWithOffsetInZone, itemAt } from "@openmapx/core";
 import { type LatLng, latLngOrNull } from "@openmapx/core/coordinates";
 import { isTransitModeRestriction } from "@openmapx/integration-framework";
 import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
@@ -200,15 +200,14 @@ function shift(time: string | undefined, seconds: number | undefined): string | 
 function completeEnds(drafts: LegDraft[], request?: { origin: LatLng; destination: LatLng }) {
   const last = drafts.length - 1;
   for (let i = last; i >= 0; i--) {
-    const d = drafts[i] as LegDraft;
+    const d = itemAt(drafts, i, "leg draft");
     if (!d.to && i === last && request) {
       d.to = request.destination;
       d.toRequest = true;
     }
     d.to ??= drafts[i + 1]?.from ?? null;
   }
-  for (let i = 0; i <= last; i++) {
-    const d = drafts[i] as LegDraft;
+  for (const [i, d] of drafts.entries()) {
     if (!d.from && i === 0 && request) {
       d.from = request.origin;
       d.fromRequest = true;
@@ -220,7 +219,7 @@ function completeEnds(drafts: LegDraft[], request?: { origin: LatLng; destinatio
     d.endTime ??= shift(d.startTime, d.seconds);
   }
   for (let i = last; i >= 0; i--) {
-    const d = drafts[i] as LegDraft;
+    const d = itemAt(drafts, i, "leg draft");
     d.endTime ??= drafts[i + 1]?.startTime;
     d.startTime ??= shift(d.endTime, d.seconds === undefined ? undefined : -d.seconds);
   }
@@ -401,11 +400,11 @@ export async function planJourney(
     }
   }
 
-  if (allItineraries.length === 0) return null;
+  const [firstItinerary] = allItineraries;
+  if (!firstItinerary) return null;
 
-  const first = allItineraries[0].legs[0];
-  const lastIt = allItineraries[0];
-  const last = lastIt.legs[lastIt.legs.length - 1];
+  const first = firstItinerary.legs[0];
+  const last = firstItinerary.legs.at(-1);
 
   return {
     from: {

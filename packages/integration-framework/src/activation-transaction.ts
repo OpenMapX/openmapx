@@ -51,8 +51,7 @@ export function createActivationTransactionScope(
       if (completed || rolledBack) return [];
       rolledBack = true;
       const errors: unknown[] = [];
-      for (let index = transactions.length - 1; index >= 0; index--) {
-        const transaction = transactions[index];
+      for (const transaction of [...transactions].reverse()) {
         if (transaction.rolledBack || !transaction.rollback) continue;
         transaction.rolledBack = true;
         try {

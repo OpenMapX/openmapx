@@ -1,4 +1,4 @@
-import type { BuildingReplacement } from "@openmapx/core";
+import { type BuildingReplacement, itemAt } from "@openmapx/core";
 import {
   type AddProtocolAction,
   AJAXError,
@@ -163,7 +163,7 @@ export function createMaskProtocolHandler(
       throw new AJAXError(404, "No building tile", params.url, new Blob());
     const [z, x, y] = [Number(match[1]), Number(match[2]), Number(match[3])];
     const upstreamY = source.scheme === "tms" ? 2 ** z - 1 - y : y;
-    const template = source.templates[(x + y) % source.templates.length] as string;
+    const template = itemAt(source.templates, (x + y) % source.templates.length);
     const url = new URL(
       template
         .replace("{z}", String(z))

@@ -7,6 +7,7 @@ import {
   selectOfflinePackage,
 } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { createOfflinePackageResolver } from "./packageResolver";
 import type { OfflinePackageRecord, OfflinePackageStorage } from "./types";
 
@@ -153,7 +154,7 @@ function createStorage(records: readonly OfflinePackageRecord[]): OfflinePackage
   return { list: async () => [...records] } as unknown as OfflinePackageStorage;
 }
 
-const GENERATED_AT = [
+const GENERATED_AT: [string, string, string] = [
   "2026-01-01T00:00:00.000Z",
   "2026-02-01T00:00:00.000Z",
   "2026-03-01T00:00:00.000Z",
@@ -180,7 +181,7 @@ function createCatalogSpecs(size: number, seed: number): PackageSpec[] {
       east: west + width,
       north: south + height,
     };
-    let generatedAt = GENERATED_AT[Math.floor(random() * GENERATED_AT.length)];
+    let generatedAt = nth(GENERATED_AT, Math.floor(random() * GENERATED_AT.length));
 
     const previous = specs[index - 1];
     // Equal coverage area on overlapping boxes exercises the `generatedAt`
@@ -249,7 +250,7 @@ function geometryIntersects(
 ): boolean {
   if (coordinates.some((coordinate) => contains(bbox, coordinate))) return true;
   for (let index = 1; index < coordinates.length; index++) {
-    if (segmentIntersects(bbox, coordinates[index - 1], coordinates[index])) return true;
+    if (segmentIntersects(bbox, nth(coordinates, index - 1), nth(coordinates, index))) return true;
   }
   return false;
 }
@@ -339,7 +340,7 @@ describe("offline package resolver index", () => {
     expect(resolver.packageForCoordinate([0, 47])).toBeUndefined();
     expect(resolver.packageIdsForGeometry([[0, 47]])).toEqual([]);
     expect(resolver.compatiblePackageIds()).toEqual([]);
-    expect(resolver.get(specs[0].id)).toBeUndefined();
+    expect(resolver.get(nth(specs, 0).id)).toBeUndefined();
   });
 
   it("returns exact package IDs for literal boundary and crossing geometries", async () => {

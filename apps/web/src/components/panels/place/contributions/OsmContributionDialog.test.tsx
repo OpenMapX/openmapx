@@ -8,6 +8,7 @@ import type {
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { createQueryWrapper } from "@/test/query";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -347,7 +348,10 @@ describe("conflict", () => {
     const latest: OsmContributionContext = {
       ...CONTEXT,
       version: 6,
-      fields: [{ ...CONTEXT.fields[0], currentValue: "Café Nord" } as never, CONTEXT.fields[1]],
+      fields: [
+        { ...nth(CONTEXT.fields, 0), currentValue: "Café Nord" } as never,
+        nth(CONTEXT.fields, 1),
+      ],
     };
     state.nextPublishError = new OsmContributionRequestError(409, {
       code: "VERSION_CONFLICT",

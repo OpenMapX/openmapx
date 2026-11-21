@@ -128,27 +128,27 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
 
     const deleted = await db.transaction(async (tx) => {
       await lockGarage(tx, userId);
-      const existing = await tx
+      const [existing] = await tx
         .select({ id: personalVehicle.id, isDefault: personalVehicle.isDefault })
         .from(personalVehicle)
         .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
         .limit(1);
-      if (existing.length === 0) return false;
+      if (existing === undefined) return false;
       await tx
         .delete(personalVehicle)
         .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
-      if (existing[0].isDefault) {
-        const next = await tx
+      if (existing.isDefault) {
+        const [next] = await tx
           .select({ id: personalVehicle.id })
           .from(personalVehicle)
           .where(eq(personalVehicle.userId, userId))
           .orderBy(asc(personalVehicle.createdAt), asc(personalVehicle.id))
           .limit(1);
-        if (next.length)
+        if (next)
           await tx
             .update(personalVehicle)
             .set({ isDefault: true })
-            .where(and(eq(personalVehicle.id, next[0].id), eq(personalVehicle.userId, userId)));
+            .where(and(eq(personalVehicle.id, next.id), eq(personalVehicle.userId, userId)));
       }
       return true;
     });
@@ -221,16 +221,15 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(req);
     const { id } = req.params;
 
-    const existing = await db
+    const [current] = await db
       .select()
       .from(parkedLocation)
       .where(and(eq(parkedLocation.id, id), eq(parkedLocation.userId, userId)))
       .limit(1);
-    if (existing.length === 0) {
+    if (current === undefined) {
       return reply.status(404).send({ error: "Parked location not found" });
     }
 
-    const current = existing[0];
     const merged = {
       ...current,
       expiresAt: current.expiresAt ? new Date(current.expiresAt).toISOString() : null,

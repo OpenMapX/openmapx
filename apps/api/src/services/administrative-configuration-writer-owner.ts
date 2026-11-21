@@ -194,10 +194,9 @@ export async function withAdministrativeConfigurationRead<T>(
 ): Promise<T> {
   options.signal?.throwIfAborted();
   const state = scope.getStore();
-  if (state?.transactionContext)
-    return withAdministrativeConfigurationReadScope(state.transactionContext, () =>
-      run(state.transactionContext!),
-    );
+  const activeContext = state?.transactionContext;
+  if (activeContext)
+    return withAdministrativeConfigurationReadScope(activeContext, () => run(activeContext));
   if (state) {
     if (state.transactionActive) throw unavailable();
     state.transactionActive = true;
@@ -208,9 +207,10 @@ export async function withAdministrativeConfigurationRead<T>(
     try {
       await connection.execute(query`BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`);
       started = true;
-      context = await capture(connection);
-      state.transactionContext = context;
-      const result = await withAdministrativeConfigurationReadScope(context, () => run(context!));
+      const captured = await capture(connection);
+      context = captured;
+      state.transactionContext = captured;
+      const result = await withAdministrativeConfigurationReadScope(captured, () => run(captured));
       await connection.execute(query`COMMIT`);
       return result;
     } catch (error) {

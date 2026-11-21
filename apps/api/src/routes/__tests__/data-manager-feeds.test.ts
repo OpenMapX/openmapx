@@ -120,8 +120,8 @@ describe("GET /data-manager/transit/feeds", () => {
     expect(body.total).toBe(87);
     expect((body.feeds as unknown[]).length).toBe(1);
     const first = (body.feeds as Array<Record<string, unknown>>)[0];
-    expect(first.region).toBe("de");
-    expect(first.lastFetchedAt).toBe("2026-05-21T03:00:00.000Z");
+    expect(first?.region).toBe("de");
+    expect(first?.lastFetchedAt).toBe("2026-05-21T03:00:00.000Z");
     expect(fakeDb.lastQuery).toEqual({ limit: 10, offset: 20 });
   });
 

@@ -116,7 +116,7 @@ function isPlaceholderHost(url: string): boolean {
     return true;
   }
   if (isIP(hostname) === 4) {
-    const [a, b] = hostname.split(".").map(Number);
+    const [a = Number.NaN, b = Number.NaN] = hostname.split(".").map(Number);
     return (
       a === 0 ||
       a === 10 ||

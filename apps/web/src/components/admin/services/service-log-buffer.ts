@@ -10,7 +10,9 @@ function tail(text: string, maximum: number) {
   const bytes = encoder.encode(value);
   if (bytes.length <= maximum) return value;
   let start = bytes.length - maximum;
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+  // Skip UTF-8 continuation bytes so the tail starts on a whole character.
+  for (let byte = bytes[start]; byte !== undefined && (byte & 0xc0) === 0x80; byte = bytes[start])
+    start++;
   return decoder.decode(bytes.subarray(start));
 }
 export class BoundedServiceLogBuffer {

@@ -1,12 +1,12 @@
 import type { RoadConditionsProvider } from "@openmapx/integration-framework";
 import { fakeHttpClient } from "@openmapx/integration-framework/testing";
 import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
-import { describe, expect, it } from "vitest";
-import { createOpenConditionsClient } from "../client.js";
+import { assert, describe, expect, it } from "vitest";
 import { featureCollectionToRoadFlowSegments } from "../road-conditions/flow.js";
 import { createRoadConditionsProvider } from "../road-conditions/provider.js";
 import { situationToRoadConditionEvent } from "../road-conditions/situation.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
+import { connectedClient, licensingOf } from "./support.js";
 
 type Rec = Record<string, unknown>;
 type Params = Record<string, unknown> | undefined;
@@ -14,6 +14,13 @@ type Params = Record<string, unknown> | undefined;
 const BASE_URL = "http://openconditions.test:4100";
 
 /** A situation record as `GET /situations` serves it. */
+/** A mapped situation; the test fails if the record maps to no event. */
+function roadEvent(situationRecord: Rec) {
+  const event = situationToRoadConditionEvent(situationRecord);
+  assert.isNotNull(event, "the situation maps to no road-condition event");
+  return event;
+}
+
 function situation(local: string, over: Rec = {}): Rec {
   return {
     id: `oc:situation:nl-ndw-events:${local}`,
@@ -90,6 +97,18 @@ function api(
   };
 }
 
+/** The OpenConditions road provider implements every optional road capability. */
+type FullRoadConditionsProvider = RoadConditionsProvider &
+  Required<
+    Pick<
+      RoadConditionsProvider,
+      "getFlow" | "getRoutingEvents" | "getBindings" | "getOperationalEvidence"
+    >
+  >;
+function isFullProvider(p: RoadConditionsProvider): p is FullRoadConditionsProvider {
+  return Boolean(p.getFlow && p.getRoutingEvents && p.getBindings && p.getOperationalEvidence);
+}
+
 function provider(
   opts: {
     serve?: (url: string, params: Params) => unknown;
@@ -97,7 +116,7 @@ function provider(
     env?: NodeJS.ProcessEnv;
     sources?: LiveSources;
   } = {},
-): RoadConditionsProvider {
+): FullRoadConditionsProvider {
   const http = fakeHttpClient((req) => {
     const params = req.options?.params as Params;
     opts.capture?.(req.url, params, req.options?.headers);
@@ -105,8 +124,10 @@ function provider(
     if (body instanceof Error) throw body;
     return body ?? { type: "FeatureCollection", features: [] };
   });
-  const client = createOpenConditionsClient(opts.env ?? { OPENCONDITIONS_URL: BASE_URL }, http);
-  return createRoadConditionsProvider(client!, opts.sources ?? EVERY_SOURCE);
+  const client = connectedClient(opts.env ?? { OPENCONDITIONS_URL: BASE_URL }, http);
+  const created = createRoadConditionsProvider(client, opts.sources ?? EVERY_SOURCE);
+  assert(isFullProvider(created), "the road provider lacks an optional capability");
+  return created;
 }
 
 /** A live list that lists every source, for the tests that are not about the list. */
@@ -154,8 +175,8 @@ describe("road-conditions provider and the live source list", () => {
       sources: createLiveSources(),
     });
     expect(await p.getEvents(BBOX)).toEqual([]);
-    expect(await p.getFlow!(BBOX)).toEqual([]);
-    await expect(p.getRoutingEvents!(BBOX)).rejects.toThrow(/source list/);
+    expect(await p.getFlow(BBOX)).toEqual([]);
+    await expect(p.getRoutingEvents(BBOX)).rejects.toThrow(/source list/);
     expect(calls).toEqual([]);
   });
 
@@ -164,7 +185,7 @@ describe("road-conditions provider and the live source list", () => {
     const p = provider({ serve: api(records), sources: live });
     const ids = ["oc:situation:nl-ndw-events:a", "oc:situation:nl-child:c", "oc:situation:crowd:r"];
     expect((await p.getEvents(BBOX)).map((e) => e.id)).toEqual(ids);
-    expect((await p.getRoutingEvents!(BBOX)).events.map((e) => e.id)).toEqual(ids);
+    expect((await p.getRoutingEvents(BBOX)).events.map((e) => e.id)).toEqual(ids);
   });
 
   it("carries a child's captured parent identity without borrowing catalogue notices", async () => {
@@ -173,12 +194,13 @@ describe("road-conditions provider and the live source list", () => {
       { id: "nl-parent", format: "datex2", notice: "Required publisher notice" },
     ]);
     const [event] = await provider({ serve: api([child]), sources: live }).getEvents(BBOX);
-    expect(event!.source).toBe("nl-child");
-    expect(event!.attribution).toMatchObject({
+    assert.isDefined(event);
+    expect(event.source).toBe("nl-child");
+    expect(event.attribution).toMatchObject({
       sourceId: "nl-parent",
     });
-    expect(event!.attribution.notice).toBeUndefined();
-    expect(JSON.stringify(event!.contributors)).not.toContain("Required publisher notice");
+    expect(event.attribution.notice).toBeUndefined();
+    expect(JSON.stringify(event.contributors)).not.toContain("Required publisher notice");
   });
 
   it("credits a listed feed's LicenseRef- licence by the name the list gives it", async () => {
@@ -212,10 +234,13 @@ describe("road-conditions provider and the live source list", () => {
 
     const p = provider({ serve: api([named]), sources: live });
     const [event] = await p.getEvents(BBOX);
-    expect(event!.attribution.provider).toBe("NDW");
-    expect(formatLicensing(event!.attribution.licensing!)).toBe("NDW terms of use");
-    const [routed] = (await p.getRoutingEvents!(BBOX)).events;
-    expect(formatLicensing(routed!.attribution.licensing!)).toBe("NDW terms of use");
+    assert.isDefined(event);
+    expect(event.attribution.provider).toBe("NDW");
+    expect(formatLicensing(licensingOf(event.attribution))).toBe("NDW terms of use");
+    assert.isDefined(p.getRoutingEvents);
+    const [routed] = (await p.getRoutingEvents(BBOX)).events;
+    assert.isDefined(routed);
+    expect(formatLicensing(licensingOf(routed.attribution))).toBe("NDW terms of use");
   });
 
   it("stops serving a source once a refresh drops it", async () => {
@@ -247,7 +272,7 @@ describe("road-conditions provider", () => {
       effects: [{ kind: "closure", scope: "road" }],
     });
     // No condition row: the situation's effects are unbound, never left to raw geometry.
-    expect(events[0]!.routingEvidence).toEqual({});
+    expect(events[0]?.routingEvidence).toEqual({});
   });
 
   it("passes the query's filters to the record API and walks pages with the cursor", async () => {
@@ -303,7 +328,7 @@ describe("road-conditions provider", () => {
       serve: (url) => (url.includes("/situations/") ? answer : undefined),
       capture: (url) => urls.push(url),
     });
-    expect(await p.getBindings!("oc:situation:nl-ndw-events:s1")).toEqual({
+    expect(await p.getBindings("oc:situation:nl-ndw-events:s1")).toEqual({
       situation: { status: "unresolved", reason: "conflicting_direction" },
       effects: {
         "s1/closure": { status: "ambiguous", reason: "direction_undecided" },
@@ -321,10 +346,10 @@ describe("road-conditions provider", () => {
       sources: { ...EVERY_SOURCE, ready: false },
       capture: (url) => urls.push(url),
     });
-    await expect(notReady.getBindings!("oc:situation:nl-ndw-events:s1")).rejects.toThrow(
+    await expect(notReady.getBindings("oc:situation:nl-ndw-events:s1")).rejects.toThrow(
       /source list/,
     );
-    expect(await provider({ capture: (url) => urls.push(url) }).getBindings!("..")).toBeNull();
+    expect(await provider({ capture: (url) => urls.push(url) }).getBindings("..")).toBeNull();
     expect(urls).toEqual([]);
   });
 
@@ -333,7 +358,7 @@ describe("road-conditions provider", () => {
       serve: (url) =>
         url.includes("/situations/") ? { status: 404, headers: {}, body: null } : undefined,
     });
-    expect(await missing.getBindings!("oc:situation:x")).toBeNull();
+    expect(await missing.getBindings("oc:situation:x")).toBeNull();
     const known = provider({
       serve: (url) =>
         url.includes("/situations/")
@@ -341,7 +366,7 @@ describe("road-conditions provider", () => {
           : undefined,
     });
     expect(
-      await known.getBindings!("oc:situation:nl-ndw-events:s1", {
+      await known.getBindings("oc:situation:nl-ndw-events:s1", {
         excludedSourceIds: ["nl-ndw-events"],
       }),
     ).toBeNull();
@@ -367,9 +392,9 @@ describe("road-conditions provider", () => {
       capture: (url, _params, headers) => seen.push([url, headers?.Authorization]),
     });
     await p.getEvents([4, 51, 6, 53]);
-    await p.getRoutingEvents!([4, 51, 6, 53]);
-    await p.getFlow!([4, 51, 6, 53]);
-    await p.getOperationalEvidence!();
+    await p.getRoutingEvents([4, 51, 6, 53]);
+    await p.getFlow([4, 51, 6, 53]);
+    await p.getOperationalEvidence();
     expect(new Set(seen.map(([url]) => url.slice(BASE_URL.length)))).toEqual(
       new Set(["/situations", "/segments/conditions.json", "/segments.geojson", "/feeds/status"]),
     );
@@ -484,7 +509,7 @@ describe("road-conditions provider", () => {
             }
           : undefined,
     });
-    const evidenceOut = await p.getOperationalEvidence!();
+    const evidenceOut = await p.getOperationalEvidence();
     expect(evidenceOut).toMatchObject({
       schemaVersion: 1,
       instanceId: "oc-eu-1",
@@ -527,7 +552,7 @@ describe("road-conditions provider", () => {
             }
           : undefined,
     });
-    const { feeds } = await p.getOperationalEvidence!();
+    const { feeds } = await p.getOperationalEvidence();
     expect(feeds.map((feed) => [feed.sourceId, feed.publicationRevision])).toEqual([
       ["de-new", null],
     ]);
@@ -543,7 +568,7 @@ describe("road-conditions provider", () => {
         capturedUrl = url;
         capturedParams = params;
       },
-    }).getFlow!([4, 51, 6, 53]);
+    }).getFlow([4, 51, 6, 53]);
 
     expect(capturedUrl).toBe(`${BASE_URL}/segments.geojson`);
     expect(capturedParams).toEqual({ bbox: "4,51,6,53" });
@@ -570,7 +595,7 @@ describe("complete routing reads", () => {
     const result = await provider({
       serve: api(records),
       capture: (url, params) => url.endsWith("/situations") && calls.push(params),
-    }).getRoutingEvents!([4, 51, 6, 53]);
+    }).getRoutingEvents([4, 51, 6, 53]);
     expect(result).toMatchObject({ complete: true });
     expect(result.events).toHaveLength(6001);
     expect(calls).toHaveLength(2);
@@ -584,10 +609,10 @@ describe("complete routing reads", () => {
       complete: true,
       conditions: [evidence(String(a.id), "a/closure", 3)],
     };
-    const { events } = await provider({ serve: api([a], conditions) }).getRoutingEvents!([
+    const { events } = await provider({ serve: api([a], conditions) }).getRoutingEvents([
       4, 51, 6, 53,
     ]);
-    expect(events[0]!.routingEvidence).toEqual({
+    expect(events[0]?.routingEvidence).toEqual({
       "a/closure": expect.objectContaining({ record_revision: 3, binding_status: "exact" }),
     });
   });
@@ -600,7 +625,7 @@ describe("complete routing reads", () => {
       conditions: [evidence(String(a.id), "a/closure", 4)],
     };
     await expect(
-      provider({ serve: api([a], conditions) }).getRoutingEvents!([4, 51, 6, 53]),
+      provider({ serve: api([a], conditions) }).getRoutingEvents([4, 51, 6, 53]),
     ).rejects.toThrow(/changed during routing read/);
   });
 
@@ -612,7 +637,7 @@ describe("complete routing reads", () => {
     };
     const { events } = await provider({
       serve: api([situation("a")], conditions),
-    }).getRoutingEvents!([4, 51, 6, 53]);
+    }).getRoutingEvents([4, 51, 6, 53]);
     expect(events.map((e) => e.routingEvidence)).toEqual([{}]);
   });
 
@@ -627,7 +652,7 @@ describe("complete routing reads", () => {
       api(records, { schema_version: 1, complete: true, conditions: [] }),
       api(records, {}),
     ]) {
-      await expect(provider({ serve }).getRoutingEvents!([4, 51, 6, 53])).rejects.toThrow();
+      await expect(provider({ serve }).getRoutingEvents([4, 51, 6, 53])).rejects.toThrow();
     }
   });
 });
@@ -814,19 +839,21 @@ describe("situationToRoadConditionEvent", () => {
   });
 
   it("keeps a phase effect to its phase's window and drops every effect's parser trace", () => {
-    const event = situationToRoadConditionEvent(record())!;
-    expect(event.effects[1]!.validity).toEqual({
+    const event = roadEvent(record());
+    expect(event.effects[1]?.validity).toEqual({
       status: "active",
       start: "2026-09-21T06:00:00Z",
       end: "2026-09-22T18:00:00Z",
     });
-    expect(event.effects[0]!.validity).toBeUndefined();
+    const [firstEffect] = event.effects;
+    assert.isDefined(firstEffect);
+    expect(firstEffect.validity).toBeUndefined();
     expect(event.effects.every((e) => !("source" in e))).toBe(true);
   });
 
   it("keeps a declared no-impact severity and reads labels it does not know as unknown", () => {
     const rated = (severity: Rec, validity: Rec = { status: "active" }) =>
-      situationToRoadConditionEvent(record({ severity, validity }))!;
+      roadEvent(record({ severity, validity }));
     expect(rated({ label: "none", source: "declared" }).severity).toEqual({ label: "none" });
     expect(rated({ label: "catastrophic", source: "declared" }).severity).toEqual({
       label: "unknown",
@@ -836,7 +863,7 @@ describe("situationToRoadConditionEvent", () => {
 
   it("carries why an ended situation ended", () => {
     const ended = record({ validity: { status: "ended", endedReason: "withdrawn_from_feed" } });
-    expect(situationToRoadConditionEvent(ended)!.validity).toEqual({
+    expect(roadEvent(ended).validity).toEqual({
       status: "ended",
       endedReason: "withdrawn_from_feed",
     });
@@ -894,16 +921,16 @@ describe("situationToRoadConditionEvent", () => {
       },
     });
 
-    expect(situationToRoadConditionEvent(tfl)!.attribution).toEqual({
+    expect(roadEvent(tfl).attribution).toEqual({
       provider: "Transport for London",
       licensing:
         (tfl.provenance as Rec).attribution &&
         ((tfl.provenance as Rec).attribution as Rec).licensing,
     });
-    expect(situationToRoadConditionEvent(record())!.attribution).toMatchObject({
+    expect(roadEvent(record()).attribution).toMatchObject({
       licensing: { bindings: [{ license: { kind: "spdx", expression: "CC-BY-4.0" } }] },
     });
-    expect(formatLicensing(situationToRoadConditionEvent(tfl)!.attribution.licensing!)).toBe(NAME);
+    expect(formatLicensing(licensingOf(roadEvent(tfl).attribution))).toBe(NAME);
   });
 
   it("credits the TMC location table a situation was placed with, once, beside its source", () => {
@@ -941,16 +968,17 @@ describe("situationToRoadConditionEvent", () => {
       attributionText: BAST,
     };
 
-    const event = situationToRoadConditionEvent(placed())!;
+    const event = roadEvent(placed());
     expect(event.contributors).toEqual([
       expect.objectContaining({ name: "Fintraffic / Digitraffic" }),
       credit,
     ]);
     // A producer's own receipts stay authoritative for the source; the table is added.
     const native = { sourceId: "fi-digitraffic-events", name: "Fintraffic" };
-    expect(
-      situationToRoadConditionEvent(placed({ contributors: [native, credit] }))!.contributors,
-    ).toEqual([native, credit]);
+    expect(roadEvent(placed({ contributors: [native, credit] })).contributors).toEqual([
+      native,
+      credit,
+    ]);
     // A table that states no notice has nothing to credit.
     const silent = record({
       location: {
@@ -958,7 +986,7 @@ describe("situationToRoadConditionEvent", () => {
         locationTable: { ref: "TMC 6/1", version: "6.13" },
       },
     });
-    expect(situationToRoadConditionEvent(silent)!.contributors).toHaveLength(1);
+    expect(roadEvent(silent).contributors).toHaveLength(1);
   });
 
   it("cannot show a situation it has no place for", () => {
@@ -1028,7 +1056,8 @@ const flowFc = {
 describe("featureCollectionToRoadFlowSegments", () => {
   it("maps a fully-populated feature to a RoadFlowSegment, stamping the provider id as source", () => {
     const segments = featureCollectionToRoadFlowSegments(flowFc, "road-conditions-openconditions");
-    const measured = segments.find((s) => s.id === "500:f")!;
+    const measured = segments.find((s) => s.id === "500:f");
+    assert.isDefined(measured);
     expect(measured).toMatchObject({
       id: "500:f",
       direction: "f",
@@ -1052,8 +1081,8 @@ describe("featureCollectionToRoadFlowSegments", () => {
 
   it("defaults a speed-less base segment to los:unknown, confidence:typical, and omits speed fields", () => {
     const segments = featureCollectionToRoadFlowSegments(flowFc, "road-conditions-openconditions");
-    const base = segments.find((s) => s.id === "700:f")!;
-    expect(base).toBeDefined();
+    const base = segments.find((s) => s.id === "700:f");
+    assert.isDefined(base);
     expect(base.los).toBe("unknown");
     expect(base.confidence).toBe("typical");
     expect(base.currentSpeedKph).toBeUndefined();
@@ -1099,8 +1128,8 @@ describe("featureCollectionToRoadFlowSegments", () => {
       },
       "road-conditions-openconditions",
     );
-    expect(segments[0]!.los).toBe("unknown");
-    expect(segments[0]!.confidence).toBe("typical");
+    expect(segments[0]?.los).toBe("unknown");
+    expect(segments[0]?.confidence).toBe("typical");
   });
 
   it("maps dir:b to direction:b", () => {
@@ -1123,7 +1152,7 @@ describe("featureCollectionToRoadFlowSegments", () => {
       },
       "road-conditions-openconditions",
     );
-    expect(segments[0]!.direction).toBe("b");
+    expect(segments[0]?.direction).toBe("b");
   });
 });
 

@@ -1,5 +1,6 @@
 import type { Route, RoutingTrafficProof } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import {
   type CoverageTraceResponse,
@@ -125,7 +126,7 @@ describe("traceRouteCoverage", () => {
       () => NOW,
     );
     expect(bodies).toHaveLength(1);
-    const body = bodies[0] as Record<string, unknown>;
+    const body = nth(bodies, 0);
     expect(body).toMatchObject({
       shape_match: "edge_walk",
       costing: "auto",

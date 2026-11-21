@@ -41,8 +41,7 @@ export interface TransitTransfer {
  */
 export function nextTransferFor(legs: TripLeg[], currentIndex: number): TransitTransfer | null {
   let walkSeconds = 0;
-  for (let i = currentIndex + 1; i < legs.length; i++) {
-    const leg = legs[i];
+  for (const leg of legs.slice(currentIndex + 1)) {
     if (leg.mode !== "walking" && leg.route) {
       return { nextLeg: leg, walkSeconds };
     }
@@ -100,8 +99,7 @@ export function itineraryTransferRisk(
   tightThresholdSeconds = 180,
 ): ConnectionRisk | null {
   let worst: ConnectionRisk | null = null;
-  for (let i = 0; i < legs.length; i++) {
-    const leg = legs[i];
+  for (const [i, leg] of legs.entries()) {
     if (leg.mode === "walking" || !leg.route) continue;
     const transfer = nextTransferFor(legs, i);
     if (!transfer) continue;

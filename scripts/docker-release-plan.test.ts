@@ -10,22 +10,25 @@ import {
   dockerInputs,
   imageFingerprint,
   lockfileSubgraph,
+  type ReadFile,
   type ReleasePlan,
   selectChangedTargets,
   targets,
   trackedTree,
 } from "./docker-release-plan.mjs";
+import { nth } from "./fixtures/nth.ts";
 
 const revision = "b".repeat(40);
 const now = "2026-09-12T12:00:00.000Z";
-const tree = [
+const treeFiles: ReadonlyArray<readonly [string, string]> = [
   ["apps/api/src/server.ts", "api"],
   ["apps/web/src/page.tsx", "web"],
   ["packages/shared/index.ts", "shared"],
   ["docs/page.md", "docs"],
   ["pnpm-lock.yaml", "lock"],
   ["README.md", "readme"],
-].map(([path, contents]) => ({
+];
+const tree = treeFiles.map(([path, contents]) => ({
   path,
   mode: "100644",
   oid: createHash("sha1").update(contents).digest("hex"),
@@ -44,7 +47,7 @@ const options = {
   revision,
   now,
   tree,
-  readDockerfile: (path: string) => dockerfiles[path],
+  readDockerfile: readFrom(dockerfiles),
 };
 
 function baseline() {
@@ -66,6 +69,21 @@ function plannedImage(plan: ReleasePlan, app: string) {
   const image = plan.images.find((candidate) => candidate.app === app);
   if (!image) throw new Error(`No planned image for ${app}`);
   return image;
+}
+
+function apiMetadata(plan: Pick<ReleasePlan, "buildMetadata">) {
+  const metadata = plan.buildMetadata.images.api;
+  if (!metadata) throw new Error("No build metadata for api");
+  return metadata;
+}
+
+/** A `ReadFile` over in-memory files that fails for a missing one, as reading the disk does. */
+function readFrom(files: Readonly<Record<string, string>>): ReadFile {
+  return (path) => {
+    const text = files[path];
+    if (text === undefined) throw new Error(`ENOENT: ${path}`);
+    return text;
+  };
 }
 
 describe("Dockerfile build input coverage", () => {
@@ -250,12 +268,12 @@ describe("selective release planning", () => {
       previous,
     });
     expect(plannedImage(next, "api").rebuild).toBe(true);
-    expect(next.buildMetadata.images.api.inputHash).toBe(failed.buildMetadata.images.api.inputHash);
+    expect(apiMetadata(next).inputHash).toBe(apiMetadata(failed).inputHash);
   });
   it("preserves original build age on reuse and refreshes without cache after seven days", () => {
     const previous = baseline();
     const reused = createReleasePlan({ ...options, now: "2026-09-18T12:00:00.000Z", previous });
-    expect(reused.buildMetadata.images.api.builtAt).toBe(now);
+    expect(apiMetadata(reused).builtAt).toBe(now);
     const refreshed = createReleasePlan({
       ...options,
       now: "2026-09-19T12:00:00.000Z",
@@ -299,7 +317,7 @@ describe("selective release planning", () => {
         now: attemptAt,
       });
       expect(attempt.images.every((image) => image.refresh)).toBe(true);
-      expect(attempt.buildMetadata.images.api.coldRefreshedAt).toBe(attemptAt);
+      expect(apiMetadata(attempt).coldRefreshedAt).toBe(attemptAt);
     }
     const successful = createReleasePlan({
       ...options,
@@ -314,16 +332,16 @@ describe("selective release planning", () => {
       now: "2026-09-21T12:00:00.000Z",
     });
     expect(next.images.every((image) => !image.rebuild)).toBe(true);
-    expect(next.buildMetadata.images.api.coldRefreshedAt).toBe("2026-09-20T12:00:00.000Z");
+    expect(apiMetadata(next).coldRefreshedAt).toBe("2026-09-20T12:00:00.000Z");
   });
   it("cold-builds a bootstrap release and records its refresh date", () => {
     const bootstrap = createReleasePlan(options);
     expect(bootstrap.images.every((image) => image.refresh)).toBe(true);
-    expect(bootstrap.buildMetadata.images.api.coldRefreshedAt).toBe(now);
+    expect(apiMetadata(bootstrap).coldRefreshedAt).toBe(now);
   });
   it("refreshes an image with a future cold-refresh clock", () => {
     const previous = baseline();
-    previous.buildMetadata.images.api.coldRefreshedAt = "2026-09-13T12:00:00.000Z";
+    apiMetadata(previous).coldRefreshedAt = "2026-09-13T12:00:00.000Z";
     const plan = createReleasePlan({ ...options, previous });
     expect(plan.images.filter((image) => image.refresh).map((image) => image.app)).toEqual(["api"]);
   });
@@ -332,7 +350,7 @@ describe("selective release planning", () => {
     (value) => {
       const previous = baseline();
       // Deliberately malformed metadata, including non-string values.
-      previous.buildMetadata.images.api.coldRefreshedAt = value as string;
+      apiMetadata(previous).coldRefreshedAt = value as string;
       expect(() => createReleasePlan({ ...options, previous })).toThrow();
     },
   );
@@ -343,13 +361,13 @@ describe("selective release planning", () => {
       if (kind === "tag") previous.images.api = "ghcr.io/openmapx/api:latest";
       if (kind === "missing") delete previous.images.api;
       if (kind === "build metadata") delete (previous as { buildMetadata?: unknown }).buildMetadata;
-      if (kind === "metadata") previous.buildMetadata.images.api.inputHash = "bad";
-      if (kind === "timestamp") previous.buildMetadata.images.api.builtAt = "tomorrow";
+      if (kind === "metadata") apiMetadata(previous).inputHash = "bad";
+      if (kind === "timestamp") apiMetadata(previous).builtAt = "tomorrow";
       expect(() => createReleasePlan({ ...options, previous })).toThrow();
     },
   );
   it("includes file names and modes, so renames and executable changes invalidate inputs", () => {
-    const target = targets[0];
+    const target = nth(targets, 0);
     const hash = imageFingerprint({ ...options, target });
     for (const changed of [
       tree.map((entry) => ({ ...entry, path: `${entry.path}.renamed` })),
@@ -622,7 +640,7 @@ describe("bundled image fingerprints", () => {
       })),
       readDockerfile: () => dockerfile,
       bundleDigest,
-      readFile: (path: string) => contents[path],
+      readFile: readFrom(contents),
     });
   };
 
@@ -746,9 +764,9 @@ describe("production Docker context exclusions", () => {
       readFile: (path: string) => readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
     };
     const first = imageFingerprint(input);
-    expect(imageFingerprint({ ...input, tree: [{ ...input.tree[0], oid: "b".repeat(40) }] })).toBe(
-      first,
-    );
+    const [entry] = input.tree;
+    if (!entry) throw new Error("the fixture tree is empty");
+    expect(imageFingerprint({ ...input, tree: [{ ...entry, oid: "b".repeat(40) }] })).toBe(first);
   });
   it("does not build images for excluded test sources, but honors later reinclusions", () => {
     const input = {

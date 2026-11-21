@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import de from "../../packages/i18n/locales/de.json";
 import en from "../../packages/i18n/locales/en.json";
@@ -192,9 +193,9 @@ describe("wildfire presentation", () => {
       "ja-JP",
     );
 
-    expect(renderJapaneseValue(nifc.fields[0].value)).toBe("100 エーカー / 40.5 ヘクタール");
-    expect(renderJapaneseValue(effis.fields[0].value)).toBe("1,234.6 ヘクタール");
-    expect(renderJapaneseValue(noaa.fields[0].value)).toBe("濃い");
+    expect(renderJapaneseValue(nth(nifc.fields, 0).value)).toBe("100 エーカー / 40.5 ヘクタール");
+    expect(renderJapaneseValue(nth(effis.fields, 0).value)).toBe("1,234.6 ヘクタール");
+    expect(renderJapaneseValue(nth(noaa.fields, 0).value)).toBe("濃い");
     expect(JSON.stringify([nifc, effis, noaa])).not.toMatch(
       /100 acres \(40\.5 ha\)|1,234\.6 ha|"Heavy"/,
     );

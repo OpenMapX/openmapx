@@ -34,6 +34,7 @@ export function matchJourneyPlatforms(
       r.calls.every((c, i) => {
         const stop = journey.stops[i];
         return (
+          stop !== undefined &&
           !c.extra &&
           c.root === roots[i] &&
           (c.aa !== undefined || c.ad !== undefined) &&
@@ -42,14 +43,14 @@ export function matchJourneyPlatforms(
         );
       }),
   );
-  if (matches.length !== 1) return [];
-  const record = matches[0];
+  const [record] = matches;
+  if (matches.length !== 1 || !record) return [];
   const stamp = Date.parse(record.recordedAt);
   if (!Number.isFinite(stamp) || stamp > now + 120_000 || now - stamp > 24 * 60 * 60_000) return [];
   return record.calls.map((call, stopIndex) => {
     const stop = journey.stops[stopIndex];
     const update: JourneyPlatformUpdate = { stopIndex };
-    if (stop.canceled || call.cancelled) return update;
+    if (!stop || stop.canceled || call.cancelled) return update;
     const knownRealtime =
       !!stop.platform &&
       (!stop.scheduledPlatform || platformChanged(stop.scheduledPlatform, stop.platform));

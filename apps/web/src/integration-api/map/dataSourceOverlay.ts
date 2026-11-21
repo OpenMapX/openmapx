@@ -166,10 +166,12 @@ export function useDataSourceColorKey(sourceId: string): DataSourceKeyEntry[] {
         (filter.options?.length ?? 0) > 0 &&
         filter.options?.every((option) => String(option.id) in colors),
     );
-    return (variantFilter?.options ?? []).map((option) => ({
-      id: String(option.id),
-      label: translateDataSourceLabel(option.label, t),
-      color: colors[String(option.id)] as string,
-    }));
+    return (variantFilter?.options ?? []).flatMap((option) => {
+      const id = String(option.id);
+      const color = colors[id];
+      return color === undefined
+        ? []
+        : [{ id, label: translateDataSourceLabel(option.label, t), color }];
+    });
   }, [listing, t]);
 }

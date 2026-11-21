@@ -172,9 +172,10 @@ export async function prepareCredentialPlan(
       feedChanges = [];
       if (feed.setKeys.length + feed.deleteKeys.length > 1000) throw new MigrationConflict();
       for (const key of feed.setKeys) {
-        if (seen.has(key) || !Object.hasOwn(map, key)) throw new MigrationConflict();
+        const value = Object.hasOwn(map, key) ? map[key] : undefined;
+        if (seen.has(key) || value === undefined) throw new MigrationConflict();
         seen.add(key);
-        feedChanges.push({ key, action: "set", value: map[key]! });
+        feedChanges.push({ key, action: "set", value });
       }
       for (const key of feed.deleteKeys) {
         if (seen.has(key)) throw new MigrationConflict();
@@ -191,7 +192,8 @@ export async function prepareCredentialPlan(
         expectedCurrentRevisionId: source.revisionId,
       });
     } else if (managed) {
-      const entry = entries.find((e) => identity(e) === identity(managed!));
+      const managedIdentity = identity(managed);
+      const entry = entries.find((e) => identity(e) === managedIdentity);
       if (entry) {
         entry.status = "denied";
         entry.reason = "explicit_feed_map_choices_required";

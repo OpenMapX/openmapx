@@ -26,7 +26,7 @@ export class SqlEmbeddingCache implements EmbeddingCache {
       `SELECT embedding FROM "${this.schema}".embedding_cache WHERE text_hash = $1`,
       [hash],
     );
-    return rows.length > 0 ? rows[0].embedding : null;
+    return rows[0]?.embedding ?? null;
   }
 
   async set(hash: string, model: string, embedding: number[]): Promise<void> {
@@ -75,27 +75,22 @@ export async function embed(
   const fetchImpl = opts.fetchImpl ?? fetch;
   const { cache } = opts;
 
-  const hashes = texts.map((t) => textHash(model, t));
-  const results: (number[] | null)[] = await Promise.all(hashes.map((h) => cache.get(h)));
-
-  const missIndices = texts.map((_, i) => i).filter((i) => results[i] === null);
-
-  if (missIndices.length > 0) {
-    const embeddings = await pMap(
-      missIndices,
-      async (i) => {
-        const embedding = await fetchEmbedding(texts[i], model, ollamaUrl, fetchImpl);
-        await cache.set(hashes[i], model, embedding);
-        return embedding;
-      },
-      { concurrency: MAX_CONCURRENCY },
-    );
-    for (let k = 0; k < missIndices.length; k++) {
-      results[missIndices[k]] = embeddings[k];
-    }
-  }
-
-  return results as number[][];
+  const entries = await Promise.all(
+    texts.map(async (text) => {
+      const hash = textHash(model, text);
+      return { text, hash, cached: await cache.get(hash) };
+    }),
+  );
+  return pMap(
+    entries,
+    async ({ text, hash, cached }) => {
+      if (cached !== null) return cached;
+      const embedding = await fetchEmbedding(text, model, ollamaUrl, fetchImpl);
+      await cache.set(hash, model, embedding);
+      return embedding;
+    },
+    { concurrency: MAX_CONCURRENCY },
+  );
 }
 
 /**
@@ -147,9 +142,12 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   let normA = 0;
   let normB = 0;
   for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined || y === undefined) return 0;
+    dot += x * y;
+    normA += x * x;
+    normB += y * y;
   }
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
   if (denom === 0) return 0;

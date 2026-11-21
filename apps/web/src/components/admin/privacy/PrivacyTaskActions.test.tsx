@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { PrivacyTaskActions } from "./PrivacyTaskActions";
 import { privacyDetail } from "./privacyFixtures.test-support";
 import { privacyJson, renderPrivacyComponent } from "./privacyTestClient.test-support";
@@ -34,8 +35,9 @@ describe("operator task actions", () => {
 
   it("offers no action for a resolved task", () => {
     const detail = privacyDetail();
-    detail.tasks[0]!.status = "resolved";
-    detail.tasks[0]!.resolutionCode = "logs-checked";
+    const task = nth(detail.tasks, 0);
+    task.status = "resolved";
+    task.resolutionCode = "logs-checked";
     renderPrivacyComponent(detail, (client) => (
       <PrivacyTaskActions detail={detail} client={client} />
     ));

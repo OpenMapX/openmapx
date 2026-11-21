@@ -202,7 +202,7 @@ export function setup(ctx: IntegrationContext): void {
   // the lossy coordinate → Nominatim reverse-geocode → "maybe-aerodrome"
   // chain that otherwise lands the user on a generic POI panel.
   registerPlaceResolver("oa", async (value) => {
-    const code = value.split(":")[0].trim().toUpperCase();
+    const code = value.replace(/:.*/s, "").trim().toUpperCase();
     if (!code) return null;
     const record = await lookupAirportRecord(ctx.log, {
       ident: code,
@@ -218,8 +218,9 @@ export function setup(ctx: IntegrationContext): void {
     if (record.iata) osmTags.iata = record.iata;
     if (record.icao) osmTags.icao = record.icao;
     if (record.wikipediaLink) {
-      const match = record.wikipediaLink.match(/wikipedia\.org\/wiki\/(.+)$/);
-      if (match) osmTags.wikipedia = `en:${decodeURIComponent(match[1]).replace(/_/g, " ")}`;
+      const [, article] = record.wikipediaLink.match(/wikipedia\.org\/wiki\/(.+)$/) ?? [];
+      if (article !== undefined)
+        osmTags.wikipedia = `en:${decodeURIComponent(article).replace(/_/g, " ")}`;
     }
 
     const place: Place = createPlace({

@@ -91,7 +91,7 @@ describe("saved list imports", () => {
       skippedDuplicates: 2,
     });
     expect(state.transactions).toBe(1);
-    expect(state.inserted[0].rows).toEqual([
+    expect(state.inserted[0]?.rows).toEqual([
       expect.objectContaining({ name: "New", sortOrder: 9, placeId: null, listId: "list-1" }),
     ]);
   });
@@ -101,7 +101,7 @@ describe("saved list imports", () => {
     expect(
       (await request({ listId: "list-1" }, [{ ...point, fieldContributors }])).statusCode,
     ).toBe(200);
-    expect(state.inserted[0].rows).toEqual([expect.objectContaining({ fieldContributors })]);
+    expect(state.inserted[0]?.rows).toEqual([expect.objectContaining({ fieldContributors })]);
   });
   it.each([{ phone: [] }, { lat: [{}] }, { lng: "bad" }])(
     "rejects an entire batch with invalid captures %j",
@@ -168,7 +168,7 @@ describe("saved list imports", () => {
     );
     const response = await request({ listId: "list-1" }, [{ ...point, name: "Bakery" }]);
     expect(response.json()).toMatchObject({ imported: 1, skippedDuplicates: 0 });
-    expect(state.inserted[0].rows).toEqual([
+    expect(state.inserted[0]?.rows).toEqual([
       expect.objectContaining({ name: "Bakery", sortOrder: 5 }),
     ]);
   });

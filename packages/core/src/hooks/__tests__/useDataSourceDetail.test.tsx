@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { Place } from "../../types/place";
@@ -25,7 +25,8 @@ describe("data-source detail paths", () => {
     renderHook(() => useDataSourceDetail("parking", id), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(get).toHaveBeenCalled());
-    const path = get.mock.calls[0]![0] as string;
+    const path = get.mock.calls[0]?.[0];
+    assert.isDefined(path);
     expect(path).toMatch(new RegExp(`/parking/detail/${encodeURIComponent(id)}$`));
     expect(decodeURIComponent(path.slice(path.indexOf("/detail/") + 8))).toBe(id);
   });
@@ -49,6 +50,8 @@ describe("data-source detail paths", () => {
     renderHook(() => useDataSourceMatch(place), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    expect(get.mock.calls[1]![0]).toMatch(new RegExp(`/parking/detail/${encodeURIComponent(id)}$`));
+    expect(get.mock.calls[1]?.[0]).toMatch(
+      new RegExp(`/parking/detail/${encodeURIComponent(id)}$`),
+    );
   });
 });

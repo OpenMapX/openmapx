@@ -218,5 +218,5 @@ it("captures the legacy uniform supplier before autocomplete acquisition resolve
   const pending = provider.searchSuggestions({ query: "Oslo", lang: "en", limit: 8 }, CALL);
   captured.name = "Changed catalogue";
   finish([{ id: "one", label: "Oslo", coordinates: [10.7, 59.9], type: "region" }]);
-  expect((await pending).suggestions[0].contributors?.[0].name).toBe("Original supplier");
+  expect((await pending).suggestions[0]?.contributors?.[0]?.name).toBe("Original supplier");
 });

@@ -3,9 +3,10 @@ import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDeterministicTarGz } from "../../../../../packages/integration-framework/src/deterministic-tar";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { installArtifactTransferRuntime } from "../../../../ops-agent/src/artifact-transfer/runtime";
@@ -307,6 +308,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.installedExtension)
         .where(eq(schema.installedExtension.id, `local-${accepted.body.operationId}`));
+      assert.isDefined(parent, "the standalone parent extension was not recorded");
       expect(parent).toMatchObject({
         installationKind: "standalone",
         sourceTrust: "community",
@@ -325,7 +327,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .where(eq(schema.installedIntegration.id, "standalone-http-fixture"));
       expect(integration).toMatchObject({
         repository: null,
-        managedByExtension: parent!.id,
+        managedByExtension: parent.id,
         sourceType: "uploaded-artifact",
       });
       expect(
@@ -442,9 +444,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
+      assert.isDefined(restored, "the cancelled job row is missing");
       const { hasVerifiedStandaloneRestoration } = await import("./settlement-checkpoint");
       expect(
-        await hasVerifiedStandaloneRestoration(restored!.result, restored!.protocol, restored!.id),
+        await hasVerifiedStandaloneRestoration(restored.result, restored.protocol, restored.id),
       ).toBe(true);
       const done = await completed(accepted.body.jobId, true);
       expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
@@ -505,6 +508,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.installedExtension)
         .where(eq(schema.installedExtension.id, `local-${accepted.body.operationId}`));
+      assert.isDefined(parent, "the adopted parent extension was not recorded");
       expect(parent).toMatchObject({
         manifest: null,
         sourceUrl: null,
@@ -527,7 +531,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await state.fixture.db
           .select()
           .from(schema.installedExtension)
-          .where(eq(schema.installedExtension.id, parent!.id)),
+          .where(eq(schema.installedExtension.id, parent.id)),
       ).toHaveLength(0);
       const { getIntegration } = await import("../../integration-host");
       expect(getIntegration(id)).toBeUndefined();
@@ -671,8 +675,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(schema.adminJob)
         .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
-      if (pending!.status === "cancel_pending") {
-        expect(pending!.finishedAt).toBeNull();
+      assert.isDefined(pending, "the removal job row is missing");
+      if (pending.status === "cancel_pending") {
+        expect(pending.finishedAt).toBeNull();
         expect(existsSync(directory)).toBe(false);
         await delay(61000);
         await jobRunner.reconcile();
@@ -740,7 +745,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const after = await state.fixture
         .sql`select xmin::text as xmin from installed_integration where id=${id}`;
       expect(after).toHaveLength(1);
-      expect(after[0]!.xmin).not.toBe(before[0]!.xmin);
+      expect(itemAt(after, 0).xmin).not.toBe(itemAt(before, 0).xmin);
       const heldInventory = await (
         await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
           headers: { "x-openmapx-local-admin": "standalone-local-fixture" },

@@ -116,7 +116,7 @@ describe("Entur transit stop discovery", () => {
       },
     ]);
 
-    const [url, init] = mockFetch.mock.calls[0];
+    const [url, init] = mockFetch.mock.calls[0] ?? [];
     expect(url).toBe("https://api.entur.io/journey-planner/v3/graphql");
     expect((init.headers as Record<string, string>)["ET-Client-Name"]).toBe("openmapx-tests");
   });
@@ -168,7 +168,7 @@ describe("Entur transit stop discovery", () => {
       },
     ]);
 
-    const [url] = mockFetch.mock.calls[0];
+    const [url] = mockFetch.mock.calls[0] ?? [];
     const parsed = new URL(url);
     expect(parsed.pathname).toBe("/geocoder/v3/autocomplete");
     expect(parsed.searchParams.get("countries")).toBe("no");
@@ -363,13 +363,13 @@ describe("Entur boards and trip planning", () => {
       transfers: 0,
       co2Grams: 43.151,
     });
-    expect(plan?.itineraries[0].legs[0]).toMatchObject({
+    expect(plan?.itineraries[0]?.legs[0]).toMatchObject({
       mode: "rail",
       tripId: "entur:2026-04-21|VYG:ServiceJourney:1669_443361-R",
       routeId: "entur:VYG:Line:R13",
       occupancy: "low",
     });
-    expect(plan?.itineraries[0].legs[0].geometry.coordinates).toEqual([
+    expect(plan?.itineraries[0]?.legs[0]?.geometry.coordinates).toEqual([
       [10.728, 59.915],
       [10.753, 59.911],
       [10.77, 59.905],
@@ -426,8 +426,8 @@ describe("Entur boards and trip planning", () => {
       to: { lat: 69.681, lng: 18.919 },
     });
 
-    expect(plan?.itineraries[0].legs).toHaveLength(1);
-    expect(plan?.itineraries[0].legs[0]).toMatchObject({
+    expect(plan?.itineraries[0]?.legs).toHaveLength(1);
+    expect(plan?.itineraries[0]?.legs[0]).toMatchObject({
       mode: "other",
       route: { shortName: "DY390", longName: "Oslo-Tromsø" },
       routeId: "entur:AVI:Line:DY_OSL-TOS",

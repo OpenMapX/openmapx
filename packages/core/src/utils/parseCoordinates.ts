@@ -45,9 +45,12 @@ function scanItems(input: string): Item[] | null {
   for (const match of input.matchAll(ITEM)) {
     const start = match.index ?? 0;
     if (input.slice(end, start).trim() !== "") return null;
-    const previous = items[items.length - 1];
-    if (match[1] && previous && "number" in previous && start === end) return null;
-    items.push(match[1] ? { number: match[1] } : { letter: match[2] });
+    const [, number, letter] = match;
+    const previous = items.at(-1);
+    if (number && previous && "number" in previous && start === end) return null;
+    if (number) items.push({ number });
+    else if (letter) items.push({ letter });
+    else return null;
     end = start + match[0].length;
   }
   return input.slice(end).trim() === "" ? items : null;
@@ -57,9 +60,9 @@ const HALF = /^(?:([NSEW])\s*)?(-?\d+(?:\.\d+)?)\s*(?:°\s*)?([NSEW])?$/i;
 
 /** One comma-separated half, for example "N51.39", "51.39°N" or "6.75"; a letter on both sides is refused. */
 function readHalf(half: string): CoordinateReading | null {
-  const match = half.trim().match(HALF);
-  if (!match || (match[1] && match[3])) return null;
-  return readCoordinate(match[1] ?? match[3], match[2]);
+  const [, prefix, value, suffix] = half.trim().match(HALF) ?? [];
+  if (value === undefined || (prefix && suffix)) return null;
+  return readCoordinate(prefix ?? suffix, value);
 }
 
 /**
@@ -69,14 +72,15 @@ function readHalf(half: string): CoordinateReading | null {
  */
 function readSpaced(items: Item[]): { lat: number; lng: number }[] {
   const numberIndexes = items.flatMap((item, index) => ("number" in item ? [index] : []));
-  if (numberIndexes.length !== 2) return [];
   const [firstAt, secondAt] = numberIndexes;
+  if (numberIndexes.length !== 2 || firstAt === undefined || secondAt === undefined) return [];
+  const first = items[firstAt];
+  const second = items[secondAt];
+  if (!first || !("number" in first) || !second || !("number" in second)) return [];
   const letters = (list: Item[]) => list.flatMap((item) => ("letter" in item ? [item.letter] : []));
   const before = letters(items.slice(0, firstAt));
   const between = letters(items.slice(firstAt + 1, secondAt));
   const after = letters(items.slice(secondAt + 1));
-  const first = items[firstAt] as { number: string };
-  const second = items[secondAt] as { number: string };
 
   const readings: { lat: number; lng: number }[] = [];
   for (let split = 0; split <= between.length; split++) {
@@ -117,10 +121,11 @@ export function parseCoordinateInput(input: string): { lngLat: LngLat; label: st
   if (!trimmed) return null;
 
   const halves = trimmed.split(",");
+  const [firstHalf = "", secondHalf = ""] = halves;
   let placed: { lat: number; lng: number } | null = null;
   if (halves.length === 2) {
-    const first = readHalf(halves[0]);
-    const second = readHalf(halves[1]);
+    const first = readHalf(firstHalf);
+    const second = readHalf(secondHalf);
     placed = first && second ? placeReadings(first, second) : null;
   } else if (halves.length === 1) {
     const items = scanItems(trimmed);
@@ -143,14 +148,25 @@ export function parseCoordinateInput(input: string): { lngLat: LngLat; label: st
 export function parseDMSCoordinateInput(input: string): { lngLat: LngLat; label: string } | null {
   const trimmed = input.trim();
   const dmsRegex =
-    /^(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*["″]?\s*([NSns])\s*[,\s]+\s*(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*["″]?\s*([EWew])$/;
-  const m = trimmed.match(dmsRegex);
-  if (!m) return null;
+    /^(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*(?:["″]\s*)?([NSns])[,\s]+(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*(?:["″]\s*)?([EWew])$/;
+  const [, latDeg, latMin, latSec, latHemisphere, lngDeg, lngMin, lngSec, lngHemisphere] =
+    trimmed.match(dmsRegex) ?? [];
+  if (
+    !latDeg ||
+    !latMin ||
+    !latSec ||
+    !latHemisphere ||
+    !lngDeg ||
+    !lngMin ||
+    !lngSec ||
+    !lngHemisphere
+  )
+    return null;
 
-  let lat = parseFloat(m[1]) + parseFloat(m[2]) / 60 + parseFloat(m[3]) / 3600;
-  let lng = parseFloat(m[5]) + parseFloat(m[6]) / 60 + parseFloat(m[7]) / 3600;
-  if (m[4].toUpperCase() === "S") lat = -lat;
-  if (m[8].toUpperCase() === "W") lng = -lng;
+  let lat = parseFloat(latDeg) + parseFloat(latMin) / 60 + parseFloat(latSec) / 3600;
+  let lng = parseFloat(lngDeg) + parseFloat(lngMin) / 60 + parseFloat(lngSec) / 3600;
+  if (latHemisphere.toUpperCase() === "S") lat = -lat;
+  if (lngHemisphere.toUpperCase() === "W") lng = -lng;
 
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 

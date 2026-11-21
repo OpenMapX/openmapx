@@ -1,7 +1,7 @@
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { installedExtension } from "../../db/schema";
 import { uniformErrorHandler } from "../../server-wiring";
 import { addExtensionSource, getKillSwitch } from "../../services/extension-store";
@@ -75,15 +75,20 @@ beforeEach(async () => {
   ports.eval.mockImplementation(async (script: string, count: number, ...args: string[]) => {
     expect(count).toBe(2);
     const [sources, catalog, sourcePresent, observedSource, ...rest] = args;
+    assert(sources !== undefined && catalog !== undefined, "both keys");
+    assert(sourcePresent !== undefined && observedSource !== undefined, "the source observation");
     const matches = (key: string, present: string, value: string) =>
       present === "0" ? !ports.values.has(key) : ports.values.get(key) === value;
     if (!matches(sources, sourcePresent, observedSource)) return 0;
     if (script === EDIT_EXTENSION_SOURCES) {
+      const [edited] = rest;
+      assert(edited !== undefined);
       ports.values.delete(catalog);
-      ports.values.set(sources, rest[0]);
+      ports.values.set(sources, edited);
     } else {
       expect(script).toBe(PUBLISH_EXTENSION_CATALOG);
       const [present, observed, next] = rest;
+      assert(present !== undefined && observed !== undefined && next !== undefined);
       if (!matches(catalog, present, observed)) return 0;
       ports.values.set(catalog, next);
     }

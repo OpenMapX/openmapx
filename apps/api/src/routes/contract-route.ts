@@ -31,6 +31,7 @@ type ContractRequest<R extends Registry, K extends keyof R> = {
   Body: ContractPart<R, K, "body">;
   Querystring: ContractPart<R, K, "query">;
   Params: ContractPart<R, K, "params">;
+  Headers: ContractPart<R, K, "headers">;
 };
 export interface RegistrationOptions {
   preHandler?: preHandlerHookHandler | preHandlerHookHandler[];
@@ -58,6 +59,7 @@ export function createContractRouteRegistrar<const R extends Registry>(
     options: RegistrationOptions = {},
   ): void {
     const operation = registry[operationId];
+    if (!operation) throw new Error(`Unknown API operation ${operationId}`);
     const request = ("request" in operation ? operation.request : {}) as Record<string, z.ZodType>;
     const responses = operation.responses as Record<number, ApiResponseContract>;
     const convert = (validator: z.ZodType, identity: string, io: "input" | "output") =>

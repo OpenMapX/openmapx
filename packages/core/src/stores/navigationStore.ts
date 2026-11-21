@@ -20,10 +20,10 @@ import { mergeTransitRefresh } from "../navigation/transitRefresh";
 import { repairTransitWalk } from "../navigation/transitWalkRepair";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
+import { expireRoadConditionRouteImpact } from "../road-conditions/roadConditionRouteImpact";
 import type { BikeRoutingOptions } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { RoadConditionRouteImpact, Route, TravelMode } from "../types/routing";
-import { expireRoadConditionRouteImpact } from "../utils/roadConditionRouteImpact";
 
 const VOICE_STORAGE_KEY = "openmapx:nav:voiceEnabled";
 const KEEP_SCREEN_ON_STORAGE_KEY = "openmapx:nav:keepScreenOn";

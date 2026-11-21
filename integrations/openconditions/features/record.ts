@@ -368,15 +368,16 @@ export function credit(source: RecordSource, sources: CreditSources): Attributio
   const a = source.attribution;
   const url = str(a.url) ?? sources.link(source.id);
   const licensing = capturedCreditLicensing(a);
+  const publisherName = str(rec(a.publisher).name);
   return {
     sourceId: source.id,
     name: str(a.name) ?? str(a.provider) ?? source.id,
     ...(url ? { url } : {}),
     ...(licensing ? { licensing } : {}),
-    ...(str(rec(a.publisher).name)
+    ...(publisherName
       ? {
           publisher: {
-            name: str(rec(a.publisher).name)!,
+            name: publisherName,
             ...(str(rec(a.publisher).url) ? { url: str(rec(a.publisher).url) } : {}),
           },
         }

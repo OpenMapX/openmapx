@@ -98,7 +98,8 @@ export class SourceTarReader {
   private header(header: Buffer): { path: string; bytes: number } {
     const checksum = this.octal(header, 148, 8);
     let sum = 0;
-    for (let i = 0; i < BLOCK; i += 1) sum += i >= 148 && i < 156 ? 32 : header[i];
+    for (const [i, byte] of header.subarray(0, BLOCK).entries())
+      sum += i >= 148 && i < 156 ? 32 : byte;
     if (checksum !== sum) throw this.error("checksum");
     if (
       header.toString("utf8", 257, 263) !== "ustar\0" ||

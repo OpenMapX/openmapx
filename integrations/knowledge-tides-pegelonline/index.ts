@@ -67,9 +67,9 @@ export function reformatPegelTime(stamp: string): string {
   // form and renders in the viewer's browser-local zone. Stripping it left
   // wall-clock numbers that the widget read as the viewer's local time —
   // events would shift by the user's UTC offset outside Germany.
-  const m = stamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2}))/);
-  if (!m) return stamp;
-  return m[1];
+  const [, iso] =
+    stamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2}))/) ?? [];
+  return iso ?? stamp;
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -148,7 +148,8 @@ async function buildTidesResponse(
     valueFt: Math.round(p.valueCm * CM_TO_FT * 100) / 100,
   }));
   const events = deriveExtrema(curveRaw);
-  const last = curveRaw[curveRaw.length - 1];
+  const last = curveRaw.at(-1);
+  if (!last) return null;
 
   const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),

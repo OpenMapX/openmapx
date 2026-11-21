@@ -14,7 +14,7 @@ import {
 import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { scanGtfsArchives } from "../../src/jobs/transitous/internal.js";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
@@ -348,8 +348,10 @@ describe("transit acquisition manifest", () => {
       }
 
       expect(ticks).toBeGreaterThan(0);
-      expect(ticksAtRead.at(-1)).toBeGreaterThan(0);
-      expect(ticksAtPublish).toBeGreaterThanOrEqual(ticksAtRead.at(-1) as number);
+      const lastRead = ticksAtRead.at(-1);
+      assert.isDefined(lastRead, "the manifest was never read");
+      expect(lastRead).toBeGreaterThan(0);
+      expect(ticksAtPublish).toBeGreaterThanOrEqual(lastRead);
     });
 
     it("indexes a 500-source inventory once instead of rescanning it per source", async () => {

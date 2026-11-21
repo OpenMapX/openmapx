@@ -103,11 +103,7 @@ function mounted(infraDir: string, service: string, target: string): string {
   const model = load(compose) as { services: Record<string, { volumes?: string[] }> };
   const line = model.services[service]?.volumes?.find((entry) => entry.split(":")[1] === target);
   if (!line) throw new Error(`${service} does not mount ${target}`);
-  return join(
-    infraDir,
-    CURRENT_CONFIGURATION,
-    line.trim().replace(/^- /, "").split(":")[0] as string,
-  );
+  return join(infraDir, CURRENT_CONFIGURATION, line.trim().replace(/^- /, "").replace(/:.*$/s, ""));
 }
 
 describe("service file overrides", () => {

@@ -133,10 +133,9 @@ function validateHeader(header: LocalPmtilesHeader, archiveSize: number): LocalP
     ["leaf", header.leafOffset, header.leafLength],
     ["tile data", header.tileDataOffset, header.tileDataLength],
   ] as const;
-  for (let index = 1; index < sections.length; index++) {
+  for (const [index, current] of sections.entries()) {
     const previous = sections[index - 1];
-    const current = sections[index];
-    if (current[1] < previous[1] + previous[2]) {
+    if (previous && current[1] < previous[1] + previous[2]) {
       throw new Error(`PMTiles ${current[0]} section overlaps ${previous[0]} section`);
     }
   }
@@ -162,8 +161,8 @@ function readVarint(bytes: Uint8Array, start: number): { value: number; next: nu
   let value = 0;
   let multiplier = 1;
   let offset = start;
-  while (offset < bytes.byteLength) {
-    const byte = bytes[offset++];
+  for (let byte = bytes[offset]; byte !== undefined; byte = bytes[offset]) {
+    offset++;
     value += (byte & 0x7f) * multiplier;
     if (!Number.isSafeInteger(value)) throw new Error("PMTiles directory value is too large");
     if ((byte & 0x80) === 0) return { value, next: offset };
@@ -236,8 +235,8 @@ async function decodeDirectory(bytes: Uint8Array, compression: number): Promise<
     previousLength = entry.length;
   });
   if (cursor !== data.byteLength) throw new Error("PMTiles directory has trailing data");
-  for (let index = 0; index < entries.length; index++) {
-    const entry = entries[index];
+  let previous: DirectoryEntry | undefined;
+  for (const entry of entries) {
     if (
       entry.length <= 0 ||
       entry.offset < 0 ||
@@ -245,10 +244,11 @@ async function decodeDirectory(bytes: Uint8Array, compression: number): Promise<
       !Number.isSafeInteger(entry.offset) ||
       !Number.isSafeInteger(entry.runLength) ||
       !Number.isSafeInteger(entry.tileId + entry.runLength) ||
-      (index > 0 && entry.tileId <= entries[index - 1].tileId)
+      (previous !== undefined && entry.tileId <= previous.tileId)
     ) {
       throw new Error("invalid PMTiles directory entry");
     }
+    previous = entry;
   }
   return entries;
 }
@@ -277,8 +277,7 @@ function zxyToTileId(z: number, x: number, y: number): number {
 }
 
 function findEntry(entries: DirectoryEntry[], tileId: number): DirectoryEntry | undefined {
-  for (let index = 0; index < entries.length; index++) {
-    const entry = entries[index];
+  for (const [index, entry] of entries.entries()) {
     if (entry.runLength === 0) {
       const next = entries[index + 1];
       if (tileId >= entry.tileId && (!next || tileId < next.tileId)) return entry;
@@ -289,6 +288,16 @@ function findEntry(entries: DirectoryEntry[], tileId: number): DirectoryEntry | 
     if (entry.tileId > tileId) return undefined;
   }
   return undefined;
+}
+
+/** Whether any range in an offset-sorted list starts before the previous one ends. */
+function rangesOverlap(ranges: readonly { offset: number; length: number }[]): boolean {
+  let end = Number.NEGATIVE_INFINITY;
+  for (const range of ranges) {
+    if (range.offset < end) return true;
+    end = range.offset + range.length;
+  }
+  return false;
 }
 
 async function readExact(
@@ -372,8 +381,7 @@ export class LocalPmtilesReader {
     const tileEntries: DirectoryEntry[] = [];
     const leafRanges: Array<{ offset: number; length: number }> = [];
 
-    for (let index = 0; index < root.length; index++) {
-      const entry = root[index];
+    for (const [index, entry] of root.entries()) {
       if (entry.runLength > 0) {
         tileEntries.push(entry);
         continue;
@@ -398,13 +406,7 @@ export class LocalPmtilesReader {
     }
 
     leafRanges.sort((a, b) => a.offset - b.offset || a.length - b.length);
-    for (let index = 1; index < leafRanges.length; index++) {
-      const previous = leafRanges[index - 1];
-      const current = leafRanges[index];
-      if (current.offset < previous.offset + previous.length) {
-        throw new Error("PMTiles leaf directory ranges overlap");
-      }
-    }
+    if (rangesOverlap(leafRanges)) throw new Error("PMTiles leaf directory ranges overlap");
 
     tileEntries.sort((a, b) => a.tileId - b.tileId);
     const minimumTileId = (4 ** header.minZoom - 1) / 3;
@@ -413,8 +415,7 @@ export class LocalPmtilesReader {
     const tileIdLimit = (4 ** (header.maxZoom + 1) - 1) / 3;
     let addressedTiles = 0;
     const contents = new Map<string, DirectoryEntry>();
-    for (let index = 0; index < tileEntries.length; index++) {
-      const entry = tileEntries[index];
+    for (const [index, entry] of tileEntries.entries()) {
       if (
         entry.runLength <= 0 ||
         entry.tileId < minimumTileId ||
@@ -448,13 +449,7 @@ export class LocalPmtilesReader {
     const contentRanges = [...contents.values()].sort(
       (a, b) => a.offset - b.offset || a.length - b.length,
     );
-    for (let index = 1; index < contentRanges.length; index++) {
-      const previous = contentRanges[index - 1];
-      const current = contentRanges[index];
-      if (current.offset < previous.offset + previous.length) {
-        throw new Error("PMTiles tile content ranges overlap");
-      }
-    }
+    if (rangesOverlap(contentRanges)) throw new Error("PMTiles tile content ranges overlap");
 
     if (
       addressedTiles !== header.addressedTiles ||

@@ -16,6 +16,11 @@
 export { fetchIntegrationMetadata } from "./api/integrations";
 export { fetchLegalConfig, type PublicLegalConfig } from "./api/legal-config";
 export { serverApiUrl } from "./api/server-url";
+export { buildAttributionHtml } from "./attribution/attribution";
+export {
+  DELIVERY_PROVIDER_HOSTS,
+  deliveryProviderIdForHost,
+} from "./deep-links/deliveryProviderHosts";
 // Git clone helpers (shared by community service repos + community integrations)
 export {
   assertCloneWithinBudget,
@@ -39,6 +44,48 @@ export {
   canonicalGitUrl,
   InvalidGitUrlError,
 } from "./git-url";
+export {
+  type BoundedBinaryProxy,
+  type BoundedBinaryResponseOptions,
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  MAX_VECTOR_TILE_BYTES,
+  RASTER_IMAGE_MEDIA_TYPES,
+  readBoundedBinaryResponse,
+  VECTOR_TILE_MEDIA_TYPES,
+} from "./http/boundedBinaryResponse";
+export { bareDomain, toHttpUrl } from "./http/httpUrl";
+// Safe downloader (DNS-aware SSRF protection for server-side fetches).
+export {
+  assertResolvesToPublicIp,
+  privateFeedHostAllowlist,
+  resolvePublicConnectionAddresses,
+  type SafeDownloadOptions,
+  type SafeDownloadResult,
+  SafeFetchHttpError,
+  type SafeFetchJsonOptions,
+  type SafeFetchStatusOptions,
+  type SafeJsonResponse,
+  type SafeStatusResponse,
+  type SafeTextResponse,
+  safeDownload,
+  safeFetchJson,
+  safeFetchJsonResponse,
+  safeFetchStatus,
+  safeFetchText,
+  safeFetchTextResponse,
+} from "./http/safe-download";
+export { currentlyOpen, currentOpeningHoursInfo } from "./opening-hours/currentOpeningHours";
+// Server-only opening-hours runtime (imports the LGPL-3 `opening_hours`
+// package). Web code never touches this barrel — see `./opening-hours/openingHours`
+// for details on why this is kept out of the main client-facing index.
+export {
+  buildOpeningHoursInfo,
+  isAlwaysOpen,
+  isOpenAt,
+  parseOpeningHours,
+} from "./opening-hours/openingHours";
+export { applyHoursFilter } from "./places/categoryFilter";
 export {
   assertPosixProcessGroupsSupported,
   monitorPosixProcessGroup,
@@ -78,58 +125,11 @@ export {
   idsFromPrimary,
   idsFromPrimaryOrCoords,
 } from "./types/placeIds";
-export { buildAttributionHtml } from "./utils/attribution";
-export {
-  type BoundedBinaryProxy,
-  type BoundedBinaryResponseOptions,
-  createBoundedBinaryProxyStream,
-  MAX_RASTER_TILE_BYTES,
-  MAX_VECTOR_TILE_BYTES,
-  RASTER_IMAGE_MEDIA_TYPES,
-  readBoundedBinaryResponse,
-  VECTOR_TILE_MEDIA_TYPES,
-} from "./utils/boundedBinaryResponse";
-export { applyHoursFilter } from "./utils/categoryFilter";
-export { currentlyOpen, currentOpeningHoursInfo } from "./utils/currentOpeningHours";
-export {
-  DELIVERY_PROVIDER_HOSTS,
-  deliveryProviderIdForHost,
-} from "./utils/deliveryProviderHosts";
 export {
   createFatalProcessHandler,
   type FatalProcessPorts,
 } from "./utils/fatalProcessPolicy";
 // Server-side geo helpers (great-circle distance, etc.).
 export { haversineKm } from "./utils/geo-server";
-export { bareDomain, toHttpUrl } from "./utils/httpUrl";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
-// Server-only opening-hours runtime (imports the LGPL-3 `opening_hours`
-// package). Web code never touches this barrel — see `../utils/openingHours`
-// for details on why this is kept out of the main client-facing index.
-export {
-  buildOpeningHoursInfo,
-  isAlwaysOpen,
-  isOpenAt,
-  parseOpeningHours,
-} from "./utils/openingHours";
-// Safe downloader (DNS-aware SSRF protection for server-side fetches).
-export {
-  assertResolvesToPublicIp,
-  privateFeedHostAllowlist,
-  resolvePublicConnectionAddresses,
-  type SafeDownloadOptions,
-  type SafeDownloadResult,
-  SafeFetchHttpError,
-  type SafeFetchJsonOptions,
-  type SafeFetchStatusOptions,
-  type SafeJsonResponse,
-  type SafeStatusResponse,
-  type SafeTextResponse,
-  safeDownload,
-  safeFetchJson,
-  safeFetchJsonResponse,
-  safeFetchStatus,
-  safeFetchText,
-  safeFetchTextResponse,
-} from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

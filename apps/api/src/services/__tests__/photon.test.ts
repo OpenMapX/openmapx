@@ -43,11 +43,11 @@ describe("geocode", () => {
     const results = await photonService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("osm:node/123456");
-    expect(results[0].label).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
-    expect(results[0].coordinates).toEqual([13.37, 52.52]);
-    expect(results[0].confidence).toBe(1);
-    expect(results[0].rawCategory).toBe("place/city");
+    expect(results[0]?.id).toBe("osm:node/123456");
+    expect(results[0]?.label).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
+    expect(results[0]?.coordinates).toEqual([13.37, 52.52]);
+    expect(results[0]?.confidence).toBe(1);
+    expect(results[0]?.rawCategory).toBe("place/city");
   });
 
   it("builds ID from osm_type lowercased + osm_id", async () => {
@@ -56,7 +56,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("Berlin");
-    expect(results[0].id).toBe("osm:way/999");
+    expect(results[0]?.id).toBe("osm:way/999");
   });
 
   it("builds label without housenumber when not present", async () => {
@@ -65,7 +65,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("Berlin");
-    expect(results[0].label).toBe("Berlin, Unter den Linden, Berlin, Germany");
+    expect(results[0]?.label).toBe("Berlin, Unter den Linden, Berlin, Germany");
   });
 
   it('returns "Unknown location" when no properties have values', async () => {
@@ -80,7 +80,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("nothing");
-    expect(results[0].label).toBe("Unknown location");
+    expect(results[0]?.label).toBe("Unknown location");
   });
 
   it('maps osm_key "highway" to "street"', async () => {
@@ -89,7 +89,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("street");
-    expect(results[0].type).toBe("street");
+    expect(results[0]?.type).toBe("street");
   });
 
   it('maps osm_key "addr" to "address"', async () => {
@@ -98,7 +98,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("address");
-    expect(results[0].type).toBe("address");
+    expect(results[0]?.type).toBe("address");
   });
 
   it('maps osm_key "building" to "address"', async () => {
@@ -107,7 +107,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("building");
-    expect(results[0].type).toBe("address");
+    expect(results[0]?.type).toBe("address");
   });
 
   it('maps osm_key "boundary" to "region"', async () => {
@@ -116,7 +116,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("boundary");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it('maps osm_key "natural" to "region"', async () => {
@@ -125,7 +125,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("lake");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it('maps osm_key "landuse" to "region"', async () => {
@@ -134,7 +134,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("forest");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it('maps unknown osm_key to "poi"', async () => {
@@ -143,7 +143,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("cafe");
-    expect(results[0].type).toBe("poi");
+    expect(results[0]?.type).toBe("poi");
   });
 
   it("throws on HTTP error", async () => {
@@ -189,8 +189,8 @@ describe("autocomplete", () => {
     const results = await photonService.autocomplete("Ber");
 
     expect(results).toHaveLength(1);
-    expect(results[0].label).toBe("Berlin");
-    expect(results[0].sublabel).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
+    expect(results[0]?.label).toBe("Berlin");
+    expect(results[0]?.sublabel).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
   });
 
   it.each([
@@ -209,8 +209,8 @@ describe("autocomplete", () => {
 
     const results = await photonService.autocomplete("Germany");
 
-    expect(results[0].label).toBe("Germany");
-    expect(results[0].sublabel).toBe(sublabel);
+    expect(results[0]?.label).toBe("Germany");
+    expect(results[0]?.sublabel).toBe(sublabel);
   });
 
   it("uses buildLabel as label when name is missing", async () => {
@@ -221,9 +221,9 @@ describe("autocomplete", () => {
     const results = await photonService.autocomplete("Unter");
 
     // label should fall back to the full buildLabel
-    expect(results[0].label).toBe("Unter den Linden 1, Berlin, Germany");
+    expect(results[0]?.label).toBe("Unter den Linden 1, Berlin, Germany");
     // sublabel should be undefined since short === full
-    expect(results[0].sublabel).toBeUndefined();
+    expect(results[0]?.sublabel).toBeUndefined();
   });
 
   it("sets iconPath from resolvePoiIconPath of osm_value", async () => {
@@ -232,7 +232,7 @@ describe("autocomplete", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.autocomplete("rest");
-    expect(typeof results[0].iconPath).toBe("string");
-    expect(results[0].rawCategory).toBe("place/restaurant");
+    expect(typeof results[0]?.iconPath).toBe("string");
+    expect(results[0]?.rawCategory).toBe("place/restaurant");
   });
 });

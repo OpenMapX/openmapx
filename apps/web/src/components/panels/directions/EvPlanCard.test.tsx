@@ -1,7 +1,7 @@
 import type { EvDirectionsResult } from "@openmapx/core";
 import { usePlaceStore } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, fireEvent, render, screen } from "@/test";
+import { createQueryWrapper, fireEvent, nth, render, screen } from "@/test";
 import { EvPlanCard } from "./EvPlanCard";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -95,7 +95,7 @@ describe("EvPlanCard", () => {
   });
 
   it("shows the stop's cost beside the tariff it was costed on, and undated availability", () => {
-    const [stop] = baseResult.stops;
+    const stop = nth(baseResult.stops, 0);
     render(
       <EvPlanCard
         result={{
@@ -117,7 +117,7 @@ describe("EvPlanCard", () => {
   });
 
   it("labels a price costed on a member or roaming tariff", () => {
-    const [stop] = baseResult.stops;
+    const stop = nth(baseResult.stops, 0);
     const { rerender } = render(<EvPlanCard result={baseResult} />, {
       wrapper: createQueryWrapper(),
     });
@@ -248,7 +248,7 @@ it("projects actual visible stop fields and captured totals independently", () =
   const visible = { sourceId: "same", name: "Visible model", attributionText: "Visible notice" };
   const hidden = { sourceId: "same", name: "Hidden model", attributionText: "Hidden notice" };
   const stop = {
-    ...baseResult.stops[0],
+    ...nth(baseResult.stops, 0),
     operator: undefined,
     isPreferredNetwork: false,
     availability: undefined,

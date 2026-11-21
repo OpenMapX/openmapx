@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test";
+import { fireEvent, nth, render, screen } from "@/test";
 import { StopBoardView } from "./StopBoardView";
 
 const departures = [
@@ -21,9 +21,9 @@ const departures = [
 ];
 
 const arrival = {
-  ...departures[0],
+  ...nth(departures, 0),
   tripId: "entur:2026-04-22|VYG:ServiceJourney:2",
-  route: { ...departures[0].route, id: "entur:VYG:Line:L1", shortName: "L1" },
+  route: { ...nth(departures, 0).route, id: "entur:VYG:Line:L1", shortName: "L1" },
   headsign: "Lillestrøm",
 };
 

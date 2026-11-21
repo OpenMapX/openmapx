@@ -49,6 +49,6 @@ describe("bboxCacheKey", () => {
     const key = bboxCacheKey({ south: 5, west: 5, north: 5, east: 5 });
     expect(key).not.toMatch(/NaN|Infinity/);
     expect(key).not.toBe(bboxCacheKey({ south: 6, west: 6, north: 6, east: 6 }));
-    expect(key.split("@")[0].split(",").map(Number)).toEqual([5, 5, 5, 5]);
+    expect(key.split("@")[0]?.split(",").map(Number)).toEqual([5, 5, 5, 5]);
   });
 });

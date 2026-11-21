@@ -199,15 +199,15 @@ export async function preparePlatformConfigurationChange(
       { actorId: writer.actorId, previewFingerprint: input.previewFingerprint },
       owner.connection,
     ),
-    preview = immutable(retained.preview);
+    preview = immutable(retained.preview),
+    { jobType } = owner.job,
+    { sourceSnapshot } = retained;
   if (
     (!migration &&
-      !platformJobMatchesPreview(
-        { type: owner.job.jobType!, payload: owner.job.payload },
-        preview,
-      )) ||
+      (!jobType ||
+        !platformJobMatchesPreview({ type: jobType, payload: owner.job.payload }, preview))) ||
     retained.consumedByJobId ||
-    !retained.sourceSnapshot ||
+    !sourceSnapshot ||
     retained.desiredRowVersion === undefined ||
     preview.expectedCurrentRevisionId !== input.expectedCurrentRevisionId ||
     preview.authPolicyRevision !== (await loadAuthPolicy(owner.connection)).revision ||
@@ -361,11 +361,13 @@ export async function preparePlatformConfigurationChange(
       )
         throw new PlatformPreviewConflict();
       await verify(actual, candidate);
+      const { execution } = current.job;
+      if (!execution) throw new PlatformPreviewConflict();
       const saved = await commitPlatformConfigurationIntent(
         {
           actorId: writer.actorId,
           jobId: current.job.jobId,
-          execution: current.job.execution!,
+          execution,
           candidateId: candidate.candidateId,
           revisionId: candidate.revisionId,
           expectedAuthPolicyRevision: preview.authPolicyRevision,
@@ -392,7 +394,7 @@ export async function preparePlatformConfigurationChange(
       ...(proof ? { proof } : {}),
     },
     preview,
-    sourceSnapshot: immutable(retained.sourceSnapshot!),
+    sourceSnapshot: immutable(sourceSnapshot),
     expectedDesiredRowVersion: desired?.version ?? null,
     handoffId: jobHandoffId(owner.job.jobId, writer.operationKey),
     ...(migration

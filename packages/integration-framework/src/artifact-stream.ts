@@ -259,7 +259,7 @@ export async function extractIntegrationArtifactStream(options: {
       if (++headers > 4096) throw Error("Artifact tar header limit exceeded: maximum 4,096");
       const expected = octal(header, 148, 8);
       let checksum = 0;
-      for (let i = 0; i < BLOCK; i++) checksum += i >= 148 && i < 156 ? 32 : header[i];
+      for (const [i, byte] of header.entries()) checksum += i >= 148 && i < 156 ? 32 : byte;
       if (checksum !== expected) throw Error("Invalid artifact tar header checksum");
       const name = text(header, 0, 100),
         prefix = text(header, 345, 155),
@@ -311,11 +311,13 @@ export async function extractIntegrationArtifactStream(options: {
         opened.close();
         continue;
       }
+      const leaf = parts.at(-1);
+      if (leaf === undefined) throw Error("Unsafe artifact root member");
       const opened = openParents(root, parts.slice(0, -1));
       let fd: number | undefined;
       try {
         fd = openSync(
-          opened.parent.name(parts.at(-1)!),
+          opened.parent.name(leaf),
           C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW,
           0o600,
         );
@@ -331,7 +333,7 @@ export async function extractIntegrationArtifactStream(options: {
         }
         fsyncSync(fd);
         const value = fstatSync(fd, { bigint: true }),
-          current = opened.parent.fileIdentity(parts.at(-1)!);
+          current = opened.parent.fileIdentity(leaf);
         if (
           value.size !== BigInt(size) ||
           value.nlink !== 1n ||

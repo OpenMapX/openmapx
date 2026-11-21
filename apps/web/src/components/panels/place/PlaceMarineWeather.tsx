@@ -205,13 +205,15 @@ function WaveSparkline({ hourly, now }: { hourly: MarineHourlyPoint[]; now: numb
   const points = hourly
     .map((p) => ({ t: new Date(p.time).getTime(), v: p.waveHeightM }))
     .filter((p): p is { t: number; v: number } => p.v !== undefined && Number.isFinite(p.v));
-  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points.at(-1);
+  if (points.length < 2 || !first || !last) return null;
 
   const W = 240;
   const H = 32;
   const PAD_Y = 2;
-  const minT = points[0].t;
-  const maxT = points[points.length - 1].t;
+  const minT = first.t;
+  const maxT = last.t;
   const minV = Math.min(...points.map((p) => p.v));
   const maxV = Math.max(...points.map((p) => p.v));
   const xRange = maxT - minT || 1;

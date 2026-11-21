@@ -77,7 +77,15 @@ function swissDayShift(
   if (!parts || !operatingDayRef) return undefined;
   const parseDay = (value: string) => {
     const [year, month, day] = value.split("-").map((segment) => Number.parseInt(segment, 10));
-    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    if (
+      year === undefined ||
+      month === undefined ||
+      day === undefined ||
+      !Number.isFinite(year) ||
+      !Number.isFinite(month) ||
+      !Number.isFinite(day)
+    )
+      return null;
     return Date.UTC(year, month - 1, day) / 86_400_000;
   };
   const actual = parseDay(parts.date);

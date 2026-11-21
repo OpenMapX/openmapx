@@ -1,3 +1,4 @@
+import { itemAt } from "@openmapx/core/item-at";
 import { expect, it } from "vitest";
 import { feedCredentialIntent } from "./transit-credential-preview";
 
@@ -11,7 +12,7 @@ it("public intent binds opaque preview identity and actions, never hashes a cred
     changes: [{ key: "de/a", action: "set" as const, value: "first" }],
   };
   expect(feedCredentialIntent(base)).toBe(
-    feedCredentialIntent({ ...base, changes: [{ ...base.changes[0]!, value: "second" }] }),
+    feedCredentialIntent({ ...base, changes: [{ ...itemAt(base.changes, 0), value: "second" }] }),
   );
   expect(feedCredentialIntent(base)).not.toBe(
     feedCredentialIntent({ ...base, previewId: "another-opaque-random-id" }),

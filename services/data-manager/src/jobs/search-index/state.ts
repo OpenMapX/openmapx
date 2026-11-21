@@ -32,9 +32,10 @@ export function resolveOsmDataset(store: StateStore, region: string): DatasetMet
   const matches = store
     .getAll()
     .filter((dataset) => dataset.type === "osm-pbf" && (dataset.region ?? dataset.id) === region);
-  if (matches.length === 0) throw new Error(`no registered OSM PBF for region ${region}`);
-  if (matches.length > 1) throw new Error(`multiple registered OSM PBFs for region ${region}`);
-  return matches[0];
+  const [match, ...others] = matches;
+  if (!match) throw new Error(`no registered OSM PBF for region ${region}`);
+  if (others.length > 0) throw new Error(`multiple registered OSM PBFs for region ${region}`);
+  return match;
 }
 
 export async function updateCurrentSearchIndexFingerprint(

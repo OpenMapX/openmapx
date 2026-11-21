@@ -7,8 +7,8 @@ import type { GbfsCatalogLock } from "@openmapx/core/catalog-pins/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
-vi.mock("@openmapx/core/utils/safe-download", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@openmapx/core/utils/safe-download")>();
+vi.mock("@openmapx/core/http/safe-download", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core/http/safe-download")>();
   return {
     ...actual,
     safeFetchJson: <T>(url: string, options = {}) =>

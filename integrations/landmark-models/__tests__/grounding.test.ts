@@ -1,3 +1,4 @@
+import { nth } from "@openmapx/integration-framework/testing";
 import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
 import { groundHeight, type TerrainProbe } from "../web/grounding";
@@ -49,6 +50,22 @@ describe("groundHeight", () => {
     ).toBeCloseTo(70, 6);
   });
 
+  it("does not sample a footprint position without two coordinates", () => {
+    const sampled: [number, number][] = [];
+    const flat = probe((lngLat) => {
+      sampled.push(lngLat);
+      return { state: "loaded", drawn: 5 };
+    });
+    const footprint: Polygon = {
+      type: "Polygon",
+      coordinates: [[[-122.406, 37.8022], [-122.4056], [-122.4056, 37.8026], [-122.406, 37.8022]]],
+    };
+    expect(groundHeight({ anchor: ANCHOR, grounding: "footprint-minimum" }, footprint, flat)).toBe(
+      5,
+    );
+    expect(sampled).toEqual([ANCHOR, [-122.406, 37.8022], [-122.4056, 37.8026]]);
+  });
+
   it("moves from a parent value to the own-tile value", () => {
     let ownTileLoaded = false;
     const terrain = probe(() =>
@@ -66,7 +83,7 @@ describe("groundHeight", () => {
       const angle = (i / 100) * Math.PI * 2;
       return [ANCHOR[0] + Math.cos(angle) * 0.001, ANCHOR[1] + Math.sin(angle) * 0.001];
     });
-    ring.push(ring[0] as number[]);
+    ring.push(nth(ring, 0));
     let samples = 0;
     const counting = probe(() => {
       samples += 1;

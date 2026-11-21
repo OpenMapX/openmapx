@@ -22,13 +22,13 @@ const LABEL_LAYER_ID = "openmapx-shelters-labels";
 const INTERACTIVE_LAYERS = [CIRCLE_LAYER_ID] as const;
 const MIN_ZOOM = 10;
 
-const SHELTER_COLORS: Record<string, string> = {
+const SHELTER_COLORS = {
   refuge: "#D84315",
   cabane: "#795548",
   gite: "#5D4037",
   pt_eau: "#0288D1",
   pt_passage: "#546E7A",
-};
+} satisfies Record<string, string>;
 
 const SHELTER_TYPE_KEYS: Record<string, string> = {
   refuge: "refuge",

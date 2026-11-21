@@ -3,7 +3,7 @@ import type { GbfsCatalogClient } from "@openmapx/mobility-core/gbfs-catalog";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import type { CacheClient } from "../context.js";
 import { createSharedMobilityProvider } from "../shared-mobility-provider-factory.js";
 
@@ -127,10 +127,12 @@ it("persists actual Entur enrichment receipts through factory search and repeate
     loadInventory: async () => ({ stations: [item], vehicles: [] }),
   });
   const response = await provider.search({ west: 10, south: 60, east: 11, north: 61 });
-  expect(response.data[0].contributors?.map((a) => a.sourceId)).toEqual(["gbfs", "entur-mobility"]);
-  const first = await provider.getDetail(response.data[0].id);
-  const second = await provider.getDetail(response.data[0].id);
-  expect(first.data?.contributors).toEqual(response.data[0].contributors);
+  const [result] = response.data;
+  assert.isDefined(result);
+  expect(result.contributors?.map((a) => a.sourceId)).toEqual(["gbfs", "entur-mobility"]);
+  const first = await provider.getDetail(result.id);
+  const second = await provider.getDetail(result.id);
+  expect(first.data?.contributors).toEqual(result.contributors);
   expect(second.data?.contributors).toEqual(first.data?.contributors);
   expect(http.fetchJson).toHaveBeenCalledTimes(2);
 });

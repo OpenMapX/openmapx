@@ -7,6 +7,7 @@ import {
   configureMapClickOwnership,
   getMapClickOwner,
 } from "@/integration-api/map/mapClickOwnership";
+import { nth } from "@/test";
 
 const originalConsoleError = console.error;
 
@@ -136,7 +137,7 @@ vi.mock("maplibre-gl", () => {
     getStyle = () => (this.style._loaded ? options[instances.indexOf(this)]?.style : undefined);
     setStyle = vi.fn((input: unknown) => {
       const style = input as { layers: Array<{ id: string }> };
-      options[instances.indexOf(this)].style = style;
+      nth(options, instances.indexOf(this)).style = style;
     });
     getLayer = (id: string) => this.getStyle()?.layers.find((layer) => layer.id === id);
     getSource = () => undefined;
@@ -296,7 +297,7 @@ async function renderWithMoveEnd() {
 
   render(<MapCanvas />);
   await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-  const map = maplibreTest.instances[0];
+  const map = nth(maplibreTest.instances, 0);
   const moveEnd = map.on.mock.calls.find(([event]: unknown[]) => event === "moveend")?.[1] as (
     e?: unknown,
   ) => void;
@@ -333,7 +334,7 @@ describe("MapCanvas", () => {
 
     render(<MapCanvas />);
     await waitFor(() => expect(maplibreTest.options).toHaveLength(1));
-    expect(maplibreTest.options[0].style.layers.map((layer) => layer.id)).toEqual([
+    expect(nth(maplibreTest.options, 0).style.layers.map((layer) => layer.id)).toEqual([
       "Building",
       "shipbuilding-monument",
     ]);
@@ -461,7 +462,7 @@ describe("MapCanvas", () => {
       render(<MapCanvas />);
       await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
       await waitFor(() => expect(fix.asked()).toBe(true));
-      const map = maplibreTest.instances[0];
+      const map = nth(maplibreTest.instances, 0);
       const moveStart = map?.on.mock.calls.find(
         ([event]: unknown[]) => event === "movestart",
       )?.[1] as ((event: { originalEvent?: unknown }) => void) | undefined;
@@ -582,7 +583,7 @@ describe("MapCanvas", () => {
 
     render(<MapCanvas />);
     await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-    const map = maplibreTest.instances[0];
+    const map = nth(maplibreTest.instances, 0);
     expect(map.isStyleLoaded()).toBe(false);
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("status")).toBeNull();
@@ -779,16 +780,16 @@ it("keeps the installed generation during pending or rejected reloads and ignore
   vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
   const view = render(<MapCanvas />);
   await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-  const map = maplibreTest.instances[0];
+  const map = nth(maplibreTest.instances, 0);
   act(() => map.emitStyleLoad());
-  const installed = maplibreTest.options[0].style;
+  const installed = nth(maplibreTest.options, 0).style;
   const first = mapStyleTest.deferStyle();
   act(() => window.dispatchEvent(new Event("offline")));
   await act(async () => {
     await Promise.resolve();
   });
   expect(map.setStyle).not.toHaveBeenCalled();
-  expect(maplibreTest.options[0].style).toBe(installed);
+  expect(nth(maplibreTest.options, 0).style).toBe(installed);
   const second = mapStyleTest.deferStyle();
   act(() => window.dispatchEvent(new Event("online")));
   await act(async () => {
@@ -796,13 +797,13 @@ it("keeps the installed generation during pending or rejected reloads and ignore
     await Promise.resolve();
   });
   await waitFor(() => expect(map.setStyle).toHaveBeenCalledTimes(1));
-  const latest = maplibreTest.options[0].style;
+  const latest = nth(maplibreTest.options, 0).style;
   await act(async () => {
     first();
     await Promise.resolve();
   });
   expect(map.setStyle).toHaveBeenCalledTimes(1);
-  expect(maplibreTest.options[0].style).toBe(latest);
+  expect(nth(maplibreTest.options, 0).style).toBe(latest);
   console.error = vi.fn();
   const reset = mapStyleTest.failStyleOnce(new Error("reload failed"));
   await act(async () => {
@@ -810,7 +811,7 @@ it("keeps the installed generation during pending or rejected reloads and ignore
     await Promise.resolve();
   });
   expect(map.setStyle).toHaveBeenCalledTimes(1);
-  expect(maplibreTest.options[0].style).toBe(latest);
+  expect(nth(maplibreTest.options, 0).style).toBe(latest);
   reset();
   view.unmount();
 });

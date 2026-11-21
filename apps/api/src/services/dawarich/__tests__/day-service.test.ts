@@ -1,7 +1,11 @@
 import type { SafeJsonResponse } from "@openmapx/core/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { timelineResponseFixture } from "../__fixtures__/timeline-day.js";
-import { tracksPageFixture } from "../__fixtures__/tracks-page.js";
+import {
+  journeyEntryFixture,
+  timelineDayFixture,
+  timelineResponseFixture,
+} from "../__fixtures__/timeline-day.js";
+import { trackFeatureFixture, tracksPageFixture } from "../__fixtures__/tracks-page.js";
 import {
   DawarichClient,
   DawarichClientError,
@@ -45,7 +49,7 @@ function emptyTracksPage(): DawarichTracksPage {
 
 function trackFeatures(count: number, prefix: string) {
   return Array.from({ length: count }, (_, index) => ({
-    ...tracksPageFixture.features[0],
+    ...trackFeatureFixture,
     properties: { id: `${prefix}-${index}` },
   }));
 }
@@ -55,16 +59,19 @@ function trackIds(count: number, prefix: string) {
 }
 
 function timelineWithTrackIds(ids: string[]) {
-  const journey = timelineResponseFixture.days[0].entries.find((entry) => entry.type === "journey");
-  if (!journey) throw new Error("fixture needs a journey");
   return {
     days: [
       {
-        ...timelineResponseFixture.days[0],
-        entries: ids.map((trackId) => ({ ...journey, track_id: trackId })),
+        ...timelineDayFixture,
+        entries: ids.map((trackId) => ({ ...journeyEntryFixture, track_id: trackId })),
       },
     ],
   };
+}
+
+/** A one-day timeline over the given track ids, dated `date`. */
+function datedTimelineWithTrackIds(ids: string[], date: string) {
+  return { days: timelineWithTrackIds(ids).days.map((day) => ({ ...day, date })) };
 }
 
 function transportResponse<T>(data: T, headers: Record<string, string> = {}): SafeJsonResponse<T> {
@@ -122,8 +129,7 @@ describe("TimelineDayService", () => {
     const recordMetric = vi.fn();
     const metricNow = vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(34);
     const { service, client } = harness({}, { recordMetric, metricNow });
-    const partialTimeline = timelineWithTrackIds(["fixture-partial-0"]);
-    partialTimeline.days[0] = { ...partialTimeline.days[0], date: "2026-03-29" };
+    const partialTimeline = datedTimelineWithTrackIds(["fixture-partial-0"], "2026-03-29");
     client.getTimeline.mockResolvedValueOnce(partialTimeline);
     client.getTracksPage.mockRejectedValueOnce(new DawarichClientError("unavailable", 503));
 
@@ -198,7 +204,7 @@ describe("TimelineDayService", () => {
       status: "success",
     });
     client.getTimeline.mockResolvedValueOnce({
-      days: [{ ...timelineResponseFixture.days[0], date: "2026-03-29" }],
+      days: [{ ...timelineDayFixture, date: "2026-03-29" }],
     });
 
     const day = await service.getPersonalTimelineDay(USER_ID, "2026-03-29");
@@ -440,7 +446,7 @@ describe("TimelineDayService", () => {
             type: "FeatureCollection" as const,
             features: [
               {
-                ...tracksPageFixture.features[0],
+                ...trackFeatureFixture,
                 properties: { device_id: "private-device" },
               },
             ],
@@ -466,7 +472,7 @@ describe("TimelineDayService", () => {
   it("treats a mismatched required day as an invalid response without recording success", async () => {
     const { service, connection, client } = harness();
     client.getTimeline.mockResolvedValueOnce({
-      days: [{ ...timelineResponseFixture.days[0], date: "2026-01-03" }],
+      days: [{ ...timelineDayFixture, date: "2026-01-03" }],
     });
 
     await expect(service.getPersonalTimelineDay(USER_ID, "2026-01-02")).rejects.toMatchObject({

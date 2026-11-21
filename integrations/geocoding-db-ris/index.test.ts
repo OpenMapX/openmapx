@@ -3,6 +3,7 @@ import {
   type FakeHttpClient,
   type FakeHttpRequest,
   fakeHttpClient,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { setup } from "./index.js";
@@ -47,7 +48,7 @@ describe("geocoding-db-ris search suggestions", () => {
 
   it("contributes stations with EVA identities and DB attribution", async () => {
     const ctx = activate();
-    const [provider] = ctx.registered.searchSuggestions;
+    const provider = nth(ctx.registered.searchSuggestions, 0);
 
     const result = await provider.searchSuggestions(
       { query: "Köln", lang: "de", limit: 8, proximity: [6.95, 50.94] },
@@ -67,7 +68,7 @@ describe("geocoding-db-ris search suggestions", () => {
 
   it("skips the metered API for queries anchored outside central Europe", async () => {
     const ctx = activate();
-    const [provider] = ctx.registered.searchSuggestions;
+    const provider = nth(ctx.registered.searchSuggestions, 0);
 
     const result = await provider.searchSuggestions(
       { query: "Köln", lang: "de", limit: 8, proximity: [-73.98, 40.75] },
@@ -80,7 +81,7 @@ describe("geocoding-db-ris search suggestions", () => {
 
   it("returns nothing when no credentials are configured", async () => {
     const ctx = activate({});
-    const [provider] = ctx.registered.searchSuggestions;
+    const provider = nth(ctx.registered.searchSuggestions, 0);
 
     const result = await provider.searchSuggestions(
       { query: "Köln", lang: "de", limit: 8, proximity: [6.95, 50.94] },

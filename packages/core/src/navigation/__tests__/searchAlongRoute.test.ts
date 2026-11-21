@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import {
   DEFAULT_CORRIDOR_PAD_METERS,
@@ -30,8 +30,10 @@ describe("poiAlongRoute", () => {
     ];
     const out = poiAlongRoute(places, geometry, 0, { speedMps: 14 });
     expect(out.map((o) => o.place.id)).toEqual(["near-close", "near-far"]);
-    expect(out[0].deviationMeters).toBeLessThan(20);
-    expect(out[0].detourMeters).toBeCloseTo(2 * out[0].deviationMeters, 5);
+    const [nearest] = out;
+    assert.isDefined(nearest);
+    expect(nearest.deviationMeters).toBeLessThan(20);
+    expect(nearest.detourMeters).toBeCloseTo(2 * nearest.deviationMeters, 5);
   });
 
   it("drops POIs behind the current position", () => {
@@ -99,6 +101,7 @@ describe("paddedRouteAheadBounds", () => {
       expect(boxes).not.toBeNull();
       expect(boxes).toHaveLength(1);
       const [box] = boxes ?? [];
+      assert.isDefined(box);
       expect(box.west).toBeLessThanOrEqual(box.east);
       expect(box.south).toBeLessThanOrEqual(box.north);
       // The window must reach at least as far as an unpadded scan would.
@@ -123,6 +126,7 @@ describe("paddedRouteAheadBounds", () => {
     const boxes = paddedRouteAheadBounds(route, 1000, 2000);
     expect(boxes).not.toBeNull();
     const [box] = boxes ?? [];
+    assert.isDefined(box);
     // The window (1,000 m to 3,000 m along) plus 250 m padding on each side,
     // converted back to metres, should land close to 750..3,250 m — nowhere
     // near the edge's full 200 km span.
@@ -143,6 +147,7 @@ describe("paddedRouteAheadBounds", () => {
     const boxes = paddedRouteAheadBounds(route, 500, 1000);
     expect(boxes).not.toBeNull();
     const [box] = boxes ?? [];
+    assert.isDefined(box);
     expect(Number.isFinite(box.west)).toBe(true);
     expect(Number.isFinite(box.east)).toBe(true);
     expect(box.west * metersPerDegLon(50)).toBeCloseTo(250, -1);
@@ -154,6 +159,7 @@ describe("paddedRouteAheadBounds", () => {
     const boxes = paddedRouteAheadBounds(route, 5000, 10_000);
     expect(boxes).not.toBeNull();
     const [box] = boxes ?? [];
+    assert.isDefined(box);
     expect(Number.isFinite(box.west)).toBe(true);
     expect(Number.isFinite(box.east)).toBe(true);
     expect(Number.isFinite(box.south)).toBe(true);
@@ -168,6 +174,7 @@ describe("paddedRouteAheadBounds", () => {
     const boxes = paddedRouteAheadBounds(route, total / 2 - 5000, 10_000);
     expect(boxes).not.toBeNull();
     const [box] = boxes ?? [];
+    assert.isDefined(box);
     expect(box.south).toBeLessThan(0);
     expect(box.north).toBeGreaterThan(0);
   });
@@ -227,6 +234,8 @@ describe("paddedRouteAheadBounds", () => {
     expect(padded).not.toBeNull();
     const [u] = unpadded ?? [];
     const [p] = padded ?? [];
+    assert.isDefined(u);
+    assert.isDefined(p);
     const westWidenMeters = (u.west - p.west) * metersPerDegLon(52);
     const northWidenMeters = (p.north - u.north) * 110_540;
     expect(westWidenMeters).toBeGreaterThan(DEFAULT_CORRIDOR_PAD_METERS * 0.9);
@@ -285,10 +294,12 @@ describe("routeSearchChunks", () => {
   it("pads each window by the 1,200 m corridor", () => {
     expect(ROUTE_SEARCH_CORRIDOR_METERS).toBe(1200);
     const { chunks } = routeSearchChunks(eastLine(30));
+    const [chunk] = chunks;
+    assert.isDefined(chunk);
     const lat = 1100 / 111_320;
     for (const along of [1, 12, 24]) {
-      expect(contains(chunks[0].boxes, [along / 111.32, lat])).toBe(true);
-      expect(contains(chunks[0].boxes, [along / 111.32, -lat])).toBe(true);
+      expect(contains(chunk.boxes, [along / 111.32, lat])).toBe(true);
+      expect(contains(chunk.boxes, [along / 111.32, -lat])).toBe(true);
     }
   });
 
@@ -299,7 +310,7 @@ describe("routeSearchChunks", () => {
     ];
     const { chunks } = routeSearchChunks(route);
     expect(chunks).toHaveLength(1);
-    expect(chunks[0].boxes).toHaveLength(2);
+    expect(chunks[0]?.boxes).toHaveLength(2);
   });
 
   it("returns no windows for geometry too short to bound", () => {

@@ -20,9 +20,10 @@ export function parseCsv(
   const lines = input.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/);
   let headerIndex = -1;
   let delimiter = "";
-  for (let index = 0; index < lines.length && headerIndex < 0; index++) {
+  for (const [index, line] of lines.entries()) {
+    if (headerIndex >= 0) break;
     for (const candidate of [",", ";", "\t", "|"]) {
-      const row = Papa.parse<string[]>(lines[index], { delimiter: candidate }).data[0] || [];
+      const row = Papa.parse<string[]>(line, { delimiter: candidate }).data[0] || [];
       const headers = row.map((h) => h.trim().toLowerCase());
       if (
         (headers.includes("title") && headers.includes("url")) ||
@@ -42,7 +43,10 @@ export function parseCsv(
     skipEmptyLines: "greedy",
   });
   if (parsed.errors.some((e) => e.type === "Quotes")) throw new ImportFileError("malformed");
-  const headers = parsed.data[0].map((h) => h.trim().toLowerCase());
+  // Parsing starts at the header line found above, so the first row exists.
+  const [headerRow] = parsed.data;
+  if (!headerRow) throw new ImportFileError("malformed");
+  const headers = headerRow.map((h) => h.trim().toLowerCase());
   const takeout = headers.includes("url") && headers.includes("title");
   const places = parsed.data.slice(1).flatMap((row) => {
     if (row.every((value) => !value.trim())) return [];

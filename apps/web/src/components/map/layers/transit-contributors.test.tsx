@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, type FakeMap, render } from "@/test";
+import { createFakeMap, type FakeMap, nth, render } from "@/test";
 
 const state = vi.hoisted(() => {
   const a = { sourceId: "a", name: "Timetable A" };
@@ -91,14 +91,16 @@ describe("core transit map acquisition receipts", () => {
   it("keeps independently fetched vehicle and infrastructure snapshots on their actual features", () => {
     render(<Layers />);
     expect(
-      JSON.parse(features("vehicle-live-source")[0].properties?._mapAttributions ?? "[]"),
+      JSON.parse(nth(features("vehicle-live-source"), 0).properties?._mapAttributions ?? "[]"),
     ).toEqual([state.b, state.a]);
     expect(
-      JSON.parse(features("selected-stop-platform-source")[0].properties?._mapAttributions ?? "[]"),
+      JSON.parse(
+        nth(features("selected-stop-platform-source"), 0).properties?._mapAttributions ?? "[]",
+      ),
     ).toEqual([state.c]);
     expect(
       JSON.parse(
-        features("transit-route-detail-stops-source")[0].properties?._mapAttributions ?? "[]",
+        nth(features("transit-route-detail-stops-source"), 0).properties?._mapAttributions ?? "[]",
       ),
     ).toEqual([state.a]);
   });
@@ -143,6 +145,6 @@ describe("core transit map acquisition receipts", () => {
 
     expect(fake.state.counts.addLayer.get("vehicle-live-layer")).toBe(added);
     expect(fake.state.counts.removeLayer.get("vehicle-live-layer")).toBeUndefined();
-    expect(features("vehicle-live-source")[0].geometry?.coordinates).toEqual([8.01, 50.01]);
+    expect(nth(features("vehicle-live-source"), 0).geometry?.coordinates).toEqual([8.01, 50.01]);
   });
 });

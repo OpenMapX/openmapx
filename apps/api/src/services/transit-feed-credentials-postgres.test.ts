@@ -5,9 +5,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
-import { afterAll, afterEach, it as base, beforeAll, describe, expect, vi } from "vitest";
+import { afterAll, afterEach, assert, it as base, beforeAll, describe, expect, vi } from "vitest";
 import { ownedDataManager } from "../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../ops-agent/src/__fixtures__/owned-service-host";
 import { installPinnedCredentialCatalog } from "../../../ops-agent/src/__fixtures__/pinned-feed-credentials";
@@ -216,7 +217,8 @@ describe.skipIf(!enabled)(
       stopCoordinator = () => host.setRows([host.row, { ...dmRow, State: "exited" }]);
       host.setCreatingProcess(async (args) => {
         if (!args.includes("--force-recreate")) return;
-        const revision = services.currentConfigurationGeneration(host.infraDir)!;
+        const revision = services.currentConfigurationGeneration(host.infraDir);
+        if (!revision) throw Error("Actual committed configuration generation unavailable");
         const compose = services.stackComposeArgs(host.stack),
           options = {
             signal: new AbortController().signal,
@@ -231,8 +233,7 @@ describe.skipIf(!enabled)(
             await host.execFile("docker", [...compose, "config", "--hash", "data-manager"], options)
           ).stdout
             .trim()
-            .split(/\s+/)
-            .at(-1)!;
+            .replace(/^.*\s/s, "");
         const row = {
             ...dmRow,
             Id: "d".repeat(64),
@@ -335,7 +336,9 @@ describe.skipIf(!enabled)(
       const old = await login(),
         operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
       const { readCatalogPinSet } = await import("@openmapx/core/catalog-pins");
-      const catalog = readCatalogPinSet(host.root)!.generationId;
+      const pins = readCatalogPinSet(host.root);
+      assert.exists(pins, "no catalog pin set is installed");
+      const catalog = pins.generationId;
       const prior = {
         id: randomUUID(),
         serviceId: "data-manager",
@@ -649,8 +652,8 @@ describe.skipIf(!enabled)(
           .where(eq(schema.adminActionReauthentication.id, competing.challenge.challengeId));
         expect(unusedProof?.state).toBe("completed");
         expect(result.configuration).toMatchObject({ outcome: "committed", followUp: "complete" });
-        const [row] = await state.fixture.db.select().from(schema.serviceSecret);
-        expect(JSON.parse(decrypt(row!.ciphertext, row!.iv, row!.tag))).toEqual({
+        const row = itemAt(await state.fixture.db.select().from(schema.serviceSecret), 0);
+        expect(JSON.parse(decrypt(row.ciphertext, row.iv, row.tag))).toEqual({
           orphan: " untouched ",
           "de/A": "synthetic-private-key",
         });
@@ -670,7 +673,7 @@ describe.skipIf(!enabled)(
           .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${startedAt}`;
         expect(links).toHaveLength(1);
         expect(links[0]).toMatchObject({ status: "ok" });
-        expect(links[0]!.execution_input.leaseId).toEqual(expect.any(String));
+        expect(itemAt(links, 0).execution_input.leaseId).toEqual(expect.any(String));
         expect(await dm.fenceStates()).toEqual(["settled"]);
         expect(dropped.size).toBe(3);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -730,15 +733,15 @@ describe.skipIf(!enabled)(
           });
           children.push(child);
           let output = "";
-          child.stdout!.on("data", (chunk) => {
+          child.stdout.on("data", (chunk) => {
             output += chunk;
           });
-          child.stderr!.on("data", () => {});
+          child.stderr.on("data", () => {});
           const exited = new Promise<number | null>((resolve, reject) => {
             child.once("error", reject);
             child.once("close", (code) => resolve(code));
           });
-          child.stdin!.end(JSON.stringify({ ...input, reconcile }));
+          child.stdin.end(JSON.stringify({ ...input, reconcile }));
           return { child, exited, output: () => output };
         };
         const waitFor = async (check: () => boolean | Promise<boolean>, ms = 90000) => {
@@ -761,13 +764,14 @@ describe.skipIf(!enabled)(
         const [before] = await state.fixture.db.select().from(schema.adminJob),
           [proof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [secret] = await state.fixture.db.select().from(schema.serviceSecret);
+        assert.isDefined(before, "the credential job row is missing");
         expect(proof?.state).toBe(phase === "rows_saved" ? "consumed" : "completed");
-        expect((before!.protocol as { candidate: { phase: string } }).candidate.phase).toBe(phase);
+        expect((before.protocol as { candidate: { phase: string } }).candidate.phase).toBe(phase);
         first.child.kill("SIGKILL");
         await first.exited;
         releaseAdmission?.();
         releaseAdmission = undefined;
-        const lease = (before!.protocol as { observationLeaseUntil: string }).observationLeaseUntil;
+        const lease = (before.protocol as { observationLeaseUntil: string }).observationLeaseUntil;
         await new Promise((resolve) =>
           setTimeout(resolve, Math.max(0, Date.parse(lease) - Date.now() + 100)),
         );
@@ -781,8 +785,9 @@ describe.skipIf(!enabled)(
         const [after] = await state.fixture.db.select().from(schema.adminJob),
           [afterProof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [afterSecret] = await state.fixture.db.select().from(schema.serviceSecret);
-        expect(after?.id).toBe(before!.id);
-        expect(after?.status).toBe(phase === "rows_saved" ? "success" : "failed");
+        assert.isDefined(after, "the credential job row is missing after recovery");
+        expect(after.id).toBe(before.id);
+        expect(after.status).toBe(phase === "rows_saved" ? "success" : "failed");
         expect(afterProof?.consumedAt).toEqual(proof?.consumedAt);
         expect(afterSecret).toEqual(secret);
         expect(dm.preparePosts).toBe(1);
@@ -794,7 +799,7 @@ describe.skipIf(!enabled)(
           expect(replay.configuration.outcome).toBe("not_committed");
         }
         expect(
-          (after!.result as { transitCredentials: { credentialsRevision: string } })
+          (after.result as { transitCredentials: { credentialsRevision: string } })
             .transitCredentials.credentialsRevision,
         ).toBe(transitCredentialRevision(secret));
       }, 240000);

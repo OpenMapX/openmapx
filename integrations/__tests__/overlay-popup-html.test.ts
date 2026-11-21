@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   findUnsafeInterpolations,
   type GuardOptions,
@@ -67,8 +67,9 @@ function collectSourceFiles(dir: string): string[] {
 
 function relativeImports(fileName: string, source: string): string[] {
   const resolved: string[] = [];
-  for (const match of source.matchAll(/(?:from|import)\s*["'](\.[^"']*)["']/g)) {
-    const target = resolveModule(fileName, match[1]);
+  for (const [, specifier] of source.matchAll(/(?:from|import)\s*["'](\.[^"']*)["']/g)) {
+    assert.isDefined(specifier, `an import in ${fileName} matched without its specifier`);
+    const target = resolveModule(fileName, specifier);
     if (target) resolved.push(target);
   }
   return resolved;
@@ -78,8 +79,7 @@ function relativeImports(fileName: string, source: string): string[] {
 function collectMarkupFiles(files: string[]): string[] {
   const included = new Set<string>();
   const pending = files.filter((file) => hasHtmlSink(fs.readFileSync(file, "utf8")));
-  while (pending.length > 0) {
-    const file = pending.pop() as string;
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
     if (included.has(file) || !file.startsWith(INTEGRATIONS_DIR)) continue;
     included.add(file);
     pending.push(...relativeImports(file, fs.readFileSync(file, "utf8")));
@@ -119,7 +119,9 @@ function findUnsafeAnchorOffenders(files: string[]): string[] {
     if (EXEMPT.has(path.relative(INTEGRATIONS_DIR, file))) return [];
     const offenders: string[] = [];
     for (const match of source.matchAll(/href\s*=\s*["']\$\{([^}]*)\}/g)) {
-      const expression = match[1].trim();
+      const [, interpolated] = match;
+      assert.isDefined(interpolated, `an href in ${file} matched without its expression`);
+      const expression = interpolated.trim();
       if (expression.startsWith("sanitizeUrl(") || hasSanitizedBinding(source, expression))
         continue;
       offenders.push(

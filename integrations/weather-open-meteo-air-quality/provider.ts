@@ -38,12 +38,17 @@ const FORECAST_TTL: UpstreamCacheTtl = {
   staleIfErrorMs: 6 * 60 * 60_000,
 };
 
+const licensing = parseLicensing(sourceManifest.dataSources[0]?.licensing);
+if (!licensing) {
+  throw new Error("weather-open-meteo-air-quality manifest declares no valid source licensing");
+}
+
 const source: AirQualitySourceRef = {
   sourceId: SOURCE_ID,
   name: "Open-Meteo Air Quality API / CAMS",
   url: "https://open-meteo.com/en/docs/air-quality-api",
   owner: "Open-Meteo and Copernicus Atmosphere Monitoring Service",
-  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
+  licensing,
   methodologyUrl: "https://open-meteo.com/en/docs/air-quality-api",
   attribution: "Open-Meteo; CAMS ENSEMBLE data providers",
 };

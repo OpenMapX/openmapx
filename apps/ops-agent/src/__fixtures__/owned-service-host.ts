@@ -117,11 +117,13 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     composePath,
   };
   const imageId = `sha256:${"b".repeat(64)}`;
+  const motis = loaded.find(s=>s.manifest.id==="motis");
+  if (!motis) throw Error("Fixture stack has no motis service");
   const row = {
     Id: "a".repeat(64),
     Image: imageId,
     State: "running",
-    ConfigImage: services.serviceContainerImageReference(loaded.find(s=>s.manifest.id==="motis")!.manifest.container),
+    ConfigImage: services.serviceContainerImageReference(motis.manifest.container),
     Labels: {
       "com.docker.compose.project": services.STACK_PROJECT,
       "com.docker.compose.service": "motis",
@@ -152,23 +154,34 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const helperContainers = new Map<string, { Id: string; Image: string; State: { Running: boolean; ExitCode: number }; Config: { Labels: Record<string, string> } }>();
   // Runs the helper a `docker run` started; resolves with its exit code.
   let helperProcess: ((env: Record<string, string>) => Promise<number>) | undefined;
-  const helperById = (id: string) => [...helperContainers.values()].find((value) => value.Id === id);
+  const helperById = (id: string | undefined) => [...helperContainers.values()].find((value) => value.Id === id);
+  // A fake Docker call without an argument the real CLI requires is a test bug.
+  const arg = (values: readonly string[], index: number) => {
+    const value = values.at(index);
+    if (value === undefined) throw Error(`Fake Docker call lacks argument ${index}: ${values.join(" ")}`);
+    return value;
+  };
+  const valueAfter = (values: readonly string[], flag: string) => {
+    const at = values.indexOf(flag);
+    if (at < 0) throw Error(`Fake Docker call lacks ${flag}: ${values.join(" ")}`);
+    return arg(values, at + 1);
+  };
   const releaseMetadata = options.configurationReleaseMetadata;
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
     let stdout = "";
     if (configurationHelperVersion !== undefined && args[0] === "run") {
-      const name = args[args.indexOf("--name") + 1]!, label = args[args.indexOf("--label") + 1]!;
+      const name = valueAfter(args, "--name"), label = valueAfter(args, "--label");
       if (!name.startsWith("openmapx-configuration-handoff-") || !label.startsWith("openmapx.configuration-handoff=")) throw Error("Unexpected helper launch");
       if (helperContainers.has(name)) throw Error("Duplicate helper launch");
       const Id = "e".repeat(64);
-      const container = { Id, Image: imageId, State: { Running: helperProcess !== undefined, ExitCode: 0 }, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1]! } } };
+      const container = { Id, Image: imageId, State: { Running: helperProcess !== undefined, ExitCode: 0 }, Config: { Labels: { "openmapx.configuration-handoff": arg(label.split("="), 1) } } };
       helperContainers.set(name, container);
       if (helperProcess) {
         const env: Record<string, string> = {};
         args.forEach((value, index) => {
           const pair = args[index - 1] === "--env" ? value.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s) : null;
-          if (pair) env[pair[1]!] = pair[2]!;
+          if (pair) env[arg(pair, 1)] = arg(pair, 2);
         });
         void helperProcess(env).catch(() => 1).then((code) => {
           container.State = { Running: false, ExitCode: code };
@@ -177,14 +190,14 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       stdout = Id;
       if (optionsForHelperLaunchResponseLoss) throw Error("Named lost Docker launch response");
     } else if (args[0] === "ps" && args.includes("--filter")) {
-      const label = args[args.indexOf("--filter") + 1]!.replace(/^label=/, "").split("=");
-      stdout = [...helperContainers.values()].filter((value) => value.Config.Labels[label[0]!] === label[1]).map((value) => value.Id).join("\n");
-    } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{json .State}}" && helperById(args[4]!)) {
-      stdout = JSON.stringify(helperById(args[4]!)!.State);
-    } else if (args[0] === "rm" && helperById(args[1]!)) {
+      const label = valueAfter(args, "--filter").replace(/^label=/, "").split("=");
+      stdout = [...helperContainers.values()].filter((value) => value.Config.Labels[arg(label, 0)] === label[1]).map((value) => value.Id).join("\n");
+    } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{json .State}}" && helperById(args[4])) {
+      stdout = JSON.stringify(helperById(args[4])?.State);
+    } else if (args[0] === "rm" && helperById(args[1])) {
       for (const [name, value] of helperContainers) if (value.Id === args[1]) helperContainers.delete(name);
-    } else if (args[0] === "container" && args[1] === "inspect" && helperContainers.has(args.at(-1)!)) {
-      stdout = JSON.stringify(helperContainers.get(args.at(-1)!));
+    } else if (args[0] === "container" && args[1] === "inspect" && helperContainers.has(arg(args, -1))) {
+      stdout = JSON.stringify(helperContainers.get(arg(args, -1)));
     } else if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
       const selected=rows.find(row=>row.Id===args[4]);
       if(!selected)throw Error("Named helper prerequisite container unavailable");
@@ -206,13 +219,13 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}") {
       // A container's health as Docker prints it for this format; the synthetic
       // containers report none unless a test gives one a healthcheck state.
-      const inspected = (runtimeInspections[args[4]!] ?? rows.find((row) => row.Id === args[4])) as { State?: { Health?: { Status?: string } } } | undefined;
+      const inspected = (runtimeInspections[arg(args, 4)] ?? rows.find((row) => row.Id === args[4])) as { State?: { Health?: { Status?: string } } } | undefined;
       stdout = inspected?.State?.Health?.Status ?? "none";
     } else if (args[0] === "container" && args[1] === "inspect")
       stdout = malformedInspect ? "{" : args[3] === "{{json .}}"
         ? args.slice(4).map(id => JSON.stringify(runtimeInspections[id] ?? null)).join("\n") : rows.map((r) => JSON.stringify(r)).join("\n");
     else if (args[0] === "container" && args[1] === "exec" && args[3] === "base64") {
-      const record = runtimeInspections[args[2]!] as { Mounts?: { Source?: string; Destination: string }[] } | undefined,
+      const record = runtimeInspections[arg(args, 2)] as { Mounts?: { Source?: string; Destination: string }[] } | undefined,
         source = record?.Mounts?.find(value => value.Destination === args[4])?.Source;
       if (!source) throw Error("Synthetic Docker secret mount unavailable");
       stdout = runtimeSecretBytes[`${args[2]}:${args[4]}`] ?? readFileSync(source).toString("base64");
@@ -230,12 +243,12 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     else if (releaseMetadata && args[0] === "info") stdout="linux/amd64";
     else if (registryDown && ((args[0] === "manifest" && args[1] === "inspect") || (args[0] === "image" && args[1] === "pull"))) throw Error("registry unavailable");
     else if (releaseMetadata && args[0] === "manifest" && args[1] === "inspect") stdout=JSON.stringify({schemaVersion:2,config:{digest:`sha256:${"c".repeat(64)}`,size:128},layers:[{digest:`sha256:${"d".repeat(64)}`,size:512}]});
-    else if (args[0] === "image" && args[1] === "inspect" && unpulledImages.has(args.at(-1)!)) throw Error("No such image");
-    else if (releaseMetadata && args[0] === "image" && args[1] === "inspect" && args[3] === "{{json .}}") stdout=JSON.stringify({Id:imageIdentities.get(args.at(-1)!)??imageId,RepoDigests:[args.at(-1)],Os:"linux",Architecture:"amd64"});
-    else if (args[0] === "image" && args[1] === "inspect") stdout = imageIdentities.get(args.at(-1)!) ?? imageId;
+    else if (args[0] === "image" && args[1] === "inspect" && unpulledImages.has(arg(args, -1))) throw Error("No such image");
+    else if (releaseMetadata && args[0] === "image" && args[1] === "inspect" && args[3] === "{{json .}}") stdout=JSON.stringify({Id:imageIdentities.get(arg(args, -1))??imageId,RepoDigests:[args.at(-1)],Os:"linux",Architecture:"amd64"});
+    else if (args[0] === "image" && args[1] === "inspect") stdout = imageIdentities.get(arg(args, -1)) ?? imageId;
     else if (args[0] === "image" && args[1] === "pull") {
-      await imagePullProcess?.(args.at(-1)!,options.signal);
-      unpulledImages.delete(args.at(-1)!);
+      await imagePullProcess?.(arg(args, -1),options.signal);
+      unpulledImages.delete(arg(args, -1));
     }
     else if (args[0] === "compose" && args.includes("up"))
       await creatingProcess?.(args, options.signal);

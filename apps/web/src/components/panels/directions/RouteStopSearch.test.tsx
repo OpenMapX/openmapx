@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import type { PlannedRouteSearch } from "@/lib/navigation/usePlannedRouteSearch";
+import { nth } from "@/test";
 
 const KM = 1 / 111.32;
 
@@ -60,7 +61,7 @@ vi.mock("@/components/navigation/RouteSearchResultsLayer", () => ({
     results: AlongRoutePoi<CategoryPlace>[];
     onSelect: (poi: AlongRoutePoi<CategoryPlace>) => void;
   }) => (
-    <button type="button" onClick={() => onSelect(results[results.length - 1])}>
+    <button type="button" onClick={() => onSelect(nth(results, -1))}>
       Tap last pin
     </button>
   ),
@@ -102,8 +103,8 @@ const baseSearch = (): PlannedRouteSearch => ({
 function setWaypoints(coords: LngLat[]) {
   const store = useDirectionsStore.getState();
   store.close();
-  store.setWaypoint(0, coords[0], "Home");
-  store.setWaypoint(1, coords[coords.length - 1], "Work");
+  store.setWaypoint(0, nth(coords, 0), "Home");
+  store.setWaypoint(1, nth(coords, -1), "Work");
   for (const [i, c] of coords.slice(1, -1).entries()) store.insertWaypoint(i + 1, c, `Stop ${i}`);
 }
 
@@ -248,7 +249,7 @@ describe("RouteStopSearch", () => {
       ["waypoint", "Station a"],
       ["destination", "Work"],
     ]);
-    expect(waypoints[1].coords).toEqual([12 * KM, 0.001]);
+    expect(nth(waypoints, 1).coords).toEqual([12 * KM, 0.001]);
     expect(fixture.queries.at(-1)).toBeNull();
   });
 
@@ -272,13 +273,13 @@ describe("RouteStopSearch", () => {
 
   it("prefers a known routing entrance as the stop", () => {
     const entrance: LngLat = [12 * KM, 0.0005];
-    fixture.search.results[0].place.routingEntrance = entrance;
+    nth(fixture.search.results, 0).place.routingEntrance = entrance;
     render(view());
     fireEvent.click(chip("Fuel"));
     fireEvent.click(screen.getByText("Station a"));
     expect(screen.getByText("Routing to known entrance")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add stop" }));
-    expect(useDirectionsStore.getState().waypoints[1].coords).toEqual(entrance);
+    expect(nth(useDirectionsStore.getState().waypoints, 1).coords).toEqual(entrance);
   });
 
   it("shows the road detour of the selected stop and disables an unreachable one", () => {

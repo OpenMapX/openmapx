@@ -1,7 +1,7 @@
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { categoryPlaceToPlace, usePlaceStore } from "@openmapx/core";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createFakeMap, renderedFeature } from "@/test";
 
 const fake = createFakeMap({ styleLoaded: true, zoom: 16 });
@@ -71,7 +71,8 @@ describe("ambient suppression with the real group hook", () => {
     await waitFor(() =>
       expect(JSON.stringify(fake.map.getFilter(AMBIENT_LABEL_LAYER))).toContain(place.id),
     );
-    const added = fake.state.counts.addLayer.get(AMBIENT_LABEL_LAYER)!;
+    const added = fake.state.counts.addLayer.get(AMBIENT_LABEL_LAYER);
+    assert.isDefined(added);
     view.rerender(
       <ThemeProvider theme={createTheme({ palette: { mode: "dark" } })}>
         <AmbientPlacesLayer />

@@ -1,7 +1,7 @@
 import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import Fastify from "fastify";
 import postgres from "postgres";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { registerAmbientPlacesApi } from "../../src/jobs/ambient-places/api.js";
 import {
   buildSearchIndexIndexesDDL,
@@ -51,6 +51,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const [lock] = await pg.sql.unsafe<{ blocked: boolean }[]>(
               `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=399401 AND NOT granted) AS blocked`,
             );
+            assert.isDefined(lock, "an EXISTS query answers one row");
             if (lock.blocked) break;
             if (Date.now() > deadline)
               throw new Error("Publication did not reach the fixture barrier");

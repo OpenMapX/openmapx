@@ -95,7 +95,7 @@ describe("checkIdentities", () => {
       apple: { ...REAL.apple, applicationIdentifier: "ABCDE12345.org.somebody.else" },
     });
 
-    expect(errors(findings)[0].message).toContain("ABCDE12345.org.openmapx.app");
+    expect(errors(findings)[0]?.message).toContain("ABCDE12345.org.openmapx.app");
   });
 
   it("rejects the upload key standing in for the app-signing certificate", () => {
@@ -106,7 +106,7 @@ describe("checkIdentities", () => {
 
     // Both are 64 hex characters, so nothing about the value gives this away —
     // and links signed this way never verify.
-    expect(errors(findings)[0].message).toContain("never verify");
+    expect(errors(findings)[0]?.message).toContain("never verify");
   });
 
   it("rejects a fingerprint that is not one", () => {
@@ -134,7 +134,7 @@ describe("checkAppleAssociation", () => {
     const details = [{ appIDs: [REAL.apple.applicationIdentifier], components: [{ "/": "/*" }] }];
 
     // A link that opens an unreviewed screen is a link nobody checked.
-    expect(errors(checkAppleAssociation(aasa(details), REAL))[0].message).toContain("wildcard");
+    expect(errors(checkAppleAssociation(aasa(details), REAL))[0]?.message).toContain("wildcard");
   });
 
   it("rejects a path nobody approved", () => {
@@ -142,7 +142,7 @@ describe("checkAppleAssociation", () => {
       { appIDs: [REAL.apple.applicationIdentifier], components: [{ "/": "/admin" }] },
     ];
 
-    expect(errors(checkAppleAssociation(aasa(details), REAL))[0].message).toContain("/admin");
+    expect(errors(checkAppleAssociation(aasa(details), REAL))[0]?.message).toContain("/admin");
   });
 
   it("requires the sign-in callback, without which the app can never finish signing in", () => {
@@ -155,7 +155,7 @@ describe("checkAppleAssociation", () => {
       },
     ];
 
-    expect(errors(checkAppleAssociation(aasa(details), REAL))[0].message).toContain(
+    expect(errors(checkAppleAssociation(aasa(details), REAL))[0]?.message).toContain(
       "/mobile-auth/callback",
     );
   });
@@ -174,19 +174,19 @@ describe("checkAppleAssociation", () => {
       REAL,
     );
 
-    expect(errors(findings)[0].message).toContain("no HTTPS link will ever open the app");
+    expect(errors(findings)[0]?.message).toContain("no HTTPS link will ever open the app");
   });
 
   it("requires webcredentials for passkeys", () => {
     const findings = checkAppleAssociation(aasa(goodDetails, []), REAL);
 
-    expect(errors(findings)[0].message).toContain("passkeys");
+    expect(errors(findings)[0]?.message).toContain("passkeys");
   });
 
   it("rejects an oversize document", () => {
     const findings = checkAppleAssociation("x".repeat(MAX_ASSOCIATION_BYTES + 1), REAL);
 
-    expect(errors(findings)[0].message).toContain("128 KiB");
+    expect(errors(findings)[0]?.message).toContain("128 KiB");
   });
 
   it("rejects invalid JSON", () => {
@@ -218,7 +218,7 @@ describe("checkAssetLinks", () => {
       REAL,
     );
 
-    expect(errors(findings)[0].message).toContain("handle_all_urls");
+    expect(errors(findings)[0]?.message).toContain("handle_all_urls");
   });
 
   it("rejects another package being granted our links", () => {
@@ -253,7 +253,7 @@ describe("checkAssetLinks", () => {
       },
     ]);
 
-    expect(errors(checkAssetLinks(raw, REAL))[0].message).toContain("does not match");
+    expect(errors(checkAssetLinks(raw, REAL))[0]?.message).toContain("does not match");
   });
 
   it("reports a placeholder fingerprint as pending", () => {
@@ -273,7 +273,7 @@ describe("checkAssetLinks", () => {
   });
 
   it("rejects a non-array document", () => {
-    expect(errors(checkAssetLinks("{}", REAL))[0].message).toContain("array");
+    expect(errors(checkAssetLinks("{}", REAL))[0]?.message).toContain("array");
   });
 });
 

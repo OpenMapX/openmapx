@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Route } from "../../types/routing";
-import { cumulativeDistances, positionAt } from "../deadReckon";
+import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
 import { navOptionsForMode } from "../options";
 import { processFix } from "../processFix";
 import { simulatePositions } from "../simulatePositions";
@@ -38,7 +38,12 @@ describe("processFix speed fallback", () => {
     [0.1, 0],
   ];
   const cum = cumulativeDistances(longGeometry);
-  const longRoute = { ...route, geometry: longGeometry, distance: cum[1], steps: [] };
+  const longRoute = {
+    ...route,
+    geometry: longGeometry,
+    distance: distanceAtVertex(cum, 1),
+    steps: [],
+  };
 
   function driver() {
     let state = emptyState;

@@ -45,7 +45,7 @@ export function traceContourRings(
   // which would silently drop the entire polygon whenever the reachable area
   // extends past the requested bbox, the common case for a wide time budget.
   const valueAt = (column: number, row: number): number | null =>
-    column < 0 || column >= nx || row < 0 || row >= ny ? null : field[row * nx + column];
+    column < 0 || column >= nx || row < 0 || row >= ny ? null : (field[row * nx + column] ?? null);
   const pointX = (column: number) => originX + column * spacing;
   const pointY = (row: number) => originY + row * spacing;
   const segments: Array<[Point, Point]> = [];
@@ -174,31 +174,30 @@ function stitchRings(segments: Array<[Point, Point]>, spacing: number): Point[][
   for (const segment of segments) {
     if (used.has(segment)) continue;
     used.add(segment);
-    const ring: Point[] = [segment[0], segment[1]];
+    const [head] = segment;
+    let tail = segment[1];
+    const ring: Point[] = [head, tail];
 
     // Follow shared endpoints until the chain closes or runs out. The guard
     // bounds the walk at the total segment count so a malformed field cannot
     // spin here.
     for (let guard = 0; guard <= segments.length; guard += 1) {
-      const tail = ring[ring.length - 1];
-      if (key(tail) === key(ring[0]) && ring.length > 2) break;
+      if (key(tail) === key(head) && ring.length > 2) break;
       const candidates = starts.get(key(tail)) ?? [];
       const next = candidates.find((candidate) => !used.has(candidate));
       if (!next) break;
       used.add(next);
-      ring.push(next[1]);
+      tail = next[1];
+      ring.push(tail);
     }
 
     if (ring.length < 4) continue;
-    if (key(ring[0]) !== key(ring[ring.length - 1])) {
+    if (key(head) !== key(tail)) {
       // An open chain means the contour left the sampled bbox. Close it so the
       // ring is a valid polygon boundary; the clip is reported in metadata.
-      const gap = Math.hypot(
-        ring[0][0] - ring[ring.length - 1][0],
-        ring[0][1] - ring[ring.length - 1][1],
-      );
+      const gap = Math.hypot(head[0] - tail[0], head[1] - tail[1]);
       if (gap > spacing * 4) continue;
-      ring.push(ring[0]);
+      ring.push(head);
     }
     rings.push(ring);
   }

@@ -289,9 +289,8 @@ class FileAnalysis {
 
   /** A top-level constant table this module declares, such as a lookup of colors. */
   private declaresConstantTable(name: string): boolean {
-    const bindings = this.scopes.get(this.sourceFile)?.get(name);
-    if (bindings?.length !== 1) return false;
-    const [binding] = bindings;
+    const [binding, ...others] = this.scopes.get(this.sourceFile)?.get(name) ?? [];
+    if (!binding || others.length > 0) return false;
     return binding.kind === "expression" && this.isConstantData(binding.expression, new Set());
   }
 
@@ -372,9 +371,8 @@ class FileAnalysis {
       );
     }
     if (ts.isIdentifier(current)) {
-      const bindings = this.bindingsOf(current.text, current);
-      if (bindings?.length !== 1) return false;
-      const [binding] = bindings;
+      const [binding, ...others] = this.bindingsOf(current.text, current) ?? [];
+      if (!binding || others.length > 0) return false;
       if (binding.kind === "imported") return this.isConstantImport(binding);
       if (binding.kind !== "expression" || seen.has(binding.expression)) return false;
       seen.add(binding.expression);

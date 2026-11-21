@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => {
   const { createTranslator } = await vi.importActual<typeof import("next-intl")>("next-intl");
@@ -33,7 +33,7 @@ vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { createFakeMap, type FakeMap } from "@/test";
+import { createFakeMap, type FakeMap, nth } from "@/test";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
 
 let fake: FakeMap;
@@ -52,6 +52,12 @@ function lastProperties() {
   const properties = drawnFeatures()[0]?.properties;
   if (!properties) throw new Error("Expected published route-search feature");
   return properties;
+}
+/** The published credit list under `key`; a missing property fails the test. */
+function credits(properties: Record<string, string>, key: string): unknown {
+  const value = properties[key];
+  if (value === undefined) throw new Error(`Expected the ${key} property`);
+  return JSON.parse(value);
 }
 function lastOptions() {
   const options = fixtures.rendered.mock.calls.at(-1)?.[3] as
@@ -108,7 +114,7 @@ describe("RouteSearchResultsLayer brand pins", () => {
     const poi = {
       ...results[0],
       place: {
-        ...results[0].place,
+        ...nth(results, 0).place,
         contributors: [hidden],
         fieldContributors: { coordinates: [coordinate], name: [hidden] },
       },
@@ -126,8 +132,8 @@ describe("RouteSearchResultsLayer brand pins", () => {
     render(<RouteSearchResultsLayer {...props} results={[poi]} brandQid="Q151954" />);
     await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));
     const properties = lastProperties();
-    expect(JSON.parse(properties._mapMarkerAttributions)).toEqual([coordinate]);
-    expect(JSON.parse(properties._mapLabelAttributions)).toEqual([coordinate, seconds]);
+    expect(credits(properties, "_mapMarkerAttributions")).toEqual([coordinate]);
+    expect(credits(properties, "_mapLabelAttributions")).toEqual([coordinate, seconds]);
     const layers = fixtures.rendered.mock.calls.at(-1)?.[1];
     const options = lastOptions();
     expect(layers).toEqual(["route-search-layer", "route-search-labels"]);
@@ -145,9 +151,9 @@ describe("RouteSearchResultsLayer brand pins", () => {
         {...props}
         results={[
           {
-            ...results[0],
+            ...nth(results, 0),
             place: {
-              ...results[0].place,
+              ...nth(results, 0).place,
               contributors: [hidden],
               fieldContributors: { coordinates: [] },
             },
@@ -157,8 +163,8 @@ describe("RouteSearchResultsLayer brand pins", () => {
       />,
     );
     const properties = lastProperties();
-    expect(JSON.parse(properties._mapMarkerAttributions)).toEqual([]);
-    expect(JSON.parse(properties._mapLabelAttributions)).toEqual([]);
+    expect(credits(properties, "_mapMarkerAttributions")).toEqual([]);
+    expect(credits(properties, "_mapLabelAttributions")).toEqual([]);
   });
   it("follows the captured receipt of a same-QID image replaced after feature publication", async () => {
     fixtures.loadBrand.mockImplementation(loadLogo());
@@ -196,10 +202,12 @@ describe("RouteSearchResultsLayer brand pins", () => {
     const { rerender } = render(<RouteSearchResultsLayer {...props} results={[unknown]} />);
     const label = () => drawnFeatures()[0]?.properties.label;
     expect(label()).toBe("Unknown detour");
+    const { detour } = unknown;
+    assert.isDefined(detour);
     rerender(
       <RouteSearchResultsLayer
         {...props}
-        results={[{ ...unknown, detour: { ...unknown.detour!, kind: "unreachable" } }]}
+        results={[{ ...unknown, detour: { ...detour, kind: "unreachable" } }]}
       />,
     );
     expect(label()).toBe("Unreachable");

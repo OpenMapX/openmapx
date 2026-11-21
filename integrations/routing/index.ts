@@ -876,7 +876,9 @@ export function setup(ctx: IntegrationContext): void {
       const cached = await Promise.all(
         keys.map((key) => ctx.cache.get<Omit<JunctionLookupResult, "index">>(key)),
       );
-      const missing = points.flatMap((point, index) => (cached[index] ? [] : [{ point, index }]));
+      const missing = points.flatMap((point, index) =>
+        cached[index] ? [] : [{ point, index, key: junctionCacheKey(point) }],
+      );
       const fetched = new Map<number, Omit<JunctionLookupResult, "index">>();
       if (missing.length > 0) {
         const writer = await captureCacheWriter(ctx.cache);
@@ -889,10 +891,10 @@ export function setup(ctx: IntegrationContext): void {
         // nothing to cache for a week.
         if (data && !data.remark) {
           await Promise.all(
-            missing.map(async ({ point, index }) => {
+            missing.map(async ({ point, index, key }) => {
               const result = mapJunctionWays(data.elements ?? [], point);
               fetched.set(index, result);
-              await writer.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
+              await writer.set(key, result, JUNCTION_CACHE_TTL_SECONDS);
             }),
           );
         }

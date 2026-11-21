@@ -15,6 +15,7 @@ import {
 } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { positionBounds } from "@/lib/positionBounds";
 
 const SOURCE_ID = "place-boundary-source";
 const LAYER_FILL = "place-boundary-fill";
@@ -23,22 +24,11 @@ const LAYER_LINE = "place-boundary-line";
 // Muted red for the administrative boundary outline.
 const BOUNDARY_COLOR = "#A52714";
 
-/** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon. */
-function bboxFromGeometry(geometry: AreaGeometry): BBox {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
+/** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon; null without positions. */
+function bboxFromGeometry(geometry: AreaGeometry): BBox | null {
   const rings = geometry.type === "Polygon" ? geometry.coordinates : geometry.coordinates.flat();
-  for (const ring of rings) {
-    for (const [lng, lat] of ring) {
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-    }
-  }
-  return [west, south, east, north];
+  const bounds = positionBounds(rings.flat());
+  return bounds && [bounds.west, bounds.south, bounds.east, bounds.north];
 }
 
 /**
@@ -142,7 +132,10 @@ export function PlaceBoundaryLayer() {
     const fitId = placeDetailsId;
     if (fitId && lastFittedId.current !== fitId) {
       lastFittedId.current = fitId;
-      const [west, south, east, north] = boundingBox ?? bboxFromGeometry(boundary);
+      const extent = boundingBox ?? bboxFromGeometry(boundary);
+      // A boundary without a single position has no extent to fit.
+      if (!extent) return;
+      const [west, south, east, north] = extent;
       fitBounds(
         [
           [west, south],

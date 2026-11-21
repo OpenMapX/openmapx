@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "./journal";
 import { createProductionOpsRuntime } from "./production-runtime";
@@ -41,7 +41,8 @@ describe("production core restart workflow", () => {
       );
       expect(await host.select(["app-api", "traefik"])).toMatchObject({ outcome: "committed" });
       const compose = realpathSync(host.stack.composePath);
-      const service = host.loaded.find((s) => s.manifest.id === serviceId)!;
+      const service = host.loaded.find((s) => s.manifest.id === serviceId);
+      assert.isDefined(service);
       host.setRows([
         {
           ...host.row,

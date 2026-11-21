@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CrowdApproachPromptLazy } from "@/components/map/crowdReportsLazy";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
+import { nth } from "@/test";
 import { NavIncidentsProvider } from "./NavIncidentsProvider";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -154,7 +155,7 @@ function renderHarness() {
   );
 }
 
-const START_WAYPOINTS: [[number, number], [number, number]] = [geometry[0], geometry[1]];
+const START_WAYPOINTS: [[number, number], [number, number]] = [nth(geometry, 0), nth(geometry, 1)];
 
 async function flush(times = 3) {
   await act(async () => {
@@ -303,7 +304,7 @@ describe("useNavIncidents production call sites", () => {
     const out: string[] = [];
     let i = 0;
     while (i < source.length) {
-      const c = source[i];
+      const c = source.charAt(i);
       const next = source[i + 1];
       if (c === "/" && next === "/") {
         while (i < source.length && source[i] !== "\n") {

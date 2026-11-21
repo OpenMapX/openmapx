@@ -10,6 +10,7 @@ import {
   createMockIntegrationContext,
   type FakeHttpRequest,
   installHostCapabilities,
+  nth,
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createSearchSuggestionsOrchestrator } from "../search-suggestions/orchestrator.js";
@@ -39,8 +40,8 @@ describe("native geocoder projections", () => {
     async (layer) => {
       const feature = LAYERS[layer];
       mockHttp.mockResolvedValue(JSON.stringify(collection([feature])));
-      const [search] = await entur.provider.geocode("Oslo", "en", [0, 0]);
-      const [suggestion] = await entur.provider.autocomplete("Oslo", "en");
+      const search = nth(await entur.provider.geocode("Oslo", "en", [0, 0]), 0);
+      const suggestion = nth(await entur.provider.autocomplete("Oslo", "en"), 0);
       const place = await entur.lookupPlaceById(feature.properties.id, "en");
       expect(search.type).toBe(
         layer === "address"
@@ -77,20 +78,20 @@ describe("native geocoder projections", () => {
     await entur.provider.autocomplete("Oslo", "en");
     await entur.provider.reverseGeocode(0, 0, "en");
     const place = await entur.lookupPlaceById("NSR:StopPlace:337", "en");
-    const urls = entur.http.calls.map((c) => new URL(c.url));
-    expect(urls[0].searchParams.get("lat")).toBe("0");
-    expect(urls[0].searchParams.get("lon")).toBe("0");
-    expect(urls[0].searchParams.get("limit")).toBe("10");
-    expect(urls[1].searchParams.get("limit")).toBe("6");
-    expect(urls[1].searchParams.has("radius")).toBe(false);
-    expect(urls[1].searchParams.has("weight")).toBe(false);
-    expect(urls[2].searchParams.get("layers")).toBe("address,street,place");
-    expect(urls[2].searchParams.get("limit")).toBe("1");
-    expect(urls[2].searchParams.has("radius")).toBe(false);
-    expect(urls[3].pathname).toBe("/geocoder/v3/place");
-    expect(urls[3].searchParams.get("ids")).toBe("NSR:StopPlace:337");
-    expect(urls[3].searchParams.has("q")).toBe(false);
-    expect(urls[3].searchParams.has("countries")).toBe(false);
+    const url = (call: number) => new URL(nth(entur.http.calls, call).url);
+    expect(url(0).searchParams.get("lat")).toBe("0");
+    expect(url(0).searchParams.get("lon")).toBe("0");
+    expect(url(0).searchParams.get("limit")).toBe("10");
+    expect(url(1).searchParams.get("limit")).toBe("6");
+    expect(url(1).searchParams.has("radius")).toBe(false);
+    expect(url(1).searchParams.has("weight")).toBe(false);
+    expect(url(2).searchParams.get("layers")).toBe("address,street,place");
+    expect(url(2).searchParams.get("limit")).toBe("1");
+    expect(url(2).searchParams.has("radius")).toBe(false);
+    expect(url(3).pathname).toBe("/geocoder/v3/place");
+    expect(url(3).searchParams.get("ids")).toBe("NSR:StopPlace:337");
+    expect(url(3).searchParams.has("q")).toBe(false);
+    expect(url(3).searchParams.has("countries")).toBe(false);
     expect(place?.description).toBe("Main stop");
     expect(place?.ids).toEqual({ entur: "NSR:StopPlace:337", nsr: "StopPlace:337" });
     expect(await entur.lookupPlaceById("NSR:StopPlace:999")).toBeNull();
@@ -201,7 +202,7 @@ describe("native German descriptions", () => {
       },
     };
     mockHttp.mockResolvedValue(JSON.stringify(collection([feature])));
-    const [suggestion] = await entur.provider.autocomplete("Oslo", "de");
+    const suggestion = nth(await entur.provider.autocomplete("Oslo", "de"), 0);
     const place = await entur.lookupPlaceById(feature.properties.id, "de");
     expect(suggestion.sublabel).toBe("Deutscher Text, Oslo");
     expect(place?.description).toBe("Deutscher Text");

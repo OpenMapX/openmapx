@@ -5,6 +5,7 @@ import {
   type AdminPlatformPreview,
   adminPlatformConfirmationSchema,
 } from "@openmapx/core/api-contracts";
+import { itemAt } from "@openmapx/core/item-at";
 import { configurationGenerationRevisionSchema } from "@openmapx/core/ops";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -223,7 +224,7 @@ export async function commitPlatformConfigurationIntent(
     ownerId: "platform",
     rowId: PLATFORM_CONFIGURATION_SETTING,
     previousRowVersion: prior?.version ?? null,
-    rowVersion: written[0]!.rowVersion,
+    rowVersion: itemAt(written, 0).rowVersion,
     state: "present" as const,
   };
   return result;

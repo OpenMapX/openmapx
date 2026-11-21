@@ -7,6 +7,7 @@ import {
   parseOfflinePackageRequest,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
+import { pinnedAtlasCommit } from "@openmapx/core/catalog-pins";
 import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contracts";
 import {
   type DataExecutionInput,
@@ -1096,7 +1097,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         catalogRevisionId: proposal.pins.generationId,
         ref: proposal.pins.transitous.ref,
         previousRef: previous.active?.transitous.ref ?? null,
-        submoduleSha: proposal.pins.transitous.submodules["transitland-atlas"]!,
+        submoduleSha: pinnedAtlasCommit(proposal.pins.transitous),
         lockedAt: proposal.pins.transitous.lockedAt,
         lockedBy: proposal.pins.transitous.lockedBy,
       };

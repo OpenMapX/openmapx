@@ -12,6 +12,7 @@ import enturLiveManifest from "../../../../integrations/live-transit-entur/manif
 import { setup as setupEnturTransit } from "../../../../integrations/transit-entur/index";
 import enturTransitManifest from "../../../../integrations/transit-entur/manifest.json";
 import { createSwissTransitClient } from "../../../../integrations/transit-opentransportdata-ch/client.js";
+import { callArg } from "../test/mock-calls";
 
 const { redisMock, sharedValues, sharedTtls, clearLeases } = vi.hoisted(() => {
   const sharedValues = new Map<string, string>();
@@ -518,7 +519,7 @@ describe("geocoder suggestion shared cache ownership", () => {
         http: createHttpClient(createNoopLogger()),
       });
       setupEnturGeocoding(geocodingCtx);
-      const provider = geocodingCtx.registered.searchSuggestions[0];
+      const provider = required(geocodingCtx.registered.searchSuggestions[0]);
       const cache = createCacheClient("search-suggestions");
       const load = (signal: AbortSignal) =>
         runWithProviderDeadline(
@@ -765,20 +766,20 @@ describe("Entur setup ownership through host clients", () => {
       a.setup();
       const b = enturContext(kind, "b");
       b.setup();
-      required(a.ctx.manifest.dataSources)[0].name = "mutated";
+      required(required(a.ctx.manifest.dataSources)[0]).name = "mutated";
       const result =
         kind === "live"
-          ? await required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5])
-          : await required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+          ? await required(a.ctx.registered.realtime[0]?.getVehiclePositions)([4, 57, 32, 71.5])
+          : await required(a.ctx.registered.transit[0]?.searchStopsByName)("Stop", 1);
       expect(String(fetch.mock.calls[0]?.[0])).toBe(
         kind === "live"
           ? "https://a.test/vehicles"
           : "https://a.test/geocoder/v3/autocomplete?q=Stop&limit=1&layers=stopPlace&sources=nsr&countries=no&multimodal=parent",
       );
-      expect((fetch.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+      expect((callArg(fetch, 0, 1) as RequestInit).headers).toMatchObject({
         "ET-Client-Name": "a-client",
       });
-      expect(result.data[0].contributors?.[0].name).toBe("a");
+      expect(result.data[0]?.contributors?.[0]?.name).toBe("a");
       await a.retire();
       await b.retire();
     },
@@ -792,12 +793,12 @@ describe("Entur setup ownership through host clients", () => {
     vi.stubGlobal("fetch", fetch);
     const a = enturContext("live", "a");
     a.setup();
-    const pending = required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]);
+    const pending = required(a.ctx.registered.realtime[0]?.getVehiclePositions)([4, 57, 32, 71.5]);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     const b = enturContext("live", "b");
     b.setup();
     gate.resolve();
-    expect((await pending).data[0].contributors?.[0].name).toBe("a");
+    expect((await pending).data[0]?.contributors?.[0]?.name).toBe("a");
     await a.retire();
     await b.retire();
   });
@@ -808,12 +809,12 @@ describe("Entur setup ownership through host clients", () => {
     a.setup();
     a.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-vehicles"]);
     await expect(
-      required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]),
+      required(a.ctx.registered.realtime[0]?.getVehiclePositions)([4, 57, 32, 71.5]),
     ).rejects.toMatchObject({ kind: "policy" });
     a.ctx.getDisallowedSourceIds = async () => new Set();
     await a.retire();
     await expect(
-      required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5]),
+      required(a.ctx.registered.realtime[0]?.getVehiclePositions)([4, 57, 32, 71.5]),
     ).rejects.toMatchObject({ kind: "abort" });
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -827,11 +828,11 @@ describe("Entur setup ownership through host clients", () => {
     const b = enturContext("live", "b");
     b.ctx.config.vehiclesEndpoint = "http://invalid.test/vehicles";
     expect(b.setup).toThrow();
-    const result = await required(a.ctx.registered.realtime[0].getVehiclePositions)([
+    const result = await required(a.ctx.registered.realtime[0]?.getVehiclePositions)([
       4, 57, 32, 71.5,
     ]);
     expect(String(fetch.mock.calls[0]?.[0])).toBe("https://a.test/vehicles");
-    expect(result.data[0].contributors?.[0].name).toBe("a");
+    expect(result.data[0]?.contributors?.[0]?.name).toBe("a");
     await a.retire();
   });
   it("does not publish transit transport failure as cacheable empty stops", async () => {
@@ -839,7 +840,7 @@ describe("Entur setup ownership through host clients", () => {
     const a = enturContext("transit", "a");
     a.setup();
     await expect(
-      required(a.ctx.registered.transit[0].getStopsNearby)(60, 10, 1000),
+      required(a.ctx.registered.transit[0]?.getStopsNearby)(60, 10, 1000),
     ).rejects.toMatchObject({
       kind: "http",
       status: 503,
@@ -853,10 +854,10 @@ it("retired transit instances reject even methods with an immediate legitimate n
   a.setup();
   await a.retire();
   await expect(
-    required(a.ctx.registered.transit[0].getStopPlatforms)("entur:NSR:Quay:1"),
+    required(a.ctx.registered.transit[0]?.getStopPlatforms)("entur:NSR:Quay:1"),
   ).rejects.toMatchObject({ kind: "abort" });
   await expect(
-    required(a.ctx.registered.transit[0].getFacilities)("unsupported"),
+    required(a.ctx.registered.transit[0]?.getFacilities)("unsupported"),
   ).rejects.toMatchObject({
     kind: "abort",
   });
@@ -881,10 +882,10 @@ describe("Entur national snapshot through real host cache", () => {
     Object.assign(required(a.ctx.upstreamRuntime), { admitSharedRequest: admission });
     Object.assign(required(b.ctx.upstreamRuntime), { admitSharedRequest: admission });
     const run = vi.spyOn(BoundedSingleFlight.prototype, "run");
-    const first = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const first = required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const firstOutcome = first.catch((error) => error);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-    const second = required(b.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+    const second = required(b.ctx.registered.realtime[0]?.getAlertsForBbox)([10, 59, 11, 60]);
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
     await a.retire();
     expect(await firstOutcome).toMatchObject({ message: "Entur live generation retired" });
@@ -900,12 +901,12 @@ describe("Entur national snapshot through real host cache", () => {
     vi.stubGlobal("fetch", fetch);
     const a = enturContext("live", "same", createCacheClient("entur-replica"));
     a.setup();
-    const first = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const first = await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const b = enturContext("live", "same", createCacheClient("entur-replica"));
     b.setup();
     const admission = vi.fn(async () => ({ allowed: true }));
     Object.assign(required(b.ctx.upstreamRuntime), { admitSharedRequest: admission });
-    const hit = await required(b.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+    const hit = await required(b.ctx.registered.realtime[0]?.getAlertsForBbox)([10, 59, 11, 60]);
     expect(hit.freshness.fetchedAt).toBe(first.freshness.fetchedAt);
     expect(fetch).toHaveBeenCalledOnce();
     expect(admission).not.toHaveBeenCalled();
@@ -914,7 +915,7 @@ describe("Entur national snapshot through real host cache", () => {
     ).toEqual([[expect.any(String), 15]]);
     b.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-situations"]);
     await expect(
-      required(b.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+      required(b.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox),
     ).rejects.toMatchObject({
       kind: "policy",
     });
@@ -926,15 +927,15 @@ describe("Entur national snapshot through real host cache", () => {
     vi.stubGlobal("fetch", fetch);
     const a = enturContext("live", "same");
     a.setup();
-    await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const b = enturContext("live", "same");
-    required(b.ctx.manifest.dataSources)[1].name = "receipt-b";
+    required(required(b.ctx.manifest.dataSources)[1]).name = "receipt-b";
     b.setup();
-    await required(b.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    await required(b.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const c = enturContext("live", "same");
     c.ctx.config.journeyPlannerEndpoint = "https://other.test/graphql";
     c.setup();
-    await required(c.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    await required(c.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(
       [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
@@ -952,7 +953,7 @@ describe("Entur national snapshot through real host cache", () => {
     const a = enturContext("live", "a");
     a.setup();
     await expect(
-      required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+      required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox),
     ).rejects.toMatchObject({
       kind: "http",
       status: 503,
@@ -960,7 +961,7 @@ describe("Entur national snapshot through real host cache", () => {
     expect(
       [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
     ).toHaveLength(0);
-    expect((await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox)).data).toEqual([]);
+    expect((await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox)).data).toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(2);
     await a.retire();
   });
@@ -976,17 +977,19 @@ describe("Entur national snapshot through real host cache", () => {
       a.setup();
       try {
         await expect(
-          required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox),
+          required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox),
         ).rejects.toMatchObject({ kind: "graphql" });
         expect(
           [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
         ).toHaveLength(0);
-        const valid = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+        const valid = await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
         expect(valid.data).toEqual([]);
         expect(
           [...sharedValues.keys()].filter((key) => key.startsWith("int:entur-runtime:")),
         ).toHaveLength(1);
-        const hit = await required(a.ctx.registered.realtime[0].getAlertsForBbox)([10, 59, 11, 60]);
+        const hit = await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)([
+          10, 59, 11, 60,
+        ]);
         expect(hit.data).toEqual([]);
         expect(hit.freshness.fetchedAt).toBe(valid.freshness.fetchedAt);
         expect(fetch).toHaveBeenCalledTimes(2);
@@ -1007,13 +1010,13 @@ describe("Entur national snapshot through real host cache", () => {
     vi.stubGlobal("fetch", fetch);
     const a = enturContext("live", "a");
     a.setup();
-    const old = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const old = required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     await cacheInvalidation.invalidate(["int:entur-runtime:*"], async () => undefined);
-    const fresh = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const fresh = await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     gate.resolve();
     await old;
-    const hit = await required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const hit = await required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     expect(hit.freshness.fetchedAt).toBe(fresh.freshness.fetchedAt);
     expect(fetch).toHaveBeenCalledTimes(2);
     await a.retire();
@@ -1027,7 +1030,7 @@ describe("Entur national snapshot through real host cache", () => {
     vi.stubGlobal("fetch", fetch);
     const a = enturContext("live", "a");
     a.setup();
-    const pending = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const pending = required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const outcome = expect(pending).rejects.toMatchObject({ kind: "policy" });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     a.ctx.getDisallowedSourceIds = async () => new Set(["entur-live-situations"]);
@@ -1042,7 +1045,7 @@ describe("Entur national snapshot through real host cache", () => {
     const a = enturContext("live", "a");
     a.setup();
     a.ctx.getDisallowedSourceIds = async () => new Promise(() => {});
-    const pending = required(a.ctx.registered.realtime[0].getAlertsForBbox)(bbox);
+    const pending = required(a.ctx.registered.realtime[0]?.getAlertsForBbox)(bbox);
     const outcome = expect(pending).rejects.toMatchObject({ kind: "abort" });
     await a.retire();
     await outcome;
@@ -1059,7 +1062,7 @@ it("pending transit A and failed B setup cannot replace A's acquisition-time rec
   const a = enturContext("transit", "a");
   Object.assign(a.ctx.config, { boundaryCountry: "se", multiModal: "child" });
   a.setup();
-  const pending = required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+  const pending = required(a.ctx.registered.transit[0]?.searchStopsByName)("Stop", 1);
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
   const b = enturContext("transit", "b");
   b.ctx.config.geocoderEndpoint = "http://invalid.test";
@@ -1067,10 +1070,10 @@ it("pending transit A and failed B setup cannot replace A's acquisition-time rec
   const c = enturContext("transit", "c");
   c.setup();
   a.ctx.config.boundaryCountry = "fi";
-  required(a.ctx.manifest.dataSources)[0].name = "mutated";
+  required(required(a.ctx.manifest.dataSources)[0]).name = "mutated";
   gate.resolve();
   const result = await pending;
-  expect(result.data[0].contributors?.[0].name).toBe("a");
+  expect(result.data[0]?.contributors?.[0]?.name).toBe("a");
   const requested = new URL(String(fetch.mock.calls[0]?.[0]));
   expect(requested.origin).toBe("https://a.test");
   expect(requested.searchParams.get("countries")).toBe("se");
@@ -1102,8 +1105,8 @@ it.each(["transit", "live"] as const)(
     a.setup();
     const pending =
       kind === "live"
-        ? required(a.ctx.registered.realtime[0].getVehiclePositions)([4, 57, 32, 71.5])
-        : required(a.ctx.registered.transit[0].searchStopsByName)("Stop", 1);
+        ? required(a.ctx.registered.realtime[0]?.getVehiclePositions)([4, 57, 32, 71.5])
+        : required(a.ctx.registered.transit[0]?.searchStopsByName)("Stop", 1);
     await expect(pending).rejects.toMatchObject({ kind: "policy" });
     await a.retire();
   },

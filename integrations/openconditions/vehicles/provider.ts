@@ -22,8 +22,12 @@ const FOLLOW_HALF_SIDE_M = 5000;
 const PLACE_SEPARATOR = "~";
 
 /** Whether two positions are the same place, to the publisher's six decimals. */
-const samePlace = (a: readonly number[], b: readonly number[]): boolean =>
-  Math.abs(a[0]! - b[0]!) < 1e-6 && Math.abs(a[1]! - b[1]!) < 1e-6;
+function samePlace(a: readonly number[], b: readonly number[]): boolean {
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  if (ax === undefined || ay === undefined || bx === undefined || by === undefined) return false;
+  return Math.abs(ax - bx) < 1e-6 && Math.abs(ay - by) < 1e-6;
+}
 
 /** A position's id: its record id with where it stood, so it can be opened without a search before. */
 function placedId(recordId: string, [lon, lat]: [number, number]): string {

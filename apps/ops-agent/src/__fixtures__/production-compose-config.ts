@@ -9,7 +9,9 @@ export function readProductionFixtureCompose(args: readonly string[]) {
   let files = 0;
   for (let index = 0; index < args.length; index++) {
     if (args[index] !== "-f") continue;
-    const source = parse(readFileSync(args[++index]!, "utf8")) as {
+    const file = args[++index];
+    if (file === undefined) throw Error("Compose -f without a file");
+    const source = parse(readFileSync(file, "utf8")) as {
       services?: Record<string, Record<string, unknown>>;
     };
     for (const [id, definition] of Object.entries(source.services ?? {}))

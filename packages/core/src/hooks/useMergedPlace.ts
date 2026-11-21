@@ -8,10 +8,7 @@ import {
   type FieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import { useDataSourceStore } from "../stores/dataSourceStore";
-import type { DataSourceDetail } from "../types/dataSource";
-import type { ReverseGeocodingResult } from "../types/geocoding";
-import type { Place } from "../types/place";
+import { matchingOpeningHours } from "../opening-hours/openingHoursClient";
 import {
   directPlaceDetailsId,
   formatAddressLocality,
@@ -20,8 +17,11 @@ import {
   isLocalityOnlyAddress,
   isMovingDataSourcePlace,
   selectPlaceAddress,
-} from "../utils/addressEvidence";
-import { matchingOpeningHours } from "../utils/openingHoursClient";
+} from "../places/addressEvidence";
+import { useDataSourceStore } from "../stores/dataSourceStore";
+import type { DataSourceDetail } from "../types/dataSource";
+import type { ReverseGeocodingResult } from "../types/geocoding";
+import type { Place } from "../types/place";
 import { useDataSourceMatch } from "./useDataSourceMatch";
 import { useOpeningHoursClock } from "./useOpeningHoursClock";
 import { usePlaceDetails } from "./usePlaceDetails";
@@ -191,7 +191,7 @@ function mergePlaceFields(
       transfer("addressEvidence", reverseGeo, "address");
     }
     if (!base.city && reverseGeo?.city) {
-      base.city = reverseGeo.city.split(",")[0].trim();
+      base.city = (reverseGeo.city.split(",")[0] ?? "").trim();
       transfer("city", reverseGeo);
     }
   }
@@ -216,7 +216,7 @@ function mergePlaceFields(
     transfer("addressEvidence", reverseGeo, "address");
   }
   if (!base.city && reverseGeo?.city) {
-    base.city = reverseGeo.city.split(",")[0].trim();
+    base.city = (reverseGeo.city.split(",")[0] ?? "").trim();
     transfer("city", reverseGeo);
   }
 
@@ -260,7 +260,7 @@ function mergePlaceFields(
   }
 
   for (const key of Object.keys(fields)) {
-    const root = key.split(".")[0];
+    const [root = key] = key.split(".");
     if ((base as unknown as Record<string, unknown>)[root] === undefined) delete fields[key];
   }
   base.fieldContributors = fields;

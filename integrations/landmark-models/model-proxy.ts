@@ -3,6 +3,7 @@ import type {
   IntegrationContext,
   LandmarkModelProvider,
   RouteHandler,
+  RouteParams,
 } from "@openmapx/integration-framework";
 import type { MergedIndex } from "./merge";
 import { type LandmarkIndexSource, landmarkProviders } from "./routes";
@@ -57,6 +58,7 @@ function servedModels(index: MergedIndex): ReadonlySet<string> {
 }
 
 type Reply = Parameters<RouteHandler>[1];
+type ModelRouteHandler = RouteHandler<RouteParams<"/models/:provider/:sha256.glb">>;
 type Outcome = { kind: "ok"; gzip: Uint8Array } | { kind: "missing" } | { kind: "failed" };
 
 class Busy extends Error {}
@@ -78,7 +80,7 @@ export function createModelProxy(
   ctx: IntegrationContext,
   source: LandmarkIndexSource,
   options: ModelProxyOptions = {},
-): { handle: RouteHandler; stats(): ModelProxyStats; stop(): void } {
+): { handle: ModelRouteHandler; stats(): ModelProxyStats; stop(): void } {
   const now = options.now ?? Date.now;
   const cacheBytes = options.cacheBytes ?? 96 * MIB;
   const maxConcurrent = options.maxConcurrent ?? 4;
@@ -193,7 +195,7 @@ export function createModelProxy(
     return true;
   }
 
-  const handle: RouteHandler = async (req, reply) => {
+  const handle: ModelRouteHandler = async (req, reply) => {
     const { provider: providerId, sha256 } = req.params;
     if (!sha256 || !SHA256.test(sha256)) {
       sendError(reply, 400, "Model ids are lower-case sha256 hashes", "INVALID_MODEL_ID");

@@ -4,7 +4,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { TRANSITOUS_CATALOG_DIR } from "@openmapx/transitous-core";
 import { parseFeedCredentialMapJson } from "@openmapx/transitous-core/feed-credentials";
-import { readCatalogPinSet } from "../catalog-pins";
+import { pinnedAtlasCommit, pinnedTransitousCommit, readCatalogPinSet } from "../catalog-pins";
 import { GENERATED_SECRETS_DIRNAME } from "../services/compose-renderer";
 import { currentConfigurationGeneration } from "../services/configuration-generation";
 import { CONFIGURATION_GENERATIONS } from "../services/deployment";
@@ -36,8 +36,8 @@ async function destination(input: MotisPortableDestinationInput) {
   const pair = readCatalogPinSet(input.rootDir);
   if (!pair) throw Error("MOTIS destination requires an approved retained catalog pin set");
   const pins = {
-    transitousCommit: pair.transitous.ref.split("@").at(-1) ?? "",
-    atlasCommit: pair.transitous.submodules["transitland-atlas"] ?? "",
+    transitousCommit: pinnedTransitousCommit(pair.transitous),
+    atlasCommit: pinnedAtlasCommit(pair.transitous),
   };
   const stage = new AnchoredDirectory(realpathSync(input.stagingDir));
   let metadata: ReturnType<typeof portableMotisSourcesSchema.parse>;

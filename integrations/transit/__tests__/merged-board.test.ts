@@ -7,8 +7,7 @@ import type { TransitOrchestrator } from "../orchestrator.js";
 import { createPlaceTransit } from "../place-transit.js";
 
 function stop(id: string, name = "Central"): TransitStop {
-  const [provider] = id.split(":");
-  return { id, provider, name, lat: 50.775, lng: 6.084, modes: ["rail"] };
+  return { id, provider: id.replace(/:.*/, ""), name, lat: 50.775, lng: 6.084, modes: ["rail"] };
 }
 
 function dep(
@@ -141,7 +140,7 @@ describe("merged place board", () => {
       "ms:platform-4": [dep("ms:t1", "RE1", "Köln Hbf", "10:00:00", { platform: "4" })],
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0].platform).toBe("4");
+    expect(rows[0]?.platform).toBe("4");
   });
 
   it("folds a train one source lists twice under two trip ids", async () => {
@@ -324,7 +323,7 @@ describe("the stop a merged row leaves from", () => {
       ["Köln Hbf", false],
       ["Köln Breslauer Platz/Hbf", true],
     ]);
-    expect(rows[1].fieldContributors?.stop).toBeDefined();
+    expect(rows[1]?.fieldContributors?.stop).toBeDefined();
   });
 
   it("keeps a row at the main stop when another source lists it at a stop nearby", async () => {

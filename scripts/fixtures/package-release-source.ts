@@ -93,13 +93,17 @@ export function packageReleaseSourceFixture(tamper = false) {
   const calls: string[] = [];
   const run = (executable: string, args: string[], options: object = {}) => {
     if (executable === "gh") {
-      calls.push(args[1]);
-      return JSON.stringify(args[1].includes("pulls/") ? pr : ci);
+      const endpoint = args[1];
+      if (endpoint === undefined) throw new Error("gh was called without an endpoint");
+      calls.push(endpoint);
+      return JSON.stringify(endpoint.includes("pulls/") ? pr : ci);
     }
     if (executable === "git" && args[0] === "fetch") return "";
     if (args.includes("publish-plan")) {
+      const output = args[args.indexOf("--output") + 1];
+      if (output === undefined) throw new Error("publish-plan was called without --output");
       writeFileSync(
-        args[args.indexOf("--output") + 1],
+        output,
         JSON.stringify({
           version: 1,
           plan: [

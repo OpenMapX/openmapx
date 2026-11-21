@@ -565,16 +565,16 @@ function SettingsGroupPanel({
                       lineHeight: 1.2,
                     }}
                   >
-                    {subgroupMeta[section.subgroup].label}
+                    {subgroupMeta[section.subgroup]?.label}
                   </Typography>
-                  {subgroupMeta[section.subgroup].description && (
+                  {subgroupMeta[section.subgroup]?.description && (
                     <Typography
                       variant="caption"
                       sx={{
                         color: "text.secondary",
                       }}
                     >
-                      {subgroupMeta[section.subgroup].description}
+                      {subgroupMeta[section.subgroup]?.description}
                     </Typography>
                   )}
                 </Stack>

@@ -755,6 +755,7 @@ export function NauticalLayer() {
       // silently produced undefined coordinates for any other geometry.
       if (f.geometry.type !== "Point") return;
       const [lng, lat] = f.geometry.coordinates;
+      if (lng === undefined || lat === undefined) return;
       const name = String(props.name ?? `Harbour ${id}`);
       const rawType = (props.type as string | undefined) ?? "harbour";
       const place = createPlace({
@@ -789,6 +790,7 @@ export function NauticalLayer() {
       // silently produced undefined coordinates for any other geometry.
       if (f.geometry.type !== "Point") return;
       const [lng, lat] = f.geometry.coordinates;
+      if (lng === undefined || lat === undefined) return;
       const name = String(p.name ?? id);
       const network = String(p.network ?? "noaa");
       const country = p.country ? String(p.country) : undefined;

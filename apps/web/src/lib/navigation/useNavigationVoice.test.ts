@@ -2,6 +2,7 @@
 
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { primeSpeechSynthesis, useNavigationVoice } from "./useNavigationVoice";
 
 class FakeUtterance {
@@ -54,7 +55,7 @@ describe("primeSpeechSynthesis", () => {
     vi.stubGlobal("navigator", {});
     primeSpeechSynthesis();
     expect(speak).toHaveBeenCalledTimes(1);
-    expect((speak.mock.calls[0][0] as FakeUtterance).volume).toBe(0);
+    expect((nth(speak.mock.calls, 0)[0] as FakeUtterance).volume).toBe(0);
   });
 
   it("is a no-op without speechSynthesis", () => {

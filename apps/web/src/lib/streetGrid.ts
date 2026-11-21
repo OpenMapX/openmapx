@@ -114,8 +114,13 @@ export function sampleRoadSegments(map: maplibregl.Map): WeightedBearing[] {
       for (let i = 1; i < coordinates.length; i += 1) {
         vertices += 1;
         if (vertices > MAX_VERTICES) return samples;
-        const a: [number, number] = [coordinates[i - 1][0], coordinates[i - 1][1]];
-        const b: [number, number] = [coordinates[i][0], coordinates[i][1]];
+        const [aLng, aLat] = coordinates[i - 1] ?? [];
+        const [bLng, bLat] = coordinates[i] ?? [];
+        // A position without both coordinates cannot be projected.
+        if (aLng === undefined || aLat === undefined || bLng === undefined || bLat === undefined)
+          continue;
+        const a: [number, number] = [aLng, aLat];
+        const b: [number, number] = [bLng, bLat];
         const pa = map.project(a);
         const pb = map.project(b);
         const pixels = Math.hypot(pb.x - pa.x, pb.y - pa.y);

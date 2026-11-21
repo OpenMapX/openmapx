@@ -1,7 +1,8 @@
 import { createValhallaService } from "@integrations/routing-valhalla/provider.js";
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHttpClient } from "../../integration-clients.js";
+import { callArg } from "../../test/mock-calls";
 import { emptyResponse, streamedJsonResponse } from "../../test/streamed-response.js";
 
 /** The provider on the real host HTTP client, so global fetch sees its requests. */
@@ -90,7 +91,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.costing).toBe("pedestrian");
     });
 
@@ -99,7 +100,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "cycling");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.costing).toBe("bicycle");
     });
 
@@ -108,6 +109,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       expect(route.distance).toBe(1200); // 1.2 * 1000
     });
@@ -117,6 +119,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       expect(route.duration).toBe(900);
     });
@@ -131,6 +134,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       expect(route.elevation).toEqual([100, 105, 110, 110, 115, 120]);
       expect(route.elevationInterval).toBe(30);
@@ -158,16 +162,17 @@ describe("valhallaService", () => {
       // the turn and street (see walking-guidance.ts).
       const route = (await valhallaService.getRoute(waypoints, "cycling", { units: "imperial" }))
         .routes[0];
+      assert.isDefined(route);
 
       expect(route.distance).toBeCloseTo(1609.344, 3);
-      expect(route.legs[0].distance).toBeCloseTo(1609.344, 3);
-      expect(route.steps[0].distance).toBeCloseTo(402.336, 3);
-      expect(route.legs[0].steps[1].distance).toBeCloseTo(1207.008, 3);
+      expect(route.legs[0]?.distance).toBeCloseTo(1609.344, 3);
+      expect(route.steps[0]?.distance).toBeCloseTo(402.336, 3);
+      expect(route.legs[0]?.steps[1]?.distance).toBeCloseTo(1207.008, 3);
       expect(route.elevation?.[0]).toBeCloseTo(100, 3);
       expect(route.elevation?.[1]).toBeCloseTo(110, 3);
       expect(route.elevation?.[2]).toBeCloseTo(120, 3);
       expect(route.elevationInterval).toBeCloseTo(30, 3);
-      expect(route.steps[1].instruction).toBe("Turn right after 0.75 miles.");
+      expect(route.steps[1]?.instruction).toBe("Turn right after 0.75 miles.");
     });
 
     it("uses the requested unit and 30 m sampling fallback when response metadata is absent", async () => {
@@ -179,6 +184,7 @@ describe("valhallaService", () => {
 
       const route = (await valhallaService.getRoute(waypoints, "cycling", { units: "imperial" }))
         .routes[0];
+      assert.isDefined(route);
 
       expect(route.distance).toBeCloseTo(1609.344, 3);
       expect(route.elevation?.[0]).toBeCloseTo(100, 3);
@@ -198,8 +204,8 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking", { units: "imperial" });
 
-      expect(result.routes[0].distance).toBeCloseTo(1609.344, 3);
-      expect(result.routes[1].distance).toBeCloseTo(3218.688, 3);
+      expect(result.routes[0]?.distance).toBeCloseTo(1609.344, 3);
+      expect(result.routes[1]?.distance).toBeCloseTo(3218.688, 3);
     });
 
     it("uses a returned metric elevation interval without converting it", async () => {
@@ -211,6 +217,7 @@ describe("valhallaService", () => {
 
       const route = (await valhallaService.getRoute(waypoints, "walking", { units: "metric" }))
         .routes[0];
+      assert.isDefined(route);
 
       expect(route.distance).toBe(1200);
       expect(route.elevation).toEqual([100, 110]);
@@ -222,6 +229,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       expect(route.elevation).toBeUndefined();
       expect(route.elevationInterval).toBeUndefined();
@@ -232,6 +240,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       // The second maneuver has street_names: ["Torstraße"]
       expect(route.summary).toBe("via Torstraße");
@@ -253,7 +262,8 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
 
-      expect(result.routes[0].summary).toBeUndefined();
+      expect(result.routes[0]).toBeDefined();
+      expect(result.routes[0]?.summary).toBeUndefined();
     });
 
     it("includes alternatives from data.alternates", async () => {
@@ -268,9 +278,9 @@ describe("valhallaService", () => {
       const result = await valhallaService.getRoute(waypoints, "walking");
 
       expect(result.routes).toHaveLength(3);
-      expect(result.routes[0].distance).toBe(1200);
-      expect(result.routes[1].distance).toBe(2000);
-      expect(result.routes[2].distance).toBe(2500);
+      expect(result.routes[0]?.distance).toBe(1200);
+      expect(result.routes[1]?.distance).toBe(2000);
+      expect(result.routes[2]?.distance).toBe(2500);
     });
 
     it("sets avoidHighways -> use_highways=0 in costing_options", async () => {
@@ -280,7 +290,7 @@ describe("valhallaService", () => {
         avoidHighways: true,
       });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.costing_options.bicycle.use_highways).toBe(0);
     });
 
@@ -291,7 +301,7 @@ describe("valhallaService", () => {
         avoidFerries: true,
       });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.costing_options.pedestrian.use_ferry).toBe(0);
     });
 
@@ -302,7 +312,7 @@ describe("valhallaService", () => {
         units: "imperial",
       });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.directions_options.units).toBe("miles");
     });
 
@@ -313,7 +323,7 @@ describe("valhallaService", () => {
         units: "metric",
       });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.directions_options.units).toBe("km");
     });
 
@@ -321,7 +331,8 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const result = await valhallaService.getRoute(waypoints, "walking");
-      const step = result.routes[0].steps[0];
+      const step = result.routes[0]?.steps[0];
+      assert.isDefined(step);
 
       expect(step.distance).toBe(500); // 0.5 * 1000
     });
@@ -332,7 +343,8 @@ describe("valhallaService", () => {
       const result = await valhallaService.getRoute(waypoints, "walking");
 
       // First maneuver: begin=0, end=2 -> slice(0, 3)
-      const step0 = result.routes[0].steps[0];
+      const step0 = result.routes[0]?.steps[0];
+      assert.isDefined(step0);
       expect(step0.coordinates).toEqual([
         [13.388, 52.517],
         [13.392, 52.521],
@@ -340,7 +352,8 @@ describe("valhallaService", () => {
       ]);
 
       // Second maneuver: begin=2, end=3 -> slice(2, 4)
-      const step1 = result.routes[0].steps[1];
+      const step1 = result.routes[0]?.steps[1];
+      assert.isDefined(step1);
       expect(step1.coordinates).toEqual([
         [13.397, 52.529],
         [13.405, 52.535],
@@ -352,10 +365,10 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/route");
 
-      const options = mockFetch.mock.calls[0][1] as RequestInit;
+      const options = callArg(mockFetch, 0, 1) as RequestInit;
       expect(options.method).toBe("POST");
       expect((options.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     });
@@ -382,7 +395,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking", { lang: "de" });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.directions_options.language).toBe("de");
     });
 
@@ -391,7 +404,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.directions_options.language).toBe("en");
     });
 
@@ -400,7 +413,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.elevation_interval).toBe(30);
       expect(body.alternates).toBe(2);
     });
@@ -410,7 +423,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "driving");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.date_time).toEqual({ type: 0 });
     });
 
@@ -419,7 +432,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "driving", { departAt: "2026-05-04T08:30" });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.date_time).toEqual({ type: 1, value: "2026-05-04T08:30" });
     });
 
@@ -428,7 +441,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "driving", { arriveBy: "2026-05-04T17:00" });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.date_time).toEqual({ type: 2, value: "2026-05-04T17:00" });
     });
 
@@ -448,7 +461,7 @@ describe("valhallaService", () => {
       const threeWaypoints: [number, number][] = [origin, [13.395, 52.525], destination];
       await valhallaService.getRoute(threeWaypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.alternates).toBeUndefined();
     });
 
@@ -457,7 +470,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getRoute(waypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.locations).toEqual([
         { lon: 13.388, lat: 52.517, type: "break" },
         { lon: 13.405, lat: 52.535, type: "break" },
@@ -469,7 +482,7 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "cycling");
 
-      expect(result.routes[0].mode).toBe("cycling");
+      expect(result.routes[0]?.mode).toBe("cycling");
     });
 
     it("produces legs array with per-leg data", async () => {
@@ -477,12 +490,13 @@ describe("valhallaService", () => {
 
       const result = await valhallaService.getRoute(waypoints, "walking");
       const route = result.routes[0];
+      assert.isDefined(route);
 
       expect(route.legs).toHaveLength(1);
-      expect(route.legs[0].distance).toBe(1200);
-      expect(route.legs[0].duration).toBe(900);
-      expect(route.legs[0].steps.length).toBeGreaterThan(0);
-      expect(route.legs[0].geometry.length).toBeGreaterThan(0);
+      expect(route.legs[0]?.distance).toBe(1200);
+      expect(route.legs[0]?.duration).toBe(900);
+      expect(route.legs[0]?.steps.length).toBeGreaterThan(0);
+      expect(route.legs[0]?.geometry.length).toBeGreaterThan(0);
     });
   });
 
@@ -513,7 +527,7 @@ describe("valhallaService", () => {
 
       await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = callArg(mockFetch, 0, 0) as string;
       expect(url).toContain("/optimized_route");
     });
 
@@ -542,7 +556,7 @@ describe("valhallaService", () => {
       const result = await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
       expect(result?.routes).toHaveLength(1);
-      expect(result?.routes[0].mode).toBe("walking");
+      expect(result?.routes[0]?.mode).toBe("walking");
     });
 
     it("normalizes imperial optimized-route distances and elevation", async () => {
@@ -566,11 +580,11 @@ describe("valhallaService", () => {
         units: "imperial",
       });
 
-      expect(result?.routes[0].distance).toBeCloseTo(1609.344, 3);
-      expect(result?.routes[0].legs[0].distance).toBeCloseTo(1609.344, 3);
-      expect(result?.routes[0].elevation?.[0]).toBeCloseTo(100, 3);
-      expect(result?.routes[0].elevation?.[1]).toBeCloseTo(110, 3);
-      expect(result?.routes[0].elevationInterval).toBeCloseTo(30, 3);
+      expect(result?.routes[0]?.distance).toBeCloseTo(1609.344, 3);
+      expect(result?.routes[0]?.legs[0]?.distance).toBeCloseTo(1609.344, 3);
+      expect(result?.routes[0]?.elevation?.[0]).toBeCloseTo(100, 3);
+      expect(result?.routes[0]?.elevation?.[1]).toBeCloseTo(110, 3);
+      expect(result?.routes[0]?.elevationInterval).toBeCloseTo(30, 3);
     });
 
     it("uses correct costing for driving mode", async () => {
@@ -578,7 +592,7 @@ describe("valhallaService", () => {
 
       await valhallaService.optimizeRoute?.(fourWaypoints, "driving");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.costing).toBe("auto");
     });
 
@@ -595,7 +609,7 @@ describe("valhallaService", () => {
 
       await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       for (const loc of body.locations) {
         expect(loc.type).toBe("break");
       }
@@ -606,7 +620,7 @@ describe("valhallaService", () => {
 
       await valhallaService.optimizeRoute?.(fourWaypoints, "driving");
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.date_time).toEqual({ type: 0 });
     });
 
@@ -617,7 +631,7 @@ describe("valhallaService", () => {
         departAt: "2026-05-04T08:30",
       });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.date_time).toEqual({ type: 1, value: "2026-05-04T08:30" });
     });
   });
@@ -662,8 +676,8 @@ describe("valhallaService", () => {
 
       await valhallaService.getMatch?.(trace, "driving");
 
-      const url = mockFetch.mock.calls[0][0] as string;
-      const init = mockFetch.mock.calls[0][1] as RequestInit;
+      const url = callArg(mockFetch, 0, 0) as string;
+      const init = callArg(mockFetch, 0, 1) as RequestInit;
       const body = JSON.parse(init.body as string);
 
       expect(url).toContain("/trace_attributes");
@@ -687,8 +701,8 @@ describe("valhallaService", () => {
       await valhallaService.getMatch?.(trace, "walking");
       await valhallaService.getMatch?.(trace, "cycling");
 
-      const body1 = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      const body2 = JSON.parse(mockFetch.mock.calls[1][1].body as string);
+      const body1 = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
+      const body2 = JSON.parse(mockFetch.mock.calls[1]?.[1].body as string);
       expect(body1.costing).toBe("pedestrian");
       expect(body2.costing).toBe("bicycle");
     });
@@ -698,7 +712,7 @@ describe("valhallaService", () => {
 
       await valhallaService.getMatch?.(trace, "driving", { shapeMatch: "map_snap" });
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.shape_match).toBe("map_snap");
     });
 
@@ -713,7 +727,7 @@ describe("valhallaService", () => {
         "driving",
       );
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body = JSON.parse(mockFetch.mock.calls[0]?.[1].body as string);
       expect(body.shape[0]).toEqual({
         lat: 52.517,
         lon: 13.388,

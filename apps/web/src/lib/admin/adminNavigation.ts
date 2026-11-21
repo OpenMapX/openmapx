@@ -112,7 +112,8 @@ export function safeAdminNavigationReturn(value: string | null | undefined): str
     if (url.origin !== "https://admin.invalid" || url.hash || value.split("?")[0] !== url.pathname)
       return null;
     const detail = /^\/admin\/(?:system\/services|integrations|users)\/([^/]+)$/.exec(url.pathname);
-    const id = detail ? decodeURIComponent(detail[1]) : null;
+    const encodedId = detail?.[1];
+    const id = encodedId === undefined ? null : decodeURIComponent(encodedId);
     const known =
       ADMIN_DESTINATIONS.some((entry) => entry.href === url.pathname) ||
       url.pathname === "/admin/integrations/bulk";

@@ -57,9 +57,16 @@ function isPosition(value: unknown): value is GeoJSON.Position {
   );
 }
 
-function positionsEqual(first: GeoJSON.Position, last: GeoJSON.Position): boolean {
+/** Whether two positions are present and equal; an absent one equals nothing. */
+function positionsEqual(
+  first: GeoJSON.Position | undefined,
+  last: GeoJSON.Position | undefined,
+): boolean {
   return (
-    first.length === last.length && first.every((coordinate, index) => coordinate === last[index])
+    first !== undefined &&
+    last !== undefined &&
+    first.length === last.length &&
+    first.every((coordinate, index) => coordinate === last[index])
   );
 }
 
@@ -68,7 +75,7 @@ function isRing(value: unknown): value is GeoJSON.Position[] {
     Array.isArray(value) &&
     value.length >= 4 &&
     value.every(isPosition) &&
-    positionsEqual(value[0] as GeoJSON.Position, value.at(-1) as GeoJSON.Position)
+    positionsEqual(value[0], value.at(-1))
   );
 }
 

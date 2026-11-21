@@ -1,4 +1,5 @@
 import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
+import { itemAt } from "@openmapx/core/item-at";
 import { afterEach, expect, it, vi } from "vitest";
 import type { JobContext } from "../job-runner";
 
@@ -11,7 +12,7 @@ vi.mock("../../db", () => ({
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: async () => (fixture.batches.length ? fixture.batches.shift()! : fixture.rows),
+          limit: async () => fixture.batches.shift() ?? fixture.rows,
         }),
       }),
     }),
@@ -94,7 +95,7 @@ it("keeps an interrupted unknown durable Activity execution explicitly cancelabl
   vi.stubGlobal("fetch", sent);
   expect(await cancelDataManagerActivityJob(owned.id)).toBe(true);
   expect(sent).toHaveBeenCalledTimes(1);
-  fixture.rows[0]!.executionVersion = 1;
+  itemAt(fixture.rows, 0).executionVersion = 1;
   expect(await cancelDataManagerActivityJob(owned.id)).toBe(false);
   expect(sent).toHaveBeenCalledTimes(1);
 });
@@ -115,13 +116,13 @@ it("cancels every registered backend with zero agent projections and retains pen
             (child) => child.id === id,
           )?.cancellationRequestedAt,
         ).not.toBeNull();
-        sent.push(id!);
+        sent.push(owned.id);
         throw Error("Lost real cancellation response");
       }
       return Response.json({
         ...owned,
-        status: sent.includes(id!) ? "cancel_pending" : "running",
-        cancellationRequestedAt: sent.includes(id!) ? new Date().toISOString() : null,
+        status: sent.includes(owned.id) ? "cancel_pending" : "running",
+        cancellationRequestedAt: sent.includes(owned.id) ? new Date().toISOString() : null,
         progress: null,
         diagnostics: { tail: [], truncated: false },
         parentAgentOperationKey: undefined,

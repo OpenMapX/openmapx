@@ -156,13 +156,14 @@ export async function runCliDataUpdate(options: {
           }
         },
         async prepare({ coordinatorMode }) {
-          if (!lease) throw Error("Full Update finalization lease required");
+          const finalizationLease = lease;
+          if (!finalizationLease) throw Error("Full Update finalization lease required");
           control.assertDataUpdateSources(authority);
           return services.withConfigurationGenerationWriter(
             paths.infraDir,
             (writer) =>
               services.withVerifiedLifecycleOwnership(
-                { writer, lease: lease!, authority },
+                { writer, lease: finalizationLease, authority },
                 async (ownership) => {
                   control.assertDataUpdateSources(authority);
                   if (
@@ -195,7 +196,7 @@ export async function runCliDataUpdate(options: {
                     revisionId: rendered.revisionId,
                     transport: options.transport,
                     issuer: authority.execution,
-                    leaseId: lease!.leaseId,
+                    leaseId: finalizationLease.leaseId,
                     signal: cliAcquisitionOptions().signal,
                   });
                   return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };

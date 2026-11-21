@@ -62,8 +62,7 @@ function expressionTree(raw: string): Expression | undefined {
   try {
     const tree = parseExpression(canonical);
     const pending = [tree];
-    while (pending.length) {
-      const node = pending.pop()!;
+    for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
       if ("license" in node) {
         // Custom references require a captured definition, not the standard list.
         if (!canonicalSpdxId(node.license)) return undefined;
@@ -77,8 +76,8 @@ function expressionTree(raw: string): Expression | undefined {
 
 function printExpression(node: Expression, fullNames = false, parentPriority = 0): string {
   if ("license" in node) {
-    const id = canonicalSpdxId(node.license)!;
-    return `${fullNames ? spdxLicenseList[id].name : id}${node.plus ? "+" : ""}${node.exception ? ` WITH ${node.exception}` : ""}`;
+    const id = canonicalSpdxId(node.license) ?? node.license;
+    return `${fullNames ? (spdxLicenseList[id]?.name ?? id) : id}${node.plus ? "+" : ""}${node.exception ? ` WITH ${node.exception}` : ""}`;
   }
   const priority = node.conjunction === "and" ? 2 : 1;
   const text = `${printExpression(node.left, fullNames, priority)} ${node.conjunction.toUpperCase()} ${printExpression(node.right, fullNames, priority)}`;
@@ -302,9 +301,9 @@ export function parseLicensing(raw: unknown): Licensing | undefined {
 
 function licenceAtoms(tree: Expression): { label: string; url?: string }[] {
   if ("license" in tree) {
-    const id = canonicalSpdxId(tree.license)!;
+    const id = canonicalSpdxId(tree.license) ?? tree.license;
     return [
-      { label: id, url: spdxLicenseList[id].url },
+      { label: id, url: spdxLicenseList[id]?.url },
       ...(tree.exception
         ? [{ label: tree.exception, url: `https://spdx.org/licenses/${tree.exception}.html` }]
         : []),
@@ -327,10 +326,15 @@ export function licensingLinks(
       let url: string | undefined;
       let licenses: { label: string; url?: string }[] | undefined;
       if (license.kind === "spdx") {
-        const tree = expressionTree(license.expression)!;
-        label = printExpression(tree, options.fullNames);
-        licenses = [...new Map(licenceAtoms(tree).map((atom) => [atom.label, atom])).values()];
-        url = license.url ?? (licenses.length === 1 ? licenses[0].url : undefined);
+        const tree = expressionTree(license.expression);
+        if (tree) {
+          label = printExpression(tree, options.fullNames);
+          licenses = [...new Map(licenceAtoms(tree).map((atom) => [atom.label, atom])).values()];
+          url = license.url ?? (licenses.length === 1 ? licenses[0]?.url : undefined);
+        } else {
+          label = license.expression;
+          url = license.url;
+        }
       } else if (license.kind === "custom" || license.kind === "public-domain") {
         label = license.name;
         url = license.url;
@@ -392,9 +396,8 @@ export function dataLicenseExpression(licensing: Licensing): string | undefined 
   const eligible = parseLicensing(licensing)?.bindings.filter((binding) =>
     DATA_SCOPES.includes(binding.scope),
   );
-  return eligible?.length === 1 && eligible[0].license.kind === "spdx"
-    ? eligible[0].license.expression
-    : undefined;
+  const only = eligible?.length === 1 ? eligible[0]?.license : undefined;
+  return only?.kind === "spdx" ? only.expression : undefined;
 }
 
 /** Exact, version-aware external declaration recognition; never substring matching. */
@@ -420,12 +423,12 @@ export function licenseIdFromDeclaration(raw: string): string | undefined {
     "open government licence v3.0": "OGL-UK-3.0",
   };
   if (aliases[normalized]) return aliases[normalized];
-  const shorthand =
+  const [, family, version, region] =
     /^(cc[- ]by(?:[- ](?:sa|nd|nc|nc-sa|nc-nd))?|cc0|odbl|nLOD|apache(?: license)?)\s+(\d+\.\d+)(?:\s+(at|de|fr|uk|us))?$/i.exec(
       trimmed,
-    );
-  if (shorthand) {
-    const candidate = `${shorthand[1].replace(/ /g, "-").replace(/-license$/i, "")}-${shorthand[2]}${shorthand[3] ? `-${shorthand[3]}` : ""}`;
+    ) ?? [];
+  if (family !== undefined && version !== undefined) {
+    const candidate = `${family.replace(/ /g, "-").replace(/-license$/i, "")}-${version}${region ? `-${region}` : ""}`;
     return canonicalSpdxId(candidate);
   }
   try {

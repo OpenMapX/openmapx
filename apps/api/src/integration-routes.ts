@@ -5,6 +5,8 @@ import {
   type LoadedIntegration,
   type RouteHandler,
   type RouteOptions,
+  type RouteParams,
+  storedRouteHandler,
 } from "@openmapx/integration-framework";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RateLimitTiers } from "./server-wiring";
@@ -121,11 +123,11 @@ function routeScore(path: string): number {
     }, path.length);
 }
 
-export function registerIntegrationRoute(
+export function registerIntegrationRoute<Path extends string>(
   integrationId: string,
   method: string,
-  path: string,
-  handler: RouteHandler,
+  path: Path,
+  handler: RouteHandler<RouteParams<Path>>,
   options?: RouteOptions,
 ): void {
   const target = stagedIntegrationRoutes ?? integrationRoutes;
@@ -133,7 +135,7 @@ export function registerIntegrationRoute(
     integrationId,
     method: method.toUpperCase(),
     path: normalizeRoutePath(path),
-    handler,
+    handler: storedRouteHandler(handler),
     options,
     score: routeScore(path),
   });
@@ -197,9 +199,9 @@ function matchRoutePath(pattern: string, path: string): Record<string, string> |
     );
     const match = pathSegment.match(new RegExp(`^${regexSource}$`));
     if (!match) return null;
-    for (let j = 0; j < names.length; j++) {
+    for (const [j, name] of names.entries()) {
       const captured = match[j + 1];
-      if (captured !== undefined) params[names[j] as string] = captured;
+      if (captured !== undefined) params[name] = captured;
     }
   }
 

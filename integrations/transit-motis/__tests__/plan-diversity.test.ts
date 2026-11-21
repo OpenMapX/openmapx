@@ -1,5 +1,6 @@
 import type { Itinerary, PlanResponse } from "@motis-project/motis-client";
-import { describe, expect, it, vi } from "vitest";
+import { nth } from "@openmapx/integration-framework/testing";
+import { assert, describe, expect, it, vi } from "vitest";
 import { diversifyPlan, regionalModes } from "../plan-diversity.js";
 
 function trip(id: string, mode: string, start: string): Itinerary {
@@ -74,7 +75,7 @@ describe("MOTIS regional diversity", () => {
       preTransitRentalProviders: ["x"],
     } as never;
     await diversifyPlan(constraints, run, options);
-    expect(run.mock.calls[1][0]).toMatchObject({
+    expect(nth(run.mock.calls, 1)[0]).toMatchObject({
       arriveBy: true,
       pedestrianProfile: "WHEELCHAIR",
       requireBikeTransport: true,
@@ -83,8 +84,8 @@ describe("MOTIS regional diversity", () => {
       preTransitRentalProviders: ["x"],
       minTransferTime: 3,
     });
-    expect(run.mock.calls[1][0].directModes).toBeUndefined();
-    expect(run.mock.calls[1][1]).toBeInstanceOf(AbortSignal);
+    expect(nth(run.mock.calls, 1)[0].directModes).toBeUndefined();
+    expect(nth(run.mock.calls, 1)[1]).toBeInstanceOf(AbortSignal);
   });
   it.each([false, true])(
     "does not supplement disabled or local-only results (%s)",
@@ -112,29 +113,32 @@ describe("MOTIS regional diversity", () => {
       .mockResolvedValueOnce({ data: page([ice], "P-prev", "P-next") })
       .mockResolvedValueOnce({ data: page([re1], "R-prev", "R-next") });
     const first = await diversifyPlan(query, run, options);
+    assert.exists(first);
     run
       .mockReset()
       .mockResolvedValueOnce({ data: page([ice], "P-back", "") })
       .mockResolvedValueOnce({ data: page([re1], "R-back", "R-more") });
     const second = await diversifyPlan(
-      { ...query, pageCursor: first!.data.nextPageCursor },
+      { ...query, pageCursor: first.data.nextPageCursor },
       run,
       options,
     );
+    assert.exists(second);
     expect(run.mock.calls.map((c) => c[0].pageCursor)).toEqual(["P-next", "R-next"]);
     run.mockReset().mockResolvedValueOnce({ data: page([re1], "R-return", "") });
     const third = await diversifyPlan(
-      { ...query, pageCursor: second!.data.nextPageCursor },
+      { ...query, pageCursor: second.data.nextPageCursor },
       run,
       options,
     );
+    assert.exists(third);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].pageCursor).toBe("R-more");
+    expect(nth(run.mock.calls, 0)[0].pageCursor).toBe("R-more");
     run.mockReset().mockResolvedValue({ data: page([]) });
-    await diversifyPlan({ ...query, pageCursor: third!.data.previousPageCursor }, run, options);
+    await diversifyPlan({ ...query, pageCursor: third.data.previousPageCursor }, run, options);
     expect(run.mock.calls.map((c) => c[0].pageCursor)).toEqual(["P-back", "R-return"]);
     await expect(
-      diversifyPlan({ ...query, pageCursor: first!.data.nextPageCursor }, run, {
+      diversifyPlan({ ...query, pageCursor: first.data.nextPageCursor }, run, {
         ...options,
         epoch: "new",
       }),
@@ -144,7 +148,7 @@ describe("MOTIS regional diversity", () => {
     const run = vi.fn().mockResolvedValue({ data: page([ice]) });
     await diversifyPlan({ ...query, pageCursor: "LATER|42" }, run, options);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].pageCursor).toBe("LATER|42");
+    expect(nth(run.mock.calls, 0)[0].pageCursor).toBe("LATER|42");
   });
 });
 

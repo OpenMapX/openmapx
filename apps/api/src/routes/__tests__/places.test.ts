@@ -2,7 +2,7 @@ import { request as httpRequest } from "node:http";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import * as placeIds from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from "vitest";
 
 /** Complete controlled Commons fixture; licensing tests elsewhere keep unknown files unknown. */
 function licensedPhoto<
@@ -953,7 +953,7 @@ describe("GET /places/:id", () => {
     const responses = await Promise.all(requests);
     expect(peak).toBe(8);
     expect(started).toHaveLength(12);
-    expect(responses[0].statusCode).toBe(500);
+    expect(responses[0]?.statusCode).toBe(500);
     expect(responses.slice(1).every((response) => response.statusCode === 200)).toBe(true);
     mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
     const recovered = await app.inject({
@@ -989,7 +989,8 @@ describe("GET /places/:id", () => {
       signal: expect.any(AbortSignal),
     });
     // The scope and its consumers share one signal, so sharing stays cancellation-safe.
-    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    const options = mockGetPlaceKnowledge.mock.calls[0]?.[2];
+    assert.isDefined(options);
     expect(options.jsonScope.signal).toBe(options.signal);
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
@@ -1510,7 +1511,8 @@ describe("GET /places/:id", () => {
       signal: expect.any(AbortSignal),
     });
     // The scope and its consumers share one signal, so sharing stays cancellation-safe.
-    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    const options = mockGetPlaceKnowledge.mock.calls[0]?.[2];
+    assert.isDefined(options);
     expect(options.jsonScope.signal).toBe(options.signal);
   });
 

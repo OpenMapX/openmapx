@@ -1,4 +1,5 @@
 import type { LoadedIntegration } from "@openmapx/integration-framework";
+import { nth } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import mangroveManifest from "../../reviews-mangrove/manifest.json";
 import {
@@ -88,7 +89,7 @@ describe("fetchReviews source tagging", () => {
   it("stamps each review with the producing provider's id", async () => {
     const p = reviewProvider("mangrove");
     (p.getReviews as ReturnType<typeof vi.fn>).mockResolvedValue([review("r1")]);
-    const [r] = await fetchReviews(SUBJECT, [p]);
+    const r = nth(await fetchReviews(SUBJECT, [p]), 0);
     expect(r.source).toBe("mangrove");
   });
 
@@ -97,7 +98,7 @@ describe("fetchReviews source tagging", () => {
     (p.getReviews as ReturnType<typeof vi.fn>).mockResolvedValue([
       { ...review("r1"), source: "preset" },
     ]);
-    const [r] = await fetchReviews(SUBJECT, [p]);
+    const r = nth(await fetchReviews(SUBJECT, [p]), 0);
     expect(r.source).toBe("preset");
   });
 });
@@ -183,21 +184,23 @@ describe("registered review acquisition receipts", () => {
     const provider = reviewProvider("mangrove");
     provider.getReviews = () => pending.promise;
     const integration = capturedIntegration(provider);
-    const [wrapped] = getReviewProviders([integration]);
+    const wrapped = nth(getReviewProviders([integration]), 0);
     const read = wrapped.getReviews(SUBJECT);
-    sources(integration)[0].name = "Changed supplier";
-    sources(integration)[0].url = "https://changed.test/";
+    nth(sources(integration), 0).name = "Changed supplier";
+    nth(sources(integration), 0).url = "https://changed.test/";
     integration.enabled = false;
     pending.resolve([original]);
-    const [result] = await read;
+    const result = nth(await read, 0);
     expect(result.contributors).toMatchObject([
       { sourceId: "mangrove", name: "Mangrove.reviews", url: "https://mangrove.reviews/" },
     ]);
     expect(result).not.toBe(original);
     expect(original).not.toHaveProperty("contributors");
     expect(result.metadata?.license).toBe("CC-BY-SA-4.0");
-    expect((await wrapped.getReviews(SUBJECT))[0].contributors?.[0]?.name).toBe("Changed supplier");
-    sources(integration)[0].name = "Changed again";
+    expect(nth(await wrapped.getReviews(SUBJECT), 0).contributors?.[0]?.name).toBe(
+      "Changed supplier",
+    );
+    nth(sources(integration), 0).name = "Changed again";
     expect(result.contributors?.[0]?.name).toBe("Mangrove.reviews");
   });
 
@@ -214,11 +217,11 @@ describe("registered review acquisition receipts", () => {
     ];
     const integration = capturedIntegration(provider);
     sources(integration).push({
-      ...sources(integration)[0],
+      ...nth(sources(integration), 0),
       sourceId: "other",
       name: "Other supplier",
     });
-    const results = await getReviewProviders([integration])[0].getReviews(SUBJECT);
+    const results = await nth(getReviewProviders([integration]), 0).getReviews(SUBJECT);
     expect(results.map((r) => r.contributors?.map((a) => a.name))).toEqual([
       ["Mangrove.reviews"],
       ["Other supplier"],
@@ -227,8 +230,8 @@ describe("registered review acquisition receipts", () => {
       [],
       ["Historical credit"],
     ]);
-    historical[0].name = "Mutated cache";
-    expect(results[5].contributors?.[0]?.name).toBe("Historical credit");
+    nth(historical, 0).name = "Mutated cache";
+    expect(nth(results, 5).contributors?.[0]?.name).toBe("Historical credit");
   });
 
   it("keeps only the duplicate winner and successful aggregate supplier", async () => {
@@ -250,12 +253,12 @@ describe("registered review acquisition receipts", () => {
     second.getAggregate = async () => retainedAggregate;
     const a = capturedIntegration(first);
     const b = capturedIntegration(second);
-    sources(b)[0].sourceId = "second";
-    sources(b)[0].name = "Successful supplier";
+    nth(sources(b), 0).sourceId = "second";
+    nth(sources(b), 0).name = "Successful supplier";
     const providers = getReviewProviders([a, b]);
     const reviews = await fetchReviews(SUBJECT, providers);
     expect(reviews).toHaveLength(1);
-    expect(reviews[0].contributors?.map((a) => a.name)).toEqual(["Mangrove.reviews"]);
+    expect(nth(reviews, 0).contributors?.map((a) => a.name)).toEqual(["Mangrove.reviews"]);
     const aggregate = await fetchAggregate(SUBJECT, providers);
     expect(aggregate.contributors?.map((a) => a.name)).toEqual(["Successful supplier"]);
     expect(retainedAggregate).not.toHaveProperty("contributors");
@@ -288,7 +291,7 @@ describe("registered review acquisition receipts", () => {
       },
     };
     const integration = capturedIntegration(provider);
-    const [wrapped] = getReviewProviders([integration]);
+    const wrapped = nth(getReviewProviders([integration]), 0);
     const read = wrapped.getAggregate(SUBJECT, options);
     integration.manifest.dataSources = [];
     pending.resolve({
@@ -300,7 +303,7 @@ describe("registered review acquisition receipts", () => {
       stars: 0,
     });
     expect((await read).contributors?.[0]?.name).toBe("Mangrove.reviews");
-    expect((await wrapped.getReviews(SUBJECT))[0].id).toBe("mangrove");
+    expect(nth(await wrapped.getReviews(SUBJECT), 0).id).toBe("mangrove");
     expect(await wrapped.submit?.("jwt")).toEqual({ id: "mangrove:jwt" });
     expect(await wrapped.uploadImage?.(new Blob(), "one.jpg")).toEqual({
       src: "https://images.test/mangrove/one.jpg",

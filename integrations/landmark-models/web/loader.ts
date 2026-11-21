@@ -13,11 +13,8 @@ export interface Candidate {
 const ROUTE = "/api/integrations/landmark-models";
 const COVERAGE_MAX_AGE_MS = 5 * 60_000;
 
-const intersects = (a: readonly number[], b: readonly number[]) =>
-  (a[0] as number) <= (b[2] as number) &&
-  (a[2] as number) >= (b[0] as number) &&
-  (a[1] as number) <= (b[3] as number) &&
-  (a[3] as number) >= (b[1] as number);
+const intersects = (a: Readonly<Box>, b: Readonly<Box>) =>
+  a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 
 /**
  * The browser's view of the merged landmark catalogue: coverage, then the

@@ -5,6 +5,7 @@ import {
   cleanup,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   userEvent,
@@ -140,7 +141,7 @@ describe("integration administration browser behavior", () => {
         ),
       ).toBe(true);
       expect(calls).toHaveLength(1);
-      expect(calls[0].init.signal?.aborted).toBe(false);
+      expect(nth(calls, 0).init.signal?.aborted).toBe(false);
     },
   );
 
@@ -917,10 +918,11 @@ describe("integration administration browser behavior", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(JSON.parse(calls[0]!.init.body as string).expectedRevision).toBe("a".repeat(64));
-    expect(calls[1]!.init.body).toBe(calls[0]!.init.body);
-    expect(new Headers(calls[1]!.init.headers).get("Idempotency-Key")).toBe(
-      new Headers(calls[0]!.init.headers).get("Idempotency-Key"),
+    const [first, second] = [nth(calls, 0), nth(calls, 1)];
+    expect(JSON.parse(first.init.body as string).expectedRevision).toBe("a".repeat(64));
+    expect(second.init.body).toBe(first.init.body);
+    expect(new Headers(second.init.headers).get("Idempotency-Key")).toBe(
+      new Headers(first.init.headers).get("Idempotency-Key"),
     );
     expect(close).not.toHaveBeenCalled();
   });
@@ -991,7 +993,7 @@ describe("integration administration browser behavior", () => {
         for (const key of keys.slice(0, 4))
           expect(client.getQueryState(key)?.isInvalidated).toBe(true);
       });
-      expect(client.getQueryState(keys[4])?.isInvalidated).toBe(false);
+      expect(client.getQueryState(nth(keys, 4))?.isInvalidated).toBe(false);
       expect(calls.filter(({ url }) => url.pathname.endsWith("/reload"))).toHaveLength(1);
     },
   );

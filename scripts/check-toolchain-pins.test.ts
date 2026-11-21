@@ -105,7 +105,7 @@ describe("collectToolchainPinViolations", () => {
     const rel = "services/pelias/service.json";
     const violations = violationsFor(
       rel,
-      withJsonChange<{ buildImages: Record<string, { digest?: string }> }>(rel, (json) => {
+      withJsonChange<{ buildImages: { schema: { digest?: string } } }>(rel, (json) => {
         json.buildImages.schema.digest = "latest";
       }),
     );

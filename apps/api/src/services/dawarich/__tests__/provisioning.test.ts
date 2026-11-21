@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { itemAt } from "@openmapx/core/item-at";
+import { assert, describe, expect, it, vi } from "vitest";
 import {
   DAWARICH_APP_SERVICE_ID,
   DAWARICH_POSTGIS_SERVICE_ID,
@@ -322,7 +323,7 @@ describe("provisionManagedDawarich", () => {
       ),
     ).resolves.toMatchObject({ needsApply: false });
 
-    Object.assign(harness.clients[0] as ManagedOAuthClient, { client_name: "Drifted client" });
+    Object.assign(itemAt(harness.clients, 0), { client_name: "Drifted client" });
     const reconciled = await provision(harness.dependencies);
     const desiredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
     expect(desiredGeneration).toMatch(/^[0-9a-f]{32}$/);
@@ -437,7 +438,7 @@ describe("provisionManagedDawarich", () => {
   ] as const)("reports %s drift as OAuth-not-ready until reconciliation", async (_name, drift) => {
     const harness = createHarness();
     await provision(harness.dependencies);
-    Object.assign(harness.clients[0] as ManagedOAuthClient, drift);
+    Object.assign(itemAt(harness.clients, 0), drift);
 
     const status = await inspectManagedDawarichProvisioning(
       { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
@@ -903,14 +904,14 @@ describe("rotateManagedDawarichOidcSecret", () => {
       if (GENERATION_KEY in updates) {
         generationWrites += 1;
         if (generationWrites === 3) {
-          harness.appliedGenerations.set(
-            DAWARICH_APP_SERVICE_ID,
-            updates[GENERATION_KEY] as string,
-          );
-          harness.appliedGenerations.set(
-            DAWARICH_WORKER_SERVICE_ID,
-            harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[GENERATION_KEY] as string,
-          );
+          const appGeneration = updates[GENERATION_KEY];
+          const workerGeneration = harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[
+            GENERATION_KEY
+          ];
+          assert(typeof appGeneration === "string", "the app write carries no generation");
+          assert(typeof workerGeneration === "string", "the worker has no generation");
+          harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, appGeneration);
+          harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, workerGeneration);
         }
       }
     });

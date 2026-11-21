@@ -16,7 +16,7 @@ import Switch from "@mui/material/Switch";
 import { styled } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useDirectionsStore, useSettingsStore, useVehicles } from "@openmapx/core";
+import { itemAt, useDirectionsStore, useSettingsStore, useVehicles } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
 import { forwardRef, type HTMLAttributes, type SyntheticEvent, useMemo, useState } from "react";
@@ -73,7 +73,8 @@ function rowHeight(row: ListboxRow): number {
  * option exactly one line tall, which is what lets the heights above be fixed.
  */
 function VehicleRow({ index, rows, style }: RowComponentProps<{ rows: ListboxRow[] }>) {
-  const row = rows[index];
+  // The list only asks for indices below `rowCount`, which is `rows.length`.
+  const row = itemAt(rows, index);
   const rowStyle = { ...style, top: (Number(style.top) || 0) + LISTBOX_PADDING };
   if (isGroupRow(row)) {
     return (
@@ -131,7 +132,7 @@ const VehicleListbox = forwardRef<HTMLDivElement, VehicleListboxProps>(function 
         className={className}
         listRef={virtualListRef}
         rowCount={rows.length}
-        rowHeight={(index) => rowHeight(rows[index])}
+        rowHeight={(index) => rowHeight(itemAt(rows, index))}
         rowComponent={VehicleRow}
         rowProps={{ rows }}
         // A numeric height keeps react-window off ResizeObserver entirely, so
