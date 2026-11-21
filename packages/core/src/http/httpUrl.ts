@@ -31,6 +31,8 @@ export function bareDomain(url: string): string {
   try {
     return new URL(url).host.replace(/^www\./, "");
   } catch {
-    return url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/.*$/, "");
+    const rest = url.replace(/^https?:\/\/(www\.)?/, "");
+    const slash = rest.indexOf("/");
+    return slash === -1 ? rest : rest.slice(0, slash);
   }
 }

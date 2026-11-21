@@ -77,4 +77,20 @@ describe("parseDMSCoordinateInput", () => {
     expect(parsed?.lngLat[1]).toBeCloseTo(51.396222, 5);
     expect(parsed?.lngLat[0]).toBeCloseTo(6.758861, 5);
   });
+
+  it.each([
+    "51°23'46.4\"N 6°45'31.9\"E",
+    "51° 23′ 46.4″ N, 6° 45′ 31.9″ E",
+    "51°23'46.4N,6°45'31.9E",
+    "51°23'46.4\" N ,  6°45'31.9\" E",
+  ])("reads %s with any spacing, comma or seconds mark", (input) => {
+    expect(parseDMSCoordinateInput(input)?.label).toBe("51.396222, 6.758861");
+  });
+
+  it("refuses a long run of spaces without backtracking", () => {
+    const input = `51°23'46.4${" ".repeat(50_000)}x`;
+    const started = performance.now();
+    expect(parseDMSCoordinateInput(input)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });

@@ -148,7 +148,7 @@ export function parseCoordinateInput(input: string): { lngLat: LngLat; label: st
 export function parseDMSCoordinateInput(input: string): { lngLat: LngLat; label: string } | null {
   const trimmed = input.trim();
   const dmsRegex =
-    /^(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*["″]?\s*([NSns])\s*[,\s]+\s*(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*["″]?\s*([EWew])$/;
+    /^(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*(?:["″]\s*)?([NSns])[,\s]+(\d{1,3})\s*°\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*(?:["″]\s*)?([EWew])$/;
   const [, latDeg, latMin, latSec, latHemisphere, lngDeg, lngMin, lngSec, lngHemisphere] =
     trimmed.match(dmsRegex) ?? [];
   if (

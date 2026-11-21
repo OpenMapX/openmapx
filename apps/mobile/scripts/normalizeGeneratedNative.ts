@@ -55,9 +55,10 @@ function matchAll(source: string, pattern: RegExp): string[] {
 function gradleProperties(source: string): Record<string, string> {
   const wanted = ["android.minSdkVersion", "android.compileSdkVersion", "android.targetSdkVersion"];
   const result: Record<string, string> = {};
+  const lines = source.split(/\r?\n/);
   for (const key of wanted) {
-    const value = source.match(new RegExp(`^${key.replace(/\./g, "\\.")}=(.*)$`, "m"))?.[1];
-    if (value !== undefined) result[key] = value.trim();
+    const line = lines.find((candidate) => candidate.startsWith(`${key}=`));
+    if (line !== undefined) result[key] = line.slice(key.length + 1).trim();
   }
   return result;
 }
