@@ -87,8 +87,8 @@ vi.mock("../../src/db/index", () => ({
 }));
 const csv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n";
-vi.mock("@openmapx/core/utils/safe-download", async (original) => ({
-  ...(await original<typeof import("@openmapx/core/utils/safe-download")>()),
+vi.mock("@openmapx/core/http/safe-download", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/http/safe-download")>()),
   safeFetchTextResponse: async (url: string) => ({
     text: csv,
     status: 200,

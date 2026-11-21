@@ -1,5 +1,5 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
-import { haversineDistance } from "./coordinates";
+import { haversineDistance } from "../utils/coordinates";
 
 /** Mirrors `SearchIntent["sort_by"]` — the orderings an NL query can request. */
 export type ResultSort = "relevance" | "distance" | "rating";

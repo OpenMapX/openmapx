@@ -6,15 +6,7 @@ import {
 
 export { buildConflationComponents } from "./components.js";
 
-import {
-  haversineMeters,
-  nameSimilarity,
-  osmAddressKey,
-  overtureAddressKey,
-  parsePhones,
-  websiteDomain,
-} from "@openmapx/core/utils/geo-server";
-import { overtureTaxonomyToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
+import { overtureTaxonomyToOpenMapX } from "@openmapx/core/places/overtureCategoryMap";
 import {
   assignConflationPairs,
   type ConflationMethod,
@@ -23,7 +15,15 @@ import {
   DEFAULT_CONFLATION_THRESHOLDS,
   type ScoredConflationPair,
   scoreConflationPair,
-} from "@openmapx/core/utils/poiConflation";
+} from "@openmapx/core/places/poiConflation";
+import {
+  haversineMeters,
+  nameSimilarity,
+  osmAddressKey,
+  overtureAddressKey,
+  parsePhones,
+  websiteDomain,
+} from "@openmapx/core/utils/geo-server";
 import { gridDisk, latLngToCell } from "h3-js";
 import type postgres from "postgres";
 import { requiredRow } from "../../db/required-row.js";

@@ -1,6 +1,6 @@
 import type { PoiSearchResult } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
-import { haversineMeters, normalizeName, normalizePhone, websiteDomain } from "./geo-server";
+import { haversineMeters, normalizeName, normalizePhone, websiteDomain } from "../utils/geo-server";
 
 /**
  * How many results a POI search returns to the client.

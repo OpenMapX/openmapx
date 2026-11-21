@@ -1,7 +1,7 @@
 import { create } from "zustand";
+import { CATEGORY_FACETS } from "../places/categoryFacets";
 import type { BoundingBox } from "../types/geometry";
 import type { SearchIntent } from "../types/search";
-import { CATEGORY_FACETS } from "../utils/categoryFacets";
 import { useCategoryFacetStore } from "./categoryFacetStore";
 import { useOpeningHoursStore } from "./openingHoursStore";
 

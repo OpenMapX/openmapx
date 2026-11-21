@@ -65,8 +65,8 @@ vi.mock("../../src/db/index", () => ({
 const oldCsv =
   "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Bike,Berlin,bike,https://operator.test,https://old.test/gbfs.json,2.3,\n";
 const newCsv = oldCsv.replace("https://old.test/gbfs.json", "https://new.test/gbfs.json");
-vi.mock("@openmapx/core/utils/safe-download", async (original) => ({
-  ...(await original<typeof import("@openmapx/core/utils/safe-download")>()),
+vi.mock("@openmapx/core/http/safe-download", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/http/safe-download")>()),
   safeFetchTextResponse: async (url: string) => {
     state.requests.push(url);
     const text = url.includes("api.github.com")

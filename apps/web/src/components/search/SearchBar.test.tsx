@@ -21,8 +21,8 @@ import {
   type NlpParseResponse,
   useNlpSearch as useRealNlpSearch,
 } from "../../../../../packages/core/src/hooks/useNlpSearch";
-import businessLocationFixture from "../../../../../packages/core/src/utils/__tests__/fixtures/business-location-intent.json";
-import distinctBusinesses from "../../../../../packages/core/src/utils/__tests__/fixtures/distinct-businesses.json";
+import businessLocationFixture from "../../../../../packages/core/src/search/__tests__/fixtures/business-location-intent.json";
+import distinctBusinesses from "../../../../../packages/core/src/search/__tests__/fixtures/distinct-businesses.json";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 

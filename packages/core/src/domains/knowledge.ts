@@ -1,9 +1,9 @@
 import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { RequestJsonScope } from "../http/requestJsonScope";
 import type { AddressEvidence } from "../types/address";
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { AirportInfo, PlaceFact, PlacePhoto, PlaceProvenance } from "../types/place";
-import type { RequestJsonScope } from "../utils/requestJsonScope";
 
 export interface KnowledgeResult extends ContributingRecord {
   /** Exact captured suppliers for each scalar or externalIds.<key>. */

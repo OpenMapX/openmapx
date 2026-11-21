@@ -1,9 +1,12 @@
 import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
-import { readBoundedResponseText } from "../fetchJson";
-import { type ResolvedPlatformEndpoint, resolvePlatformEndpoint } from "../platform-endpoints";
-import { urlCredentialsAsBasicAuth } from "../url-credentials";
-import { USER_AGENT } from "../userAgent";
+import { readBoundedResponseText } from "../../http/fetchJson";
+import { urlCredentialsAsBasicAuth } from "../../http/url-credentials";
+import { USER_AGENT } from "../../http/userAgent";
+import {
+  type ResolvedPlatformEndpoint,
+  resolvePlatformEndpoint,
+} from "../../utils/platform-endpoints";
 import type { OverpassResponse } from "./types";
 
 const OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter";

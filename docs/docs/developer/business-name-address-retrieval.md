@@ -90,7 +90,7 @@ aliases/codes/acronyms, skipping ordinary business names; Overture exposes categ
 search rather than named-business candidates; Overpass matches whole query against
 name without address decomposition. Code: `integrations/geocoding-maptiler/provider.ts`,
 `services/data-manager/src/jobs/search-index/{terms,extract}.ts`,
-`integrations/poi-overture/index.ts`, `packages/core/src/utils/overpass.service.ts`,
+`integrations/poi-overture/index.ts`, `packages/core/src/places/overpass.service.ts`,
 `integrations/search-suggestions/orchestrator.ts`, shared `suggestionRanking.ts`.
 
 | Offline layer/run                           | Verified Hit@3                 | Interpretation                                                                                                                                                   |

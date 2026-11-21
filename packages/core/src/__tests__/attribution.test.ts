@@ -6,7 +6,7 @@ import {
   extractSourcePrefix,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
-} from "../utils/attribution";
+} from "../attribution/attribution";
 
 describe("extractSourcePrefix", () => {
   it("returns full string when no separator", () => {

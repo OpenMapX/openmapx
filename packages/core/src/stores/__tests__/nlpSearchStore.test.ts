@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { OverpassFilter } from "../../places/overpassFilter";
 import type { BoundingBox } from "../../types/geometry";
 import type { SearchIntent } from "../../types/search";
-import type { OverpassFilter } from "../../utils/overpassFilter";
 import { useCategoryFacetStore } from "../categoryFacetStore";
 import { useCategorySearchStore } from "../categorySearchStore";
 import { useNlpSearchStore } from "../nlpSearchStore";

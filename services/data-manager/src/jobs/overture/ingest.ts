@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { assertSupportedOvertureContributors } from "@openmapx/core/places/overtureSource";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
-import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
 import { requiredRow } from "../../db/required-row.js";

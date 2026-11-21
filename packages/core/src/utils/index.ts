@@ -1,60 +1,7 @@
 export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
-export {
-  addressComponentsFromOsmTags,
-  directPlaceDetailsId,
-  formatAddressLocality,
-  sanitizeAddressComponents,
-} from "./addressEvidence";
-export { isCityOrSmaller } from "./administrativePlace";
-export {
-  type AttributionDetail,
-  type AttributionLabels,
-  type AttributionPresentation,
-  buildAttributionHtml,
-  buildAttributionPresentation,
-  buildLicensingHtml,
-  buildRuntimeAttributionHtml,
-  creditLicensing,
-  extractSourcePrefix,
-  isUnstatedLicence,
-  parseAttributionHtml,
-  pickIntegrationForSources,
-  sanitizeAttributionHtml,
-} from "./attribution";
-export {
-  type AttributionPresentationGroup,
-  dedupeAttributionHtml,
-  mergeAttributionDetails,
-  projectAttributionPresentations,
-  type VisibleAttribution,
-} from "./attribution-presentation";
 export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
-export {
-  BRAND_QID_KEYS,
-  brandForPlaceLogo,
-  brandToFilter,
-  firstBrandIdentity,
-  gapFillBranding,
-  withBrandingContributors,
-} from "./brandFilter";
 export { isBuildingStyleLayer } from "./buildingStyle";
-export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
-export {
-  applyFacetFilters,
-  brandOptions,
-  CATEGORY_FACETS,
-  cuisineOptions,
-  facetsForCategory,
-} from "./categoryFacets";
-export { applyHoursFilter } from "./categoryFilter";
 export { AVERAGE_CAR_CO2_GRAMS_PER_KM, estimateDrivingCo2Grams } from "./co2";
-export {
-  type CommonsPage,
-  fetchCommonsMetadata,
-  isDisplayablePhoto,
-  parseCommonsPage,
-} from "./commons-metadata";
-export { connectorStandardOf } from "./connector-standard";
 export { haversineDistance } from "./coordinates";
 export { applyClientSideFilters, splitFilters } from "./dataSourceFilters";
 export {
@@ -77,16 +24,6 @@ export {
   type TimeFormat,
 } from "./dateTimeFormat";
 export {
-  buildDeliveryOptions,
-  classifyDeliveryUrl,
-  resolveOsmOrderUrl,
-} from "./deliveryEvidence";
-export { buildDeliveryOpenUrl } from "./deliveryLink";
-export {
-  DELIVERY_PROVIDER_HOSTS,
-  deliveryProviderIdForHost,
-} from "./deliveryProviderHosts";
-export {
   buildElevationProfile,
   buildElevationProfileFromApi,
   computeElevationStats,
@@ -94,24 +31,6 @@ export {
   downsampleLTTB,
 } from "./elevation";
 export { ConfigurationError } from "./errors";
-export {
-  DEFAULT_FETCH_ERROR_MAX_BYTES,
-  DEFAULT_FETCH_JSON_MAX_BYTES,
-  DEFAULT_FETCH_TIMEOUT_MS,
-  FetchJsonHttpError,
-  type FetchJsonOptions,
-  fetchJson,
-  hasPotentiallyCredentialBearingHeaders,
-  isJsonMediaType,
-  readBoundedJsonResponse,
-  readBoundedResponseText,
-} from "./fetchJson";
-export {
-  type FetchWithRedirectsOptions,
-  fetchWithRedirects,
-} from "./fetchWithRedirects";
-export { buildFlightOpenUrl } from "./flightLink";
-export { isFoodPlace, resolveOsmMenuUrl } from "./foodPlace";
 export { escapeHtml, isSafeHttpUrl, safeHref, sanitizeUrl } from "./format";
 export {
   formatArea,
@@ -146,11 +65,6 @@ export {
   parsePhones,
   websiteDomain,
 } from "./geo-server";
-export {
-  geocodeStopAsPlace,
-  makeSyntheticStopPlace,
-  resolveStopAsPlace,
-} from "./geocodeStopAsPlace";
 export { estimateFlightMinutes, greatCircleArc } from "./greatCircle";
 export {
   bearingDelta,
@@ -160,135 +74,13 @@ export {
   type WeightedBearing,
 } from "./gridOrientation";
 export { lerpHex } from "./hexColor";
-export { buildHotelOpenUrl } from "./hotelLink";
-export { bareDomain } from "./httpUrl";
-export {
-  captureKnowledgeResult,
-  knowledgeFieldContributors,
-  mergeKnowledgeResults,
-} from "./knowledgeContributors";
 export { formatAddress, legalConfig } from "./legalConfig";
-export { isLodging } from "./lodgingPlace";
-export { type MatchRange, matchRanges } from "./matchRanges";
-export { matchesAnyOperator, normalizeOperator, operatorKeyMatches } from "./normalize-operator";
 export { numberAt } from "./numberAt";
 export { validObservedAt } from "./observationTime";
-export {
-  isOpenAtBitmap,
-  isOpenAtSlot,
-  matchingOpeningHours,
-  presentCategoryOpeningHours,
-  presentOpeningHoursInfo,
-} from "./openingHoursClient";
-export { type OpeningHoursSource, openingHoursSourceFromOsm } from "./openingHoursSource";
-export {
-  buildSimpleWeekdaySelectors,
-  createDefaultOpeningHoursRule,
-  extractSimpleWeekdaySelection,
-  OSM_HOLIDAYS,
-  OSM_MONTHS,
-  OSM_RULE_MODIFIERS,
-  OSM_RULE_SEPARATORS,
-  OSM_SOLAR_EVENTS,
-  OSM_WEEKDAYS,
-  type OsmDateEndpoint,
-  type OsmDateOffset,
-  type OsmHoliday,
-  type OsmMonth,
-  type OsmMonthdayRange,
-  type OsmNthEntry,
-  type OsmNthValue,
-  type OsmOpeningHoursDocument,
-  type OsmOpeningHoursParseResult,
-  type OsmOpeningHoursRule,
-  type OsmRuleModifier,
-  type OsmRuleSeparator,
-  type OsmSolarEvent,
-  type OsmTimePoint,
-  type OsmTimeSelector,
-  type OsmWeekday,
-  type OsmWeekdaySelectorItem,
-  type OsmWeekRange,
-  type OsmYearRange,
-  parseOsmOpeningHours,
-  type SimpleWeekdaySelection,
-  serializeOsmOpeningHours,
-  serializeOsmOpeningHoursRule,
-} from "./osmOpeningHoursAst";
-export {
-  buildNodeMap,
-  buildWayMap,
-  isOverpassRuntimeLimit,
-  OverpassRateLimitError,
-  OverpassTimeoutError,
-  OverpassUnavailableError,
-  overpassQuery,
-  overpassQuerySafe,
-  reconstructLineString,
-  reconstructMultiLineString,
-  reconstructMultiPolygon,
-  reconstructPolygon,
-  setOverpassContributorResolver,
-  setOverpassUrl,
-} from "./overpass";
-export type {
-  LineStringGeometry,
-  MultiLineStringGeometry,
-  MultiPolygonGeometry,
-  OverpassElement,
-  OverpassNode,
-  OverpassRelation,
-  OverpassResponse,
-  OverpassWay,
-  PolygonGeometry,
-} from "./overpass/types";
-export type { OsmFilter } from "./overpass.service";
-export {
-  buildCategoryWithAttributesQuery,
-  CATEGORY_FILTERS,
-  searchByCategory,
-  searchByCategoryWithAttributes,
-  searchByOsmTags,
-  searchByText,
-} from "./overpass.service";
-export type { FilterSelector, OverpassFilter, TagOp, TagPredicate } from "./overpassFilter";
-export {
-  buildFilterQuery,
-  categoriesToFilter,
-  FILTER_LIMITS,
-  normalizeFilter,
-  removeFilterPredicate,
-  searchByFilter,
-  validateOverpassFilter,
-} from "./overpassFilter";
-export {
-  OVERTURE_COMMERCIAL_CATEGORIES,
-  openMapXCategoryToOvertureConcepts,
-  overtureTaxonomyToOpenMapX,
-} from "./overtureCategoryTyped";
-export {
-  assertSupportedOvertureContributors,
-  captureOvertureFieldContributors,
-  normalizeOvertureProvenance,
-  OVERTURE_PLACE_DATASET_SOURCE_IDS,
-  type OverturePlaceDataset,
-  type OvertureSourceItem,
-  overtureDatasetSourceId,
-  overturePropertyContributors,
-  selectOvertureName,
-} from "./overtureSource";
-export {
-  type PanoramaxAssetSize,
-  type PanoramaxCreatorMetadata,
-  panoramaxAuthor,
-  panoramaxPictureAssetUrl,
-} from "./panoramax-metadata";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./parseCoordinates";
-export { formatPaymentMethodLabel } from "./paymentMethods";
-export { withPhotoContributors } from "./photo-contributors";
 export {
   ENDPOINT_URL_TEMPLATE,
   isPlatformEndpointId,
@@ -308,92 +100,13 @@ export {
   plusCodeUrl,
   shortenPlusCode,
 } from "./plusCode";
-export {
-  AD_HOC_ICON_PATH,
-  poiCategoryIconPath,
-  resolvePoiCategoryId,
-  resolvePoiIconPath,
-} from "./poi-icon";
-export {
-  assignConflationPairs,
-  type ConflationMethod,
-  type ConflationPairScore,
-  type ConflationPoint,
-  type ConflationResult,
-  type ConflationThresholds,
-  conflate,
-  DEFAULT_CONFLATION_THRESHOLDS,
-  type ScoredConflationPair,
-  scoreConflationPair,
-} from "./poiConflation";
-export { fusePoiResults } from "./poiFusion";
 export { pointInIsochroneGeometry } from "./pointInPolygon";
-export type { RankedPoiResults } from "./poiRanking";
-export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
-export { createRequestJsonScope, type RequestJsonScope } from "./requestJsonScope";
-export {
-  type DistanceReference,
-  resolveDistanceReference,
-  resultDistanceMetres,
-  validResultCoordinates,
-} from "./resultReference";
-export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
-export {
-  actionInForce,
-  actionInPlace,
-  bindsEveryCar,
-  closesRoadForCars,
-  effectInForceAt,
-  effectStatusInForce,
-  effectValidity,
-  isLocalAccessClosure,
-  isRestrictionEvidence,
-  isVehicleSpecific,
-  lifecycleInForce,
-  localizedTextFor,
-  readRoadConditionEffects,
-  roadConditionEffectSchema,
-  roadConditionScheduleSchema,
-  roadConditionValiditySchema,
-  scheduleOccursAt,
-  speedCapKph,
-  VEHICLE_CLASSES,
-  validityHoldsAt,
-  validityWindowHoldsAt,
-  vehicleApplicabilitySchema,
-} from "./roadConditionEffects";
-export {
-  type RoadConditionRouteNotice,
-  roadConditionRouteNotice,
-} from "./roadConditionRouteImpact";
-export {
-  getRoadConditionRoutingDecision,
-  isRoadConditionRoutingEvidence,
-  isRoutingRelevantBinding,
-  type RoadConditionRightsPolicy,
-  routingRightsReasons,
-} from "./roadConditionRouting";
 export {
   isSystemSavedList,
   MAX_SAVED_LISTS_PER_USER,
   MAX_SAVED_PLACES_PER_USER,
 } from "./savedLists";
-export {
-  compareSearchSuggestions,
-  editDistance,
-  isRailwayStationCategory,
-  isUppercaseAcronymIntent,
-  localityScore,
-  MIN_NEAR_SPELLING_LENGTH,
-  MIN_SUGGESTION_TEXT_SCORE,
-  mergeAutocompleteSuggestions,
-  nearSpellingEdits,
-  normalizeSearchTerm,
-  type SuggestionScoreContext,
-  suggestionScore,
-  textMatchScore,
-} from "./searchSuggestion";
 export { sectionSlug } from "./sectionSlug";
 export {
   antisolarPoint,
@@ -410,32 +123,10 @@ export {
   type TwilightBandProperties,
   twilightBands,
 } from "./solar";
-export { sortResultsByIntent } from "./sortResults";
 export {
   clusterSpatialItems,
   type SpatialClusteringOptions,
 } from "./spatialClustering";
-export {
-  bearingDegrees,
-  type DirectionSector,
-  directionSector,
-  type StreetLevelArrow,
-  selectArrowLinks,
-} from "./streetLevelLinks";
-export { formatStreetLevelRef, parseStreetLevelRef } from "./streetLevelRef";
-export {
-  type AutocompleteCandidates,
-  type AutocompleteRowLimits,
-  brandSuggestionRows,
-  DEFAULT_AUTOCOMPLETE_ROW_LIMITS,
-  type EnterAction,
-  enterAction,
-  isPlausibleDestination,
-  matchCategorySuggestions,
-  matchRecentSearches,
-  presetSuggestionRows,
-  rankAutocompleteRows,
-} from "./suggestionRanking";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export {
@@ -449,30 +140,8 @@ export {
   viewerTimeZone,
   zonedWallClockToInstant,
 } from "./timezone";
-export {
-  FLOW_FALLBACK_COLOR,
-  FLOW_LOS_COLORS,
-  FLOW_RATIO_STOPS,
-  flowColorFor,
-} from "./trafficFlowColors";
-export {
-  bandForDelayRatio,
-  type DelayBand,
-  TRAFFIC_BAND_COLORS,
-  type TrafficBand,
-} from "./trafficSeverity";
 export { transitItineraryKey } from "./transitItineraryKey";
 export { itineraryMatchesTransitReference } from "./transitTripReference";
-export { type UrlWithoutCredentials, urlCredentialsAsBasicAuth } from "./url-credentials";
-export {
-  contactDomain,
-  USER_AGENT,
-  USER_AGENT_ADMIN,
-  USER_AGENT_CONTACT,
-  USER_AGENT_TRANSIT,
-  userAgent,
-} from "./userAgent";
-export { assertHttpProtocol, isPublicUrl, validatePublicUrl } from "./validate-url";
 export {
   type WeatherCodeInfo,
   weatherCodeToDescription,

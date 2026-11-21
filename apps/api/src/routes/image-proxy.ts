@@ -3,7 +3,7 @@ import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import {
   createPinnedFetchTransport,
   resolvePublicConnectionAddresses,
-} from "@openmapx/core/utils/safe-download";
+} from "@openmapx/core/http/safe-download";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { configuredTrustedWebOrigins } from "../utils/csrf.js";
 import { requestNetworkKey } from "../utils/rate-limit.js";

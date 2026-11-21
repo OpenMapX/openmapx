@@ -1,6 +1,6 @@
+import { isOpenAtSlot } from "../opening-hours/openingHoursClient";
 import type { OpeningHoursFilter } from "../stores/openingHoursStore";
 import type { CategoryPlace } from "../types/category";
-import { isOpenAtSlot } from "./openingHoursClient";
 
 /**
  * Filters category search results by the active opening-hours filter.

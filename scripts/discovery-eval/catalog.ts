@@ -1,8 +1,8 @@
-import { EVAL_CASES } from "../../packages/core/src/utils/__tests__/search-eval/cases.js";
+import { EVAL_CASES } from "../../packages/core/src/search/__tests__/search-eval/cases.js";
 import { OVERTURE_QUALITY_BASELINE_RELEASE } from "../../services/data-manager/src/jobs/overture/eval/quality-baseline.js";
 import type { EvalCase } from "./report.js";
 
-const search = "packages/core/src/utils/__tests__/search-eval";
+const search = "packages/core/src/search/__tests__/search-eval";
 const navigation = "packages/core/src/navigation";
 const overture = "services/data-manager/__tests__/overture";
 const cards = "apps/web/src/components/panels/category/CategoryResultsContent.test.tsx";
@@ -40,7 +40,7 @@ export const CATALOG: EvalCase[] = [
   {
     id: "identity/co-located-tenants",
     layer: "conflation/synthetic",
-    suite: "packages/core/src/utils/__tests__/poiConflation.test.ts",
+    suite: "packages/core/src/places/__tests__/poiConflation.test.ts",
     note: "Includes plural-per-address restaurants, contradictory address/phone and shared switchboard guards; does not establish real mall floor identity.",
   },
   {

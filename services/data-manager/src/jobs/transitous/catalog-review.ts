@@ -20,8 +20,8 @@ import {
   sameCatalogRuntimeInputs,
   scopeCatalogRuntimeInputs,
 } from "@openmapx/core/catalog-pins";
+import { safeFetchTextResponse } from "@openmapx/core/http/safe-download";
 import { canonicalJson } from "@openmapx/core/ops";
-import { safeFetchTextResponse } from "@openmapx/core/utils/safe-download";
 import {
   type CatalogFeedDiff,
   catalogCompilerSettings,

@@ -2,8 +2,8 @@ import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { renderHook, waitFor } from "@testing-library/react";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../../api/client";
+import { makeSyntheticStopPlace } from "../../../search/geocodeStopAsPlace";
 import { createQueryWrapper } from "../../../test/queryWrapper";
-import { makeSyntheticStopPlace } from "../../../utils/geocodeStopAsPlace";
 import { useLinkedTransitArrivals } from "../useLinkedTransitArrivals";
 import { useLinkedTransitDepartures } from "../useLinkedTransitDepartures";
 

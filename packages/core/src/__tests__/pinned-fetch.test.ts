@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPinnedFetchTransport } from "../utils/pinned-fetch.js";
+import { createPinnedFetchTransport } from "../http/pinned-fetch.js";
 
 const publicAddress = [{ address: "93.184.216.34", family: 4 as const }];
 

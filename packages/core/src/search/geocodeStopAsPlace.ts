@@ -12,7 +12,7 @@ import type { LngLat } from "../types/geometry";
 import { parseId } from "../types/identified";
 import type { Place, PlaceIds } from "../types/place";
 import { createPlace } from "../types/placeIds";
-import { haversineDistance } from "./coordinates";
+import { haversineDistance } from "../utils/coordinates";
 
 /**
  * Collect every identifier a transit stop carries — its explicit `ids`

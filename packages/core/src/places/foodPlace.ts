@@ -1,5 +1,5 @@
+import { toHttpUrl } from "../http/httpUrl";
 import type { Place } from "../types/place";
-import { toHttpUrl } from "./httpUrl";
 
 /** OSM `amenity` values that denote a place serving food/drink to order. */
 const FOOD_AMENITIES = new Set([

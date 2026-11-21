@@ -1,6 +1,6 @@
-import { haversineMeters, nameSimilarity } from "./geo-server";
-import { indexAt } from "./indexAt";
-import { numberAt } from "./numberAt";
+import { haversineMeters, nameSimilarity } from "../utils/geo-server";
+import { indexAt } from "../utils/indexAt";
+import { numberAt } from "../utils/numberAt";
 
 export interface ConflationPoint {
   id: string;

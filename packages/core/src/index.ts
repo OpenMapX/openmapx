@@ -30,8 +30,10 @@ export {
   type TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
 export * from "./api";
+export * from "./attribution";
 export * from "./auth";
 export * from "./constants";
+export * from "./deep-links";
 export * from "./domains";
 export * from "./feed-id";
 // Git URL allowlist (shared by community service repos + community integrations).
@@ -47,6 +49,7 @@ export {
   InvalidGitUrlError,
 } from "./git-url";
 export * from "./hooks";
+export * from "./http";
 export * from "./impact";
 export {
   type ActiveAlert,
@@ -225,10 +228,14 @@ export type {
   VoiceCue,
 } from "./navigation/types";
 export * from "./offline";
+export * from "./opening-hours";
 export * from "./panels";
+export * from "./places";
 export * from "./platform";
+export * from "./road-conditions";
 export * from "./routing";
 export * from "./schemas";
+export * from "./search";
 export * from "./stores";
 export * from "./types";
 export * from "./utils";

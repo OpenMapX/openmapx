@@ -6,7 +6,6 @@ import { BlockList, isIP, SocketAddress } from "node:net";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { parseRetryAfterMs } from "../http/retry-after";
 import {
   type FetchConnectionAddress,
   type FetchImplementation,
@@ -15,6 +14,7 @@ import {
   hostMatchesAllowlist,
 } from "./fetchWithRedirects";
 import { createPinnedFetchTransport } from "./pinned-fetch";
+import { parseRetryAfterMs } from "./retry-after";
 import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
 
 export { hostMatchesAllowlist } from "./fetchWithRedirects";

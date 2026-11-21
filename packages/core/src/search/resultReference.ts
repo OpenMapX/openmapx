@@ -1,5 +1,5 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
-import { haversineDistance } from "./coordinates";
+import { haversineDistance } from "../utils/coordinates";
 import { bboxCenter, validResultCoordinates } from "./sortResults";
 
 export { validResultCoordinates } from "./sortResults";

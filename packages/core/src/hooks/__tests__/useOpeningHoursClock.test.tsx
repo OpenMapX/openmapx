@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { presentOpeningHoursInfo } from "../../utils/openingHoursClient";
+import { presentOpeningHoursInfo } from "../../opening-hours/openingHoursClient";
 import { useOpeningHoursClock } from "../useOpeningHoursClock";
 
 describe("mounted opening-hours freshness", () => {

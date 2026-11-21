@@ -4,7 +4,7 @@ import {
   contributorsForRecords,
 } from "@openmapx/mobility-core/contributors";
 import type { PoiSearchResult } from "../types/category";
-import { parsePhones, websiteDomain } from "./geo-server";
+import { parsePhones, websiteDomain } from "../utils/geo-server";
 import { type ConflationPoint, type ConflationThresholds, conflate } from "./poiConflation";
 
 /**

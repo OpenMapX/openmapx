@@ -388,7 +388,7 @@ describe("SDK response-consumer cancellation", () => {
           {},
           async (response, signal) => {
             expect(signal).toBeInstanceOf(AbortSignal);
-            const { readBoundedJsonResponse } = await import("../utils/fetchJson");
+            const { readBoundedJsonResponse } = await import("../http/fetchJson");
             return readBoundedJsonResponse(response, { signal, maxBytes: 1024 });
           },
           { signal: observer.signal, ...(mode === "timeout" ? { timeoutMs: 10 } : {}) },

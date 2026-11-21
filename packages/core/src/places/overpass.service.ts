@@ -3,10 +3,10 @@ import {
   type FieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
+import { openingHoursSourceFromOsm } from "../opening-hours/openingHoursSource";
 import type { PoiSearchOutcome } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { PlaceProvenance } from "../types/place";
-import { openingHoursSourceFromOsm } from "./openingHoursSource";
 import type { OsmFilter } from "./osmCategoryFilters";
 import { isOverpassRuntimeLimit, OverpassTimeoutError, overpassQuery } from "./overpass";
 import type { OverpassElement } from "./overpass/types";
@@ -43,7 +43,7 @@ export interface CategoryPlaceResult extends ContributingRecord {
   phone?: string;
   website?: string;
   openingHours?: string;
-  openingHoursSource?: import("./openingHoursSource").OpeningHoursSource;
+  openingHoursSource?: import("../opening-hours/openingHoursSource").OpeningHoursSource;
   countryCode?: string;
   isOpen?: boolean;
   provenance?: PlaceProvenance[];

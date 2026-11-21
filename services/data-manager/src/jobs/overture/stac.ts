@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import {
   assertSupportedOvertureContributors,
   parseOvertureSourceCatalogue,
-} from "@openmapx/core/utils/overtureSource";
+} from "@openmapx/core/places/overtureSource";
 import type { captureOvertureCatalogue } from "./attribution-capture.js";
 import type { RegionBbox } from "./pull.js";
 

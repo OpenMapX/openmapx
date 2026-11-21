@@ -2,9 +2,9 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
+import { isUppercaseAcronymIntent, normalizeSearchTerm } from "../search/searchSuggestion";
 import type { LngLat } from "../types/geometry";
 import type { SearchSuggestionsResponse } from "../types/searchSuggestion";
-import { isUppercaseAcronymIntent, normalizeSearchTerm } from "../utils/searchSuggestion";
 
 function roundedCoordinate(value: number): string {
   return value.toFixed(2);

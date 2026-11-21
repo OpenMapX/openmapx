@@ -18,11 +18,11 @@ import {
   readCapturedFieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
+import { overtureTaxonomyCategoryEvidence } from "./places/overtureCategoryMap";
+import { captureOvertureFieldContributors, type OvertureSourceItem } from "./places/overtureSource";
 import type { CategoryPlace } from "./types/category";
 import type { Place } from "./types/place";
 import { haversineDistance } from "./utils/coordinates";
-import { overtureTaxonomyCategoryEvidence } from "./utils/overtureCategoryMap";
-import { captureOvertureFieldContributors, type OvertureSourceItem } from "./utils/overtureSource";
 
 export const AMBIENT_POLICY_VERSION = 2;
 export const AMBIENT_FORMAT_VERSION = 2;

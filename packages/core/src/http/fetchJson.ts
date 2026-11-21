@@ -1,4 +1,4 @@
-import { parseRetryAfterMs } from "../http/retry-after";
+import { parseRetryAfterMs } from "./retry-after";
 import { USER_AGENT } from "./userAgent";
 
 /** Default HTTP timeout for upstream JSON APIs. */

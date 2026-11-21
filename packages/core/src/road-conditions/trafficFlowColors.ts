@@ -1,4 +1,4 @@
-import { lerpHex } from "./hexColor";
+import { lerpHex } from "../utils/hexColor";
 import { TRAFFIC_BAND_COLORS } from "./trafficSeverity";
 
 /**

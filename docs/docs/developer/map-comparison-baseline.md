@@ -111,7 +111,7 @@ screenshot fold; the listed facts are available sheet content, not all visible
 at once. Repeat the initial sheet state before comparing layout.
 
 For offline search-ranking regressions, use the existing
-`packages/core/src/utils/__tests__/search-eval` fixtures and
+`packages/core/src/search/__tests__/search-eval` fixtures and
 `pnpm search-eval:record`; this visual baseline complements that suite.
 
 ## Repeat and assess a change

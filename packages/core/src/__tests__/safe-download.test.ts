@@ -43,8 +43,7 @@ vi.mock("undici", async (importOriginal) => {
 // mocked module to drive the mock.
 import { lookup as dnsLookup } from "node:dns/promises";
 import { fetch as undiciFetch } from "undici";
-import { mobilityHttpTransport } from "../mobility-http-transport";
-import { createPinnedFetchTransport } from "../utils/pinned-fetch";
+import { createPinnedFetchTransport } from "../http/pinned-fetch";
 import {
   assertResolvesToPublicIp,
   resolvePublicConnectionAddresses,
@@ -54,7 +53,8 @@ import {
   safeFetchJsonResponse,
   safeFetchStatus,
   safeFetchText,
-} from "../utils/safe-download";
+} from "../http/safe-download";
+import { mobilityHttpTransport } from "../mobility-http-transport";
 
 // dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
 const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;

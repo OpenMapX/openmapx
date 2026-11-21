@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
-import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
+import type { OsmFilter } from "@openmapx/core/places/osmCategoryFilters";
+import { CATEGORY_FILTERS } from "@openmapx/core/places/osmCategoryFilters";
 import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";

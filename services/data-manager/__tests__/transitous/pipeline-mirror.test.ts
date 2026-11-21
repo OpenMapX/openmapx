@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { SafeDownloadOptions } from "@openmapx/core/http/safe-download";
 import { transitousRunnerArgv } from "@openmapx/core/transitous-runner";
-import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import {

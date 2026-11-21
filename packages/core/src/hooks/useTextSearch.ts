@@ -3,9 +3,9 @@ import { useMemo } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../api/queryPolicy";
+import { detectDominantCategory } from "../places/categoryFacets";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
 import type { CategorySearchResponse } from "../types/category";
-import { detectDominantCategory } from "../utils/categoryFacets";
 import { useExploreFilters } from "./useExploreFilters";
 
 /**

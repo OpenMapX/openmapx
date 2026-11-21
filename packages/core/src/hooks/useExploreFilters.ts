@@ -1,10 +1,10 @@
 import { useMemo } from "react";
+import { presentCategoryOpeningHours } from "../opening-hours/openingHoursClient";
+import { applyFacetFilters } from "../places/categoryFacets";
+import { applyHoursFilter } from "../places/categoryFilter";
 import { useCategoryFacetStore } from "../stores/categoryFacetStore";
 import { useOpeningHoursStore } from "../stores/openingHoursStore";
 import type { CategoryPlace } from "../types/category";
-import { applyFacetFilters } from "../utils/categoryFacets";
-import { applyHoursFilter } from "../utils/categoryFilter";
-import { presentCategoryOpeningHours } from "../utils/openingHoursClient";
 import { useOpeningHoursClock } from "./useOpeningHoursClock";
 
 /**

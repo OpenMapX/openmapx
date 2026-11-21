@@ -13,7 +13,7 @@ import escapeHtml from "escape-html";
 import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
 import type { Attribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
-import { requiresChangeNotice } from "./changeNotice";
+import { requiresChangeNotice } from "../utils/changeNotice";
 
 function safeExternalUrl(value: string | undefined, baseUrl?: string): string | undefined {
   if (!value) return undefined;

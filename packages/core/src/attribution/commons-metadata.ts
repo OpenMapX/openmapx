@@ -1,9 +1,9 @@
 import { licensingFromDeclaration, licensingLinks } from "@openmapx/mobility-core/licensing";
+import { fetchJson } from "../http/fetchJson";
+import { USER_AGENT } from "../http/userAgent";
 import type { PlacePhoto } from "../types/place";
 import { parseAttributionHtml } from "./attribution";
-import { fetchJson } from "./fetchJson";
 import { withPhotoContributors } from "./photo-contributors";
-import { USER_AGENT } from "./userAgent";
 
 const HEADERS = {
   "User-Agent": USER_AGENT,

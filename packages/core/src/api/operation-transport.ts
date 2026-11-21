@@ -1,4 +1,4 @@
-import { readBoundedJsonResponse, readBoundedResponseText } from "../utils/fetchJson";
+import { readBoundedJsonResponse, readBoundedResponseText } from "../http/fetchJson";
 import { consumeAdminBytes } from "./admin-byte-reader";
 import {
   type ApiClient,

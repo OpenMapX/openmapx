@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
-import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
+import type { SafeDownloadOptions } from "@openmapx/core/http/safe-download";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const undiciLifecycle = vi.hoisted(() => ({

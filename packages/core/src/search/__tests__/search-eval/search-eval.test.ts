@@ -4,7 +4,7 @@ import type { BrandSuggestResponse } from "../../../types/brand";
 import { CATEGORY_DEFINITIONS } from "../../../types/category";
 import type { AutocompleteResult } from "../../../types/geocoding";
 import type { ChipTranslation, PresetMatch } from "../../../types/presetMatch";
-import { haversineDistance } from "../../coordinates";
+import { haversineDistance } from "../../../utils/coordinates";
 import {
   brandSuggestionRows,
   type EnterAction,

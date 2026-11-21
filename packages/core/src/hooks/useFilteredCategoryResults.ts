@@ -1,9 +1,9 @@
 import { useMemo } from "react";
+import { presentCategoryOpeningHours } from "../opening-hours/openingHoursClient";
+import { applyHoursFilter } from "../places/categoryFilter";
+import type { TagPredicate } from "../places/overpassFilter";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
 import { useOpeningHoursStore } from "../stores/openingHoursStore";
-import { applyHoursFilter } from "../utils/categoryFilter";
-import { presentCategoryOpeningHours } from "../utils/openingHoursClient";
-import type { TagPredicate } from "../utils/overpassFilter";
 import { useCategorySearch } from "./useCategorySearch";
 import { useExploreFilters } from "./useExploreFilters";
 import { useFilterSearch } from "./useFilterSearch";

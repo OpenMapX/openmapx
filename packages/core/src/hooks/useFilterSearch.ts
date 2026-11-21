@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../api/queryPolicy";
+import { normalizeFilter, type OverpassFilter, type TagPredicate } from "../places/overpassFilter";
 import type { CategorySearchResponse } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
-import { normalizeFilter, type OverpassFilter, type TagPredicate } from "../utils/overpassFilter";
 import { isAreaTooLarge } from "./useCategorySearch";
 
 /**

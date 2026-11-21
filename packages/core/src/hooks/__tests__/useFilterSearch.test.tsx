@@ -2,9 +2,9 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
+import { normalizeFilter, type OverpassFilter } from "../../places/overpassFilter";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { BoundingBox } from "../../types/geometry";
-import { normalizeFilter, type OverpassFilter } from "../../utils/overpassFilter";
 import { filterSearchQueryOptions, useFilterSearch } from "../useFilterSearch";
 
 const bbox: BoundingBox = { south: 52.4, west: 13.3, north: 52.6, east: 13.5 };

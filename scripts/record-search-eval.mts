@@ -1,6 +1,6 @@
 /**
  * Records selected adapted API responses behind each search-eval case, so the ranking
- * eval (packages/core/src/utils/__tests__/search-eval) runs offline and
+ * eval (packages/core/src/search/__tests__/search-eval) runs offline and
  * deterministically. Needs a running API:
  *
  *   pnpm search-eval:record [--api http://localhost:3001] [case-id …]
@@ -16,12 +16,12 @@ import { fileURLToPath } from "node:url";
 import {
   EVAL_CASES,
   type EvalCase,
-} from "../packages/core/src/utils/__tests__/search-eval/cases.js";
+} from "../packages/core/src/search/__tests__/search-eval/cases.js";
 import { captureMetadata } from "./discovery-eval/capture.js";
 
 const FIXTURE_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../packages/core/src/utils/__tests__/search-eval/fixtures",
+  "../packages/core/src/search/__tests__/search-eval/fixtures",
 );
 
 const args = process.argv.slice(2);

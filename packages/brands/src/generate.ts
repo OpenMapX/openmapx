@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrandKind } from "@openmapx/core";
-import { BRAND_QID_KEYS } from "@openmapx/core/utils/brandFilter";
+import { BRAND_QID_KEYS } from "@openmapx/core/places/brandFilter";
 import { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 import { normalize } from "./normalize.ts";
 import type { BrandArtifact, BrandEntry } from "./types.ts";

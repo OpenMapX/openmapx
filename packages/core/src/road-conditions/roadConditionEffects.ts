@@ -6,7 +6,7 @@ import type {
   RoadConditionSchedule,
   RoadConditionValidity,
 } from "../types/roadConditions";
-import { localDateInZone, zonedWallClockToInstant } from "./wallClock";
+import { localDateInZone, zonedWallClockToInstant } from "../utils/wallClock";
 
 /**
  * The host's mirror of the OpenConditions model `Effect`: what a situation

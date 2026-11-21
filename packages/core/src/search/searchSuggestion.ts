@@ -8,7 +8,7 @@ import type { AutocompleteResult } from "../types/geocoding";
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { SearchMatchKind } from "../types/searchSuggestion";
-import { haversineDistance } from "./coordinates";
+import { haversineDistance } from "../utils/coordinates";
 
 const AIRPORT_RAW_CATEGORY = "aeroway/aerodrome";
 

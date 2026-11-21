@@ -8,10 +8,7 @@ import {
   type FieldContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import { useDataSourceStore } from "../stores/dataSourceStore";
-import type { DataSourceDetail } from "../types/dataSource";
-import type { ReverseGeocodingResult } from "../types/geocoding";
-import type { Place } from "../types/place";
+import { matchingOpeningHours } from "../opening-hours/openingHoursClient";
 import {
   directPlaceDetailsId,
   formatAddressLocality,
@@ -20,8 +17,11 @@ import {
   isLocalityOnlyAddress,
   isMovingDataSourcePlace,
   selectPlaceAddress,
-} from "../utils/addressEvidence";
-import { matchingOpeningHours } from "../utils/openingHoursClient";
+} from "../places/addressEvidence";
+import { useDataSourceStore } from "../stores/dataSourceStore";
+import type { DataSourceDetail } from "../types/dataSource";
+import type { ReverseGeocodingResult } from "../types/geocoding";
+import type { Place } from "../types/place";
 import { useDataSourceMatch } from "./useDataSourceMatch";
 import { useOpeningHoursClock } from "./useOpeningHoursClock";
 import { usePlaceDetails } from "./usePlaceDetails";

@@ -3,9 +3,9 @@
  * All frontend data fetching goes through this client — never directly
  * to Pelias / OSRM / Valhalla.
  */
-import { parseRetryAfterMs } from "../http/retry-after";
 
-import { readBoundedResponseText } from "../utils/fetchJson";
+import { readBoundedResponseText } from "../http/fetchJson";
+import { parseRetryAfterMs } from "../http/retry-after";
 
 export interface ApiClientConfig {
   baseUrl: string;

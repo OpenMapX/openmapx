@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchWithRedirects } from "../utils/fetchWithRedirects.js";
-import { createPinnedFetchTransport } from "../utils/pinned-fetch.js";
+import { fetchWithRedirects } from "../http/fetchWithRedirects.js";
+import { createPinnedFetchTransport } from "../http/pinned-fetch.js";
 
 afterEach(() => {
   vi.useRealTimers();
