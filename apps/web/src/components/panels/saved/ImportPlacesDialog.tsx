@@ -295,8 +295,7 @@ export function ImportPlacesDialog({
             {skippedLists.length > 0 && (
               <Typography
                 variant="body2"
-                color="text.secondary"
-                sx={{ mb: 2, overflowWrap: "anywhere" }}
+                sx={{ color: "text.secondary", mb: 2, overflowWrap: "anywhere" }}
               >
                 {t("importSkippedLists", {
                   count: skippedLists.length,
@@ -304,7 +303,7 @@ export function ImportPlacesDialog({
                 })}
               </Typography>
             )}
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
               {t("importLookupInfo")}
             </Typography>
             {lists.map((list, index) => {
@@ -373,7 +372,7 @@ export function ImportPlacesDialog({
                           }
                           label={t("importApproximate", { count: approximate })}
                         />
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {t("importApproximateInfo")}
                         </Typography>
                       </Box>

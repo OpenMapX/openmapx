@@ -6,6 +6,8 @@ import {
   TransitCredentialsSection,
 } from "./TransitCredentialsSection";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   preview: vi.fn(),

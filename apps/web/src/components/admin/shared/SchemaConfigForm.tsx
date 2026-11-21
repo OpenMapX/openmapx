@@ -20,8 +20,11 @@ import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useCallback, useId, useMemo, useState } from "react";
+import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
+import { useConfigSourceLabel } from "./configSourceLabel";
 
 // The shared, schema-driven config form used by BOTH the integration and the
 // service admin tabs. It renders non-secret configSchema fields from a resolved
@@ -91,6 +94,7 @@ export function buildConfigDiff(
   fields: SchemaConfigField[],
   values: Record<string, unknown>,
   changedKeys: string[],
+  t: AdminTranslator<"adminShared">,
 ): Record<string, unknown> {
   const diff: Record<string, unknown> = {};
   for (const key of changedKeys) {
@@ -101,12 +105,12 @@ export function buildConfigDiff(
       (OPERATOR_STRING_FORMATS as readonly string[]).includes(field.format) &&
       (typeof value !== "string" || !validOperatorString(value, field.format))
     )
-      throw Error(`${field.title} has an invalid format`);
+      throw new AdminDisplayError(t("fieldInvalidFormat", { field: field.title }));
     if (field && isStructuredField(field)) {
       try {
         diff[key] = JSON.parse(String(value));
       } catch {
-        throw new Error(`${field.title} must be valid JSON`);
+        throw new AdminDisplayError(t("fieldInvalidJson", { field: field.title }));
       }
     } else {
       diff[key] = value;
@@ -151,8 +155,15 @@ export function extractConfigFields(
     }));
 }
 
-export class AdminActionNotStartedError extends Error {}
+export class AdminActionNotStartedError extends AdminDisplayError {}
+/**
+ * The configuration was saved, but applying it to the service did not start or
+ * could not be confirmed. The form that shows it explains which, in the
+ * reader's language.
+ */
 export class SavedConfigurationApplyError extends Error {
+  readonly notStarted: boolean;
+  readonly detail: string | null;
   constructor(cause: unknown) {
     const status =
       cause instanceof Error && cause.cause instanceof ApiClientError ? cause.cause.status : null;
@@ -161,10 +172,12 @@ export class SavedConfigurationApplyError extends Error {
       (status !== null && status >= 400 && status < 500 && status !== 408);
     super(
       notStarted
-        ? `Configuration saved. Service application was not started. ${cause instanceof Error ? cause.message : "The action was rejected."}`
-        : "Configuration saved. Service application could not be confirmed. Inspect Activity before trying again.",
+        ? "Saved configuration application was not started"
+        : "Saved configuration application could not be confirmed",
       { cause },
     );
+    this.notStarted = notStarted;
+    this.detail = cause instanceof Error ? cause.message : null;
   }
 }
 export interface SchemaConfigFormProps {
@@ -205,13 +218,21 @@ export function SchemaConfigForm({
   onSave,
   onSaveAndApply,
   onApplySaved,
-  applySavedLabel = "Apply saved configuration",
+  applySavedLabel: applySavedLabelProp,
   applyPending = false,
-  applyLabel = "Save & apply",
-  applySuccessMessage = "Configuration saved and applied.",
-  applySavedSuccessMessage = "Saved configuration application queued.",
-  emptyMessage = "No editable configuration fields. Credentials live on the Credentials tab.",
+  applyLabel: applyLabelProp,
+  applySuccessMessage: applySuccessMessageProp,
+  applySavedSuccessMessage: applySavedSuccessMessageProp,
+  emptyMessage: emptyMessageProp,
 }: SchemaConfigFormProps) {
+  const t = useAdminTranslations("adminShared");
+  const sourceLabel = useConfigSourceLabel();
+  const applySavedLabel = applySavedLabelProp ?? t("applySavedConfiguration");
+  const applyLabel = applyLabelProp ?? t("saveAndApply");
+  const applySuccessMessage = applySuccessMessageProp ?? t("configurationSavedAndApplied");
+  const applySavedSuccessMessage =
+    applySavedSuccessMessageProp ?? t("savedConfigurationApplicationQueued");
+  const emptyMessage = emptyMessageProp ?? t("noEditableConfigurationFieldsCredentials");
   const fields = useMemo(() => extractConfigFields(schema, excludeKeys), [schema, excludeKeys]);
 
   // Env-overridden fields are dictated by the host, so they are never seeded
@@ -257,7 +278,7 @@ export function SchemaConfigForm({
     setPending(kind);
     const submitted = Object.fromEntries(changedKeys.map((key) => [key, values[key]]));
     try {
-      const diff = buildConfigDiff(fields, values, changedKeys);
+      const diff = buildConfigDiff(fields, values, changedKeys, t);
       await fn(diff);
       draft.acknowledge(submitted);
       setSaved(kind === "save" ? "saved" : kind === "apply-saved" ? "applied-saved" : "applied");
@@ -265,8 +286,14 @@ export function SchemaConfigForm({
       if (err instanceof SavedConfigurationApplyError) {
         draft.acknowledge(submitted);
         setSaved("saved");
+        setError(
+          err.notStarted
+            ? t("applyNotStarted", { detail: err.detail ?? t("applyRejected") })
+            : t("applyUnconfirmed"),
+        );
+      } else {
+        setError(adminErrorText(err, t("saveFailed")));
       }
-      setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setPending(null);
     }
@@ -287,12 +314,15 @@ export function SchemaConfigForm({
           severity="warning"
           action={
             <Button disabled={saving} onClick={() => draft.keepEdits()}>
-              Keep my edits
+              {t("keepMyEdits")}
             </Button>
           }
         >
-          Saved values changed for {draft.conflicts.join(", ")}. Review your edits or discard them
-          before saving.
+          {t("savedValuesChangedForConflicts", {
+            settingLabels: draft.conflicts
+              .map((key) => fields.find((field) => field.key === key)?.title ?? key)
+              .join(", "),
+          })}
         </Alert>
       )}
       {error && (
@@ -302,12 +332,11 @@ export function SchemaConfigForm({
       )}
       {saved === "saved" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved.
           {onApplySaved
-            ? " Apply the saved configuration when ready."
+            ? t("configurationSavedApplyWhenReady")
             : onSaveAndApply
-              ? " Runtime application is still pending."
-              : ""}
+              ? t("configurationSavedRuntimePending")
+              : t("configurationSaved")}
         </Alert>
       )}
       {(saved === "applied" || saved === "applied-saved") && (
@@ -318,14 +347,17 @@ export function SchemaConfigForm({
       {envPrefix && (
         <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
           <Typography variant="caption">
-            Host env vars always win. Override any field below by setting{" "}
-            <Box
-              component="code"
-              sx={{ fontFamily: "monospace", fontSize: "0.78rem", fontWeight: 600 }}
-            >
-              {envPrefix}&lt;KEY&gt;
-            </Box>{" "}
-            in the host environment.
+            {t.rich("hostEnvVarsAlwaysWin", {
+              pattern: `${envPrefix}<KEY>`,
+              code: (chunks) => (
+                <Box
+                  component="code"
+                  sx={{ fontFamily: "monospace", fontSize: "0.78rem", fontWeight: 600 }}
+                >
+                  {chunks}
+                </Box>
+              ),
+            })}
           </Typography>
         </Alert>
       )}
@@ -337,6 +369,7 @@ export function SchemaConfigForm({
           source === "env" ||
           source === "config.json" ||
           ownership?.[field.key]?.writable === false;
+        const envVar = ownership?.[field.key]?.envVar;
         const displayValue = isEnvOverridden ? toFormValue(field, entry?.value) : values[field.key];
 
         return (
@@ -345,9 +378,9 @@ export function SchemaConfigForm({
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {field.title}
               </Typography>
-              <Tooltip title={`Currently sourced from: ${source}`}>
+              <Tooltip title={t("currentlySourcedFrom", { sourceLabel: sourceLabel(source) })}>
                 <Chip
-                  label={source}
+                  label={sourceLabel(source)}
                   size="small"
                   color={SOURCE_COLOR[source] ?? "default"}
                   variant="outlined"
@@ -358,10 +391,10 @@ export function SchemaConfigForm({
                 <Chip
                   label={
                     source === "config.json"
-                      ? "host file"
+                      ? t("hostFile")
                       : source === "env"
-                        ? "env override"
-                        : "host owned"
+                        ? t("envOverride")
+                        : t("hostOwned")
                   }
                   size="small"
                   color="success"
@@ -375,10 +408,12 @@ export function SchemaConfigForm({
               </Typography>
             )}
             {isEnvOverridden && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {source === "config.json"
-                  ? "Controlled by the host config file. Remove the host override, refresh, then save."
-                  : `Controlled by the host environment${ownership?.[field.key]?.envVar ? ` (${ownership[field.key].envVar})` : ""}. Remove the override, refresh, then save.`}
+                  ? t("controlledByTheHostConfig")
+                  : envVar
+                    ? t("controlledByHostVariable", { envVar })
+                    : t("controlledByTheHostEnvironment")}
               </Typography>
             )}
             {field.setup && <CredentialSetupGuide setup={field.setup} />}
@@ -399,7 +434,10 @@ export function SchemaConfigForm({
                   />
                 }
                 label={
-                  <Typography variant="body2" color={isEnvOverridden ? "text.disabled" : undefined}>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: isEnvOverridden ? "text.disabled" : undefined }}
+                  >
                     {String(displayValue ?? false)}
                   </Typography>
                 }
@@ -414,7 +452,7 @@ export function SchemaConfigForm({
                 minRows={6}
                 maxRows={24}
                 spellCheck={false}
-                helperText="JSON"
+                helperText={t("json")}
                 sx={{
                   maxWidth: 760,
                   "& textarea": { fontFamily: "monospace", fontSize: "0.8rem" },
@@ -476,7 +514,7 @@ export function SchemaConfigForm({
       <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
         {draft.dirty && (
           <Button size="small" disabled={saving} onClick={() => draft.discard()}>
-            Discard
+            {t("discard")}
           </Button>
         )}
         <Button
@@ -486,7 +524,7 @@ export function SchemaConfigForm({
           onClick={() => run("save", onSave)}
           disabled={saving || changedKeys.length === 0 || draft.conflicts.length > 0}
         >
-          Save{changedKeys.length > 0 ? ` (${changedKeys.length} changed)` : ""}
+          {changedKeys.length > 0 ? t("saveChanged", { count: changedKeys.length }) : t("save")}
         </Button>
         {(onSaveAndApply || onApplySaved) && (
           <Button

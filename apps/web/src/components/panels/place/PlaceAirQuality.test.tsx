@@ -227,9 +227,7 @@ function forecast(): AirQualityForecastResponse {
 }
 
 function renderSection() {
-  return render(
-    <PlaceAirQuality lat={52.5} lng={13.4} enabled countryCode="DE" subdivisionCode="DE-BE" />,
-  );
+  return render(<PlaceAirQuality lat={52.5} lng={13.4} countryCode="DE" subdivisionCode="DE-BE" />);
 }
 
 beforeEach(() => {
@@ -253,7 +251,7 @@ describe("PlaceAirQuality", () => {
       isError: true,
       error: new Error("offline"),
     };
-    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} enabled />);
+    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} />);
     expect(screen.getByRole("alert")).toHaveTextContent("airQuality.requestError");
 
     hooks.current = {
@@ -267,7 +265,7 @@ describe("PlaceAirQuality", () => {
       isError: false,
       error: null,
     };
-    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} enabled />);
+    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} />);
     expect(screen.getByRole("status")).toHaveTextContent("airQuality.unavailable");
   });
 
@@ -523,7 +521,7 @@ describe("PlaceAirQuality", () => {
       isError: false,
       error: null,
     };
-    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} enabled />);
+    view.rerender(<PlaceAirQuality lat={52.5} lng={13.4} />);
     expect(screen.getByText("airQuality.comparison.unavailable")).toBeVisible();
     expect(screen.getByText("airQuality.requirement.epaWindow")).toBeVisible();
   });

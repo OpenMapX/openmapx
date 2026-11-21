@@ -13,12 +13,11 @@ import { useContributorResolver } from "@/integration-api/overlay/useContributor
 interface Props {
   lat: number;
   lng: number;
-  enabled?: boolean;
 }
 
-export function PlaceWeather({ lat, lng, enabled = true }: Props) {
+export function PlaceWeather({ lat, lng }: Props) {
   const t = useTranslations("weather");
-  const { data, isLoading } = useCurrentWeather(lat, lng, enabled);
+  const { data, isLoading } = useCurrentWeather(lat, lng);
   const resolve = useContributorResolver();
 
   if (isLoading)

@@ -79,6 +79,9 @@ it("keeps the newer map stop when transit resolutions finish out of order", asyn
   resolveStop.mockImplementation(() => requests.shift());
   fake.map.setStyle({} as never);
   usePlaceStore.getState().setSelectedPlace(null);
+  reach.isTransitCategory = true;
+  transitStops = [{ id: "stop", name: "Stop", lat: 50, lng: 8, modes: ["bus"], provider: "test" }];
+  useCategorySearchStore.setState({ activeCategory: "transit" });
   const view = render(<CategoryResultMarkers />);
   transitClick("A");
   transitClick("B");
@@ -92,6 +95,8 @@ it("keeps the newer map stop when transit resolutions finish out of order", asyn
   });
   expect(usePlaceStore.getState().selectedPlace).toBe(placeB);
   view.unmount();
+  reach.isTransitCategory = false;
+  transitStops = undefined;
 });
 
 it.each(["dismiss", "unmount"])("does not publish a pending map stop after %s", async (action) => {
@@ -122,7 +127,7 @@ it.each(["dismiss", "unmount"])("does not publish a pending map stop after %s", 
   view.unmount();
 });
 
-it("keeps brand-enriched data on unrelated events and fences old image completions after a style replacement", async () => {
+it("keeps brand-enriched data on unrelated events, reloads logos after a style replacement and drops unwanted ones", async () => {
   const OriginalImage = globalThis.Image;
   const images: Array<{ onload: (() => void) | null; src: string }> = [];
   globalThis.Image = class {
@@ -212,16 +217,13 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     expect(fake.state.counts.setData.get("category-results-source")).toBe(uploads);
     expect(reads).toBe(coordinateReads);
     expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
-    const oldImage = images[0];
     act(() => {
       fake.map.setStyle({} as never);
     });
     expect(loadedBrandMarkerContributors(fake.map, "Q1")).toEqual([]);
     fake.state.styleLoaded = false;
-    await act(async () => {
-      oldImage.onload?.();
-    });
-    expect(fake.state.layers.has("category-results-layer")).toBe(false);
+    // The layers come back inside the style change, and the logo loads again.
+    expect(fake.state.layers.has("category-results-layer")).toBe(true);
     // Resolve this style's optional logo while an unrelated source stays pending.
     await waitFor(() =>
       expect(
@@ -234,11 +236,25 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     expect(fake.map.hasImage("brand-marker-Q1")).toBe(true);
     expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
     expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
+    // A logo still loading when the results change to ones without that brand
+    // never reaches the map.
+    const pendingFrom = images.length;
+    act(() => {
+      fake.map.setStyle({} as never);
+    });
+    await waitFor(() =>
+      expect(
+        images
+          .slice(pendingFrom)
+          .some((image) => decodeURIComponent(image.src).includes("<image ")),
+      ).toBe(true),
+    );
     reach.filtered = [{ id: "new", name: "New", coordinates: [9, 51] }];
     view.rerender(<CategoryResultMarkers />);
     await act(async () => {
-      for (const img of images) img.onload?.();
+      for (const img of images.slice(pendingFrom)) img.onload?.();
     });
+    expect(fake.map.hasImage("brand-marker-Q1")).toBe(false);
     expect(data().features[0].properties?.id).toBe("new");
     view.unmount();
   } finally {
@@ -250,7 +266,7 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
 });
 
 it.each([false, true])(
-  "restores surviving-source layers and retries failed marker images (transit=%s)",
+  "draws its layers at once and retries a failed marker image with the next style (transit=%s)",
   async (transit) => {
     const OriginalImage = globalThis.Image;
     const images: Array<{ onload: (() => void) | null; onerror: (() => void) | null }> = [];
@@ -274,28 +290,20 @@ it.each([false, true])(
       fake.map.setStyle({} as never);
       useCategorySearchStore.setState({ activeCategory: "restaurant" });
       view = render(<CategoryResultMarkers />);
-      const source = fake.map.getSource(sourceId);
+      expect(fake.map.getSource(sourceId)).toBeDefined();
+      expect(fake.map.getLayer(layerId)).toBeDefined();
       await act(async () => {
         images[0].onerror?.();
       });
+      expect(fake.map.hasImage(imageId)).toBe(false);
       const attempts = images.length;
-      await act(async () => {
-        fake.emit("styledata");
-      });
+      act(() => fake.map.setStyle({} as never));
       expect(images.length).toBe(attempts + 1);
       await act(async () => {
         images.at(-1)?.onload?.();
       });
       expect(fake.map.hasImage(imageId)).toBe(true);
       expect(fake.map.getLayer(layerId)).toBeDefined();
-      const uploads = fake.state.counts.setData.get(sourceId) ?? 0;
-      await act(async () => {
-        fake.map.removeLayer(layerId);
-        fake.emit("styledata");
-      });
-      expect(fake.map.getLayer(layerId)).toBeDefined();
-      expect(fake.map.getSource(sourceId)).toBe(source);
-      expect(fake.state.counts.setData.get(sourceId) ?? 0).toBe(uploads);
     } finally {
       view?.unmount();
       globalThis.Image = OriginalImage;
@@ -563,6 +571,35 @@ it("keeps hover over the focused name outside the pin symbol", async () => {
   expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBe("osm:node/1");
   act(() => fake.emit("mousemove", { point: { x: 150, y: 14 } }));
   expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBeNull();
+  view.unmount();
+  reach.filtered = [result];
+});
+
+it("keeps hover on the pinned result while the pointer is on the pin over a neighbour", async () => {
+  fake.map.setStyle({} as never);
+  fake.map.addImage("category-marker-restaurant", {} as never);
+  reach.filtered = [
+    { id: "osm:node/1", name: "One", coordinates: [8, 50] },
+    { id: "osm:node/2", name: "Two", coordinates: [8, 50.0001] },
+  ];
+  useCategorySearchStore.setState({
+    activeCategory: "restaurant",
+    hoveredCategoryPlaceId: "osm:node/1",
+  });
+  const pinElement = document.createElement("div");
+  pinElement.dataset.openmapxPinMarker = "";
+  const head = document.createElement("span");
+  pinElement.appendChild(head);
+  const view = render(<CategoryResultMarkers />);
+  await act(async () => {});
+  fake.setRenderedFeatures("category-results-layer", [
+    { properties: { id: "osm:node/2" }, layer: { id: "category-results-layer" } } as never,
+  ]);
+
+  act(() => fake.emit("mousemove", { point: { x: 30, y: 14 }, originalEvent: { target: head } }));
+  expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBe("osm:node/1");
+  act(() => fake.emit("mousemove", { point: { x: 30, y: 14 } }));
+  expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBe("osm:node/2");
   view.unmount();
   reach.filtered = [result];
 });

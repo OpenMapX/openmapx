@@ -1,6 +1,7 @@
 import { useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { LiveTransitLayer } from "../map-layer";
 import { useLiveTransitStore } from "../store";
@@ -76,10 +77,9 @@ function itinerary(tripId: string): TripItinerary {
 function vehicleData() {
   return fake.state.sources.get(SOURCE)?.data as GeoJSON.FeatureCollection | undefined;
 }
+/** Whether the vehicles answer clicks through the shared overlay pipeline. */
 function delegatedClickCount() {
-  return fake.state.listenerCalls
-    .filter((call) => call.event === "click" && call.layerId === ICON)
-    .reduce((active, call) => active + (call.method === "off" ? -1 : 1), 0);
+  return INTERACTIVE_LAYER_IDS.has(ICON) ? (fake.state.handlers.get("click")?.size ?? 0) : 0;
 }
 function expectRetainedVehicle() {
   expect(vehicleData()?.features).toHaveLength(1);

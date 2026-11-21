@@ -3,6 +3,8 @@ import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { cleanup, render, screen, userEvent } from "@/test";
 import { SchemaConfigForm } from "../SchemaConfigForm";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 afterEach(cleanup);
 it("locks config.json winners and never sends them in a save alongside an editable field", async () => {
   const save = vi.fn();

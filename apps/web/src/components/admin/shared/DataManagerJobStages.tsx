@@ -6,7 +6,10 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { JobStatusChip } from "./JobStatusChip";
+import { useJobStageLabel } from "./jobStageLabel";
 import { formatStageError } from "./jobStatus";
 
 export interface DataManagerJobStage {
@@ -19,16 +22,15 @@ export interface DataManagerJobStage {
   artifacts?: unknown;
 }
 
-function durationLabel(durationMs: number): string {
+function durationLabel(durationMs: number, format: AdminFormatters): string {
   if (durationMs < 0 || !Number.isFinite(durationMs)) return "—";
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.floor((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
+  return format.duration(durationMs);
 }
 
-function validationDetails(stage: DataManagerJobStage): string | null {
+function validationDetails(
+  stage: DataManagerJobStage,
+  t: AdminTranslator<"adminShared">,
+): string | null {
   if (stage.stage !== "validate" || !stage.artifacts || typeof stage.artifacts !== "object") {
     return null;
   }
@@ -43,44 +45,50 @@ function validationDetails(stage: DataManagerJobStage): string | null {
   });
   if (details.length === 0) return null;
   const hidden = details.length - 5;
-  return `Invalid archives — ${details.slice(0, 5).join("; ")}${hidden > 0 ? `; +${hidden} more` : ""}`;
+  const shown = details.slice(0, 5).join("; ");
+  return hidden > 0
+    ? t("invalidArchivesMore", { archives: shown, hidden })
+    : t("invalidArchives", { archives: shown });
 }
 
 export function DataManagerJobStages({
   stages,
-  emptyMessage = "No stages recorded",
+  emptyMessage,
 }: {
   stages: DataManagerJobStage[];
   emptyMessage?: string;
 }) {
+  const t = useAdminTranslations("adminShared");
+  const format = useAdminFormat();
+  const stageLabel = useJobStageLabel();
   return (
     <Stack sx={{ gap: 0.75 }}>
       <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-        Stages ({stages.length})
+        {t("stagesCount", { count: stages.length })}
       </Typography>
       {stages.length === 0 ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {emptyMessage}
+          {emptyMessage ?? t("noStagesRecorded")}
         </Typography>
       ) : (
         <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Stage</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Duration</TableCell>
+                <TableCell>{t("stage")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell align="right">{t("duration")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {stages.map((stage) => {
                 const error = formatStageError(stage.error);
-                const artifactDetails = validationDetails(stage);
+                const artifactDetails = validationDetails(stage, t);
                 return (
                   <TableRow key={stage.id} hover>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {stage.stage.replace(/[_-]/g, " ")}
+                        {stageLabel(stage.stage)}
                       </Typography>
                       {(stage.message || error) && (
                         <Typography
@@ -102,7 +110,7 @@ export function DataManagerJobStages({
                     <TableCell>
                       <JobStatusChip status={stage.status} />
                     </TableCell>
-                    <TableCell align="right">{durationLabel(stage.durationMs)}</TableCell>
+                    <TableCell align="right">{durationLabel(stage.durationMs, format)}</TableCell>
                   </TableRow>
                 );
               })}

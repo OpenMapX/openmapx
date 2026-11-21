@@ -3,6 +3,7 @@
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { useSaveParking } from "@/components/panels/parking/useSaveParking";
 import { act, createFakeMap, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -29,7 +30,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     }),
   };
 });
-const parking = vi.hoisted(() => ({ saveAt: vi.fn(async () => "saved" as const) }));
+const parking = vi.hoisted(() => ({
+  saveAt: vi.fn<ReturnType<typeof useSaveParking>["saveAt"]>(async () => "saved"),
+}));
 // The menu row's job is to hand the target coordinate to the shared save
 // action; persistence is that hook's own test.
 vi.mock("@/components/panels/parking/useSaveParking", () => ({

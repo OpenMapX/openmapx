@@ -14,10 +14,11 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { type TransitStateSummary, useTransitFeeds } from "@/lib/admin/transitHooks";
 
 const PAGE_SIZE = 50;
@@ -39,6 +40,9 @@ function validationColor(v: string | null): "default" | "success" | "warning" | 
 }
 
 export function FeedsTable({ state }: { state: TransitStateSummary }) {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
+  const tShared = useTranslations("adminShared");
   const [region, setRegion] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [page, setPage] = useState(0);
@@ -61,7 +65,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
 
   return (
     <AdminTableSurface
-      title={`Feed state (${data?.total ?? 0})`}
+      title={t("feedStateTitle", { count: data?.total ?? 0 })}
       toolbar={
         <Stack
           direction={{ xs: "column", sm: "row" }}
@@ -69,7 +73,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
         >
           <TextField
             select
-            label="Region"
+            label={t("region")}
             value={region}
             onChange={(e) => {
               setRegion(e.target.value);
@@ -77,7 +81,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
             }}
             sx={{ minWidth: 160 }}
           >
-            <MenuItem value="">All regions</MenuItem>
+            <MenuItem value="">{t("allRegions")}</MenuItem>
             {regionOptions.map((r) => (
               <MenuItem key={r} value={r}>
                 {r}
@@ -86,7 +90,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           </TextField>
           <TextField
             select
-            label="Status"
+            label={t("status")}
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
@@ -94,7 +98,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
             }}
             sx={{ minWidth: 160 }}
           >
-            <MenuItem value="">All statuses</MenuItem>
+            <MenuItem value="">{t("allStatuses")}</MenuItem>
             {statusOptions.map((s) => (
               <MenuItem key={s} value={s}>
                 {s}
@@ -128,7 +132,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
         </Box>
       ) : isError ? (
         <Typography variant="body2" color="error" sx={{ p: 2 }}>
-          Failed to load feeds.
+          {t("failedToLoadFeeds")}
         </Typography>
       ) : !data || data.feeds.length === 0 ? (
         <Typography
@@ -138,19 +142,19 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
             p: 2,
           }}
         >
-          No feeds match the current filter.
+          {t("noFeedsMatchTheCurrent")}
         </Typography>
       ) : (
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Region</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Validation</TableCell>
-                <TableCell>Last fetched</TableCell>
-                <TableCell>Last imported</TableCell>
+                <TableCell>{t("region")}</TableCell>
+                <TableCell>{t("name")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell>{t("validation")}</TableCell>
+                <TableCell>{t("lastFetched")}</TableCell>
+                <TableCell>{t("lastImported")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -183,7 +187,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                   <TableCell>
                     <Chip
                       size="small"
-                      label={feed.status}
+                      label={tShared("jobStatusLabel", { status: feed.status })}
                       color={statusColor(feed.status)}
                       variant="outlined"
                     />
@@ -193,7 +197,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                       <Tooltip title={feed.validationMessage ?? ""}>
                         <Chip
                           size="small"
-                          label={feed.validationStatus}
+                          label={t("validationStatus", { status: feed.validationStatus })}
                           color={validationColor(feed.validationStatus)}
                           variant="outlined"
                         />
@@ -202,8 +206,8 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                       "—"
                     )}
                   </TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(feed.lastFetchedAt)}</TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(feed.lastImportedAt)}</TableCell>
+                  <TableCell>{format.timestamp(feed.lastFetchedAt)}</TableCell>
+                  <TableCell>{format.timestamp(feed.lastImportedAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

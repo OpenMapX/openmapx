@@ -6,6 +6,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import type { AdminReauthProofRef } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
@@ -19,6 +20,7 @@ import {
   type StoredAdminReauth,
   startStoredAdminReauthentication,
 } from "@/lib/admin/adminReauthentication";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 
 type Props = (
   | {
@@ -38,6 +40,8 @@ type Props = (
     }
 ) & { onCompleted: (proofs: AdminReauthProofRef[]) => void; onClose: () => void };
 export function AdminReauthenticationDialog(props: Props) {
+  const t = useTranslations("adminUsers");
+  const tCommon = useTranslations("common");
   const requestExit = useAdminDraftExit();
   const { apiUrl, actorId } = useAccountAdmin(),
     requests: AdminReauthIntent[] = props.purposes
@@ -84,25 +88,18 @@ export function AdminReauthenticationDialog(props: Props) {
   };
   return (
     <Dialog open onClose={close} maxWidth="xs" fullWidth>
-      <DialogTitle>Confirm your administrator sign-in</DialogTitle>
+      <DialogTitle>{t("confirmYourAdministratorSignIn")}</DialogTitle>
       <DialogContent>
-        <DialogContentText>
-          Sign in again to authorize this specific action. Complete your configured second factor.
-          The confirmation expires after 10 minutes and can be used once.
-        </DialogContentText>
+        <DialogContentText>{t("signInAgainToAuthorize")}</DialogContentText>
         {(start.error || confirm.error) && (
-          <Alert severity="error">
-            Could not confirm administrator sign-in. Prepare a new confirmation.
-          </Alert>
+          <Alert severity="error">{t("couldNotConfirmAdministratorSign")}</Alert>
         )}
         {stored?.phase === "completed" && (
-          <Alert severity="success">
-            Sign-in verified. Review and confirm the original action.
-          </Alert>
+          <Alert severity="success">{t("signInVerifiedReviewAnd")}</Alert>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={close}>Cancel</Button>
+        <Button onClick={close}>{tCommon("cancel")}</Button>
         {stored?.phase === "completed" ? (
           <Button
             disabled={confirm.isPending}
@@ -114,13 +111,13 @@ export function AdminReauthenticationDialog(props: Props) {
                   intentKey(current.requests) !== identity ||
                   JSON.stringify(current.challengeIds) !== JSON.stringify(stored.challengeIds)
                 )
-                  throw Error("Administrator action changed");
+                  throw new AdminDisplayError(t("administratorActionChanged"));
                 await completeStoredAdminReauthentication(apiUrl);
                 return stored.challengeIds.map((challengeId) => ({ challengeId }));
               })
             }
           >
-            Continue with verified sign-in
+            {t("continueWithVerifiedSignIn")}
           </Button>
         ) : stored ? (
           <Button
@@ -130,21 +127,21 @@ export function AdminReauthenticationDialog(props: Props) {
               event.preventDefault();
               if (
                 await requestExit(
-                  "Administrator reauthentication leaves this page.",
+                  t("administratorReauthenticationLeavesThisPage"),
                   "reauthentication",
                 )
               )
                 navigateAdminDocument("/auth/admin", "reauthentication");
             }}
           >
-            Sign in again
+            {t("signInAgain")}
           </Button>
         ) : (
           <Button
             disabled={start.isPending}
             onClick={() => start.mutate(() => startStoredAdminReauthentication(apiUrl, requests))}
           >
-            Prepare sign-in
+            {t("prepareSignIn")}
           </Button>
         )}
       </DialogActions>

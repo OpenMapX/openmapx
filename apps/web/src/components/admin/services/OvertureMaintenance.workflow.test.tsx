@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { OvertureMaintenance } from "./OvertureMaintenance";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   run: vi.fn(),

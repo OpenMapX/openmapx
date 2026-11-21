@@ -17,14 +17,16 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import type { ApiClient } from "@openmapx/core";
 import {
-  adminErrorMessage,
   clearAdminCache,
   listAdminCacheNamespaces,
   unwrapAdminResponse,
 } from "@openmapx/core/api-admin-sdk";
 import { isAppCachePattern } from "@openmapx/core/cache-namespaces";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -48,6 +50,8 @@ export function CacheManager() {
   return <CacheManagerSession key={apiUrl} apiUrl={apiUrl} client={client} />;
 }
 function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiClient }) {
+  const t = useTranslations("adminSystem.cache");
+  const format = useAdminFormat();
   const qc = useQueryClient();
   const showToast = useAdminToast();
   const [pattern, setPattern] = useState("");
@@ -63,27 +67,23 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
 
   const previewMutation = useMutation({
     mutationFn: async (captured: string) => {
-      try {
-        const result = unwrapAdminResponse(
-          await clearAdminCache({ pattern: captured, dryRun: true }, { client }),
-        );
-        if (!("estimatedCount" in result)) throw new Error("Preview deleted keys");
-        return { pattern: captured, estimatedCount: result.estimatedCount };
-      } catch (error) {
-        throw new Error(adminErrorMessage(error, "Failed to preview cache"), { cause: error });
-      }
+      const result = unwrapAdminResponse(
+        await clearAdminCache({ pattern: captured, dryRun: true }, { client }),
+      );
+      if (!("estimatedCount" in result)) throw new Error("Preview deleted keys");
+      return { pattern: captured, estimatedCount: result.estimatedCount };
     },
     onSuccess: setPreview,
   });
   const clearMutation = useMutation({
-    mutationFn: async (t: ClearTarget) => {
+    mutationFn: async (clear: ClearTarget) => {
       const result = unwrapAdminResponse(
         await clearAdminCache(
-          t.kind === "all"
+          clear.kind === "all"
             ? {}
-            : t.kind === "pattern"
-              ? { pattern: t.pattern }
-              : { namespace: t.namespace },
+            : clear.kind === "pattern"
+              ? { pattern: clear.pattern }
+              : { namespace: clear.namespace },
           { client },
         ),
       );
@@ -91,11 +91,11 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
       return result;
     },
     onSuccess: (result) => {
-      showToast(`Cleared ${result.deleted} cache ${result.deleted === 1 ? "key" : "keys"}`);
+      showToast(t("cleared", { count: result.deleted }));
       setPreview(null);
       void qc.invalidateQueries({ queryKey: [...CACHE_QUERY_KEY, apiUrl] });
     },
-    onError: () => showToast("Failed to clear cache", "error"),
+    onError: () => showToast(t("clearFailed"), "error"),
     onSettled: () => setTarget(null),
   });
 
@@ -103,25 +103,25 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
   const { paged, paginationProps } = useClientPagination(namespaces);
   const confirmMessage =
     target?.kind === "pattern"
-      ? `Clear cached keys matching "${target.pattern}"? Preview estimated ${target.estimatedCount} keys; concurrent changes can alter this count. This cannot be undone.`
+      ? t("confirmPattern", { pattern: target.pattern, count: target.estimatedCount })
       : target?.kind === "namespace"
-        ? `Clear all cached keys under "${target.namespace}"? This cannot be undone.`
-        : "Clear the entire application cache (all integration and API caches)? This cannot be undone.";
+        ? t("confirmNamespace", { namespace: target.namespace })
+        : t("confirmAll");
 
   return (
     <Stack sx={{ gap: 2 }}>
       <AdminPageHeader
-        title="Cache"
-        subtitle="Inspect and clear the application cache"
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <>
-            <Tooltip title="Refresh">
+            <Tooltip title={t("refresh")}>
               <IconButton onClick={() => refetch()} size="small">
                 <RefreshIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <Button
-              aria-label="Clear all application cache"
+              aria-label={t("clearAllLabel")}
               variant="outlined"
               color="error"
               size="small"
@@ -129,7 +129,7 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
               disabled={namespaces.length === 0 || clearMutation.isPending}
               onClick={() => setTarget({ kind: "all" })}
             >
-              Clear all
+              {t("clearAll")}
             </Button>
           </>
         }
@@ -138,14 +138,14 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack sx={{ gap: 2 }}>
           <TextField
-            label="Cache pattern"
+            label={t("pattern")}
             value={pattern}
             onChange={(event) => {
               setPattern(event.target.value);
               setPreview(null);
               previewMutation.reset();
             }}
-            helperText="Redis glob, up to 256 characters, starting literally with int: or cache:. Session and job keys are excluded."
+            helperText={t("patternHelp", { max: 256 })}
             placeholder="int:geocoding:*"
             size="small"
           />
@@ -154,7 +154,7 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
               disabled={!patternValid || previewMutation.isPending || clearMutation.isPending}
               onClick={() => previewMutation.mutate(pattern)}
             >
-              Preview pattern
+              {t("previewPattern")}
             </Button>
             <Button
               color="error"
@@ -164,31 +164,31 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
                   setTarget({ kind: "pattern", ...preview });
               }}
             >
-              Clear previewed pattern
+              {t("clearPreviewed")}
             </Button>
           </Stack>
           {previewMutation.isError && (
-            <Alert severity="error">{previewMutation.error.message}</Alert>
+            <Alert severity="error">
+              {adminErrorText(previewMutation.error, t("previewFailed"))}
+            </Alert>
           )}
           {preview && preview.pattern === pattern && (
             <Alert severity="info">
-              Estimated matching keys: {preview.estimatedCount}. Pattern: {preview.pattern}. Preview
-              never deletes keys. SCAN counts are estimates; concurrent writes and repeated keys may
-              change them.
+              {t("previewResult", { count: preview.estimatedCount, pattern: preview.pattern })}
             </Alert>
           )}
         </Stack>
       </Paper>
       {isError ? (
-        <ErrorState message="Failed to load the cache." onRetry={() => refetch()} />
+        <ErrorState message={t("loadFailed")} onRetry={() => refetch()} />
       ) : (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Namespace</TableCell>
-                <TableCell align="right">Keys</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{t("namespace")}</TableCell>
+                <TableCell align="right">{t("keys")}</TableCell>
+                <TableCell align="right">{t("actions")}</TableCell>
               </TableRow>
             </TableHead>
             {isLoading ? (
@@ -196,12 +196,12 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
             ) : (
               <TableBody>
                 {namespaces.length === 0 ? (
-                  <TableEmptyState colSpan={3} message="No cached data found" />
+                  <TableEmptyState colSpan={3} message={t("empty")} />
                 ) : (
                   paged.map((ns) => (
                     <TableRow key={ns.namespace} hover>
                       <TableCell sx={{ fontFamily: "monospace" }}>{ns.namespace}</TableCell>
-                      <TableCell align="right">{ns.keyCount}</TableCell>
+                      <TableCell align="right">{format.number(ns.keyCount)}</TableCell>
                       <TableCell align="right">
                         <Button
                           size="small"
@@ -209,7 +209,7 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
                           disabled={clearMutation.isPending}
                           onClick={() => setTarget({ kind: "namespace", namespace: ns.namespace })}
                         >
-                          Clear
+                          {t("clear")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -224,9 +224,9 @@ function CacheManagerSession({ apiUrl, client }: { apiUrl: string; client: ApiCl
 
       <ConfirmDialog
         open={target !== null}
-        title="Clear cache"
+        title={t("clearTitle")}
         message={confirmMessage}
-        confirmLabel="Clear"
+        confirmLabel={t("clear")}
         confirmColor="error"
         loading={clearMutation.isPending}
         onConfirm={() => {

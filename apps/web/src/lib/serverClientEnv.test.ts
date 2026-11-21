@@ -10,7 +10,7 @@ describe("server map bootstrap", () => {
   it("reads effective public configuration through the internal API without forwarding browser credentials", async () => {
     process.env.INTERNAL_API_URL = "http://app-api:3001/";
     process.env.NEXT_PUBLIC_TILES_URL = "";
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({
         hostedBasemapProvider: "auto",
         maptilerConfigured: true,

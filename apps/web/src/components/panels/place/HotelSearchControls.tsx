@@ -1,12 +1,10 @@
 "use client";
-
-import AddIcon from "@mui/icons-material/Add";
-import RemoveIcon from "@mui/icons-material/Remove";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useHotelSearchStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useEffect } from "react";
+import { Stepper } from "@/components/ui/Stepper";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 const inputSx = {
@@ -22,66 +20,6 @@ const inputSx = {
   fontFamily: "inherit",
   "&:focus": { outline: "none", borderColor: BRAND },
 } as const;
-
-function Stepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
-}) {
-  const btnSx = {
-    border: "1px solid",
-    borderColor: "divider",
-    bgcolor: "background.paper",
-    borderRadius: "50%",
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    color: "text.primary",
-    "&:hover": { borderColor: BRAND, color: BRAND },
-    "&:disabled": { opacity: 0.4, cursor: "default" },
-  } as const;
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <Typography variant="body2">{label}</Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`-${label}`}
-          disabled={value <= min}
-          onClick={() => onChange(Math.max(min, value - 1))}
-          sx={btnSx}
-        >
-          <RemoveIcon sx={{ fontSize: 16 }} />
-        </Box>
-        <Typography variant="body2" sx={{ minWidth: 16, textAlign: "center", fontWeight: 600 }}>
-          {value}
-        </Typography>
-        <Box
-          component="button"
-          type="button"
-          aria-label={`+${label}`}
-          disabled={value >= max}
-          onClick={() => onChange(Math.min(max, value + 1))}
-          sx={btnSx}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-        </Box>
-      </Box>
-    </Box>
-  );
-}
 
 /**
  * Check-in/check-out + occupancy controls, bound to the shared

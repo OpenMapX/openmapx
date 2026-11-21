@@ -4,6 +4,7 @@ import { cleanup, createTestQueryClient, fireEvent, render, screen } from "@/tes
 import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
 
 const mocks = vi.hoisted(() => ({ inventory: vi.fn(), preview: vi.fn(), apply: vi.fn() }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 vi.mock("@/lib/admin/accountAdmin", () => ({
   useAccountAdmin: () => ({ actorId: "synthetic-admin" }),
 }));

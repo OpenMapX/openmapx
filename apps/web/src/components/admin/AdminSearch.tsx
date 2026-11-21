@@ -18,12 +18,17 @@ import {
 } from "@openmapx/core/api-admin-sdk";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminDraftAuthority } from "@/lib/admin/AdminDraftProvider";
 import type { AdminNavigationAccess } from "@/lib/admin/adminNavigation";
-import { buildAdminSearchEntries, searchAdminEntries } from "@/lib/admin/adminSearch";
+import {
+  adminSearchCopy,
+  buildAdminSearchEntries,
+  searchAdminEntries,
+} from "@/lib/admin/adminSearch";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
+import { useSettingText } from "@/lib/admin/useSettingText";
 import { useActivityClient } from "./activity/activityQueries";
 
 export function AdminSearch({
@@ -39,7 +44,9 @@ export function AdminSearch({
       (authority.owner?.role === "admin" &&
         authority.owner.actorId === actorId &&
         authority.owner.apiUrl === apiUrl));
-  const t = useTranslations("adminNavigation");
+  const t = useAdminTranslations("adminNavigation");
+  const ts = useAdminTranslations("adminShared");
+  const settingText = useSettingText();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -122,17 +129,18 @@ export function AdminSearch({
   });
   const entries = useMemo(
     () =>
-      buildAdminSearchEntries({ role, selfHosted }, metadata.data).map((entry) =>
-        entry.id.includes(":") ||
-        ["email-smtp", "transit-sources", "backup-retention", "release-selector"].includes(entry.id)
-          ? entry
-          : {
-              ...entry,
-              title: t(`destinations.${entry.id}.label`),
-              description: t(`destinations.${entry.id}.description`),
-            },
+      buildAdminSearchEntries(
+        { role, selfHosted },
+        adminSearchCopy(t, ts),
+        metadata.data && {
+          ...metadata.data,
+          settings: metadata.data.settings.map((setting) => ({
+            ...setting,
+            ...settingText(setting),
+          })),
+        },
       ),
-    [role, selfHosted, metadata.data, t],
+    [role, selfHosted, metadata.data, t, ts, settingText],
   );
   const results = searchAdminEntries(entries, query);
   useEffect(() => {
@@ -238,7 +246,7 @@ export function AdminSearch({
             ))}
           </List>
           {!results.length && (
-            <Typography color="text.secondary">{t("noSearchResults")}</Typography>
+            <Typography sx={{ color: "text.secondary" }}>{t("noSearchResults")}</Typography>
           )}
         </DialogContent>
       </Dialog>

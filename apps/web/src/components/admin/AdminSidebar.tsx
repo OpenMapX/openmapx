@@ -73,9 +73,9 @@ export function AdminSidebar({
         <OverviewIcon color="primary" />
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>
-            OpenMapX
+            {"OpenMapX"}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("administration")}
           </Typography>
         </Box>

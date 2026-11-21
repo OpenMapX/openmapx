@@ -2,6 +2,7 @@
 
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import { useTranslations } from "next-intl";
 
 export interface CapabilityProvider {
   id: string;
@@ -21,6 +22,7 @@ export function CapabilityBindingPicker({
   onChange: (serviceId: string | null) => void;
   disabled?: boolean;
 }) {
+  const t = useTranslations("adminIntegrations");
   return (
     <TextField
       select
@@ -31,7 +33,7 @@ export function CapabilityBindingPicker({
       onChange={(e) => onChange(e.target.value || null)}
       sx={{ minWidth: 240 }}
     >
-      <MenuItem value="">(none — use fallback)</MenuItem>
+      <MenuItem value="">{t("noneUseFallback")}</MenuItem>
       {providers.map((p) => (
         <MenuItem key={p.id} value={p.id}>
           {p.name} ({p.id})

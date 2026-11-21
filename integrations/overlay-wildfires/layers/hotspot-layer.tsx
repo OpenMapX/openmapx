@@ -2,14 +2,11 @@
 
 import { escapeHtml, formatRelativeTime } from "@openmapx/core";
 import { captureHazardFeatures } from "@openmapx/integration-framework";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createHeatmapPaint } from "@/integration-api/map/heatmapLayer";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import {
   EMPTY_FEATURE_COLLECTION,
   type MapLayerGroup,
@@ -17,6 +14,7 @@ import {
 } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useMapOverlayInteraction } from "@/integration-api/map/useMapOverlayInteraction";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -396,11 +394,21 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
     return () => popupController.close(lease);
   }, [active, popupController]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !active) return;
-
-    const openPopup = (coords: [number, number], html: string) => {
+  useMapOverlayInteraction({
+    id: "overlay-wildfires-hotspots",
+    layerIds: [CIRCLE_LAYER_ID, DENSITY_LAYER_ID],
+    priority: 50,
+    enabled: active,
+    onClick: ({ features }) => {
+      const map = mapRef.current;
+      const f = features[0];
+      if (!map || !f) return;
+      const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
+      const properties = f.properties as Record<string, unknown>;
+      const html =
+        f.layer.id === DENSITY_LAYER_ID
+          ? buildDensityPopupHtml(properties, t)
+          : buildHotspotPopupHtml(properties, coords, t, locale);
       popupController.open(
         popupLease.current,
         new maplibregl.Popup({
@@ -412,54 +420,8 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
           .setHTML(html)
           .addTo(map),
       );
-    };
-
-    const onHotspotClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
-      if (!f) return;
-      const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      openPopup(
-        coords,
-        buildHotspotPopupHtml(f.properties as Record<string, unknown>, coords, t, locale),
-      );
-    };
-
-    const onDensityClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
-      if (!f) return;
-      const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      openPopup(coords, buildDensityPopupHtml(f.properties as Record<string, unknown>, t));
-    };
-
-    const onMouseEnter = () => {
-      map.getCanvasContainer().style.cursor = "pointer";
-    };
-
-    const onMouseLeave = () => {
-      map.getCanvasContainer().style.cursor = "";
-    };
-
-    map.on("click", CIRCLE_LAYER_ID, onHotspotClick);
-    map.on("click", DENSITY_LAYER_ID, onDensityClick);
-    for (const layerId of [CIRCLE_LAYER_ID, DENSITY_LAYER_ID]) {
-      map.on("mouseenter", layerId, onMouseEnter);
-      map.on("mouseleave", layerId, onMouseLeave);
-      INTERACTIVE_LAYER_IDS.add(layerId);
-    }
-
-    return () => {
-      map.off("click", CIRCLE_LAYER_ID, onHotspotClick);
-      map.off("click", DENSITY_LAYER_ID, onDensityClick);
-      for (const layerId of [CIRCLE_LAYER_ID, DENSITY_LAYER_ID]) {
-        map.off("mouseenter", layerId, onMouseEnter);
-        map.off("mouseleave", layerId, onMouseLeave);
-        INTERACTIVE_LAYER_IDS.delete(layerId);
-      }
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [mapReady, mapRef, active, popupController, t, locale]);
+    },
+  });
 
   return null;
 }

@@ -34,7 +34,7 @@ export function NavigationSessionResumeDialog({ snapshot, coverage, onResume, on
         <Typography variant="body1" sx={{ mb: 1 }}>
           {snapshot.route.summary ?? t("offlineRouteContinuation")}
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
           {formatMeasurementDistance(snapshot.route.distance, "metric")} · {coverageText}
         </Typography>
         <Alert severity="info">{t("offlineResumeBody")}</Alert>

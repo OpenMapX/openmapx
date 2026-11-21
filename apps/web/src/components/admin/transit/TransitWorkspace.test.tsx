@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen } from "@/test";
 import { adminTestHistory } from "@/test/adminNavigation";
 import { TransitWorkspace } from "./TransitWorkspace";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const continuation = vi.hoisted(() => ({ current: null as null | { proposalId?: string } }));
 vi.mock(
   "next/navigation",

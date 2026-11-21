@@ -391,17 +391,20 @@ export function RouteLayer() {
       const idx = e.features?.[0]?.properties?.routeIndex as number | undefined;
       if (idx !== undefined) setActiveRouteIndex(idx);
     };
+    // Take back only a pointer this handler set; overlays show their own.
+    let ownsCursor = false;
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (!map.getLayer(LAYER_ALT_LINE)) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers: [LAYER_ALT_LINE] });
-      map.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
+      const over = map.queryRenderedFeatures(e.point, { layers: [LAYER_ALT_LINE] }).length > 0;
+      if (over || ownsCursor) map.getCanvasContainer().style.cursor = over ? "pointer" : "";
+      ownsCursor = over;
     };
     map.on("click", LAYER_ALT_LINE, onClick);
     map.on("mousemove", onMouseMove);
     return () => {
       map.off("click", LAYER_ALT_LINE, onClick);
       map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
+      if (ownsCursor) map.getCanvasContainer().style.cursor = "";
     };
   }, [mapRef, mapReady, styleVersion, setActiveRouteIndex]);
 
@@ -418,7 +421,6 @@ export function RouteLayer() {
 
   // Fit the camera to a newly drawn route. This is camera behaviour, so a style
   // change must not re-fit and yank the map away from the user's position.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve the camera effect's existing dependency contract
   useEffect(() => {
     if (navigating || mode === "transit" || mode === "flying" || routes.length === 0) return;
 
@@ -454,7 +456,7 @@ export function RouteLayer() {
       ],
       80,
     );
-  }, [routes, activeRouteIndex, mode, isEvMode, evStops, mapRef, fitBounds, navigating]);
+  }, [routes, activeRouteIndex, mode, isEvMode, evStops, fitBounds, navigating]);
 
   const evStopsData = useMemo(
     () => ({

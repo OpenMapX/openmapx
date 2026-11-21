@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AdminPageHeader } from "../AdminPageHeader";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 describe("AdminPageHeader", () => {
   it("renders an accessible back link for detail pages", () => {

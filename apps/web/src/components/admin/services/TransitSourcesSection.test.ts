@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { catalogTranslator } from "@/test/catalogTranslator";
 import { sourceStateLabel, type TransitSource } from "./TransitSourcesSection";
+
+const t = catalogTranslator("adminServices");
 
 function source(overrides: Partial<TransitSource>): TransitSource {
   return {
@@ -21,21 +24,21 @@ function source(overrides: Partial<TransitSource>): TransitSource {
 
 describe("transit source state labels", () => {
   it("makes desired, active, and pending states explicit", () => {
-    expect(sourceStateLabel(source({}))).toBe("Requested · active");
-    expect(sourceStateLabel(source({ lifecycle: "update-pending" }))).toBe(
+    expect(sourceStateLabel(source({}), t)).toBe("Requested · active");
+    expect(sourceStateLabel(source({ lifecycle: "update-pending" }), t)).toBe(
       "Update pending · active",
     );
-    expect(sourceStateLabel(source({ lifecycle: "removal-pending", requested: false }))).toBe(
+    expect(sourceStateLabel(source({ lifecycle: "removal-pending", requested: false }), t)).toBe(
       "Removal pending · active",
     );
     expect(
-      sourceStateLabel(source({ lifecycle: "add-pending", active: false, requested: true })),
+      sourceStateLabel(source({ lifecycle: "add-pending", active: false, requested: true }), t),
     ).toBe("Add pending · not active");
-    expect(sourceStateLabel(source({ lifecycle: "failed", active: false }))).toBe(
+    expect(sourceStateLabel(source({ lifecycle: "failed", active: false }), t)).toBe(
       "Requested · failed",
     );
     expect(
-      sourceStateLabel(source({ lifecycle: "disabled", active: false, requested: false })),
+      sourceStateLabel(source({ lifecycle: "disabled", active: false, requested: false }), t),
     ).toBe("Disabled · not active");
   });
 });

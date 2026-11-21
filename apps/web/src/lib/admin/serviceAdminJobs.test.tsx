@@ -19,6 +19,8 @@ import { AdminJobEffectsProvider } from "./adminJobEffects";
 import { serviceAdminQueries, serviceOrThrow } from "./serviceAdmin";
 import { useServiceJobRegistration } from "./serviceAdminJobs";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "http://admin.test";
 const acquisition = { state: "available", reason: null };
 
@@ -336,7 +338,7 @@ it("records the committed Next tab rather than the previous browser URL", async 
   act(() => adminTestHistory.push("/admin/system/services/demo?tab=configuration"));
   fireEvent.click(screen.getByText("Queue"));
   fireEvent.click(await screen.findByRole("button", { name: "Administration jobs, 1 active" }));
-  const link = await screen.findByRole("link", { name: "demo · service" });
+  const link = await screen.findByRole("link", { name: "demo service action" });
   expect(new URL(link.getAttribute("href") ?? "", "http://test").searchParams.get("returnTo")).toBe(
     "/admin/system/services/demo?tab=configuration",
   );

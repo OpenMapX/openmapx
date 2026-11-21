@@ -53,6 +53,7 @@ const credentials = vi.hoisted(() => ({
   changeEmail: vi.fn(),
   deleteUser: vi.fn(),
   clearDeviceData: vi.fn(),
+  generateBackupCodes: vi.fn(),
 }));
 vi.mock("@/lib/accountDeletionCleanup", () => ({
   clearPrivateDeviceData: credentials.clearDeviceData,
@@ -75,6 +76,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
         changeEmail: credentials.changeEmail,
       },
       deleteUser: credentials.deleteUser,
+      twoFactor: { generateBackupCodes: credentials.generateBackupCodes },
     },
     getInitials: () => "AT",
     oauthProviders: [{ providerId: "openstreetmap", name: "OpenStreetMap", icon: "/osm-logo.svg" }],
@@ -116,6 +118,67 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.location.hash = "";
+});
+
+describe("AccountSettingsDialog backup codes and reopening", () => {
+  async function showNewBackupCodes() {
+    credentials.generateBackupCodes.mockResolvedValue({
+      data: { backupCodes: ["code-one", "code-two"] },
+      error: null,
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        user={{ ...user, twoFactorEnabled: true }}
+        initialSection={null}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "account.backupCodes" }));
+    await userEvent.type(screen.getByLabelText("account.password"), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "account.regenerateCodes" }));
+    await screen.findByText("code-one");
+  }
+
+  it("reports a refused clipboard instead of claiming the codes were copied", async () => {
+    await showNewBackupCodes();
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "common.copy" }));
+    expect(await screen.findByText("account.backupCodesCopyFailed")).toBeInTheDocument();
+    expect(screen.queryByText("account.backupCodesCopied")).not.toBeInTheDocument();
+  });
+
+  it("confirms copied codes once the clipboard accepted them", async () => {
+    await showNewBackupCodes();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await userEvent.click(screen.getByRole("button", { name: "common.copy" }));
+    expect(await screen.findByText("account.backupCodesCopied")).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith("code-one\ncode-two");
+  });
+
+  it("starts each opening afresh", async () => {
+    const view = render(
+      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />,
+      { wrapper: createQueryWrapper() },
+    );
+    const name = screen.getByDisplayValue("Alice Timeline");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Draft name");
+    view.rerender(
+      <AccountSettingsDialog open={false} onClose={vi.fn()} user={user} initialSection={null} />,
+    );
+    view.rerender(
+      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />,
+    );
+    expect(await screen.findByDisplayValue("Alice Timeline")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Draft name")).not.toBeInTheDocument();
+  });
 });
 
 describe("AccountSettingsDialog timeline targeting", () => {

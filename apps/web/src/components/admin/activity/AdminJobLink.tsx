@@ -2,19 +2,22 @@
 import Button from "@mui/material/Button";
 import type { AdminActivityJobSource } from "@openmapx/core/api-contracts";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 export function AdminJobLink({
   id,
   source,
   returnTo,
-  children = "View job",
+  children,
 }: {
   id: string;
   source: AdminActivityJobSource;
   returnTo?: string;
   children?: ReactNode;
 }) {
+  const t = useTranslations("adminActivity");
+  const label = children ?? t("viewJob");
   return (
     <Button
       component={Link}
@@ -22,7 +25,7 @@ export function AdminJobLink({
       size="small"
       sx={{ alignSelf: "flex-start" }}
     >
-      {children}
+      {label}
     </Button>
   );
 }

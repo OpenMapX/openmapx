@@ -105,6 +105,33 @@ afterwards, so it refuses to run beside an existing deployment. CI runs it on
 main, nightly and on pull requests that touch the CLI, service rendering,
 `services/`, `infra/docker`, the operations agent or a Dockerfile.
 
+Changes to map layers, the map style lifecycle, search, directions or the app
+shell should also pass the browser journeys. They run four user journeys in
+headless Google Chrome against the production web build, with every API, tile
+and glyph request answered by a local fixture server, and fail on any page or
+console error, including a map layer missing after a style change:
+
+```bash
+pnpm --filter web build
+pnpm --filter web test:e2e
+```
+
+The fixture server listens on `127.0.0.1:3001`, the API address a build without
+`NEXT_PUBLIC_API_URL` uses, so stop a local API first. A request the fixtures do
+not answer is logged as `[fixture] unhandled …` and fails the journey. CI runs
+the journeys nightly and on manual dispatch (`browser-journeys.yml`), not on
+pull requests.
+
+The fixture server also answers the administration pages from
+`apps/web/e2e/admin-fixtures.json`, at least one populated page per admin
+section, and a test checks each answer against its admin contract (a record
+such as one privacy case answers its templated path). Better Auth's session and user-list answers have no contract
+in this repository, so the test checks only the administrator's identity in
+them; a change to Better Auth's shapes would not fail it. A browser that sends
+the cookie `openmapx-fixture-admin=1` is
+signed in as an administrator, so admin pages render populated, for example when
+taking screenshots; journeys without the cookie stay signed out.
+
 ### Running the full test suite on a Mac
 
 Control-plane and filesystem-heavy tests (durable writes, fsync, lock files) are

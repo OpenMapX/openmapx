@@ -14,27 +14,30 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
-import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
-function durationLabel(startedAt: string, finishedAt: string | null): string {
+function durationLabel(
+  startedAt: string,
+  finishedAt: string | null,
+  format: AdminFormatters,
+): string {
   if (!finishedAt) return "—";
   const start = new Date(startedAt).getTime();
   const end = new Date(finishedAt).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "—";
-  const secs = Math.max(0, Math.round((end - start) / 1000));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  const rem = secs % 60;
-  return rem ? `${mins}m ${rem}s` : `${mins}m`;
+  return format.duration(Math.max(0, Math.round((end - start) / 1000) * 1000));
 }
 
 function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => void }) {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const { data, isLoading, isError } = useTransitJobDetail(jobId);
 
   return (
@@ -60,7 +63,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               flex: 1,
             }}
           >
-            Job detail
+            {t("jobDetail")}
           </Typography>
           <IconButton size="small" onClick={onClose}>
             <CloseIcon fontSize="small" />
@@ -92,7 +95,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
         )}
         {isError && (
           <Typography variant="body2" color="error">
-            Failed to load job detail.
+            {t("failedToLoadJobDetail")}
           </Typography>
         )}
         {data && (
@@ -108,24 +111,28 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               <JobStatusChip status={data.status} />
               <Chip
                 size="small"
-                label={`triggered by ${data.triggeredBy ?? "—"}`}
+                label={t("triggeredByActor", { actor: data.triggeredBy ?? "—" })}
                 variant="outlined"
               />
               <Chip
                 size="small"
-                label={`started ${formatTransitAdminTimestamp(data.startedAt)}`}
+                label={t("startedAt", {
+                  startedAt: format.timestamp(data.startedAt),
+                })}
                 variant="outlined"
               />
               {data.finishedAt && (
                 <Chip
                   size="small"
-                  label={`duration ${durationLabel(data.startedAt, data.finishedAt)}`}
+                  label={t("durationValue", {
+                    duration: durationLabel(data.startedAt, data.finishedAt, format),
+                  })}
                   variant="outlined"
                 />
               )}
             </Stack>
 
-            <DataManagerJobStages stages={data.stages} emptyMessage="No stage records yet." />
+            <DataManagerJobStages stages={data.stages} emptyMessage={t("noStageRecordsYet")} />
           </Stack>
         )}
       </Box>
@@ -134,11 +141,13 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
 }
 
 export function RecentJobsTable() {
+  const t = useTranslations("adminTransit");
+  const format = useAdminFormat();
   const { data, isLoading, isError } = useTransitJobs(20);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
 
   return (
-    <AdminTableSurface title="Recent jobs" description="Showing up to 20 most recent">
+    <AdminTableSurface title={t("recentJobs")} description={t("showingUpTo20Most")}>
       {isLoading ? (
         <Box
           sx={{
@@ -151,7 +160,7 @@ export function RecentJobsTable() {
         </Box>
       ) : isError ? (
         <Typography variant="body2" color="error" sx={{ p: 2 }}>
-          Failed to load jobs.
+          {t("failedToLoadJobs")}
         </Typography>
       ) : data && data.jobs.length === 0 ? (
         <Typography
@@ -161,19 +170,19 @@ export function RecentJobsTable() {
             p: 2,
           }}
         >
-          No jobs recorded yet.
+          {t("noJobsRecordedYet")}
         </Typography>
       ) : (
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Job ID</TableCell>
-                <TableCell>Started</TableCell>
-                <TableCell>Finished</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Triggered by</TableCell>
-                <TableCell align="right">Duration</TableCell>
+                <TableCell>{t("jobId")}</TableCell>
+                <TableCell>{t("started")}</TableCell>
+                <TableCell>{t("finished")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell>{t("triggeredBy")}</TableCell>
+                <TableCell align="right">{t("duration")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -194,8 +203,8 @@ export function RecentJobsTable() {
                       {job.id.slice(0, 8)}…
                     </Typography>
                   </TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(job.startedAt)}</TableCell>
-                  <TableCell>{formatTransitAdminTimestamp(job.finishedAt)}</TableCell>
+                  <TableCell>{format.timestamp(job.startedAt)}</TableCell>
+                  <TableCell>{format.timestamp(job.finishedAt)}</TableCell>
                   <TableCell>
                     <JobStatusChip status={job.status} />
                   </TableCell>
@@ -210,7 +219,7 @@ export function RecentJobsTable() {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    {durationLabel(job.startedAt, job.finishedAt)}
+                    {durationLabel(job.startedAt, job.finishedAt, format)}
                   </TableCell>
                 </TableRow>
               ))}

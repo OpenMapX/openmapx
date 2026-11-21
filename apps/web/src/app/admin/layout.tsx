@@ -1,8 +1,11 @@
 import { serverApiUrl } from "@openmapx/core/server-api";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getMessages } from "next-intl/server";
 import type { ReactNode } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminMessagesProvider } from "@/components/admin/AdminMessagesProvider";
+import { onlyAdminMessages } from "@/i18n/adminMessages";
 import { getSelfHosted } from "@/lib/admin/serverDeployment";
 
 async function getAdminSession() {
@@ -30,9 +33,12 @@ export default async function AdminRootLayout({ children }: { children: ReactNod
 
   const selfHosted = await getSelfHosted(cookieHeader);
 
+  // The root layout leaves admin copy out of public pages; admin pages add it to the public catalogue.
   return (
-    <AdminLayout user={session.user} selfHosted={selfHosted}>
-      {children}
-    </AdminLayout>
+    <AdminMessagesProvider messages={onlyAdminMessages(await getMessages())}>
+      <AdminLayout user={session.user} selfHosted={selfHosted}>
+        {children}
+      </AdminLayout>
+    </AdminMessagesProvider>
   );
 }

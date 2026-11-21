@@ -15,7 +15,9 @@ import {
   serviceBatchResultSchema,
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { type AdminFormatters, useAdminFormat } from "@/lib/admin/adminFormat";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "../shared/JobStatusChip";
 import {
@@ -26,25 +28,18 @@ import {
 } from "./activityQueries";
 import { type JobStreamConnection, useJobEventStream } from "./useJobEventStream";
 
-const CONNECTION_LABEL: Record<JobStreamConnection, string | null> = {
-  connecting: "Connecting",
-  live: "Live",
-  reconnecting: "Reconnecting",
-  polling: "Polling",
-  closed: null,
-};
-
 /** Poll cadence used only when the event stream is unavailable. */
 const POLL_INTERVAL_MS = 5_000;
 
-function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+  format: AdminFormatters,
+): string {
   if (!startedAt) return "—";
   const start = new Date(startedAt).getTime();
   const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const ms = end - start;
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  return format.duration(end - start);
 }
 
 function isCancelable(status: string) {
@@ -56,6 +51,9 @@ function isActive(status: string) {
 }
 
 export function JobDetail({ jobId, source }: { jobId: string; source: AdminActivityJobSource }) {
+  const t = useTranslations("adminActivity");
+  const tCommon = useTranslations("common");
+  const format = useAdminFormat();
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -80,7 +78,14 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
   const data = stream.data ?? query.data;
   const isLoading = !data && query.isLoading;
   const isError = !data && query.isError;
-  const connectionLabel = CONNECTION_LABEL[stream.connection];
+  const connectionLabels: Record<JobStreamConnection, string | null> = {
+    connecting: t("connectionConnecting"),
+    live: t("connectionLive"),
+    reconnecting: t("connectionReconnecting"),
+    polling: t("connectionPolling"),
+    closed: null,
+  };
+  const connectionLabel = connectionLabels[stream.connection];
 
   useEffect(() => {
     if (data && isActive(data.status)) {
@@ -114,7 +119,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
   if (isError) {
     return (
       <Typography variant="body2" color="error">
-        Failed to load job details.
+        {t("failedToLoadJobDetails")}
       </Typography>
     );
   }
@@ -192,7 +197,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
             color: "text.secondary",
           }}
         >
-          Duration: {formatDuration(data.startedAt, data.finishedAt)}
+          {t("duration", { duration: formatDuration(data.startedAt, data.finishedAt, format) })}
         </Typography>
         {data.cancelable && data.status !== "cancel_pending" && (
           <Button
@@ -203,7 +208,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
             onClick={() => cancel.mutate()}
             disabled={cancel.isPending}
           >
-            Cancel
+            {tCommon("cancel")}
           </Button>
         )}
       </Stack>
@@ -211,34 +216,43 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         <Box role="status">
           <Typography
             variant="subtitle2"
-            color={batch.data.outcome === "success" ? "success.main" : "warning.main"}
+            sx={{ color: batch.data.outcome === "success" ? "success.main" : "warning.main" }}
           >
             {batch.data.outcome === "partial"
-              ? "Partially completed"
+              ? t("partiallyCompleted")
               : batch.data.outcome === "failed"
-                ? "Batch failed"
-                : "Batch completed"}
+                ? t("batchFailed")
+                : t("batchCompleted")}
           </Typography>
           <Typography variant="body2">
-            Completed: {batch.data.completedServiceIds.join(", ") || "none"}
+            {t("completedServices", {
+              count: batch.data.completedServiceIds.length,
+              services: batch.data.completedServiceIds.join(", "),
+            })}
           </Typography>
           <Typography variant="body2">
-            Failed: {batch.data.failedServiceIds.join(", ") || "none"}
+            {t("failedServices", {
+              count: batch.data.failedServiceIds.length,
+              services: batch.data.failedServiceIds.join(", "),
+            })}
           </Typography>
           <Typography variant="body2">
-            Skipped: {batch.data.skippedServiceIds.join(", ") || "none"}
+            {t("skippedServices", {
+              count: batch.data.skippedServiceIds.length,
+              services: batch.data.skippedServiceIds.join(", "),
+            })}
           </Typography>
         </Box>
       )}
       {observation.success && (
-        <Typography role="status" variant="body2" color="warning.main">
-          Outcome unknown; checking retained operation status.
+        <Typography role="status" variant="body2" sx={{ color: "warning.main" }}>
+          {t("outcomeUnknownCheckingRetainedOperation")}
         </Typography>
       )}
       {tail.length > 0 && (
         <Box>
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Retained diagnostics
+            {t("retainedDiagnostics")}
           </Typography>
           <Box
             component="pre"
@@ -273,7 +287,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
       {data.source === "data-manager" ? (
         <DataManagerJobStages
           stages={data.stages}
-          emptyMessage={isActive(data.status) ? "Waiting for the first stage..." : undefined}
+          emptyMessage={isActive(data.status) ? t("waitingForTheFirstStage") : undefined}
         />
       ) : (
         <Box
@@ -290,7 +304,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         >
           {data.logs.length === 0 ? (
             <Typography variant="caption" sx={{ color: "grey.500" }}>
-              {isActive(data.status) ? "Waiting for output..." : "No log output"}
+              {isActive(data.status) ? t("waitingForOutput") : t("noLogOutput")}
             </Typography>
           ) : (
             data.logs.map((log) => (
@@ -315,7 +329,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
               fontWeight: 600,
             }}
           >
-            Result
+            {t("result")}
           </Typography>
           <Box
             component="pre"

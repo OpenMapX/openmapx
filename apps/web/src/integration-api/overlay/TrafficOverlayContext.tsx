@@ -20,7 +20,7 @@ export function TrafficOverlayContext({
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
       {!visible && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("hidden")}
         </Typography>
       )}

@@ -1,4 +1,3 @@
-import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import {
   type ReactElement,
   useCallback,
@@ -8,35 +7,17 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  AccessibilityInfo,
-  Alert,
-  Linking,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Alert, Linking, Platform, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
-import { getNavigationAudio } from "./audio/navigationAudioModule";
-import { answerCommand } from "./bridge/answerCommand";
-import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
-import { IntakeController } from "./intake/IntakeController";
-import { createNativeIntakePort, NativeIntakeError } from "./intake/nativeIntakeModule";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
 import type { DeepLinkIntent } from "./links/deepLinkIntent";
 import { useIncomingLinks } from "./links/useIncomingLinks";
-import { createLocationDriver } from "./location/createLocationDriver";
-import {
-  createForegroundNavigation,
-  type ForegroundNavigation,
-} from "./navigation/createForegroundNavigation";
 import { surfaceCopy } from "./navigation/surfaces/surfaceModel";
-import { createPermissionPrompter, PermissionPrompts } from "./permissions/PermissionPrompts";
+import { PermissionPrompts } from "./permissions/PermissionPrompts";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { type NativePalette, useNativePalette } from "./shell/nativeTheme";
@@ -45,10 +26,8 @@ import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
-import { createShellServices } from "./shell/shellServices";
 import { useHardwareBack } from "./shell/useHardwareBack";
-import { createUserIntentGate } from "./voice/userIntentGate";
-import { VoiceInputController } from "./voice/VoiceInputController";
+import { useShellRuntime } from "./shell/useShellRuntime";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
@@ -56,15 +35,6 @@ import { VoiceInputController } from "./voice/VoiceInputController";
  * WebView cannot render itself: the first load, a failed load, a session that
  * outlived its process, and a fatally misconfigured build.
  */
-
-/** What a shell without native navigation reports. */
-const NO_NAVIGATION = {
-  groundNavigation: false,
-  transitNavigation: false,
-  backgroundLocation: false,
-  localNotifications: false,
-  speech: false,
-};
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -99,158 +69,26 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
-  const [voiceIntent] = useState(() => createUserIntentGate());
-  useEffect(() => {
-    let mounted = true;
-    void AccessibilityInfo.isScreenReaderEnabled()
-      .then((enabled) => {
-        if (mounted) voiceIntent.setScreenReader(enabled);
-      })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener("screenReaderChanged", (enabled) =>
-      voiceIntent.setScreenReader(enabled),
-    );
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, [voiceIntent]);
   const webSource = useMemo(() => ({ uri: new URL(config.webOrigin).href }), [config.webOrigin]);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
   useEffect(() => {
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
   }, [visibility]);
-  const services = useMemo(
-    () =>
-      createShellServices({
-        config,
-        isAppActive: () => visibilityRef.current === "active",
-      }),
-    [config],
-  );
-  const prompter = useMemo(
-    () =>
-      createPermissionPrompter({
-        locale,
-        requestBackgroundAccess: () => createLocationDriver().requestBackgroundPermission(),
-      }),
-    [locale],
-  );
   // Shell states follow the composition, which reports each guidance change
-  // once and every end once, whoever caused it.
-  const setNavigating = useCallback((navigating: boolean) => {
-    dispatchShell({ type: navigating ? "session-started" : "session-ended" });
-  }, []);
-  const sessionEnded = useCallback(() => {
-    dispatchShell({ type: "session-ended" });
-  }, []);
-  const intakePort = useMemo(() => createNativeIntakePort(), []);
-  const { shell, navigation, voice } = useMemo(() => {
-    let intake: IntakeController;
-    let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
-    const voice = new VoiceInputController({
-      module: ExpoSpeechRecognitionModule,
-      platform: Platform.OS,
-      api: Number(Platform.Version),
-      audio: getNavigationAudio(),
-      active: () => visibilityRef.current === "active",
-      channel: () =>
-        composed.registry.handshake() ? (composed.registry.current()?.nonce ?? null) : null,
-      emit: (event) => composed.bridge.send("voice.event", event),
-    });
-    const composed: ShellBridge = createShellBridge({
-      webOrigin: config.webOrigin,
+  // once and every end once, whoever caused it. A recomposed runtime reloads
+  // the page so that it handshakes with the fresh bridge.
+  const { shell, navigation, voice, voiceIntent, prompter, intakePort } = useShellRuntime(
+    {
+      config,
+      locale,
       inject: (script) => webViewRef.current?.injectJavaScript(script),
-      // Navigation commands go through the coordinator's queue; the
-      // composition answers the one-shot location, settings and sign-in
-      // requests beside it. A build without it (the feasibility probe) answers
-      // only those.
-      dispatch: async (message) => {
-        if (message.type.startsWith("intake.")) {
-          await intake.dispatch(message);
-          return;
-        }
-        if (message.type === "voice.probe") {
-          composed.bridge.send(
-            "voice.availability",
-            { available: voice.isAvailable() },
-            { forMessageId: message.messageId },
-          );
-          return;
-        }
-        if (message.type === "voice.start") {
-          // The microphone starts only after a touch the shell itself saw
-          // (see userIntentGate), never on the page's word alone.
-          if (!voiceIntent.admit()) {
-            composed.bridge.send("voice.event", {
-              requestId: message.payload.requestId,
-              state: "error",
-              error: "generic",
-            });
-            return;
-          }
-          void voice.start(message.payload.requestId, message.payload.locale);
-          return;
-        }
-        if (message.type === "voice.stop") {
-          voice.stop(message.payload.requestId);
-          return;
-        }
-        if (message.type === "voice.cancel") {
-          voice.cancel(message.payload.requestId);
-          return;
-        }
-        const composedNavigation = await navigation;
-        if (composedNavigation) {
-          await composedNavigation.dispatch(message);
-          return;
-        }
-        await answerCommand(message, services.auxiliary, (type, payload, options) =>
-          composed.bridge.send(type, payload, options),
-        );
-      },
-      capabilities: async () => ({
-        ...((await navigation)?.capabilities() ?? NO_NAVIGATION),
-        nativeIntake: await intakePort.available(),
-      }),
-      permission: () => services.permission(),
-      activeSession: async () => (await navigation)?.activeSession() ?? null,
-      reportInvalidSend: (type) => {
-        void navigation.then((composed) => composed?.reportInvalidSend(type));
-      },
-    });
-    if (!config.feasibilityMode) {
-      navigation = createForegroundNavigation({
-        apiOrigin: config.apiOrigin,
-        locale,
-        send: (type, payload, options) => composed.bridge.send(type, payload, options),
-        permissionUi: prompter.ui,
-        isAppActive: () => visibilityRef.current === "active",
-        auxiliary: services.auxiliary,
-        onNavigatingChanged: setNavigating,
-        onSessionEnded: sessionEnded,
-      }).catch(() => null);
-    }
-    intake = new IntakeController({
-      port: intakePort,
-      scheme: config.scheme,
-      currentNonce: () => composed.registry.current()?.nonce,
-      send: (type, payload, options) => composed.bridge.send(type, payload, options),
-      canApply: async () => {
-        const runtime = await navigation;
-        if (runtime === null) {
-          if (config.feasibilityMode) return true;
-          throw new NativeIntakeError("navigation-unavailable");
-        }
-        try {
-          return (await runtime.activeSession()) === null;
-        } catch {
-          throw new NativeIntakeError("navigation-unavailable");
-        }
-      },
-    });
-    return { shell: composed, navigation, intake, voice };
-  }, [config, locale, prompter, services, setNavigating, sessionEnded, intakePort, voiceIntent]);
+      isAppActive: () => visibilityRef.current === "active",
+      onNavigatingChanged: (navigating) =>
+        dispatchShell({ type: navigating ? "session-started" : "session-ended" }),
+      onSessionEnded: () => dispatchShell({ type: "session-ended" }),
+    },
+    () => setLoadAttempt((attempt) => attempt + 1),
+  );
   useEffect(() => {
     if (visibility !== "active") voice.suspend();
   }, [visibility, voice]);
@@ -289,13 +127,6 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     [navigation, locale],
   );
   const incomingLinks = useIncomingLinks(config, deliverLink, requestNativeEnd);
-  useEffect(
-    () => () => {
-      voice.cancel();
-      void navigation.then((composed) => composed?.dispose());
-    },
-    [navigation, voice],
-  );
 
   /**
    * The nonce the document-start script currently publishes.

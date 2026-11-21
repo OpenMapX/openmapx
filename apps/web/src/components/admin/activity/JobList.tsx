@@ -21,22 +21,20 @@ import { listAdminActivityJobs, unwrapAdminResponse } from "@openmapx/core/api-a
 import type { AdminActivityJob, AdminActivityJobsResponse } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { parseAdminJobSelection } from "@/lib/admin/adminJobNavigation";
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { JobStatusChip } from "../shared/JobStatusChip";
+import { useJobTypeLabel } from "../shared/jobTypeLabel";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
 import { ACTIVITY_READ_TIMEOUT_MS, useActivityClient } from "./activityQueries";
 import { JobDetail } from "./JobDetail";
 
 type StatusFilter = "all" | "active" | "completed" | "failed";
-
-function formatJobType(type: string): string {
-  return type.replace(/[.:]/g, " › ").replace(/[_-]/g, " ");
-}
 
 function formatPayload(payload: unknown): string | null {
   if (payload == null) return null;
@@ -48,6 +46,8 @@ function formatPayload(payload: unknown): string | null {
 }
 
 function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void }) {
+  const t = useTranslations("adminActivity");
+  const jobTypeLabel = useJobTypeLabel();
   const dtf = useDateTimeFormat();
   const payload = formatPayload(job.payload);
 
@@ -57,7 +57,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
         <TableCell sx={{ width: 32, px: 1 }}>
           <IconButton
             size="small"
-            aria-label={`Open job ${job.id}`}
+            aria-label={t("openJobId", { id: job.id })}
             onClick={(event) => {
               event.stopPropagation();
               onSelect();
@@ -73,7 +73,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
               fontWeight: 500,
             }}
           >
-            {formatJobType(job.type)}
+            {jobTypeLabel(job.type)}
           </Typography>
           {payload && (
             <Tooltip title={payload} placement="bottom-start">
@@ -88,7 +88,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
           )}
           {job.source === "data-manager" && (
             <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-              Data manager
+              {t("dataManager")}
             </Typography>
           )}
         </TableCell>
@@ -116,6 +116,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
 }
 
 export function JobList() {
+  const t = useTranslations("adminActivity");
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const { params, update } = useAdminQueryState();
@@ -147,7 +148,7 @@ export function JobList() {
       {selection && (
         <Box
           component="section"
-          aria-label="Selected job"
+          aria-label={t("selectedJob")}
           sx={{
             p: 2,
             border: 1,
@@ -158,18 +159,21 @@ export function JobList() {
         >
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1 }}>
             <Typography component="h2" variant="subtitle1" sx={{ flexGrow: 1 }}>
-              Selected job · {selection.source} · {selection.id}
+              {t("selectedJobHeading", {
+                source: selection.source.replace("-", "_"),
+                id: selection.id,
+              })}
             </Typography>
             {selection.returnTo && (
               <Button component={Link} href={selection.returnTo} size="small">
-                Return to task
+                {t("returnToTask")}
               </Button>
             )}
             <Button
               size="small"
               onClick={() => update({ job: null, source: null, returnTo: null })}
             >
-              Close job details
+              {t("closeJobDetails")}
             </Button>
           </Stack>
           <JobDetail
@@ -199,17 +203,21 @@ export function JobList() {
                 }
               }}
             >
-              <ToggleButton value="all">All</ToggleButton>
-              <ToggleButton value="active">Active</ToggleButton>
-              <ToggleButton value="completed">Completed</ToggleButton>
-              <ToggleButton value="failed">Failed</ToggleButton>
+              <ToggleButton value="all">{t("all")}</ToggleButton>
+              <ToggleButton value="active">{t("active")}</ToggleButton>
+              <ToggleButton value="completed">{t("completed")}</ToggleButton>
+              <ToggleButton value="failed">{t("failed")}</ToggleButton>
             </ToggleButtonGroup>
 
             <Box sx={{ flexGrow: 1 }} />
 
-            <Chip label={`${data?.total ?? 0} jobs`} size="small" variant="outlined" />
+            <Chip
+              label={t("jobCount", { count: data?.total ?? 0 })}
+              size="small"
+              variant="outlined"
+            />
 
-            <Tooltip title="Refresh">
+            <Tooltip title={t("refresh")}>
               <IconButton
                 size="small"
                 onClick={() =>
@@ -228,10 +236,10 @@ export function JobList() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 32 }} />
-                <TableCell>Job</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Actor</TableCell>
-                <TableCell>When</TableCell>
+                <TableCell>{t("job")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell>{t("actor")}</TableCell>
+                <TableCell>{t("when")}</TableCell>
               </TableRow>
             </TableHead>
             {isLoading ? (
@@ -241,7 +249,7 @@ export function JobList() {
                 <TableRow>
                   <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <Typography variant="body2" color="error">
-                      Failed to load jobs
+                      {t("failedToLoadJobs")}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -256,7 +264,7 @@ export function JobList() {
                         color: "text.secondary",
                       }}
                     >
-                      No jobs found
+                      {t("noJobsFound")}
                     </Typography>
                   </TableCell>
                 </TableRow>

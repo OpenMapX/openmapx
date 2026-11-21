@@ -115,9 +115,11 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
                     <Typography
                       variant="caption"
-                      color={stop.canceled ? "error.main" : "text.secondary"}
                       noWrap
-                      sx={{ textDecoration: stop.canceled ? "line-through" : "none" }}
+                      sx={{
+                        color: stop.canceled ? "error.main" : "text.secondary",
+                        textDecoration: stop.canceled ? "line-through" : "none",
+                      }}
                     >
                       {stop.name}
                     </Typography>

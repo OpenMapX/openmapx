@@ -36,10 +36,13 @@ import { getInitials, proxyImageUrl } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Menu from "@/components/ui/Menu";
 import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { useAccountErrorText } from "@/lib/admin/useAccountErrorText";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -79,15 +82,17 @@ function UserRoleSelect({
   role?: string | null;
   isSelf: boolean;
 }) {
+  const t = useTranslations("adminUsers");
   const showToast = useAdminToast();
+  const errorText = useAccountErrorText();
   const mutation = useAccountAction(userId, {
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
 
   return (
     <FormControl size="small" sx={{ minWidth: 90 }}>
       <Select
-        inputProps={{ "aria-label": "Role" }}
+        inputProps={{ "aria-label": t("role") }}
         value={role ?? "user"}
         disabled={isSelf || mutation.isPending}
         onChange={(e) => {
@@ -98,8 +103,8 @@ function UserRoleSelect({
         disableUnderline
         sx={{ fontSize: 13 }}
       >
-        <MenuItem value="user">User</MenuItem>
-        <MenuItem value="admin">Admin</MenuItem>
+        <MenuItem value="user">{t("user")}</MenuItem>
+        <MenuItem value="admin">{t("admin")}</MenuItem>
       </Select>
     </FormControl>
   );
@@ -120,31 +125,33 @@ function ActionsMenu({
   impersonate: (id: string) => void;
   impersonating: boolean;
 }) {
+  const t = useTranslations("adminUsers");
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const showToast = useAdminToast();
+  const errorText = useAccountErrorText();
 
   const unban = useAccountAction(user.id, {
     onSuccess: () => {
       setAnchor(null);
-      showToast(`${user.name} unbanned`);
+      showToast(t("nameUnbanned", { name: user.name }));
     },
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
   const deleteUser = useAccountAction(user.id, {
     onSuccess: () => {
       setConfirmDelete(false);
       setAnchor(null);
-      showToast(`${user.name} deleted`);
+      showToast(t("nameDeleted", { name: user.name }));
     },
-    onError: (error) => showToast(error.message, "error"),
+    onError: (error) => showToast(errorText(error), "error"),
   });
 
   return (
     <>
       <IconButton
         size="small"
-        aria-label="User actions"
+        aria-label={t("userActions")}
         onClick={(e) => setAnchor(e.currentTarget)}
       >
         <MoreVertIcon fontSize="small" />
@@ -160,14 +167,14 @@ function ActionsMenu({
           <ListItemIcon>
             <PersonSearchIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>View</ListItemText>
+          <ListItemText>{t("view")}</ListItemText>
         </MenuItem>
         {!isSelf && (
           <MenuItem onClick={() => impersonate(user.id)} disabled={impersonating}>
             <ListItemIcon>
               <SupervisorAccountIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Impersonate</ListItemText>
+            <ListItemText>{t("impersonate")}</ListItemText>
           </MenuItem>
         )}
         {user.banned ? (
@@ -178,7 +185,7 @@ function ActionsMenu({
             <ListItemIcon>
               <CheckCircleIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Unban</ListItemText>
+            <ListItemText>{t("unban")}</ListItemText>
           </MenuItem>
         ) : (
           !isSelf && (
@@ -191,7 +198,7 @@ function ActionsMenu({
               <ListItemIcon>
                 <BlockIcon fontSize="small" color="warning" />
               </ListItemIcon>
-              <ListItemText>Ban</ListItemText>
+              <ListItemText>{t("ban")}</ListItemText>
             </MenuItem>
           )
         )}
@@ -203,7 +210,7 @@ function ActionsMenu({
           <ListItemIcon>
             <LockResetIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Account recovery…</ListItemText>
+          <ListItemText>{t("accountRecoveryMenuItem")}</ListItemText>
         </MenuItem>
         {!isSelf && !isLastAdmin && (
           <MenuItem
@@ -216,15 +223,15 @@ function ActionsMenu({
             <ListItemIcon>
               <DeleteIcon fontSize="small" color="error" />
             </ListItemIcon>
-            <ListItemText>Delete</ListItemText>
+            <ListItemText>{t("delete")}</ListItemText>
           </MenuItem>
         )}
       </Menu>
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete user?"
-        message={`Permanently delete ${user.name} (${user.email})? This cannot be undone.`}
-        confirmLabel="Delete"
+        title={t("deleteUser")}
+        message={t("deleteUserConfirm", { name: user.name, email: user.email })}
+        confirmLabel={t("delete")}
         confirmColor="error"
         loading={deleteUser.isPending}
         onConfirm={() => deleteUser.mutate((client) => client.remove(user.id))}
@@ -235,6 +242,8 @@ function ActionsMenu({
 }
 
 export function UserList() {
+  const t = useTranslations("adminUsers");
+  const format = useAdminFormat();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
@@ -318,8 +327,8 @@ export function UserList() {
       }}
     >
       <AdminPageHeader
-        title="Users"
-        subtitle="Accounts, roles, bans, impersonation"
+        title={t("users")}
+        subtitle={t("accountsRolesBansImpersonation")}
         actions={
           <Button
             variant="contained"
@@ -327,23 +336,23 @@ export function UserList() {
             onClick={() => setCreateOpen(true)}
             size="small"
           >
-            Create user
+            {t("createUserTitle")}
           </Button>
         }
       />
       {readError && (
         <Alert severity="error">
-          Could not load accounts. {data ? "Showing the last confirmed list." : ""}
+          {data ? t("couldNotLoadAccountsShowingLast") : t("couldNotLoadAccounts")}
         </Alert>
       )}
       {countError && !readError && (
-        <Alert severity="warning">Administrator count is temporarily unavailable.</Alert>
+        <Alert severity="warning">{t("administratorCountIsTemporarilyUnavailable")}</Alert>
       )}
       <AdminTableSurface
         toolbar={
           <TableToolbar>
             <TableSearchField
-              placeholder="Search users by email…"
+              placeholder={t("searchUsersByEmail")}
               value={search}
               onChange={(value) => {
                 setSearch(value);
@@ -352,10 +361,10 @@ export function UserList() {
               minWidth={280}
             />
             <ToggleButtonGroup size="small" exclusive value={filter} onChange={handleFilterChange}>
-              <ToggleButton value="all">All</ToggleButton>
-              <ToggleButton value="active">Active</ToggleButton>
-              <ToggleButton value="banned">Banned</ToggleButton>
-              <ToggleButton value="admins">Admins</ToggleButton>
+              <ToggleButton value="all">{t("all")}</ToggleButton>
+              <ToggleButton value="active">{t("active")}</ToggleButton>
+              <ToggleButton value="banned">{t("banned")}</ToggleButton>
+              <ToggleButton value="admins">{t("admins")}</ToggleButton>
             </ToggleButtonGroup>
           </TableToolbar>
         }
@@ -379,7 +388,7 @@ export function UserList() {
                     direction={sortField === "name" ? sortDir : "asc"}
                     onClick={() => handleSort("name")}
                   >
-                    Name
+                    {t("name")}
                   </TableSortLabel>
                 </TableCell>
                 <TableCell>
@@ -388,19 +397,19 @@ export function UserList() {
                     direction={sortField === "email" ? sortDir : "asc"}
                     onClick={() => handleSort("email")}
                   >
-                    Email
+                    {t("email")}
                   </TableSortLabel>
                 </TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell sx={{ width: 40 }}>2FA</TableCell>
+                <TableCell>{t("role")}</TableCell>
+                <TableCell>{t("status")}</TableCell>
+                <TableCell sx={{ width: 40 }}>{t("twoFactorColumn")}</TableCell>
                 <TableCell>
                   <TableSortLabel
                     active={sortField === "createdAt"}
                     direction={sortField === "createdAt" ? sortDir : "asc"}
                     onClick={() => handleSort("createdAt")}
                   >
-                    Joined
+                    {t("joinedColumn")}
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ width: 48 }} />
@@ -413,7 +422,7 @@ export function UserList() {
                 {users.length === 0 ? (
                   <TableEmptyState
                     colSpan={8}
-                    message={readError ? "Unable to load accounts" : "No users found"}
+                    message={readError ? t("unableToLoadAccounts") : t("noUsersFound")}
                   />
                 ) : (
                   users.map((user) => {
@@ -442,7 +451,7 @@ export function UserList() {
                             {user.name}
                             {isSelf && (
                               <Chip
-                                label="you"
+                                label={t("you")}
                                 size="small"
                                 sx={{ ml: 0.5, height: 16, fontSize: 10 }}
                               />
@@ -459,7 +468,7 @@ export function UserList() {
                           >
                             <Typography variant="body2">{user.email}</Typography>
                             {user.emailVerified && (
-                              <Tooltip title="Email verified">
+                              <Tooltip title={t("emailVerifiedTooltip")}>
                                 <VerifiedIcon sx={{ fontSize: 14, color: "success.main" }} />
                               </Tooltip>
                             )}
@@ -474,18 +483,28 @@ export function UserList() {
                         </TableCell>
                         <TableCell>
                           {user.banned ? (
-                            <Tooltip title={user.banReason ?? "Banned"}>
-                              <Chip label="Banned" size="small" color="error" variant="outlined" />
+                            <Tooltip title={user.banReason ?? t("banned")}>
+                              <Chip
+                                label={t("banned")}
+                                size="small"
+                                color="error"
+                                variant="outlined"
+                              />
                             </Tooltip>
                           ) : user.emailVerified ? (
-                            <Chip label="Active" size="small" color="success" variant="outlined" />
+                            <Chip
+                              label={t("active")}
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                            />
                           ) : (
-                            <Chip label="Unverified" size="small" variant="outlined" />
+                            <Chip label={t("unverified")} size="small" variant="outlined" />
                           )}
                         </TableCell>
                         <TableCell>
                           {user.twoFactorEnabled && (
-                            <Tooltip title="2FA enabled">
+                            <Tooltip title={t("twoFactorEnabled")}>
                               <SecurityIcon sx={{ fontSize: 16, color: "primary.main" }} />
                             </Tooltip>
                           )}
@@ -497,7 +516,7 @@ export function UserList() {
                               color: "text.secondary",
                             }}
                           >
-                            {new Date(user.createdAt).toLocaleDateString()}
+                            {format.date(user.createdAt)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -543,9 +562,11 @@ export function UserList() {
 }
 
 function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: () => void }) {
+  const t = useTranslations("adminUsers");
   const requestExit = useAdminDraftExit();
   const router = useRouter(),
-    showToast = useAdminToast();
+    showToast = useAdminToast(),
+    errorText = useAccountErrorText();
   const action = useAccountAction(targetId, {
     impersonation: true,
     onSuccess: () => {
@@ -554,7 +575,7 @@ function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: (
       onDone();
     },
     onError: (error) => {
-      showToast(error.message, "error");
+      showToast(errorText(error), "error");
       onDone();
     },
   });
@@ -562,11 +583,11 @@ function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: (
   useEffect(() => {
     if (!started.current) {
       started.current = true;
-      void requestExit("Impersonation changes the active account.").then((confirmed) => {
+      void requestExit(t("impersonationChangesTheActiveAccount")).then((confirmed) => {
         if (confirmed) action.mutate((client) => client.impersonate(targetId));
         else onDone();
       });
     }
-  }, [action, targetId, requestExit, onDone]);
+  }, [action, targetId, requestExit, onDone, t]);
   return null;
 }

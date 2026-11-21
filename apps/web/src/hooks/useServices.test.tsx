@@ -18,6 +18,7 @@ import {
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
 function mount<T>(fn: () => T) {
   const qc = createTestQueryClient();
@@ -67,7 +68,7 @@ describe("service feature hooks use the generated SDK", () => {
   it.each(["action", "config", "set", "delete", "check", "selection", "bulk"] as const)(
     "never retries failed %s under retrying mutation defaults",
     async (kind) => {
-      const fetch = vi.fn(() =>
+      const fetch = vi.fn<typeof globalThis.fetch>(async () =>
         Response.json(
           kind === "config"
             ? {
@@ -105,12 +106,12 @@ describe("service feature hooks use the generated SDK", () => {
       });
       expect(fetch).toHaveBeenCalledTimes(1);
       if (["config", "set", "delete", "selection"].includes(kind)) {
-        const init = fetch.mock.calls[0]![1] as RequestInit;
-        expect(new Headers(init.headers).get("idempotency-key")).toMatch(
+        const init = fetch.mock.calls[0]?.[1];
+        expect(new Headers(init?.headers).get("idempotency-key")).toMatch(
           /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
         );
         if (kind !== "delete")
-          expect(JSON.parse(String(init.body))).toEqual(
+          expect(JSON.parse(String(init?.body))).toEqual(
             kind === "config"
               ? { config: { count: 2 } }
               : kind === "set"
@@ -119,7 +120,7 @@ describe("service feature hooks use the generated SDK", () => {
           );
       }
       if (kind === "set" || kind === "delete")
-        expect(fetch.mock.calls[0][0]).toContain("TOKEN%20%2Fkey");
+        expect(fetch.mock.calls[0]?.[0]).toContain("TOKEN%20%2Fkey");
     },
   );
   it("refreshes only the executing origin when a save acknowledgement arrives after replacement", async () => {

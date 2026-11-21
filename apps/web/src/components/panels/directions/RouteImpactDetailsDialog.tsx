@@ -170,7 +170,11 @@ export function RouteImpactDetailsDialog({
           {t("impactDetailsTitle")}
         </Typography>
         {impact.vehicleName && (
-          <Typography variant="body2" color="text.secondary" data-testid="dialog-vehicle-name">
+          <Typography
+            variant="body2"
+            sx={{ color: "text.secondary" }}
+            data-testid="dialog-vehicle-name"
+          >
             {impact.vehicleName}
           </Typography>
         )}
@@ -285,7 +289,7 @@ export function RouteImpactDetailsDialog({
                 <Box
                   sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                 >
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     {t("operationalTailpipe")}
                   </Typography>
                   <Typography
@@ -301,7 +305,7 @@ export function RouteImpactDetailsDialog({
                 <Box
                   sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                 >
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     {t("upstreamEnergy")}
                   </Typography>
                   <Typography
@@ -332,7 +336,7 @@ export function RouteImpactDetailsDialog({
                   alignItems: "center",
                 }}
               >
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
                   {t("energyConsumed")}
                 </Typography>
                 <Typography
@@ -378,7 +382,7 @@ export function RouteImpactDetailsDialog({
                         alignItems: "center",
                       }}
                     >
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
                         {impact.energy.electricityKwh !== null && impact.energy.fuelLiters === null
                           ? t("electricityCost")
                           : t("fuelCost")}
@@ -398,7 +402,7 @@ export function RouteImpactDetailsDialog({
                         alignItems: "center",
                       }}
                     >
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
                         {t("tolls")}
                       </Typography>
                       <Typography
@@ -423,7 +427,7 @@ export function RouteImpactDetailsDialog({
                   <Box
                     sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                   >
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {t("transitFare")}
                     </Typography>
                     <Typography
@@ -479,7 +483,7 @@ export function RouteImpactDetailsDialog({
                   }}
                 >
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {t("wellToWheelTotal")}
                     </Typography>
                     <Typography
@@ -495,7 +499,7 @@ export function RouteImpactDetailsDialog({
                     </Typography>
                   </Box>
                   <Box sx={{ textAlign: "right" }}>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {impact.cost.costCompleteness === "complete"
                         ? t("totalCost")
                         : t("knownCostSubtotal")}

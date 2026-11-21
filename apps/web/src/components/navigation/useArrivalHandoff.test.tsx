@@ -1,6 +1,8 @@
 import {
   type CategoryPlace,
+  type useCategorySearch as categorySearchHook,
   type DataSourceResult,
+  type useDataSourceSearch as dataSourceSearchHook,
   type LngLat,
   type Route,
   useNavigationStore,
@@ -27,7 +29,7 @@ vi.mock("@/lib/mobile/useStartNavigation", () => ({
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 const fetchDirections = vi.fn();
-const useCategorySearch = vi.fn(() => ({
+const useCategorySearch = vi.fn((..._args: Parameters<typeof categorySearchHook>) => ({
   data: { results: [] as CategoryPlace[] },
   isLoading: false,
 }));
@@ -35,7 +37,7 @@ const useDataSources = vi.fn(() => ({
   data: { sources: [] as { id: string }[] } as { sources: { id: string }[] } | undefined,
   isLoading: false,
 }));
-const useDataSourceSearch = vi.fn(() => ({
+const useDataSourceSearch = vi.fn((..._args: Parameters<typeof dataSourceSearchHook>) => ({
   data: undefined as DataSourceResult[] | undefined,
   isLoading: false,
   isError: false,
@@ -46,9 +48,11 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   return {
     ...actual,
     fetchDirections: (...args: unknown[]) => fetchDirections(...args),
-    useCategorySearch: (...args: unknown[]) => useCategorySearch(...args),
+    useCategorySearch: (...args: Parameters<typeof categorySearchHook>) =>
+      useCategorySearch(...args),
     useDataSources: () => useDataSources(),
-    useDataSourceSearch: (...args: unknown[]) => useDataSourceSearch(...args),
+    useDataSourceSearch: (...args: Parameters<typeof dataSourceSearchHook>) =>
+      useDataSourceSearch(...args),
   };
 });
 

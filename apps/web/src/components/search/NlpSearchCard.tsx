@@ -34,7 +34,7 @@ export function NlpSearchCard({ intent, providerLabel, onActivate }: NlpSearchCa
             {intent.explanation}
           </Typography>
         </Box>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("aiPoweredSearch")} · {providerLabel}
         </Typography>
       </Box>

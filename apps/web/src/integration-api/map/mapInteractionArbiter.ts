@@ -14,7 +14,19 @@ export interface MapOverlayInteractionRegistration {
   layerIds: readonly string[];
   /** Larger values win when several registered overlays have a rendered hit. */
   priority: number;
-  onClick: (event: MapOverlayInteractionEvent) => void;
+  /**
+   * Opens what was clicked. Without it the overlay only shows the pointer
+   * cursor over its layers, for features another handler opens (basemap-style
+   * POIs, for example), and its layers stay out of the interactive registry.
+   */
+  onClick?: (event: MapOverlayInteractionEvent) => void;
+  /**
+   * Called on every pointer move with the features under the pointer when this
+   * overlay owns the hover, and with `null` when it does not: the pointer is
+   * off its layers, a higher-priority overlay owns it, or the pointer left the
+   * map. The pointer event comes along while the pointer is over the map.
+   */
+  onHover?: (features: MapGeoJSONFeature[] | null, event?: MapMouseEvent) => void;
 }
 
 interface RegistrationRecord extends MapOverlayInteractionRegistration {
@@ -26,9 +38,11 @@ interface MapInteractionState {
   layerOwners: Map<string, number>;
   arbiterOwnedLayerIds: Set<string>;
   nextOrder: number;
+  /** Whether the pointer cursor on the map is the one this arbiter set. */
+  ownsCursor: boolean;
   onClick: (event: MapMouseEvent) => void;
   onMouseMove: (event: MapMouseEvent) => void;
-  onMouseLeave: () => void;
+  onMouseLeave: (event?: MapMouseEvent) => void;
 }
 
 const mapStates = new WeakMap<MaplibreMap, MapInteractionState>();
@@ -65,10 +79,11 @@ function winningHit(
   map: MaplibreMap,
   state: MapInteractionState,
   event: MapMouseEvent,
+  clicksOnly = false,
 ): { registration: RegistrationRecord; features: MapGeoJSONFeature[] } | null {
-  const registrations = [...state.registrations.values()].sort(
-    (a, b) => b.priority - a.priority || a.order - b.order,
-  );
+  const registrations = [...state.registrations.values()]
+    .filter((registration) => !clicksOnly || registration.onClick)
+    .sort((a, b) => b.priority - a.priority || a.order - b.order);
   for (const registration of registrations) {
     const features = hitForRegistration(map, registration, event);
     if (features.length > 0) return { registration, features };
@@ -76,8 +91,25 @@ function winningHit(
   return null;
 }
 
-function setCursor(map: MaplibreMap, cursor: string): void {
+function reportHover(
+  state: MapInteractionState,
+  hit: { registration: RegistrationRecord; features: MapGeoJSONFeature[] } | null,
+  event?: MapMouseEvent,
+): void {
+  for (const registration of [...state.registrations.values()]) {
+    registration.onHover?.(registration === hit?.registration ? hit.features : null, event);
+  }
+}
+
+/**
+ * Show the pointer over an overlay hit, and take back only a pointer this
+ * arbiter set: basemap POIs and the route line keep their own cursor.
+ */
+function showPointer(map: MaplibreMap, state: MapInteractionState, pointer: boolean): void {
+  if (!pointer && !state.ownsCursor) return;
+  state.ownsCursor = pointer;
   const style = map.getCanvasContainer().style;
+  const cursor = pointer ? "pointer" : "";
   if (style.cursor !== cursor) style.cursor = cursor;
 }
 
@@ -110,16 +142,25 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.layerOwners = new Map();
   state.arbiterOwnedLayerIds = new Set();
   state.nextOrder = 0;
+  state.ownsCursor = false;
   state.onClick = (event) => {
     if (getMapClickOwner(event)) return;
-    const hit = winningHit(map, state, event);
-    if (!hit) return;
-    hit.registration.onClick({ event, features: hit.features });
+    const hit = winningHit(map, state, event, true);
+    hit?.registration.onClick?.({ event, features: hit.features });
   };
   state.onMouseMove = (event) => {
-    setCursor(map, winningHit(map, state, event) ? "pointer" : "");
+    const hit = winningHit(map, state, event);
+    showPointer(map, state, hit !== null);
+    reportHover(state, hit, event);
   };
-  state.onMouseLeave = () => setCursor(map, "");
+  state.onMouseLeave = (event) => {
+    // Moving onto a DOM marker or popup inside the map also fires mouseout, but
+    // the pointer is still over the map and the next move reports it again.
+    const entered = (event?.originalEvent as MouseEvent | undefined)?.relatedTarget;
+    if (entered && map.getCanvasContainer().contains(entered as Node)) return;
+    showPointer(map, state, false);
+    reportHover(state, null);
+  };
 
   map.on("click", state.onClick);
   map.on("mousemove", state.onMouseMove);
@@ -140,7 +181,7 @@ export function registerMapOverlayInteraction(
   const state = mapStates.get(map) ?? createMapState(map);
   const record: RegistrationRecord = { ...registration, order: state.nextOrder++ };
   state.registrations.set(registration.id, record);
-  addRegistrationLayers(state, registration.layerIds);
+  if (registration.onClick) addRegistrationLayers(state, registration.layerIds);
 
   let active = true;
   return () => {
@@ -148,13 +189,13 @@ export function registerMapOverlayInteraction(
     active = false;
     if (state.registrations.get(registration.id) !== record) return;
     state.registrations.delete(registration.id);
-    removeRegistrationLayers(state, registration.layerIds);
+    if (registration.onClick) removeRegistrationLayers(state, registration.layerIds);
     if (state.registrations.size > 0) return;
 
     map.off("click", state.onClick);
     map.off("mousemove", state.onMouseMove);
     map.off("mouseout", state.onMouseLeave);
-    setCursor(map, "");
+    showPointer(map, state, false);
     mapStates.delete(map);
   };
 }

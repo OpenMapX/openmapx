@@ -261,7 +261,7 @@ describe("GET /admin/overview", () => {
         {
           source: "data-manager",
           id: "job-dm",
-          type: "transitous-sync",
+          type: "transit-sync",
           payload: {},
           progress: null,
           createdBy: null,
@@ -284,7 +284,11 @@ describe("GET /admin/overview", () => {
       expect.objectContaining({ source: "data-manager", id: "job-dm" }),
     ]);
     expect(res.json().attention).toContainEqual(
-      expect.objectContaining({ type: "job_failed", target: "job-dm" }),
+      expect.objectContaining({
+        type: "job_failed",
+        target: "job-dm",
+        job: { type: "transit-sync", status: "failed" },
+      }),
     );
   });
 

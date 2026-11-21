@@ -162,6 +162,158 @@ describe("map interaction arbiter", () => {
     unregister();
   });
 
+  it("reports hover to the winning overlay and null to the others on every move", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-incident");
+    state.addLayer("test-flow");
+    const incidentHover = vi.fn();
+    const flowHover = vi.fn();
+    const unregisterFlow = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+      onHover: flowHover,
+    });
+    const unregisterIncident = registerMapOverlayInteraction(map, {
+      id: "incident",
+      layerIds: ["test-incident"],
+      priority: 20,
+      onClick: vi.fn(),
+      onHover: incidentHover,
+    });
+
+    state.setHits("test-flow", [feature("flow")]);
+    state.emit("mousemove", event());
+    expect(flowHover).toHaveBeenLastCalledWith([feature("flow")], event());
+    expect(incidentHover).toHaveBeenLastCalledWith(null, event());
+
+    state.setHits("test-incident", [feature("incident")]);
+    state.emit("mousemove", event());
+    expect(flowHover).toHaveBeenLastCalledWith(null, event());
+    expect(incidentHover).toHaveBeenLastCalledWith([feature("incident")], event());
+
+    state.emit("mouseout", {});
+    expect(incidentHover).toHaveBeenLastCalledWith(null, undefined);
+    expect(flowHover).toHaveBeenLastCalledWith(null, undefined);
+
+    unregisterIncident();
+    unregisterFlow();
+  });
+
+  it("gives a cursor-only overlay the pointer but neither clicks nor the interactive registry", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-poi");
+    state.addLayer("test-flow");
+    state.setHits("test-poi", [feature("poi")]);
+    state.setHits("test-flow", [feature("flow")]);
+    const flow = vi.fn();
+    const unregisterPoi = registerMapOverlayInteraction(map, {
+      id: "poi",
+      layerIds: ["test-poi"],
+      priority: 50,
+    });
+    const unregisterFlow = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: flow,
+    });
+    expect(INTERACTIVE_LAYER_IDS.has("test-poi")).toBe(false);
+
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+    state.emit("click", event());
+    expect(flow).toHaveBeenCalledTimes(1);
+
+    unregisterFlow();
+    unregisterPoi();
+    INTERACTIVE_LAYER_IDS.delete("test-poi");
+  });
+
+  it("clears only a pointer cursor it set itself", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-flow");
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+    });
+    // Another handler (basemap POIs) shows the pointer over its own features.
+    state.getCanvasContainer().style.cursor = "pointer";
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+
+    state.setHits("test-flow", [feature("flow")]);
+    state.emit("mousemove", event());
+    state.setHits("test-flow", []);
+    state.emit("mousemove", event());
+    expect(state.getCanvasContainer().style.cursor).toBe("");
+    unregister();
+  });
+
+  it("keeps hover and the cursor when the pointer moves onto a marker inside the map", () => {
+    const { map, state } = createMap();
+    const marker = { nodeType: 1 };
+    const container = map.getCanvasContainer() as unknown as {
+      contains?: (node: unknown) => boolean;
+    };
+    container.contains = (node) => node === marker;
+    state.addLayer("test-flow");
+    state.setHits("test-flow", [feature("flow")]);
+    const onHover = vi.fn();
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+      onHover,
+    });
+    state.emit("mousemove", event());
+    onHover.mockClear();
+
+    state.emit("mouseout", { originalEvent: { relatedTarget: marker } });
+    expect(onHover).not.toHaveBeenCalled();
+    expect(state.getCanvasContainer().style.cursor).toBe("pointer");
+
+    state.emit("mouseout", { originalEvent: { relatedTarget: null } });
+    expect(onHover).toHaveBeenLastCalledWith(null, undefined);
+    expect(state.getCanvasContainer().style.cursor).toBe("");
+    unregister();
+  });
+
+  it("does not report hover to an overlay after it unregisters", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-flow");
+    state.addLayer("test-incident");
+    const flowHover = vi.fn();
+    const unregisterFlow = registerMapOverlayInteraction(map, {
+      id: "flow",
+      layerIds: ["test-flow"],
+      priority: 10,
+      onClick: vi.fn(),
+      onHover: flowHover,
+    });
+    const unregisterIncident = registerMapOverlayInteraction(map, {
+      id: "incident",
+      layerIds: ["test-incident"],
+      priority: 20,
+      onClick: vi.fn(),
+    });
+    state.setHits("test-flow", [feature("flow")]);
+    state.emit("mousemove", event());
+    flowHover.mockClear();
+
+    unregisterFlow();
+    state.setHits("test-incident", [feature("incident")]);
+    state.emit("mousemove", event());
+    state.emit("mouseout", {});
+    expect(flowHover).not.toHaveBeenCalled();
+
+    unregisterIncident();
+  });
+
   it("replaces only the currently owned popup", () => {
     const { map } = createMap();
     const first = { addTo: vi.fn(), remove: vi.fn() };

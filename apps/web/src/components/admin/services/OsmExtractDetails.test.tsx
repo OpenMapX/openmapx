@@ -1,23 +1,28 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { catalogTranslator } from "@/test/catalogTranslator";
 import { extractAge, OsmExtractDetails } from "./OsmExtractDetails";
 
 const NOW = Date.parse("2026-11-01T12:00:00Z");
 const hoursAgo = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString();
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
+const t = catalogTranslator("adminServices");
+
 afterEach(cleanup);
 
 describe("extractAge", () => {
   it("counts hours within two days, then days", () => {
-    expect(extractAge(hoursAgo(0.5), NOW)).toBe("less than an hour ago");
-    expect(extractAge(hoursAgo(5), NOW)).toBe("5 hours ago");
-    expect(extractAge(hoursAgo(47), NOW)).toBe("47 hours ago");
-    expect(extractAge(hoursAgo(48), NOW)).toBe("2 days ago");
-    expect(extractAge(hoursAgo(24 * 40), NOW)).toBe("40 days ago");
+    expect(extractAge(hoursAgo(0.5), NOW, "en", t)).toBe("less than an hour ago");
+    expect(extractAge(hoursAgo(5), NOW, "en", t)).toBe("5 hours ago");
+    expect(extractAge(hoursAgo(47), NOW, "en", t)).toBe("47 hours ago");
+    expect(extractAge(hoursAgo(48), NOW, "en", t)).toBe("2 days ago");
+    expect(extractAge(hoursAgo(24 * 40), NOW, "en", t)).toBe("40 days ago");
   });
 
   it("does not report a future time as negative age", () => {
-    expect(extractAge(hoursAgo(-3), NOW)).toBe("less than an hour ago");
+    expect(extractAge(hoursAgo(-3), NOW, "en", t)).toBe("less than an hour ago");
   });
 });
 

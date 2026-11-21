@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { catalogTranslator } from "@/test/catalogTranslator";
 import { formatStageError, jobStatusColor, jobStatusDescription } from "../jobStatus";
 
 describe("jobStatusColor", () => {
@@ -23,13 +24,14 @@ describe("jobStatusColor", () => {
 });
 
 describe("jobStatusDescription", () => {
+  const t = catalogTranslator("adminShared");
   it("explains partial as a completed job with warnings", () => {
-    expect(jobStatusDescription("partial")).toContain("Completed with warnings");
-    expect(jobStatusDescription("partial")).toContain("partially succeeded");
+    expect(jobStatusDescription("partial", t)).toContain("Completed with warnings");
+    expect(jobStatusDescription("partial", t)).toContain("partially succeeded");
   });
 
   it("omits a tooltip for an unknown status", () => {
-    expect(jobStatusDescription("custom-status")).toBeNull();
+    expect(jobStatusDescription("custom-status", t)).toBeNull();
   });
 });
 

@@ -212,6 +212,7 @@ export function MapStylePoiClickHandler() {
       }, HIDE_GRACE_MS);
     };
 
+    let ownsCursor = false;
     const onMouseMove = (e: MapMouseEvent) => {
       const target = findStylePoiAtPoint(
         map,
@@ -220,7 +221,9 @@ export function MapStylePoiClickHandler() {
         INTERACTIVE_LAYER_IDS,
         locale,
       );
-      map.getCanvasContainer().style.cursor = target ? "pointer" : "";
+      // Take back only a pointer this handler set; overlays show their own.
+      if (target || ownsCursor) map.getCanvasContainer().style.cursor = target ? "pointer" : "";
+      ownsCursor = Boolean(target);
       if (!finePointer) return;
       // A held button means a drag is starting, which moves the POI away.
       if (e.originalEvent.buttons !== 0) {
@@ -244,7 +247,8 @@ export function MapStylePoiClickHandler() {
     };
 
     const onMouseOut = () => {
-      map.getCanvasContainer().style.cursor = "";
+      if (ownsCursor) map.getCanvasContainer().style.cursor = "";
+      ownsCursor = false;
       candidateRef.current = null;
       if (showTimerRef.current) clearTimeout(showTimerRef.current);
       showTimerRef.current = null;

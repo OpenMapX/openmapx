@@ -22,6 +22,8 @@ export interface ClockTimeOptions {
   timeFormat?: TimeFormat;
   /** IANA time zone (e.g. a station's local zone); defaults to the runtime zone. */
   timeZone?: string;
+  /** Include seconds, for log lines and other precise times. */
+  seconds?: boolean;
 }
 
 export interface CalendarDateOptions {
@@ -45,7 +47,7 @@ function hour12For(timeFormat: TimeFormat | undefined): boolean | undefined {
 /** Format a timestamp as a short wall-clock time (hour + minute) per preference. */
 export function formatClockTime(
   value: string | number | Date,
-  { locale, timeFormat = "auto", timeZone }: ClockTimeOptions = {},
+  { locale, timeFormat = "auto", timeZone, seconds }: ClockTimeOptions = {},
 ): string {
   const d = toDate(value);
   if (!d) return "";
@@ -53,6 +55,7 @@ export function formatClockTime(
   return d.toLocaleTimeString(locale ?? [], {
     hour: "2-digit",
     minute: "2-digit",
+    ...(seconds ? { second: "2-digit" } : {}),
     ...(hour12 !== undefined ? { hour12 } : {}),
     ...(timeZone ? { timeZone } : {}),
   });

@@ -21,7 +21,9 @@ const source = () => ({ tiles: ["/tiles/{z}/{x}/{y}.png"] }) as RasterTileSource
 
 it("pairs concurrent responses with their own acquisitions, without adding a nonce to the HTTP cache key", async () => {
   const pending: Array<(value: Response) => void> = [];
-  const fetchMock = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)));
+  const fetchMock = vi.fn<typeof fetch>(
+    () => new Promise<Response>((resolve) => pending.push(resolve)),
+  );
   vi.stubGlobal("fetch", fetchMock);
   const a = beginRasterResponseAcquisition(source());
   const b = beginRasterResponseAcquisition(source());
@@ -62,7 +64,7 @@ it("pairs concurrent responses with their own acquisitions, without adding a non
     { sourceId: "A", name: "Supplier A", attributionText: "Notice A" },
   ]);
   expect(b.contributors()[0].sourceId).toBe("B");
-  expect(fetchMock.mock.calls[0][0]).toMatchObject({
+  expect(fetchMock.mock.calls[0]?.[0]).toMatchObject({
     url: new URL("/tiles/2/1/0.png", document.baseURI).href,
     credentials: "include",
     cache: "reload",
@@ -152,10 +154,10 @@ it("applies asynchronous URL policies before HTTP normalization and rejects deni
   }));
   const params = await transform(acquisition.source.tiles[0]);
   if (!params) throw new Error("Missing transformed request");
-  const fetchMock = vi.fn(async () => new Response(new Uint8Array([1])));
+  const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1])));
   vi.stubGlobal("fetch", fetchMock);
   await protocol(params, new AbortController());
-  const request = fetchMock.mock.calls[0][0];
+  const request = fetchMock.mock.calls[0]?.[0];
   if (!(request instanceof Request)) throw new Error("Missing request");
   expect(request.url).toContain("?policy=allowed");
   expect(request.headers.get("X-Policy")).toBe("applied");

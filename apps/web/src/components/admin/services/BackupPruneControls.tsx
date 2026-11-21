@@ -10,11 +10,13 @@ import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { useAdminToast } from "../shared/AdminToast";
 
@@ -23,6 +25,9 @@ type Preview = Extract<
   { status: 200 }
 >["data"];
 export function BackupPruneControls() {
+  const t = useTranslations("adminServices");
+  const format = useAdminFormat();
+  const tCommon = useTranslations("common");
   const { client, apiUrl } = useActivityClient(),
     owner = useAdminMutationOwner(client),
     register = useServiceJobRegistration(),
@@ -54,7 +59,7 @@ export function BackupPruneControls() {
     retry: false,
     mutationFn: async () => {
       if (!intent || Date.parse(intent.preview.proof.expiresAt) <= Date.now())
-        throw Error("Preview expired; request a fresh preview");
+        throw new AdminDisplayError(t("previewExpiredRequestAFresh"));
       const execution = owner;
       const result = sdk.unwrapAdminResponse(
         await sdk.pruneAdminServiceBackups(
@@ -66,7 +71,7 @@ export function BackupPruneControls() {
       register({ client, apiUrl, jobId: result.jobId, effect: { kind: "backups" } });
       if (execution.active) {
         setIntent(null);
-        showToast(`Backup prune queued (${result.jobId})`);
+        showToast(t("backupPruneQueued", { jobId: result.jobId }));
       }
     },
   });
@@ -82,19 +87,17 @@ export function BackupPruneControls() {
             previewMutation.mutate();
           }}
         >
-          Preview expired backups
+          {t("previewExpiredBackups")}
         </Button>
         <Button component={Link} href="/admin/system/backups#backup-retention">
-          Edit backup retention policy
+          {t("editBackupRetentionPolicy")}
         </Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary">
-        A longer policy applies to new backups. Existing expiry ceilings cannot be extended.
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        {t("aLongerPolicyAppliesTo")}
       </Typography>
       {previewMutation.isError && (
-        <Alert severity="error">
-          Backup preview is unavailable. Retry after checking Activity.
-        </Alert>
+        <Alert severity="error">{t("backupPreviewIsUnavailableRetry")}</Alert>
       )}
       <Dialog
         open={intent !== null}
@@ -102,45 +105,47 @@ export function BackupPruneControls() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Prune expired backups</DialogTitle>
+        <DialogTitle>{t("pruneExpiredBackups")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
             <Typography>
-              {intent?.preview.retentionDays} days · {intent?.preview.policySource} policy
+              {t("retentionPolicy", {
+                days: intent?.preview.retentionDays ?? 0,
+                source: intent?.preview.policySource ?? "",
+              })}
             </Typography>
             <Typography>
-              Eligible backups: {intent?.preview.candidates.length} (
-              {formatBytes(
-                intent?.preview.candidates.reduce((sum, item) => sum + item.totalBytes, 0) ?? 0,
-              )}
-              ); retained: {intent?.preview.retainedCount}.
+              {t("pruneSummary", {
+                eligible: intent?.preview.candidates.length ?? 0,
+                size: format.bytes(
+                  intent?.preview.candidates.reduce((sum, item) => sum + item.totalBytes, 0) ?? 0,
+                ),
+                retained: intent?.preview.retainedCount ?? 0,
+              })}
             </Typography>
             <Stack sx={{ maxHeight: 240, overflowY: "auto" }}>
               {intent?.preview.candidates.map((entry) => (
                 <Typography key={entry.backupId} variant="body2">
-                  {entry.backupId}
-                  {entry.corrupt ? " · unreadable expiry metadata, directory age used" : ""}
+                  {entry.corrupt
+                    ? t("pruneCandidateUnreadable", { backupId: entry.backupId })
+                    : entry.backupId}
                 </Typography>
               ))}
             </Stack>
             {!!intent?.preview.corruptBackups.length && (
               <Alert severity="warning">
-                Unreadable expiry metadata: {intent.preview.corruptBackups.join(", ")}. Review these
-                entries before confirming.
+                {t("unreadableExpiryMetadata", {
+                  backups: intent.preview.corruptBackups.join(", "),
+                })}
               </Alert>
             )}
-            {expired && (
-              <Alert severity="warning">Preview expired. Cancel and request a fresh preview.</Alert>
-            )}
+            {expired && <Alert severity="warning">{t("previewExpiredCancelAndRequest")}</Alert>}
             {pruneMutation.isError && (
-              <Alert severity="error">
-                Prune request failed. Inspect Activity, then retry this same request or obtain a
-                fresh preview if the inventory or policy changed.
-              </Alert>
+              <Alert severity="error">{t("pruneRequestFailedInspectActivity")}</Alert>
             )}
             <TextField
-              label="Confirmation"
-              helperText="Type PRUNE EXPIRED BACKUPS"
+              label={t("confirmation")}
+              helperText={t("typePruneExpiredBackups")}
               value={confirmation}
               disabled={pruneMutation.isPending}
               onChange={(event) => setConfirmation(event.target.value)}
@@ -149,7 +154,7 @@ export function BackupPruneControls() {
         </DialogContent>
         <DialogActions>
           <Button disabled={pruneMutation.isPending} onClick={() => setIntent(null)}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             color="error"
@@ -161,7 +166,7 @@ export function BackupPruneControls() {
             }
             onClick={() => pruneMutation.mutate()}
           >
-            Prune backups
+            {t("pruneBackups")}
           </Button>
         </DialogActions>
       </Dialog>

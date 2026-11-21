@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@/test";
 import { adminTestHistory as history } from "@/test/adminNavigation";
 import { ActivityTabs } from "./ActivityTabs";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock(
   "next/navigation",
   async () => (await import("@/test/adminNavigation")).adminNavigationMock,

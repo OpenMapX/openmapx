@@ -21,7 +21,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   return {
     ...actual,
     fetchDirections: (...args: unknown[]) => mockFetchDirections(...args),
-    useCategorySearch: (...args: unknown[]) => mockUseCategorySearch(...args),
+    useCategorySearch: () => mockUseCategorySearch(),
     // No parking source is offered, so arrival parking comes from the place search.
     useDataSources: () => ({ data: { sources: [] }, isLoading: false }),
     useDataSourceSearch: () => ({

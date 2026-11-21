@@ -2,17 +2,18 @@
 
 import { escapeHtml, formatRelativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import { captureHazardFeatures } from "@openmapx/integration-framework";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { createHeatmapPaint } from "@/integration-api/map/heatmapLayer";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -295,7 +296,7 @@ export function EarthquakeLayer() {
   const setUnavailable = useEarthquakeStore((s) => s.setUnavailable);
   useOverlayExclusion("earthquakes", layerVisible);
   const t = useTranslations("earthquakes");
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popup = useMapOverlayPopup(layerVisible);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -386,49 +387,30 @@ export function EarthquakeLayer() {
     return () => clearInterval(interval);
   }, [layerVisible, timeRange, fetchEarthquakes]);
 
-  // Click popup + cursor
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  // Click popup
+  useMapOverlayInteraction({
+    id: "overlay-earthquakes",
+    layerIds: [CIRCLE_LAYER_ID],
+    priority: 50,
+    enabled: layerVisible,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
       const html = buildEarthquakePopupHtml(p, t, locale);
 
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "300px",
-        className: "omx-popup",
-      })
-        .setLngLat(coords)
-        .setHTML(html)
-        .addTo(map);
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(CIRCLE_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [CIRCLE_LAYER_ID] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", CIRCLE_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(CIRCLE_LAYER_ID);
-
-    return () => {
-      map.off("click", CIRCLE_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-      INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, t, locale]);
+      popup.show(
+        new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "300px",
+          className: "omx-popup",
+        })
+          .setLngLat(coords)
+          .setHTML(html),
+      );
+    },
+  });
 
   return null;
 }

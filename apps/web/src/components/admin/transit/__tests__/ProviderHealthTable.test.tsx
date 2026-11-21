@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderHealthResponse } from "@/lib/admin/transitHooks";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const resetMutate = vi.fn();
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({

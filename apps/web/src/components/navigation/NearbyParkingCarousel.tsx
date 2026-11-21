@@ -177,7 +177,7 @@ export function NearbyParkingCarousel({
                   </Typography>
                 )}
                 {place.walk ? (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     {t("parkingWalkToDestination", {
                       minutes: Math.max(1, Math.round(place.walk.seconds / 60)),
                       dist: formatMeasurementDistance(place.walk.meters, units),
@@ -185,7 +185,7 @@ export function NearbyParkingCarousel({
                   </Typography>
                 ) : (
                   straightMeters !== null && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {t("straightLineDistance", {
                         dist: formatMeasurementDistance(straightMeters, units),
                       })}

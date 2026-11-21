@@ -16,6 +16,8 @@ import { job } from "../activity/__tests__/fixtures";
 import { AdminToastProvider } from "../shared/AdminToast";
 import { ExtensionStorePage } from "./ExtensionStorePage";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const caches: ReturnType<typeof createTestQueryClient>[] = [];

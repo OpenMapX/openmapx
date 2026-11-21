@@ -2,6 +2,7 @@ import { useLayerStore } from "@openmapx/core";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap, type FakeMap } from "@/test";
+import type { generatedContourUrl } from "./generatedContours";
 import { TerrainBaseLayer } from "./TerrainBaseLayer";
 
 let fake: FakeMap;
@@ -9,10 +10,12 @@ let terrain: unknown;
 let resolveTileUrl: (url: string) => void;
 let rejectTileUrl: (reason: Error) => void;
 let tileUrl: Promise<string>;
-const generated = vi.fn(() => Promise.resolve("dem-contour://test/{z}/{x}/{y}"));
+const generated = vi.fn<typeof generatedContourUrl>(() =>
+  Promise.resolve("dem-contour://test/{z}/{x}/{y}"),
+);
 vi.mock("./generatedContours", () => ({
   contourDemTileUrl: () => tileUrl,
-  generatedContourUrl: (...args: unknown[]) => generated(...args),
+  generatedContourUrl: (...args: Parameters<typeof generatedContourUrl>) => generated(...args),
 }));
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 }),

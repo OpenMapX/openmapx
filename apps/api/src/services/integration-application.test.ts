@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import Fastify from "fastify";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, it as base, beforeAll, describe, expect, vi } from "vitest";
 import { ownedServiceHost } from "../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../ops-agent/src/server";
@@ -47,6 +47,8 @@ vi.mock("./integration-health", () => ({
   executeAllIntegrationHealthChecks: async () => [],
   getCachedIntegrationHealthSnapshot: () => ({ updatedAt: null, results: [] }),
 }));
+/** `withDataManager`: the host also installs the data manager, which owns transit credentials. */
+const it = base.extend<{ withDataManager: boolean }>({ withDataManager: false });
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "actual binding candidate / API / agent / PostgreSQL / captured provider",
   () => {
@@ -64,7 +66,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     afterAll(async () => {
       await migrated?.stop();
     });
-    beforeEach(async (context) => {
+    it.beforeEach(async ({ withDataManager }) => {
       vi.stubEnv("BETTER_AUTH_SECRET", "binding-owned-synthetic-auth-secret-only");
       vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
@@ -72,10 +74,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       raceAfterPreview = false;
       driftAfterCommit = false;
       host = await ownedServiceHost({
-        extraServiceIds: [
-          "engine-b",
-          ...(context.task.name.includes("managed transit") ? ["data-manager"] : []),
-        ],
+        extraServiceIds: ["engine-b", ...(withDataManager ? ["data-manager"] : [])],
         capabilities: { motis: ["routing-engine"], "engine-b": ["routing-engine"] },
         schemas: {
           motis: {
@@ -649,19 +648,22 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       90000,
     );
-    it("rejects managed transit writes before malformed body validation, including an undeclared key", async () => {
-      for (const method of ["PUT", "DELETE"] as const) {
-        (await import("../utils/rate-limit")).serviceActionLimit.reset();
-        const result = await api.inject({
-          method,
-          url: "/api/admin/services/data-manager/credentials/TRANSITOUS_API_KEYS",
-          headers: { ...headers, "idempotency-key": randomUUID() },
-          payload: { unexpected: true },
-        });
-        expect(result.statusCode, result.body).toBe(409);
-        expect(result.json()).toMatchObject({ code: "transit_credentials_managed" });
-      }
-      expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
+    describe("with the data manager installed", () => {
+      it.override("withDataManager", true);
+      it("rejects managed transit writes before malformed body validation, including an undeclared key", async () => {
+        for (const method of ["PUT", "DELETE"] as const) {
+          (await import("../utils/rate-limit")).serviceActionLimit.reset();
+          const result = await api.inject({
+            method,
+            url: "/api/admin/services/data-manager/credentials/TRANSITOUS_API_KEYS",
+            headers: { ...headers, "idempotency-key": randomUUID() },
+            payload: { unexpected: true },
+          });
+          expect(result.statusCode, result.body).toBe(409);
+          expect(result.json()).toMatchObject({ code: "transit_credentials_managed" });
+        }
+        expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
+      });
     });
     it("rolls back binding, revision and application receipt together on an actual SQL constraint failure", async () => {
       const before = await desired();

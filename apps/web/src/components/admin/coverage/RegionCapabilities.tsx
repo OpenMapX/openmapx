@@ -33,7 +33,7 @@ export function RegionCapabilities({
         <Typography id="coverage-capabilities-heading" component="h2" variant="subtitle1">
           {t("capabilities.title")}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("capabilities.description")}
         </Typography>
       </Stack>
@@ -70,7 +70,7 @@ export function RegionCapabilities({
                     <Typography variant="body2" sx={{ fontWeight: 650 }}>
                       {t(`operation.${capability.operationId.replaceAll(".", "_")}`)}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       {capability.operationId}
                     </Typography>
                   </TableCell>
@@ -82,7 +82,7 @@ export function RegionCapabilities({
                       {candidate?.label ?? t("capabilities.noProvider")}
                     </Typography>
                     {candidate && candidate.providerId !== "none" && (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
                         {candidate.providerId}
                       </Typography>
                     )}
@@ -112,7 +112,7 @@ export function RegionCapabilities({
                           />
                         ))
                       ) : (
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {t("common.notAvailable")}
                         </Typography>
                       )}
@@ -126,13 +126,13 @@ export function RegionCapabilities({
                             key={reason}
                             variant="caption"
                             component="div"
-                            color="text.secondary"
+                            sx={{ color: "text.secondary" }}
                           >
                             {t(`reason.${reason}`)}
                           </Typography>
                         ))
                       ) : (
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {t("common.none")}
                         </Typography>
                       )}

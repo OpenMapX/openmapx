@@ -324,6 +324,7 @@ function PackageList({
   onDelete: (record: OfflinePackageRecord) => void;
 }) {
   const t = useTranslations("settings");
+  const locale = useLocale();
   const [removing, setRemoving] = useState<OfflinePackageRecord | null>(null);
   const [viewing, setViewing] = useState<OfflinePackageRecord | null>(null);
   if (records.length === 0)
@@ -369,7 +370,7 @@ function PackageList({
                         component="span"
                         sx={{ color: "text.secondary" }}
                       >
-                        {formatBytes(record.manifest.archive.byteLength)} · z
+                        {formatBytes(record.manifest.archive.byteLength, locale)} · z
                         {record.manifest.coverage.minZoom}–{record.manifest.coverage.maxZoom}
                       </Typography>
                       <OfflinePackageStatus record={record} />
@@ -393,7 +394,7 @@ function PackageList({
                 height={420}
               />
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {formatBytes(viewing.manifest.archive.byteLength)} · z
+                {formatBytes(viewing.manifest.archive.byteLength, locale)} · z
                 {viewing.manifest.coverage.minZoom}–{viewing.manifest.coverage.maxZoom}
               </Typography>
             </Stack>
@@ -409,7 +410,7 @@ function PackageList({
           <Typography variant="body2">
             {t("removeAreaDescription", {
               name: removing?.name ?? "",
-              size: formatBytes(removing?.manifest.archive.byteLength ?? 0),
+              size: formatBytes(removing?.manifest.archive.byteLength ?? 0, locale),
             })}
           </Typography>
         </DialogContent>

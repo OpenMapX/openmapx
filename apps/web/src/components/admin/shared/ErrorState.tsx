@@ -1,7 +1,9 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
+import { useTranslations } from "next-intl";
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const tCommon = useTranslations("common");
   return (
     <Alert
       severity="error"
@@ -9,7 +11,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       action={
         onRetry ? (
           <Button color="inherit" size="small" onClick={onRetry}>
-            Retry
+            {tCommon("retry")}
           </Button>
         ) : undefined
       }

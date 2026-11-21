@@ -21,6 +21,8 @@ import { RequiredServicesPanel } from "../RequiredServicesPanel";
 import { SetCredentialDialog } from "../SetCredentialDialog";
 import { detail, summary } from "./fixtures";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const credentialReceipt = {
   operationId: "credential-synthetic-operation",
   integrationId: "demo",
@@ -622,7 +624,7 @@ describe("integration administration browser behavior", () => {
     });
     mount(<BulkConfigure />);
     await userEvent.click(await screen.findByRole("button", { name: /Demo demo/ }));
-    expect(await screen.findByText("env")).toBeInTheDocument();
+    expect(await screen.findByText("environment")).toBeInTheDocument();
     expect(screen.getByText(/Vault updated/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete from vault" })).toBeDisabled();
     expect(requests.filter(({ init }) => init.method === "DELETE")).toHaveLength(0);
@@ -673,6 +675,46 @@ describe("integration administration browser behavior", () => {
     expect(
       requests.filter(({ url }) => url.pathname === "/api/admin/integrations/health/run"),
     ).toHaveLength(1);
+  });
+
+  it("words a failed or interrupted job by its type, and a type this build does not know by its code", async () => {
+    transport((url) => {
+      switch (url.pathname) {
+        case "/api/admin/overview":
+          return Response.json({
+            systemHealth: { status: "pass", unhealthyCount: 0 },
+            users: { total: 1, active24h: 1, banned: 0 },
+            integrations: { total: 1, enabled: 1, unhealthy: 0, unconfigured: 0 },
+            services: null,
+            attention: [
+              {
+                type: "job_failed",
+                severity: "error",
+                message: 'Job "transit-sync" failed: boom',
+                target: "3fa2c1d0-0000-4000-8000-000000000000",
+                job: { type: "transit-sync", status: "failed" },
+              },
+              {
+                type: "job_failed",
+                severity: "error",
+                message: 'Job "future.kind" was interrupted',
+                target: "4fa2c1d0-0000-4000-8000-000000000000",
+                job: { type: "future.kind", status: "interrupted" },
+              },
+            ],
+            recentActivity: [],
+            activeJobs: [],
+          });
+        case "/api/admin/credentials":
+          return Response.json({ secretsConfigured: true, credentials: [] });
+        default:
+          throw new Error(`Unexpected request ${url}`);
+      }
+    });
+    mount(<AdminOverview />);
+    expect(await screen.findByText('Job "Sync transit" failed')).toBeInTheDocument();
+    expect(screen.getByText('Job "future › kind" was interrupted')).toBeInTheDocument();
+    expect(screen.queryByText(/3fa2c1d0/)).not.toBeInTheDocument();
   });
 
   it("displays structured resolved configuration as full JSON", async () => {

@@ -7,35 +7,42 @@ import {
   renameSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { downloadOsm } from "../src/jobs/download-osm";
+import { curlAtomicWithResult } from "../src/jobs/atomic-download";
+import { type DownloadOsmOptions, downloadOsm } from "../src/jobs/download-osm";
 import { StateStore } from "../src/state";
+import { serve, withLoopbackServer } from "./helpers/loopback-server.js";
+
+/**
+ * Downloads with the real atomic `curl` download, from `url` on loopback
+ * instead of the region's Geofabrik address.
+ */
+function fromLoopback(url: string): DownloadOsmOptions["downloadImpl"] {
+  return (_geofabrik, target, options) => curlAtomicWithResult(url, target, options);
+}
 
 it("publishes SHA256 metadata inside the same snapshot publication lock", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-osm-evidence-"));
   let publishedUnderLock = false;
   try {
-    const result = await downloadOsm({
-      region: "europe/germany",
-      dataDir: root,
-      store: new StateStore(root),
-      verifyChecksum: false,
-      withPublishLock: async (publish) => {
-        publish();
-        publishedUnderLock = existsSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"));
-      },
-      downloadImpl: async (_url, target, options) => {
-        const tmp = target + ".test-part";
-        writeFileSync(tmp, "fixture pbf bytes", { mode: 0o600 });
-        await options.beforePublish?.(tmp);
-        await options.withPublishLock?.(() => renameSync(tmp, target));
-        return { published: true };
-      },
-    });
+    const result = await withLoopbackServer(serve("fixture pbf bytes"), (url) =>
+      downloadOsm({
+        region: "europe/germany",
+        dataDir: root,
+        store: new StateStore(root),
+        verifyChecksum: false,
+        withPublishLock: async (publish) => {
+          publish();
+          publishedUnderLock = existsSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"));
+        },
+        downloadImpl: fromLoopback(url),
+      }),
+    );
     expect(publishedUnderLock).toBe(true);
     expect(result.sizeBytes).toBe(17);
     expect(statSync(join(root, "osm")).mode & 0o777).toBe(0o700);
@@ -53,34 +60,48 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
     expect(evidence.inode).toMatch(/^\d+$/);
   } finally {
     rmSync(root, { recursive: true, force: true });
-    vi.restoreAllMocks();
   }
 });
+
 it("does not bind a 304 checksum to a replacement inode at publication", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-osm-304-evidence-"));
   mkdirSync(join(root, "osm"), { mode: 0o700 });
   const target = join(root, "osm/europe-germany.osm.pbf");
   writeFileSync(target, "old bytes", { mode: 0o600 });
+  // curl sends the existing target's mtime as If-Modified-Since; a fixed time
+  // makes the conditional request checkable.
+  utimesSync(target, new Date(0), new Date(0));
+  let ifModifiedSince: string | undefined;
+  const notModified = serve("new bytes", { notModified: true });
   try {
     await expect(
-      downloadOsm({
-        region: "europe/germany",
-        dataDir: root,
-        store: new StateStore(root),
-        verifyChecksum: false,
-        downloadImpl: async () => ({ published: false }),
-        withPublishLock: async (publish) => {
-          writeFileSync(target + ".replacement", "new bytes", { mode: 0o600 });
-          renameSync(target + ".replacement", target);
-          publish();
+      withLoopbackServer(
+        (request, response) => {
+          ifModifiedSince = request.headers["if-modified-since"];
+          notModified(request, response);
         },
-      }),
+        (url) =>
+          downloadOsm({
+            region: "europe/germany",
+            dataDir: root,
+            store: new StateStore(root),
+            verifyChecksum: false,
+            downloadImpl: fromLoopback(url),
+            withPublishLock: async (publish) => {
+              writeFileSync(`${target}.replacement`, "new bytes", { mode: 0o600 });
+              renameSync(`${target}.replacement`, target);
+              publish();
+            },
+          }),
+      ),
     ).rejects.toThrow(/source changed/);
-    expect(existsSync(target + ".openmapx.json")).toBe(false);
+    expect(ifModifiedSince).toBe(new Date(0).toUTCString());
+    expect(existsSync(`${target}.openmapx.json`)).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
 it("reports failed sidecar publication without leaving verified evidence", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-osm-sidecar-fail-"));
   const { AnchoredDirectory } = await import(
@@ -91,21 +112,17 @@ it("reports failed sidecar publication without leaving verified evidence", async
   });
   try {
     await expect(
-      downloadOsm({
-        region: "europe/germany",
-        dataDir: root,
-        store: new StateStore(root),
-        verifyChecksum: false,
-        downloadImpl: async (_url, target, options) => {
-          mkdirSync(join(root, "osm"), { mode: 0o700, recursive: true });
-          writeFileSync(target + ".part", "new bytes", { mode: 0o600 });
-          await options.beforePublish?.(target + ".part");
-          await options.withPublishLock?.(() => renameSync(target + ".part", target));
-          return { published: true };
-        },
-      }),
+      withLoopbackServer(serve("new bytes"), (url) =>
+        downloadOsm({
+          region: "europe/germany",
+          dataDir: root,
+          store: new StateStore(root),
+          verifyChecksum: false,
+          downloadImpl: fromLoopback(url),
+        }),
+      ),
     ).rejects.toThrow(/metadata publication failure/);
-    expect(existsSync(join(root, "osm/europe-germany.osm.pbf"))).toBe(true);
+    expect(readFileSync(join(root, "osm/europe-germany.osm.pbf"), "utf8")).toBe("new bytes");
     expect(existsSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"))).toBe(false);
   } finally {
     write.mockRestore();

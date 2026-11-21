@@ -1,15 +1,17 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback } from "@openmapx/core";
-import type { MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useHikingStore } from "./store";
@@ -98,7 +100,7 @@ export function MountainShelterLayer() {
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useRenderedMapAttributions("hiking-shelters", [CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popup = useMapOverlayPopup(layerVisible);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -150,14 +152,14 @@ export function MountainShelterLayer() {
     };
   }, [mapReady, mapRef, layerVisible, debouncedFetch]);
 
-  // Click popup + cursor; hiding the overlay closes the popup.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: maplibregl.MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  // Click popup; hiding the overlay closes the popup.
+  useMapOverlayInteraction({
+    id: "overlay-hiking-shelters",
+    layerIds: [...INTERACTIVE_LAYERS],
+    priority: 50,
+    enabled: layerVisible,
+    onClick: ({ features }) => {
+      const f = features[0];
       if (!f) return;
       const props = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
@@ -177,38 +179,17 @@ export function MountainShelterLayer() {
         <div style="font-size:12px;color:#666;margin-bottom:2px">${details}</div>
       </div>`;
 
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "260px",
-        className: "omx-popup",
-      })
-        .setLngLat(coords)
-        .setHTML(html)
-        .addTo(map);
-    };
-
-    const onMouseMove = (e: MapMouseEvent) => {
-      const activeLayers = INTERACTIVE_LAYERS.filter((id) => !!map.getLayer(id));
-      if (activeLayers.length === 0) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [...activeLayers] });
-      if (features.length > 0) {
-        map.getCanvasContainer().style.cursor = "pointer";
-      } else {
-        map.getCanvasContainer().style.cursor = "";
-      }
-    };
-
-    map.on("click", CIRCLE_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-
-    return () => {
-      map.off("click", CIRCLE_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-    };
-  }, [mapReady, mapRef, layerVisible]);
+      popup.show(
+        new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "260px",
+          className: "omx-popup",
+        })
+          .setLngLat(coords)
+          .setHTML(html),
+      );
+    },
+  });
 
   return null;
 }

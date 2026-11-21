@@ -51,7 +51,7 @@ export function MenuAccountHeader({
               <Typography sx={{ fontSize: 18, fontWeight: 600 }} noWrap>
                 {user.name}
               </Typography>
-              <Typography variant="body2" color="text.secondary" noWrap>
+              <Typography variant="body2" sx={{ color: "text.secondary" }} noWrap>
                 {user.email}
               </Typography>
             </Box>
@@ -69,7 +69,7 @@ export function MenuAccountHeader({
             >
               <PersonIcon />
             </Avatar>
-            <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" sx={{ color: "text.secondary", flex: 1, minWidth: 0 }}>
               {tMenu("signInHint")}
             </Typography>
             {close}

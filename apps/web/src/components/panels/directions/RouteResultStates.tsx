@@ -77,7 +77,7 @@ function RouteRecovery({
   const unavailable = isApiClientError(error) && [502, 503, 504].includes(error.status);
   return (
     <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-      <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
+      <Typography variant="body2" sx={{ color: failed ? "error.main" : "text.secondary" }}>
         {t(
           failed
             ? unavailable

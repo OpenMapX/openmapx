@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { CreateUserDialog } from "./CreateUserDialog";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({
   provision: vi.fn(),
   delivery: vi.fn(),

@@ -15,8 +15,11 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { NotablePlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -39,6 +42,8 @@ export function NotablePlacesMaintenance({ apiUrl }: { apiUrl: string }) {
   return <NotablePlacesMaintenanceView key={apiUrl} apiUrl={apiUrl} />;
 }
 function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const register = useServiceJobRegistration();
@@ -75,12 +80,11 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
         register({ client, apiUrl, jobId, effect });
         if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
-          showToast(`Queued notable-places build (${jobId})`);
+          showToast(t("notablePlacesBuildQueued", { jobId }));
           setConfirmOpen(false);
         }
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Operation failed", "error");
+        if (execution.active) showToast(adminErrorText(error, t("operationFailed")), "error");
         throw error;
       }
     },
@@ -93,23 +97,28 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
           <Stack direction="row" sx={{ gap: 1, alignItems: "center", mb: 0.5 }}>
             <TravelExploreIcon color="primary" />
             <Typography component="h2" variant="h6">
-              Notable places
+              {t("notablePlaces")}
             </Typography>
             {(status?.status || status?.building) && (
               <Chip
-                label={status?.building ? "building" : status.status}
+                label={
+                  status?.building || status.status === "building"
+                    ? t("building")
+                    : status.status === "failed"
+                      ? t("failed")
+                      : t("ready")
+                }
                 color={status?.status === "failed" ? "error" : "primary"}
                 variant="outlined"
               />
             )}
           </Stack>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            Places covered by many Wikipedias, from Wikidata, so search tells the Louvre in Paris
-            from a bar of that name nearby. Rebuilt monthly on its own.
+            {t("placesCoveredByManyWikipedias")}
           </Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={() => statusQuery.refetch()}>
-          Refresh
+          {t("refresh")}
         </Button>
         <Button
           component={Link}
@@ -120,22 +129,18 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
           }
           variant="text"
         >
-          View jobs
+          {t("viewJobsLink")}
         </Button>
       </Stack>
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {sdk.adminErrorMessage(
-            statusQuery.error,
-            statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable",
-          )}
+          {adminErrorText(statusQuery.error, t("statusUnavailable"))}
         </Alert>
       )}
       {status === null && (
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          No notable-places index is published yet. Search ranks far-away places by the
-          geocoder&apos;s order alone until it is.
+          {t("noNotablePlacesIndexIs")}
         </Alert>
       )}
       {status?.lastError && (
@@ -148,10 +153,13 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
       {status?.ok && (
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", mt: 1.5 }}>
           {[
-            ["Places", status.placeCount?.toLocaleString() ?? "—"],
-            ["Names", status.nameCount?.toLocaleString() ?? "—"],
-            ["Min. Wikipedias", status.minSitelinks?.toString() ?? "—"],
-            ["Published", status.publishedAt ? new Date(status.publishedAt).toLocaleString() : "—"],
+            [t("places"), status.placeCount == null ? "—" : format.number(status.placeCount)],
+            [t("names"), status.nameCount == null ? "—" : format.number(status.nameCount)],
+            [
+              t("minWikipedias"),
+              status.minSitelinks == null ? "—" : format.number(status.minSitelinks),
+            ],
+            [t("published"), format.timestamp(status.publishedAt)],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
@@ -171,14 +179,14 @@ function NotablePlacesMaintenanceView({ apiUrl }: { apiUrl: string }) {
         disabled={operation.isPending || status?.building === true}
         onClick={() => setConfirmOpen(true)}
       >
-        {status?.ok ? "Rebuild now" : "Build now"}
+        {status?.ok ? t("rebuildNow") : t("buildNow")}
       </Button>
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Build notable-places index"
-        message="Download the notable places from the Wikidata SPARQL endpoint and publish them atomically? This fetches a few hundred megabytes and takes a couple of minutes."
-        confirmLabel="Start build"
+        title={t("buildNotablePlacesIndex")}
+        message={t("downloadTheNotablePlacesFrom")}
+        confirmLabel={t("startBuild")}
         loading={operation.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => operation.mutate()}

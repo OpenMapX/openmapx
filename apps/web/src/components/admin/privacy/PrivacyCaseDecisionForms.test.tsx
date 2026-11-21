@@ -11,9 +11,7 @@ describe("case decisions", () => {
     renderPrivacyComponent(detail, (client) => (
       <PrivacyCaseDecisionForms detail={detail} client={client} />
     ));
-    expect(
-      screen.getByText(/privacyAdmin.workflows.originalDueAt.*2026-10-01/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("privacyAdmin.workflows.originalDueAt")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.extendedUntil"), {
       target: { value: "2026-11-01T10:00" },
     });

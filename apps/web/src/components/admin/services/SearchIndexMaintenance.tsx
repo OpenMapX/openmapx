@@ -16,9 +16,11 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { SearchIndexStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -52,7 +54,7 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
 }
 function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminSearchIndex");
-  const locale = useLocale();
+  const format = useAdminFormat();
   const showToast = useAdminToast();
   const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const register = useServiceJobRegistration();
@@ -100,8 +102,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
           setConfirmOpen(false);
         }
       } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : t("operationFailed"), "error");
+        if (execution.active) showToast(adminErrorText(error, t("operationFailed")), "error");
         throw error;
       }
     },
@@ -156,10 +157,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {sdk.adminErrorMessage(
-            statusQuery.error,
-            statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable"),
-          )}
+          {adminErrorText(statusQuery.error, t("statusUnavailable"))}
         </Alert>
       )}
       {status === null && (
@@ -183,13 +181,10 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", mt: 1.5 }}>
           {[
             [t("region"), status.region ?? "—"],
-            [t("places"), status.placeCount?.toLocaleString(locale) ?? "—"],
-            [t("terms"), status.termCount?.toLocaleString(locale) ?? "—"],
+            [t("places"), status.placeCount == null ? "—" : format.number(status.placeCount)],
+            [t("terms"), status.termCount == null ? "—" : format.number(status.termCount)],
             [t("epoch"), status.epoch ?? "—"],
-            [
-              t("published"),
-              status.publishedAt ? new Date(status.publishedAt).toLocaleString(locale) : "—",
-            ],
+            [t("published"), format.timestamp(status.publishedAt)],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>

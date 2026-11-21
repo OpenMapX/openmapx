@@ -2,6 +2,7 @@
 
 import Chip from "@mui/material/Chip";
 import type { AdminServiceStatus } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 
 export function statusColor(
   status: AdminServiceStatus,
@@ -12,12 +13,23 @@ export function statusColor(
   return "default";
 }
 
-export function statusLabel(status: AdminServiceStatus): string {
-  if (status === "not-running") return "Not running";
-  return status.charAt(0).toUpperCase() + status.slice(1);
+/** The reader-facing name of a container status. */
+export function useServiceStatusLabel(): (status: AdminServiceStatus) => string {
+  const t = useTranslations("adminShared");
+  const labels: Record<AdminServiceStatus, string> = {
+    running: t("serviceRunning"),
+    exited: t("serviceExited"),
+    restarting: t("serviceRestarting"),
+    created: t("serviceCreated"),
+    paused: t("servicePaused"),
+    "not-running": t("serviceNotRunning"),
+    unknown: t("serviceUnknown"),
+  };
+  return (status) => labels[status];
 }
 
 export function ServiceStatusChip({ status }: { status: AdminServiceStatus }) {
+  const statusLabel = useServiceStatusLabel();
   return (
     <Chip
       label={statusLabel(status)}

@@ -14,17 +14,10 @@ import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/cor
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 
 type Action = AdminServicesBulkAction["action"] | "stage";
-const LABELS: Record<Action, string> = {
-  start: "Start Selected",
-  stop: "Stop Selected",
-  restart: "Restart Selected",
-  update: "Update selected",
-  build: "Build Selected",
-  stage: "Stage selected images",
-};
 export function ServiceBulkActions({
   services,
   selectedIds,
@@ -40,6 +33,15 @@ export function ServiceBulkActions({
   onStage: (ids: string[]) => void;
   onClear: () => void;
 }) {
+  const ta = useAdminTranslations("adminServices");
+  const labels: Record<Action, string> = {
+    start: ta("bulkStart"),
+    stop: ta("bulkStop"),
+    restart: ta("bulkRestart"),
+    update: ta("bulkUpdate"),
+    build: ta("bulkBuild"),
+    stage: ta("bulkStage"),
+  };
   const [action, setAction] = useState<Action>("start");
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
@@ -50,14 +52,14 @@ export function ServiceBulkActions({
     const decision = services.find((service) => service.id === id)?.actions?.[
       action === "stage" ? "pull" : action
     ];
-    return Boolean(serviceActionReason(decision)) || decision?.workflow === "core-restart";
+    return Boolean(serviceActionReason(decision, ta)) || decision?.workflow === "core-restart";
   });
   const reason = denied.length
-    ? `Unavailable for: ${denied.join(", ")}. Use individual core Restart where available.`
+    ? ta("unavailableForDeniedUseIndividual", { denied: denied.join(", ") })
     : action === "build" && motisImport && !selectedIds.has("motis")
-      ? "MOTIS import requires selecting MOTIS"
+      ? ta("motisImportNeedsMotis")
       : action === "stage" && ids.length > 64
-        ? "Stage at most 64 services at once"
+        ? ta("stageAtMost64Services")
         : undefined;
   function submit() {
     if (reason || !ids.length || busy) return;
@@ -84,20 +86,20 @@ export function ServiceBulkActions({
       <Stack sx={{ gap: 1.25 }}>
         <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", alignItems: "center" }}>
           <Typography variant="body2" sx={{ fontWeight: 650 }}>
-            {ids.length} selected
+            {ta("selectedCount", { count: ids.length })}
           </Typography>
           <TextField
             select
             size="small"
-            label="Action"
+            label={ta("action")}
             value={action}
             disabled={busy}
             onChange={(event) => setAction(event.target.value as Action)}
             sx={{ minWidth: 175 }}
           >
-            {(Object.keys(LABELS) as Action[]).map((value) => (
+            {(Object.keys(labels) as Action[]).map((value) => (
               <MenuItem key={value} value={value}>
-                {LABELS[value]}
+                {labels[value]}
               </MenuItem>
             ))}
           </TextField>
@@ -108,10 +110,10 @@ export function ServiceBulkActions({
             disabled={busy || !!reason}
             onClick={submit}
           >
-            {LABELS[action]}
+            {labels[action]}
           </Button>
           <Button size="small" disabled={busy} onClick={onClear}>
-            Clear selection
+            {ta("clearSelection")}
           </Button>
         </Stack>
         {action === "build" && (
@@ -134,16 +136,15 @@ export function ServiceBulkActions({
                 onChange={(event) => setNoDeps(event.target.checked)}
               />
             }
-            label="Update without dependency recreation"
+            label={ta("updateWithoutDependencyRecreation")}
           />
         )}
         <Typography
           variant="caption"
-          color={reason ? "warning.main" : "text.secondary"}
+          sx={{ color: reason ? "warning.main" : "text.secondary" }}
           role="status"
         >
-          {reason ??
-            `Targets: ${ids.join(", ")}. These are action targets; persistent roots stay unchanged.`}
+          {reason ?? ta("targetsIdsTheseAreAction", { ids: ids.join(", ") })}
         </Typography>
       </Stack>
     </Paper>
@@ -166,12 +167,13 @@ function BuildOptions({
   setMotisImport: (value: boolean) => void;
   disabled: boolean;
 }) {
+  const ta = useAdminTranslations("adminServices");
   return (
     <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
       <TextField
         size="small"
-        label="Build region"
-        placeholder="optional"
+        label={ta("buildRegion")}
+        placeholder={ta("optional")}
         value={region}
         disabled={disabled}
         onChange={(event) => setRegion(event.target.value)}
@@ -185,7 +187,7 @@ function BuildOptions({
             onChange={(event) => setContinueOnError(event.target.checked)}
           />
         }
-        label="Continue on build errors"
+        label={ta("continueOnBuildErrors")}
       />
       <FormControlLabel
         control={
@@ -195,7 +197,7 @@ function BuildOptions({
             onChange={(event) => setMotisImport(event.target.checked)}
           />
         }
-        label="Import MOTIS after build"
+        label={ta("importMotisAfterBuild")}
       />
     </Stack>
   );

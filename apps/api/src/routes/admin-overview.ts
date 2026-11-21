@@ -80,6 +80,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       severity: "warning" | "error" | "info";
       message: string;
       target?: string;
+      job?: { type: string; status: "failed" | "interrupted" };
     }> = [];
 
     if (inventory?.acquisition.state === "unavailable")
@@ -132,6 +133,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
             ? `Job "${job.type}" failed: ${job.error}`
             : `Job "${job.type}" ${job.status === "interrupted" ? "was interrupted" : "failed"}`,
           target: job.id,
+          job: { type: job.type, status: job.status },
         });
       }
     }

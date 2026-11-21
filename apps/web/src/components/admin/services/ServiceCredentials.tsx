@@ -18,6 +18,7 @@ import type {
   AdminServiceCredentialChanged,
 } from "@openmapx/core/api-contracts";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import {
@@ -25,22 +26,28 @@ import {
   useServiceCredentials,
   useSetServiceCredential,
 } from "@/hooks/useServices";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
+import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 import { useAdminToast } from "../shared/AdminToast";
 
-function applyToast(result: AdminServiceCredentialChanged): {
+function applyToast(
+  result: AdminServiceCredentialChanged,
+  t: AdminTranslator<"adminServices">,
+): {
   message: string;
   severity: "success" | "info";
 } {
   if ("needsRender" in result && result.needsRender) {
     return {
-      message: "Saved. Render and apply the service on the host (no Docker host-control).",
+      message: t("credentialSavedNeedsRender"),
       severity: "info",
     };
   }
-  return { message: "Saved — service credential application queued.", severity: "success" };
+  return { message: t("credentialSavedQueued"), severity: "success" };
 }
 
 export function ServiceCredentials({ serviceId }: { serviceId: string }) {
@@ -49,6 +56,9 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
 }
 
 function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
+  const t = useAdminTranslations("adminServices");
+  const tCommon = useTranslations("common");
+  const format = useAdminFormat();
   const { client } = useActivityClient();
   const query = useServiceCredentials(serviceId);
   const setCred = useSetServiceCredential(serviceId);
@@ -72,7 +82,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
   if (query.isError || !query.data) {
     return (
       <Alert severity="error" variant="outlined">
-        Failed to load credentials.
+        {t("failedToLoadCredentials")}
       </Alert>
     );
   }
@@ -82,7 +92,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
   if (credentials.length === 0) {
     return (
       <Alert severity="info" variant="outlined">
-        This service declares no credentials.
+        {t("thisServiceDeclaresNoCredentials")}
       </Alert>
     );
   }
@@ -93,13 +103,13 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
     try {
       const result = await setCred.mutateAsync({ key: editing.key, value });
       if (!execution.active) return;
-      const { message, severity } = applyToast(result);
+      const { message, severity } = applyToast(result, t);
       showToast(message, severity);
       setEditing(null);
       setValue("");
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : "Failed to save credential", "error");
+      showToast(adminErrorText(err, t("failedToSaveCredential")), "error");
     }
   }
 
@@ -108,11 +118,11 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
     try {
       const result = await deleteCred.mutateAsync(key);
       if (!execution.active) return;
-      const { message, severity } = applyToast(result);
+      const { message, severity } = applyToast(result, t);
       showToast(message, severity);
     } catch (err) {
       if (!execution.active) return;
-      showToast(err instanceof Error ? err.message : "Failed to remove credential", "error");
+      showToast(adminErrorText(err, t("failedToRemoveCredential")), "error");
     }
   }
 
@@ -120,8 +130,10 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
     <Stack spacing={2}>
       {!secretsConfigured && (
         <Alert severity="warning" variant="outlined">
-          The secret vault is not configured. Set <code>OPENMAPX_SECRETS_KEY</code> (a 64-char hex
-          string) on app-api before storing credentials.
+          {t.rich("secretVaultNotConfigured", {
+            variable: "OPENMAPX_SECRETS_KEY",
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Alert>
       )}
 
@@ -140,14 +152,14 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                     size="small"
                     label={
                       cred.source === "env"
-                        ? "Host environment"
+                        ? t("hostEnvironment")
                         : cred.source === "config.json"
-                          ? "Host file"
+                          ? t("hostFile")
                           : cred.managedBy === "dawarich-provisioning"
-                            ? "Managed"
+                            ? t("managed")
                             : cred.source === "vault"
-                              ? "Set"
-                              : "Not set"
+                              ? t("set")
+                              : t("notSet")
                     }
                     color={
                       cred.managedBy === "dawarich-provisioning"
@@ -170,26 +182,29 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                 )}
                 {(cred.source === "env" || cred.source === "config.json") && (
                   <Typography variant="body2">
-                    Host controlled{cred.ownership?.envVar ? ` (${cred.ownership.envVar})` : ""}.
-                    Remove the host override, refresh, then rotate.
+                    {cred.ownership?.envVar
+                      ? t("hostControlledByVariable", { envVar: cred.ownership.envVar })
+                      : t("hostControlledRemoveOverride")}
                   </Typography>
                 )}
                 {cred.managedBy === "transit.credentials" && (
                   <Button component={Link} href="/admin/data/transit?tab=credentials">
-                    Manage pinned feed credentials
+                    {t("managePinnedFeedCredentials")}
                   </Button>
                 )}
                 {cred.updatedAt && (
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    Updated {new Date(cred.updatedAt).toLocaleString()}
-                    {cred.updatedBy ? ` by ${cred.updatedBy}` : ""}
+                    {cred.updatedBy
+                      ? t("updatedAtBy", {
+                          updatedAt: format.dateTime(cred.updatedAt),
+                          updatedBy: cred.updatedBy,
+                        })
+                      : t("updatedAt", { updatedAt: format.dateTime(cred.updatedAt) })}
                   </Typography>
                 )}
                 {cred.managedBy === "dawarich-provisioning" && (
                   <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.75 }}>
-                    Managed Dawarich setup owns this credential. Use Provision/reconcile or the
-                    dedicated OIDC recovery action; follow the operator guide for database or Rails
-                    credential conflict recovery.
+                    {t("managedDawarichSetupOwnsThis")}
                   </Typography>
                 )}
               </Box>
@@ -210,7 +225,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                       setValue("");
                     }}
                   >
-                    {cred.source === "vault" ? "Rotate" : "Set"}
+                    {cred.source === "vault" ? t("rotate") : t("set")}
                   </Button>
                   {cred.source === "vault" && (
                     <Button
@@ -223,7 +238,7 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                         ["env", "config.json"].includes(cred.source)
                       }
                     >
-                      Remove
+                      {t("remove")}
                     </Button>
                   )}
                 </Stack>
@@ -250,20 +265,20 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
             autoFocus
             fullWidth
             type="password"
-            label="Value"
+            label={t("value")}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             sx={{ mt: 1 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditing(null)}>Cancel</Button>
+          <Button onClick={() => setEditing(null)}>{tCommon("cancel")}</Button>
           <Button
             variant="contained"
             onClick={handleSave}
             disabled={value.trim() === "" || setCred.isPending}
           >
-            Save
+            {t("save")}
           </Button>
         </DialogActions>
       </Dialog>

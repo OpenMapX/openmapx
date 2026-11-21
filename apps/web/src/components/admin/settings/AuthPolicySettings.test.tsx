@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({ get: vi.fn(), apply: vi.fn() }));
 vi.mock("@openmapx/core", async () => ({
   ...(await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core")),

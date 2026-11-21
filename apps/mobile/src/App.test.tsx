@@ -4,7 +4,8 @@ jest.mock("expo-speech-recognition", () => ({
 
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { Alert, AppState, BackHandler, Linking, Platform } from "react-native";
+import { StrictMode } from "react";
+import { AccessibilityInfo, Alert, AppState, BackHandler, Linking, Platform } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { IntakeController } from "./intake/IntakeController";
@@ -838,6 +839,85 @@ describe("App bridge channel", () => {
     });
 
     expect(mockNavigation.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a live shell when React runs its effects again without a remount", async () => {
+    // Each composition gets its own graph, so the test can tell them apart.
+    const graphs: Array<{ dispatch: jest.Mock; dispose: jest.Mock }> = [];
+    mockCreateForegroundNavigation.mockImplementation(async () => {
+      const graph = {
+        ...mockNavigation,
+        dispatch: jest.fn(async () => undefined),
+        dispose: jest.fn(),
+      };
+      graphs.push(graph);
+      return graph;
+    });
+    resetRuntimeConfigCache();
+    // Strict Mode runs every effect's cleanup and set-up once more after the
+    // first commit, as a Fast Refresh does after an edit.
+    const view = await render(<App />, { wrapper: StrictMode });
+    await act(async () => undefined);
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { openmapxDocumentStart: true } });
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    await post(nonce, {
+      messageId: "prepare-1",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    });
+
+    const live = graphs.filter((graph) => graph.dispatch.mock.calls.length > 0);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.dispose).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await view.unmount();
+    });
+    expect(live[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("admits voice without a touch while a screen reader is on, until it is turned off", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const start = jest.spyOn(VoiceInputController.prototype, "start").mockResolvedValue();
+    jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(true);
+    let screenReaderChanged: ((enabled: boolean) => void) | undefined;
+    const remove = jest.fn();
+    const listen = (event: string, handler: (enabled: boolean) => void) => {
+      if (event === "screenReaderChanged") screenReaderChanged = handler;
+      return { remove };
+    };
+    // The shell subscribes to one event and only ever removes the subscription.
+    jest
+      .spyOn(AccessibilityInfo, "addEventListener")
+      .mockImplementation(listen as unknown as typeof AccessibilityInfo.addEventListener);
+    const nonce = await hello();
+    await post(nonce, {
+      messageId: "voice-screen-reader",
+      type: "voice.start",
+      payload: { requestId: "r1", locale: "en-US" },
+    });
+    expect(start).toHaveBeenCalledWith("r1", "en-US");
+
+    await act(async () => screenReaderChanged?.(false));
+    await post(nonce, {
+      messageId: "voice-screen-reader-off",
+      type: "voice.start",
+      payload: { requestId: "r2", locale: "en-US" },
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await shellView.unmount();
+    });
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });
 

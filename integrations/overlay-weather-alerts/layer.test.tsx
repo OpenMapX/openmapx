@@ -165,8 +165,11 @@ describe("WeatherAlertLayer freshness", () => {
     await waitFor(() => expect(drawn()).toEqual(["soon", "dropped", "kept"]));
     const click = (id: string) =>
       act(() => {
+        fake.setRenderedFeatures("openmapx-weather-alerts-fill", [
+          { ...feature(id, null), layer: { id: "openmapx-weather-alerts-fill" } } as never,
+        ]);
         fake.emit("click", {
-          features: [feature(id, null)],
+          point: { x: 0, y: 0 },
           lngLat: { lng: 8, lat: 50 },
           originalEvent: new MouseEvent("click"),
         });

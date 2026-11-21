@@ -3,6 +3,7 @@
 import Chip, { type ChipProps } from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
 import type { ReactNode } from "react";
+import { useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { jobStatusColor, jobStatusDescription } from "./jobStatus";
 
 export function JobStatusChip({
@@ -16,16 +17,17 @@ export function JobStatusChip({
   variant?: ChipProps["variant"];
   sx?: ChipProps["sx"];
 }) {
+  const t = useAdminTranslations("adminShared");
   const value = status ?? "never";
   const chip = (
     <Chip
-      label={label ?? value}
+      label={label ?? t("jobStatusLabel", { status: value })}
       size="small"
       color={jobStatusColor(value)}
       variant={variant ?? (value === "running" ? "filled" : "outlined")}
       sx={sx}
     />
   );
-  const description = jobStatusDescription(value);
+  const description = jobStatusDescription(value, t);
   return description ? <Tooltip title={description}>{chip}</Tooltip> : chip;
 }

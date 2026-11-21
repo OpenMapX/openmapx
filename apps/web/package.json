@@ -12,6 +12,7 @@
     "build:sw": "node scripts/build-sw.mjs",
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",
+    "test:e2e": "playwright test -c e2e/playwright.config.mts",
     "check-types": "pnpm build:licenses && tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.integrations.json && tsc --noEmit -p tsconfig.integration-tests.json",
     "icons:sync": "node scripts/copy-preset-icons.mjs",
     "icons:basemap": "node scripts/generate-poi-sprites.mjs",
@@ -99,6 +100,7 @@
     "esbuild": "^0.28.2",
     "fake-indexeddb": "6.2.8",
     "jsdom": "^31.0.1",
+    "playwright": "1.65.1",
     "sharp": "0.35.5",
     "typescript": "^6.0.3"
   }

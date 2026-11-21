@@ -52,12 +52,12 @@ export function OfflineNavigationBanner({
           <Typography variant="body2">{t("offlineRerouteUnavailable")}</Typography>
         )}
         {liveDataUnavailable && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {t("offlineLiveDataUnavailable")}
           </Typography>
         )}
         {mapMessage && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {mapMessage}
           </Typography>
         )}

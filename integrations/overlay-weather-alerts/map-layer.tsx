@@ -3,16 +3,17 @@
 import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import {
+  useMapOverlayInteraction,
+  useMapOverlayPopup,
+} from "@/integration-api/map/useMapOverlayInteraction";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -262,7 +263,7 @@ export function WeatherAlertLayer() {
   useRenderedMapAttributions("weather-alerts", ALL_LAYER_IDS, layerVisible);
   useOverlayExclusion("weather-alerts", layerVisible);
 
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { show: showPopup, close: closePopup } = useMapOverlayPopup(layerVisible);
   /** The alert the popup shows: it closes once that alert is no longer drawn. */
   const openAlertRef = useRef<{ id: string; severity: string } | null>(null);
   /** The last successful load and when it arrived; null once it is too old to show. */
@@ -283,11 +284,11 @@ export function WeatherAlertLayer() {
       setAlertCount(current.features.length);
       const open = openAlertRef.current;
       if (open && !current.features.some((f) => String(f.properties?.id) === open.id)) {
-        popupRef.current?.remove();
+        closePopup();
         openAlertRef.current = null;
       }
     },
-    [publishGeoJson, setAlertCount],
+    [publishGeoJson, setAlertCount, closePopup],
   );
 
   /**
@@ -303,9 +304,9 @@ export function WeatherAlertLayer() {
       return;
     }
     lastLoadRef.current = null;
-    popupRef.current?.remove();
+    closePopup();
     draw(NO_ALERTS);
-  }, [draw]);
+  }, [draw, closePopup]);
 
   const fetchAlerts = useCallback(async () => {
     const map = mapRef.current;
@@ -380,10 +381,10 @@ export function WeatherAlertLayer() {
   useEffect(() => {
     const open = openAlertRef.current;
     if (open && !activeSeverities.has(open.severity)) {
-      popupRef.current?.remove();
+      closePopup();
       openAlertRef.current = null;
     }
-  }, [activeSeverities]);
+  }, [activeSeverities, closePopup]);
 
   useEffect(
     () => () => {
@@ -421,14 +422,13 @@ export function WeatherAlertLayer() {
   }, [layerVisible, fetchAlerts, expireStale]);
 
   // Click popup
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      if (getMapClickOwner(e)) return;
-      const f = e.features?.[0];
+  useMapOverlayInteraction({
+    id: "overlay-weather-alerts",
+    layerIds: [...ALL_LAYER_IDS],
+    priority: 20,
+    enabled: layerVisible,
+    onClick: ({ event, features }) => {
+      const f = features[0];
       if (!f) return;
       const p = f.properties as Record<string, unknown>;
       const severity = String(p.severity || "Unknown");
@@ -439,7 +439,7 @@ export function WeatherAlertLayer() {
       const coords: [number, number] =
         p.geometryType === "point"
           ? ((f.geometry as { coordinates: number[] }).coordinates as [number, number])
-          : [e.lngLat.lng, e.lngLat.lat];
+          : [event.lngLat.lng, event.lngLat.lat];
 
       const html = buildAlertPopupHtml(
         p,
@@ -452,41 +452,18 @@ export function WeatherAlertLayer() {
         { name: dataSource?.name ?? sourceId, url: dataSource?.url },
       );
 
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "320px",
-        className: "omx-popup",
-      })
-        .setLngLat(coords)
-        .setHTML(html)
-        .addTo(map);
+      showPopup(
+        new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "320px",
+          className: "omx-popup",
+        })
+          .setLngLat(coords)
+          .setHTML(html),
+      );
       openAlertRef.current = { id: String(p.id ?? ""), severity: String(p.severity ?? "") };
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      const layers = ALL_LAYER_IDS.filter((id) => map.getLayer(id));
-      if (layers.length === 0) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [...layers] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    for (const id of ALL_LAYER_IDS) {
-      map.on("click", id, onClick);
-      INTERACTIVE_LAYER_IDS.add(id);
-    }
-    map.on("mousemove", onMouseMove);
-
-    return () => {
-      for (const id of ALL_LAYER_IDS) {
-        map.off("click", id, onClick);
-        INTERACTIVE_LAYER_IDS.delete(id);
-      }
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, t, registry]);
+    },
+  });
 
   return null;
 }

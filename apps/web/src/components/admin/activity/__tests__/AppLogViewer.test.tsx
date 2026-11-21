@@ -6,6 +6,7 @@ import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);

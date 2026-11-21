@@ -1,10 +1,6 @@
 /**
  * Capture `console.error` calls for a test.
  *
- * Deliberately not `vi.spyOn`: this repo hand-writes a small `vi` surface in
- * `src/vitest.d.ts` and does not expose spies. Swapping the function directly
- * needs no new type surface.
- *
  * Always `restore()` in an `afterEach` — a test that throws before restoring
  * leaves every later test's console swallowed.
  */

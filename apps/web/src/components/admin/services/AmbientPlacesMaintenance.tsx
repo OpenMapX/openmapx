@@ -22,7 +22,10 @@ import {
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { AmbientPlacesStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
+import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
@@ -33,6 +36,8 @@ type AmbientMutation =
   | { action: "rollback"; body: Record<string, never> };
 
 export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminServices");
+  const format = useAdminFormat();
   const toast = useAdminToast();
   const client = useQueryClient();
   const apiClient = useMemo(
@@ -76,13 +81,13 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
     onSuccess: (_result, variables) => {
       toast(
         ["build", "resume"].includes(variables.action)
-          ? "Publication queued"
-          : "Publication updated",
+          ? t("publicationQueued")
+          : t("publicationUpdated"),
       );
       setConfirm(null);
       void client.invalidateQueries({ queryKey });
     },
-    onError: (error: Error) => toast(sdk.adminErrorMessage(error, error.message), "error"),
+    onError: (error: Error) => toast(adminErrorText(error, t("serviceRequestFailed")), "error"),
   });
   const status = query.data;
   const active = status?.active;
@@ -92,55 +97,59 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
     <Paper variant="outlined" sx={{ p: 3 }}>
       <Stack spacing={2}>
         <Box>
-          <Typography variant="h6">Nearby places on the map</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Publish planet, Germany or a custom region from the existing OSM search index and
-            optional Overture snapshot. Failed builds keep the last good map.
+          <Typography variant="h6">{t("nearbyPlacesOnTheMap")}</Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            {t("publishPlanetGermanyOrA")}
           </Typography>
         </Box>
         {(query.isLoading || busy) && <LinearProgress />}
         {query.error && (
-          <Alert severity="error">{sdk.adminErrorMessage(query.error, query.error.message)}</Alert>
+          <Alert severity="error">{adminErrorText(query.error, t("serviceRequestFailed"))}</Alert>
         )}
         {status?.lastError && <Alert severity="error">{status.lastError}</Alert>}
         {status?.building && status.progress && (
           <Alert severity="info">
             {status.progress.phase === "osm"
-              ? "Preparing OSM places"
+              ? t("preparingOsmPlaces")
               : status.progress.phase === "overture"
-                ? "Preparing Overture gaps"
-                : "Validating snapshot"}
+                ? t("preparingOvertureGaps")
+                : t("validatingSnapshot")}
             {" · "}
-            {status.progress.processed.toLocaleString()} source rows processed
+            {t("processedSourceRows", {
+              count: status.progress.processed,
+            })}
             {" · "}
-            {status.progress.placeCount.toLocaleString()} staged places. The previous map remains
-            active until publication succeeds.
+            {t("stagedPlaces", {
+              count: status.progress.placeCount,
+            })}
           </Alert>
         )}
         {status?.candidate && !status.building && (
           <Alert severity="warning">
-            Interrupted planet candidate · {status.candidate.checkpoint.processed.toLocaleString()}{" "}
-            source rows processed · {status.candidate.checkpoint.placeCount.toLocaleString()} staged
-            places. Resume with the same sources and policy, or discard and rebuild. The active map
-            remains unchanged.
+            {t("interruptedPlanetCandidate", {
+              processed: status.candidate.checkpoint.processed,
+              places: status.candidate.checkpoint.placeCount,
+            })}
           </Alert>
         )}
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-          <Chip label={active ? `${active.placeCount.toLocaleString()} places` : "Not published"} />
+          <Chip
+            label={active ? t("placeCount", { count: active.placeCount }) : t("notPublished")}
+          />
           <Chip
             color={active?.enabled ? "success" : "default"}
-            label={active?.enabled ? "Visible" : "Disabled or out of date"}
+            label={active?.enabled ? t("visible") : t("disabledOrOutOfDate")}
           />
-          <Chip label={active?.sources.overture ? "OSM + Overture" : "OSM only"} />
-          {active && <Chip label={`Policy ${active.policyVersion}`} />}
+          <Chip label={active?.sources.overture ? t("osmOverture") : t("osmOnly")} />
+          {active && <Chip label={t("policyVersion", { version: active.policyVersion })} />}
           {active && (
             <Chip
               label={
                 active.region.coverage === "planet"
-                  ? "Planet coverage"
+                  ? t("planetCoverage")
                   : active.region.coverage === "germany"
-                    ? "Germany coverage"
-                    : "Regional coverage"
+                    ? t("germanyCoverage")
+                    : t("regionalCoverage")
               }
             />
           )}
@@ -148,71 +157,79 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
         {active && (
           <Box>
             <Typography variant="body2">
-              {active.region.name} · published {new Date(active.publishedAt).toLocaleString()}
+              {t("publishedSnapshot", {
+                name: active.region.name,
+                publishedAt: format.dateTime(active.publishedAt),
+              })}
             </Typography>
             <Typography variant="caption" sx={{ display: "block", overflowWrap: "anywhere" }}>
-              Generation {active.generation}
+              {t("generation", { generation: active.generation })}
             </Typography>
             <Typography variant="caption" sx={{ display: "block" }}>
-              OSM {active.sources.osm.epoch} · {active.sources.osm.count.toLocaleString()} eligible
-              places · snapshot {active.sources.osm.publishedAt}
+              {t("osmSnapshot", {
+                epoch: active.sources.osm.epoch,
+                count: active.sources.osm.count,
+                publishedAt: format.dateTime(active.sources.osm.publishedAt),
+              })}
             </Typography>
             {active.sources.overture && (
               <Typography variant="caption" sx={{ display: "block" }}>
-                Overture {active.sources.overture.release} ·{" "}
-                {active.sources.overture.count.toLocaleString()} eligible places · snapshot{" "}
-                {active.sources.overture.publishedAt}
+                {t("overtureSnapshot", {
+                  release: active.sources.overture.release,
+                  count: active.sources.overture.count,
+                  publishedAt: format.dateTime(active.sources.overture.publishedAt),
+                })}
               </Typography>
             )}
-            <Typography variant="caption" color="text.secondary">
-              Snapshot dates describe imported data, not real-world verification of each place.
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {t("snapshotDatesDescribeImportedData")}
             </Typography>
           </Box>
         )}
         {status?.previous && (
           <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
-            Previous generation {status.previous}
+            {t("previousGeneration", { previous: status.previous })}
           </Typography>
         )}
         <RadioGroup
           row
-          aria-label="Coverage"
+          aria-label={t("coverage")}
           value={coverage}
           onChange={(event) => setCoverage(event.target.value)}
         >
           <FormControlLabel
             value="regional"
             control={<Radio />}
-            label="Custom region"
+            label={t("customRegion")}
             disabled={busy}
           />
-          <FormControlLabel value="germany" control={<Radio />} label="Germany" disabled={busy} />
-          <FormControlLabel value="planet" control={<Radio />} label="Planet" disabled={busy} />
+          <FormControlLabel
+            value="germany"
+            control={<Radio />}
+            label={t("germany")}
+            disabled={busy}
+          />
+          <FormControlLabel
+            value="planet"
+            control={<Radio />}
+            label={t("planet")}
+            disabled={busy}
+          />
         </RadioGroup>
         {planet ? (
-          <Alert severity="info">
-            Prepare the full planet OSM snapshot with source format 2 and matching planet Overture
-            conflation first. Planet publication saves bounded checkpoints and can resume after
-            interruption. Size source preparation, database disk/WAL, retained generations and
-            serving capacity for your deployment before starting. The active map stays available.
-          </Alert>
+          <Alert severity="info">{t("prepareTheFullPlanetOsm")}</Alert>
         ) : country ? (
-          <Alert severity="info">
-            Prepare the complete europe/germany OSM search snapshot and, when used, the Germany
-            Overture snapshot with completed conflation first. Germany publication checks disk space
-            and processes bounded batches. Schedule it after source preparation; failed builds keep
-            the active map.
-          </Alert>
+          <Alert severity="info">{t("prepareTheCompleteEuropeGermany")}</Alert>
         ) : (
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
             <TextField
-              label="Region name"
+              label={t("regionName")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               size="small"
               disabled={busy}
             />
-            {["West", "South", "East", "North"].map((label, i) => (
+            {[t("west"), t("south"), t("east"), t("north")].map((label, i) => (
               <TextField
                 key={label}
                 label={label}
@@ -228,14 +245,13 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             ))}
           </Stack>
         )}
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {planet
-            ? "Planet preset: installed source coverage within Web Mercator bounds."
+            ? t("planetPresetInstalledSourceCoverage")
             : country
-              ? "Germany preset: installed source coverage within the rollout envelope."
-              : "Custom region: maximum 0.5° × 0.5°, 100,000 places."}{" "}
-          Sources must be ready and no older than 90 days; Overture requires completed conflation.
-          Eight generations are retained with a seven-day tile cache lease.
+              ? t("germanyPresetInstalledSourceCoverage")
+              : t("customRegionLimits")}{" "}
+          {t("ambientSourceRequirements")}
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button
@@ -253,10 +269,10 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
             }
           >
             {planet
-              ? "Publish planet snapshot"
+              ? t("publishPlanetSnapshot")
               : country
-                ? "Publish Germany snapshot"
-                : "Publish map snapshot"}
+                ? t("publishGermanySnapshot")
+                : t("publishMapSnapshot")}
           </Button>
           <Button
             disabled={busy || !active}
@@ -264,10 +280,10 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
               operation.mutate({ action: "enabled", body: { enabled: !active?.enabled } })
             }
           >
-            {active?.enabled ? "Disable" : "Enable"}
+            {active?.enabled ? t("disable") : t("enable")}
           </Button>
           <Button disabled={busy || !status?.previous} onClick={() => setConfirm("rollback")}>
-            Roll back
+            {t("rollBack")}
           </Button>
           {candidate && (
             <>
@@ -280,31 +296,25 @@ export function AmbientPlacesMaintenance({ apiUrl }: { apiUrl: string }) {
                   })
                 }
               >
-                Resume planet build
+                {t("resumePlanetBuild")}
               </Button>
               <Button disabled={busy} onClick={() => setConfirm("discard")}>
-                Discard candidate
+                {t("discardCandidate")}
               </Button>
             </>
           )}
           <Button disabled={busy} onClick={() => void client.invalidateQueries({ queryKey })}>
-            Refresh
+            {t("refresh")}
           </Button>
         </Stack>
       </Stack>
       <ConfirmDialog
         open={confirm !== null}
         title={
-          confirm === "discard"
-            ? "Discard unpublished planet candidate?"
-            : "Roll back nearby places?"
+          confirm === "discard" ? t("discardUnpublishedPlanetCandidate") : t("rollBackNearbyPlaces")
         }
-        message={
-          confirm === "discard"
-            ? "The saved candidate and its progress will be removed. The active map and cached tiles remain available."
-            : "The map will use the previous generation. Cached tiles remain available."
-        }
-        confirmLabel={confirm === "discard" ? "Discard" : "Roll back"}
+        message={confirm === "discard" ? t("theSavedCandidateAndIts") : t("theMapWillUseThe")}
+        confirmLabel={confirm === "discard" ? t("discard") : t("rollBack")}
         loading={operation.isPending}
         onConfirm={() => {
           if (confirm === "discard") {

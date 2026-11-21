@@ -1,21 +1,36 @@
 import {
   type FixInput,
   freshTransitTickState,
+  type JourneyStopLike,
+  lngLatSchema,
+  mergeTransitRefresh,
   prepareTransitProgress,
-  type Route,
+  refreshTransitCaptures,
   repairTransitWalk,
   type TransitMobileSession,
   type TransitNavigationStartPackage,
   type TransitRiderAction,
   transitProgressFromTick,
+  transitStartPackageSchema,
+  type WalkRoute,
+  type WalkRouteStep,
 } from "@openmapx/core/navigation";
-import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { z } from "zod";
+import type {
+  NavigationProcessor,
+  ProcessorMutation,
+  ProcessorPreparation,
+  WalkRepairRoute,
+} from "../processor";
 import {
+  isCurrentGeneration,
   onRefreshFailed,
   onRefreshRequested,
   onRefreshSucceeded,
   shouldRefresh,
 } from "./refreshState";
+import type { RefreshOutcome } from "./TransitRefreshService";
 import { processTransitBatch, TransitItineraryCache } from "./transitBatch";
 import { createTransitPreparingSession, validateTransitStartPackage } from "./transitSession";
 
@@ -111,7 +126,7 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
   repairTransitWalk(
     session: TransitMobileSession,
     legIndex: number,
-    route: Route,
+    walkRoute: WalkRepairRoute,
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string } {
     if (
@@ -119,8 +134,10 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
       session.payload.tickState.phase !== "walking"
     )
       return { ok: false, code: "invalid-state" };
+    const route = checkedWalkRoute(walkRoute);
+    if (!route) return { ok: false, code: "invalid-route" };
     const itinerary = repairTransitWalk(
-      session.payload.startPackage.itinerary as never,
+      storedItinerary(session.payload.startPackage.itinerary),
       legIndex,
       route,
     );
@@ -148,9 +165,9 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
         payload: {
           ...session.payload,
           navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
-          startPackage: { ...session.payload.startPackage, itinerary: itinerary as never },
+          startPackage: { ...session.payload.startPackage, itinerary: { ...itinerary } },
           tickState,
-          progress: progress as unknown as Record<string, unknown>,
+          progress: { ...progress },
         },
       },
       effects: [{ kind: "publish-snapshot", immediate: true }],
@@ -187,6 +204,34 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     // journey that produced it and is useless against a different one.
     this.cache.invalidate();
     return applyTransitReplacement(session, validated.startPackage, nowMs);
+  }
+
+  applyRefresh(
+    session: TransitMobileSession,
+    outcome: RefreshOutcome,
+    nowMs: number,
+  ): ProcessorMutation | null {
+    const { refresh } = session.payload;
+    if (refresh.status !== "in-flight" || !isCurrentGeneration(refresh, outcome)) return null;
+
+    const payload = (outcome.ok && adoptRefresh(session, outcome, nowMs)) || {
+      ...session.payload,
+      refresh: onRefreshFailed(
+        refresh,
+        outcome.ok ? "rejected" : outcome.failure === "unreachable" ? "retryable" : outcome.failure,
+        nowMs,
+        !!session.payload.refreshToken,
+      ),
+    };
+    // A terminal itinerary chain must not prevent the same owner polling journey evidence.
+    if (payload.refresh.status === "broken") payload.refreshToken = null;
+    return {
+      session: { ...session, revision: session.revision + 1, updatedAtMs: nowMs, payload },
+      effects: [
+        { kind: "reconcile-alerts", sessionId: session.sessionId },
+        { kind: "publish-snapshot", immediate: true },
+      ],
+    };
   }
 
   async onConnectivityRestored(
@@ -230,6 +275,129 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
 }
 
 /**
+ * The payload after a refresh answer for the journey being followed, or null
+ * when the answer describes another journey or fails the start package schema.
+ *
+ * Live service updates replace the itinerary, except that an active walking
+ * repair keeps its own route. Captured stops keep the occurrences the rider is
+ * following and take the refetched predictions. A walk whose target or route
+ * changed restarts its guidance from the first step.
+ */
+function adoptRefresh(
+  session: TransitMobileSession,
+  outcome: Extract<RefreshOutcome, { ok: true }>,
+  nowMs: number,
+): TransitMobileSession["payload"] | null {
+  const { startPackage, tickState } = session.payload;
+  const parsed = transitStartPackageSchema.safeParse({
+    ...startPackage,
+    itinerary: outcome.itinerary,
+  });
+  if (!parsed.success) return null;
+  const current = storedItinerary(startPackage.itinerary);
+  const merged = mergeTransitRefresh(
+    current,
+    storedItinerary(parsed.data.itinerary),
+    tickState.currentLegIndex,
+    tickState.walkRevision ?? 0,
+  );
+  if (!merged) return null;
+
+  const refreshed = { ...parsed.data, itinerary: { ...merged.itinerary } };
+  const captured = transitStartPackageSchema.safeParse({
+    ...refreshed,
+    captures: refreshTransitCaptures(
+      startPackage.captures,
+      current.legs,
+      // Each stop is read defensively: one without a usable id and position is skipped.
+      outcome.journeys as Readonly<Record<string, readonly JourneyStopLike[] | undefined>>,
+      nowMs,
+    ),
+  });
+  const payload: TransitMobileSession["payload"] = {
+    ...session.payload,
+    startPackage: captured.success ? captured.data : refreshed,
+    navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
+    refreshToken: outcome.capturesOnly
+      ? session.payload.refreshToken
+      : typeof merged.itinerary.refreshToken === "string"
+        ? merged.itinerary.refreshToken
+        : null,
+    refresh: onRefreshSucceeded(session.payload.refresh, nowMs),
+  };
+  if (!merged.resetWalk) return payload;
+
+  const walkTick = {
+    ...tickState,
+    currentWalkStepIndex: 0,
+    reachedStepEnd: false,
+    distanceToNextStepMeters: undefined,
+    walkRevision: (tickState.walkRevision ?? 0) + 1,
+  };
+  const progress = transitProgressFromTick(
+    {
+      ...walkTick,
+      ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+    },
+    prepareTransitProgress(merged.itinerary),
+  );
+  return { ...payload, tickState: walkTick, progress: { ...progress } };
+}
+
+/**
+ * The step fields the walk repair copies, which the bridge does not check.
+ *
+ * The page sends core `Route` steps. The bridge's schema makes a step's
+ * instruction, distance and duration optional, and lets its coordinates and
+ * maneuver through unchecked (it validates a `geometry` that route steps do not
+ * carry), so they are checked here.
+ */
+const walkStepSchema = z.object({
+  instruction: z.string(),
+  distance: z.number(),
+  duration: z.number(),
+  coordinates: z.array(lngLatSchema),
+  maneuver: z.object({ type: z.string(), modifier: z.string().optional() }).optional(),
+});
+
+/**
+ * The walking route as the repair reads it, or null when a step lacks a field
+ * the repair copies into the itinerary.
+ *
+ * The bridge has already validated the route's geometry, distance, duration and
+ * mode, and the receipts on the route and each step.
+ */
+function checkedWalkRoute(route: WalkRepairRoute): WalkRoute | null {
+  const steps: WalkRouteStep[] = [];
+  for (const step of route.steps) {
+    const checked = walkStepSchema.safeParse(step);
+    if (!checked.success) return null;
+    steps.push({
+      ...checked.data,
+      ...(step.contributors ? { contributors: step.contributors } : {}),
+      ...(step.fieldContributors ? { fieldContributors: step.fieldContributors } : {}),
+    });
+  }
+  return {
+    mode: route.mode,
+    distance: route.distance,
+    duration: route.duration,
+    geometry: route.geometry,
+    steps,
+    ...(route.contributors ? { contributors: route.contributors } : {}),
+    ...(route.fieldContributors ? { fieldContributors: route.fieldContributors } : {}),
+  };
+}
+
+/**
+ * The start package keeps the server's itinerary as an open record; the
+ * navigation helpers read it as the itinerary the server shaped.
+ */
+function storedItinerary(itinerary: Record<string, unknown>): TripItinerary {
+  return itinerary as unknown as TripItinerary;
+}
+
+/**
  * Commits a replacement itinerary and resets everything the old one owned.
  *
  * The whole package is adopted or none of it: combining a new itinerary with an
@@ -250,7 +418,7 @@ export function applyTransitReplacement(
     updatedAtMs: nowMs,
     payload: {
       startPackage: structuredClone(startPackage),
-      tickState: freshTransitTickState(nowMs, startPackage.itinerary as never),
+      tickState: freshTransitTickState(nowMs, storedItinerary(startPackage.itinerary)),
       progress: null,
       confidence: "gps",
       refreshToken,

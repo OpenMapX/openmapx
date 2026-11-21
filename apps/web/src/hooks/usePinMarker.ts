@@ -173,7 +173,7 @@ export function usePinMarker(
     };
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mapReady is an intentional trigger so the marker is created once the map initializes
+  // The marker is created once the map is ready; a pin requested earlier waits for it.
   useEffect(() => {
     if (!coords) {
       markerRef.current?.remove();
@@ -221,7 +221,7 @@ export function usePinMarker(
 
     void import("maplibre-gl")
       .then((maplibregl) => {
-        if (destroyed || !mapRef.current) return;
+        if (destroyed || !mapReady || !mapRef.current) return;
 
         // Move and relabel existing marker instead of recreating
         if (markerRef.current && markerMapRef.current !== mapRef.current) {
@@ -318,16 +318,5 @@ export function usePinMarker(
     return () => {
       destroyed = true;
     };
-  }, [
-    coords,
-    label,
-    mapRef,
-    mapReady,
-    styleVersion,
-    showLabel,
-    color,
-    onActivate,
-    receiptKey,
-    labelReceiptKey,
-  ]);
+  }, [coords, label, mapRef, mapReady, showLabel, color, onActivate, receiptKey, labelReceiptKey]);
 }

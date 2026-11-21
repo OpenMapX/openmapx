@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 import { CredentialSetupGuide } from "../CredentialSetupGuide";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 describe("CredentialSetupGuide", () => {
   it("renders a Get API key link to the registration URL", () => {

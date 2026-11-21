@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 import { RegionCoverageMatrix } from "./RegionCoverageMatrix";
 
-vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 
 const data: CoverageRegionsResponse = {
   schemaVersion: 1,
@@ -116,18 +116,34 @@ describe("RegionCoverageMatrix", () => {
       <RegionCoverageMatrix data={data} selectedRegionId="extract:first" onSelect={onSelect} />,
     );
 
-    await user.click(
-      screen.getAllByRole("button", { name: "adminCoverage.matrix.selectRegion" })[0],
-    );
+    await user.click(screen.getAllByRole("button", { name: "Select region First extract" })[0]);
     expect(onSelect).toHaveBeenCalledWith("extract:first");
 
     await user.click(
-      screen.getAllByRole("button", { name: "adminCoverage.matrix.selectDomain" })[0],
+      screen.getAllByRole("button", { name: /^Open Addresses for First extract/ })[0],
     );
     expect(onSelect).toHaveBeenCalledWith("extract:first", "addresses");
-    expect(screen.getByRole("columnheader", { name: "adminCoverage.domain.cameras" })).toBeTruthy();
-    const buttons = screen.getAllByRole("button", { name: "adminCoverage.matrix.selectDomain" });
-    await user.click(buttons[buttons.length - 2]);
+    expect(screen.getByRole("columnheader", { name: "Cameras" })).toBeTruthy();
+    const cameras = screen.getAllByRole("button", { name: /^Open Cameras for First extract/ });
+    await user.click(cameras[cameras.length - 1]);
     expect(onSelect).toHaveBeenCalledWith("extract:first", "cameras");
+  });
+
+  it("words and groups the counts on the narrow layout and the unassigned note", () => {
+    const [row] = data.regions;
+    render(
+      <RegionCoverageMatrix
+        data={{
+          ...data,
+          regions: [{ ...row, sourceCount: 1234, attentionCount: 1001 }],
+          unassignedSourceCount: 1,
+        }}
+        onSelect={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Sources: 1,234")).toBeTruthy();
+    expect(screen.getByText("Attention: 1,001")).toBeTruthy();
+    expect(screen.getByText("1 source has no verified region association.")).toBeTruthy();
   });
 });

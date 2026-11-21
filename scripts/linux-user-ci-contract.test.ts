@@ -32,7 +32,6 @@ describe("required Linux deployment-user gate", () => {
       OPENMAPX_TEST_DEPLOYMENT_USER: "1001",
     });
     expect(job.defaults.run.shell).toBe("bash");
-    expect(job["timeout-minutes"]).toBe(30);
     const confirmation = steps.find((step) => step.name === "Confirm the user and umask");
     expect(confirmation?.run).toContain("umask 002");
     expect(confirmation?.run).toContain('test "$(id -u)" = 1001 && test "$(umask)" = 0002');

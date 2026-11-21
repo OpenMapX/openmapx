@@ -427,7 +427,7 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
                       {stop.name}
                     </Typography>
                     {isCanceledStop && (
-                      <Typography variant="caption" color="error.main" sx={{ fontWeight: 600 }}>
+                      <Typography variant="caption" sx={{ color: "error.main", fontWeight: 600 }}>
                         {t("canceled")}
                       </Typography>
                     )}

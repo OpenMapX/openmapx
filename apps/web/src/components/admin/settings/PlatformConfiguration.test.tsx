@@ -7,6 +7,8 @@ import { PlatformConfiguration } from "./PlatformConfiguration";
 import { PlatformPreviewLifecycle } from "./PlatformPreviewLifecycle";
 import type { PlatformScope } from "./platformScope";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 const mocks = vi.hoisted(() => ({ get: vi.fn(), preview: vi.fn(), apply: vi.fn(), job: vi.fn() }));
 vi.mock("@openmapx/core", async () => ({
   ...(await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core")),

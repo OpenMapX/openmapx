@@ -125,7 +125,7 @@ function OidcConsentContent() {
             <Typography variant="h6" sx={{ mt: 2 }}>
               {client.client_name || t("unknownClient")}
             </Typography>
-            {origin && <Typography color="text.secondary">{origin}</Typography>}
+            {origin && <Typography sx={{ color: "text.secondary" }}>{origin}</Typography>}
             <Typography sx={{ mt: 2 }}>{t("consentBody")}</Typography>
             <List disablePadding sx={{ my: 1.5 }}>
               {requestedScopes.map((scope) => (

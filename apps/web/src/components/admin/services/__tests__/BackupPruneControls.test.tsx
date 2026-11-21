@@ -3,6 +3,8 @@ import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { cleanup, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
 import { BackupPruneControls } from "../BackupPruneControls";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));

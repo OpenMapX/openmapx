@@ -78,7 +78,7 @@ export function RouteImpactProvenance({ impact }: { impact: RouteImpact }) {
             key={assumptionKey(item)}
             component="li"
             variant="caption"
-            color="text.secondary"
+            sx={{ color: "text.secondary" }}
           >
             {formatAssumption(item)}
           </Typography>
@@ -118,8 +118,7 @@ export function RouteImpactProvenance({ impact }: { impact: RouteImpact }) {
         {impact.cost.energyCostProvenance.timestamp && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ display: "block" }}
+            sx={{ color: "text.secondary", display: "block" }}
             data-testid="fuel-provenance-timestamp"
           >
             {formatProvenanceDate(impact.cost.energyCostProvenance.timestamp, locale)}
@@ -144,8 +143,7 @@ export function RouteImpactProvenance({ impact }: { impact: RouteImpact }) {
         {impact.emissions.provenance.timestamp && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ display: "block" }}
+            sx={{ color: "text.secondary", display: "block" }}
             data-testid="emissions-provenance-timestamp"
           >
             {formatProvenanceDate(impact.emissions.provenance.timestamp, locale)}

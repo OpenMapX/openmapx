@@ -5,7 +5,7 @@ import { JobDetail } from "../JobDetail";
 import { JobList } from "../JobList";
 import { FakeEventSource, job, log, stage, timestamp } from "./fixtures";
 
-vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
 let apiUrl = "http://api.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const clients: QueryClient[] = [];
@@ -130,9 +130,9 @@ describe("Activity generated SDK consumers", () => {
         <JobDetail jobId="job-1" source="data-manager" />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("validate")).toBeInTheDocument();
+    expect(await screen.findByText("Validate feeds")).toBeInTheDocument();
     expect(screen.getByText("Invalid archives — archive-1: Invalid format")).toBeInTheDocument();
-    expect(screen.getByText("1.3s")).toBeInTheDocument();
+    expect(screen.getByText("1.3 sec")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
@@ -333,7 +333,7 @@ describe("Activity generated SDK consumers", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(reads).toBe(2);
-    expect(screen.getByText("cancel_pending")).toBeInTheDocument();
+    expect(screen.getByText("cancel pending")).toBeInTheDocument();
     expect(screen.getByText("Polling")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     await act(async () => {

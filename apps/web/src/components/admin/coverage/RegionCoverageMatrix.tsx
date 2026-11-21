@@ -14,6 +14,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { CoverageDomain, CoverageRegionsResponse } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { CoverageStatus } from "./CoverageStatus";
 
@@ -40,6 +41,7 @@ export function RegionCoverageMatrix({
   onPageChange?: (offset: number) => void;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
 
   return (
     <Paper component="section" variant="outlined" aria-labelledby="coverage-matrix-heading">
@@ -47,7 +49,7 @@ export function RegionCoverageMatrix({
         <Typography id="coverage-matrix-heading" component="h2" variant="subtitle1">
           {t("matrix.title")}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t("matrix.description")}
         </Typography>
       </Stack>
@@ -93,7 +95,7 @@ export function RegionCoverageMatrix({
                         <Typography variant="body2" sx={{ fontWeight: 650 }} noWrap>
                           {row.region.label}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
+                        <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                           {row.region.key}
                         </Typography>
                       </Box>
@@ -110,7 +112,7 @@ export function RegionCoverageMatrix({
                           aria-label={t("matrix.selectDomain", {
                             region: row.region.label,
                             domain: t(`domain.${domain}`),
-                            status: t(`status.${summary.status}`),
+                            statusLabel: t(`status.${summary.status}`),
                           })}
                           sx={{
                             display: "inline-flex",
@@ -126,7 +128,7 @@ export function RegionCoverageMatrix({
                           }}
                         >
                           <CoverageStatus status={summary.status} />
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
                             {t("matrix.operationCount", {
                               count: summary.operational,
                               total:
@@ -140,15 +142,15 @@ export function RegionCoverageMatrix({
                       </TableCell>
                     );
                   })}
-                  <TableCell align="right">{row.sourceCount}</TableCell>
+                  <TableCell align="right">{format.number(row.sourceCount)}</TableCell>
                   <TableCell align="right">
                     <Typography
                       component="span"
                       variant="body2"
-                      color={row.attentionCount > 0 ? "warning.main" : "text.secondary"}
+                      sx={{ color: row.attentionCount > 0 ? "warning.main" : "text.secondary" }}
                       aria-label={t("matrix.attentionCount", { count: row.attentionCount })}
                     >
-                      {row.attentionCount}
+                      {format.number(row.attentionCount)}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -185,7 +187,7 @@ export function RegionCoverageMatrix({
                   <Typography variant="body2" sx={{ fontWeight: 650 }} noWrap>
                     {row.region.label}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                     {row.region.key}
                   </Typography>
                 </Box>
@@ -209,7 +211,7 @@ export function RegionCoverageMatrix({
                       aria-label={t("matrix.selectDomain", {
                         region: row.region.label,
                         domain: t(`domain.${domain}`),
-                        status: t(`status.${summary.status}`),
+                        statusLabel: t(`status.${summary.status}`),
                       })}
                       sx={{
                         display: "flex",
@@ -226,7 +228,7 @@ export function RegionCoverageMatrix({
                         <Typography variant="caption" sx={{ fontWeight: 650 }} noWrap>
                           {t(`domain.${domain}`)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
+                        <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
                           {t("matrix.operationCount", {
                             count: summary.operational,
                             total:
@@ -242,14 +244,14 @@ export function RegionCoverageMatrix({
                 })}
               </Box>
               <Stack direction="row" spacing={2} sx={{ mt: 0.75, px: 0.5 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t("matrix.sources")}: {row.sourceCount}
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  {t("matrix.sourceTotal", { count: row.sourceCount })}
                 </Typography>
                 <Typography
                   variant="caption"
-                  color={row.attentionCount > 0 ? "warning.main" : "text.secondary"}
+                  sx={{ color: row.attentionCount > 0 ? "warning.main" : "text.secondary" }}
                 >
-                  {t("matrix.attention")}: {row.attentionCount}
+                  {t("matrix.attentionTotal", { count: row.attentionCount })}
                 </Typography>
               </Stack>
             </Paper>
@@ -269,8 +271,7 @@ export function RegionCoverageMatrix({
       {data.unassignedSourceCount > 0 && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ display: "block", px: 1.5, py: 1 }}
+          sx={{ color: "text.secondary", display: "block", px: 1.5, py: 1 }}
         >
           {t("matrix.unassigned", { count: data.unassignedSourceCount })}
         </Typography>

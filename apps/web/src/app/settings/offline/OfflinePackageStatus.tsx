@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { OfflinePackageDownloadProgress, OfflinePackageRecord } from "@/lib/offlineAreas";
 import { formatBytes } from "@/lib/storageFormat";
 
@@ -38,6 +38,7 @@ function statusText(status: Status, t: (key: string) => string): string {
 
 export function OfflinePackageStatus({ record, progress }: Props) {
   const t = useTranslations("settings");
+  const locale = useLocale();
   const status = progress?.status ?? record?.status ?? "queued";
   const received = progress?.bytesReceived ?? record?.bytesReceived ?? 0;
   const total =
@@ -66,12 +67,12 @@ export function OfflinePackageStatus({ record, progress }: Props) {
         ) : null}
         {total > 0 && status !== "ready" ? (
           <Typography variant="caption" component="span" sx={{ color: "text.secondary" }}>
-            {formatBytes(received)} / {formatBytes(total)}
+            {formatBytes(received, locale)} / {formatBytes(total, locale)}
           </Typography>
         ) : null}
         {status === "downloading" && speed > 0 ? (
           <Typography variant="caption" component="span" sx={{ color: "text.secondary" }}>
-            {t("downloadSpeed", { speed: formatBytes(speed) })}
+            {t("downloadSpeed", { speed: formatBytes(speed, locale) })}
           </Typography>
         ) : null}
       </Stack>

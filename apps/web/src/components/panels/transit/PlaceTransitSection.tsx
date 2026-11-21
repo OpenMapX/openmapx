@@ -214,7 +214,6 @@ export function PlaceTransitSection({
                   role="button"
                   tabIndex={0}
                   variant="caption"
-                  color={BRAND}
                   onClick={() => onOpenDepartures(mode)}
                   onKeyDown={(e: KeyboardEvent) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -222,7 +221,11 @@ export function PlaceTransitSection({
                       onOpenDepartures(mode);
                     }
                   }}
-                  sx={{ cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
+                  sx={{
+                    color: BRAND,
+                    cursor: "pointer",
+                    "&:hover": { textDecoration: "underline" },
+                  }}
                 >
                   {t("moreRoutes", { count: modeRoutes.length - MAX_BADGES_PER_MODE })}
                 </Typography>

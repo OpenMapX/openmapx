@@ -13,9 +13,10 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { CoverageReport, CoverageSourceRow } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
+import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
-import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
+import { CoverageStatus } from "./CoverageStatus";
 
 export function CoverageSourcesTable({
   report,
@@ -69,7 +70,7 @@ export function CoverageSourcesTable({
             {report.sources.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9}>
-                  <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                  <Typography sx={{ color: "text.secondary", py: 2, textAlign: "center" }}>
                     {t("sources.empty")}
                   </Typography>
                 </TableCell>
@@ -90,6 +91,7 @@ function SourceRow({
   onSelect: (source: CoverageSourceRow) => void;
 }) {
   const t = useTranslations("adminCoverage");
+  const format = useAdminFormat();
   const reasons = source.reasons;
   return (
     <TableRow sx={{ "&:last-child td": { borderBottom: 0 } }}>
@@ -98,7 +100,7 @@ function SourceRow({
           variant="text"
           size="small"
           onClick={() => onSelect(source)}
-          aria-label={t("sources.open", { source: source.name })}
+          aria-label={t("sources.open", { sourceName: source.name })}
           endIcon={<OpenInNewIcon fontSize="small" />}
           sx={{ justifyContent: "flex-start", textAlign: "left", px: 0.5 }}
         >
@@ -108,14 +110,13 @@ function SourceRow({
             </Typography>
             {source.count && (
               <Typography component="span" variant="caption" sx={{ display: "block" }}>
-                {source.count.value.toLocaleString()} {source.count.unit}
+                {t("sources.countValue", { count: source.count.value, unit: source.count.unit })}
               </Typography>
             )}
             <Typography
               component="span"
               variant="caption"
-              color="text.secondary"
-              sx={{ display: "block" }}
+              sx={{ color: "text.secondary", display: "block" }}
             >
               {source.owner.id} · {source.sourceId}
             </Typography>
@@ -124,7 +125,7 @@ function SourceRow({
       </TableCell>
       <TableCell>
         <Typography variant="body2">{source.stream}</Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t(`domain.${source.domain}`)}
         </Typography>
       </TableCell>
@@ -132,7 +133,7 @@ function SourceRow({
         <Stack sx={{ gap: 0.5 }}>
           <CoverageStatus status={source.presence} />
           <CoverageStatus status={source.freshness} />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {source.active === true
               ? t("sources.active")
               : source.active === false
@@ -146,7 +147,7 @@ function SourceRow({
           status={source.region.relation}
           label={t(`relation.${source.region.relation}`)}
         />
-        <Typography variant="caption" color="text.secondary" component="div">
+        <Typography variant="caption" sx={{ color: "text.secondary" }} component="div">
           {source.region.keys.length > 0
             ? source.region.keys.join(", ")
             : t("sources.regionUnknown")}
@@ -154,14 +155,14 @@ function SourceRow({
       </TableCell>
       <TableCell>
         <Typography variant="body2" title={source.lastSuccessfulCheckAt ?? undefined}>
-          {formatCoverageDate(source.lastSuccessfulCheckAt)}
+          {format.timestamp(source.lastSuccessfulCheckAt)}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {t(`attempt.${source.latestAttempt.outcome}`)}
         </Typography>
       </TableCell>
-      <TableCell>{formatCoverageDate(source.lastPublishedAt)}</TableCell>
-      <TableCell>{formatCoverageDate(source.expiresAt)}</TableCell>
+      <TableCell>{format.timestamp(source.lastPublishedAt)}</TableCell>
+      <TableCell>{format.timestamp(source.expiresAt)}</TableCell>
       <TableCell>
         <CoverageStatus status={source.rights.status} />
       </TableCell>
@@ -169,8 +170,7 @@ function SourceRow({
         {reasons.length > 0 ? (
           <Typography
             variant="caption"
-            color="warning.main"
-            sx={{ maxWidth: 180, display: "block" }}
+            sx={{ color: "warning.main", maxWidth: 180, display: "block" }}
           >
             {reasons
               .slice(0, 3)
@@ -179,7 +179,7 @@ function SourceRow({
             {reasons.length > 3 ? ` (+${reasons.length - 3})` : ""}
           </Typography>
         ) : (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             —
           </Typography>
         )}

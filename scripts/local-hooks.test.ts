@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -42,7 +43,10 @@ function fixture() {
     "scripts/check-staged.mjs",
     "scripts/verify-full.sh",
     "biome.json",
-    "scripts/biome-plugins/noClickableLayoutElement.grit",
+    // biome.json loads every plugin in this directory.
+    ...readdirSync(join(root, "scripts/biome-plugins"))
+      .filter((name) => name.endsWith(".grit"))
+      .map((name) => `scripts/biome-plugins/${name}`),
     ".prettierrc.json",
     ".prettierignore",
   ]) {

@@ -213,7 +213,7 @@ describe("service administration query acquisition", () => {
         client: qc,
         meta: undefined,
       });
-      const rejected = expect(pending).rejects.toThrow("Service request failed");
+      const rejected = expect(pending).rejects.toMatchObject({ detail: null });
       await vi.advanceTimersByTimeAsync(29_999);
       expect(signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
@@ -303,7 +303,7 @@ describe("service administration query acquisition", () => {
     vi.stubGlobal("fetch", () =>
       Response.json({ acquisition, services: [], secret: "synthetic-private" }),
     );
-    await expect(qc.fetchQuery(queries().list())).rejects.toThrow("Service request failed");
+    await expect(qc.fetchQuery(queries().list())).rejects.toMatchObject({ detail: null });
     expect(qc.getQueryData(queries().list().queryKey)).toBeUndefined();
   });
   it("keeps actual detail, config and credential payloads separate for two origins and reserved IDs", async () => {
