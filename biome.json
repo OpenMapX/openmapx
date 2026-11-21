@@ -65,6 +65,9 @@
       "nursery": {
         "noFloatingPromises": "error"
       },
+      "style": {
+        "noNonNullAssertion": "error"
+      },
       "suspicious": {
         "noImportCycles": "error"
       }
@@ -283,73 +286,6 @@
                 ]
               }
             }
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "apps/mobile/**",
-        "apps/ops-agent/**",
-        "apps/transitous-runner/**",
-        "integrations/openconditions/**",
-        "integrations/*/types.ts",
-        "packages/air-quality/**",
-        "packages/brands/**",
-        "packages/cli/**",
-        "packages/command-palette/**",
-        "packages/core/**",
-        "packages/db-schema/**",
-        "packages/entur-client/**",
-        "packages/ev-charge-planner/**",
-        "packages/extension-cli/**",
-        "packages/extension-contracts/**",
-        "packages/hardlinks/**",
-        "packages/hey-api-client-fetch/**",
-        "packages/i18n/**",
-        "packages/integration-framework/**",
-        "packages/mangrove-client/**",
-        "packages/mangrove-react/**",
-        "packages/mobility-core/**",
-        "packages/mobility-formats/**",
-        "packages/mobility-formats-tomp/**",
-        "packages/motis-feed-proxy-config/**",
-        "packages/noaa-coops-data/**",
-        "packages/openconditions-contrib-client/**",
-        "packages/otp-client/**",
-        "packages/ourairports-data/**",
-        "packages/place-ids/**",
-        "packages/presets/**",
-        "packages/transitous-core/**",
-        "scripts/**",
-        "services/brouter/tests/**",
-        "services/dawarich-*/*.ts",
-        "services/data-manager/**",
-        "services/valhalla/tests/**",
-        "vitest.aliases.ts",
-        "vitest.config.ts",
-        "vitest.setup.node.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "noNonNullAssertion": "error"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "integrations/**/*.ts",
-        "integrations/**/*.tsx",
-        "!integrations/**/*.test.ts",
-        "!integrations/**/*.test.tsx",
-        "!integrations/**/__tests__/**"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "noNonNullAssertion": "error"
           }
         }
       }
