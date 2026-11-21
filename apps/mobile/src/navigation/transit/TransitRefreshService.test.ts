@@ -4,6 +4,7 @@ import {
   ApiClientError,
   ApiRequestAbortedError,
 } from "@openmapx/core/navigation/api";
+import { nth } from "../../testing/nth";
 import { journeysToRefetch, TransitRefreshService } from "./TransitRefreshService";
 import { FIXTURE_TOKEN, transitSessionFixture } from "./testing/transitFixture";
 
@@ -109,10 +110,11 @@ describe("TransitRefreshService.request", () => {
       sessionId: "session-t1",
       itinerary: refreshedItinerary().data.itinerary,
     });
-    expect(calls[0]?.body).toMatchObject({ token: FIXTURE_TOKEN });
-    expect(calls[0]?.options.timeoutMs).toBe(15_000);
+    const refresh = nth(calls, 0);
+    expect(refresh.body).toMatchObject({ token: FIXTURE_TOKEN });
+    expect(refresh.options.timeoutMs).toBe(15_000);
     // Never abandoned by this side: only the answer carries the rotated token.
-    expect(calls[0]?.options.signal).toBeUndefined();
+    expect(refresh.options.signal).toBeUndefined();
   });
 
   it("retains captures when a hosted journey lookup fails", async () => {
