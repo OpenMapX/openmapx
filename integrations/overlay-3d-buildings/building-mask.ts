@@ -209,6 +209,7 @@ export function rewriteBuildingTile(
     }
   }
   const layer = new GeoJSONWrapper(features, { version: 2, extent });
+  // The encoder writes each layer under its own `name`; the object key is unused.
   layer.name = sourceLayer;
-  return fromVectorTileJs({ layers: { [sourceLayer]: layer } });
+  return fromVectorTileJs({ layers: { masked: layer } });
 }

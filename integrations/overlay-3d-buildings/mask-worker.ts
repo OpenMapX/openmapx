@@ -12,6 +12,9 @@ interface RewriteRequest {
 
 /** Rewrites building tiles off the main thread for the masked building source. */
 self.onmessage = (event: MessageEvent<RewriteRequest>) => {
+  // Only the page that created this dedicated worker can post to it, and such
+  // messages carry no origin; verify anyway, as the service worker does.
+  if (event.origin && event.origin !== self.location.origin) return;
   const { id, bytes, tile, sourceLayer, replacements } = event.data;
   try {
     const output = rewriteBuildingTile(bytes, tile, sourceLayer, replacements);
