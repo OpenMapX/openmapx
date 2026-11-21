@@ -480,7 +480,7 @@ describe("renderComposeForRepo", () => {
     expect(apiToken).not.toBe(dataManagerToken);
     expect(firstYaml).not.toContain(apiToken);
     expect(firstYaml).not.toContain(dataManagerToken);
-    expect(firstYaml).not.toContain("traefik.http.routers.ops-agent");
+    expect(firstYaml).not.toContain("traefik.http.routers.openmapx-ops-agent");
     expect(firstYaml).not.toContain("ops-agent.example.com");
     expect(firstYaml.split("ops-agent-api-token:/run/secrets/ops-agent-api-token:ro")).toHaveLength(
       3,

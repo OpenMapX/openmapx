@@ -47,9 +47,17 @@ function labelsByService(): Map<string, Record<string, string>> {
   return out;
 }
 
+/** The label names carry a project prefix for a shared Traefik; the file's names are bare. */
+const LABEL_NAME_PREFIX = "openmapx-";
+function fileName(labelName: string): string {
+  expect(labelName.startsWith(LABEL_NAME_PREFIX), labelName).toBe(true);
+  return labelName.slice(LABEL_NAME_PREFIX.length);
+}
+
 /**
  * Reconstruct the router/service/middleware view the Docker-label provider
- * produced, so the generated file configuration can be compared against it.
+ * produced, under the file provider's names, so the generated file
+ * configuration can be compared against it.
  */
 function routingFromLabels(labels: Record<string, string>) {
   const routers: Record<string, Record<string, string>> = {};
@@ -58,17 +66,29 @@ function routingFromLabels(labels: Record<string, string>) {
   for (const [key, value] of Object.entries(labels)) {
     let match = /^traefik\.http\.routers\.([^.]+)\.(.+)$/.exec(key);
     if (match) {
-      const name = itemAt(match, 1);
-      routers[name] = { ...routers[name], [itemAt(match, 2)]: value };
+      const name = fileName(itemAt(match, 1));
+      const property = itemAt(match, 2);
+      // References to this service's own backend and middlewares carry the
+      // prefix too; the manifest's file-provider middlewares do not.
+      const reference =
+        property === "service"
+          ? fileName(value)
+          : property === "middlewares"
+            ? value
+                .split(",")
+                .map((entry) => (entry.startsWith(LABEL_NAME_PREFIX) ? fileName(entry) : entry))
+                .join(",")
+            : value;
+      routers[name] = { ...routers[name], [property]: reference };
       continue;
     }
     match = /^traefik\.http\.services\.([^.]+)\.loadbalancer\.server\.port$/.exec(key);
     if (match) {
-      services[itemAt(match, 1)] = value;
+      services[fileName(itemAt(match, 1))] = value;
       continue;
     }
     match = /^traefik\.http\.middlewares\.([^.]+)\.stripprefix\.prefixes$/.exec(key);
-    if (match) middlewares[itemAt(match, 1)] = value;
+    if (match) middlewares[fileName(itemAt(match, 1))] = value;
   }
   return { routers, services, middlewares };
 }

@@ -1002,11 +1002,20 @@ export function resolveProxyHost(m: ServiceManifest, ctx: RenderContext): string
   return resolved;
 }
 
+/**
+ * Prefix of the router, service and middleware names the Docker labels
+ * declare. Only an operator-run Traefik reads the labels, and it may route
+ * other projects too: an unprefixed `api` or `web` router there would clash
+ * with theirs. The bundled Traefik reads its own file, whose names stay bare.
+ */
+const PROXY_LABEL_NAME_PREFIX = "openmapx-";
+
 function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<string, string> {
   const proxy = m.exposure?.proxy;
   if (!proxy?.enabled) return {};
 
   const id = m.id;
+  const name = `${PROXY_LABEL_NAME_PREFIX}${id}`;
   const customHost = resolveProxyHost(m, ctx);
   const domain = customHost ?? ctx.domain ?? "localhost";
   const pathPrefix = proxy.pathPrefix ?? (customHost ? undefined : `/${id}`);
@@ -1014,12 +1023,12 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 
   const labels: Record<string, string> = {
     "traefik.enable": "true",
-    [`traefik.http.routers.${id}.rule`]: pathPrefix
+    [`traefik.http.routers.${name}.rule`]: pathPrefix
       ? `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`
       : `Host(\`${domain}\`)`,
-    [`traefik.http.routers.${id}.entrypoints`]: PROXY_ENTRYPOINT_LABEL_VALUE,
-    [`traefik.http.routers.${id}.tls.certresolver`]: PROXY_CERT_RESOLVER_LABEL_VALUE,
-    [`traefik.http.services.${id}.loadbalancer.server.port`]: String(targetPort),
+    [`traefik.http.routers.${name}.entrypoints`]: PROXY_ENTRYPOINT_LABEL_VALUE,
+    [`traefik.http.routers.${name}.tls.certresolver`]: PROXY_CERT_RESOLVER_LABEL_VALUE,
+    [`traefik.http.services.${name}.loadbalancer.server.port`]: String(targetPort),
   };
   const proxyNetwork = externalProxyNetwork(ctx);
   if (proxyNetwork) labels["traefik.docker.network"] = proxyNetwork;
@@ -1027,31 +1036,31 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
   const middlewares: string[] = [];
   if (proxy.stripPrefix) {
     if (!pathPrefix) throw new Error(`stripPrefix requires a pathPrefix for service "${id}"`);
-    labels[`traefik.http.middlewares.${id}-strip.stripprefix.prefixes`] = pathPrefix;
-    middlewares.push(`${id}-strip`);
+    labels[`traefik.http.middlewares.${name}-strip.stripprefix.prefixes`] = pathPrefix;
+    middlewares.push(`${name}-strip`);
   }
   for (const mw of proxy.middleware ?? []) middlewares.push(mw);
   if (middlewares.length) {
-    labels[`traefik.http.routers.${id}.middlewares`] = middlewares.join(",");
+    labels[`traefik.http.routers.${name}.middlewares`] = middlewares.join(",");
   }
 
   if (typeof proxy.priority === "number") {
-    labels[`traefik.http.routers.${id}.priority`] = String(proxy.priority);
+    labels[`traefik.http.routers.${name}.priority`] = String(proxy.priority);
   }
 
   // Additional routes — each emits a separate Traefik router but reuses the
-  // same `traefik.http.services.${id}` backend so all routes hit the same
+  // same `traefik.http.services.${name}` backend so all routes hit the same
   // container port. Useful for a single API exposing both `/api/*` and `/health`.
   const additionalRoutes = proxy.additionalRoutes ?? [];
   for (let i = 0; i < additionalRoutes.length; i++) {
     const route = additionalRoutes[i];
     if (!route) continue;
-    const routerName = `${id}-r${i + 1}`;
+    const routerName = `${name}-r${i + 1}`;
     const matcher = route.path ? `Path(\`${route.path}\`)` : `PathPrefix(\`${route.pathPrefix}\`)`;
     labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${domain}\`) && ${matcher}`;
     labels[`traefik.http.routers.${routerName}.entrypoints`] = PROXY_ENTRYPOINT_LABEL_VALUE;
     labels[`traefik.http.routers.${routerName}.tls.certresolver`] = PROXY_CERT_RESOLVER_LABEL_VALUE;
-    labels[`traefik.http.routers.${routerName}.service`] = id;
+    labels[`traefik.http.routers.${routerName}.service`] = name;
     if (route.middleware?.length) {
       labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware.join(",");
     }

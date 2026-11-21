@@ -318,10 +318,10 @@ describe("renderServiceSnippet", () => {
       ]),
     }).labels as Record<string, string>;
 
-    expect(labels["traefik.http.routers.timeline.rule"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-timeline.rule"]).toBe(
       "Host(`timeline.operator.example`) && PathPrefix(`/app`)",
     );
-    expect(labels["traefik.http.routers.timeline-r1.rule"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-timeline-r1.rule"]).toBe(
       "Host(`timeline.operator.example`) && Path(`/health`)",
     );
 
@@ -331,7 +331,9 @@ describe("renderServiceSnippet", () => {
       }),
       { domain: "example.com" },
     ).labels as Record<string, string>;
-    expect(hostOnly["traefik.http.routers.timeline.rule"]).toBe("Host(`timeline.example.com`)");
+    expect(hostOnly["traefik.http.routers.openmapx-timeline.rule"]).toBe(
+      "Host(`timeline.example.com`)",
+    );
   });
 
   it("rejects unsafe resolved custom host values before emitting Traefik labels", () => {
@@ -377,7 +379,7 @@ describe("renderServiceSnippet", () => {
     expect(resolveProxyHost(service.manifest, { domain: "example.com" })).toBeUndefined();
     expect(
       renderServiceSnippet(service, { domain: "example.com" }).labels?.[
-        "traefik.http.routers.alpha.rule"
+        "traefik.http.routers.openmapx-alpha.rule"
       ],
     ).toBe("Host(`example.com`) && PathPrefix(`/alpha`)");
   });
@@ -691,16 +693,54 @@ describe("renderServiceSnippet", () => {
     );
     const labels = snippet.labels as Record<string, string>;
     expect(labels["traefik.enable"]).toBe("true");
-    expect(labels["traefik.http.routers.alpha.rule"]).toContain("PathPrefix(`/alpha`)");
-    expect(labels["traefik.http.routers.alpha.entrypoints"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-alpha.rule"]).toContain("PathPrefix(`/alpha`)");
+    expect(labels["traefik.http.routers.openmapx-alpha.entrypoints"]).toBe(
       "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
     );
-    expect(labels["traefik.http.routers.alpha.tls.certresolver"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-alpha.tls.certresolver"]).toBe(
       "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
     );
-    expect(labels["traefik.http.middlewares.alpha-strip.stripprefix.prefixes"]).toBe("/alpha");
-    expect(labels["traefik.http.services.alpha.loadbalancer.server.port"]).toBe("3000");
+    expect(labels["traefik.http.middlewares.openmapx-alpha-strip.stripprefix.prefixes"]).toBe(
+      "/alpha",
+    );
+    expect(labels["traefik.http.services.openmapx-alpha.loadbalancer.server.port"]).toBe("3000");
     expect(labels["traefik.docker.network"]).toBeUndefined();
+  });
+
+  it("namespaces the label router, service and middleware names for a shared Traefik", () => {
+    const labels = renderServiceSnippet(
+      svc("api", {
+        container: { image: "t/api", tag: "latest", expose: [3001] },
+        exposure: {
+          proxy: {
+            enabled: true,
+            pathPrefix: "/api",
+            stripPrefix: true,
+            middleware: ["sw-no-cache@file"],
+            additionalRoutes: [{ path: "/health", middleware: ["internal-only@file"] }],
+          },
+        },
+      }),
+      { domain: "example.com", externalProxyNetwork: "proxy" },
+    ).labels as Record<string, string>;
+
+    expect(labels).toEqual({
+      "traefik.enable": "true",
+      "traefik.docker.network": "proxy",
+      "traefik.http.routers.openmapx-api.rule": "Host(`example.com`) && PathPrefix(`/api`)",
+      "traefik.http.routers.openmapx-api.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-api.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-api.middlewares": "openmapx-api-strip,sw-no-cache@file",
+      "traefik.http.middlewares.openmapx-api-strip.stripprefix.prefixes": "/api",
+      "traefik.http.services.openmapx-api.loadbalancer.server.port": "3001",
+      "traefik.http.routers.openmapx-api-r1.rule": "Host(`example.com`) && Path(`/health`)",
+      "traefik.http.routers.openmapx-api-r1.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-api-r1.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-api-r1.service": "openmapx-api",
+      "traefik.http.routers.openmapx-api-r1.middlewares": "internal-only@file",
+    });
   });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
 
@@ -1193,11 +1233,13 @@ describe("renderCompose", () => {
       }),
     ];
     const result = renderCompose(list, { domain: "example.com" });
-    expect(result.composeYaml).toContain("traefik.http.routers.api.rule");
-    expect(result.composeYaml).toContain("traefik.http.routers.api-r1.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.openmapx-api.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.openmapx-api-r1.rule");
     expect(result.composeYaml).toContain("Path(`/health`)");
     // Secondary router routes to the SAME backend service.
-    expect(result.composeYaml).toContain("traefik.http.routers.api-r1.service: api");
+    expect(result.composeYaml).toContain(
+      "traefik.http.routers.openmapx-api-r1.service: openmapx-api",
+    );
   });
 
   it("resolves @service:<slug>:<path> bindMounts against the named service's directory", () => {

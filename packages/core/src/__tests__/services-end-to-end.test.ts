@@ -135,7 +135,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
     };
     const labels = document.services.api?.labels;
     assert.isDefined(labels);
-    expect(labels["traefik.http.routers.api.rule"]).toContain("PathPrefix(`/api`)");
+    expect(labels["traefik.http.routers.openmapx-api.rule"]).toContain("PathPrefix(`/api`)");
     const internal = Object.entries(labels).filter(
       ([key, value]) => key.endsWith(".rule") && value.includes("PathPrefix(`/api/internal`)"),
     );
@@ -684,18 +684,20 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
       expect(composeYaml).not.toContain("CHANGE_ME");
 
       const labels = compose.services["dawarich-app"]?.labels;
-      expect(labels?.["traefik.http.routers.dawarich-app.rule"]).toBe(
+      expect(labels?.["traefik.http.routers.openmapx-dawarich-app.rule"]).toBe(
         "Host(`timeline.example.test`)",
       );
-      expect(labels?.["traefik.http.routers.dawarich-app.entrypoints"]).toBe(
+      expect(labels?.["traefik.http.routers.openmapx-dawarich-app.entrypoints"]).toBe(
         // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
         "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
       );
-      expect(labels?.["traefik.http.routers.dawarich-app.tls.certresolver"]).toBe(
+      expect(labels?.["traefik.http.routers.openmapx-dawarich-app.tls.certresolver"]).toBe(
         // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation
         "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
       );
-      expect(labels?.["traefik.http.services.dawarich-app.loadbalancer.server.port"]).toBe("3000");
+      expect(labels?.["traefik.http.services.openmapx-dawarich-app.loadbalancer.server.port"]).toBe(
+        "3000",
+      );
       expect(composeYaml).not.toContain("PathPrefix(`/dawarich-app`)");
     });
   });

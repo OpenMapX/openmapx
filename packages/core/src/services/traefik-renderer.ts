@@ -45,8 +45,9 @@ export interface TraefikRenderContext {
 
 /**
  * Render the dynamic configuration for one manifest, or null when it declares
- * no proxy. The router names, rules, entrypoints, priorities, middlewares, and
- * backend ports intentionally mirror `renderTraefikLabels` one-for-one — the
+ * no proxy. The router names (without the labels' `openmapx-` prefix), rules,
+ * entrypoints, priorities, middlewares, and backend ports intentionally mirror
+ * `renderTraefikLabels` one-for-one — the
  * golden parity test asserts that equivalence for every built-in proxied
  * service, so switching providers cannot silently change routing.
  */
