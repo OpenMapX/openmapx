@@ -4,7 +4,9 @@ import { EARTH_CIRCUMFERENCE_M } from "./derive/units";
 /** Which z16 cells to fill and which instances to draw (spec §6.4). */
 
 const CELL_ZOOM = 16;
-const MAX_CELLS = 400;
+export const MAX_CELLS = 400;
+/** Cell caches (worker and layer) hold more than one view's cells, so none in view is evicted. */
+export const CELL_CACHE_SIZE = 512;
 const FURNITURE_MIN_ZOOM = 17;
 const TREE_KINDS = new Set<ModelKind>(["broadleaf", "conifer"]);
 

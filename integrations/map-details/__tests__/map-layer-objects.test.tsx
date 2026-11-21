@@ -221,6 +221,33 @@ describe("objects wiring", () => {
     expect(worker.queries.every(({ query }) => query.streetTemplate === null)).toBe(true);
   });
 
+  it("asks again with the street template once a late TileJSON arrives", async () => {
+    let answer: (response: Response) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    );
+    render(<MapDetailsLayer />);
+    await activate();
+    expect(worker.queries.length).toBeGreaterThan(0);
+    expect(worker.queries.every(({ query }) => query.streetTemplate === null)).toBe(true);
+    const before = worker.queries.length;
+    answer(Response.json({ tiles: ["https://maps.example/street/{z}/{x}/{y}.pbf"] }));
+    await flush();
+    const later = worker.queries.slice(before);
+    expect(later.length).toBeGreaterThan(0);
+    expect(
+      later.every(
+        ({ query }) => query.streetTemplate === "https://maps.example/street/{z}/{x}/{y}.pbf",
+      ),
+    ).toBe(true);
+  });
+
   it("rebuilds after the camera settles and ignores superseded answers", async () => {
     render(<MapDetailsLayer />);
     await activate();

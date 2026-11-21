@@ -18,7 +18,7 @@ import { findForestSource } from "./web/basemap-source";
 import type { Instances } from "./web/derive/forest";
 import { LRU } from "./web/lru";
 import type { MapDetailsObjectsLayer, ObjectLighting } from "./web/objects-layer";
-import { cellKey, selectInstances, visibleCells } from "./web/selection";
+import { CELL_CACHE_SIZE, cellKey, selectInstances, visibleCells } from "./web/selection";
 import { detectTier, TIER_BUDGETS } from "./web/tiers";
 import type { MapDetailsWorkerClient } from "./web/worker-client";
 
@@ -30,7 +30,6 @@ const MOVE_REBUILD_M = 150;
 const SELECT_THROTTLE_MS = 250;
 const MIN_ZOOM = 16;
 const TERRAIN_GRID = 9;
-const CELL_CACHE = 256;
 const CELL_ZOOM = 16;
 
 /** The three.js side of the shared scene light. */
@@ -95,9 +94,7 @@ export function useMapDetailsObjects({
   const [unsupported, setUnsupported] = useState(false);
   const light = useSceneLight((l) => l);
   const objectsActive = active && !unsupported;
-  const cells = useRef(new LRU<string, Instances[]>(CELL_CACHE));
-  const template = useRef(streetTemplate);
-  template.current = streetTemplate;
+  const cells = useRef(new LRU<string, Instances[]>(CELL_CACHE_SIZE));
   const budget = useMemo(() => TIER_BUDGETS[deviceTier()], []);
 
   // Load three.js on first activation; release it after a while inactive.
@@ -212,7 +209,7 @@ export function useMapDetailsObjects({
       lastCentre = { lng: centre.lng, lat: centre.lat };
       if (map.getZoom() >= MIN_ZOOM) {
         const forest = findForestSource(map.getStyle(), (id) => map.getSource(id));
-        const street = template.current;
+        const street = streetTemplate;
         sourceKey = `${street ?? ""}|${forest?.templates.join(" ") ?? ""}|${forest?.maxzoom ?? ""}`;
         for (const cell of viewCells()) {
           const key = `${sourceKey}|${cellKey(cell.x, cell.y)}`;
@@ -271,7 +268,8 @@ export function useMapDetailsObjects({
       map.off("sourcedata", onSourceData);
       map.off("terrain", onTerrain);
     };
-  }, [map, scene, client, objectsActive, budget]);
+    // A street template that arrives after the first rebuild (a late TileJSON) fills the cells again.
+  }, [map, scene, client, objectsActive, budget, streetTemplate]);
 
   // OpenStreetMap is owed only while street objects are drawn; planted forests come from the basemap.
   const attribution = useMemo(

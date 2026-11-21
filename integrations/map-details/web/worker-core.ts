@@ -12,6 +12,7 @@ import { railPaint } from "./derive/rails";
 import { crossSection, type PaintPolygon, roadSurfaces } from "./derive/roads";
 import { metresPerUnit } from "./derive/units";
 import { LRU } from "./lru";
+import { CELL_CACHE_SIZE } from "./selection";
 
 /**
  * Everything the map-details worker does, testable without a worker: fetch
@@ -158,7 +159,7 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
   const basemapBytes = new LRU<string, Promise<Uint8Array | null>>(32);
   const decoded = new LRU<string, DecodedTile>(48);
   const paint16 = new LRU<string, Promise<PaintPolygon[] | null>>(64);
-  const cells = new LRU<string, Promise<Instances[]>>(256);
+  const cells = new LRU<string, Promise<Instances[]>>(CELL_CACHE_SIZE);
   const active = new Set<number>();
   const cancelled = new Set<number>();
 
@@ -216,8 +217,9 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
     if (cached) return cached;
     const pending = (async () => {
       const cell = { x: request.cellX, y: request.cellY };
-      const sets: Instances[] = [];
-      if (request.basemapTemplates.length > 0) {
+      // Forests and street objects come from different servers: one failing must not hide the other.
+      const forest = async (): Promise<Instances[]> => {
+        if (request.basemapTemplates.length === 0) return [];
         const z = Math.max(0, Math.min(16, Math.floor(request.basemapMaxzoom)));
         const shift = 2 ** (16 - z);
         const bx = Math.floor(cell.x / shift);
@@ -230,18 +232,26 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
           expand(template, z, bx, by),
           BASEMAP_LAYERS,
         );
-        if (basemap) sets.push(...plantForest(basemap, { z, x: bx, y: by }, cell));
-      }
-      if (request.streetTemplate) {
-        const street = await decodedTile(
+        return basemap ? plantForest(basemap, { z, x: bx, y: by }, cell) : [];
+      };
+      const street = async (): Promise<Instances[]> => {
+        if (!request.streetTemplate) return [];
+        const tile = await decodedTile(
           streetBytes,
           expand(request.streetTemplate, 16, cell.x, cell.y),
           STREET_LAYERS,
         );
         const [lng, lat] = tileCentre(16, cell.x, cell.y);
-        if (street) sets.push(...streetObjects(street, cell, isLeftHandTraffic(lng, lat)));
-      }
-      return mergeInstances(sets);
+        return tile ? streetObjects(tile, cell, isLeftHandTraffic(lng, lat)) : [];
+      };
+      const parts = await Promise.allSettled([forest(), street()]);
+      const failed = parts.filter((part) => part.status === "rejected");
+      if (failed.length === parts.length) throw (failed[0] as PromiseRejectedResult).reason;
+      // A partial cell is drawn but not kept, so the failed part is asked for again later.
+      if (failed.length > 0) queueMicrotask(() => cells.delete(key));
+      return mergeInstances(
+        parts.flatMap((part) => (part.status === "fulfilled" ? part.value : [])),
+      );
     })();
     cells.set(key, pending);
     pending.catch(() => cells.delete(key));

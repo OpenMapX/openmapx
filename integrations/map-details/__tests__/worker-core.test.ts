@@ -176,6 +176,28 @@ describe("worker core objects", () => {
   });
 });
 
+describe("worker core objects with a failing basemap", () => {
+  it("still places street objects when the basemap tile fails", async () => {
+    const fetchImpl = fakeFetch({
+      [`https://tiles.example/14/${Math.floor(X / 4)}/${Math.floor(Y / 4)}.pbf`]: async () =>
+        new Response(null, { status: 500 }),
+    });
+    const core = coreWith(fetchImpl);
+    const { response } = await core.handle({
+      id: 9,
+      kind: "objects",
+      cellX: X,
+      cellY: Y,
+      streetTemplate: TEMPLATE,
+      basemapTemplates: [BASEMAP],
+      basemapMaxzoom: 14,
+    });
+    expect("kind" in response && response.kind).toBe("objects");
+    const instances = "kind" in response && response.kind === "objects" ? response.instances : [];
+    expect(instances.reduce((sum, set) => sum + set.count, 0)).toBeGreaterThan(10);
+  });
+});
+
 describe("encodePaintTile", () => {
   it("keeps a 0.10 m line within 10 % at z18", () => {
     // z18 at 52.5°N: 0.0227 m per 4096-unit; the encoder writes 8192 units per tile.

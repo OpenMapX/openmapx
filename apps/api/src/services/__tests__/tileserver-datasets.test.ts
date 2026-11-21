@@ -69,6 +69,33 @@ describe("tileserverDatasets", () => {
     expect(await pending).toBeNull();
   });
 
+  it("treats only a definite 404 as a missing archive; other errors leave the answer unknown", async () => {
+    stubFetch(
+      async (url) =>
+        new Response("{}", { status: url.endsWith("/data/openmapx.json") ? 503 : 200 }),
+    );
+    expect(await tileserverDatasets()).toBeNull();
+  });
+
+  it("keeps the last good answer while the tileserver is briefly unreachable", async () => {
+    vi.useFakeTimers();
+    let down = false;
+    const fetchMock = stubFetch(async (url) => {
+      if (down) throw new TypeError("fetch failed");
+      return new Response("{}", { status: url.endsWith("/data/openmapx.json") ? 404 : 200 });
+    });
+    expect(await tileserverDatasets()).toEqual({ basemap: false, streetDetail: true });
+    down = true;
+    vi.advanceTimersByTime(60_001);
+    expect(await tileserverDatasets()).toEqual({ basemap: false, streetDetail: true });
+    // A failure is not cached for a minute: the next request after a few seconds asks again.
+    down = false;
+    const calls = fetchMock.mock.calls.length;
+    vi.advanceTimersByTime(5_001);
+    expect(await tileserverDatasets()).toEqual({ basemap: false, streetDetail: true });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(calls);
+  });
+
   it("probes once per minute", async () => {
     vi.useFakeTimers();
     const fetchMock = stubFetch(async () => new Response("{}"));

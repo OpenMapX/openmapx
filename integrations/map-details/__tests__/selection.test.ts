@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { INSTANCE_STRIDE, type Instances, type ModelKind } from "../web/derive/forest";
 import { EARTH_CIRCUMFERENCE_M, tileCentreLat } from "../web/derive/units";
-import { cellKey, type Selection, selectInstances, visibleCells } from "../web/selection";
+import {
+  CELL_CACHE_SIZE,
+  cellKey,
+  MAX_CELLS,
+  type Selection,
+  selectInstances,
+  visibleCells,
+} from "../web/selection";
 
 const N = 2 ** 16;
 const lngOf = (x: number) => (x / N) * 360 - 180;
@@ -29,6 +36,11 @@ describe("visible cells", () => {
     for (let x = CELL.x - 1; x <= CELL.x + 2; x++)
       for (let y = CELL.y - 1; y <= CELL.y + 1; y++) expect(keys.has(cellKey(x, y))).toBe(true);
     expect(cells).toHaveLength(12);
+  });
+
+  it("caches more cells than a view can show, so visible cells are never evicted", () => {
+    expect(MAX_CELLS).toBe(400);
+    expect(CELL_CACHE_SIZE).toBeGreaterThan(MAX_CELLS);
   });
 
   it("lists a world-wide view without enumerating every cell", () => {
