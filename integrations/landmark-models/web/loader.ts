@@ -24,7 +24,8 @@ const intersects = (a: readonly number[], b: readonly number[]) =>
  * z12 cells of the area being looked at. Cell URLs carry the coverage
  * revision so each revision has its own cache entry; a cell that answers with
  * another revision (a different API replica, a refresh in between) is used
- * and the coverage is fetched again from the network.
+ * for that one answer and the coverage is fetched again from the network.
+ * Only cells of the current coverage revision are kept.
  */
 export class LandmarkCatalogue {
   private readonly fetchImpl: typeof fetch;
@@ -69,6 +70,7 @@ export class LandmarkCatalogue {
     const coverage = await this.ensureCoverage();
     const occupied = new Set(coverage.occupied);
     let stale = false;
+    const fetched = new Map<string, { revision: string; candidates: Candidate[] }>();
     for (const cell of cellsInArea(area, occupied)) {
       if (this.cells.has(cell)) continue;
       const response = await this.fetchImpl(
@@ -78,31 +80,32 @@ export class LandmarkCatalogue {
       if (!response.ok) continue;
       const body = (await response.json()) as CellResponse;
       const receipts = body.receipts.map((receipt) => readCapturedContributors([receipt])?.[0]);
-      this.cells.set(
-        cell,
-        body.assets.map((asset) => ({
-          asset,
-          receipts: asset.receipts.flatMap((index) => {
-            const receipt = receipts[index];
-            return receipt ? [receipt] : [];
-          }),
-        })),
-      );
-      if (body.revision !== coverage.revision) stale = true;
+      const candidates = body.assets.map((asset) => ({
+        asset,
+        receipts: asset.receipts.flatMap((index) => {
+          const receipt = receipts[index];
+          return receipt ? [receipt] : [];
+        }),
+      }));
+      fetched.set(cell, { revision: body.revision, candidates });
+      if (body.revision === coverage.revision) this.cells.set(cell, candidates);
+      else stale = true;
     }
+    // This call answers from what it has, whatever revision a cell came from.
+    const answer = new Map(this.cells);
+    for (const [cell, { candidates }] of fetched) answer.set(cell, candidates);
     if (stale) {
-      const cached = new Map(this.cells);
-      await this.loadCoverage(true);
-      // The fresh answers stay usable even though the revision moved on.
-      for (const [cell, candidates] of cached)
-        if (!this.cells.has(cell)) this.cells.set(cell, candidates);
+      const current = await this.loadCoverage(true);
+      // Fresh answers of the new revision are kept; the rest are used once.
+      for (const [cell, answer] of fetched)
+        if (answer.revision === current.revision) this.cells.set(cell, answer.candidates);
     }
 
     const [west, south, east, north] = area;
     const center = [(west + east) / 2, (south + north) / 2] as const;
     const byId = new Map<string, Candidate>();
     for (const cell of cellsInArea(area, occupied)) {
-      for (const candidate of this.cells.get(cell) ?? []) {
+      for (const candidate of answer.get(cell) ?? []) {
         if (candidate.asset.minZoom > zoom) continue;
         if (!intersects(candidate.asset.bounds, area)) continue;
         byId.set(candidate.asset.id, candidate);

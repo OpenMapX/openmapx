@@ -103,6 +103,29 @@ describe("LandmarkCatalogue", () => {
     expect((await catalogue.ensureCoverage()).revision).toBe("rev2");
   });
 
+  it("uses a mismatched cell once but does not keep cells from the old revision", async () => {
+    let revision = "rev1";
+    const occupied = ["2074/1409", "2075/1409"];
+    const cellUrl = (cell: string) => `${API}/api/integrations/landmark-models/cells/${cell}`;
+    const routes = new Map<string, () => unknown>([
+      [COVERAGE_URL, () => coverage(revision, occupied)],
+      [cellUrl("2074/1409"), () => cell(revision, [asset("x", [2.31, 48.86])])],
+      [cellUrl("2075/1409"), () => cell(revision, [asset("y", [2.38, 48.86])])],
+    ]);
+    const fetchImpl = fakeFetch(routes);
+    const catalogue = new LandmarkCatalogue({ apiUrl: API, fetch: fetchImpl as never });
+    const west: [number, number, number, number] = [2.3, 48.85, 2.32, 48.87];
+    const both: [number, number, number, number] = [2.3, 48.85, 2.4, 48.87];
+    await catalogue.candidates(west, 16, new AbortController().signal);
+    // The API moves to a new release; the next new cell reveals it.
+    revision = "rev2";
+    const found = await catalogue.candidates(both, 16, new AbortController().signal);
+    expect(found.map((c) => c.asset.id).sort()).toEqual(["x", "y"]);
+    fetchImpl.mockClear();
+    await catalogue.candidates(both, 16, new AbortController().signal);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([`${cellUrl("2074/1409")}?r=rev2`]);
+  });
+
   it("refetches coverage older than five minutes on ensureCoverage", async () => {
     let now = 0;
     const routes = new Map<string, () => unknown>([[COVERAGE_URL, () => coverage("rev1")]]);
