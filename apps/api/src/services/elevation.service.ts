@@ -5,6 +5,7 @@
 
 import type { ElevationApiResponse } from "@openmapx/core";
 import { encodePolyline } from "@openmapx/core";
+import { itemAt } from "@openmapx/core/item-at";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { valhallaEndpoint } from "../utils/valhalla-endpoint.js";
 
@@ -18,11 +19,9 @@ function simplifyCoords(coords: [number, number][], maxPoints: number): [number,
   // Uniform sampling as a fast approximation — keeps endpoints + evenly spaced interior
   const step = (coords.length - 1) / (maxPoints - 1);
   const result: [number, number][] = [];
+  // The step spreads maxPoints samples over the array's own indices.
   for (let i = 0; i < maxPoints; i++) {
-    const point = coords[Math.round(i * step)];
-    // The step spreads maxPoints samples over the array's own indices.
-    if (point === undefined) throw new RangeError("Sampled coordinate outside the route");
-    result.push(point);
+    result.push(itemAt(coords, Math.round(i * step), "sampled route coordinate"));
   }
   return result;
 }

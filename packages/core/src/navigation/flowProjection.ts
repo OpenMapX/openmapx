@@ -2,6 +2,7 @@ import { readCapturedFieldContributors } from "@openmapx/mobility-core/contribut
 import type { LngLat } from "../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../types/roadConditions";
 import { haversineDistance } from "../utils/coordinates";
+import { itemAt } from "../utils/itemAt";
 import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
 import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
@@ -261,17 +262,11 @@ export function resolveFlowOverlaps(
    * Whether `a` should own an interval that both cover. Severity first, then
    * the submission order — never the order a sort happened to leave them in.
    */
-  const spanAt = (ordinal: number): RankedFlowSpan => {
-    const span = raw[ordinal];
-    if (!span) throw new RangeError(`Flow span ${ordinal} is not one of the submitted spans`);
-    return span;
-  };
-
   const beats = (a: number | undefined, b: number | undefined): boolean => {
     if (a === undefined || b === undefined) return false;
     if (counters) counters.comparisons++;
-    const rankA = spanAt(a).rank;
-    const rankB = spanAt(b).rank;
+    const rankA = itemAt(raw, a, "flow span").rank;
+    const rankB = itemAt(raw, b, "flow span").rank;
     if (rankA > rankB) return true;
     if (rankB > rankA) return false;
     return a < b;
@@ -280,7 +275,7 @@ export function resolveFlowOverlaps(
   const byValue = (values: (span: RankedFlowSpan) => number): number[] =>
     Array.from({ length: count }, (_, i) => i).sort((a, b) => {
       if (counters) counters.comparisons++;
-      return values(spanAt(a)) - values(spanAt(b)) || a - b;
+      return values(itemAt(raw, a, "flow span")) - values(itemAt(raw, b, "flow span")) || a - b;
     });
   const byStart = byValue((span) => span.startMeters);
   const byEnd = byValue((span) => span.endMeters);
@@ -349,7 +344,7 @@ export function resolveFlowOverlaps(
     // span is opened and closed once no matter how many boundaries it spans.
     for (
       let closing = byEnd[ended];
-      closing !== undefined && spanAt(closing).endMeters <= start;
+      closing !== undefined && itemAt(raw, closing, "flow span").endMeters <= start;
       closing = byEnd[ended]
     ) {
       open[closing] = 0;
@@ -357,7 +352,7 @@ export function resolveFlowOverlaps(
     }
     for (
       let opening = byStart[started];
-      opening !== undefined && spanAt(opening).startMeters <= start;
+      opening !== undefined && itemAt(raw, opening, "flow span").startMeters <= start;
       opening = byStart[started]
     ) {
       push(opening);
@@ -366,7 +361,7 @@ export function resolveFlowOverlaps(
     const winner = owner();
     if (winner < 0) continue;
     if (counters) counters.intervals++;
-    intervals.push({ ...spanAt(winner), startMeters: start, endMeters: end });
+    intervals.push({ ...itemAt(raw, winner, "flow span"), startMeters: start, endMeters: end });
   }
 
   const merged: RankedFlowSpan[] = [];

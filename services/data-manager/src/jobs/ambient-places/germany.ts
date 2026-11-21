@@ -14,8 +14,8 @@ import {
   ambientPlaceFromOverture,
   mergeAmbientPlaces,
 } from "@openmapx/core/ambient-places";
+import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertAmbientDiskCapacity } from "./capacity.js";
 import {
@@ -91,11 +91,12 @@ export async function buildGermanyPlaces(
       `SELECT region,release,status,places_published_at,place_count::TEXT FROM overture_places.conflation_state WHERE singleton=1`,
     );
     if (!state) {
-      const input = requiredRow(
+      const input = itemAt(
         await tx.unsafe<{ populated: boolean }[]>(
           `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
         ),
-        "Overture places check",
+        0,
+        "row from the Overture places check",
       );
       if (input.populated) throw new Error("Overture conflation state is missing");
     } else {
@@ -103,12 +104,13 @@ export async function buildGermanyPlaces(
         throw new Error("Germany coverage requires the complete europe/germany Overture snapshot");
       if (state.status !== "completed")
         throw new Error("Overture conflation must be completed before ambient publication");
-      const releases = requiredRow(
+      const releases = itemAt(
         await tx.unsafe<{ mismatch: boolean }[]>(
           `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 LIMIT 1) AS mismatch`,
           [state.release],
         ),
-        "Overture release check",
+        0,
+        "row from the Overture release check",
       );
       if (releases.mismatch)
         throw new Error("Overture conflation release does not match published places");

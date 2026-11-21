@@ -130,14 +130,16 @@ export async function retainFeedCredentialPreview(
         throw new TransitCredentialConflict();
       return value.preview;
     }
-    const [counts] = await tx
-      .select({
-        total: sql<number>`count(*)::int`,
-        actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorId} = ${input.actorId})::int`,
-      })
-      .from(transitCredentialPreview);
-    if (!counts) throw new Error("Transit credential preview count returned no row");
-    const { total, actor } = counts;
+    const { total, actor } = itemAt(
+      await tx
+        .select({
+          total: sql<number>`count(*)::int`,
+          actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorId} = ${input.actorId})::int`,
+        })
+        .from(transitCredentialPreview),
+      0,
+      "row from the transit credential preview count query",
+    );
     if (total >= 4096 || actor >= 100)
       throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_PREVIEW_CAPACITY");
     const previewId = randomUUID(),

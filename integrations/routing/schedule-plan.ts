@@ -2,6 +2,7 @@ import {
   composeSchedule,
   fidelityFor,
   isoWithOffsetInZone,
+  itemAt,
   planScheduledTrip,
   type ResolvedSchedule,
   requiredTemporalSemantics,
@@ -9,7 +10,6 @@ import {
   resolveTemporalCapabilities,
   type ScheduledDirectionsResult,
   type SchedulePlanWarning,
-  stopAt,
   type TemporalCapabilities,
   type TemporalSemantic,
   type TemporalSupport,
@@ -191,7 +191,11 @@ export async function runSchedulePlan(
     const to = request.waypoints[legIndex + 1];
     if (!from || !to) throw new RangeError(`No waypoints for scheduled leg ${legIndex}`);
     const pair: [number, number][] = [from, to];
-    const zone = stopAt(resolved.stops, pinArrival ? legIndex + 1 : legIndex).timeZone;
+    const zone = itemAt(
+      resolved.stops,
+      pinArrival ? legIndex + 1 : legIndex,
+      "resolved stop",
+    ).timeZone;
     const call = await callChain(pair, {
       ...request.routingOptions,
       ...(pinArrival

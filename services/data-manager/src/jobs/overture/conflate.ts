@@ -6,6 +6,7 @@ import {
 
 export { buildConflationComponents } from "./components.js";
 
+import { itemAt } from "@openmapx/core/item-at";
 import { overtureTaxonomyToOpenMapX } from "@openmapx/core/places/overtureCategoryMap";
 import {
   assignConflationPairs,
@@ -26,7 +27,6 @@ import {
 } from "@openmapx/core/utils/geo-server";
 import { gridDisk, latLngToCell } from "h3-js";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { buildConflationComponents } from "./components.js";
 import {
   cosineSimilarity,
@@ -529,12 +529,13 @@ export async function scoreOvertureCandidates(opts: {
   }
 
   await sql.unsafe(`ANALYZE "${schema}".poi_conflation_candidate`);
-  const { count } = requiredRow(
+  const { count } = itemAt(
     await sql.unsafe<{ count: string }[]>(
       `SELECT COUNT(*)::TEXT AS count FROM "${schema}".poi_conflation_candidate`,
       [],
     ),
-    "Conflation candidate count",
+    0,
+    "row from the conflation candidate count query",
   );
   candidateCount = Number(count ?? 0);
   return {
@@ -572,12 +573,13 @@ export async function assignOvertureCandidates(opts: {
   let assignmentCursor = opts.assignmentCursor ?? 0;
   let stagedLinks = opts.stagedLinks ?? 0;
 
-  const { mappings } = requiredRow(
+  const { mappings } = itemAt(
     await sql.unsafe<{ mappings: string }[]>(
       `SELECT COUNT(*)::TEXT AS mappings FROM "${schema}".poi_conflation_component`,
       [],
     ),
-    "Conflation component count",
+    0,
+    "row from the conflation component count query",
   );
   if (components === null || (components > 0 && Number(mappings ?? 0) === 0)) {
     components = await buildConflationComponents(sql, schema, opts.onProgress);
@@ -653,12 +655,13 @@ export async function assignOvertureCandidates(opts: {
     );
   }
 
-  const { linked } = requiredRow(
+  const { linked } = itemAt(
     await sql.unsafe<{ linked: string }[]>(
       `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link_next`,
       [],
     ),
-    "Staged conflation link count",
+    0,
+    "row from the staged conflation link count query",
   );
   return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
 }
@@ -685,12 +688,13 @@ export async function publishOvertureLinks(
     }),
   );
 
-  const { linked } = requiredRow(
+  const { linked } = itemAt(
     await sql.unsafe<{ linked: string }[]>(
       `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
       [],
     ),
-    "Conflation link count",
+    0,
+    "row from the conflation link count query",
   );
   const linkedCount = Number(linked ?? 0);
   return { linked: linkedCount };

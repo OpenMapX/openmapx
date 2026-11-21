@@ -1,10 +1,10 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import { assertSupportedOvertureContributors } from "@openmapx/core/places/overtureSource";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import {
   assertDataPublication,
   cancellableTransaction,
@@ -248,12 +248,13 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   if (contributors.join("\0") !== pullContract.contributors.join("\0")) {
     throw new Error("Ingested Overture contributors do not match the pull contract");
   }
-  const { count } = requiredRow(
+  const { count } = itemAt(
     await sql.unsafe<{ count: number }[]>(
       `SELECT COUNT(*)::INTEGER AS count FROM "${stagingSchema}".places`,
       [],
     ),
-    "Ingested Overture row count",
+    0,
+    "row from the ingested Overture row count query",
   );
   if (count !== pullContract.rowCount) {
     throw new Error(

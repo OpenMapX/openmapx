@@ -5,8 +5,8 @@ import {
   type AmbientManifest,
   type AmbientPlace,
 } from "@openmapx/core/ambient-places";
+import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { retireAmbientGenerations } from "./planet-storage.js";
 
 export function fresh(value: Date | string | null): string {
@@ -20,18 +20,20 @@ export function fresh(value: Date | string | null): string {
   return new Date(date).toISOString();
 }
 export async function tableExists(tx: postgres.TransactionSql, name: string): Promise<boolean> {
-  return requiredRow(
+  return itemAt(
     await tx.unsafe<{ exists: boolean }[]>(`SELECT to_regclass($1) IS NOT NULL AS exists`, [name]),
-    "Table check",
+    0,
+    "row from the table check",
   ).exists;
 }
 export async function prepareAmbientGeneration(tx: postgres.TransactionSql): Promise<string> {
   await retireAmbientGenerations(tx);
-  const capacity = requiredRow(
+  const capacity = itemAt(
     await tx.unsafe<{ count: number }[]>(
       `SELECT count(*)::INT AS count FROM ambient_places.generations`,
     ),
-    "Ambient generation count",
+    0,
+    "row from the ambient generation count query",
   );
   if (capacity.count >= AMBIENT_LIMITS.generations)
     throw new Error(
@@ -79,12 +81,13 @@ export async function activateAmbientGeneration(
   tx: postgres.TransactionSql,
   manifest: AmbientManifest,
 ): Promise<void> {
-  const count = requiredRow(
+  const count = itemAt(
     await tx.unsafe<{ count: string }[]>(
       `SELECT count(*)::TEXT AS count FROM ambient_places.features WHERE generation=$1`,
       [manifest.generation],
     ),
-    "Candidate feature count",
+    0,
+    "row from the candidate feature count query",
   );
   if (Number(count.count) !== manifest.placeCount)
     throw new Error("Candidate feature count validation failed");

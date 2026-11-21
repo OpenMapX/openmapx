@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type ResolvedSchedule, stopAt } from "./scheduleConstraints";
+import { itemAt } from "../utils/itemAt";
+import type { ResolvedSchedule } from "./scheduleConstraints";
 import {
   fidelityFor,
   requiredTemporalSemantics,
@@ -100,14 +101,14 @@ describe("requiredTemporalSemantics", () => {
 
   it("asks for dwell when any stop has one", () => {
     const input = resolved();
-    stopAt(input.stops, 1).dwellSeconds = 600;
+    itemAt(input.stops, 1).dwellSeconds = 600;
     expect(requiredTemporalSemantics(input)).toEqual(["dwell"]);
   });
 
   it("asks for each window semantic that appears", () => {
     const input = resolved();
-    stopAt(input.stops, 0).earliestDepartureMs = 1;
-    stopAt(input.stops, 1).latestArrivalMs = 2;
+    itemAt(input.stops, 0).earliestDepartureMs = 1;
+    itemAt(input.stops, 1).latestArrivalMs = 2;
     expect(requiredTemporalSemantics(input).sort()).toEqual([
       "waypointArriveBy",
       "waypointDepartAfter",

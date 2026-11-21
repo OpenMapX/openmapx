@@ -6,7 +6,6 @@ export {
   type ResolveScheduleInput,
   resolveScheduleConstraints,
   type ScheduleAnchor,
-  stopAt,
 } from "./scheduleConstraints";
 export {
   type BackwardLegOracle,

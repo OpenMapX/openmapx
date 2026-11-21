@@ -9,6 +9,7 @@ import type {
 import {
   connectorStandardOf,
   isoWithOffsetInZone,
+  itemAt,
   matchesAnyOperator,
   normalizeOperator,
   timeZoneAt,
@@ -54,15 +55,8 @@ type Day = NonNullable<EnergyTariffRestrictions["days"]>[number];
 type TariffElement = EnergyTariff["elements"][number];
 type Component = TariffElement["components"][number];
 
-/** Weekdays in `Date.getUTCDay()` order. */
+/** Weekdays in `Date.getUTCDay()` order; an invalid date has none. */
 const WEEK: readonly Day[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
-
-/** The weekday at a position of {@link WEEK}; an invalid date has none. */
-function weekday(index: number): Day {
-  const day = WEEK[index];
-  if (day === undefined) throw new RangeError(`No weekday at index ${index}`);
-  return day;
-}
 
 /** Midnight UTC of a `YYYY-MM-DD` date, moved by whole days. */
 function utcDate(date: string, plusDays = 0): Date {
@@ -208,7 +202,7 @@ function localArrival(site: ChargingSite, atMs: number): LocalArrival {
   const zone = site.timeZone ?? timeZoneAt(lat, lng) ?? "UTC";
   const iso = isoWithOffsetInZone(new Date(atMs), zone);
   const date = iso.slice(0, 10);
-  return { date, time: iso.slice(11, 16), day: weekday(utcDate(date).getUTCDay()) };
+  return { date, time: iso.slice(11, 16), day: itemAt(WEEK, utcDate(date).getUTCDay(), "weekday") };
 }
 
 /** `min` inclusive, `max` exclusive, as tariff restrictions bound a value. */
@@ -223,7 +217,7 @@ function withinWindow(time: string, start: string | undefined, end: string | und
 }
 
 function dayBefore(day: Day): Day {
-  return weekday((WEEK.indexOf(day) + 6) % 7);
+  return itemAt(WEEK, (WEEK.indexOf(day) + 6) % 7, "weekday");
 }
 
 /**
@@ -339,7 +333,7 @@ function localAfter(start: LocalArrival, seconds: number): LocalArrival {
   return {
     date: date.toISOString().slice(0, 10),
     time: `${hh}:${mm}`,
-    day: weekday(date.getUTCDay()),
+    day: itemAt(WEEK, date.getUTCDay(), "weekday"),
   };
 }
 
@@ -578,17 +572,10 @@ function coordAtDistanceM(geometry: LngLat[], targetM: number): LngLat | undefin
 }
 
 /**
- * A sample of the energy or distance axis. Both axes have one value per
- * sample and the planner only indexes samples it has counted, so a missing
- * value is a broken invariant rather than a gap to skip.
+ * Last sample index reachable from `startIdx` while keeping `>= floorKwh`.
+ * The energy and distance axes have one value per sample and the planner only
+ * indexes samples it has counted, so a missing sample is a broken invariant.
  */
-function sampleAt(values: readonly number[], index: number): number {
-  const value = values[index];
-  if (value === undefined) throw new RangeError(`No route sample at index ${index}`);
-  return value;
-}
-
-/** Last sample index reachable from `startIdx` while keeping `>= floorKwh`. */
 function reachOffset(
   cumulativeKwh: number[],
   startIdx: number,
@@ -596,10 +583,10 @@ function reachOffset(
   floorKwh: number,
 ): number {
   const budget = socKwh - floorKwh;
-  const startKwh = sampleAt(cumulativeKwh, startIdx);
+  const startKwh = itemAt(cumulativeKwh, startIdx, "route sample");
   let last = 0;
   for (let i = startIdx + 1; i < cumulativeKwh.length; i++) {
-    if (sampleAt(cumulativeKwh, i) - startKwh <= budget) last = i - startIdx;
+    if (itemAt(cumulativeKwh, i, "route sample") - startKwh <= budget) last = i - startIdx;
     else break;
   }
   return last;
@@ -618,7 +605,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
     ambientTempC: input.ambientTempC,
     elevationAbsentDerate: input.hasElevation ? 1 : 1.1,
   });
-  const destKwh = sampleAt(cumulativeKwh, cumulativeKwh.length - 1);
+  const destKwh = itemAt(cumulativeKwh, cumulativeKwh.length - 1, "route sample");
   const sampleCount = cumulativeKwh.length;
   const sampleDistM = buildSampleDistances(route, sampleCount);
   const onwardTarget = route.geometry.at(-1);
@@ -634,7 +621,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
   for (let iter = 0; iter < MAX_STOPS; iter++) {
     // reachable (REACH_EPS_KWH absorbs float error when a prior charge was exactly enough)
     if (
-      soc - (destKwh - sampleAt(cumulativeKwh, startIdx)) >=
+      soc - (destKwh - itemAt(cumulativeKwh, startIdx, "route sample")) >=
       input.socArrivalMinKwh - REACH_EPS_KWH
     )
       break;
@@ -646,18 +633,25 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
       break;
     }
-    const divertPoint = coordAtDistanceM(route.geometry, sampleAt(sampleDistM, divertIdx));
+    const divertPoint = coordAtDistanceM(
+      route.geometry,
+      itemAt(sampleDistM, divertIdx, "route sample"),
+    );
     if (!divertPoint || !onwardTarget) {
       warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
       break;
     }
     const socAtDivert =
-      soc - (sampleAt(cumulativeKwh, divertIdx) - sampleAt(cumulativeKwh, startIdx));
+      soc -
+      (itemAt(cumulativeKwh, divertIdx, "route sample") -
+        itemAt(cumulativeKwh, startIdx, "route sample"));
     // Approx drive time from the current start to the divert point (proportional
     // to distance along the route). Used to time the arrival at each candidate.
     const driveToDivertSec =
       route.duration *
-      ((sampleAt(sampleDistM, divertIdx) - sampleAt(sampleDistM, startIdx)) / totalDistM);
+      ((itemAt(sampleDistM, divertIdx, "route sample") -
+        itemAt(sampleDistM, startIdx, "route sample")) /
+        totalDistM);
     const etaBaseSec = elapsedSec + driveToDivertSec;
     const arrivalAt = (site: ChargingSite, toSeconds: number) =>
       localArrival(site, input.tripStartMs + (etaBaseSec + toSeconds) * 1000);
@@ -810,7 +804,8 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
     const caps = powerCaps(chosen.pick, vehicle);
     const arriveKwh = Math.max(0, best.reachKwh);
     const taperKwh = (vehicle.vehicleTaperSocPct / 100) * vehicle.batteryKwh;
-    const needForRest = destKwh - sampleAt(cumulativeKwh, divertIdx) + input.socArrivalMinKwh; // pack level to finish
+    const needForRest =
+      destKwh - itemAt(cumulativeKwh, divertIdx, "route sample") + input.socArrivalMinKwh; // pack level to finish
     const userCapKwh = Math.min(input.socTargetKwh, vehicle.batteryKwh);
     // Charge target: if the remaining trip fits on one charge this is the
     // FINAL leg — charge enough to finish, ABOVE taper if required (the final-leg
@@ -867,7 +862,7 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
 
   if (
     stops.length >= MAX_STOPS &&
-    soc - (destKwh - sampleAt(cumulativeKwh, startIdx)) < input.socArrivalMinKwh
+    soc - (destKwh - itemAt(cumulativeKwh, startIdx, "route sample")) < input.socArrivalMinKwh
   ) {
     warnings.push({ kind: "unreachable", afterStopIndex: stops.length - 1 });
   }

@@ -7,6 +7,7 @@ import {
   type AmbientPlace,
   ambientPlaceFromTile,
 } from "../ambient-places";
+import { itemAt } from "../utils/itemAt";
 
 function freshPublication(manifest: AmbientManifest): boolean {
   const dates = [
@@ -44,10 +45,14 @@ export const PUBLISHED_AMBIENT_FEATURES = `(
 )`;
 
 export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientManifest | null> {
-  const [exists] = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+  const { exists } = itemAt(
+    await sql.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+    ),
+    0,
+    "row from the ambient state table check",
   );
-  if (!exists?.exists) return null;
+  if (!exists) return null;
   const [row] = await sql.unsafe<{ manifest: AmbientManifest; enabled: boolean }[]>(
     `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1 AND g.publication_status='published'`,
   );
@@ -66,10 +71,14 @@ export async function readAmbientPlaceByGers(
   if (!gers || gers.length > 128) return null;
   return sql.begin("isolation level repeatable read", async (tx) => {
     await tx.unsafe(`SET LOCAL statement_timeout='2000ms'`);
-    const [exists] = await tx.unsafe<{ exists: boolean }[]>(
-      `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+    const { exists } = itemAt(
+      await tx.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
+      ),
+      0,
+      "row from the ambient state table check",
     );
-    if (!exists?.exists) return null;
+    if (!exists) return null;
     const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
       `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
        CROSS JOIN ambient_places.state s WHERE s.singleton=1 AND g.publication_status='published'
@@ -107,10 +116,14 @@ export async function readAmbientTile(
   if (!validAmbientTile(generation, z, x, y)) throw new Error("Invalid ambient tile coordinates");
   return sql.begin(async (tx) => {
     await tx.unsafe(`SET LOCAL statement_timeout='2000ms'`);
-    const [exists] = await tx.unsafe<{ exists: boolean }[]>(
-      `SELECT to_regclass('ambient_places.generations') IS NOT NULL AS exists`,
+    const { exists } = itemAt(
+      await tx.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regclass('ambient_places.generations') IS NOT NULL AS exists`,
+      ),
+      0,
+      "row from the ambient generations table check",
     );
-    if (!exists?.exists) return null;
+    if (!exists) return null;
     const [known] = await tx.unsafe<{ version: number }[]>(
       `SELECT (manifest->>'version')::INT AS version FROM ambient_places.generations g WHERE id=$1 AND g.publication_status='published'`,
       [generation],
@@ -119,7 +132,7 @@ export async function readAmbientTile(
     const lineage = `,${AMBIENT_FORMAT_VERSION} AS format_version,coalesce(contributors,'[]'::JSONB)::TEXT AS "_mapAttributions",field_contributors::TEXT AS field_contributors,source_lineage::TEXT AS source_lineage`;
     const worldWidth = 40075016.68557849;
     const shift = x === 0 ? worldWidth : x === 2 ** z - 1 ? -worldWidth : 0;
-    const [result] = await tx.unsafe<{ tile: Buffer }[]>(
+    const rows = await tx.unsafe<{ tile: Buffer }[]>(
       `
       WITH spatial AS (
         SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_GeomFromEWKB(geom) AS geom
@@ -155,7 +168,7 @@ export async function readAmbientTile(
       [generation, z, x, y, shift],
     );
     // ST_AsMVT is an aggregate, so the query always returns its one row.
-    if (!result) throw new Error("Ambient tile query returned no row");
+    const result = itemAt(rows, 0, "row from the ambient tile query");
     if (result.tile.length > AMBIENT_LIMITS.tileBytes)
       throw new Error("Ambient tile byte budget exceeded");
     return result.tile;

@@ -1,11 +1,11 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { itemAt } from "@openmapx/core/item-at";
 import type { OsmFilter } from "@openmapx/core/places/osmCategoryFilters";
 import { CATEGORY_FILTERS } from "@openmapx/core/places/osmCategoryFilters";
 import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { osmPbfName } from "../download-osm.js";
 import {
   assertDataPublication,
@@ -284,12 +284,13 @@ export async function extractOsmPois(
         rl.close();
       }
 
-      const { count: uniqueCountText } = requiredRow(
+      const { count: uniqueCountText } = itemAt(
         await sql.unsafe<{ count: string }[]>(
           `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
           [],
         ),
-        "Unique OSM POI count",
+        0,
+        "row from the unique OSM POI count query",
       );
       const extracted = Number(uniqueCountText ?? 0);
       opts.onProgress?.(

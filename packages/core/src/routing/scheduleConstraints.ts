@@ -20,20 +20,6 @@ export interface ResolvedStopConstraint {
   dwellIgnored: boolean;
 }
 
-/**
- * The resolved stop at `index`. Schedule code indexes the list it was given
- * and the legs between neighbours in it, so a missing stop is a programming
- * error and throws, as reading a property of the missing stop did.
- */
-export function stopAt(
-  stops: readonly ResolvedStopConstraint[],
-  index: number,
-): ResolvedStopConstraint {
-  const stop = stops[index];
-  if (!stop) throw new RangeError(`No resolved stop at index ${index}`);
-  return stop;
-}
-
 export type ScheduleAnchor =
   | { kind: "now" }
   | { kind: "departAt"; wallClock: string }

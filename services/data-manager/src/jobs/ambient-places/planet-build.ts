@@ -7,8 +7,8 @@ import {
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
+import { itemAt } from "@openmapx/core/item-at";
 import postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
@@ -35,21 +35,23 @@ async function withPlanetSession<T>(
   let writer = false;
   const held: (readonly [number, number])[] = [];
   try {
-    const lock = requiredRow(
+    const lock = itemAt(
       await connection.unsafe<{ locked: boolean; pid: number }[]>(
         `SELECT pg_try_advisory_lock(${AMBIENT_WRITE_LOCK}) AS locked,pg_backend_pid() AS pid`,
       ),
-      "Ambient write lock",
+      0,
+      "row from the ambient write lock query",
     );
     if (!lock.locked) throw new AmbientPublicationBusyError();
     writer = true;
     for (const pair of [DATA_ADVISORY_LOCKS.overture, DATA_ADVISORY_LOCKS.searchIndex]) {
-      const source = requiredRow(
+      const source = itemAt(
         await connection.unsafe<{ locked: boolean }[]>(
           `SELECT pg_try_advisory_lock_shared($1,$2) AS locked`,
           [...pair],
         ),
-        "Planet source lock",
+        0,
+        "row from the planet source lock query",
       );
       if (!source.locked)
         throw new AmbientPublicationBusyError(

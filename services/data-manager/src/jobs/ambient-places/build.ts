@@ -16,8 +16,8 @@ import {
   mergeAmbientPlaces,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
+import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
-import { requiredRow } from "../../db/required-row.js";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { type AmbientBuildOptions, buildGermanyPlaces } from "./germany.js";
 import { buildPlanetPlaces } from "./planet-build.js";
@@ -32,11 +32,12 @@ import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError, ensureAmbientSchema } 
 import { lockAmbientCountrySources } from "./source-locks.js";
 
 async function lock(tx: postgres.TransactionSql) {
-  const row = requiredRow(
+  const row = itemAt(
     await tx.unsafe<{ locked: boolean }[]>(
       `SELECT pg_try_advisory_xact_lock(${AMBIENT_WRITE_LOCK}) AS locked`,
     ),
-    "Ambient write lock",
+    0,
+    "row from the ambient write lock query",
   );
   if (!row.locked) throw new AmbientPublicationBusyError();
 }
@@ -58,9 +59,10 @@ export async function buildAmbientPlaces(
         await lock(tx);
         if (region.coverage === "germany") await lockAmbientCountrySources(tx);
         await tx.unsafe(`SET LOCAL statement_timeout='120000ms'`);
-        const clock = requiredRow(
+        const clock = itemAt(
           await tx.unsafe<{ started_at: string }[]>(`SELECT clock_timestamp()::TEXT AS started_at`),
-          "Ambient build clock",
+          0,
+          "row from the ambient build clock query",
         );
         startedAt = clock.started_at;
         // Progress writes share the publication transaction and its writer lock.
@@ -110,11 +112,12 @@ export async function buildAmbientPlaces(
             `SELECT region,release,status,places_published_at FROM overture_places.conflation_state WHERE singleton=1`,
           );
           if (!state) {
-            const input = requiredRow(
+            const input = itemAt(
               await tx.unsafe<{ populated: boolean }[]>(
                 `SELECT EXISTS(SELECT 1 FROM overture_places.places LIMIT 1) AS populated`,
               ),
-              "Overture places check",
+              0,
+              "row from the Overture places check",
             );
             if (input.populated) throw new Error("Overture conflation state is missing");
           }
@@ -122,12 +125,13 @@ export async function buildAmbientPlaces(
             throw new Error("Overture conflation must be completed before ambient publication");
           if (state) {
             const publishedAt = fresh(state.places_published_at);
-            const releases = requiredRow(
+            const releases = itemAt(
               await tx.unsafe<{ mismatch: boolean }[]>(
                 `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 AND geom && ST_MakeEnvelope($2,$3,$4,$5,4326) LIMIT 1) AS mismatch`,
                 [state.release, ...params],
               ),
-              "Overture release check",
+              0,
+              "row from the Overture release check",
             );
             if (releases.mismatch)
               throw new Error("Overture conflation release does not match published places");

@@ -3,11 +3,11 @@ import {
   arrivalBefore,
   departureAfter,
   fidelityFor,
+  itemAt,
   planScheduledTrip,
   requiredTemporalSemantics,
   resolveScheduleConstraints,
   type ScheduleAnchor,
-  stopAt,
   type TemporalCapabilities,
   type TripSchedule,
   type WaypointSchedule,
@@ -116,7 +116,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
       : options;
     const deadline = pinArrival
       ? instantMs
-      : stopAt(resolved.stops, segmentIndex + 1).latestArrivalMs;
+      : itemAt(resolved.stops, segmentIndex + 1, "resolved stop").latestArrivalMs;
     const chosen = selectItinerary(itineraries, deadline);
     if (!chosen) {
       warnings.push({ kind: "no-connection", segmentIndex });
@@ -181,7 +181,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
         break;
       }
       deadline = arrivalBefore(
-        stopAt(resolved.stops, index),
+        itemAt(resolved.stops, index, "resolved stop"),
         Date.parse(segment.itinerary.startTime),
       );
     }
@@ -192,7 +192,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
       const previous = retained[index - 1];
       if (!previous) continue;
       const ready = departureAfter(
-        stopAt(resolved.stops, segment.fromIndex),
+        itemAt(resolved.stops, segment.fromIndex, "resolved stop"),
         Date.parse(previous.itinerary.endTime),
       );
       segment.boardingWaitSeconds = Math.max(
