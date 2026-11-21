@@ -8,7 +8,7 @@ import {
   MeshStandardMaterial,
   type Scene,
 } from "three";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { NEUTRAL_SCENE_LIGHT, sunVector } from "@/integration-api/map/sceneLight";
 
 const fake = vi.hoisted(() => {
@@ -97,10 +97,11 @@ const NEUTRAL_LIGHTING = {
 
 function lightsOf(layer: LandmarkModelLayer) {
   const children = (layer as unknown as { scene: Scene }).scene.children;
-  return {
-    sun: children.find((child) => child instanceof DirectionalLight) as DirectionalLight,
-    ambient: children.find((child) => child instanceof AmbientLight) as AmbientLight,
-  };
+  const sun = children.find((child) => child instanceof DirectionalLight);
+  const ambient = children.find((child) => child instanceof AmbientLight);
+  assert.isDefined(sun, "the scene has a sun light");
+  assert.isDefined(ambient, "the scene has an ambient light");
+  return { sun, ambient };
 }
 
 afterEach(() => {

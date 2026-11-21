@@ -181,7 +181,7 @@ describe("GlobeProjection sky lifecycle", () => {
       }),
     );
     expect(container.style.backgroundColor).toBe("rgb(227, 180, 166)");
-    expect(skies[0].setOptions).toHaveBeenLastCalledWith(
+    expect(nth(skies, 0).setOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({ themeSky: [227 / 255, 180 / 255, 166 / 255] }),
     );
   });
