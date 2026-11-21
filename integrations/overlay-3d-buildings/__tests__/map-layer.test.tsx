@@ -80,6 +80,12 @@ afterEach(() => {
 });
 
 describe("BuildingExtrusionLayer", () => {
+  it("leaves the scene light to the scene lighting", () => {
+    render(<BuildingExtrusionLayer />);
+    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    expect(fake.state.light).toBeNull();
+  });
+
   it("hides buildings for navigation and restores the normal map selection", () => {
     render(<BuildingExtrusionLayer />);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);

@@ -137,12 +137,6 @@ export function BuildingExtrusionLayer() {
 
       if (!map.getLayer(LAYER_ID)) {
         addExtrusionLayer(map, buildingSource, buildingSource.source, buildingSource.sourceLayer);
-        map.setLight({
-          anchor: "viewport",
-          color: "#ffffff",
-          intensity: 0.4,
-          position: [1.5, 210, 30],
-        });
       } else {
         syncVisibility();
       }
