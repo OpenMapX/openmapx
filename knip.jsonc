@@ -50,7 +50,9 @@
         "check-toolchain-pins.ts",
         "bench-air-quality.ts",
         "benchmark-motis-reachability.ts",
-        "ev-vehicles/generate.ts"
+        "ev-vehicles/generate.ts",
+        // Regenerates the 3D view's embedded left-hand-traffic regions on demand.
+        "map-details/generate-driving-side.mjs"
       ],
       "ignoreDependencies": [
         // The Biome plugin test runs the root node_modules/.bin/biome binary by
