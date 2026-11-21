@@ -250,7 +250,7 @@ describe("createHttpClient", () => {
     const client = createHttpClient(createNoopLogger());
     const data = await client.get("https://x.test/data");
     expect(data).toEqual({ ok: true, n: 42 });
-    const init = fn.mock.calls[0][1] as RequestInit;
+    const init = fn.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -293,7 +293,7 @@ describe("createHttpClient", () => {
     const client = createHttpClient(createNoopLogger());
     const data = await client.post("https://x.test/data", { a: 1 });
     expect(data).toEqual({ ok: true });
-    const init = fn.mock.calls[0][1] as RequestInit;
+    const init = fn.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 

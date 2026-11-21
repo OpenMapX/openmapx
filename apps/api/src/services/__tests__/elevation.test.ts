@@ -60,14 +60,12 @@ describe("elevationService", () => {
 
       expect(result?.points).toHaveLength(4);
       expect(result?.interval).toBe(50);
-      expect(result?.points[0].distance).toBe(0);
-      expect(result?.points[0].elevation).toBe(34.5);
-      expect(result?.points[1].distance).toBe(50);
-      expect(result?.points[1].elevation).toBe(36.2);
-      expect(result?.points[2].distance).toBe(100);
-      expect(result?.points[2].elevation).toBe(38.1);
-      expect(result?.points[3].distance).toBe(150);
-      expect(result?.points[3].elevation).toBe(37.0);
+      expect(result?.points).toEqual([
+        { distance: 0, elevation: 34.5 },
+        { distance: 50, elevation: 36.2 },
+        { distance: 100, elevation: 38.1 },
+        { distance: 150, elevation: 37.0 },
+      ]);
     });
 
     it("simplifies to max 500 points when input exceeds 500", async () => {
@@ -82,7 +80,7 @@ describe("elevationService", () => {
       await elevationService.getElevation(largeCoords, 10000);
 
       // encodePolyline should have been called with at most 500 points
-      const callArgs = encodeMock.mock.calls[callsBefore][0] as [number, number][];
+      const callArgs = encodeMock.mock.calls[callsBefore]?.[0] as [number, number][];
       expect(callArgs).toHaveLength(500);
     });
 
@@ -96,7 +94,7 @@ describe("elevationService", () => {
       const { elevationService } = await import("../elevation.service.js");
       await elevationService.getElevation(sampleCoords, 5000);
 
-      const callArgs = encodeMock.mock.calls[callsBefore][0] as [number, number][];
+      const callArgs = encodeMock.mock.calls[callsBefore]?.[0] as [number, number][];
       expect(callArgs).toEqual(sampleCoords);
     });
 
@@ -155,10 +153,10 @@ describe("elevationService", () => {
       const { elevationService } = await import("../elevation.service.js");
       await elevationService.getElevation(sampleCoords, 5000);
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]?.[0] as string;
       expect(url).toContain("/height");
 
-      const options = mockFetch.mock.calls[0][1] as RequestInit;
+      const options = mockFetch.mock.calls[0]?.[1] as RequestInit;
       expect(options.method).toBe("POST");
 
       const body = JSON.parse(options.body as string);

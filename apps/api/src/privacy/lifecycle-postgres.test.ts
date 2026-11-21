@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   dataSubjectRequest,
   dataSubjectRequestEvent,
@@ -151,14 +151,15 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       const racing = [service().create(input), service().create(input)];
       // Wait until both transactions block on the retention lock (both passed the pre-check).
       for (let i = 0; ; i++) {
-        const [{ waiting }] = await fixture.sql<{ waiting: number }[]>`
+        const [locks] = await fixture.sql<{ waiting: number }[]>`
           select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`;
-        if (waiting >= 2) break;
+        if (locks && locks.waiting >= 2) break;
         if (i > 200) throw new Error("creates never reached the retention lock");
         await new Promise((r) => setTimeout(r, 25));
       }
       await holder`select pg_advisory_unlock(1330464848, 1380275027)`;
       const [a, b] = await Promise.all(racing);
+      assert(a && b, "both creates return a request");
       expect(a.id).toBe(b.id);
     } finally {
       // A failure above must not leave the session lock held for later tests.

@@ -8,7 +8,7 @@ describe("apps/api/openapi.json", () => {
     for (const [path, operationId] of [
       ["/api/capabilities", "getApiCapabilities"],
       ["/api/integrations", "getApiIntegrations"],
-    ]) {
+    ] as const) {
       const operation = document.paths[path].get;
       expect(operation.operationId).toBe(operationId);
       expect(operation.tags).toContain("runtime-metadata");

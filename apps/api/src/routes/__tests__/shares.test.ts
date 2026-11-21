@@ -69,7 +69,7 @@ function insertedRow(): Record<string, unknown> {
   const chain = dbMock.db.insert.mock.results[0]?.value as {
     values: { mock: { calls: unknown[][] } };
   };
-  return chain.values.mock.calls[0][0] as Record<string, unknown>;
+  return chain.values.mock.calls[0]?.[0] as Record<string, unknown>;
 }
 
 describe("POST /api/shares", () => {

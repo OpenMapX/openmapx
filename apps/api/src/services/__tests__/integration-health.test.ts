@@ -1134,7 +1134,7 @@ describe("Entur composite health dispatch", () => {
       };
       const statuses = await executeIntegrationHealthCheck(integration);
       expect(statuses).toHaveLength(1);
-      expect(statuses[0].status).toBe("up");
+      expect(statuses[0]?.status).toBe("up");
       expect(http.calls.map((call) => new URL(call.url).pathname).sort()).toEqual(
         id === "transit-entur"
           ? [
@@ -1192,7 +1192,7 @@ describe("Entur composite health dispatch", () => {
       customHealthCheck: ctx.registered.healthChecks[0],
     });
     expect(statuses).toHaveLength(1);
-    expect(statuses[0].status).toBe("down");
+    expect(statuses[0]?.status).toBe("down");
     expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
   });
 });

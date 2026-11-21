@@ -14,7 +14,7 @@ import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
 
 import { canonicalJson } from "@openmapx/core/ops";
 import type { services as coreServices } from "@openmapx/core/server";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { adminJob } from "../../db/schema";
 import { createDbMock, type DbMock, makeQueryChain } from "../../test/db.js";
 
@@ -209,14 +209,18 @@ dbMock.db.transaction.mockImplementation(async (work: (tx: unknown) => unknown) 
   work(jobRowDatabase),
 );
 
+const INTEGRATION = {
+  artifact: "https://ex.example/intg-one.tar.gz",
+  id: "intg-one",
+  sha256: "a".repeat(64),
+};
+
 const MANIFEST = {
   id: "bundle-x",
   name: "Bundle X",
   version: "1.2.3",
   services: [{ repo: "https://github.com/example/repo.git", service: "svc-one" }],
-  integrations: [
-    { artifact: "https://ex.example/intg-one.tar.gz", id: "intg-one", sha256: "a".repeat(64) },
-  ],
+  integrations: [INTEGRATION],
 } satisfies ExtensionManifest;
 
 const TWO_REPO_MANIFEST = {
@@ -585,7 +589,8 @@ describe("installExtension", () => {
 
     // All bookkeeping writes run inside the single transaction.
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-    const txOrder = dbMock.db.transaction.mock.invocationCallOrder[0];
+    const [txOrder] = dbMock.db.transaction.mock.invocationCallOrder;
+    assert.isDefined(txOrder);
     const writeOrders = [
       ...dbMock.db.insert.mock.invocationCallOrder,
       ...dbMock.db.delete.mock.invocationCallOrder,
@@ -604,7 +609,7 @@ describe("installExtension", () => {
       ],
       integrations: [
         {
-          ...MANIFEST.integrations[0],
+          ...INTEGRATION,
           artifact: "https://EX.example:443/releases/../intg-one.tar.gz",
         },
       ],
@@ -651,9 +656,7 @@ describe("installExtension", () => {
     });
 
     expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(REPO_URL);
-    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
-      MANIFEST.integrations[0].artifact,
-    );
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(INTEGRATION.artifact);
     expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
       "https://ex.example/extension.json",
     );
@@ -766,8 +769,9 @@ describe("installExtension", () => {
       const saved = checkpoint._extensionWorkflow as { body: string };
       const state = JSON.parse(saved.body) as { steps: Record<string, { input: string }> };
       const name = Object.keys(state.steps).find((step) => step.startsWith(prefix));
-      if (!name) throw new Error(`The saved job records no ${prefix} step`);
-      state.steps[name].input = "0".repeat(64);
+      const step = name === undefined ? undefined : state.steps[name];
+      if (!step) throw new Error(`The saved job records no ${prefix} step`);
+      step.input = "0".repeat(64);
       return { ...checkpoint, _extensionWorkflow: { body: canonicalJson(state) } };
     }
 
@@ -1163,7 +1167,7 @@ describe("installExtension", () => {
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
 
     // Inserts: [0]=installedIntegration, [1]=installedExtension, [2]=component.
-    const componentInsertChain = dbMock.db.insert.mock.results[2].value as {
+    const componentInsertChain = dbMock.db.insert.mock.results[2]?.value as {
       values: ReturnType<typeof vi.fn>;
     };
     expect(componentInsertChain.values).toHaveBeenCalledWith([

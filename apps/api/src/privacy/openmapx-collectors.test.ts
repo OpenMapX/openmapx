@@ -99,9 +99,9 @@ describe("OpenMapX subject collectors", () => {
       "twoFactorEnabled",
       "updatedAt",
     ]);
-    expect(records[0].data).toEqual(
+    expect(records[0]?.data).toEqual(
       expect.objectContaining({ id: "u1", email: "ada@example.test" }),
     );
-    expect(records[0].data).toHaveProperty("role", "admin");
+    expect(records[0]?.data).toHaveProperty("role", "admin");
   });
 });

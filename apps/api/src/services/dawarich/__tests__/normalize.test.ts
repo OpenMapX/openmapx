@@ -1,7 +1,7 @@
 import { personalTimelineDayV1Schema } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { timelineDayFixture } from "../__fixtures__/timeline-day";
-import { tracksPageFixture } from "../__fixtures__/tracks-page";
+import { timelineDayFixture, visitEntryFixture } from "../__fixtures__/timeline-day";
+import { trackFeatureFixture, tracksPageFixture } from "../__fixtures__/tracks-page";
 import { normalizeDawarichDay } from "../normalize";
 
 describe("normalizeDawarichDay", () => {
@@ -65,7 +65,7 @@ describe("normalizeDawarichDay", () => {
       distance: -1,
       dayDurationSeconds: 1,
     });
-    expect(parsed.map.tracks.features[0].geometry.coordinates[1]).toEqual([12.5, 45.8, 4, 5]);
+    expect(parsed.map.tracks.features[0]?.geometry.coordinates[1]).toEqual([12.5, 45.8, 4, 5]);
   });
 
   it("keeps visit minutes and journey seconds distinct while sorting chronologically", () => {
@@ -90,7 +90,7 @@ describe("normalizeDawarichDay", () => {
       durationSeconds: 2520,
       id: "track-fixture-1",
     });
-    expect(result.entries[0].startedAt).toBe("2026-01-02T08:00:00.000Z");
+    expect(result.entries[0]?.startedAt).toBe("2026-01-02T08:00:00.000Z");
   });
 
   it("preserves missing optional numbers and creates longitude-latitude visit points", () => {
@@ -108,7 +108,7 @@ describe("normalizeDawarichDay", () => {
     const result = normalizeDawarichDay({
       day: {
         ...timelineDayFixture,
-        entries: [timelineDayFixture.entries[0], journeyWithoutOptionalNumbers],
+        entries: [visitEntryFixture, journeyWithoutOptionalNumbers],
       },
       selectedDate: "2026-01-02",
       timeZone: "Etc/UTC",
@@ -119,7 +119,7 @@ describe("normalizeDawarichDay", () => {
     expect(normalizedJourney).not.toHaveProperty("distance");
     expect(normalizedJourney).not.toHaveProperty("averageSpeed");
     expect(normalizedJourney).not.toHaveProperty("elevationGain");
-    expect(result.map.visits.features[0].geometry.coordinates).toEqual([12.4, 45.7]);
+    expect(result.map.visits.features[0]?.geometry.coordinates).toEqual([12.4, 45.7]);
   });
 
   it("omits null optional visit and journey fields", () => {
@@ -131,7 +131,7 @@ describe("normalizeDawarichDay", () => {
       day: {
         ...timelineDayFixture,
         entries: [
-          { ...timelineDayFixture.entries[0], point_count: null },
+          { ...visitEntryFixture, point_count: null },
           {
             ...journey,
             speed_unit: null,
@@ -203,7 +203,7 @@ describe("normalizeDawarichDay", () => {
 
   it("joins tracks to selected-day journeys and omits unrelated geometry", () => {
     const unrelated = {
-      ...tracksPageFixture.features[0],
+      ...trackFeatureFixture,
       properties: { id: "track-from-another-day" },
     };
     const result = normalizeDawarichDay({
@@ -213,12 +213,12 @@ describe("normalizeDawarichDay", () => {
       distanceUnit: "km",
       tracks: {
         type: "FeatureCollection",
-        features: [unrelated, tracksPageFixture.features[0]],
+        features: [unrelated, trackFeatureFixture],
       },
     });
 
     expect(result.map.tracks.features).toHaveLength(1);
-    expect(result.map.tracks.features[0].properties).toEqual({ id: "track-fixture-1" });
+    expect(result.map.tracks.features[0]?.properties).toEqual({ id: "track-fixture-1" });
   });
 
   it("strips additive upstream track properties from the browser contract", () => {
@@ -231,7 +231,7 @@ describe("normalizeDawarichDay", () => {
         type: "FeatureCollection",
         features: [
           {
-            ...tracksPageFixture.features[0],
+            ...trackFeatureFixture,
             properties: {
               id: "track-fixture-1",
               device_id: "private-device",
@@ -242,7 +242,7 @@ describe("normalizeDawarichDay", () => {
       },
     });
 
-    expect(result.map.tracks.features[0].properties).toEqual({ id: "track-fixture-1" });
+    expect(result.map.tracks.features[0]?.properties).toEqual({ id: "track-fixture-1" });
     expect(JSON.stringify(result.map.tracks)).not.toMatch(/private-device|private-point/);
   });
 });

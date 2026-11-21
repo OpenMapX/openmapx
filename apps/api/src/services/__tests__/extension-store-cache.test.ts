@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
   values: new Map<string, string>(),
@@ -52,16 +52,21 @@ const empty = JSON.stringify({ entries: [], killSwitch: { removed: [], critical:
 async function atomic(_script: string, count: number, ...args: string[]) {
   expect(count).toBe(2);
   const [sources, catalog, sourcePresent, observedSource, ...rest] = args;
+  assert(sources !== undefined && catalog !== undefined, "both keys");
+  assert(sourcePresent !== undefined && observedSource !== undefined, "the source observation");
   const matches = (key: string, present: string, value: string) =>
     present === "0" ? !ports.values.has(key) : ports.values.get(key) === value;
   if (!matches(sources, sourcePresent, observedSource)) return 0;
   if (rest.length === 1) {
     expect(_script).toBe(EDIT_EXTENSION_SOURCES);
+    const [edited] = rest;
+    assert(edited !== undefined);
     ports.values.delete(catalog);
-    ports.values.set(sources, rest[0]);
+    ports.values.set(sources, edited);
   } else {
     expect(_script).toBe(PUBLISH_EXTENSION_CATALOG);
     const [catalogPresent, observedCatalog, next] = rest;
+    assert(catalogPresent !== undefined && observedCatalog !== undefined && next !== undefined);
     if (!matches(catalog, catalogPresent, observedCatalog)) return 0;
     ports.values.set(catalog, next);
   }
@@ -252,6 +257,7 @@ describe("extension source and catalog coherence", () => {
   it("preserves absent/default removal and duplicate add no-ops without cache invalidation", async () => {
     ports.values.set(catalogKey, old);
     const [defaultSource] = await listExtensionSources();
+    assert.isDefined(defaultSource);
     await removeExtensionSource(defaultSource.url);
     await removeExtensionSource("not a URL");
     expect(ports.values.has(sourceKey)).toBe(false);
@@ -333,7 +339,7 @@ describe("extension source and catalog coherence", () => {
       ...source,
       inert: { x: 1 },
     });
-    expect(ports.eval.mock.calls[0][5]).toBe(persisted);
+    expect(ports.eval.mock.calls[0]?.[5]).toBe(persisted);
   });
   it.each([false, true])(
     "rejects catalog read failures without building (forced: %s)",

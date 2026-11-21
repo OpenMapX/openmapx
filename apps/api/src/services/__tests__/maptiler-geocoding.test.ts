@@ -51,12 +51,12 @@ describe("geocode", () => {
     const results = await maptilerGeocodingService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("maptiler:place.123");
-    expect(results[0].label).toBe("Berlin, Germany");
-    expect(results[0].coordinates).toEqual([13.37, 52.52]);
-    expect(results[0].type).toBe("poi");
-    expect(results[0].confidence).toBe(0.95);
-    expect(results[0].rawCategory).toBe("restaurant");
+    expect(results[0]?.id).toBe("maptiler:place.123");
+    expect(results[0]?.label).toBe("Berlin, Germany");
+    expect(results[0]?.coordinates).toEqual([13.37, 52.52]);
+    expect(results[0]?.type).toBe("poi");
+    expect(results[0]?.confidence).toBe(0.95);
+    expect(results[0]?.rawCategory).toBe("restaurant");
   });
 
   it('maps place_type "address" to "address"', async () => {
@@ -65,7 +65,7 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("address");
+    expect(results[0]?.type).toBe("address");
   });
 
   it('maps place_type "street" to "street"', async () => {
@@ -74,7 +74,7 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("street");
+    expect(results[0]?.type).toBe("street");
   });
 
   it('maps place_type "neighbourhood" to "street"', async () => {
@@ -83,7 +83,7 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("street");
+    expect(results[0]?.type).toBe("street");
   });
 
   it('maps empty place_type to "region"', async () => {
@@ -92,7 +92,7 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it('maps unknown place_type to "region"', async () => {
@@ -101,7 +101,7 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].type).toBe("region");
+    expect(results[0]?.type).toBe("region");
   });
 
   it("returns undefined rawCategory when no categories", async () => {
@@ -110,7 +110,8 @@ describe("geocode", () => {
     const { maptilerGeocodingService } = await loadModule();
 
     const results = await maptilerGeocodingService.geocode("Berlin");
-    expect(results[0].rawCategory).toBeUndefined();
+    expect(results).toHaveLength(1);
+    expect(results[0]?.rawCategory).toBeUndefined();
   });
 
   it("throws when MAPTILER_KEY is not set", async () => {
@@ -142,7 +143,7 @@ describe("request includes POI types", () => {
 
     // MapTiler omits POIs from its default response, so "Köln Hbf" returns only
     // addresses (Düren Hbf, …) unless we explicitly ask for poi.
-    const types = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("types");
+    const types = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams.get("types");
     expect(types?.split(",")).toContain("poi");
   });
 
@@ -152,7 +153,7 @@ describe("request includes POI types", () => {
 
     await maptilerGeocodingService.autocomplete("Köln Hb");
 
-    const types = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("types");
+    const types = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams.get("types");
     expect(types?.split(",")).toContain("poi");
   });
 });
@@ -171,8 +172,8 @@ describe("autocomplete", () => {
     const results = await maptilerGeocodingService.autocomplete("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].label).toBe("Berlin Hbf");
-    expect(results[0].sublabel).toBe("Berlin Hbf, Berlin, Germany");
+    expect(results[0]?.label).toBe("Berlin Hbf");
+    expect(results[0]?.sublabel).toBe("Berlin Hbf, Berlin, Germany");
   });
 
   it("sets iconPath from resolvePoiIconPath when category exists", async () => {
@@ -183,8 +184,8 @@ describe("autocomplete", () => {
     const results = await maptilerGeocodingService.autocomplete("Berlin");
 
     // iconPath should be a string (the resolved icon path for "restaurant")
-    expect(typeof results[0].iconPath).toBe("string");
-    expect(results[0].rawCategory).toBe("restaurant");
+    expect(typeof results[0]?.iconPath).toBe("string");
+    expect(results[0]?.rawCategory).toBe("restaurant");
   });
 
   it("sets iconPath to undefined when no category", async () => {
@@ -194,8 +195,9 @@ describe("autocomplete", () => {
 
     const results = await maptilerGeocodingService.autocomplete("Berlin");
 
-    expect(results[0].iconPath).toBeUndefined();
-    expect(results[0].rawCategory).toBeUndefined();
+    expect(results).toHaveLength(1);
+    expect(results[0]?.iconPath).toBeUndefined();
+    expect(results[0]?.rawCategory).toBeUndefined();
   });
 });
 

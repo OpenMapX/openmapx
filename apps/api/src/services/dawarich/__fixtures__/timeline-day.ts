@@ -1,5 +1,36 @@
 import type { DawarichTimelineDay } from "../contracts";
 
+type TimelineEntry = DawarichTimelineDay["entries"][number];
+
+export const visitEntryFixture = {
+  type: "visit",
+  visit_id: "visit-fixture-1",
+  name: "Fixture Plaza",
+  status: "confirmed",
+  place_id: "place-fixture-1",
+  point_count: 4,
+  tags: [{ id: "tag-fixture-1", name: "fixture" }],
+  started_at: "2026-01-02T08:00:00Z",
+  ended_at: "2026-01-02T08:25:00Z",
+  duration: 25,
+  place: { lat: 45.7, lng: 12.4 },
+} satisfies TimelineEntry;
+
+export const journeyEntryFixture = {
+  type: "journey",
+  track_id: "track-fixture-1",
+  started_at: "2026-01-02T08:25:00Z",
+  ended_at: "2026-01-02T09:07:00Z",
+  duration: 2520,
+  distance: 12.5,
+  distance_unit: "km",
+  dominant_mode: "cycling",
+  avg_speed: 18.2,
+  speed_unit: "km/h",
+  elevation_gain: 25,
+  elevation_loss: 18,
+} satisfies TimelineEntry;
+
 export const timelineDayFixture: DawarichTimelineDay = {
   date: "2026-01-02",
   summary: {
@@ -10,35 +41,7 @@ export const timelineDayFixture: DawarichTimelineDay = {
     time_stationary_minutes: 25,
   },
   bounds: { sw_lng: 12.3, sw_lat: 45.6, ne_lng: 12.5, ne_lat: 45.8 },
-  entries: [
-    {
-      type: "visit",
-      visit_id: "visit-fixture-1",
-      name: "Fixture Plaza",
-      status: "confirmed",
-      place_id: "place-fixture-1",
-      point_count: 4,
-      tags: [{ id: "tag-fixture-1", name: "fixture" }],
-      started_at: "2026-01-02T08:00:00Z",
-      ended_at: "2026-01-02T08:25:00Z",
-      duration: 25,
-      place: { lat: 45.7, lng: 12.4 },
-    },
-    {
-      type: "journey",
-      track_id: "track-fixture-1",
-      started_at: "2026-01-02T08:25:00Z",
-      ended_at: "2026-01-02T09:07:00Z",
-      duration: 2520,
-      distance: 12.5,
-      distance_unit: "km",
-      dominant_mode: "cycling",
-      avg_speed: 18.2,
-      speed_unit: "km/h",
-      elevation_gain: 25,
-      elevation_loss: 18,
-    },
-  ],
+  entries: [visitEntryFixture, journeyEntryFixture],
 };
 
 export const timelineResponseFixture = { days: [timelineDayFixture] };

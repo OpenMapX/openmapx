@@ -75,7 +75,7 @@ describe("GET /api/saved/lists/:id/export", () => {
     expect(res.headers["content-type"]).toContain("application/geo+json");
     const fc = res.json();
     expect(fc.type).toBe("FeatureCollection");
-    expect(fc.features[0].properties.fieldContributors).toEqual(placeRows[0].fieldContributors);
+    expect(fc.features[0].properties.fieldContributors).toEqual(placeRows[0]?.fieldContributors);
     expect(fc.features[0].geometry.coordinates).toEqual([13.3777, 52.5163]);
   });
 

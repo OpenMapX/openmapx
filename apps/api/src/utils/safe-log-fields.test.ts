@@ -461,10 +461,10 @@ describe("Pino defense-in-depth", () => {
       token: "[redacted]",
       err: { name: "TypeError" },
     });
-    expect(record.msg).toContain("Bearer [redacted]");
-    expect(record.msg).toContain("[redacted-url]");
-    expect(record.msg).toContain("kept-json");
-    expect((record.msg as string).length).toBeLessThanOrEqual(2_048);
+    expect(record?.msg).toContain("Bearer [redacted]");
+    expect(record?.msg).toContain("[redacted-url]");
+    expect(record?.msg).toContain("kept-json");
+    expect((record?.msg as string).length).toBeLessThanOrEqual(2_048);
     expect(Buffer.byteLength(JSON.stringify(record), "utf8")).toBeLessThanOrEqual(16 * 1_024);
     expect(capture.chunks.join("")).not.toMatch(
       /fixture-split-bearer-token|fixture-split-url-token|fixture-binding-token|fixture-error-token|fixture-user|fixture-pass|private\?/,
@@ -539,7 +539,7 @@ describe("Pino defense-in-depth", () => {
 
     const [record] = capture.records();
     expect(record).toMatchObject({ integration: "fixture-integration", err: { name: "Error" } });
-    expect(record.msg).toBe("Bearer [redacted]");
+    expect(record?.msg).toBe("Bearer [redacted]");
     expect(capture.chunks.join("")).not.toMatch(
       /fixture-integration-token|fixture-user|fixture-pass/,
     );

@@ -135,7 +135,7 @@ describe("valhallaIsochroneProvider", () => {
         mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
         const { valhallaIsochroneProvider } = await import("../valhalla.js");
         const result = await valhallaIsochroneProvider.isochrone(origin, mode, [minutes]);
-        const [url, options] = mockFetch.mock.calls[0];
+        const [url, options] = mockFetch.mock.calls[0] ?? [];
         expect(url).toContain("/isochrone");
         expect(options.method).toBe("POST");
         expect(options.headers["Content-Type"]).toBe("application/json");
@@ -159,15 +159,15 @@ describe("valhallaIsochroneProvider", () => {
       const { valhallaIsochroneProvider } = await import("../valhalla.js");
       const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [30, 10, 20]);
 
-      expect(JSON.parse(mockFetch.mock.calls[0][1].body).contours).toEqual([
+      expect(JSON.parse(mockFetch.mock.calls[0]?.[1].body).contours).toEqual([
         { time: 10 },
         { time: 20 },
         { time: 30 },
       ]);
       expect(result.contours).toHaveLength(3);
-      expect(result.contours[0].time).toBe(10);
-      expect(result.contours[1].time).toBe(20);
-      expect(result.contours[2].time).toBe(30);
+      expect(result.contours[0]?.time).toBe(10);
+      expect(result.contours[1]?.time).toBe(20);
+      expect(result.contours[2]?.time).toBe(30);
     });
 
     it("filters features by metric === 'time' (ignores distance features)", async () => {
@@ -182,8 +182,8 @@ describe("valhallaIsochroneProvider", () => {
       const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [10, 20]);
 
       expect(result.contours).toHaveLength(2);
-      expect(result.contours[0].time).toBe(10);
-      expect(result.contours[1].time).toBe(20);
+      expect(result.contours[0]?.time).toBe(10);
+      expect(result.contours[1]?.time).toBe(20);
     });
 
     it("handles Polygon geometry type", async () => {
@@ -193,8 +193,8 @@ describe("valhallaIsochroneProvider", () => {
       const { valhallaIsochroneProvider } = await import("../valhalla.js");
       const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [15]);
 
-      expect(result.contours[0].geometry.type).toBe("Polygon");
-      expect(result.contours[0].geometry.coordinates).toEqual(feature.geometry.coordinates);
+      expect(result.contours[0]?.geometry.type).toBe("Polygon");
+      expect(result.contours[0]?.geometry.coordinates).toEqual(feature.geometry.coordinates);
     });
 
     it("handles MultiPolygon geometry type", async () => {
@@ -204,8 +204,8 @@ describe("valhallaIsochroneProvider", () => {
       const { valhallaIsochroneProvider } = await import("../valhalla.js");
       const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [20]);
 
-      expect(result.contours[0].geometry.type).toBe("MultiPolygon");
-      expect(result.contours[0].geometry.coordinates).toEqual(feature.geometry.coordinates);
+      expect(result.contours[0]?.geometry.type).toBe("MultiPolygon");
+      expect(result.contours[0]?.geometry.coordinates).toEqual(feature.geometry.coordinates);
     });
 
     it("throws with status and body text on HTTP error", async () => {
@@ -225,7 +225,7 @@ describe("valhallaIsochroneProvider", () => {
         mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
         const { valhallaIsochroneProvider } = await import("../valhalla.js");
         await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-        const url = mockFetch.mock.calls[0][0] as string;
+        const url = mockFetch.mock.calls[0]?.[0] as string;
         expect(url).toContain("/isochrone?api_key=test-stadia-key");
       } finally {
         if (prev === undefined) delete process.env.VALHALLA_API_KEY;
@@ -255,9 +255,9 @@ it("captures contour receipts and returns no credits for empty geometry", async 
   const { valhallaIsochroneProvider } = await import("../valhalla.js");
   mockFetch.mockResolvedValue(mockOk(makeIsochroneResponse([makePolygonFeature(5)])));
   const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [5]);
-  expect(result.contours[0].contributors).toEqual(result.attributions);
+  expect(result.contours[0]?.contributors).toEqual(result.attributions);
   expect(result.contributors).toEqual(result.attributions);
-  expect(result.contours[0].contributors).not.toBe(result.attributions);
+  expect(result.contours[0]?.contributors).not.toBe(result.attributions);
   mockFetch.mockResolvedValue(mockOk(makeIsochroneResponse([makePolygonFeature(5, "distance")])));
   const empty = await valhallaIsochroneProvider.isochrone(origin, "driving", [5]);
   expect(empty.contours).toEqual([]);

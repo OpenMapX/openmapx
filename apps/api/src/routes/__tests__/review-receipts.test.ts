@@ -92,20 +92,20 @@ it("serializes captured receipts, skips old caches and invalidates both receipt-
     const firstReviews = (await app.inject(`/reviews${query}`)).json().reviews as Review[];
     const firstAggregate = (await app.inject(`/aggregate${query}`)).json()
       .aggregate as ReviewAggregate;
-    expect(firstReviews[0].opinion).toBe("Original opinion");
-    expect(firstReviews[0].metadata?.license).toBe("CC-BY-SA-4.0");
-    expect(firstReviews[0].contributors?.[0]).toMatchObject({
+    expect(firstReviews[0]?.opinion).toBe("Original opinion");
+    expect(firstReviews[0]?.metadata?.license).toBe("CC-BY-SA-4.0");
+    expect(firstReviews[0]?.contributors?.[0]).toMatchObject({
       sourceId: "mangrove",
       name: "Mangrove.reviews",
       url: "https://mangrove.reviews/",
     });
-    expect(firstAggregate.contributors).toEqual(firstReviews[0].contributors);
+    expect(firstAggregate.contributors).toEqual(firstReviews[0]?.contributors);
     const source = integration.manifest.dataSources?.[0];
     if (!source) throw new Error("Missing review source fixture");
     source.name = "New terms";
     integration.enabled = false;
     expect((await app.inject(`/reviews${query}`)).json().reviews[0].contributors).toEqual(
-      firstReviews[0].contributors,
+      firstReviews[0]?.contributors,
     );
     expect((await app.inject(`/aggregate${query}`)).json().aggregate.contributors).toEqual(
       firstAggregate.contributors,

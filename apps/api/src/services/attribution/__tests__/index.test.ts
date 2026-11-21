@@ -64,7 +64,7 @@ describe("AttributionIndex", () => {
     const sbb = idx.getForMotisFile("ch_SBB.gtfs.zip");
     expect(sbb).toBeDefined();
     expect(sbb?.sourceId).toBe("ch_SBB");
-    expect(sbb?.licensing?.bindings[0].license).toEqual({
+    expect(sbb?.licensing?.bindings[0]?.license).toEqual({
       kind: "unknown",
       raw: "OPEN-DATA-CH",
       url: "https://opentransportdata.swiss/license",

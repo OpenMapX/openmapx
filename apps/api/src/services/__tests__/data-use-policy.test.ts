@@ -215,7 +215,7 @@ describe("filterGatedSources", () => {
     };
     const out = filterGatedSources(fc, gated) as typeof fc;
     expect(out.features).toHaveLength(1);
-    expect(out.features[0].properties).toEqual({ source: "eonet", categoryId: "floods" });
+    expect(out.features[0]?.properties).toEqual({ source: "eonet", categoryId: "floods" });
     // No surviving feature with a nulled properties bag.
     expect(out.features.every((f) => f.properties != null)).toBe(true);
   });

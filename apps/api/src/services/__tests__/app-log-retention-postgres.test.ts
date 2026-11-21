@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { db } from "../../db/index.js";
 import {
   appLog,
@@ -35,6 +35,7 @@ async function insertLog(subjectId: string | null, daysAgo: number): Promise<num
       createdAt: new Date(Date.now() - daysAgo * DAY),
     })
     .returning({ id: appLog.id });
+  assert.isDefined(row);
   logs.push(row.id);
   return row.id;
 }
@@ -88,6 +89,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await pruneAppLogs(30);
       expect(await remaining([subjectLog, otherSubjectLog, systemLog])).toEqual([subjectLog]);
 
+      assert.isDefined(holds[0]);
       await releasePreservation({ id: holds[0].id, database: db });
       await pruneAppLogs(30);
       expect(await remaining([subjectLog])).toEqual([]);

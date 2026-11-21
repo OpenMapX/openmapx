@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { EncryptedSourceSpool, janitorEncryptedSourceSpools } from "./encrypted-source-spool.js";
 
 const parents: string[] = [];
@@ -13,6 +13,11 @@ async function parentDirectory(): Promise<string> {
   const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
   parents.push(parent);
   return parent;
+}
+function firstSpoolFile(spool: EncryptedSourceSpool): string {
+  const [file] = spool.filesForTesting();
+  assert.isDefined(file, "the spool holds a file");
+  return file;
 }
 
 describe("EncryptedSourceSpool", () => {
@@ -33,7 +38,7 @@ describe("EncryptedSourceSpool", () => {
       })(),
     });
     expect(yielded).toBe(plaintext.byteLength / (16 * 1024));
-    const stored = await readFile(spool.filesForTesting()[0]);
+    const stored = await readFile(firstSpoolFile(spool));
     expect(stored.includes(plaintext.subarray(0, 64 * 1024))).toBe(false);
 
     const restored: Buffer[] = [];
@@ -102,8 +107,9 @@ describe("EncryptedSourceSpool", () => {
         }),
       ),
     );
+    assert(first && second, "two spooled entries");
     expect(new Set(spool.filesForTesting()).size).toBe(2);
-    await import("node:fs/promises").then(({ rm }) => rm(spool.filesForTesting()[0]));
+    await import("node:fs/promises").then(({ rm }) => rm(firstSpoolFile(spool)));
     await expect(async () => {
       for await (const _chunk of first.source as AsyncIterable<Uint8Array>) void _chunk;
     }).rejects.toMatchObject({ code: "ENOENT" });
@@ -125,7 +131,7 @@ describe("EncryptedSourceSpool", () => {
         yield Buffer.from("x");
       })(),
     });
-    const directory = dirname(spool.filesForTesting()[0]);
+    const directory = dirname(firstSpoolFile(spool));
     await writeFile(
       join(directory, "marker.json"),
       `${JSON.stringify({
@@ -154,7 +160,7 @@ describe("EncryptedSourceSpool", () => {
         yield Buffer.from("x\n");
       })(),
     });
-    const directory = dirname(spool.filesForTesting()[0]);
+    const directory = dirname(firstSpoolFile(spool));
     await writeFile(
       join(directory, "marker.json"),
       `${JSON.stringify({

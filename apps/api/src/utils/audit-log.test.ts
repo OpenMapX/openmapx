@@ -43,7 +43,7 @@ describe("writeAuditLog", () => {
 
     expect(h.insertMock).toHaveBeenCalledTimes(1);
     expect(h.valuesMock).toHaveBeenCalledTimes(1);
-    const values = h.valuesMock.mock.calls[0][0] as Record<string, unknown>;
+    const values = h.valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(values).toMatchObject({
       actorId: "admin-1",
       action: "user.ban",
@@ -57,7 +57,7 @@ describe("writeAuditLog", () => {
   it("maps the loopback sentinel actor to null with a tagged user-agent", async () => {
     await writeAuditLog({ actorId: "loopback", action: "user.role.change" });
 
-    const values = h.valuesMock.mock.calls[0][0] as Record<string, unknown>;
+    const values = h.valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(values.actorId).toBeNull();
     expect(values.userAgent).toBe("unknown (loopback)");
   });

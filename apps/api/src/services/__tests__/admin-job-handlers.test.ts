@@ -167,12 +167,12 @@ describe("admin job handlers", () => {
           payload: raw,
         });
         expect(response.statusCode).toBe(200);
-        const payload = enqueue.mock.calls[0][1];
+        const payload = enqueue.mock.calls[0]?.[1];
         const ctx = dataCtx(payload);
         await handleDataOperationJob(ctx);
         expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, "admin-job.data.update"]]);
         expect(payload).toEqual({ operation: "update", version: 1, input: raw });
-        expect(audit.mock.calls[0][0].details).toEqual(preview.json().input);
+        expect(audit.mock.calls[0]?.[0].details).toEqual(preview.json().input);
       } finally {
         await app.close();
       }
@@ -214,7 +214,7 @@ describe("admin job handlers", () => {
           payload: raw,
         });
         expect(response.statusCode).toBe(200);
-        const payload = enqueue.mock.calls[0][1];
+        const payload = enqueue.mock.calls[0]?.[1];
         expect(payload).toEqual({
           operation: id,
           version: id === "overture-conflate" ? 2 : 1,
@@ -227,11 +227,11 @@ describe("admin job handlers", () => {
         expect(runCliMock).not.toHaveBeenCalled();
         expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, `admin-job.data.${id}`]]);
         if (id === "overture-conflate")
-          expect(audit.mock.calls[0][0].details).toEqual({
+          expect(audit.mock.calls[0]?.[0].details).toEqual({
             region: "europe/germany",
             restart: false,
           });
-        if (id === "clean") expect(audit.mock.calls[0][0].details).toEqual({ target: "osm" });
+        if (id === "clean") expect(audit.mock.calls[0]?.[0].details).toEqual({ target: "osm" });
       } finally {
         await app.close();
       }
@@ -251,7 +251,7 @@ describe("admin job handlers", () => {
             : { headers: { "content-type": "application/json" }, payload: "null" }),
         });
         expect(response.statusCode).toBe(200);
-        const payload = enqueue.mock.calls[0][1];
+        const payload = enqueue.mock.calls[0]?.[1];
         expect(payload).toEqual({ operation: "download-fonts", version: 1, input: {} });
         await handleDataOperationJob(dataCtx(payload));
         expect(runAdminOperationMock.mock.calls.map((call) => call[1])).toEqual([

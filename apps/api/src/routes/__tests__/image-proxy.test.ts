@@ -517,7 +517,7 @@ describe("image-proxy route", () => {
 
     await inject({ referer: ALLOWED_REFERER });
 
-    const sent = new Headers(mockFetchWithRedirects.mock.calls[0][1].headers);
+    const sent = new Headers(mockFetchWithRedirects.mock.calls[0]?.[1].headers);
     expect(sent.get("accept-encoding")).toBe("identity");
     expect(sent.get("user-agent")).toBe("test-agent");
   });

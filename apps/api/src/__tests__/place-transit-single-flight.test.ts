@@ -1,6 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransitOrchestrator } from "../../../../integrations/transit/orchestrator";
 import { createPlaceTransit } from "../../../../integrations/transit/place-transit";
 import { emptyResult } from "../../../../integrations/transit/result-merge";
@@ -148,6 +148,11 @@ describe("partial station discovery", () => {
     freshness: { ...emptyResult(stops).freshness, isPartial: true },
   };
   const keysWith = (fragment: string) => [...values.keys()].filter((k) => k.includes(fragment));
+  const firstKeyWith = (fragment: string) => {
+    const [key] = keysWith(fragment);
+    assert.isDefined(key, `a cache key containing ${fragment}`);
+    return key;
+  };
 
   it("keeps a partial discovery for a minute, outside the long-lived link cache", async () => {
     const search = vi.fn<TransitOrchestrator["searchByNameRaw"]>(async () => partial);
@@ -160,7 +165,7 @@ describe("partial station discovery", () => {
     expect(second).toEqual(first);
     expect(search).toHaveBeenCalledTimes(1);
     expect(keysWith("place-stops:")).toEqual([]);
-    const [retryKey] = keysWith("place-stops-partial:");
+    const retryKey = firstKeyWith("place-stops-partial:");
     expect(ttls.get(retryKey)).toBe(60);
   });
 
@@ -176,7 +181,7 @@ describe("partial station discovery", () => {
 
     expect(recovered.freshness.isPartial).toBeUndefined();
     expect(recovered.data.map((stop) => stop.id)).toEqual(["ms:test"]);
-    const [linkKey] = keysWith("place-stops:");
+    const linkKey = firstKeyWith("place-stops:");
     expect(ttls.get(linkKey)).toBeGreaterThanOrEqual(86_400 * 0.9);
   });
 
@@ -190,7 +195,7 @@ describe("partial station discovery", () => {
     expect(routes.freshness.isPartial).toBe(true);
     expect(facilities.freshness.isPartial).toBe(true);
     for (const fragment of ["place-routes:", "place-facilities:"]) {
-      const [key] = keysWith(fragment);
+      const key = firstKeyWith(fragment);
       expect(ttls.get(key)).toBe(60);
     }
   });

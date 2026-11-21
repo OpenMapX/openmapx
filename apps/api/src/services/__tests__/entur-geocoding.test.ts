@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ADDRESS,
   collection,
@@ -61,7 +61,7 @@ describe("entur autocomplete", () => {
       rawCategory: "railStation",
       coordinates: [10.753051, 59.910357],
     });
-    expect(results[0].transitStop).toMatchObject({
+    expect(results[0]?.transitStop).toMatchObject({
       id: "nsr:StopPlace:59872",
       primaryScheme: "nsr",
       ids: {
@@ -75,7 +75,9 @@ describe("entur autocomplete", () => {
       provider: "entur",
     });
 
-    const { url, options } = http.calls[0];
+    const [call] = http.calls;
+    assert.isDefined(call);
+    const { url, options } = call;
     const parsed = new URL(url);
     expect(parsed.pathname).toBe("/geocoder/v3/autocomplete");
     expect(parsed.searchParams.get("q")).toBe("Oslo S");
@@ -100,8 +102,8 @@ describe("entur autocomplete", () => {
       rawCategory: "cafe",
       coordinates: [10.752276, 59.911116],
     });
-    expect(typeof results[0].iconPath).toBe("string");
-    expect(results[0].transitStop).toBeUndefined();
+    expect(typeof results[0]?.iconPath).toBe("string");
+    expect(results[0]?.transitStop).toBeUndefined();
   });
 });
 
@@ -174,7 +176,9 @@ describe("lookupPlaceById", () => {
       description: "Hub",
     });
 
-    const { url } = http.calls[0];
+    const [call] = http.calls;
+    assert.isDefined(call);
+    const { url } = call;
     const parsed = new URL(url);
     expect(parsed.pathname).toBe("/geocoder/v3/place");
     expect(parsed.searchParams.get("ids")).toBe("NSR:StopPlace:59872");

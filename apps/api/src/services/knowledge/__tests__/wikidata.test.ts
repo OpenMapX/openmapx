@@ -263,7 +263,7 @@ describe("wikidataSource", () => {
 
     // Verify second fetch call has both IDs
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    const secondCallUrl = mockFetch.mock.calls[1][0] as string;
+    const secondCallUrl = mockFetch.mock.calls[1]?.[0] as string;
     expect(secondCallUrl).toContain("Q123");
     expect(secondCallUrl).toContain("Q456");
 
@@ -342,7 +342,7 @@ describe("wikidataSource", () => {
     const result = await wikidataSource.lookup({ wikidata: "Q64" });
     expect(result?.description).toBe("Test place");
 
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = mockFetch.mock.calls[0]?.[0] as string;
     expect(url).toContain("languages=en");
     expect(url).toContain("sitefilter=enwiki");
   });

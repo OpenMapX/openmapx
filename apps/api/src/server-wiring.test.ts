@@ -8,7 +8,7 @@ import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-place
 import { httpError } from "@openmapx/integration-framework";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
@@ -744,7 +744,9 @@ describe("controlled request lifecycle logging", () => {
       statusCode: 200,
       durationMs: 12.5,
     });
-    expect(records[0].requestId).toBe(records[1].requestId);
+    const [received, completed] = records;
+    assert(received && completed, "both request log records");
+    expect(received.requestId).toBe(completed.requestId);
     const output = capture.chunks.join("");
     for (const marker of [
       "private-customer-id",

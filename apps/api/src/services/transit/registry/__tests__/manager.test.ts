@@ -3,7 +3,7 @@ import type {
   ProtocolType,
   RegistryEntry,
 } from "@integrations/transit-dynamic-registry/registry-types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchRegistryEntries = vi.fn<() => Promise<RegistryEntry[]>>();
 const registry = new RegistryManager(fetchRegistryEntries);
@@ -161,6 +161,7 @@ describe("RegistryManager (registry singleton)", () => {
     const providers = registry.listProviders();
     expect(providers.length).toBe(1);
     const p = providers[0];
+    assert.isDefined(p);
     expect(p.slug).toBe("oebb");
     expect(p.label).toBe("Österreichische Bundesbahnen"); // attribution.name takes precedence
     expect(p.url).toBe("https://www.oebb.at");
@@ -175,7 +176,7 @@ describe("RegistryManager (registry singleton)", () => {
     await registry.initialize();
 
     const providers = registry.listProviders();
-    expect(providers[0].label).toBe("SNCF");
-    expect(providers[0].url).toBe("");
+    expect(providers[0]?.label).toBe("SNCF");
+    expect(providers[0]?.url).toBe("");
   });
 });

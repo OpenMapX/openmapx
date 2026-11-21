@@ -101,7 +101,7 @@ describe("public OTP using actual host HTTP error boundaries", () => {
         }),
     );
     expect(await f.client("fi/digitransit-otp")()).toEqual([]);
-    const init = f.fetch.mock.calls[0][1] as RequestInit;
+    const init = f.fetch.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).get("content-type")).toBe("application/json");
     expect(new Headers(init.headers).get("digitransit-subscription-key")).toBe("fixture-key");
     expect(JSON.parse(String(init.body))).toMatchObject({
