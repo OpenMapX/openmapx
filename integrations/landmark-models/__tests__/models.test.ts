@@ -87,12 +87,74 @@ describe("ModelStore", () => {
     store.dispose();
   });
 
+  it("never evicts a nearer wanted model to admit a farther one", async () => {
+    const fetchImpl = vi.fn(async () => glbResponse());
+    const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never, maxResident: 2 });
+    store.request("near", "low", "/near.glb", 0);
+    store.request("mid", "low", "/mid.glb", 1);
+    await settle();
+    // Touch order must not matter: the map touches nearest first.
+    store.touch("near");
+    store.touch("mid");
+    store.request("far", "low", "/far.glb", 2);
+    await settle();
+    expect(store.get("near", "low")).toBeDefined();
+    expect(store.get("mid", "low")).toBeDefined();
+    expect(store.get("far", "low")).toBeUndefined();
+    store.dispose();
+  });
+
+  it("evicts models no longer wanted before wanted ones", async () => {
+    const fetchImpl = vi.fn(async () => glbResponse());
+    const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never, maxResident: 2 });
+    store.request("old", "low", "/old.glb", 0);
+    store.request("b", "low", "/b.glb", 1);
+    await settle();
+    store.touch("old");
+    store.request("b", "low", "/b.glb", 0);
+    store.request("c", "low", "/c.glb", 1);
+    store.cancelExcept(new Set(["b", "c"]));
+    await settle();
+    expect(store.get("old", "low")).toBeUndefined();
+    expect(store.get("b", "low")).toBeDefined();
+    expect(store.get("c", "low")).toBeDefined();
+    store.dispose();
+  });
+
+  it("a 404 skips only that model file, not a newer one of the same asset", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.endsWith("/old.glb") ? new Response("", { status: 404 }) : glbResponse(),
+    );
+    const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
+    store.request("a", "detail", "/old.glb", 0);
+    await settle();
+    expect(store.failure("/old.glb")).toBe("skipped");
+    store.request("a", "low", "/low.glb", 0);
+    store.request("a", "detail", "/new.glb", 0);
+    await settle();
+    expect(store.get("a", "low")).toBeDefined();
+    expect(store.get("a", "detail")).toBeDefined();
+    store.dispose();
+  });
+
+  it("night shading leaves unlit materials alone", async () => {
+    const fetchImpl = vi.fn(async () => glbResponse({ unlit: true }));
+    const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
+    store.request("a", "low", "/a.glb", 0);
+    await settle();
+    const mesh = firstMesh(store, "a");
+    const day = mesh.material;
+    expect(() => store.get("a", "low")?.setNight(true)).not.toThrow();
+    expect(mesh.material).toBe(day);
+    store.dispose();
+  });
+
   it("skips a model after 404", async () => {
     const fetchImpl = vi.fn(async () => new Response("", { status: 404 }));
     const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
     store.request("a", "low", "/a.glb", 0);
     await settle();
-    expect(store.failure("a")).toBe("skipped");
+    expect(store.failure("/a.glb")).toBe("skipped");
     store.request("a", "low", "/a.glb", 0);
     await settle();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -106,13 +168,13 @@ describe("ModelStore", () => {
     const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
     store.request("a", "low", "/a.glb", 0);
     await settle();
-    expect(store.failure("a")).toBe("retrying");
+    expect(store.failure("/a.glb")).toBe("retrying");
     for (let i = 0; i < 5; i++) {
       await vi.advanceTimersByTimeAsync(5_000);
       await settle();
     }
     expect(fetchImpl).toHaveBeenCalledTimes(4);
-    expect(store.failure("a")).toBe("skipped");
+    expect(store.failure("/a.glb")).toBe("skipped");
     store.dispose();
   });
 
@@ -128,7 +190,7 @@ describe("ModelStore", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await settle();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(store.failure("a")).toBe("skipped");
+    expect(store.failure("/a.glb")).toBe("skipped");
     store.dispose();
   });
 
@@ -162,7 +224,7 @@ describe("ModelStore", () => {
       const store = new ModelStore({ apiUrl: "", fetch: fetchImpl as never });
       store.request("a", "low", "/a.glb", 0);
       await settle();
-      expect(store.failure("a")).toBe("skipped");
+      expect(store.failure("/a.glb")).toBe("skipped");
       expect(store.get("a", "low")).toBeUndefined();
       expect(fetchImpl).toHaveBeenCalledTimes(1);
       store.dispose();

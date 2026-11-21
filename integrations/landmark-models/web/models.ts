@@ -157,6 +157,8 @@ function wrapModel(key: string, scene: Group): LoadedModel {
     for (const mesh of meshes) {
       const source = day.get(mesh);
       if (Array.isArray(source) || !source) continue;
+      // Unlit materials have no lighting colours to rework; they keep their day look.
+      if (!(source as MeshStandardMaterial).isMeshStandardMaterial) continue;
       const standard = source as MeshStandardMaterial;
       const colors = new BufferAttribute(nightVertexColors(mesh.geometry, standard), 4);
       const material = new MeshBasicMaterial({
@@ -211,8 +213,11 @@ function wrapModel(key: string, scene: Group): LoadedModel {
 
 /**
  * Loads landmark GLBs from the API with bounded concurrency, keeps a bounded
- * set resident (least recently touched evicted first, with GPU resources
- * disposed) and remembers failures so a broken model is not retried forever.
+ * set resident and remembers failures per model file so a broken model is not
+ * retried forever. Over budget, models no longer wanted go first (least
+ * recently touched), then the wanted ones farthest from the view; a model is
+ * never evicted to admit a farther one. Evicted models' GPU resources are
+ * disposed.
  */
 export class ModelStore {
   private readonly options: Required<Omit<ModelStoreOptions, "fetch">> & { fetch: typeof fetch };
@@ -221,7 +226,10 @@ export class ModelStore {
   private readonly touched = new Map<string, number>();
   private readonly queue = new Map<string, Request>();
   private readonly inFlight = new Map<string, AbortController>();
+  /** Keyed by model path: a new release's file is not blocked by the old one's failure. */
   private readonly failures = new Map<string, Failure>();
+  /** The latest request priority (lower is nearer) of each wanted asset. */
+  private readonly priorities = new Map<string, number>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly listeners = new Set<() => void>();
   private clock = 0;
@@ -239,11 +247,12 @@ export class ModelStore {
 
   request(assetId: string, lod: Lod, path: string, priority: number): void {
     const key = keyOf(assetId, lod);
+    this.priorities.set(assetId, priority);
     if (this.disposed || this.resident.has(key)) {
       this.touch(assetId);
       return;
     }
-    const failure = this.failures.get(assetId);
+    const failure = this.failures.get(path);
     if (failure) return;
     const queued = this.queue.get(key);
     if (queued) queued.priority = priority;
@@ -270,6 +279,8 @@ export class ModelStore {
 
   /** Drop queued and in-flight loads of assets no longer wanted. */
   cancelExcept(wanted: ReadonlySet<string>): void {
+    for (const assetId of this.priorities.keys())
+      if (!wanted.has(assetId)) this.priorities.delete(assetId);
     for (const [key, request] of this.queue)
       if (!wanted.has(request.assetId)) this.queue.delete(key);
     for (const [key, controller] of this.inFlight) {
@@ -281,8 +292,8 @@ export class ModelStore {
     this.pump();
   }
 
-  failure(assetId: string): "none" | "retrying" | "skipped" {
-    return this.failures.get(assetId)?.state ?? "none";
+  failure(path: string): "none" | "retrying" | "skipped" {
+    return this.failures.get(path)?.state ?? "none";
   }
 
   onChange(listener: () => void): () => void {
@@ -325,19 +336,19 @@ export class ModelStore {
   }
 
   private retry(request: Request, kind: "busy" | "error", delayMs: number): void {
-    const previous = this.failures.get(request.assetId);
+    const previous = this.failures.get(request.path);
     const attempts =
       previous?.state === "retrying" && previous.kind === kind ? previous.attempts + 1 : 1;
     const limit = kind === "busy" ? MAX_BUSY_RETRIES : 1;
     if (attempts > limit) {
-      this.failures.set(request.assetId, { state: "skipped" });
+      this.failures.set(request.path, { state: "skipped" });
       this.notify();
       return;
     }
-    this.failures.set(request.assetId, { state: "retrying", attempts, kind });
+    this.failures.set(request.path, { state: "retrying", attempts, kind });
     this.later(delayMs, () => {
       if (this.disposed) return;
-      const current = this.failures.get(request.assetId);
+      const current = this.failures.get(request.path);
       if (current?.state !== "retrying") return;
       this.queue.set(keyOf(request.assetId, request.lod), request);
       this.pump();
@@ -352,7 +363,7 @@ export class ModelStore {
         signal: controller.signal,
       });
       if (response.status === 404) {
-        this.failures.set(request.assetId, { state: "skipped" });
+        this.failures.set(request.path, { state: "skipped" });
         this.notify();
         return;
       }
@@ -366,14 +377,14 @@ export class ModelStore {
       try {
         assertSelfContained(glb);
       } catch {
-        this.failures.set(request.assetId, { state: "skipped" });
+        this.failures.set(request.path, { state: "skipped" });
         this.notify();
         return;
       }
       const gltf = await this.loader.parseAsync(glb, "");
       if (this.disposed || controller.signal.aborted) return;
       const model = wrapModel(key, gltf.scene);
-      this.failures.delete(request.assetId);
+      this.failures.delete(request.path);
       this.resident.set(key, model);
       this.clock += 1;
       this.touched.set(key, this.clock);
@@ -388,18 +399,33 @@ export class ModelStore {
     }
   }
 
+  /** Eviction order: unwanted before wanted, then farther first, then least recently touched. */
+  private rank(key: string): [number, number, number] {
+    const priority = this.priorities.get(key.slice(0, key.lastIndexOf("|")));
+    const age = -(this.touched.get(key) ?? 0);
+    return priority === undefined ? [1, 0, age] : [0, priority, age];
+  }
+
+  private evictsBefore(a: string, b: string): boolean {
+    const [ra, rb] = [this.rank(a), this.rank(b)];
+    for (let i = 0; i < 3; i++) if (ra[i] !== rb[i]) return (ra[i] as number) > (rb[i] as number);
+    return false;
+  }
+
   private evict(keep: string): void {
     const total = () => [...this.resident.values()].reduce((sum, m) => sum + m.bytesEstimate, 0);
     while (this.resident.size > this.options.maxResident || total() > this.options.maxBytes) {
-      let oldest: string | undefined;
+      let victim: string | undefined;
       for (const key of this.resident.keys()) {
         if (key === keep) continue;
-        if (!oldest || (this.touched.get(key) ?? 0) < (this.touched.get(oldest) ?? 0)) oldest = key;
+        if (!victim || this.evictsBefore(key, victim)) victim = key;
       }
-      if (!oldest) return;
-      this.resident.get(oldest)?.dispose();
-      this.resident.delete(oldest);
-      this.touched.delete(oldest);
+      // Everything else is wanted and nearer: the new model gives way instead.
+      if (!victim || this.evictsBefore(keep, victim)) victim = keep;
+      this.resident.get(victim)?.dispose();
+      this.resident.delete(victim);
+      this.touched.delete(victim);
+      if (victim === keep) return;
     }
   }
 }

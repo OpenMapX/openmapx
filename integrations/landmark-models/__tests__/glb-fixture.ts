@@ -11,6 +11,8 @@ export function makeGlb(
     externalImageUri?: string;
     /** Declare a second buffer loaded from a URI. */
     externalBufferUri?: string;
+    /** Mark the material KHR_materials_unlit. */
+    unlit?: boolean;
   } = {},
 ): ArrayBuffer {
   const size = options.size ?? 10;
@@ -38,6 +40,7 @@ export function makeGlb(
   if (options.floodlight) attributes._FLOODLIGHT = 3;
   const json = {
     asset: { version: "2.0" },
+    ...(options.unlit ? { extensionsUsed: ["KHR_materials_unlit"] } : {}),
     scene: 0,
     scenes: [{ nodes: [0] }],
     nodes: [{ mesh: 0 }],
@@ -45,6 +48,7 @@ export function makeGlb(
     materials: [
       {
         name: options.materialName ?? "stone",
+        ...(options.unlit ? { extensions: { KHR_materials_unlit: {} } } : {}),
         pbrMetallicRoughness: {
           baseColorFactor: [0.8, 0.8, 0.8, 1],
           ...(options.externalImageUri ? { baseColorTexture: { index: 0 } } : {}),
