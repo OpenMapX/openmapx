@@ -4,7 +4,7 @@ import type { AddProtocolAction, RasterTileSource } from "maplibre-gl";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { attributedRasterRequestTransform } from "@/integration-api/overlay/rasterResponseProtocol";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { CyclingBaseLayer } from "./CyclingBaseLayer";
 
 const fake = createFakeMap();
@@ -74,7 +74,7 @@ it("credits response suppliers with their texture commits, never HEAD or a newes
     if (!source || spec.type !== "raster") throw new Error("fixture source");
     source.tiles = spec.tiles ?? [];
     source.loadTile = async function (target) {
-      const url = this.tiles[0].replace("{z}", "0").replace("{x}", "0").replace("{y}", "0");
+      const url = nth(this.tiles, 0).replace("{z}", "0").replace("{x}", "0").replace("{y}", "0");
       const params = await attributedRasterRequestTransform()(url);
       if (!params) throw new Error("fixture transform");
       const bytes = await protocol(params, new AbortController());
@@ -121,12 +121,12 @@ it("credits response suppliers with their texture commits, never HEAD or a newes
     const second = source.loadTile(tile as Tile);
     await drain();
     expect(acquired).toHaveLength(2);
-    acquired[1]();
+    nth(acquired, 1)();
     await second;
     flush();
     expect(html()).toContain("CyclOSM");
     expect(html()).not.toContain("Thunderforest");
-    acquired[0]();
+    nth(acquired, 0)();
     await first;
     flush();
     expect(html()).toContain("Thunderforest");
@@ -134,7 +134,7 @@ it("credits response suppliers with their texture commits, never HEAD or a newes
     expect(html()).toContain("OpenStreetMap");
     const unknown = source.loadTile(tile as Tile);
     await drain();
-    acquired[2]();
+    nth(acquired, 2)();
     await unknown;
     flush();
     expect(html()).toBe("");

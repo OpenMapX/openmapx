@@ -25,6 +25,7 @@ import {
 } from "@openmapx/core";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: null }, mapReady: true }),
@@ -445,7 +446,7 @@ describe("DeepLinkManager directions waypoints", () => {
     expect(wp()).toEqual(["", "52.52,13.405,Berlin"]);
 
     reopen(window.location.search);
-    expect(slots()[0].coords).toBeNull();
+    expect(nth(slots(), 0).coords).toBeNull();
     expect(slots()[1]).toMatchObject({ coords: berlin, label: "Berlin" });
   });
 
@@ -462,7 +463,7 @@ describe("DeepLinkManager directions waypoints", () => {
 
     reopen(window.location.search);
     expect(slots()).toHaveLength(3);
-    expect(slots()[1].coords).toBeNull();
+    expect(nth(slots(), 1).coords).toBeNull();
     expect(slots()[2]).toMatchObject({ coords: berlin, label: "Berlin" });
   });
 
@@ -483,7 +484,7 @@ describe("DeepLinkManager directions waypoints", () => {
 
     reopen(window.location.search);
     expect(slots()[2]).toMatchObject({ coords: koeln, label: "Koeln", schedule });
-    expect(slots()[3].schedule).toBeUndefined();
+    expect(nth(slots(), 3).schedule).toBeUndefined();
   });
 
   it("keeps a schedule on the destination after a blank stop", () => {
@@ -578,6 +579,6 @@ describe("DeepLinkManager directions waypoints", () => {
     render(<DeepLinkManager />);
 
     expect(slots()[0]).toMatchObject({ coords: aachen, label: "Aachen" });
-    expect(slots()[1].coords).toBeNull();
+    expect(nth(slots(), 1).coords).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import type { NavigationSessionSnapshot, NavProgress, Route } from "@openmapx/co
 import { createNavigationSessionSnapshot, useNavigationStore } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { CHANNEL_GLOBAL } from "../mobile/mobileShellEnvironment";
 import { OFFLINE_PACKAGE_CHANGED_EVENT } from "../offlineAreas/packageDownload";
 import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
@@ -408,7 +409,7 @@ describe("useNavigationSessionPersistence", () => {
     renderHook(() => useNavigationSessionPersistence(storage, undefined, now));
     act(start);
     await waitFor(() => expect(storage.writes.length).toBe(1));
-    expect(storage.writes[0].packageIds).toEqual([]);
+    expect(nth(storage.writes, 0).packageIds).toEqual([]);
 
     const resolver = fakeResolver();
     shared.discoveredResolver = resolver;
@@ -416,7 +417,7 @@ describe("useNavigationSessionPersistence", () => {
       window.dispatchEvent(new CustomEvent(OFFLINE_PACKAGE_CHANGED_EVENT));
     });
     await waitFor(() => expect(storage.writes.length).toBe(2));
-    expect(storage.writes[1].packageIds).toEqual([packageId]);
+    expect(nth(storage.writes, 1).packageIds).toEqual([packageId]);
   });
 
   it("does not schedule a checkpoint for unrelated store actions", async () => {

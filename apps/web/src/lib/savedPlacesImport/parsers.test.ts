@@ -1,6 +1,7 @@
 import { placesToGeoJson, placesToGpx, placesToKml } from "@openmapx/core/saved-place-export";
 import { strToU8, zipSync } from "fflate";
 import { assert, describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { coordinatesFromGoogleUrl, s2CellCenter } from "./googleUrl";
 import { parseImportFiles, parseImportText } from "./index";
 
@@ -389,10 +390,13 @@ describe("saved place file parsers", () => {
       parse("track.gpx", '<gpx><trk><trkseg><trkpt lat="52" lon="13"/></trkseg></trk></gpx>'),
     ).toThrow("emptyTracks");
     expect(
-      parse(
-        "one.gpx",
-        '<gpx><metadata><name>Trip</name></metadata><wpt lat="52" lon="13"><name>Home</name><type>A</type></wpt></gpx>',
-      )[0].name,
+      nth(
+        parse(
+          "one.gpx",
+          '<gpx><metadata><name>Trip</name></metadata><wpt lat="52" lon="13"><name>Home</name><type>A</type></wpt></gpx>',
+        ),
+        0,
+      ).name,
     ).toBe("Trip");
   });
   it("parses generic GeoJSON points and lat/lon CSV", () => {
@@ -511,10 +515,11 @@ describe("saved place file parsers", () => {
   });
   it("truncates notes without splitting surrogate pairs", () => {
     const note = `${"a".repeat(1999)}😀`;
-    expect(
-      parse("notes.csv", `Title,Note,URL,Comment\nCafe,${note},https://google.com/?q=52%2C13,`)[0]
-        .places[0].note,
-    ).toBe("a".repeat(1999));
+    const lists = parse(
+      "notes.csv",
+      `Title,Note,URL,Comment\nCafe,${note},https://google.com/?q=52%2C13,`,
+    );
+    expect(nth(nth(lists, 0).places, 0).note).toBe("a".repeat(1999));
   });
 });
 

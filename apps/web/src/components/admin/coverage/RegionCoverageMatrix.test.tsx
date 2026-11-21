@@ -1,6 +1,6 @@
 import type { CoverageRegionsResponse } from "@openmapx/core/coverage";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent } from "@/test";
+import { nth, render, screen, userEvent } from "@/test";
 import { RegionCoverageMatrix } from "./RegionCoverageMatrix";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntlWithCatalog());
@@ -116,21 +116,23 @@ describe("RegionCoverageMatrix", () => {
       <RegionCoverageMatrix data={data} selectedRegionId="extract:first" onSelect={onSelect} />,
     );
 
-    await user.click(screen.getAllByRole("button", { name: "Select region First extract" })[0]);
+    await user.click(
+      nth(screen.getAllByRole("button", { name: "Select region First extract" }), 0),
+    );
     expect(onSelect).toHaveBeenCalledWith("extract:first");
 
     await user.click(
-      screen.getAllByRole("button", { name: /^Open Addresses for First extract/ })[0],
+      nth(screen.getAllByRole("button", { name: /^Open Addresses for First extract/ }), 0),
     );
     expect(onSelect).toHaveBeenCalledWith("extract:first", "addresses");
     expect(screen.getByRole("columnheader", { name: "Cameras" })).toBeTruthy();
     const cameras = screen.getAllByRole("button", { name: /^Open Cameras for First extract/ });
-    await user.click(cameras[cameras.length - 1]);
+    await user.click(nth(cameras, -1));
     expect(onSelect).toHaveBeenCalledWith("extract:first", "cameras");
   });
 
   it("words and groups the counts on the narrow layout and the unassigned note", () => {
-    const [row] = data.regions;
+    const row = nth(data.regions, 0);
     render(
       <RegionCoverageMatrix
         data={{

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 const sessionState: { data: unknown; isPending: boolean } = { data: null, isPending: false };
 const deleteCalls: unknown[] = [];
@@ -27,7 +28,7 @@ vi.mock("next-intl/server", async () => {
   const { en: catalogue } = await import("@openmapx/i18n");
   return {
     getTranslations: async (namespace: string) => (key: string) =>
-      (catalogue as unknown as Record<string, Record<string, string>>)[namespace][key],
+      (catalogue as unknown as Record<string, Record<string, string>>)[namespace]?.[key],
   };
 });
 
@@ -69,7 +70,7 @@ describe("DeleteAccountActions", () => {
     fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
 
     const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
-    fireEvent.click(buttons[buttons.length - 1]);
+    fireEvent.click(nth(buttons, -1));
 
     await waitFor(() => expect(deleteCalls).toEqual([{}]));
     await view.findByRole("status");
@@ -84,7 +85,7 @@ describe("DeleteAccountActions", () => {
     expect(view.container.querySelector('input[type="password"]')).toBeNull();
 
     const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
-    fireEvent.click(buttons[buttons.length - 1]);
+    fireEvent.click(nth(buttons, -1));
 
     const signIn = await view.findByText(en.account.freshSignIn.signInAgain);
     expect(view.getByText(en.account.freshSignIn.notice)).toBeInTheDocument();
@@ -100,7 +101,7 @@ describe("DeleteAccountActions", () => {
     const view = renderActions();
     fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
     const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
-    fireEvent.click(buttons[buttons.length - 1]);
+    fireEvent.click(nth(buttons, -1));
 
     expect(await view.findByText(en.account.freshSignIn.impersonating)).toBeInTheDocument();
     expect(view.queryByText(en.account.freshSignIn.signInAgain)).toBeNull();
@@ -112,7 +113,7 @@ describe("DeleteAccountActions", () => {
     fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
 
     const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
-    fireEvent.click(buttons[buttons.length - 1]);
+    fireEvent.click(nth(buttons, -1));
 
     await view.findByRole("alert");
   });

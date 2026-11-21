@@ -12,6 +12,7 @@ import {
   createQueryWrapper,
   createTestQueryClient,
   fireEvent,
+  nth,
   render,
   screen,
   userEvent,
@@ -690,7 +691,7 @@ describe("SearchBar", () => {
       fireEvent.focus(input);
       fireEvent.change(input, { target: { value: query } });
       await screen.findByRole("option", { name: /Grunerstraße 20/ });
-      expect(screen.getAllByRole("option")[0]).toHaveTextContent(address);
+      expect(nth(screen.getAllByRole("option"), 0)).toHaveTextContent(address);
       fireEvent.keyDown(input, { key: "ArrowDown" });
       fireEvent.keyDown(input, { key: "Enter" });
       expect(usePlaceStore.getState().selectedPlace?.address).toContain(address);
@@ -954,7 +955,9 @@ describe("SearchBar", () => {
     expect(input.getAttribute("aria-expanded")).toBe("true");
     expect(input.getAttribute("aria-controls")).toBe(listbox.id);
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(input.getAttribute("aria-activedescendant")).toBe(screen.getAllByRole("option")[0].id);
+    expect(input.getAttribute("aria-activedescendant")).toBe(
+      nth(screen.getAllByRole("option"), 0).id,
+    );
   });
 
   it("keeps the highlight on the same row when later results reorder the list", async () => {
@@ -992,7 +995,7 @@ describe("SearchBar", () => {
 
     const selected = await screen.findByRole("option", { selected: true });
     expect(selected.textContent).toContain("Pizzeria Uno");
-    expect(screen.getAllByRole("option")[0].textContent).toContain("Pizza");
+    expect(nth(screen.getAllByRole("option"), 0).textContent).toContain("Pizza");
   });
 
   it("keeps keyboard selection aligned across category, brand, and place suggestions", async () => {
@@ -1412,7 +1415,7 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "coffee" } });
     await waitFor(() => expect(useBrandSuggestMock.mock.calls.at(-1)?.[0]).toBe("coffee"));
-    const top = screen.getAllByRole("option")[0];
+    const top = nth(screen.getAllByRole("option"), 0);
     expect(top.textContent).toContain("Cafes");
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
@@ -2958,7 +2961,7 @@ it("keeps captured source fields when an autocomplete row becomes a selected pla
   expect(selected?.fieldContributors?.name).toEqual([name]);
   expect(selected?.fieldContributors?.coordinates).toEqual([geometry]);
   name.name = "Changed catalogue";
-  expect(selected?.fieldContributors?.name?.[0].name).toBe("Name supplier");
+  expect(selected?.fieldContributors?.name?.[0]?.name).toBe("Name supplier");
 });
 
 it("retains direct object and address evidence when a MapTiler row is selected", async () => {
@@ -3101,5 +3104,5 @@ it("keeps an address house number in selection and both history records", async 
   expect(usePlaceStore.getState().selectedPlace?.name).toBe(row.label);
   expect(usePlaceStore.getState().selectedPlace?.addressEvidence).toEqual(row.addressEvidence);
   expect(useRecentSearchStore.getState().entries[0]).toBe(row.label);
-  expect(useRecentSearchStore.getState().destinations[0].label).toBe(row.label);
+  expect(nth(useRecentSearchStore.getState().destinations, 0).label).toBe(row.label);
 });

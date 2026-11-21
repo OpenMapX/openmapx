@@ -162,9 +162,12 @@ function directions(url: URL) {
     coordinates: [at],
     maneuver: { type },
   });
+  const [start] = waypoints;
+  const end = waypoints.at(-1);
+  if (!start || !end) throw new Error("A fixture route needs a start and an end");
   const steps = [
-    { ...step("Head east", waypoints[0], "depart"), distance: 4200, duration: 840 },
-    step("You have arrived", waypoints[waypoints.length - 1], "arrive"),
+    { ...step("Head east", start, "depart"), distance: 4200, duration: 840 },
+    step("You have arrived", end, "arrive"),
   ];
   const leg = { contributors: [], distance: 4200, duration: 840, geometry: waypoints, steps };
   return {
@@ -268,12 +271,16 @@ const ADMIN_COOKIE = "openmapx-fixture-admin=1";
 const SESSION_ROUTES = new Set(["/api/me", "/api/auth/get-session"]);
 
 function resolve(url: URL, request: IncomingMessage): ReturnType<Route> | undefined {
-  if (SESSION_ROUTES.has(url.pathname) && request.headers.cookie?.includes(ADMIN_COOKIE))
-    return json(adminFixtures[url.pathname]);
+  const adminFixture = adminFixtures[url.pathname];
+  if (
+    adminFixture !== undefined &&
+    SESSION_ROUTES.has(url.pathname) &&
+    request.headers.cookie?.includes(ADMIN_COOKIE)
+  )
+    return json(adminFixture);
   const route = routes[url.pathname];
   if (route) return route(url);
-  if (url.pathname in adminFixtures && !SESSION_ROUTES.has(url.pathname))
-    return json(adminFixtures[url.pathname]);
+  if (adminFixture !== undefined && !SESSION_ROUTES.has(url.pathname)) return json(adminFixture);
   if (url.pathname.startsWith("/tiles/data/openmapx/")) {
     return { body: encodeVectorTile(), contentType: "application/x-protobuf" };
   }

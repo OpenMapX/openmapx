@@ -6,7 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  cleanup,
+  createTestQueryClient,
+  fireEvent,
+  nth,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
 import { adminTestHistory } from "@/test/adminNavigation";
 import { RequiredServicesPanel } from "../integrations/RequiredServicesPanel";
 import { ServiceCatalog } from "./ServiceCatalog";
@@ -125,9 +134,9 @@ it("confirms immutable image staging and reuses the request key after a lost res
     { serviceIds: ["demo"] },
     { serviceIds: ["demo"] },
   ]);
-  expect(new Headers(staged[0].init.headers).get("idempotency-key")).toBeTruthy();
-  expect(new Headers(staged[0].init.headers).get("idempotency-key")).toBe(
-    new Headers(staged[1].init.headers).get("idempotency-key"),
+  expect(new Headers(nth(staged, 0).init.headers).get("idempotency-key")).toBeTruthy();
+  expect(new Headers(nth(staged, 0).init.headers).get("idempotency-key")).toBe(
+    new Headers(nth(staged, 1).init.headers).get("idempotency-key"),
   );
 });
 const acquisition = { state: "available", reason: null };
@@ -317,7 +326,7 @@ describe("service administration visible behavior with the generated SDK", () =>
       mount(<ServiceCredentials serviceId="demo" />);
       await editCredential();
       await waitFor(() => expect(toast).toHaveBeenCalled());
-      expect(toast.mock.calls[0][0]).toMatch(manual ? /Saved.*Render/ : /queued/i);
+      expect(nth(toast.mock.calls, 0)[0]).toMatch(manual ? /Saved.*Render/ : /queued/i);
     },
   );
   it.each(["success", "error"] as const)(
@@ -1130,7 +1139,7 @@ it("applies the saved service configuration without posting another save and lin
   fireEvent.click(screen.getByRole("button", { name: /^Save \(/ }));
   await screen.findByText(/Configuration saved\./);
   await waitFor(() => expect(screen.getAllByRole("button", { name: "Start" }).length).toBe(2));
-  fireEvent.click(screen.getAllByRole("button", { name: "Start" })[1]);
+  fireEvent.click(nth(screen.getAllByRole("button", { name: "Start" }), 1));
   expect(await screen.findByRole("link", { name: "View job" })).toHaveAttribute(
     "href",
     "/admin/activity?tab=jobs&job=job-1&source=application",

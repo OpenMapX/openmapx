@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
+import { nth } from "@/test";
 import { MapFooter } from "./MapFooter";
 
 vi.mock("next-intl", () => ({
@@ -28,7 +29,7 @@ beforeEach(() => {
 });
 
 it("shows one captured MapTiler credit across owners while earlier basemap credits change", () => {
-  const source = maptilerManifest.dataSources[0];
+  const source = nth(maptilerManifest.dataSources, 0);
   const maptiler = buildAttributionPresentation(
     {
       sourceId: source.sourceId,

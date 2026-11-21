@@ -1,5 +1,6 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
+import { nth } from "@/test";
 import { mergeTransitItineraryPage, selectTransitAlternative } from "./transitPlanPages";
 
 function itinerary(id: string, overrides: Partial<TripItinerary> = {}): TripItinerary {
@@ -161,7 +162,7 @@ describe("transit itinerary page merge", () => {
       expect(merged).toEqual(preference === "fewerTransfers" ? [preferred, a] : [a, preferred]);
       const preferredIndex = preference === "fewerTransfers" ? 0 : 1;
       expect(merged[preferredIndex]).toBe(preferred);
-      expect(merged[preferredIndex].contributors).toBe(preferred.contributors);
+      expect(nth(merged, preferredIndex).contributors).toBe(preferred.contributors);
       expect(incoming).toEqual([a, preferred]);
     },
   );
@@ -189,7 +190,7 @@ describe("selecting complete transit alternatives", () => {
     const result = selectTransitAlternative([a, authoritative], a, ride)!;
     expect(result.index).toBe(1);
     expect(result.itineraries[1]).toBe(authoritative);
-    expect(result.itineraries[1].refreshToken).toBe("own-token");
+    expect(nth(result.itineraries, 1).refreshToken).toBe("own-token");
   });
   it("inserts a new choice without losing the original and refuses stale callbacks", () => {
     const result = selectTransitAlternative([a], a, ride)!;
@@ -226,5 +227,5 @@ it("upgrades a composed journey to its authoritative record when another page su
     preference: "best",
   });
   expect(merged).toEqual([authoritative]);
-  expect(merged[0].refreshToken).toBe("official-token");
+  expect(nth(merged, 0).refreshToken).toBe("official-token");
 });

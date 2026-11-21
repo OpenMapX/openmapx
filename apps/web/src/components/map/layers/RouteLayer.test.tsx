@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -151,7 +151,7 @@ it("publishes each alternate route's captured suppliers into its geometry", () =
   ).toEqual([0, 1]);
   for (const feature of data.features) {
     expect(JSON.parse(feature.properties._mapAttributions)).toEqual(
-      drawn.routes[feature.properties.routeIndex].contributors,
+      nth(drawn.routes, feature.properties.routeIndex).contributors,
     );
   }
   view.unmount();
@@ -233,7 +233,7 @@ it("credits only charge-pin geometry and status, retaining separate preview fiel
     view = render(<RouteLayer />);
     await act(async () => {});
     const data = fake.state.sources.get("ev-stops-source")?.data as GeoJSON.FeatureCollection;
-    const receipt = JSON.parse(data.features[0].properties?._mapAttributions ?? "[]");
+    const receipt = JSON.parse(nth(data.features, 0).properties?._mapAttributions ?? "[]");
     expect(receipt).toEqual([position, status]);
     fake.setRenderedFeatures("ev-stops-layer", data.features as MapGeoJSONFeature[]);
     openCharger.mockClear();
@@ -266,7 +266,7 @@ it("credits only queried chunks of a composed route, independently of total-dura
   // No finite duration: no pill is painted, leaving geometry as the only owner.
   drawn.routes = [
     {
-      ...original[0],
+      ...nth(original, 0),
       duration: Number.NaN,
       geometry: [
         [8, 50],
@@ -276,7 +276,7 @@ it("credits only queried chunks of a composed route, independently of total-dura
       contributors: [a, b],
     },
   ];
-  Object.assign(drawn.routes[0], {
+  Object.assign(nth(drawn.routes, 0), {
     geometryContributors: [
       { startIndex: 0, endIndex: 1, contributors: [a] },
       { startIndex: 1, endIndex: 2, contributors: [b] },
@@ -293,7 +293,7 @@ it("credits only queried chunks of a composed route, independently of total-dura
   ] as const) {
     fake.setRenderedFeatures(
       "route-active-line",
-      indices.map((i) => data.features[i]),
+      indices.map((i) => nth(data.features, i)),
     );
     act(() => {
       fake.emit("render");

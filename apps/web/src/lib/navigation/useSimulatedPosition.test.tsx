@@ -2,6 +2,7 @@ import type { FixInput } from "@openmapx/core";
 import { useNavigationStore } from "@openmapx/core";
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 import { useNavSimStore } from "./navSimStore";
 import { useSimulatedPosition } from "./useSimulatedPosition";
 
@@ -67,7 +68,7 @@ describe("useSimulatedPosition", () => {
 
     vi.advanceTimersByTime(2000);
 
-    const fix = fixes[0];
+    const fix = nth(fixes, 0);
     expect(fix.coords[1]).toBeCloseTo(51.1985, 4);
     expect(fix.speed).toBeCloseTo(14, 5);
     expect(fix.heading).toBeGreaterThan(0);

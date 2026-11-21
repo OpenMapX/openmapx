@@ -3,7 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 import { SharedMapView } from "./SharedMapView";
 
 let fake = createFakeMap();
@@ -55,7 +55,7 @@ it("retains coordinate receipts in the point generation and publishes locally on
   });
   act(() => fake.emit("load"));
   const data = fake.state.sources.get("shared-points-source")?.data as GeoJSON.FeatureCollection;
-  expect(JSON.parse(data.features[0].properties?._mapAttributions)).toEqual([coordinate]);
+  expect(JSON.parse(nth(data.features, 0).properties?._mapAttributions)).toEqual([coordinate]);
   expect(screen.getByTestId("credits")).toHaveTextContent("");
   fake.setRenderedFeatures("shared-points-layer", data.features as MapGeoJSONFeature[]);
   act(() => {
@@ -191,9 +191,9 @@ it("installs initial shared content and restores it without waiting for tiles", 
   });
   const data = () =>
     fake.state.sources.get("shared-points-source")?.data as GeoJSON.FeatureCollection | undefined;
-  expect(data()?.features[0].geometry).toEqual({ type: "Point", coordinates: [8, 50] });
+  expect(data()?.features[0]?.geometry).toEqual({ type: "Point", coordinates: [8, 50] });
   act(() => fake.map.setStyle({} as never));
-  expect(data()?.features[0].geometry).toEqual({ type: "Point", coordinates: [8, 50] });
+  expect(data()?.features[0]?.geometry).toEqual({ type: "Point", coordinates: [8, 50] });
   expect(fake.map.getLayer("shared-points-layer")).toBeDefined();
   view.unmount();
   expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);

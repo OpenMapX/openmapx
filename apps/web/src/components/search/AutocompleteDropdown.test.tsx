@@ -1,7 +1,7 @@
 import type { AutocompleteResult } from "@openmapx/core";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, userEvent } from "@/test";
+import { fireEvent, nth, render, screen, userEvent } from "@/test";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
 const brandPhoto = vi.hoisted(() => ({ data: undefined as unknown }));
@@ -146,7 +146,7 @@ describe("AutocompleteDropdown", () => {
     );
 
     screen.getByText("search.resultTypeStreet");
-    expect(screen.getAllByRole("option")[1].querySelector("p")?.textContent).toBe(
+    expect(nth(screen.getAllByRole("option"), 1).querySelector("p")?.textContent).toBe(
       "Near the old bridge,  upstairs",
     );
   });
@@ -279,8 +279,8 @@ describe("AutocompleteDropdown", () => {
       "search-bar-option-0",
       "search-bar-option-1",
     ]);
-    expect(options[1].getAttribute("aria-selected")).toBe("true");
-    expect(options[0].getAttribute("aria-selected")).toBe("false");
+    expect(nth(options, 1).getAttribute("aria-selected")).toBe("true");
+    expect(nth(options, 0).getAttribute("aria-selected")).toBe("false");
   });
 
   it("describes airports as airports, not transit stops", () => {
@@ -314,7 +314,7 @@ describe("AutocompleteDropdown", () => {
     );
 
     screen.getByText("search.recentSearch");
-    expect(screen.getAllByRole("option")[1].textContent).toBe("Search in this area");
+    expect(nth(screen.getAllByRole("option"), 1).textContent).toBe("Search in this area");
   });
 
   it("moves the highlight with the mouse", async () => {

@@ -3,7 +3,7 @@ import { act, render } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { createFakeMap } from "@/test";
+import { createFakeMap, nth } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -192,7 +192,7 @@ describe("RouteLayer map click binding", () => {
       await makeMapReady(view);
       const bound = calls("on", "click", "route-alt-line");
       expect(bound).toHaveLength(1);
-      const handler = bound[0].handler;
+      const { handler } = nth(bound, 0);
       act(() => handler(altClick()));
       expect(activateRoute).toHaveBeenCalledWith(1);
       view.unmount();
@@ -216,7 +216,7 @@ describe("RouteLayer map click binding", () => {
         expect(calls("on", event, "ev-stops-layer")).toHaveLength(1);
       }
       showEvStopUnderPointer();
-      const handler = calls("on", "click", "ev-stops-layer")[0].handler;
+      const { handler } = nth(calls("on", "click", "ev-stops-layer"), 0);
       act(() => handler({ point: { x: 100, y: 100 } }));
       expect(openCharger).toHaveBeenCalledWith(
         expect.objectContaining({ id: "charger", name: "Charger" }),
@@ -247,8 +247,7 @@ describe("RouteLayer map click binding", () => {
     const view = render(<RouteLayer />);
     try {
       await makeMapReady(view);
-      const handler = calls("on", "click", "route-alt-line")[0]?.handler;
-      expect(handler).toBeDefined();
+      const { handler } = nth(calls("on", "click", "route-alt-line"), 0);
       act(() => handler(altClick()));
       expect(activateRoute).toHaveBeenCalledWith(1);
       activateRoute.mockClear();

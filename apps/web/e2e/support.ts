@@ -70,10 +70,13 @@ export async function countPixels(
       const pixels = context.getImageData(0, 0, image.width, image.height).data;
       let count = 0;
       for (let index = 0; index < pixels.length; index += 4) {
+        // This runs serialized in the page, so it reads channels inline; a
+        // missing one is NaN, which matches no colour.
+        const channel = (offset: number) => pixels[index + offset] ?? Number.NaN;
         if (
-          Math.abs(pixels[index] - color[0]) <= tolerance &&
-          Math.abs(pixels[index + 1] - color[1]) <= tolerance &&
-          Math.abs(pixels[index + 2] - color[2]) <= tolerance
+          Math.abs(channel(0) - color[0]) <= tolerance &&
+          Math.abs(channel(1) - color[1]) <= tolerance &&
+          Math.abs(channel(2) - color[2]) <= tolerance
         ) {
           count += 1;
         }

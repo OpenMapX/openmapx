@@ -16,7 +16,7 @@ it("captures before await and binds hosted style supplier despite unused local t
   const request = captureNativeBasemapRequest(env);
   env.styleProvider = "openmapx";
   const candidate = request.bind(style, false);
-  expect(candidate.sourceContributors.openmaptiles.map((r) => r.sourceId)).toEqual([
+  expect(candidate.sourceContributors.openmaptiles?.map((r) => r.sourceId)).toEqual([
     "openstreetmap",
     "maptiler",
   ]);
@@ -29,9 +29,9 @@ it("selected offline source omits unused online service but preserves acquired s
     basemapProvider: "maptiler",
     tilesUrl: "",
   } as ClientEnv);
-  expect(request.bind(style, true).sourceContributors.openmaptiles.map((r) => r.sourceId)).toEqual([
-    "openstreetmap",
-  ]);
+  expect(request.bind(style, true).sourceContributors.openmaptiles?.map((r) => r.sourceId)).toEqual(
+    ["openstreetmap"],
+  );
   expect(request.bind(style, true).styleContributors.map((r) => r.sourceId)).toEqual([
     "openmaptiles",
   ]);

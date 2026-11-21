@@ -18,6 +18,7 @@ import {
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nth } from "@/test";
 
 type PaddedRouteAheadBounds = typeof import("@openmapx/core").paddedRouteAheadBounds;
 
@@ -112,7 +113,9 @@ function makeRoute(overrides: Partial<Route> = {}): Route {
 
 function start(route: Route, alongMeters = 0, speedMps = 20) {
   useNavigationStore.getState().stopNavigation();
-  useNavigationStore.getState().startGroundNavigation(route, "driving", [geometry[0], geometry[1]]);
+  useNavigationStore
+    .getState()
+    .startGroundNavigation(route, "driving", [nth(geometry, 0), nth(geometry, 1)]);
   useNavigationStore.getState().applyProgress({
     snapped: geometry[0],
     alongMeters,

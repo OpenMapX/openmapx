@@ -6,6 +6,13 @@ import {
   validateOfflineStyleAssets,
 } from "./packageStyle";
 
+/** The resolved style's openmaptiles source; a style without one fails the test. */
+function vectorSource(style: Record<string, unknown>): Record<string, unknown> {
+  const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
+  if (!source) throw new Error("The resolved style has no openmaptiles source");
+  return source;
+}
+
 const packageId = `omp2-${"b".repeat(64)}`;
 const manifest: OfflineMapPackageManifest = {
   schemaVersion: 2,
@@ -119,7 +126,7 @@ describe("offline package styles", () => {
   it("rewrites the configured online style for one or more offline packages", () => {
     const configured = onlineStyle();
     const style = resolveOfflinePackageStyle(configured, [{ packageId, manifest }]);
-    const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
+    const source = vectorSource(style);
 
     expect(source.tiles).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
     expect(source.url).toBeUndefined();
@@ -143,14 +150,12 @@ describe("offline package styles", () => {
       { packageId, manifest },
       { packageId: secondPackageId, manifest: secondManifest },
     ]);
-    const sources = style.sources as Record<string, Record<string, unknown>>;
+    const source = vectorSource(style);
     const layers = style.layers as Array<Record<string, unknown>>;
 
-    expect(sources.openmaptiles.tiles).toEqual([
-      `pmtiles://offline/${packageId},${secondPackageId}/{z}/{x}/{y}`,
-    ]);
-    expect(sources.openmaptiles.url).toBeUndefined();
-    expect(sources.openmaptiles.maxzoom).toBe(12);
+    expect(source.tiles).toEqual([`pmtiles://offline/${packageId},${secondPackageId}/{z}/{x}/{y}`]);
+    expect(source.url).toBeUndefined();
+    expect(source.maxzoom).toBe(12);
     expect(layers).toEqual(onlineStyle().layers);
   });
 
