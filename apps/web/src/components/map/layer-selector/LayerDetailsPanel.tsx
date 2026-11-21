@@ -15,6 +15,7 @@ import {
   useGlobeLightingActive,
 } from "@/components/map/layers/globe/globeLighting";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
+import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { LayerDetailsTile } from "./LayerDetailsTile";
 import { globeLightingPreview, globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -103,6 +104,8 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
   const globeView = useLayerStore((s) => s.globeView);
   const setGlobeView = useLayerStore((s) => s.setGlobeView);
   const globeLighting = useGlobeLightingActive();
+  // Day and night lights the 3D view as well as the globe.
+  const threeDActive = useOverlayLayerVisible("3d-buildings");
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
   const { isAvailable } = useCapabilities();
@@ -198,7 +201,7 @@ export function LayerDetailsPanel({ onClose, variant = "popover" }: LayerDetails
         labelWidth={labelWidth}
         onClick={() => setGlobeView(!globeView)}
       />
-      {globeView ? (
+      {globeView || threeDActive ? (
         <LayerDetailsTile
           item={{ preview: globeLightingPreview, selected: globeLighting }}
           label={t("globeLighting")}

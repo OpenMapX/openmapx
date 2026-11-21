@@ -168,4 +168,16 @@ describe("useCommandSources globe commands", () => {
     });
     expect(useLayerStore.getState().globeLighting).toBe(false);
   });
+
+  it("offers day and night in the 3D view", () => {
+    useLayerStore.setState({ globeView: false, globeLighting: true });
+    const threeD = createOverlayStore({ overlayId: "3d-buildings", extra: {} });
+    act(() => threeD.getState().setLayerVisible(true));
+    const { result } = renderHook(() => useCommandSources({ openShortcutsDialog: () => {} }), {
+      wrapper,
+    });
+    expect(result.current.find((c) => c.id === "layers.globe-lighting")).toBeDefined();
+    act(() => threeD.getState().setLayerVisible(false));
+    expect(result.current.find((c) => c.id === "layers.globe-lighting")).toBeUndefined();
+  });
 });

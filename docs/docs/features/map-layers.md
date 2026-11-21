@@ -41,7 +41,8 @@ package is active, Default and Terrain show the flat street map. The picker also
 
 Zoomed out, the globe sits in dark space with stars and the Milky Way, and a
 blue atmosphere glows around it. **Day and night**, on by default and shown next
-to the globe toggle while the globe is on, lights the globe from the Sun's real position:
+to the globe toggle while the globe or the 3D view is on, lights the globe from the Sun's real position
+(and the 3D view, see [Lighting in the 3D view](#lighting-in-the-3d-view)):
 the night side darkens, a warm band marks the twilight, and the Sun appears in the
 sky. With satellite imagery the night side also shows city lights. The
 **Daylight & time zones** layer draws its own day and night for a time you can
@@ -276,8 +277,22 @@ while such a warning is drawn.
 While the 3D view is on and the map is tilted, well-known buildings and
 structures appear as low-poly 3D models in place of their extruded box, from
 each model's own minimum zoom (13 to 17). Close up, a more detailed version
-loads. Models stand on the 3D terrain of the Terrain base map, and use night
-lighting in the dark theme. Clicking a model opens the building it represents.
+loads. Models stand on the 3D terrain of the Terrain base map, and share the
+3D view's lighting, including night lighting in the dark theme. Clicking a
+model opens the building it represents.
+
+#### Lighting in the 3D view
+
+Buildings and landmarks are lit by one sun. With **Day and night** on (the
+default), it comes from the Sun's real direction at the map centre, so the
+shading moves through the day and turns with the map. In the light theme the
+light warms at golden hour and cools at dusk, but never turns to full night;
+the dark theme always lights the 3D view as night. On a computer, an overcast
+sky at the map centre softens and greys the light. With **Day and night** off,
+or while the **Daylight & time zones** layer is open, a fixed light is used.
+**Day and night** appears next to the globe toggle while the globe or the 3D
+view is on. A soft shadow along each building's base helps it read against the
+street.
 
 The models come from two openly licensed collections, each its own integration:
 

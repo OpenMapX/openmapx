@@ -97,6 +97,15 @@ describe("DesktopQuickSelector", () => {
     expect(useLayerStore.getState().globeLighting).toBe(false);
   });
 
+  it("offers day and night in the 3D view", () => {
+    const threeD = createOverlayStore({ overlayId: "3d-buildings", extra: {} });
+    act(() => threeD.getState().setLayerVisible(true));
+    renderSelector();
+    expect(screen.getByText("layers.globeLighting")).toBeTruthy();
+    act(() => threeD.getState().setLayerVisible(false));
+    expect(screen.queryByText("layers.globeLighting")).toBeNull();
+  });
+
   it("toggles an overlay tile with an explicit 'user' origin", () => {
     renderSelector();
     expect(isOverlayActive("traffic-flow")).toBe(false);

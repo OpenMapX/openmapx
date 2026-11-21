@@ -1309,6 +1309,12 @@ call. Choose the narrowest lifecycle primitive:
   The callback runs often and must be cheap and idempotent: adding a source,
   layer or image emits another `styledata`. Return its unsubscribe from the
   effect, and remove what it added with `removeSlottedLayers`.
+- `useSceneLight` from `@/integration-api/map/sceneLight` reads the shared
+  scene light: the sun's direction, colours and intensities for 3D content,
+  whether it is night, and the globe's sky colours. Custom 3D layers light
+  their models from it (`sunVector` gives the direction), so they match the
+  extruded buildings. Only the host sets MapLibre's light; integrations never
+  call `map.setLight`.
 
 Installation needs a parsed stylesheet, not loaded tiles. Do not gate it, or
 asynchronous image completion, on `isStyleLoaded()` or an idle event: an
