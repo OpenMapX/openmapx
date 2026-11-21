@@ -54,6 +54,9 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
   );
 }
 
+/** Side by side, the globe tiles' labels wrap instead of running into each other. */
+const GLOBE_LABEL_WIDTH = 64;
+
 function GlobeTile() {
   const t = useTranslations("layers");
   const globeView = useLayerStore((s) => s.globeView);
@@ -64,6 +67,7 @@ function GlobeTile() {
       <LayerPreviewTile
         preview={globePreview}
         label={t("globeView")}
+        labelWidth={GLOBE_LABEL_WIDTH}
         selected={globeView}
         onClick={() => setGlobeView(!globeView)}
       />
@@ -81,6 +85,7 @@ function GlobeLightingTile() {
       <LayerPreviewTile
         preview={globeLightingPreview}
         label={t("globeLighting")}
+        labelWidth={GLOBE_LABEL_WIDTH}
         selected={globeLighting}
         onClick={() => setGlobeLighting(!globeLighting)}
       />
