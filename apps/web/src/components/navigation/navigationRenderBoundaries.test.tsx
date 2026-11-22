@@ -28,6 +28,7 @@ vi.mock("@/lib/navigation/useNavigationEngine", () => ({ useNavigationEngine: ()
 vi.mock("@/lib/navigation/useNavCamera", () => ({ useNavCamera: () => {} }));
 vi.mock("@/lib/navigation/useNavAlerts", () => ({ useNavAlerts: () => null }));
 vi.mock("@/lib/navigation/useNavLaneGuidance", () => ({ useNavLaneGuidance: () => {} }));
+vi.mock("@/lib/navigation/useNavLandmarks", () => ({ useNavLandmarks: () => {} }));
 
 // Mutable so individual tests can flip the pending-session-resume case without
 // re-declaring the whole module mock. Referenced only from inside the factory's

@@ -953,7 +953,7 @@ describe("situationToRoadConditionEvent", () => {
     const credit = {
       sourceId: "fi-digitraffic-events",
       name: "TMC 58/1 (22.0)",
-      url: "https://creativecommons.org/licenses/by/4.0/legalcode",
+      url: "https://creativecommons.org/licenses/by/4.0/",
       licensing: {
         version: 1,
         bindings: [

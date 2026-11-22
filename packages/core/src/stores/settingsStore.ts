@@ -24,6 +24,7 @@ const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
 const AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:autoSwitchFasterRoutes";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
+const NAVIGATION_3D_STORAGE_KEY = "openmapx:nav:3d";
 const MAP_LOCAL_SCRIPT_STORAGE_KEY = "openmapx:mapLocalScript";
 const TOUCH_ZOOM_BUTTONS_STORAGE_KEY = "openmapx:touchZoomButtons";
 const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
@@ -113,6 +114,11 @@ function readAutoSwitchFasterRoutes(): boolean {
 /** Chosen TTS voice by SpeechSynthesisVoice.name; null follows the locale default. */
 function readVoiceName(): string | null {
   return getStorage().getString(VOICE_NAME_STORAGE_KEY) || null;
+}
+
+/** The driver's 3D navigation choice, remembered for later trips (off until chosen). */
+function readNavigation3d(): boolean {
+  return getStorage().getString(NAVIGATION_3D_STORAGE_KEY) === "true";
 }
 
 function readMapNorthUp(): boolean {
@@ -210,6 +216,9 @@ interface SettingsState {
   /** Keep the map north-up during navigation instead of the default course-up. */
   mapNorthUp: boolean;
   setMapNorthUp: (v: boolean) => void;
+  /** Driving trips start in the 3D view; set by the navigation menu's 3D view row. */
+  navigation3d: boolean;
+  setNavigation3d: (v: boolean) => void;
   /** Show the map's zoom buttons on touch screens too (off by default; always shown with a mouse). */
   touchZoomButtons: boolean;
   setTouchZoomButtons: (v: boolean) => void;
@@ -315,6 +324,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(VOICE_NAME_STORAGE_KEY, voiceName ?? "");
     set({ voiceName });
   },
+  navigation3d: readNavigation3d(),
+  setNavigation3d: (navigation3d) => {
+    getStorage().setString(NAVIGATION_3D_STORAGE_KEY, String(navigation3d));
+    set({ navigation3d });
+  },
   mapNorthUp: readMapNorthUp(),
   setMapNorthUp: (mapNorthUp) => {
     getStorage().setString(MAP_NORTH_UP_STORAGE_KEY, String(mapNorthUp));
@@ -399,6 +413,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       autoSwitchFasterRoutes: readAutoSwitchFasterRoutes(),
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
+      navigation3d: readNavigation3d(),
       touchZoomButtons: readTouchZoomButtons(),
       rememberMapView: readRememberMapView(),
       showLocalScript: readShowLocalScript(),

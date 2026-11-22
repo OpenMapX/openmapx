@@ -14,6 +14,9 @@ export {
   formatNavigationCue,
   NavigationCueError,
   type NavigationCueIntent,
+  type NavigationCueReference,
+  type NavigationLandmarkCategory,
   resetNavigationCueCache,
+  startsWithReferenceStarter,
 } from "./navigationCues";
 export { createTranslator } from "./translator";

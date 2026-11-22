@@ -361,12 +361,53 @@ mapped `direction` or `stop:direction`. A stop sign mapped on the junction itsel
 applies to the junction's minor roads unless it is tagged `stop=all`. An
 undirected one applies toward the nearest junction. Speed bumps are height
 changes (humps, tables, cushions, rumble strips); chicanes and narrowings are not
-announced. These alerts need a connection.
+announced. Give-way signs follow the same direction rules as stop signs, and
+marked pedestrian crossings without signals are shown too; both appear on
+screen only, without a sound or vibration, because they are frequent in town.
+These alerts need a connection.
 
 Navigation requires usable location fixes. Browser wake locks, speech, background
 behavior, and connectivity depend on the device. Prepare
 [offline coverage](./offline-maps.md) before losing connectivity; offline
 continuation cannot calculate an arbitrary new route.
+
+### 3D navigation
+
+For driving and motorcycle trips, the **3D view** row in the navigation menu
+switches to a 3D navigation view. It is off by default and remembered for your
+next trips. In 3D:
+
+- the camera sits lower and closer, tilts further and looks a few seconds ahead
+  along the route. Before a turn at a junction it keeps to the street and turns
+  with you as you cross the junction;
+- buildings rise from zoom 16.5, as outside navigation, and landmarks, street paint, traffic signals
+  and stop and give-way signs stand in the scene. The route passes behind
+  buildings that stand in front of it and shows faintly through them;
+- the route is drawn at the real width of a lane;
+- close to a turn, the arrow stands raised above the road;
+- where lane guidance is shown and the street detail tiles are available, the
+  recommended lanes are highlighted on the road itself. The highlight appears
+  only where OpenStreetMap's lane tags on the road you are on agree with the
+  routing engine's lane guidance; elsewhere the road stays plain. Along the
+  highlight, the arrow and your position marker are drawn in the highlighted
+  lane. Your location cannot tell lanes apart, so this shows where to be, not
+  which lane you are in; routing and progress still follow the route line.
+
+The car screen (Android Auto) stays flat.
+
+### Voice prompts that name what you see
+
+Close to a turn, a driving or motorcycle prompt can name something you can see
+instead of a distance: "At the second traffic light, turn right" or "At the Aral
+petrol station, turn left". Traffic lights are counted only up to the third,
+from the traffic signals the route is map-matched against, and only where the
+whole stretch to the turn was matched. Landmarks are petrol stations,
+supermarkets and fast-food restaurants by their brand, pharmacies, and churches,
+mosques and synagogues, within 30 m of the turn on the side you turn to and with
+no other of their kind within 150 m. Names are never read out. When neither
+applies, the prompt keeps its distance. Landmarks come from OpenStreetMap
+through the Overpass API, queried by the OpenMapX server for the turn points
+without any user identifier.
 
 ### Search for a stop along your route
 

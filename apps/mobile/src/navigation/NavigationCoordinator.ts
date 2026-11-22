@@ -19,7 +19,9 @@ import type { CommitResult, SessionEffect, SessionRepository } from "../storage/
 import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import { type CoastOrigin, canCoast } from "./ground/GroundCoastingScheduler";
+import type { ReferenceOutcome } from "./ground/GroundReferenceService";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
+import { applyGroundReferences, referenceRequestEffects } from "./ground/groundReferences";
 import type { ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { profileForSession } from "./sessionProfile";
@@ -485,6 +487,7 @@ export class NavigationCoordinator {
         effects: [
           { kind: "start-location", permissionMode: decision },
           { kind: "publish-snapshot", immediate: true },
+          ...referenceRequestEffects(session),
         ],
       }),
       now,
@@ -539,7 +542,14 @@ export class NavigationCoordinator {
     if (!outcome) return errorResponse("mode-unsupported");
     if ("ok" in outcome) return errorResponse(outcome.code);
 
-    const committed = await this.commit(current, outcome, now);
+    const committed = await this.commit(
+      current,
+      {
+        ...outcome,
+        effects: [...(outcome.effects ?? []), ...referenceRequestEffects(outcome.session)],
+      },
+      now,
+    );
     if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
 
@@ -1025,6 +1035,10 @@ export class NavigationCoordinator {
                 },
               }
             : applied;
+        mutation = {
+          ...mutation,
+          effects: [...(mutation.effects ?? []), ...referenceRequestEffects(mutation.session)],
+        };
       }
     }
     if (!mutation) {
@@ -1045,6 +1059,26 @@ export class NavigationCoordinator {
 
     const committed = await this.commit(session, mutation, now);
     if (committed.ok) await this.deps.effects.run(committed.effects);
+  }
+
+  /**
+   * Applies a voice-reference answer. Like a reroute it ran outside the queue;
+   * it is committed only for the session and route it was fetched for.
+   */
+  async applyReferences(outcome: ReferenceOutcome): Promise<void> {
+    await this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (!session) return;
+        const mutation = applyGroundReferences(session, outcome, now);
+        if (!mutation) return;
+        const committed = await this.commit(session, mutation, now);
+        if (committed.ok) await this.deps.effects.run(committed.effects);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "references" });
+      }
+    });
   }
 
   /**

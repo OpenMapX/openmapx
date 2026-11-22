@@ -48,7 +48,7 @@ describe("valhallaManeuverType", () => {
     [24, { type: "keep", modifier: "left" }], // kStayLeft
     [25, { type: "merge" }], // kMerge
     [26, { type: "roundabout" }], // kRoundaboutEnter
-    [27, { type: "roundabout" }], // kRoundaboutExit
+    [27, { type: "exit roundabout" }], // kRoundaboutExit
     [28, { type: "turn", modifier: "straight" }], // kFerryEnter
     [29, { type: "turn", modifier: "straight" }], // kFerryExit
     [30, { type: "turn", modifier: "straight" }], // kTransit

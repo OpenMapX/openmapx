@@ -21,6 +21,13 @@ describe("selectActiveAlert", () => {
     expect(a?.alert.id).toBe("c1"); // camera outranks traffic calming
   });
 
+  it("announces a give-way sign with the stop sign's window", () => {
+    // 50 m ahead at 10 m/s: inside the 60 m window (6 s lead, 40–150 m)
+    const giveWay = { id: "g", type: "give_way", coord: [0, 0], alongMeters: 150 } as RoadAlert;
+    expect(selectActiveAlert([giveWay], 100, 10, [])?.alert.id).toBe("g");
+    expect(selectActiveAlert([{ ...giveWay, alongMeters: 300 }], 100, 10, [])).toBeNull();
+  });
+
   it("skips already-announced alerts", () => {
     expect(selectActiveAlert([cam], 1000, 14, ["c1"])).toBeNull();
   });

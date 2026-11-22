@@ -60,6 +60,14 @@ obstructions in the safe map area. OpenMapX follows that split:
   The car uses the step's sign as lane evidence but not the phone's per-lane OSM
   destinations, which the web fetches separately. The host renders no maneuver
   icon of its own, so these bitmaps also feed the cluster and the notification.
+- Roundabouts are drawn as they are driven. `roundaboutTurnAt` reads the
+  circulation from the engine's driving side, or from how the path bends where
+  the engine names none (Valhalla), and the exit angle from the headings into and
+  out of the roundabout. `roundaboutGlyph` turns that into path data: the phone
+  draws it, and the projection sends it (`maneuverGlyph`) for the car to draw
+  instead of a fixed drawable. The host gets the `…_WITH_ANGLE` roundabout type
+  with that angle and the exit number, and `TYPE_ROUNDABOUT_EXIT_CW`/`_CCW` for
+  the step that leaves the roundabout.
 - Distances use the phone banner's rounding (`measurementDistanceParts`: whole
   metres, one decimal below 10 km, feet below a mile). The projection sends the
   rounded value and unit; the car wraps them as the host's `Distance`, which shows
@@ -408,6 +416,12 @@ build/web/Android Auto/DHU versions, host API, session/revision continuity,
 notification behavior, frame/memory observations and inspected screenshots.
 
 {/* <!-- screenshots: added after DHU verification --> */}
+
+The car surface keeps the flat 2D navigation map. The phone's 3D navigation view
+(raised buildings, lane highlight on the road, raised arrow) never reaches it:
+the car map has its own JavaScript context, and its camera profile is always the
+2D one. A 3D car view is a follow-up that needs its own frame-time and template
+review.
 
 ## Checks and remaining qualification
 

@@ -60,6 +60,8 @@ export type SessionEffect =
   | { kind: "cancel-session-alerts"; sessionId: string }
   | { kind: "publish-snapshot"; immediate: boolean }
   | { kind: "request-reroute"; requestId: string }
+  /** Fetch voice references for the route with this fingerprint. */
+  | { kind: "request-references"; requestId: string }
   | { kind: "request-transit-refresh"; requestId: string };
 
 export interface ScheduledAlertInput {

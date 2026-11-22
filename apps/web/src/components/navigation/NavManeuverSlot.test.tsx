@@ -1,5 +1,5 @@
-import type { Route } from "@openmapx/core";
-import { useNavigationStore } from "@openmapx/core";
+import type { RoundaboutTurn, Route } from "@openmapx/core";
+import { roundaboutGlyph, roundaboutTurnAt, useNavigationStore } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,6 +77,98 @@ describe("NavManeuverSlot", () => {
     cleanup();
     useNavigationStore.getState().stopNavigation();
     useNavLaneGuidanceStore.getState().reset();
+  });
+
+  it("the banner shows the narrowed lanes before a close second turn", () => {
+    const closeTurns = {
+      ...route,
+      steps: [
+        { instruction: "Drive on", distance: 1000, duration: 60, coordinates: [] },
+        {
+          instruction: "Continue",
+          distance: 120,
+          duration: 10,
+          coordinates: [],
+          maneuver: { type: "continue" },
+          lanes: [
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+          ],
+        },
+        {
+          instruction: "Turn right",
+          distance: 300,
+          duration: 30,
+          coordinates: [],
+          maneuver: { type: "turn", modifier: "right" },
+          lanes: [
+            { indications: ["through"], valid: false },
+            { indications: ["through"], valid: false },
+            { indications: ["right"], valid: true, preferred: true, active: "right" },
+          ],
+        },
+        { instruction: "Arrive", distance: 100, duration: 20, coordinates: [] },
+      ],
+    } as unknown as Route;
+    useNavigationStore.setState({ route: closeTurns });
+    const view = mount();
+    const active = [...view.container.querySelectorAll("[data-valid]")].map((cell) =>
+      cell.querySelector('[data-active="true"]') ? "bright" : "dim",
+    );
+    // All three lanes stay usable; only the right one keeps its bright arrow.
+    expect(view.container.querySelectorAll('[data-valid="true"]')).toHaveLength(3);
+    expect(active).toEqual(["dim", "dim", "bright"]);
+  });
+
+  it("circles a roundabout the way traffic does there, out at its exit", () => {
+    // Strausberger Platz, Berlin: in from Alexanderstraße, out at the 2nd exit.
+    const steps = [
+      {
+        instruction: "Turn right onto Alexanderstraße",
+        distance: 1000,
+        duration: 60,
+        maneuver: { type: "turn", modifier: "right" },
+        coordinates: [
+          [13.427501, 52.5185],
+          [13.427641, 52.518406],
+        ],
+      },
+      {
+        instruction: "Enter Strausberger Platz and take the 2nd exit",
+        distance: 74,
+        duration: 11,
+        maneuver: { type: "roundabout" },
+        roundaboutExitCount: 2,
+        bearingBefore: 137,
+        bearingAfter: 146,
+        coordinates: [
+          [13.427641, 52.518406],
+          [13.427859, 52.518257],
+          [13.428045, 52.518177],
+          [13.428345, 52.518135],
+          [13.428592, 52.518146],
+        ],
+      },
+      {
+        instruction: "Exit the roundabout",
+        distance: 400,
+        duration: 30,
+        maneuver: { type: "exit roundabout" },
+        bearingBefore: 73,
+        bearingAfter: 78,
+        coordinates: [
+          [13.428592, 52.518146],
+          [13.429106, 52.518204],
+        ],
+      },
+    ];
+    useNavigationStore.setState({ route: { ...route, steps } as unknown as Route });
+    const view = mount();
+    const turn = roundaboutTurnAt(steps as never, 1);
+    expect(turn?.circulation).toBe("ccw");
+    const drawn = [...view.container.querySelectorAll("svg path")].map((p) => p.getAttribute("d"));
+    expect(drawn).toContain(roundaboutGlyph(turn as RoundaboutTurn).fills[0]);
   });
 
   it("passes the upcoming step's sign to the banner", () => {

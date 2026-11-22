@@ -1,0 +1,64 @@
+{
+  "source": "Valhalla verbal alert and pre-transition instructions, OpenMapX production, driving",
+  "locale": "de-DE",
+  "recorded": "2026-11-22",
+  "routes": 40,
+  "firstWords": {
+    "rechts": {
+      "count": 286,
+      "example": "Rechts auf Alexanderstraße abbiegen."
+    },
+    "links": {
+      "count": 248,
+      "example": "Links auf Klingelhöferstraße abbiegen."
+    },
+    "auf": {
+      "count": 171,
+      "example": "Auf Warschauer Straße, B 96a Richtung Süden fahren."
+    },
+    "leicht": {
+      "count": 98,
+      "example": "Leicht nach links in Richtung B 96 abbiegen."
+    },
+    "in": {
+      "count": 84,
+      "example": "In Richtung Tiergarten nach Links abbiegen."
+    },
+    "an": {
+      "count": 57,
+      "example": "An der Ausfahrt 20 abfahren."
+    },
+    "das": {
+      "count": 37,
+      "example": "Das Ziel befindet sich auf der rechten Seite."
+    },
+    "ziel": {
+      "count": 37,
+      "example": "Ziel befindet sich auf der rechten Seite."
+    },
+    "aus": {
+      "count": 11,
+      "example": "Aus dem Kreisverkehr auf Adalbertstraße ausfahren. Dann Das Ziel wird erreicht."
+    },
+    "richtung": {
+      "count": 7,
+      "example": "Richtung Nordosten fahren. Dann Rechts auf Alexanderstraße abbiegen."
+    },
+    "scharf": {
+      "count": 6,
+      "example": "Scharf nach links auf Reeperbahn abbiegen."
+    },
+    "nach": {
+      "count": 6,
+      "example": "Nach links eine Kehrtwende bei Landshuter Allee machen."
+    },
+    "weiter": {
+      "count": 6,
+      "example": "Weiter auf A 5."
+    },
+    "geradeaus": {
+      "count": 4,
+      "example": "Geradeaus halten auf Am Plärrer."
+    }
+  }
+}

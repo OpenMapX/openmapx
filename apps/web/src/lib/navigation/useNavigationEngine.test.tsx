@@ -174,6 +174,84 @@ describe("useNavigationEngine", () => {
     expect(speak).toHaveBeenCalledWith(expected);
   });
 
+  describe("references", () => {
+    const turn = {
+      instruction: "Written",
+      verbalAlert: "Turn right onto Main Street.",
+      maneuver: { type: "turn", modifier: "right" },
+    } as Partial<RouteStep>;
+
+    /** The near cue for `turn`, ~100 m before it, with the store set up by `prepare`. */
+    function speakWith(
+      prepare: (route: Route) => void,
+      mode: "driving" | "walking" = "driving",
+    ): void {
+      const withSpeech = {
+        ...route,
+        steps: [nth(route.steps, 0), { ...nth(route.steps, 1), ...turn }],
+      };
+      useNavigationStore.getState().startGroundNavigation(withSpeech, mode, [
+        [0, 0],
+        [0.004, 0],
+      ]);
+      const active = useNavigationStore.getState().route;
+      if (active) prepare(active);
+      renderHook(() => useNavigationEngine(disabledResource));
+      act(() => fixHandler?.({ coords: [0.0011, 0], accuracy: 5, speed: 0, timestampMs: 1000 }));
+    }
+
+    const matched = { signalSpans: [{ from: 0, to: 444 }] };
+
+    it("the near cue names the second traffic light", () => {
+      speakWith(() => useNavigationStore.setState({ signalsAlong: [150, 215], ...matched }));
+      expect(speak).toHaveBeenCalledWith(
+        "At the second traffic light, turn right onto Main Street.",
+      );
+    });
+
+    it("the near cue names a landmark when no light qualifies", () => {
+      speakWith((active) =>
+        useNavigationStore.setState({
+          signalsAlong: [],
+          ...matched,
+          landmarkReferences: {
+            route: active,
+            byStep: { 1: { stepIndex: 1, category: "fuel", brand: "Aral" } },
+          },
+        }),
+      );
+      expect(speak).toHaveBeenCalledWith(
+        "At the Aral petrol station, turn right onto Main Street.",
+      );
+    });
+
+    it("ignores landmarks looked up for another route", () => {
+      speakWith(() =>
+        useNavigationStore.setState({
+          landmarkReferences: {
+            route: { ...route },
+            byStep: { 1: { stepIndex: 1, category: "fuel", brand: "Aral" } },
+          },
+        }),
+      );
+      expect(speak).toHaveBeenCalledWith("In 100 metres, Turn right onto Main Street.");
+    });
+
+    it("plain distance when the match window failed", () => {
+      speakWith(() => useNavigationStore.setState({ signalsAlong: [150, 215], signalSpans: [] }));
+      expect(speak).toHaveBeenCalledWith("In 100 metres, Turn right onto Main Street.");
+    });
+
+    it("walking cues never get references", () => {
+      speakWith(
+        () => useNavigationStore.setState({ signalsAlong: [150, 215], ...matched }),
+        "walking",
+      );
+      expect(speak).toHaveBeenCalledTimes(1);
+      expect(speak).not.toHaveBeenCalledWith(expect.stringContaining("traffic light"));
+    });
+  });
+
   it.each(["", "   ", "x".repeat(241)])(
     "preserves navigation progression without unusable speech",
     (instruction) => {

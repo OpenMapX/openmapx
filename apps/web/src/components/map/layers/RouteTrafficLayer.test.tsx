@@ -67,7 +67,7 @@ import type {
   RouteFlowSpan,
   useRouteFlow as routeFlowHook,
 } from "@openmapx/core";
-import { useNavigationStore } from "@openmapx/core";
+import { routeWidthExpression, useNavigationStore } from "@openmapx/core";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { RouteTrafficLayer } from "./RouteTrafficLayer";
@@ -123,14 +123,16 @@ describe("RouteTrafficLayer", () => {
 
     render(<RouteTrafficLayer />);
 
-    expect(fake.state.paint.get("route-traffic-active")?.["line-width"]).toBe(
-      ROUTE_WIDTHS.nav.line,
+    // congestion bands use the same width rule while navigating: the lane-wide
+    // ribbon the navigation route itself is drawn with.
+    expect(fake.state.paint.get("route-traffic-active")?.["line-width"]).toEqual(
+      routeWidthExpression(ROUTE_WIDTHS.nav.line, 3.2, 50),
     );
     expect(fake.state.paint.get("route-traffic-alt")?.["line-width"]).toBe(
       ROUTE_WIDTHS.nav.altLine,
     );
-    expect(fake.state.paint.get("route-traffic-current")?.["line-width"]).toBe(
-      ROUTE_WIDTHS.nav.line,
+    expect(fake.state.paint.get("route-traffic-current")?.["line-width"]).toEqual(
+      routeWidthExpression(ROUTE_WIDTHS.nav.line, 3.2, 50),
     );
 
     // The static source stays untrimmed — the boundary at `alongMeters` is a

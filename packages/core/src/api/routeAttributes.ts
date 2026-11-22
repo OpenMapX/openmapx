@@ -4,6 +4,7 @@ import { extractTrafficSignals } from "../navigation/trafficSignals";
 import type { LngLat } from "../types/geometry";
 import type { MatchResult, TravelMode } from "../types/routing";
 import {
+  type ApiClient,
   type ApiRequestOptions,
   apiClient,
   isApiClientError,
@@ -22,7 +23,25 @@ export interface RouteMatchWindow {
   speedLimitsByPoint: (number | null)[];
   /** ISO country code per matched trace point, aligned like `speedLimitsByPoint`. */
   countriesByPoint: (string | null)[];
+  /** Matched edges that name their OSM way, with their end index into `geometry`. */
+  edges: { wayId: number; endShapeIndex: number }[];
+  /** The matched shape the edges index into. */
+  geometry: LngLat[];
+  /**
+   * The window could not be matched (no map-matcher, network failure, …). Its
+   * span then carries no road attributes: callers must not read the absence of
+   * signals there as "no signals".
+   */
+  failed: boolean;
 }
+
+const EMPTY_WINDOW = {
+  signals: [],
+  speedLimitsByPoint: [],
+  countriesByPoint: [],
+  edges: [],
+  geometry: [],
+} satisfies Omit<RouteMatchWindow, "failed">;
 
 const RETRY_DELAYS_MS = [1000, 3000] as const;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -59,6 +78,7 @@ async function matchWindow(
   trace: LngLat[],
   mode: TravelMode,
   signal?: AbortSignal,
+  client: ApiClient = apiClient,
 ): Promise<MatchResult> {
   const body = {
     trace: trace.map(([lng, lat]) => ({ lat, lng })),
@@ -69,7 +89,7 @@ async function matchWindow(
   };
   for (let attempt = 0; ; attempt++) {
     try {
-      return await apiClient.post<MatchResult>(API_ENDPOINTS.routingMatch, body, {
+      return await client.post<MatchResult>(API_ENDPOINTS.routingMatch, body, {
         signal,
         timeoutMs: REQUEST_TIMEOUT_MS,
       });
@@ -93,11 +113,11 @@ async function matchWindow(
 export async function fetchRouteMatchWindow(
   trace: LngLat[],
   mode: TravelMode,
-  options: Pick<ApiRequestOptions, "signal"> = {},
+  options: Pick<ApiRequestOptions, "signal"> & { client?: ApiClient } = {},
 ): Promise<RouteMatchWindow> {
-  if (trace.length < 2) return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
+  if (trace.length < 2) return { ...EMPTY_WINDOW, failed: false };
   try {
-    const res = await matchWindow(trace, mode, options.signal);
+    const res = await matchWindow(trace, mode, options.signal, options.client);
     // The caller offsets speedLimitsByPoint into a route-geometry-indexed array
     // (window point j → geometry[start + j]), which is only correct when the
     // matcher returns exactly one point per input trace point, in order. If the
@@ -109,8 +129,15 @@ export async function fetchRouteMatchWindow(
       signals: extractTrafficSignals(res),
       speedLimitsByPoint: aligned ? matchSpeedLimitsByPoint(res) : [],
       countriesByPoint: aligned ? matchCountriesByPoint(res) : [],
+      edges: (res.edges ?? []).flatMap((edge) =>
+        typeof edge.wayId === "number"
+          ? [{ wayId: edge.wayId, endShapeIndex: edge.endShapeIndex }]
+          : [],
+      ),
+      geometry: res.geometry ?? [],
+      failed: false,
     };
   } catch {
-    return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
+    return { ...EMPTY_WINDOW, failed: true };
   }
 }

@@ -65,6 +65,12 @@ export interface ManeuverLane {
    * lane. Undefined when unknown.
    */
   active?: string;
+  /**
+   * Set on the phone and car, never by an engine: a recommended lane given up
+   * before a close second maneuver (`narrowForNextManeuver`). It stays usable
+   * but its arrow is not drawn bright.
+   */
+  narrowed?: true;
 }
 
 /** Interchange signage for a maneuver, when the engine supplies it. */

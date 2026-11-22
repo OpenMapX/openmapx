@@ -1,7 +1,7 @@
 import { type PlacePhoto, withPhotoContributors } from "@openmapx/core";
 import type { HttpClient } from "@openmapx/integration-framework";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
-import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { licenceLink, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 /**
  * Flickr license IDs that allow commercial use:
@@ -20,13 +20,12 @@ const LICENSE_NAMES: Record<string, string> = {
   "10": "CC-PDM-1.0",
 };
 
-const LICENSE_URLS: Record<string, string> = {
-  "4": "https://creativecommons.org/licenses/by/2.0",
-  "5": "https://creativecommons.org/licenses/by-sa/2.0",
-  "6": "https://creativecommons.org/licenses/by-nd/2.0",
-  "9": "https://creativecommons.org/publicdomain/zero/1.0",
-  "10": "https://creativecommons.org/publicdomain/mark/1.0",
-};
+/** The shared licence page, so a photo credit links where every other credit naming it does. */
+function licenseUrl(code: string): string | undefined {
+  if (code === "10") return "https://creativecommons.org/publicdomain/mark/1.0/";
+  const name = LICENSE_NAMES[code];
+  return name ? licenceLink(name) : undefined;
+}
 
 interface FlickrPhoto {
   id: string;
@@ -119,7 +118,7 @@ export function createFlickrPhotoProvider(options: {
             authorUrl: `https://www.flickr.com/photos/${photo.owner}`,
             licensing: licensingFromDeclaration(
               license,
-              LICENSE_URLS[photo.license],
+              licenseUrl(photo.license),
               "Flickr photo",
               "imagery",
             ),

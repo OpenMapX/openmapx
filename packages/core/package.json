@@ -114,6 +114,10 @@
       "types": "./src/navigation/api.ts",
       "default": "./src/navigation/api.ts"
     },
+    "./navigation/laneMatch": {
+      "types": "./src/navigation/laneMatch.ts",
+      "default": "./src/navigation/laneMatch.ts"
+    },
     "./licenses": {
       "types": "./src/licenses.ts",
       "default": "./src/licenses.ts"

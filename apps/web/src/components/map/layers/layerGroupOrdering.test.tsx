@@ -127,6 +127,8 @@ describe("layer groups from several components on one map", () => {
       "nav-route-remaining",
       "route-traffic-active",
       "route-traffic-current",
+      // The raised 3D arrow stands in the scene, under the labels (hidden in 2D).
+      "nav-maneuver-arrow-raised",
       "place-labels",
       "nav-maneuver-arrow-casing",
       "nav-maneuver-arrow",

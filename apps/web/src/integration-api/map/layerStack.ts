@@ -23,6 +23,12 @@ export const MAP_LAYER_SLOTS = [
   "route-alt",
   "route-active",
   "route-congestion",
+  // 3D navigation only: the 3D scene (buildings, landmarks, street objects, the
+  // raised turn arrow) moves here so it covers the route where it stands in
+  // front of it, and a faint copy of the route shows through it from the slot
+  // above. Outside 3D navigation the scene stays in `area-overlays`.
+  "scene-3d",
+  "route-ghost",
   "conditions-lines",
   "overlay-points",
   // Above the points, not below them with the other area fills: a heatmap
@@ -264,6 +270,21 @@ export function addLayerWithinBasemap(
         ? layers.find((layer) => layer.type === "line")?.id
         : layers.find((layer) => layer.type === "symbol")?.id;
   map.addLayer(spec, anchor);
+}
+
+/**
+ * Move an existing layer to another slot (3D navigation lifts the 3D scene
+ * above the route). Does nothing for a layer the style does not hold.
+ */
+export function moveLayerToSlot(
+  map: StackMap,
+  layerId: string,
+  slot: MapLayerSlot,
+  order: number,
+): void {
+  if (!map.getLayer(layerId)) return;
+  registerLayerSlot(layerId, slot, order);
+  anchorMapLayers(map);
 }
 
 /** Re-assert the whole canonical order. Idempotent and cheap when nothing moved. */

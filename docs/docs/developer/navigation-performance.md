@@ -75,6 +75,15 @@ the simulator panel so they are visible while you set a run up:
 3. city + reroute: 10 minutes of city driving containing exactly one
    off-route/reroute sequence (use the simulator's off-route toggle).
 4. stationary: 5 minutes parked in follow mode.
+5. city 3D and highway 3D: runs 1 and 2 with the navigation menu's **3D view**
+   row on, against the same runs flat. Leave the camera alone: 3D navigation
+   picks its own zoom and tilt. The 3D runs pass when the whole-run mean frame
+   time stays within 1.5× the flat run and fewer than 1% of frames exceed
+   50 ms. The 30-minute release-gate run is repeated in 3D.
+
+The HUD's p95 covers only the retained window (the last 1,000 frames), not the
+whole run. Compare whole runs by their mean frame time and their share of
+frames over 50 ms.
 
 Use the **same** recording (record/replay in the `?navsim=1` panel) or the same
 generated route before and after an optimization. The simulator shows the loaded

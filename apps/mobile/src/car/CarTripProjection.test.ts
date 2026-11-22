@@ -1,4 +1,9 @@
-import type { GroundFullSnapshot } from "@openmapx/core/navigation";
+import {
+  type GroundFullSnapshot,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutTurnAt,
+} from "@openmapx/core/navigation";
 import { buildCarTripProjection } from "./CarTripProjection";
 
 const snapshot = {
@@ -32,6 +37,43 @@ it("projects upcoming maneuver and active rerouting with ETA", () => {
   const projected = buildCarTripProjection(snapshot, 1000);
   expect(projected?.maneuverDistance).toEqual({ value: 50, unit: "m", decimals: 0 });
   expect(projected?.remainingDistanceDisplay).toEqual({ value: 500, unit: "m", decimals: 0 });
+});
+it("the car card shows the narrowed lanes", () => {
+  const closeTurns = {
+    ...snapshot,
+    route: {
+      steps: [
+        { instruction: "Drive on", maneuver: { type: "depart" }, distance: 800 },
+        {
+          instruction: "Continue",
+          maneuver: { type: "continue" },
+          distance: 120,
+          lanes: [
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+          ],
+        },
+        {
+          instruction: "Turn right",
+          maneuver: { type: "turn", modifier: "right" },
+          distance: 300,
+          lanes: [
+            { indications: ["through"], valid: false },
+            { indications: ["through"], valid: false },
+            { indications: ["right"], valid: true, preferred: true, active: "right" },
+          ],
+        },
+      ],
+    },
+  } as unknown as GroundFullSnapshot;
+  const lanes = buildCarTripProjection(closeTurns, 1000)?.lanes;
+  expect(lanes?.map((cell) => cell.valid)).toEqual([true, true, true]);
+  expect(lanes?.map((cell) => cell.arrows.some((arrow) => arrow.active))).toEqual([
+    false,
+    false,
+    true,
+  ]);
 });
 it("clears terminal state and refuses invalid progress", () => {
   expect(buildCarTripProjection({ ...snapshot, status: "stopped" }, 0)).toBeNull();
@@ -94,6 +136,18 @@ it("projects the upcoming and current steps of a long route", () => {
   });
 });
 
+it("keeps guiding along a step with a very long line", () => {
+  // A long motorway stretch can carry tens of thousands of points.
+  const steps = longRoute();
+  steps[CURRENT] = {
+    instruction: "Continue on the motorway",
+    distance: 400_000,
+    duration: 14_000,
+    coordinates: Array.from({ length: 25_000 }, (_, i) => [8 + i * 1e-4, 50]),
+  };
+  expect(buildCarTripProjection(withSteps(steps), 1000)?.instruction).toBe("Step 2001");
+});
+
 it("ignores a malformed step that the projection does not read", () => {
   const clean = buildCarTripProjection(withSteps(longRoute()), 1000);
   const steps = longRoute();
@@ -139,4 +193,74 @@ it("never touches the steps it does not read", () => {
     maneuverId: `s:${CURRENT + 1}`,
   });
   expect(touched).toBe(0);
+});
+
+// Strausberger Platz, Berlin: in from Alexanderstraße, out at the 2nd exit,
+// as Valhalla returns it (no driving side, enter and exit as two steps).
+const strausberger = [
+  {
+    instruction: "Turn right onto Alexanderstraße",
+    distance: 200,
+    duration: 30,
+    maneuver: { type: "turn", modifier: "right" },
+    coordinates: [
+      [13.427501, 52.5185],
+      [13.427641, 52.518406],
+    ],
+  },
+  {
+    instruction: "Enter Strausberger Platz and take the 2nd exit",
+    distance: 74,
+    duration: 11,
+    roundaboutExitCount: 2,
+    maneuver: { type: "roundabout" },
+    bearingBefore: 137,
+    bearingAfter: 146,
+    coordinates: [
+      [13.427641, 52.518406],
+      [13.427859, 52.518257],
+      [13.428045, 52.518177],
+      [13.428345, 52.518135],
+      [13.428592, 52.518146],
+    ],
+  },
+  {
+    instruction: "Exit the roundabout",
+    distance: 400,
+    duration: 30,
+    maneuver: { type: "exit roundabout" },
+    bearingBefore: 73,
+    bearingAfter: 78,
+    coordinates: [
+      [13.428592, 52.518146],
+      [13.429106, 52.518204],
+    ],
+  },
+  { instruction: "Arrive", distance: 0, duration: 0, maneuver: { type: "arrive" } },
+];
+
+it("tells the car how far round a counter-clockwise roundabout the exit lies", () => {
+  const projection = buildCarTripProjection(withSteps(strausberger, 0), 1000);
+  const turn = roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn;
+  expect(turn.circulation).toBe("ccw");
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238 });
+  // The car draws the phone's glyph, not a drawable that circles the wrong way.
+  expect(projection?.maneuverGlyph).toEqual(roundaboutGlyph(turn));
+});
+
+it("names the roundabout's exit step as leaving it", () => {
+  const projection = buildCarTripProjection(withSteps(strausberger, 1), 1000);
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238, leaving: true });
+  expect(projection?.maneuverGlyph).toEqual(
+    roundaboutGlyph(roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn),
+  );
+});
+
+it("names an exit step a server sent as a second roundabout as leaving it", () => {
+  // Saved routes from before the exit step had its own name carry this shape.
+  const legacy = strausberger.map((step, i) =>
+    i === 2 ? { ...step, maneuver: { type: "roundabout" } } : step,
+  );
+  const projection = buildCarTripProjection(withSteps(legacy, 1), 1000);
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238, leaving: true });
 });

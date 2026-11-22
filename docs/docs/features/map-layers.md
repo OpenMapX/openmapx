@@ -284,7 +284,11 @@ model opens the building it represents.
 #### Forests, street objects and street paint
 
 Close up, the 3D view fills in what the flat map leaves out. Nothing changes on
-the flat map or while you navigate.
+the flat map. While you navigate with the 3D view on (see
+[3D navigation](./directions.md#3d-navigation)), a driving subset stays:
+buildings, landmarks, street paint, traffic signals and stop and give-way signs.
+Forests, street trees, lamps, benches and pitch markings step aside so the road
+ahead stays readable.
 
 - **Forests**: from zoom 16, woods on the base map grow trees, about one every
   11 m, kept clear of roads, buildings and water. Beyond the drawn trees, woods

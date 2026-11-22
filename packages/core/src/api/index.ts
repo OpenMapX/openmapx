@@ -27,6 +27,7 @@ export {
   type MapConfig,
   mapConfigSchema,
 } from "./map-config";
+export { fetchNavigationLandmarks, type NavigationLandmarkResult } from "./navigationLandmarks";
 export {
   connectTimeline,
   disconnectTimeline,

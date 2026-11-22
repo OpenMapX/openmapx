@@ -104,6 +104,28 @@ describe("stepDeadReckon", () => {
     expect(next).toBeGreaterThan(125); // moved back < ~5 m in one 60fps frame
   });
 
+  it("holds rather than steps back for a small correction while moving", () => {
+    // Ahead of a late fix by 5 m at 14 m/s: the projection catches up within
+    // half a second, so the puck waits instead of bouncing back and forth.
+    const next = stepDeadReckon(
+      120,
+      { fixAlongMeters: 115, speedMps: 14, ageSeconds: 0 },
+      1 / 60,
+      opts,
+    );
+    expect(next).toBe(120);
+  });
+
+  it("still corrects a large backward gap while moving", () => {
+    const next = stepDeadReckon(
+      160,
+      { fixAlongMeters: 115, speedMps: 14, ageSeconds: 0 },
+      1 / 60,
+      opts,
+    );
+    expect(next).toBeLessThan(160);
+  });
+
   it("clamps to the route length", () => {
     const next = stepDeadReckon(
       995,

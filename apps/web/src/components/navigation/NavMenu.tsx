@@ -60,7 +60,7 @@ export function NavMenu({ onOpenDirections, onOverview, onOpenSettings }: NavMen
         <OverlayToggleRow
           overlayId="3d-buildings"
           icon={<ApartmentIcon />}
-          label={t("menu.showRaisedBuildings")}
+          label={t("menu.threeDView")}
         />
       )}
       <ToggleRow

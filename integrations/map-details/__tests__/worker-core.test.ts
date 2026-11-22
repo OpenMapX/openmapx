@@ -198,6 +198,61 @@ describe("worker core objects with a failing basemap", () => {
   });
 });
 
+describe("worker core lane highlight", () => {
+  const centre = (): [number, number] => {
+    const n = 2 ** 16;
+    const lng = ((X + 0.5) / n) * 360 - 180;
+    const lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (Y + 0.5)) / n))) * 180) / Math.PI;
+    return [lng, lat];
+  };
+  const request = (wayId: number): Extract<WorkerRequest, { kind: "lane-highlight" }> => ({
+    id: 7,
+    kind: "lane-highlight",
+    streetTemplate: TEMPLATE,
+    wayId,
+    approach: [[centre()[0] - 0.001, centre()[1]], centre()],
+    engineLanes: [{ indications: ["through"], valid: true }],
+    recommended: [0],
+    classes: ["urban", "motorway"],
+  });
+
+  it("reads the street tiles the approach passes and answers with a reason when the way is absent", async () => {
+    const fetchMock = fakeFetch();
+    const core = coreWith(fetchMock);
+    const { response } = await core.handle(request(1));
+    expect(response).toEqual({
+      id: 7,
+      kind: "lane-highlight",
+      answer: { polygons: null, reason: "no-way" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(STREET_URL);
+  });
+
+  it("also reads a tile a sparse approach crosses between two vertices", async () => {
+    const n = 2 ** 16;
+    const lngOf = (x: number) => ((x + 0.5) / n) * 360 - 180;
+    const fetchMock = fakeFetch();
+    const core = coreWith(fetchMock);
+    // One vertex in the tile west of (X, Y), one in the tile east of it.
+    await core.handle({
+      ...request(1),
+      approach: [
+        [lngOf(X - 1), centre()[1]],
+        [lngOf(X + 1), centre()[1]],
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(STREET_URL);
+  });
+
+  it("answers no-ids without street tiles", async () => {
+    const core = coreWith(
+      fakeFetch({ [STREET_URL]: async () => new Response(null, { status: 404 }) }),
+    );
+    const { response } = await core.handle(request(1));
+    expect(response).toMatchObject({ answer: { polygons: null, reason: "no-ids" } });
+  });
+});
+
 describe("encodePaintTile", () => {
   it("keeps a 0.10 m line within 10 % at z18", () => {
     // z18 at 52.5°N: 0.0227 m per 4096-unit; the encoder writes 8192 units per tile.

@@ -62,6 +62,9 @@ describe("offline live-data gating", () => {
       signals: [],
       speedLimitsByPoint: [50, null],
       countriesByPoint: ["DE", "DE"],
+      edges: [],
+      geometry: [],
+      failed: false,
     });
     fetchRoadAlerts.mockReset().mockResolvedValue([]);
     useNavigationStore.getState().stopNavigation();
@@ -142,6 +145,9 @@ describe("offline live-data gating", () => {
         signals: [],
         speedLimitsByPoint: trace.map(() => (nth(trace, 0)[1] === 0 ? 30 : 70)),
         countriesByPoint: trace.map(() => "DE"),
+        edges: [],
+        geometry: [],
+        failed: false,
       };
     });
     useNavigationStore
@@ -196,6 +202,9 @@ describe("offline live-data gating", () => {
           signals: [nth(geometry, 0)],
           speedLimitsByPoint: [90, 90],
           countriesByPoint: ["DE", "DE"],
+          edges: [],
+          geometry: [],
+          failed: false,
         }),
       );
       expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
@@ -212,6 +221,9 @@ describe("offline live-data gating", () => {
             signals: [],
             speedLimitsByPoint: [70, 70],
             countriesByPoint: ["DE", "DE"],
+            edges: [],
+            geometry: [],
+            failed: false,
           }),
         );
         expect(useNavigationStore.getState().liveSpeedLimits).toEqual([70, 70]);

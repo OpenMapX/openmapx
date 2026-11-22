@@ -1,5 +1,7 @@
 import { createOverlayStore, useLayerStore, useNavigationStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   NEUTRAL_SCENE_LIGHT,
   NIGHT_SCENE_LIGHT,
@@ -190,6 +192,40 @@ describe("objects wiring", () => {
     expect(fake.state.counts.addLayer.get(OBJECTS)).toBe(before + 1);
   });
 
+  describe("scene slot", () => {
+    const slotOf = () => layerRegistrations().find((r) => r.id === OBJECTS);
+    afterEach(() => {
+      act(() => useNavigationSceneStore.getState().setActive(false));
+    });
+
+    it("adds its layer in scene-3d while the navigation scene is active", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(slotOf()).toMatchObject({ slot: "scene-3d", order: 13 });
+    });
+
+    it("moves back to area-overlays when it ends", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(slotOf()?.slot).toBe("area-overlays");
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      expect(slotOf()?.slot).toBe("scene-3d");
+      act(() => useNavigationSceneStore.getState().setActive(false));
+      expect(slotOf()).toMatchObject({ slot: "area-overlays", order: 13 });
+    });
+
+    it("a style swap during 3D navigation re-adds it in scene-3d", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<MapDetailsLayer />);
+      await activate();
+      act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
+      await flush();
+      expect(fake.state.layers.has(OBJECTS)).toBe(true);
+      expect(slotOf()?.slot).toBe("scene-3d");
+    });
+  });
+
   it("releases the scene 30 s after deactivation", async () => {
     render(<MapDetailsLayer />);
     await activate();
@@ -322,6 +358,66 @@ describe("objects wiring", () => {
     act(() => useLayerStore.setState({ activeLayer: "satellite" }));
     await flush();
     expect(sceneMock.layer.setSatellite).toHaveBeenLastCalledWith(true);
+  });
+
+  describe("navigation mode", () => {
+    const enter3dNavigation = () =>
+      act(() => {
+        useNavigationStore.setState({ status: "navigating" });
+        useNavigationSceneStore.getState().setActive(true);
+      });
+    afterEach(() => {
+      act(() => {
+        useNavigationSceneStore.getState().setActive(false);
+        useNavigationStore.setState({ status: "idle" });
+      });
+    });
+
+    it("navigation mode requests no basemap templates", async () => {
+      enter3dNavigation();
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(worker.queries.length).toBeGreaterThan(0);
+      expect(worker.queries.every((q) => q.query.basemapTemplates.length === 0)).toBe(true);
+    });
+
+    it("objects layer keeps only signals and signs in navigation mode", async () => {
+      enter3dNavigation();
+      render(<MapDetailsLayer />);
+      await activate();
+      const mixed: Instances[] = (
+        ["lamp_arm", "signal", "stop", "broadleaf", "give_way"] as const
+      ).map((kind) => {
+        const data = new Float32Array(INSTANCE_STRIDE);
+        data.set([100, 100, 0, 3, 3, 0, 0, 1]);
+        return { kind, count: 1, data };
+      });
+      for (const query of worker.queries) query.resolve(mixed);
+      await advance(300);
+      const selection = lastSelection();
+      const kinds = new Set(
+        [...(selection?.near ?? []), ...(selection?.far ?? [])].map((s) => s.kind),
+      );
+      expect([...kinds].sort()).toEqual(["give_way", "signal", "stop"]);
+    });
+
+    it("publishes that street objects draw signals at zoom 16 and above", async () => {
+      enter3dNavigation();
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(useNavigationSceneStore.getState().streetObjectsDrawn).toBe(true);
+    });
+
+    it("navigation mode without street detail keeps buildings and landmarks", async () => {
+      env.streetDetailTilesUrl = "";
+      enter3dNavigation();
+      render(<MapDetailsLayer />);
+      await activate();
+      // The objects scene still runs (activation does not need street detail),
+      // but no street objects stand in for the flat signal icons.
+      expect(sceneMock.created).toBe(1);
+      expect(useNavigationSceneStore.getState().streetObjectsDrawn).toBe(false);
+    });
   });
 
   it("credits OpenStreetMap only while street objects are drawn", async () => {

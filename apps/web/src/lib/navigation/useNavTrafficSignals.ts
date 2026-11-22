@@ -1,14 +1,20 @@
 import {
   appendCountrySpans,
+  approachWayIdsFromWindow,
   cumulativeDistances,
   fetchRouteMatchWindow,
   type LngLat,
+  maneuverStartMeters,
+  positionAt,
+  type Route,
   type RouteCountrySpan,
+  type RouteMatchWindow,
+  signalAlongDistances,
   signalCoordKey,
   useNavigationStore,
   windowGeometry,
 } from "@openmapx/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** Max points per /match request, below the gateway and Valhalla trace caps. */
 const MAX_TRACE_POINTS = 4500;
@@ -23,6 +29,22 @@ function writeLimits(arr: (number | null)[], start: number, perPoint: (number | 
     const idx = start + j;
     if (idx < arr.length && limit !== null) arr[idx] = limit;
   });
+}
+
+/** The maneuvers whose along-route position lies inside `[fromM, toM]`, with their points. */
+function maneuversInWindow(
+  route: Route,
+  cum: number[],
+  fromM: number,
+  toM: number,
+): { stepIndex: number; point: LngLat }[] {
+  const out: { stepIndex: number; point: LngLat }[] = [];
+  for (let stepIndex = 1; stepIndex < route.steps.length; stepIndex++) {
+    const along = maneuverStartMeters(route, stepIndex);
+    if (along < fromM || along > toM) continue;
+    out.push({ stepIndex, point: positionAt(route.geometry, cum, along).point });
+  }
+  return out;
 }
 
 /**
@@ -47,6 +69,15 @@ export function useNavTrafficSignals(): LngLat[] {
   const setLiveSpeedLimits = useNavigationStore((s) => s.setLiveSpeedLimits);
   const setRouteCountries = useNavigationStore((s) => s.setRouteCountries);
   const setLiveDataUnavailable = useNavigationStore((s) => s.setLiveDataUnavailable);
+  const setApproachWayIds = useNavigationStore((s) => s.setApproachWayIds);
+  const setSignalEvidence = useNavigationStore((s) => s.setSignalEvidence);
+  // The approach way of every maneuver matched so far (step index → OSM way id).
+  const approachRef = useRef<Record<number, number>>({});
+  // Signal along-distances and matched spans, accumulated across windows.
+  const signalEvidenceRef = useRef<{
+    signalsAlong: number[] | null;
+    signalSpans: { from: number; to: number }[];
+  }>({ signalsAlong: null, signalSpans: [] });
 
   const [signals, setSignals] = useState<LngLat[]>([]);
   const windowRef = useRef({ nextStart: 0, endMeters: 0, done: true });
@@ -64,15 +95,66 @@ export function useNavTrafficSignals(): LngLat[] {
   // every window advance so we never re-walk the full geometry per fix.
   const cum = useMemo(() => (route ? cumulativeDistances(route.geometry) : []), [route]);
 
+  // Merge one window's approach ways into the route's. A failed window adds
+  // nothing, so its maneuvers get no lane highlight.
+  const publishApproachWays = useCallback(
+    (answer: RouteMatchWindow, forRoute: Route, fromMeters: number, toMeters: number) => {
+      if (answer.failed || answer.edges.length === 0) return;
+      const found = approachWayIdsFromWindow(
+        maneuversInWindow(forRoute, cum, fromMeters, toMeters),
+        answer,
+      );
+      if (Object.keys(found).length === 0) return;
+      approachRef.current = { ...approachRef.current, ...found };
+      setApproachWayIds({ ...approachRef.current });
+    },
+    [cum, setApproachWayIds],
+  );
+
+  // Merge one window's signals, as along-route distances, and record its span
+  // as matched. A failed window adds neither: voice prompts must not count
+  // traffic lights across a stretch nobody looked at.
+  const publishSignalEvidence = useCallback(
+    (answer: RouteMatchWindow, forRoute: Route, fromIndex: number, toIndex: number) => {
+      if (answer.failed) return;
+      const found = signalAlongDistances(
+        answer.signals,
+        forRoute.geometry,
+        cum,
+        fromIndex,
+        toIndex,
+      );
+      const previous = signalEvidenceRef.current;
+      const merged = [...(previous.signalsAlong ?? [])];
+      for (const along of found) {
+        // Overlapping windows report the shared node twice.
+        if (!merged.some((known) => Math.abs(known - along) < 1)) merged.push(along);
+      }
+      signalEvidenceRef.current = {
+        signalsAlong: merged.sort((a, b) => a - b),
+        signalSpans: [
+          ...previous.signalSpans,
+          { from: cum[fromIndex] ?? 0, to: cum[Math.min(toIndex, cum.length - 1)] ?? 0 },
+        ],
+      };
+      setSignalEvidence(signalEvidenceRef.current);
+    },
+    [cum, setSignalEvidence],
+  );
+
   // Reset + fetch the first window whenever the active route changes (fresh
   // start or applied reroute). Clears when there is no usable route.
   useEffect(() => {
     genRef.current += 1;
     fetchingRef.current = false;
     requestControllerRef.current = null;
+    approachRef.current = {};
+    signalEvidenceRef.current = { signalsAlong: null, signalSpans: [] };
+    setSignalEvidence(signalEvidenceRef.current);
     if (connectivity === "offline" || !route || route.geometry.length < 2) {
       setSignals([]);
       setLiveSpeedLimits(null);
+      setApproachWayIds(null);
       // Countries describe the route, not live conditions: going offline keeps
       // them, and a new route clears them with the rest of its derived state.
       if (!route) setRouteCountries(null);
@@ -89,12 +171,14 @@ export function useNavTrafficSignals(): LngLat[] {
     // the spans rather than appending out of route order.
     countriesRef.current = [];
     setLiveSpeedLimits(null);
+    setApproachWayIds(null);
     const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchingRef.current = true;
     fetchRouteMatchWindow(w.trace, mode, { signal: controller.signal })
-      .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
+      .then((answer) => {
         if (genRef.current !== gen) return;
+        const { signals: found, speedLimitsByPoint, countriesByPoint } = answer;
         setSignals(found);
         writeLimits(limitsRef.current, 0, speedLimitsByPoint);
         setLiveSpeedLimits([...limitsRef.current]);
@@ -103,6 +187,8 @@ export function useNavTrafficSignals(): LngLat[] {
           setRouteCountries(countriesRef.current);
         }
         setLiveDataUnavailable(false);
+        publishApproachWays(answer, route, 0, w.endMeters);
+        publishSignalEvidence(answer, route, 0, w.trace.length - 1);
       })
       .catch(() => {
         if (genRef.current === gen) setLiveDataUnavailable(true);
@@ -125,6 +211,10 @@ export function useNavTrafficSignals(): LngLat[] {
     setLiveDataUnavailable,
     setLiveSpeedLimits,
     setRouteCountries,
+    setApproachWayIds,
+    setSignalEvidence,
+    publishApproachWays,
+    publishSignalEvidence,
   ]);
 
   // Advance the window as the driver nears its far edge (long routes only).
@@ -142,9 +232,11 @@ export function useNavTrafficSignals(): LngLat[] {
     // every fix. The fetch holds the lock through retries of this same window.
     const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
+    const windowStartMeters = cum[startIndex] ?? 0;
     fetchRouteMatchWindow(w.trace, mode, { signal: controller.signal })
-      .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
+      .then((answer) => {
         if (genRef.current !== gen) return;
+        const { signals: found, speedLimitsByPoint, countriesByPoint } = answer;
         if (countriesByPoint.length > 0) {
           countriesRef.current = appendCountrySpans(
             countriesRef.current,
@@ -159,6 +251,8 @@ export function useNavTrafficSignals(): LngLat[] {
           setLiveSpeedLimits([...limitsRef.current]);
         }
         setLiveDataUnavailable(false);
+        publishApproachWays(answer, route, windowStartMeters, w.endMeters);
+        publishSignalEvidence(answer, route, startIndex, startIndex + w.trace.length - 1);
         if (found.length === 0) return;
         setSignals((prev) => {
           const seen = new Set(prev.map(signalCoordKey));
@@ -188,6 +282,8 @@ export function useNavTrafficSignals(): LngLat[] {
     setLiveDataUnavailable,
     setLiveSpeedLimits,
     setRouteCountries,
+    publishApproachWays,
+    publishSignalEvidence,
   ]);
 
   return signals;

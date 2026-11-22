@@ -118,6 +118,73 @@ describe("mapAlertElements — stop signs", () => {
     { highway: "residential" },
   );
 
+  it("give_way honours direction like stop", () => {
+    const alerts = mapAlertElements([
+      node(21, 0, -10, { highway: "give_way", direction: "backward" }),
+      sideStreet,
+      mainRoad,
+    ]);
+    expect(flags(byId(alerts, "give_way:21"))).toEqual([
+      { wayId: 2, forward: false, backward: true },
+    ]);
+  });
+
+  it("give_way on a junction node faces the nearer junction", () => {
+    const alerts = mapAlertElements([
+      node(10, 0, 0, { highway: "give_way" }),
+      mainRoad,
+      sideStreet,
+    ]);
+    // Like a stop sign on the junction node: only the minor approach.
+    expect(flags(byId(alerts, "give_way:10"))).toEqual([
+      { wayId: 2, forward: true, backward: false },
+    ]);
+  });
+
+  it("zebra crossing on the route becomes pedestrian_crossing", () => {
+    const alerts = mapAlertElements([
+      node(21, 0, -10, { highway: "crossing", crossing: "zebra" }),
+      sideStreet,
+    ]);
+    expect(flags(byId(alerts, "pedestrian_crossing:21"))).toEqual([
+      { wayId: 2, forward: true, backward: true },
+    ]);
+  });
+
+  it("marked crossings count, signalised ones and crossing:markings=no do not", () => {
+    const at21 = (tags: Record<string, string>) =>
+      byId(
+        mapAlertElements([node(21, 0, -10, { highway: "crossing", ...tags }), sideStreet]),
+        "pedestrian_crossing:21",
+      );
+    expect(at21({ "crossing:markings": "zebra" })).toBeDefined();
+    expect(at21({ crossing: "uncontrolled" })).toBeDefined();
+    // signalised crossing is ignored
+    expect(at21({ crossing: "traffic_signals", "crossing:markings": "zebra" })).toBeUndefined();
+    // crossing:markings=no is ignored
+    expect(at21({ "crossing:markings": "no" })).toBeUndefined();
+    expect(at21({ crossing: "unmarked" })).toBeUndefined();
+  });
+
+  it("asks Overpass for give-way signs and crossings", () => {
+    const query = buildNavigationAlertsQuery({ south: 0, west: 0, north: 1, east: 1 });
+    expect(query).toContain('node["highway"="give_way"]');
+    expect(query).toContain('node["highway"="crossing"]');
+  });
+
+  it("downloads only marked, unsignalised crossings, not every crossing and its ways", () => {
+    const query = buildNavigationAlertsQuery({ south: 0, west: 0, north: 1, east: 1 });
+    // Every crossing node pulls its footways and roads into the answer; in a
+    // dense city that risks the timeout that would drop every other alert.
+    expect(query).not.toContain('node["highway"="crossing"](0,0,1,1)');
+    expect(query).toContain(
+      'node["highway"="crossing"]["crossing"~"^(zebra|marked|uncontrolled)$"](0,0,1,1)',
+    );
+    expect(query).toContain(
+      'node["highway"="crossing"]["crossing:markings"]["crossing:markings"!="no"]["crossing"!="traffic_signals"](0,0,1,1)',
+    );
+  });
+
   it("applies a stop on a junction node only to the minor approach", () => {
     const alerts = mapAlertElements([node(10, 0, 0, { highway: "stop" }), mainRoad, sideStreet]);
     expect(flags(byId(alerts, "stop:10"))).toEqual([

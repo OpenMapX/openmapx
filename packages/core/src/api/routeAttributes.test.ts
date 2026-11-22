@@ -69,7 +69,7 @@ describe("fetchRouteMatchWindow", () => {
       }),
     );
 
-    expect(await fetchRouteMatchWindow(trace, "driving")).toEqual({
+    expect(await fetchRouteMatchWindow(trace, "driving")).toMatchObject({
       signals: [trace[1]],
       speedLimitsByPoint: [30, null, 50],
       countriesByPoint: ["DE", null, "NL"],
@@ -81,7 +81,7 @@ describe("fetchRouteMatchWindow", () => {
     async (points) => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ ...matched, points })));
 
-      expect(await fetchRouteMatchWindow(trace, "driving")).toEqual({
+      expect(await fetchRouteMatchWindow(trace, "driving")).toMatchObject({
         signals: [trace[1]],
         speedLimitsByPoint: [],
         countriesByPoint: [],
@@ -117,8 +117,41 @@ describe("fetchRouteMatchWindow", () => {
       signals: [],
       speedLimitsByPoint: [],
       countriesByPoint: [],
+      edges: [],
+      geometry: [],
+      failed: true,
     });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("503 from /match marks the window failed and publishes no ids", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse({ error: "no map-matcher" }, 503))),
+    );
+    const pending = fetchRouteMatchWindow(trace, "driving");
+    await vi.advanceTimersByTimeAsync(4000);
+    const result = await pending;
+    expect(result.failed).toBe(true);
+    expect(result.edges).toEqual([]);
+  });
+
+  it("returns the matched shape and the edges that carry a way id", async () => {
+    const withWays: MatchResult = {
+      ...matched,
+      edges: matched.edges.map((edge, i) => (i === 1 ? edge : { ...edge, wayId: 100 + i })),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse(withWays))),
+    );
+    const result = await fetchRouteMatchWindow(trace, "driving");
+    expect(result.failed).toBe(false);
+    expect(result.geometry).toEqual(matched.geometry);
+    expect(result.edges).toEqual([
+      { wayId: 100, endShapeIndex: 1 },
+      { wayId: 102, endShapeIndex: 3 },
+    ]);
   });
 
   it("recovers the same trace after network and temporary provider failures with backoff", async () => {

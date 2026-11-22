@@ -25,6 +25,7 @@ vi.mock("@/lib/navigation/useNavigationEngine", () => ({ useNavigationEngine: ()
 vi.mock("@/lib/navigation/useNavCamera", () => ({ useNavCamera: () => {} }));
 vi.mock("@/lib/navigation/useNavAlerts", () => ({ useNavAlerts: () => null }));
 vi.mock("@/lib/navigation/useNavLaneGuidance", () => ({ useNavLaneGuidance: () => {} }));
+vi.mock("@/lib/navigation/useNavLandmarks", () => ({ useNavLandmarks: () => {} }));
 vi.mock("@/lib/navigation/useNavigationSessionPersistence", () => ({
   useNavigationSessionPersistence: () => ({
     pending: null,

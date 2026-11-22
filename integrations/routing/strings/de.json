@@ -1,1 +1,16 @@
-{ "name": "Routenplanung", "description": "Punkt-zu-Punkt-Routenplanung und Wegbeschreibungen" }
+{
+  "name": "Routenplanung",
+  "description": "Punkt-zu-Punkt-Routenplanung und Wegbeschreibungen",
+  "dataSources": {
+    "overpass": {
+      "purpose": "OpenStreetMap-Straßen- und Ortsdaten für die Navigation: Annäherungswarnungen (Blitzer, Stopp- und Vorfahrtsschilder, Überwege), Spurführung an Autobahnknoten und Orientierungspunkte in Sprachansagen",
+      "dataSent": "Aus der Route gebildete Overpass-QL-Abfragen: Begrenzungsrahmen entlang der Route für Warnungen, kurze Routenabschnitte an Autobahn-Entscheidungspunkten für die Spurführung und Manöverpunkte für Orientierungspunkte. Vom OpenMapX-Server ohne Nutzerkennung gesendet",
+      "dataReceived": "OSM-Knoten und -Wege mit Tags und Koordinaten (Verkehrszeichen, Überwege, Spur-Tags, Tankstellen, Gotteshäuser, Apotheken, Supermärkte, Fast-Food-Marken)"
+    },
+    "overpass-kumi": {
+      "purpose": "Overpass-Mirror als Fallback bei Ratenbegrenzung (Kumi Systems e.U., Österreich) für Navigationswarnungen, Spurführung und Orientierungspunkte; wird nur verwendet, wenn der primäre Overpass-Endpunkt ratenbegrenzt oder nicht verfügbar ist",
+      "dataSent": "Dieselben Overpass-QL-Abfragen wie beim primären Endpunkt (Begrenzungsrahmen der Route, Routenabschnitte an Autobahn-Entscheidungspunkten, Manöverpunkte); serverseitig nur dann gesendet, wenn der primäre Endpunkt nicht verfügbar ist",
+      "dataReceived": "OSM-Knoten und -Wege mit Tags und Koordinaten"
+    }
+  }
+}

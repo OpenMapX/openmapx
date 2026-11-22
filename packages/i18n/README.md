@@ -16,7 +16,7 @@ Browser code imports `@openmapx/i18n/locale` (locales, `resolveLocale`) and
 bundles do not carry every catalogue; a Biome rule enforces this in the web app
 and integrations. The compact cue module reads
 `generated/navigation-cue-messages.json`, a copy of the cue messages listed in
-`NAVIGATION_CUE_KEYS`. After editing any of those 17 `navigation` messages, rerun
+`NAVIGATION_CUE_KEYS`. After editing any of those 19 `navigation` messages, rerun
 the generator above, or `navigationCuesCompact.test.ts` fails.
 
 Web components use `next-intl` (`useTranslations` and `useFormatter`). Headless

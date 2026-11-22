@@ -3,6 +3,7 @@
 import {
   countryAtMeters,
   guidanceApproachMeters,
+  guidanceLanesForStep,
   maneuverStartMeters,
   shouldPreviewNextStep,
   upcomingManeuverIndex,
@@ -14,6 +15,7 @@ import { useMemo } from "react";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { OSM_ATTRIBUTION } from "@/lib/map";
 import { useNavLaneGuidanceStore } from "@/lib/navigation/laneGuidanceStore";
+import { stepManeuver } from "@/lib/navigation/maneuverIcon";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 const OSM_CREDIT = [OSM_ATTRIBUTION];
@@ -50,8 +52,18 @@ export function NavManeuverSlot() {
   // time before the maneuver that stretches on the motorway) — so on a long
   // stretch neither the lanes nor the "Then …" preview clutter the banner.
   const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
-  const resolvedLanes =
-    (guidanceRoute === route ? guidanceByStep.get(upcomingIndex)?.lanes : undefined) ?? step?.lanes;
+  const lanesFor = (index: number) =>
+    (guidanceRoute === route ? guidanceByStep.get(index)?.lanes : undefined) ??
+    route?.steps[index]?.lanes;
+  // Narrowed for a close second maneuver, exactly as the car card does.
+  const resolvedLanes = route
+    ? guidanceLanesForStep(
+        route.steps,
+        upcomingIndex,
+        lanesFor(upcomingIndex),
+        lanesFor(upcomingIndex + 1),
+      )
+    : step?.lanes;
   const showLanes = !!resolvedLanes?.length && approaching;
   // Preview the maneuver after this one only when it's both relevant (approaching)
   // and follows closely (a short gap), so back-to-back turns chain but far-apart
@@ -84,9 +96,9 @@ export function NavManeuverSlot() {
     <ManeuverBanner
       instruction={step.instruction}
       distanceToManeuver={distanceToManeuver}
-      maneuver={step.maneuver}
+      maneuver={stepManeuver(route?.steps ?? [], upcomingIndex)}
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
-      nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
+      nextManeuver={showNextStep ? stepManeuver(route?.steps ?? [], upcomingIndex + 1) : undefined}
       lanes={showLanes ? resolvedLanes : undefined}
       laneSource={usesOsmLanes ? "osm" : "engine"}
       sign={step.sign}

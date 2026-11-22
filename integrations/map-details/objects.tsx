@@ -4,7 +4,12 @@ import { sampleTerrainGrid } from "@openmapx/core";
 import type { Attribution } from "@openmapx/integration-framework";
 import type { Map as MaplibreMap, MapSourceDataEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, moveLayerToSlot } from "@/integration-api/map/layerStack";
+import {
+  sceneSlot,
+  useNavigationSceneStore,
+  useSceneSlot,
+} from "@/integration-api/map/navigationScene";
 import {
   type SceneLight,
   sunVector,
@@ -15,7 +20,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { mapTerrainProbe } from "@/integration-api/map/terrainProbe";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { findForestSource } from "./web/basemap-source";
-import type { Instances } from "./web/derive/forest";
+import type { Instances, ModelKind } from "./web/derive/forest";
 import { LRU } from "./web/lru";
 import type { MapDetailsObjectsLayer, ObjectLighting } from "./web/objects-layer";
 import { CELL_CACHE_SIZE, cellKey, selectInstances, visibleCells } from "./web/selection";
@@ -24,6 +29,8 @@ import type { MapDetailsWorkerClient } from "./web/worker-client";
 
 /** Above the 3D buildings (order 5) and the landmark models (order 12). */
 const OBJECTS_SLOT_ORDER = 13;
+/** The street objects 3D navigation keeps: the ones that tell a driver something. */
+const NAVIGATION_KINDS = new Set<ModelKind>(["signal", "stop", "give_way"]);
 const RELEASE_AFTER_MS = 30_000;
 const MOVE_DEBOUNCE_MS = 150;
 const MOVE_REBUILD_M = 150;
@@ -78,6 +85,7 @@ function deviceTier() {
 export function useMapDetailsObjects({
   map,
   active,
+  mode = "full",
   client,
   streetTemplate,
   satellite,
@@ -85,6 +93,8 @@ export function useMapDetailsObjects({
 }: {
   map: MaplibreMap | null;
   active: boolean;
+  /** `navigation`: no forests or furniture, only the street signs a driver uses. */
+  mode?: "full" | "navigation";
   client: MapDetailsWorkerClient | null;
   streetTemplate: string | null;
   satellite: boolean;
@@ -93,6 +103,8 @@ export function useMapDetailsObjects({
   const [scene, setScene] = useState<{ layer: MapDetailsObjectsLayer } | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const light = useSceneLight((l) => l);
+  const slot = useSceneSlot();
+  const navigation = mode === "navigation";
   const objectsActive = active && !unsupported;
   const cells = useRef(new LRU<string, Instances[]>(CELL_CACHE_SIZE));
   const budget = useMemo(() => TIER_BUDGETS[deviceTier()], []);
@@ -126,18 +138,27 @@ export function useMapDetailsObjects({
 
   useEffect(() => () => scene?.layer.dispose(), [scene]);
 
-  // Keep the custom layer on the map while active, across style swaps.
+  // Keep the custom layer on the map while active, across style swaps. During
+  // 3D navigation it sits above the route, like the buildings.
   useEffect(() => {
     if (!map || !scene || !objectsActive) return;
     const { layer } = scene;
     const unsubscribe = subscribeStyleLoaded(map, () => {
-      if (!map.getLayer(layer.id)) addLayerInSlot(map, layer, "area-overlays", OBJECTS_SLOT_ORDER);
+      if (!map.getLayer(layer.id)) {
+        const current = sceneSlot(useNavigationSceneStore.getState().active);
+        addLayerInSlot(map, layer, current, OBJECTS_SLOT_ORDER);
+      }
     });
     return () => {
       unsubscribe();
       if (map.getLayer(layer.id)) map.removeLayer(layer.id);
     };
   }, [map, scene, objectsActive]);
+
+  useEffect(() => {
+    if (!map || !scene) return;
+    moveLayerToSlot(map, scene.layer.id, slot, OBJECTS_SLOT_ORDER);
+  }, [map, scene, slot]);
 
   useEffect(() => {
     scene?.layer.setLighting(lightingOf(light));
@@ -183,7 +204,10 @@ export function useMapDetailsObjects({
           const key = cellKey(cell.x, cell.y);
           const instances = cells.current.get(`${sourceKey}|${key}`);
           if (!instances) continue;
-          chosen.set(key, instances);
+          chosen.set(
+            key,
+            navigation ? instances.filter((set) => NAVIGATION_KINDS.has(set.kind)) : instances,
+          );
           if (!grids.has(key)) {
             const grid = sampleTerrainGrid(probe, ...cellBounds(cell.x, cell.y), TERRAIN_GRID);
             grids.set(key, grid);
@@ -211,7 +235,10 @@ export function useMapDetailsObjects({
       const centre = map.getCenter();
       lastCentre = { lng: centre.lng, lat: centre.lat };
       if (map.getZoom() >= MIN_ZOOM) {
-        const forest = findForestSource(map.getStyle(), (id) => map.getSource(id));
+        // Navigation draws no forests, so the worker skips them altogether.
+        const forest = navigation
+          ? null
+          : findForestSource(map.getStyle(), (id) => map.getSource(id));
         const street = streetTemplate;
         sourceKey = `${street ?? ""}|${forest?.templates.join(" ") ?? ""}|${forest?.maxzoom ?? ""}`;
         for (const cell of viewCells()) {
@@ -272,7 +299,7 @@ export function useMapDetailsObjects({
       map.off("terrain", onTerrain);
     };
     // A street template that arrives after the first rebuild (a late TileJSON) fills the cells again.
-  }, [map, scene, client, objectsActive, budget, streetTemplate]);
+  }, [map, scene, client, objectsActive, budget, streetTemplate, navigation]);
 
   // OpenStreetMap is owed only while street objects are drawn; planted forests come from the basemap.
   const attribution = useMemo(

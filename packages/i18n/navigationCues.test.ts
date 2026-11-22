@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import deFixture from "./__fixtures__/valhalla-verbal-de-DE.json";
+import enFixture from "./__fixtures__/valhalla-verbal-en-US.json";
 import { locales } from "./index";
+import type { NavigationCueReference } from "./navigationCueFormatter";
 import {
   formatCueDistance,
   formatNavigationCue,
@@ -7,6 +10,10 @@ import {
   type NavigationCueIntent,
   resetNavigationCueCache,
 } from "./navigationCues";
+import {
+  REFERENCE_STARTER_EXCLUSIONS,
+  startsWithReferenceStarter,
+} from "./navigationReferenceStarters";
 
 /** Every intent shape, used to assert bilingual coverage in one place. */
 const ALL_INTENTS: NavigationCueIntent[] = [
@@ -199,4 +206,205 @@ describe("caching", () => {
     expect(en).not.toBe(de);
     expect(formatNavigationCue(intent, "en")).toBe(en);
   });
+});
+
+describe("reference phrasing", () => {
+  const near = (instruction: string, reference: NavigationCueReference): NavigationCueIntent => ({
+    kind: "ground-maneuver",
+    tier: "near",
+    instruction,
+    distanceMeters: 120,
+    reference,
+  });
+
+  it("en: At the second traffic light, turn right …", () => {
+    expect(
+      formatNavigationCue(
+        near("Turn right onto Main Street.", { kind: "traffic-light", ordinal: 2 }),
+        "en",
+      ),
+    ).toBe("At the second traffic light, turn right onto Main Street.");
+  });
+
+  it("de: An der zweiten Ampel biegen Sie rechts ab …", () => {
+    expect(
+      formatNavigationCue(
+        near("Rechts auf Hauptstraße abbiegen.", { kind: "traffic-light", ordinal: 2 }),
+        "de",
+      ),
+    ).toBe("An der zweiten Ampel rechts auf Hauptstraße abbiegen.");
+    expect(
+      formatNavigationCue(
+        near("Biegen Sie rechts ab.", { kind: "traffic-light", ordinal: 1 }),
+        "de",
+      ),
+    ).toBe("An der ersten Ampel biegen Sie rechts ab.");
+    expect(
+      formatNavigationCue(
+        near("Leicht nach links abbiegen.", { kind: "traffic-light", ordinal: 3 }),
+        "de",
+      ),
+    ).toBe("An der dritten Ampel leicht nach links abbiegen.");
+  });
+
+  it("de: Bei der Aral-Tankstelle … (brand)", () => {
+    expect(
+      formatNavigationCue(
+        near("Links abbiegen.", { kind: "landmark", category: "fuel", brand: "Aral" }),
+        "de",
+      ),
+    ).toBe("Bei der Aral-Tankstelle links abbiegen.");
+    expect(
+      formatNavigationCue(near("Links abbiegen.", { kind: "landmark", category: "fuel" }), "de"),
+    ).toBe("Bei der Tankstelle links abbiegen.");
+    expect(
+      formatNavigationCue(
+        near("Links abbiegen.", { kind: "landmark", category: "supermarket", brand: "REWE" }),
+        "de",
+      ),
+    ).toBe("Beim REWE-Supermarkt links abbiegen.");
+    expect(
+      formatNavigationCue(
+        near("Links abbiegen.", { kind: "landmark", category: "fast_food", brand: "McDonald's" }),
+        "de",
+      ),
+    ).toBe("Bei McDonald's links abbiegen.");
+  });
+
+  it.each([
+    ["church", "An der Kirche"],
+    ["mosque", "An der Moschee"],
+    ["synagogue", "An der Synagoge"],
+    ["pharmacy", "Bei der Apotheke"],
+    ["supermarket", "Beim Supermarkt"],
+  ] as const)("de: %s takes its article (%s …)", (category, phrase) => {
+    expect(
+      formatNavigationCue(near("Rechts abbiegen.", { kind: "landmark", category }), "de"),
+    ).toBe(`${phrase} rechts abbiegen.`);
+  });
+
+  it("en: At McDonald's, …", () => {
+    expect(
+      formatNavigationCue(
+        near("Turn left onto Elm Road.", {
+          kind: "landmark",
+          category: "fast_food",
+          brand: "McDonald's",
+        }),
+        "en",
+      ),
+    ).toBe("At McDonald's, turn left onto Elm Road.");
+    expect(
+      formatNavigationCue(
+        near("Bear right.", { kind: "landmark", category: "fuel", brand: "Shell" }),
+        "en",
+      ),
+    ).toBe("At the Shell petrol station, bear right.");
+    expect(
+      formatNavigationCue(near("Turn right.", { kind: "landmark", category: "church" }), "en"),
+    ).toBe("At the church, turn right.");
+  });
+
+  it("speaks the category word for a brand on a category without one", () => {
+    expect(
+      formatNavigationCue(
+        near("Turn right.", { kind: "landmark", category: "pharmacy", brand: "DocMorris" }),
+        "en",
+      ),
+    ).toBe("At the pharmacy, turn right.");
+  });
+
+  it("falls back to the distance for unbranded fast food", () => {
+    expect(
+      formatNavigationCue(near("Turn right.", { kind: "landmark", category: "fast_food" }), "en"),
+    ).toBe("In 100 metres, Turn right.");
+  });
+
+  it("no reference when the instruction starts with a word off the allowlist", () => {
+    const reference = { kind: "traffic-light", ordinal: 1 } as const;
+    expect(formatNavigationCue(near("Your destination is on the right.", reference), "en")).toBe(
+      "In 100 metres, Your destination is on the right.",
+    );
+    expect(formatNavigationCue(near("An der Ausfahrt 20 abfahren.", reference), "de")).toBe(
+      "In 100 Meter, An der Ausfahrt 20 abfahren.",
+    );
+  });
+
+  it("far and now tiers ignore the reference", () => {
+    const reference = { kind: "traffic-light", ordinal: 2 } as const;
+    expect(
+      formatNavigationCue(
+        {
+          kind: "ground-maneuver",
+          tier: "far",
+          instruction: "Turn right.",
+          distanceMeters: 400,
+          reference,
+        },
+        "en",
+      ),
+    ).toBe("In 400 metres, Turn right.");
+    expect(
+      formatNavigationCue(
+        { kind: "ground-maneuver", tier: "now", instruction: "Turn right.", reference },
+        "en",
+      ),
+    ).toBe("Turn right.");
+  });
+
+  it.each([
+    { kind: "traffic-light", ordinal: 4 },
+    { kind: "traffic-light", ordinal: 0 },
+    { kind: "traffic-light", ordinal: 1.5 },
+    { kind: "traffic-light", ordinal: "2" },
+    { kind: "landmark", category: "casino" },
+    { kind: "landmark", category: "fuel", brand: "" },
+    { kind: "landmark", category: "fuel", brand: "x".repeat(41) },
+    { kind: "billboard" },
+  ])("an invalid reference is refused: %j", (reference) => {
+    expect(() => formatNavigationCue(near("Turn right.", reference as never), "en")).toThrow(
+      NavigationCueError,
+    );
+  });
+
+  it("treats a brand as plain text", () => {
+    expect(
+      formatNavigationCue(
+        near("Turn right.", { kind: "landmark", category: "fuel", brand: "{instruction}" }),
+        "en",
+      ),
+    ).toBe("At the {instruction} petrol station, turn right.");
+  });
+});
+
+describe("reference starters", () => {
+  it("matches the first word case-insensitively, ignoring punctuation", () => {
+    expect(startsWithReferenceStarter("Turn right.", "en")).toBe(true);
+    expect(startsWithReferenceStarter("  keep, left", "en")).toBe(true);
+    expect(startsWithReferenceStarter("Turnip ahead", "en")).toBe(false);
+    expect(startsWithReferenceStarter("Rechts abbiegen.", "de")).toBe(true);
+    expect(startsWithReferenceStarter("Turn right.", "de")).toBe(false);
+    expect(startsWithReferenceStarter("", "en")).toBe(false);
+    expect(startsWithReferenceStarter("Turn!?!", "en")).toBe(true);
+  });
+
+  it("reads a first word of many punctuation marks in linear time", () => {
+    const started = performance.now();
+    expect(startsWithReferenceStarter(`${"!".repeat(50_000)}x`, "en")).toBe(false);
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+
+  it.each([
+    ["en", enFixture],
+    ["de", deFixture],
+  ] as const)(
+    "every %s fixture first word is either allowlisted or documented as excluded",
+    (locale, fixture) => {
+      for (const word of Object.keys(fixture.firstWords)) {
+        const allowed = startsWithReferenceStarter(word, locale);
+        const excluded = word in REFERENCE_STARTER_EXCLUSIONS[locale];
+        expect(allowed !== excluded, `${locale} "${word}"`).toBe(true);
+      }
+    },
+  );
 });

@@ -1,6 +1,7 @@
 import { createOverlayStore, useLayerStore, useNavigationStore } from "@openmapx/core";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   NEUTRAL_SCENE_LIGHT,
   NIGHT_SCENE_LIGHT,
@@ -194,6 +195,71 @@ describe("street paint layer", () => {
     await flush();
     expect(visibility()).toBe("none");
     expect(fake.state.sources.has(PAINT_SOURCE_ID)).toBe(true);
+  });
+
+  describe("navigation mode", () => {
+    const paintFilter = () =>
+      fake.state.filters.get(PAINT_LAYER_ID) ??
+      (fake.state.layers.get(PAINT_LAYER_ID) as { filter?: unknown } | undefined)?.filter;
+    const enter3dNavigation = () =>
+      act(() => {
+        useNavigationStore.setState({ status: "navigating" });
+        useNavigationSceneStore.getState().setActive(true);
+      });
+    afterEach(() => {
+      act(() => {
+        useNavigationSceneStore.getState().setActive(false);
+        useNavigationStore.setState({ status: "idle" });
+      });
+    });
+
+    it("navigation mode drops pitches from the paint", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(paintFilter() ?? null).toBeNull();
+      enter3dNavigation();
+      await flush();
+      expect(visibility()).toBe("visible");
+      expect(paintFilter()).toEqual(["!=", ["get", "kind"], "pitch"]);
+      act(() => {
+        useNavigationSceneStore.getState().setActive(false);
+        useNavigationStore.setState({ status: "idle" });
+      });
+      await flush();
+      expect(paintFilter() ?? null).toBeNull();
+    });
+
+    it("navigation draws the real-width roads from zoom 16, browsing from 16.5", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      const layer = () => fake.state.layers.get(PAINT_LAYER_ID) as { minzoom?: number };
+      expect(layer().minzoom).toBe(16.5);
+      enter3dNavigation();
+      await flush();
+      expect(layer().minzoom).toBe(16);
+      expect(fake.state.paint.get(PAINT_LAYER_ID)?.["fill-opacity"]).toEqual(
+        paintOpacity(1, "navigation"),
+      );
+      act(() => {
+        useNavigationSceneStore.getState().setActive(false);
+        useNavigationStore.setState({ status: "idle" });
+      });
+      await flush();
+      expect(layer().minzoom).toBe(16.5);
+      expect(fake.state.paint.get(PAINT_LAYER_ID)?.["fill-opacity"]).toEqual(paintOpacity(1));
+    });
+
+    it("a style swap keeps navigation mode", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      enter3dNavigation();
+      await flush();
+      fake.state.filters.delete(PAINT_LAYER_ID);
+      act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
+      await flush();
+      expect(fake.state.layers.has(PAINT_LAYER_ID)).toBe(true);
+      expect(paintFilter()).toEqual(["!=", ["get", "kind"], "pitch"]);
+    });
   });
 
   it("follows the tilt fade, throttled", async () => {

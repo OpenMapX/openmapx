@@ -7,11 +7,17 @@ import {
   useBuildingReplacementStore,
   useNavigationStore,
   useOverlayExclusion,
+  useSettingsStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, moveLayerToSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import {
+  sceneSlot,
+  useNavigationSceneStore,
+  useSceneSlot,
+} from "@/integration-api/map/navigationScene";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   buildingExtrusionColor,
@@ -60,12 +66,13 @@ function addExtrusionLayer(
   source: string,
   sourceLayer: string,
 ): void {
+  const minZoom = MIN_ZOOM;
   const layer = {
     id: LAYER_ID,
     type: "fill-extrusion",
     source,
     "source-layer": sourceLayer,
-    minzoom: MIN_ZOOM,
+    minzoom: minZoom,
     filter: ["!=", ["get", "hide_3d"], true],
     layout: { visibility: extrusionVisibility(map) },
     paint: {
@@ -74,19 +81,22 @@ function addExtrusionLayer(
       ),
       "fill-extrusion-height": EXTRUSION_HEIGHT,
       "fill-extrusion-base": EXTRUSION_BASE,
-      "fill-extrusion-opacity": [
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        MIN_ZOOM,
-        0,
-        MIN_ZOOM + 0.5,
-        1,
-      ],
+      "fill-extrusion-opacity": extrusionOpacity(minZoom),
       "fill-extrusion-vertical-gradient": true,
     },
   } as maplibregl.FillExtrusionLayerSpecification;
-  addLayerInSlot(map, layer, "area-overlays", 5);
+  addLayerInSlot(map, layer, currentSceneSlot(), EXTRUSION_ORDER);
+}
+
+const EXTRUSION_ORDER = 5;
+const CONTACT_ORDER = 4.5;
+function extrusionOpacity(minZoom: number): maplibregl.ExpressionSpecification {
+  return ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, 1];
+}
+
+/** Above the route during 3D navigation, with the other area overlays otherwise. */
+function currentSceneSlot() {
+  return sceneSlot(useNavigationSceneStore.getState().active);
 }
 
 /** The soft ground rim under the extrusions, always on the basemap's own buildings. */
@@ -101,13 +111,18 @@ function addContactLayer(map: maplibregl.Map, basemap: BuildingSourceReference):
     layout: { visibility: extrusionVisibility(map) },
     paint: contactShadowPaint(findBuildingRoofColor(map, basemap), MIN_ZOOM),
   };
-  addLayerInSlot(map, layer, "area-overlays", 4.5);
+  addLayerInSlot(map, layer, currentSceneSlot(), CONTACT_ORDER);
 }
 
 function extrusionVisibility(map: maplibregl.Map): "visible" | "none" {
   return useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
     ? "visible"
     : "none";
+}
+
+/** Trip modes that take the 3D navigation view; others always navigate flat. */
+function drivesIn3d(mode: string): boolean {
+  return mode === "driving" || mode === "motorcycle";
 }
 
 const replacementKey = (replacement: BuildingReplacement) =>
@@ -121,13 +136,42 @@ export function BuildingExtrusionLayer() {
   const prevVisibleRef = useRef(false);
   const wasTiltedRef = useRef(false);
   const currentMap = mapRef.current;
+  const slot = useSceneSlot();
+
+  // 3D navigation lifts the buildings above the route, so they cover it where
+  // they stand in front of it; layers added later read the slot themselves.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    moveLayerToSlot(map, CONTACT_LAYER_ID, slot, CONTACT_ORDER);
+    moveLayerToSlot(map, LAYER_ID, slot, EXTRUSION_ORDER);
+  }, [slot, mapReady, styleVersion, mapRef]);
 
   useEffect(() => {
-    const sync = () =>
-      useBuildingsStore.getState().syncNavigation(useNavigationStore.getState().status !== "idle");
+    const sync = () => {
+      const nav = useNavigationStore.getState();
+      const show3d = useSettingsStore.getState().navigation3d && drivesIn3d(nav.mode);
+      useBuildingsStore.getState().syncNavigation(nav.status !== "idle", { show3d });
+    };
     sync();
     return useNavigationStore.subscribe(sync);
   }, []);
+
+  // The driver's own 3D view choice during a driving trip is remembered for the
+  // next one. Automation (trip start, camera tilt) does not bump userRevision,
+  // so only the driver's toggles are written.
+  useEffect(
+    () =>
+      useBuildingsStore.subscribe((state, previous) => {
+        if (state.layerVisible === previous.layerVisible) return;
+        if (state.userRevision === previous.userRevision) return;
+        const nav = useNavigationStore.getState();
+        if (nav.status === "idle" || !drivesIn3d(nav.mode)) return;
+        useSettingsStore.getState().setNavigation3d(state.layerVisible);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void styleVersion;
@@ -256,7 +300,9 @@ export function BuildingExtrusionLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    if (layerVisible && !prevVisibleRef.current) {
+    // While navigating, the navigation camera owns the pitch.
+    const navigating = useNavigationStore.getState().status !== "idle";
+    if (layerVisible && !prevVisibleRef.current && !navigating) {
       if (map.getPitch() <= TILT_THRESHOLD) {
         moveToPitch(map, AUTO_PITCH, 800);
       }

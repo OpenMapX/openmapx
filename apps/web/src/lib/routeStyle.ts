@@ -1,4 +1,31 @@
+import { type RouteWidthExpression, routeWidthExpression } from "@openmapx/core";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+
+/** One lane: the navigation route grows to this real width once it is wider than its pixels. */
+export const ROUTE_LANE_METRES = 3.2;
+
+/**
+ * Navigation route widths for a latitude: 11/8/7 px (casing/line/travelled)
+ * until a lane is wider than the line, then a lane-wide ribbon with the casing
+ * still 3 px wider and the travelled line 1 px narrower.
+ */
+export function navRouteWidths(latitude: number): {
+  line: RouteWidthExpression;
+  casing: RouteWidthExpression;
+  traveled: RouteWidthExpression;
+} {
+  const base = ROUTE_WIDTHS.nav.line;
+  return {
+    line: routeWidthExpression(base, ROUTE_LANE_METRES, latitude),
+    casing: routeWidthExpression(base, ROUTE_LANE_METRES, latitude, ROUTE_WIDTHS.nav.casing - base),
+    traveled: routeWidthExpression(
+      base,
+      ROUTE_LANE_METRES,
+      latitude,
+      ROUTE_WIDTHS.nav.traveled - base,
+    ),
+  };
+}
 
 /**
  * Route line geometry, in one place, because three layers draw the same route

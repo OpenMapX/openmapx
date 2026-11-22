@@ -1,8 +1,13 @@
 import type { Instances } from "./derive/forest";
+import type { LaneHighlightAnswer } from "./derive/lane-highlight";
 import type { WorkerCore, WorkerRequest, WorkerResponse } from "./worker-core";
 
 /** What the objects layer asks the worker for one z16 cell. */
 export type ObjectsQuery = Omit<Extract<WorkerRequest, { kind: "objects" }>, "id" | "kind">;
+export type LaneHighlightQuery = Omit<
+  Extract<WorkerRequest, { kind: "lane-highlight" }>,
+  "id" | "kind"
+>;
 
 export interface MapDetailsWorkerClient {
   /** Paint tile bytes, or null without street data or when superseded (`signal` aborted). */
@@ -15,6 +20,11 @@ export interface MapDetailsWorkerClient {
   ): Promise<ArrayBuffer | null>;
   /** Instances of a cell, or null when superseded. */
   objects(query: ObjectsQuery, signal?: AbortSignal): Promise<Instances[] | null>;
+  /** The recommended lanes as polygons on the road, or null when superseded or disposed. */
+  laneHighlight(
+    query: LaneHighlightQuery,
+    signal?: AbortSignal,
+  ): Promise<LaneHighlightAnswer | null>;
   dispose(): void;
 }
 
@@ -87,7 +97,7 @@ export function createMapDetailsWorker(): MapDetailsWorkerClient {
   }
 
   async function request(
-    body: Extract<WorkerRequest, { kind: "paint" | "objects" }>,
+    body: Extract<WorkerRequest, { kind: "paint" | "objects" | "lane-highlight" }>,
     signal: AbortSignal | undefined,
   ): Promise<WorkerResponse | null> {
     if (disposed || signal?.aborted) return null;
@@ -151,6 +161,22 @@ export function createMapDetailsWorker(): MapDetailsWorkerClient {
         signal,
       );
       return unwrap(response, (r) => ("kind" in r && r.kind === "objects" ? r.instances : []));
+    },
+    async laneHighlight(query, signal) {
+      const response = await request(
+        {
+          id: ++sequence,
+          kind: "lane-highlight",
+          ...query,
+          streetTemplate: absoluteTemplate(query.streetTemplate, base),
+        },
+        signal,
+      );
+      return unwrap(response, (r) =>
+        "kind" in r && r.kind === "lane-highlight"
+          ? r.answer
+          : ({ polygons: null, reason: "no-way" } as const),
+      );
     },
     dispose() {
       disposed = true;

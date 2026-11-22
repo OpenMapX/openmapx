@@ -5,6 +5,7 @@ import { useNavIncidentResource } from "@openmapx/integration-framework/react";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
+import { useNavLandmarks } from "@/lib/navigation/useNavLandmarks";
 import { useNavLaneGuidance } from "@/lib/navigation/useNavLaneGuidance";
 import { useWakeLock } from "@/lib/useWakeLock";
 
@@ -34,6 +35,7 @@ export function GroundNavigationRuntime() {
   // share, so it stays here rather than inside the browser-only child.
   useNavCamera();
   useNavLaneGuidance();
+  useNavLandmarks();
 
   return browserAuthority ? <BrowserGroundRuntime /> : null;
 }

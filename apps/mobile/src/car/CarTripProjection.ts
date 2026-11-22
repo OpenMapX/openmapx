@@ -1,11 +1,16 @@
-import type { ManeuverLane, ManeuverSign } from "@openmapx/core";
+import type { LngLat, ManeuverLane, ManeuverSign } from "@openmapx/core";
 import type { GroundFullSnapshot } from "@openmapx/core/navigation";
 import {
   type GuidanceIconName,
   guidanceApproachMeters,
+  guidanceLanesForStep,
   maneuverIconName,
   measurementDistanceParts,
   presentGuidanceLanes,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutRole,
+  roundaboutTurnAt,
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
 import { z } from "zod";
@@ -42,9 +47,33 @@ export const carTripProjectionSchema = z.object({
     )
     .max(12)
     .optional(),
-  /** A roundabout's exit number and circling direction; the turn type follows the glyph. */
+  /**
+   * A roundabout's exit number and circling direction; `angle` is how far round
+   * the exit lies in the direction of travel (Android for Cars' exit angle), and
+   * `leaving` marks the step that leaves it.
+   */
   roundabout: z
-    .object({ exit: z.number().int().min(1).max(99), clockwise: z.boolean() })
+    .object({
+      exit: z.number().int().min(1).max(99),
+      clockwise: z.boolean(),
+      angle: z.number().int().min(1).max(360).optional(),
+      leaving: z.literal(true).optional(),
+    })
+    .optional(),
+  /** A glyph drawn for this maneuver instead of `maneuverIcon` (a roundabout's way round). */
+  maneuverGlyph: z
+    .object({
+      strokes: z
+        .array(
+          z.object({
+            d: z.string().max(512),
+            width: z.number().positive().max(6),
+            opacity: z.number().min(0).max(1).optional(),
+          }),
+        )
+        .max(4),
+      fills: z.array(z.string().max(512)).max(4),
+    })
     .optional(),
   distanceToManeuver: nonnegative,
   maneuverDistance: displayDistance,
@@ -75,6 +104,9 @@ const stepSchema = z.object({
     .max(12)
     .optional(),
   roundaboutExitCount: z.number().optional(),
+  bearingBefore: z.number().finite().optional(),
+  bearingAfter: z.number().finite().optional(),
+  motorway: z.boolean().optional(),
   sign: z.unknown().optional(),
   maneuver: z
     .object({ type: z.string(), modifier: z.string().optional(), exit: z.number().optional() })
@@ -106,6 +138,53 @@ function readStep(steps: unknown[], index: number): { step: CarStep | undefined 
   return parsed.success ? { step: parsed.data } : null;
 }
 
+const ROUNDABOUT_TYPES = new Set(["roundabout", "rotary", "exit roundabout", "exit rotary"]);
+
+/**
+ * A step's line, read only around a roundabout: a long one, such as a motorway
+ * stretch into it, or a malformed one only costs the exit angle.
+ */
+const coordinatesSchema = z.array(z.tuple([z.number().finite(), z.number().finite()])).max(20_000);
+
+function withCoordinates(steps: unknown[], index: number, step: CarStep | undefined) {
+  if (!step) return undefined;
+  const raw = (steps[index] as { coordinates?: unknown } | undefined)?.coordinates;
+  const parsed = coordinatesSchema.safeParse(raw);
+  return parsed.success ? { ...step, coordinates: parsed.data as LngLat[] } : step;
+}
+
+/**
+ * The roundabout at the upcoming step, entered or left there: its exit number
+ * and the turn read from the steps around it. Those neighbours are read only
+ * for a roundabout, and a malformed one only costs the turn.
+ */
+function upcomingRoundabout(
+  steps: unknown[],
+  index: number,
+  step: CarStep | undefined,
+): {
+  exitCount?: number;
+  drivingSide?: "left" | "right";
+  turn?: RoundaboutTurn;
+  leaving: boolean;
+} | null {
+  if (!ROUNDABOUT_TYPES.has(step?.maneuver?.type ?? "")) return null;
+  // The upcoming step sits at window[2], between the two steps before it (the
+  // roundabout it may leave, and the road into that) and the one after it.
+  const window = [index - 2, index - 1, index, index + 1].map((i) =>
+    withCoordinates(steps, i, readStep(steps, i)?.step),
+  );
+  const role = roundaboutRole(window, 2);
+  if (!role) return null;
+  const entry = role === "exit" ? window[1] : window[2];
+  return {
+    leaving: role === "exit",
+    exitCount: entry?.roundaboutExitCount,
+    drivingSide: entry?.drivingSide,
+    turn: roundaboutTurnAt(window, 2),
+  };
+}
+
 /** The maneuver is at the START of the next step, not the step being driven. */
 export function buildCarTripProjection(
   snapshot: Pick<
@@ -135,9 +214,34 @@ export function buildCarTripProjection(
   if (!upcoming || !current) return null;
   const step = upcoming.step;
   const m = step?.maneuver;
-  const roundabout = m?.type === "roundabout" || m?.type === "rotary";
+  const roundabout = upcomingRoundabout(steps, upcomingIndex, step);
   const reroute = rerouteSchema.safeParse(snapshot.reroute);
   const currentStep = current.step;
+  const showLanes =
+    !!step?.lanes &&
+    !!m &&
+    p.distanceToNextManeuver <=
+      guidanceApproachMeters("driving", "speedMps" in p ? (p.speedMps ?? 0) : 0);
+  // Narrowed for a close second maneuver like the phone's banner; the step
+  // after the upcoming one is read only while lanes are shown.
+  const following = showLanes ? readStep(steps, upcomingIndex + 1) : null;
+  const laneSteps = [
+    currentIndex === upcomingIndex - 1 ? currentStep : undefined,
+    step,
+    following?.step,
+  ].map((laneStep) => ({
+    distance: laneStep?.distance ?? Number.POSITIVE_INFINITY,
+    ...(laneStep?.maneuver ? { maneuver: laneStep.maneuver } : {}),
+    ...(laneStep?.motorway !== undefined ? { motorway: laneStep.motorway } : {}),
+  }));
+  const shownLanes = showLanes
+    ? guidanceLanesForStep(
+        laneSteps,
+        1,
+        step?.lanes as ManeuverLane[] | undefined,
+        following?.step?.lanes as ManeuverLane[] | undefined,
+      )
+    : undefined;
   const secondsToManeuver =
     currentStep?.distance && currentStep.duration
       ? Math.max(0, Math.min(1, p.distanceToNextManeuver / currentStep.distance)) *
@@ -153,12 +257,9 @@ export function buildCarTripProjection(
     maneuverIcon: maneuverIconName(m) satisfies GuidanceIconName,
     // Like the phone's banner: lanes appear once the maneuver is close enough to act on.
     lanes:
-      step?.lanes &&
-      m &&
-      p.distanceToNextManeuver <=
-        guidanceApproachMeters("driving", "speedMps" in p ? (p.speedMps ?? 0) : 0)
-        ? presentGuidanceLanes(step.lanes as ManeuverLane[], m, {
-            sign: step.sign as ManeuverSign | undefined,
+      shownLanes && m
+        ? presentGuidanceLanes(shownLanes, m, {
+            sign: step?.sign as ManeuverSign | undefined,
           }).map((cell) => ({
             valid: cell.valid,
             arrows: cell.arrows.map(({ icon, active, stemShift }) => ({ icon, active, stemShift })),
@@ -167,10 +268,18 @@ export function buildCarTripProjection(
     ...(roundabout
       ? {
           roundabout: {
-            exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))),
-            // Left-hand traffic circles clockwise.
-            clockwise: step?.drivingSide === "left",
+            exit: Math.min(99, Math.max(1, Math.trunc(roundabout.exitCount ?? 1))),
+            // Left-hand traffic circles clockwise; the turn reads it from the path
+            // where the engine names no driving side.
+            clockwise: roundabout.turn
+              ? roundabout.turn.circulation === "cw"
+              : roundabout.drivingSide === "left",
+            ...(roundabout.turn
+              ? { angle: Math.min(360, Math.max(1, Math.round(roundabout.turn.exitAngle))) }
+              : {}),
+            ...(roundabout.leaving ? { leaving: true as const } : {}),
           },
+          ...(roundabout.turn ? { maneuverGlyph: roundaboutGlyph(roundabout.turn) } : {}),
         }
       : {}),
     distanceToManeuver: p.distanceToNextManeuver,

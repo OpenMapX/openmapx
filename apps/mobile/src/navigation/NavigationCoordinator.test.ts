@@ -1,6 +1,7 @@
 import {
   MOBILE_PROTOCOL_MAX,
   type MobileNavigationSession,
+  routeFingerprint,
   type TransitMobileSession,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
@@ -90,6 +91,8 @@ interface Harness {
   sent: Array<{ type: string; payload: unknown; options: SendStamp }>;
   effectLog: string[];
   observedAtStart: Array<MobileNavigationSession | null>;
+  /** Reference requests, recorded only when the harness was asked to. */
+  referenceRequests: string[];
   deps: CoordinatorDeps;
   close: () => Promise<void>;
 }
@@ -101,6 +104,7 @@ async function harness(
     appActive?: boolean;
     failEffect?: string;
     sendOutcome?: (type: string) => SendOutcome | undefined;
+    references?: boolean;
   } = {},
 ): Promise<Harness> {
   const database = openTestDatabase();
@@ -114,6 +118,7 @@ async function harness(
   const sent: Array<{ type: string; payload: unknown; options: SendStamp }> = [];
   const effectLog: string[] = [];
   const observedAtStart: Array<MobileNavigationSession | null> = [];
+  const referenceRequests: string[] = [];
   const fail = (label: string) => async () => {
     if (label === "driver.start") observedAtStart.push(await repository.loadActive(NOW));
     effectLog.push(label);
@@ -137,6 +142,13 @@ async function harness(
       remote: {
         reroute: fail("remote.reroute"),
         transitRefresh: fail("remote.transitRefresh"),
+        ...(overrides.references
+          ? {
+              references: async (requestId: string) => {
+                referenceRequests.push(requestId);
+              },
+            }
+          : {}),
       },
       diagnostics: { record: () => undefined },
     }),
@@ -166,6 +178,7 @@ async function harness(
     sent,
     effectLog,
     observedAtStart,
+    referenceRequests,
     deps,
     close: () => database.closeAsync(),
   };
@@ -1455,6 +1468,134 @@ describe("NavigationCoordinator settings changes", () => {
       keepScreenOn: false,
     });
     expect(context.effectLog).toContain("audio.stop");
+    await context.close();
+  });
+});
+
+describe("NavigationCoordinator voice references", () => {
+  const FINGERPRINT = routeFingerprint(START_PACKAGE.route.geometry);
+  const ANSWER = {
+    signalsAlong: [400],
+    signalSpans: [{ from: 0, to: 1_200 }],
+    landmarkReferences: [{ stepIndex: 0, category: "fuel" as const, brand: "Aral" }],
+  };
+
+  const groundOf = async (context: Harness) => {
+    const session = await context.repository.loadActive(NOW);
+    if (session?.kind !== "ground") throw new Error("no ground session");
+    return session;
+  };
+
+  it("asks for references when a driving session starts without them", async () => {
+    const context = await harness({ references: true });
+    await running(context);
+    expect(context.referenceRequests).toEqual([FINGERPRINT]);
+    await context.close();
+  });
+
+  it("after a native reroute the references come from the new fetch", async () => {
+    const context = await harness({ references: true });
+    const { sessionId } = await running(context);
+    const before = await groundOf(context);
+    await context.repository.compareAndSwap(
+      sessionId,
+      before.revision,
+      (session) => ({
+        session: {
+          ...session,
+          revision: session.revision + 1,
+          payload: {
+            ...(session as typeof before).payload,
+            reroute: { status: "pending", requestId: "reroute-1", attempts: 0 },
+          },
+        } as MobileNavigationSession,
+        effects: [],
+      }),
+      NOW,
+    );
+    await context.coordinator.applyReroute({
+      ok: true,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: before.revision + 1,
+      route: START_PACKAGE,
+    });
+    expect(context.referenceRequests).toEqual([FINGERPRINT, FINGERPRINT]);
+
+    await context.coordinator.applyReferences({
+      ok: true,
+      requestId: FINGERPRINT,
+      sessionId,
+      routeFingerprint: FINGERPRINT,
+      ...ANSWER,
+    });
+
+    const { startPackage } = (await groundOf(context)).payload;
+    expect(startPackage.signalsAlong).toEqual([400]);
+    expect(startPackage.signalSpans).toEqual([{ from: 0, to: 1_200 }]);
+    expect(startPackage.landmarkReferences).toEqual(ANSWER.landmarkReferences);
+    await context.close();
+  });
+
+  it("an answer for a replaced route is dropped", async () => {
+    const context = await harness({ references: true });
+    const { sessionId } = await running(context);
+    const before = await groundOf(context);
+
+    await context.coordinator.applyReferences({
+      ok: true,
+      requestId: "old-route",
+      sessionId,
+      routeFingerprint: "old-route",
+      ...ANSWER,
+    });
+    await context.coordinator.applyReferences({
+      ok: true,
+      requestId: FINGERPRINT,
+      sessionId: "another-session",
+      routeFingerprint: FINGERPRINT,
+      ...ANSWER,
+    });
+
+    const after = await groundOf(context);
+    expect(after.revision).toBe(before.revision);
+    expect(after.payload.startPackage.signalsAlong).toBeUndefined();
+    await context.close();
+  });
+
+  it("a failed native fetch gives plain prompts", async () => {
+    const context = await harness({ references: true });
+    const { sessionId } = await running(context);
+    const before = await groundOf(context);
+
+    await context.coordinator.applyReferences({
+      ok: false,
+      requestId: FINGERPRINT,
+      sessionId,
+      code: "network",
+    });
+
+    const after = await groundOf(context);
+    expect(after.revision).toBe(before.revision);
+    expect(after.payload.startPackage.landmarkReferences).toBeUndefined();
+    await context.close();
+  });
+
+  it("refuses references the start package could not hold", async () => {
+    const context = await harness({ references: true });
+    const { sessionId } = await running(context);
+    const before = await groundOf(context);
+
+    await context.coordinator.applyReferences({
+      ok: true,
+      requestId: FINGERPRINT,
+      sessionId,
+      routeFingerprint: FINGERPRINT,
+      signalsAlong: Array.from({ length: 2_001 }, (_, i) => i),
+      signalSpans: [{ from: 0, to: 1_200 }],
+    });
+
+    expect((await groundOf(context)).revision).toBe(before.revision);
     await context.close();
   });
 });

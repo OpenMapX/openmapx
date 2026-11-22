@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
   routingMatch: "/api/integrations/routing/match",
   navigationAlerts: "/api/integrations/routing/navigation/alerts",
   navigationJunctions: "/api/integrations/routing/navigation/junctions",
+  navigationLandmarks: "/api/integrations/routing/navigation/landmarks",
   roadConditions: "/api/integrations/road-conditions/events",
   roadConditionsFlowRoute: "/api/integrations/road-conditions/flow-along-route",
   roadConditionBindings: "/api/integrations/road-conditions/bindings",

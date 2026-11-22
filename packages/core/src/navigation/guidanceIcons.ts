@@ -182,6 +182,10 @@ export function presentGuidanceLanes(
   const engineChose = source === "engine" && (lanes?.some((l) => l.valid) ?? false);
   const unmarkedIcon = engineChose ? unmarkedLaneIconName(maneuver) : null;
   return resolved.map((lane) => {
+    // A lane narrowed away before a close second maneuver stays highlighted,
+    // but its arrow is not drawn bright. A usable lane the engine merely did
+    // not prefer keeps its bright arrow.
+    const demoted = lane.narrowed === true;
     const marked = lane.indications.flatMap((indication) => {
       const icon = laneIndicationIconName(indication);
       return icon ? [{ indication, icon }] : [];
@@ -198,6 +202,7 @@ export function presentGuidanceLanes(
         icon,
         active:
           lane.valid === true &&
+          !demoted &&
           (activeNorm ? normalizeLaneToken(indication) === activeNorm : arrows.length === 1),
         stemShift: arrows.length > 1 ? laneArrowStemShift(icon) : 0,
       })),

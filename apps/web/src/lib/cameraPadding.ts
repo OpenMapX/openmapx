@@ -89,14 +89,39 @@ export function puckOffsetActive(nav: NavCameraState): boolean {
   return active && nav.kind === "ground" && nav.cameraMode !== "overview";
 }
 
+export interface CameraViewport {
+  width: number;
+  height: number;
+}
+
+/** The map container's size, measured once (a layout read). */
+export function measureCameraViewport(map: maplibregl.Map): CameraViewport {
+  const container = map.getContainer();
+  return { width: container.clientWidth, height: container.clientHeight };
+}
+
+/**
+ * The padding this map should carry right now, with the viewport it was
+ * resolved against, from one container measurement.
+ */
+export function getCameraFrameTarget(map: maplibregl.Map): {
+  padding: ResolvedPadding;
+  viewport: CameraViewport;
+} {
+  const viewport = measureCameraViewport(map);
+  return {
+    padding: resolveCameraPadding({
+      insets: getMapObstructionInsets(),
+      viewport,
+      puckOffset: puckOffsetActive(useNavigationStore.getState()),
+    }),
+    viewport,
+  };
+}
+
 /** The padding this map should carry right now. */
 export function getCameraPaddingTarget(map: maplibregl.Map): ResolvedPadding {
-  const container = map.getContainer();
-  return resolveCameraPadding({
-    insets: getMapObstructionInsets(),
-    viewport: { width: container.clientWidth, height: container.clientHeight },
-    puckOffset: puckOffsetActive(useNavigationStore.getState()),
-  });
+  return getCameraFrameTarget(map).padding;
 }
 
 /** Fires whenever any input of `getCameraPaddingTarget` may have changed. */

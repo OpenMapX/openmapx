@@ -81,6 +81,8 @@ const EXPECTED_TYPES: Record<string, Record<string, string>> = {
     kind: "string",
     dir: "string",
     sig_dir: "string",
+    stop_dir: "string",
+    stop: "string",
     mount: "string",
     backrest: "boolean",
   },
@@ -96,6 +98,36 @@ describe("street detail schema", () => {
       min_feature_size_at_max_zoom: 0,
     });
     expect(schema.attribution).toContain("OpenStreetMap");
+  });
+
+  it("furniture carries stop and give_way with stop_dir and stop", () => {
+    const furniture = schema.layers.find((entry) => entry.id === "furniture");
+    const feature = furniture?.features[0] as unknown as {
+      include_when: { highway: string[] };
+      attributes: { key: string; value?: Record<string, unknown> }[];
+    };
+    expect(feature.include_when.highway).toEqual([
+      "street_lamp",
+      "traffic_signals",
+      "stop",
+      "give_way",
+    ]);
+    const kind = feature.attributes.find((attribute) => attribute.key === "kind")?.value;
+    expect(kind?.stop).toEqual({ highway: "stop" });
+    expect(kind?.give_way).toEqual({ highway: "give_way" });
+    expect(STREET_DETAIL_SCHEMA).toContain("name: stop sign");
+    expect(STREET_DETAIL_SCHEMA).toContain("name: give way sign");
+  });
+
+  it("roads layer has no tile_post_process merge", () => {
+    // The lane highlight reads each road's OSM way id from Planetiler's feature
+    // id (osmId × 10 + 2); merging lines would drop it.
+    const roads = schema.layers.find((entry) => entry.id === "roads") as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(roads.tile_post_process).toBeUndefined();
+    expect(STREET_DETAIL_SCHEMA).not.toContain("tile_post_process");
   });
 
   it("reads the local extract and never downloads", () => {

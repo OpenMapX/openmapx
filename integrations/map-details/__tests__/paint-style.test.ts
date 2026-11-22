@@ -54,6 +54,21 @@ describe("paint style", () => {
     expect(PAINT_LAYER_ID).toBe("openmapx-street-detail-paint");
   });
 
+  it("in navigation fades in from zoom 16, fully drawn at the city cruising zoom", () => {
+    expect(paintLayerSpec("light", "navigation").minzoom).toBe(16);
+    expect(paintOpacity(1, "navigation")).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      16,
+      0,
+      16.5,
+      1,
+    ]);
+    // Browsing keeps its closer fade-in.
+    expect(paintOpacity(1)).toEqual(["interpolate", ["linear"], ["zoom"], 16.5, 0, 17, 1]);
+  });
+
   it("sorts by OSM layer, then by kind", () => {
     expect(KIND_RANK).toEqual(Object.fromEntries(KINDS.map((kind, rank) => [kind, rank])));
     const sortKey = paintLayerSpec("light").layout?.["fill-sort-key"] as unknown[];

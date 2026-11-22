@@ -1,10 +1,12 @@
 import { type Feature, fromVectorTileJs, GeoJSONWrapper } from "@maplibre/vt-pbf";
+import type { ManeuverLane } from "@openmapx/core";
 import { turnArrows } from "./derive/arrows";
 import { crossingPaint } from "./derive/crossings";
 import { type DecodedTile, decodeLayers } from "./derive/decode";
 import { isLeftHandTraffic } from "./derive/driving-side";
 import { type Instances, plantForest } from "./derive/forest";
 import { clipRingsToSquare, type Pt, type Ring, ringArea } from "./derive/geometry";
+import { type LaneHighlightAnswer, laneHighlight } from "./derive/lane-highlight";
 import { junctionCuts, lanePaint } from "./derive/lanes";
 import { streetObjects } from "./derive/objects";
 import { pitchPaint } from "./derive/pitches";
@@ -31,11 +33,23 @@ export type WorkerRequest =
       basemapTemplates: string[];
       basemapMaxzoom: number;
     }
+  | {
+      id: number;
+      kind: "lane-highlight";
+      streetTemplate: string;
+      wayId: number;
+      /** Route geometry before the maneuver, in travel order; its last point is the maneuver. */
+      approach: [number, number][];
+      engineLanes: ManeuverLane[];
+      recommended: number[];
+      classes: ("urban" | "motorway")[];
+    }
   | { id: number; kind: "cancel"; target: number };
 
 export type WorkerResponse =
   | { id: number; kind: "paint"; bytes: ArrayBuffer | null }
   | { id: number; kind: "objects"; instances: Instances[] }
+  | { id: number; kind: "lane-highlight"; answer: LaneHighlightAnswer }
   | { id: number; error: string };
 
 export interface WorkerCore {
@@ -56,6 +70,44 @@ class Cancelled extends Error {}
 
 function expand(template: string, z: number, x: number, y: number): string {
   return template.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
+}
+
+/** The z16 tile a point lies in. */
+function z16Cell(lng: number, lat: number): { x: number; y: number } {
+  const n = 2 ** 16;
+  const s = Math.sin((Math.max(Math.min(lat, 85.0511), -85.0511) * Math.PI) / 180);
+  return {
+    x: Math.floor(((lng + 180) / 360) * n),
+    y: Math.floor((0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n),
+  };
+}
+
+/** Sample spacing along the approach when collecting tiles, metres. */
+const APPROACH_SAMPLE_M = 2;
+
+/** The approach's vertices plus points every 2 m along each segment. */
+function approachSamples(approach: readonly [number, number][]): [number, number][] {
+  const samples: [number, number][] = [];
+  approach.forEach((point, i) => {
+    const previous = approach[i - 1];
+    if (previous) {
+      const cos = Math.cos((point[1] * Math.PI) / 180);
+      const metres = Math.hypot(
+        (point[0] - previous[0]) * 111_320 * cos,
+        (point[1] - previous[1]) * 111_320,
+      );
+      const steps = Math.floor(metres / APPROACH_SAMPLE_M);
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        samples.push([
+          previous[0] + (point[0] - previous[0]) * t,
+          previous[1] + (point[1] - previous[1]) * t,
+        ]);
+      }
+    }
+    samples.push(point);
+  });
+  return samples;
 }
 
 function tileCentre(z: number, x: number, y: number): [number, number] {
@@ -296,6 +348,38 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
             encoded.byteOffset + encoded.byteLength,
           ) as ArrayBuffer;
           return { response: { id, kind: "paint", bytes }, transfer: [bytes] };
+        }
+        if (request.kind === "lane-highlight") {
+          // The z16 street tiles the approach passes through; the way is joined
+          // across them. Sampled along each segment, not only at its vertices,
+          // so a sparse approach still loads a tile it crosses in between.
+          const keys = new Map<string, { x: number; y: number }>();
+          for (const [lng, lat] of approachSamples(request.approach)) {
+            const cell = z16Cell(lng, lat);
+            keys.set(`${cell.x}/${cell.y}`, cell);
+          }
+          const tiles = (
+            await Promise.all(
+              [...keys.values()].map(async ({ x, y }) => {
+                const tile = await decodedTile(
+                  streetBytes,
+                  expand(request.streetTemplate, 16, x, y),
+                  STREET_LAYERS,
+                );
+                return tile ? [{ z: 16 as const, x, y, tile }] : [];
+              }),
+            )
+          ).flat();
+          check(id);
+          const answer = laneHighlight({
+            tiles,
+            wayId: request.wayId,
+            approach: request.approach,
+            engineLanes: request.engineLanes,
+            recommended: request.recommended,
+            classes: request.classes,
+          });
+          return { response: { id, kind: "lane-highlight", answer }, transfer: [] };
         }
         const instances = await objectsOf(request);
         check(id);

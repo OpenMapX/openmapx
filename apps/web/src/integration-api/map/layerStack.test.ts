@@ -13,6 +13,7 @@ import {
   layerRank,
   layerRegistrations,
   MAP_LAYER_SLOTS,
+  moveLayerToSlot,
   planAnchorMoves,
   registerLayerSlot,
   resolveBeforeId,
@@ -334,5 +335,44 @@ describe("anchorMapLayers", () => {
       "omx-road-conditions-line",
       "place-labels",
     ]);
+  });
+});
+
+describe("3D navigation slots", () => {
+  afterEach(() => {
+    for (const id of ["extrusion", "route-line", "closures"]) unregisterLayerSlot(id);
+  });
+
+  it("slot order puts scene-3d and route-ghost right above route-congestion and below conditions-lines", () => {
+    const congestion = MAP_LAYER_SLOTS.indexOf("route-congestion");
+    expect(MAP_LAYER_SLOTS[congestion + 1]).toBe("scene-3d");
+    expect(MAP_LAYER_SLOTS[congestion + 2]).toBe("route-ghost");
+    expect(MAP_LAYER_SLOTS[congestion + 3]).toBe("conditions-lines");
+  });
+
+  it("moveLayerToSlot re-anchors a layer between slots", () => {
+    const { map, state } = createFakeMap({ styleLoaded: true });
+    map.addLayer({ id: "extrusion", type: "fill-extrusion" } as never);
+    map.addLayer({ id: "route-line", type: "line" } as never);
+    map.addLayer({ id: "closures", type: "line" } as never);
+    map.addLayer({ id: "place-labels", type: "symbol" } as never);
+    registerLayerSlot("extrusion", "area-overlays", 5);
+    registerLayerSlot("route-line", "route-active", 1);
+    registerLayerSlot("closures", "conditions-lines", 0);
+    anchorMapLayers(map);
+    expect([...state.layers.keys()].slice(0, 3)).toEqual(["extrusion", "route-line", "closures"]);
+
+    moveLayerToSlot(map, "extrusion", "scene-3d", 5);
+    expect([...state.layers.keys()].slice(0, 3)).toEqual(["route-line", "extrusion", "closures"]);
+    expect(layerRegistrations().find((r) => r.id === "extrusion")?.slot).toBe("scene-3d");
+
+    moveLayerToSlot(map, "extrusion", "area-overlays", 5);
+    expect([...state.layers.keys()].slice(0, 3)).toEqual(["extrusion", "route-line", "closures"]);
+  });
+
+  it("moveLayerToSlot ignores a missing layer", () => {
+    const { map } = createFakeMap({ styleLoaded: true });
+    moveLayerToSlot(map, "extrusion", "scene-3d", 5);
+    expect(layerRegistrations().some((r) => r.id === "extrusion")).toBe(false);
   });
 });

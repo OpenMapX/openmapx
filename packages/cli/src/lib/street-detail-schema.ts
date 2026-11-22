@@ -9,6 +9,10 @@
  * `local_path` is a placeholder and there is no `url`, so nothing downloads.
  *
  * Quote `"yes"` and `"no"`: Planetiler reads YAML 1.1, where they are booleans.
+ *
+ * Planetiler gives every feature the vector-tile id `osmId × 10 + kind` (2 for
+ * ways). The navigation lane highlight reads a road's OSM way id from it, so no
+ * layer here may add a `tile_post_process` merge, which would drop the ids.
  */
 
 export const STREET_DETAIL_LAYERS = [
@@ -22,7 +26,7 @@ export const STREET_DETAIL_LAYERS = [
 
 export const STREET_DETAIL_SCHEMA = `schema_name: OpenMapX street detail
 schema_description: Street paint and street object source data for the OpenMapX 3D view
-attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
 args:
   minzoom: 16
   maxzoom: 16
@@ -212,7 +216,7 @@ layers:
       - source: osm
         geometry: point
         include_when:
-          highway: [street_lamp, traffic_signals]
+          highway: [street_lamp, traffic_signals, stop, give_way]
           amenity: bench
         attributes:
           - key: kind
@@ -222,10 +226,16 @@ layers:
                 highway: street_lamp
               signals:
                 highway: traffic_signals
+              stop:
+                highway: stop
+              give_way:
+                highway: give_way
               bench:
                 amenity: bench
           - { key: dir, tag_value: direction, type: string }
           - { key: sig_dir, tag_value: "traffic_signals:direction", type: string }
+          - { key: stop_dir, tag_value: "stop:direction", type: string }
+          - { key: stop, tag_value: stop, type: string }
           - { key: mount, tag_value: lamp_mount, type: string }
           - { key: backrest, tag_value: backrest, type: boolean }
 
@@ -468,6 +478,34 @@ examples:
         tags:
           kind: signals
           sig_dir: forward
+  - name: stop sign
+    input:
+      source: osm
+      geometry: point
+      tags:
+        highway: stop
+        direction: forward
+        stop: minor
+    output:
+      - layer: furniture
+        geometry: point
+        tags:
+          kind: stop
+          dir: forward
+          stop: minor
+  - name: give way sign
+    input:
+      source: osm
+      geometry: point
+      tags:
+        highway: give_way
+        "stop:direction": backward
+    output:
+      - layer: furniture
+        geometry: point
+        tags:
+          kind: give_way
+          stop_dir: backward
   - name: bench
     input:
       source: osm

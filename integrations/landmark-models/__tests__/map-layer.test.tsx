@@ -6,7 +6,9 @@ import {
   usePlaceStore,
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   NEUTRAL_SCENE_LIGHT,
   NIGHT_SCENE_LIGHT,
@@ -257,6 +259,52 @@ describe("LandmarkModelsLayer", () => {
     expect(fake.state.layers.has(LAYER_ID)).toBe(false);
   });
 
+  it("landmarks render during 3D navigation", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => {
+      useNavigationStore.setState({ status: "navigating" });
+      useNavigationSceneStore.getState().setActive(true);
+    });
+    await activate();
+    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(false);
+      useNavigationStore.setState({ status: "idle" });
+    });
+  });
+
+  it("landmarks stay off during 2D navigation", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    await activate();
+    expect(fake.state.layers.has(LAYER_ID)).toBe(false);
+    act(() => useNavigationStore.setState({ status: "idle" }));
+  });
+
+  it("taps do nothing while navigating", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => {
+      useNavigationStore.setState({ status: "navigating" });
+      useNavigationSceneStore.getState().setActive(true);
+    });
+    await activate();
+    act(() => sceneMock.options?.onFrame(["landmark-models-open-landmarks:arc"]));
+    sceneMock.pick = "landmark-models-open-landmarks:arc";
+    act(() =>
+      fake.emit("click", {
+        target: fake.map,
+        point: { x: 10, y: 10 },
+        lngLat: { lng: 2.2945, lat: 48.8584 },
+        originalEvent: new MouseEvent("click"),
+      }),
+    );
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    act(() => {
+      useNavigationSceneStore.getState().setActive(false);
+      useNavigationStore.setState({ status: "idle" });
+    });
+  });
+
   it("does not import the scene module until first active", async () => {
     render(<LandmarkModelsLayer />);
     await flush();
@@ -273,6 +321,40 @@ describe("LandmarkModelsLayer", () => {
     fake.state.layers.delete(LAYER_ID);
     act(() => fake.emit("styledata"));
     expect(fake.state.layers.get(LAYER_ID)).toBe(sceneMock.layer);
+  });
+
+  describe("scene slot", () => {
+    const slotOf = () => layerRegistrations().find((r) => r.id === LAYER_ID);
+    afterEach(() => {
+      act(() => useNavigationSceneStore.getState().setActive(false));
+    });
+
+    it("adds its layer in scene-3d while the navigation scene is active", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<LandmarkModelsLayer />);
+      await activate();
+      expect(slotOf()).toMatchObject({ slot: "scene-3d", order: 12 });
+    });
+
+    it("moves back to area-overlays when it ends", async () => {
+      render(<LandmarkModelsLayer />);
+      await activate();
+      expect(slotOf()?.slot).toBe("area-overlays");
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      expect(slotOf()?.slot).toBe("scene-3d");
+      act(() => useNavigationSceneStore.getState().setActive(false));
+      expect(slotOf()).toMatchObject({ slot: "area-overlays", order: 12 });
+    });
+
+    it("a style swap during 3D navigation re-adds it in scene-3d", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<LandmarkModelsLayer />);
+      await activate();
+      fake.state.layers.delete(LAYER_ID);
+      act(() => fake.emit("styledata"));
+      expect(fake.state.layers.get(LAYER_ID)).toBe(sceneMock.layer);
+      expect(slotOf()?.slot).toBe("scene-3d");
+    });
   });
 
   it("publishes replacements for placed, grounded models and empties them when inactive", async () => {

@@ -155,6 +155,12 @@ tile server which archives it serves, and the web app shows street detail
 whenever `street_detail` is there. Coverage is your extract: outside it the 3D
 view has no street detail, while forests still grow everywhere.
 
+Rebuild `street_detail.mbtiles` after updating OpenMapX to get stop and give-way
+signs in the 3D view and the lane highlight in 3D navigation: the build now
+writes the signs, and each road keeps its OpenStreetMap way id, which the lane
+highlight matches against the route. An older archive keeps working; it simply
+has no signs and no lane highlight.
+
 ### Street detail with a hosted base map
 
 To keep OpenFreeMap or MapTiler as the base map and still get street detail,

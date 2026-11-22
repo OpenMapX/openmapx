@@ -161,8 +161,16 @@ export class GroundRerouteService {
       // Validated through exactly the schema a captured package uses. A server
       // response is not more trustworthy than the page, and a malformed route
       // must leave the old one in place rather than half-replace it.
+      // Signals and landmarks are positions on the old route; the new one gets
+      // its own once fetched, and plain prompts until then.
+      const {
+        signalsAlong: _signalsAlong,
+        signalSpans: _signalSpans,
+        landmarkReferences: _landmarkReferences,
+        ...kept
+      } = startPackage;
       const replacement = {
-        ...startPackage,
+        ...kept,
         route: candidate,
         alternatives: [],
         destinationWaypoints: waypoints,

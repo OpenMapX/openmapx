@@ -501,6 +501,7 @@ describe("navigationStore route-identity reset", () => {
       progress: { alongMeters: 42 } as NavProgress,
       offRoute: true,
       liveSpeedLimits: [50, 60],
+      approachWayIds: { 1: 18908130 },
       currentSpeedLimit: 90,
     });
   }
@@ -620,6 +621,8 @@ describe("navigationStore route-identity reset", () => {
       expect(s.progress).toBeNull();
       expect(s.offRoute).toBe(false);
       expect(s.liveSpeedLimits).toBeNull();
+      // approach ways reset with liveSpeedLimits on route identity change
+      expect(s.approachWayIds).toBeNull();
       expect(s.currentSpeedLimit).toBeNull();
       assertSpecific();
     },

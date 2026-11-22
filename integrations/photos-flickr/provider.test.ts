@@ -65,7 +65,7 @@ describe("Flickr photo provider", () => {
         authorUrl: "https://www.flickr.com/photos/12345@N00",
         licensing: licensingFromDeclaration(
           "CC-BY-2.0",
-          "https://creativecommons.org/licenses/by/2.0",
+          "https://creativecommons.org/licenses/by/2.0/",
           "Flickr photo",
           "imagery",
         ),

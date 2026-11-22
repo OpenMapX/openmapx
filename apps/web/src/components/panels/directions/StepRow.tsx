@@ -12,7 +12,7 @@ import {
 import { useLocale } from "next-intl";
 import { LaneGuidance } from "@/components/navigation/LaneGuidance";
 import { ExitSignStrip } from "@/components/navigation/signs/ExitSignStrip";
-import { maneuverIconFor } from "@/lib/navigation/maneuverIcon";
+import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 
 interface StepRowProps {
   instruction: string;
@@ -22,7 +22,7 @@ interface StepRowProps {
   /** Turn-lane guidance for this step, when the engine supplies it. */
   lanes?: ManeuverLane[];
   /** Normalized maneuver for the lane recommendation fallback. */
-  maneuver?: { type: string; modifier?: string };
+  maneuver?: Maneuver;
   /** Interchange signage for this step, when the engine supplies it. */
   sign?: ManeuverSign;
   /** Country of the route origin, for the sign palette. */

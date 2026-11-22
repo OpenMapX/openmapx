@@ -21,6 +21,7 @@ export {
   selectActiveAlert,
   shouldWarnCamera,
 } from "./alerts";
+export { approachWayIdsFromWindow } from "./approachWays";
 export {
   angularDifference,
   bearingBetween,
@@ -137,7 +138,19 @@ export {
 } from "./junctionDetect";
 export { junctionLookupPoints } from "./junctionLookup";
 export {
+  eligibleLandmarkManeuvers,
+  type LandmarkCandidate,
+  type LandmarkCandidateCategory,
+  type LandmarkManeuver,
+  landmarkManeuverAt,
+  selectLandmark,
+} from "./landmarks";
+export { LANE_ENTRY_M, type LanePath, laneOffsetAt, offsetLngLat } from "./lanePath";
+export {
   guidanceApproachMeters,
+  guidanceLanesForStep,
+  type LaneStep,
+  narrowForNextManeuver,
   type ResolvedLaneGuidance,
   resolveGuidanceLanes,
   resolveLaneGuidance,
@@ -153,10 +166,15 @@ export {
 } from "./laneTags";
 export { isLiveNavigationStatus } from "./liveStatus";
 export {
+  ARROW_HEAD_M,
+  laneRejoinAlong,
+  laneShiftedArrowLine,
   type ManeuverArrowSpans,
   maneuverArrowLine,
   maneuverArrowSpans,
   maneuverArrowTipBearing,
+  raisedArrowPolygon,
+  smoothArrowLine,
 } from "./maneuverArrow";
 export {
   type ManeuverPositions,
@@ -244,6 +262,17 @@ export {
   transitSnapshotWireSchema,
 } from "./nativeSnapshot";
 export {
+  approachTargetZoom,
+  type JunctionFitInput,
+  junctionFitZoom,
+  lookAheadBearing,
+  lookAheadMeters,
+  NAV_CAMERA_PROFILE,
+  type NavCameraProfile,
+  type NavCameraProfileName,
+  speedZoom,
+} from "./navCameraFraming";
+export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
   NAVIGATION_SESSION_MAX_AGE_MS,
@@ -283,12 +312,29 @@ export {
   type TimelineEventType,
 } from "./recording";
 export {
+  type ChooseReferenceInput,
+  type CueReference,
+  chooseReference,
+  type LandmarkReference,
+  type SpokenLandmarkCategory,
+  trafficLightReference,
+} from "./references";
+export {
   remainingWaypoints,
   shouldReroute,
   shouldRerouteForClosure,
   updateOffRouteScore,
 } from "./reroute";
 export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
+export {
+  type GuidanceGlyph,
+  type RoundaboutCirculation,
+  type RoundaboutStep,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutRole,
+  roundaboutTurnAt,
+} from "./roundabout";
 export { isNearRoute, ROUTE_CORRIDOR_METERS } from "./routeCorridor";
 export {
   appendCountrySpans,
@@ -325,6 +371,7 @@ export {
   routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "./routeStopDetours";
+export { metresToPixels, type RouteWidthExpression, routeWidthExpression } from "./routeWidth";
 export {
   type AlongRouteOptions,
   type AlongRoutePoi,
@@ -357,6 +404,7 @@ export { spokenInstructionFor } from "./spokenInstruction";
 export {
   extractTrafficSignals,
   type GeometryWindow,
+  signalAlongDistances,
   signalCoordKey,
   windowGeometry,
 } from "./trafficSignals";

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useNavTrafficSignals } from "@/lib/navigation/useNavTrafficSignals";
 import { loadTrafficLightImage, TRAFFIC_LIGHT_IMAGE_ID } from "@/lib/trafficLightMarker";
@@ -10,7 +11,10 @@ const SOURCE = "nav-traffic-signals-source";
 export const NAV_TRAFFIC_SIGNALS_LAYER_ID = "nav-traffic-signals";
 
 export function NavTrafficSignalsLayer() {
+  // Stays mounted while hidden: it owns the signal fetch other features read.
   const signals = useNavTrafficSignals();
+  // In 3D navigation the street objects draw the signals themselves.
+  const hidden = useNavigationSceneStore((s) => s.active && s.streetObjectsDrawn);
 
   const data = useMemo(
     () => ({
@@ -37,6 +41,7 @@ export function NavTrafficSignalsLayer() {
           type: "symbol",
           source: SOURCE,
           layout: {
+            visibility: hidden ? "none" : "visible",
             "icon-image": TRAFFIC_LIGHT_IMAGE_ID,
             "icon-size": 0.8,
             "icon-allow-overlap": true,
@@ -47,7 +52,7 @@ export function NavTrafficSignalsLayer() {
         },
       ] satisfies SlottedLayer[],
     }),
-    [data],
+    [data, hidden],
   );
   useMapLayerGroup(group);
 

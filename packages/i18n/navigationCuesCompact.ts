@@ -6,6 +6,11 @@
 import cueMessages from "./generated/navigation-cue-messages.json";
 import { createNavigationCueFormatter } from "./navigationCueFormatter";
 
-export { NavigationCueError } from "./navigationCueFormatter";
+export {
+  NavigationCueError,
+  type NavigationCueReference,
+  type NavigationLandmarkCategory,
+} from "./navigationCueFormatter";
+export { startsWithReferenceStarter } from "./navigationReferenceStarters";
 
 export const { formatNavigationCue } = createNavigationCueFormatter(cueMessages);

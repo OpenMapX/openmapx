@@ -1,4 +1,4 @@
-import type { MobileNavigationSession } from "@openmapx/core/navigation";
+import { type MobileNavigationSession, routeFingerprint } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
 import { createRemoteWork, type RemoteWorkDeps } from "./createRemoteWork";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
@@ -112,4 +112,48 @@ it("runs native transit refresh through the remote-work production port", async 
   await work.idle();
   expect(request).toHaveBeenCalledTimes(1);
   expect(apply).toHaveBeenCalledTimes(1);
+});
+
+describe("createRemoteWork voice references", () => {
+  function referenceHarness(session: MobileNavigationSession | null) {
+    const request = jest.fn(async ({ requestId }: { requestId: string }) => ({
+      ok: false as const,
+      requestId,
+      sessionId: "session-1",
+      code: "network" as const,
+    }));
+    const apply = jest.fn(async () => undefined);
+    const work = createRemoteWork({
+      repository: { loadActive: async () => session },
+      reroute: { request: jest.fn(), abortAll: jest.fn() },
+      applyReroute: jest.fn(),
+      now: () => NOW,
+      diagnostics: { record: jest.fn() },
+      references: { request, abortAll: jest.fn() },
+      applyReferences: apply,
+    });
+    return { work, request, apply };
+  }
+
+  it("asks for the references of the route the session still follows", async () => {
+    const session = activeGround(undefined);
+    if (session.kind !== "ground") throw new Error("not ground");
+    const fingerprint = routeFingerprint(session.payload.startPackage.route.geometry);
+    const { work, request, apply } = referenceHarness(session);
+
+    await work.port.references?.(fingerprint);
+    await work.idle();
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask for a route the session no longer follows", async () => {
+    const { work, request } = referenceHarness(activeGround(undefined));
+
+    await work.port.references?.("another-route");
+    await work.idle();
+
+    expect(request).not.toHaveBeenCalled();
+  });
 });

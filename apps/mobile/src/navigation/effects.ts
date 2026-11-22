@@ -25,9 +25,10 @@ const ORDER: Record<SessionEffect["kind"], number> = {
   "stop-audio": 5,
   speak: 6,
   "request-reroute": 7,
-  "request-transit-refresh": 8,
-  "reconcile-surface": 9,
-  "publish-snapshot": 10,
+  "request-references": 8,
+  "request-transit-refresh": 9,
+  "reconcile-surface": 10,
+  "publish-snapshot": 11,
 };
 
 export interface LocationDriverPort {
@@ -54,6 +55,8 @@ export interface PublishPort {
 export interface RemoteWorkPort {
   reroute(requestId: string): Promise<void>;
   transitRefresh(requestId: string): Promise<void>;
+  /** Optional: compositions without native voice references leave it out. */
+  references?(requestId: string): Promise<void>;
 }
 
 export interface DiagnosticSink {
@@ -115,6 +118,8 @@ export class EffectRunner {
         return remote.reroute(effect.requestId);
       case "request-transit-refresh":
         return remote.transitRefresh(effect.requestId);
+      case "request-references":
+        return remote.references?.(effect.requestId);
     }
   }
 }

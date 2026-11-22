@@ -147,3 +147,81 @@ describe("cue exactly-once behaviour", () => {
     expect(afterReplacement?.cueId).not.toBe(built?.cueId);
   });
 });
+
+describe("references", () => {
+  // Eastbound, ~143 m per vertex: a right turn at the second vertex.
+  const p0: [number, number] = [8.68, 50.11];
+  const p1: [number, number] = [8.682, 50.11];
+  const p2: [number, number] = [8.684, 50.11];
+  const turnStep = {
+    instruction: "Turn right onto Main Street",
+    verbalAlert: "Turn right onto Main Street.",
+    distance: 143,
+    duration: 20,
+    coordinates: [p1, p2],
+    maneuver: { type: "turn", modifier: "right" },
+  };
+
+  function withPackage(
+    extra: Record<string, unknown>,
+    mode: "driving" | "walking" = "driving",
+  ): GroundMobileSession {
+    const base = session();
+    const startPackage = base.payload.startPackage;
+    return {
+      ...base,
+      payload: {
+        ...base.payload,
+        startPackage: {
+          ...startPackage,
+          mode,
+          route: {
+            ...startPackage.route,
+            distance: 286,
+            geometry: [p0, p1, p2],
+            steps: [
+              { instruction: "Head east", distance: 143, duration: 20, coordinates: [p0, p1] },
+              turnStep,
+              { instruction: "Arrive", distance: 0, duration: 0, coordinates: [p2] },
+            ],
+          },
+          ...extra,
+        } as never,
+      },
+    };
+  }
+
+  const nearTurn = cue({ stepIndex: 1, distance: 100, step: turnStep as never });
+
+  it("native near cue names the traffic light from the package", () => {
+    const built = groundCueEffect(
+      withPackage({ signalsAlong: [60, 135], signalSpans: [{ from: 0, to: 286 }] }),
+      FINGERPRINT,
+      nearTurn,
+    );
+    expect(built?.effect.text).toBe("At the second traffic light, turn right onto Main Street.");
+  });
+
+  it("native near cue names the landmark from the package", () => {
+    const built = groundCueEffect(
+      withPackage({ landmarkReferences: [{ stepIndex: 1, category: "pharmacy" }] }),
+      FINGERPRINT,
+      nearTurn,
+    );
+    expect(built?.effect.text).toBe("At the pharmacy, turn right onto Main Street.");
+  });
+
+  it("a native cue without package references stays plain", () => {
+    const built = groundCueEffect(withPackage({}), FINGERPRINT, nearTurn);
+    expect(built?.effect.text).toBe("In 100 metres, Turn right onto Main Street.");
+  });
+
+  it("a walking session never gets references", () => {
+    const built = groundCueEffect(
+      withPackage({ signalsAlong: [60, 135], signalSpans: [{ from: 0, to: 286 }] }, "walking"),
+      FINGERPRINT,
+      nearTurn,
+    );
+    expect(built?.effect.text).toBe("In 100 metres, Turn right onto Main Street.");
+  });
+});

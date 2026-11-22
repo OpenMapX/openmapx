@@ -1,6 +1,18 @@
-import { cumulativeDistances, haversineDistance, numberAt, positionAt } from "@openmapx/core";
-import { render } from "@testing-library/react";
+import {
+  bearingBetween,
+  cumulativeDistances,
+  haversineDistance,
+  laneRejoinAlong,
+  maneuverArrowSpans,
+  maneuverStartMeters,
+  numberAt,
+  positionAt,
+  type Route,
+} from "@openmapx/core";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { createFakeMap, nth } from "@/test";
 
 const fake = createFakeMap({
@@ -75,6 +87,98 @@ afterEach(() => {
   };
 });
 
+describe("NavManeuverArrowLayer in 3D", () => {
+  const RAISED = "nav-maneuver-arrow-raised";
+  const visibility = (id: string) => fake.map.getLayoutProperty(id, "visibility") ?? "visible";
+  const setZoom = (zoom: number) =>
+    act(() => {
+      fake.state.zoom = zoom;
+      fake.emit("zoom");
+    });
+  afterEach(() => {
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    fake.state.zoom = 10;
+  });
+
+  it("the raised arrow replaces the 2D arrow in 3D from z16.5", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(fake.state.layers.get(RAISED)).toMatchObject({ type: "fill-extrusion" });
+    expect(layerRegistrations().find((r) => r.id === RAISED)).toMatchObject({
+      slot: "scene-3d",
+      order: 14,
+    });
+    expect(fake.state.paint.get(RAISED)).toMatchObject({
+      "fill-extrusion-base": 0.8,
+      "fill-extrusion-height": 1.1,
+      "fill-extrusion-color": "#ffffff",
+    });
+    expect(visibility(RAISED)).toBe("visible");
+    for (const id of ["nav-maneuver-arrow-casing", "nav-maneuver-arrow", "nav-maneuver-arrow-head"])
+      expect(visibility(id)).toBe("none");
+  });
+
+  it("below z16.5 the 2D arrow stays", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(16);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(visibility("nav-maneuver-arrow")).toBe("visible");
+    expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+  });
+
+  it("publishes the raised arrow's span so the route ghost can leave it white", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    const along = maneuverStartMeters(route as unknown as Route, 1);
+    const spans = maneuverArrowSpans("driving");
+    expect(useNavigationSceneStore.getState().arrowSpan).toEqual({
+      fromAlong: along - spans.before,
+      toAlong: along + spans.after,
+    });
+    setZoom(16);
+    expect(useNavigationSceneStore.getState().arrowSpan).toBeNull();
+  });
+
+  it("runs the arrow in the highlighted lane, back on the route line at its head", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    const lineOf = () =>
+      features().find((f) => f.geometry.type === "LineString")?.geometry as GeoJSON.LineString;
+    const plain = lineOf().coordinates as [number, number][];
+    const along = maneuverStartMeters(route as unknown as Route, 1);
+    act(() =>
+      useNavigationSceneStore.getState().setHighlightSpan({
+        fromAlong: along - 80,
+        toAlong: along - 5,
+        rejoinAlong: laneRejoinAlong(along, "driving"),
+        offsetMeters: 3,
+      }),
+    );
+    const shifted = lineOf().coordinates as [number, number][];
+    // The first vertex moved 3 m sideways; the tip did not.
+    expect(haversineDistance(nth(shifted, 0), nth(plain, 0))).toBeCloseTo(3, 0);
+    expect(nth(shifted, -1)).toEqual(nth(plain, -1));
+    // It stays off the route line through the junction, cutting the corner
+    // from the lane, and rejoins it only at the arrow head.
+    const geometry = (route as unknown as Route).geometry;
+    const turnPoint = positionAt(geometry, cumulativeDistances(geometry), along).point;
+    const nearest = Math.min(...shifted.map((p) => haversineDistance(p, turnPoint)));
+    expect(nearest).toBeGreaterThan(0.5);
+  });
+
+  it("3D off restores the 2D arrow", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(visibility("nav-maneuver-arrow")).toBe("visible");
+    expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+  });
+});
+
 describe("NavManeuverArrowLayer", () => {
   it("centres the map arrow on the same physical maneuver as the countdown", () => {
     navState.route = {
@@ -99,7 +203,7 @@ describe("NavManeuverArrowLayer", () => {
       expect(ids).toContain(id);
       expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf("place-labels"));
     }
-    const feats = features();
+    const feats = features().filter((f) => f.geometry.type !== "Polygon");
     expect(feats).toHaveLength(2);
     const point = feats.find((f) => f.geometry.type === "Point");
     expect(point).toBeTruthy();
@@ -109,7 +213,10 @@ describe("NavManeuverArrowLayer", () => {
     ) as GeoJSON.Feature<GeoJSON.LineString>;
     expect(line).toBeTruthy();
     expect(typeof line.properties?.bearing).toBe("number");
-    expect(line.geometry.coordinates.some(([lng, lat]) => lng === 8 && lat === 50.01)).toBe(true);
+    const nearest = Math.min(
+      ...line.geometry.coordinates.map((p) => haversineDistance(p as [number, number], [8, 50.01])),
+    );
+    expect(nearest).toBeLessThan(0.5);
     navState.progress = {
       currentStepIndex: 0,
       distanceToNextManeuver: 5000,
@@ -118,6 +225,34 @@ describe("NavManeuverArrowLayer", () => {
     };
     view.rerender(<NavManeuverArrowLayer />);
     expect(features()).toHaveLength(0);
+  });
+
+  it("irons a sideways step in the route out of the arrow", () => {
+    // 3 m sideways, 25 m before the maneuver, as where a road splits into two
+    // carriageways.
+    const stepped: [number, number][] = [
+      [8, 50],
+      [8, 50.008768],
+      [8.000042, 50.008795],
+      [8.000042, 50.02],
+    ];
+    navState.route = { ...route, geometry: stepped };
+    render(<NavManeuverArrowLayer />);
+    const line = features().find((f) => f.geometry.type === "LineString")
+      ?.geometry as GeoJSON.LineString;
+    const points = line.coordinates as [number, number][];
+    let sharpest = 0;
+    for (let i = 2; i < points.length; i++) {
+      const turn = Math.abs(
+        ((bearingBetween(nth(points, i - 1), nth(points, i)) -
+          bearingBetween(nth(points, i - 2), nth(points, i - 1)) +
+          540) %
+          360) -
+          180,
+      );
+      sharpest = Math.max(sharpest, turn);
+    }
+    expect(sharpest).toBeLessThan(10);
   });
 
   it("uses the short spans for a walking route", () => {
@@ -129,7 +264,7 @@ describe("NavManeuverArrowLayer", () => {
       alongMeters: 980,
     };
     render(<NavManeuverArrowLayer />);
-    const feats = features();
+    const feats = features().filter((f) => f.geometry.type !== "Polygon");
     expect(feats).toHaveLength(2);
     const line = feats.find(
       (f) => f.geometry.type === "LineString",

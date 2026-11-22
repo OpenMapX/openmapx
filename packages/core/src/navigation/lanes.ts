@@ -76,6 +76,91 @@ export function resolveLaneGuidance(lanes: ManeuverLane[] | undefined): Resolved
   };
 }
 
+const MERGE_NARROW_M = 200;
+const MERGE_NARROW_MOTORWAY_M = 400;
+
+/** "left"/"right" for a turn modifier ("slight left", "sharp_right", …), else null. */
+function modifierSide(modifier: string | undefined): "left" | "right" | null {
+  const mod = modifier ? norm(modifier) : "";
+  if (mod.endsWith("left")) return "left";
+  if (mod.endsWith("right")) return "right";
+  return null;
+}
+
+/**
+ * Anticipate a close second maneuver (immersive navigation spec §9.1): when the
+ * next maneuver follows within 200 m (400 m on a motorway) and both lane sets
+ * are fully known, keep only the current recommended lanes nearest the side the
+ * next maneuver's lanes are on as preferred. It narrows within lanes the engine
+ * already recommends and never invents or re-validates a lane; demoted lanes
+ * stay usable and lose their bright arrow. Anything uncertain changes nothing.
+ */
+export function narrowForNextManeuver(
+  current: ManeuverLane[],
+  next: ManeuverLane[],
+  gapMeters: number,
+  motorway: boolean,
+  nextModifier: string | undefined,
+): ManeuverLane[] {
+  if (current.length === 0 || next.length === 0) return current;
+  if (gapMeters > (motorway ? MERGE_NARROW_MOTORWAY_M : MERGE_NARROW_M)) return current;
+  const now = resolveLaneGuidance(current);
+  const then = resolveLaneGuidance(next);
+  if (now.state !== "known" || then.state !== "known") return current;
+  const nextRecommended = then.preferredLanes.length > 0 ? then.preferredLanes : then.usableLanes;
+  if (nextRecommended.length === 0) return current;
+  const middle = (next.length - 1) / 2;
+  const lanesSide = nextRecommended.every((i) => i < middle)
+    ? "left"
+    : nextRecommended.every((i) => i > middle)
+      ? "right"
+      : null;
+  if (!lanesSide || lanesSide !== modifierSide(nextModifier)) return current;
+  const recommended = now.preferredLanes.length > 0 ? now.preferredLanes : now.usableLanes;
+  const k = Math.min(recommended.length, Math.max(1, nextRecommended.length));
+  // Nothing to narrow when every recommended lane stays.
+  if (k === 0 || k === recommended.length) return current;
+  const ordered = lanesSide === "left" ? recommended : [...recommended].reverse();
+  const kept = new Set(ordered.slice(0, k));
+  return current.map((lane, i) => {
+    if (!recommended.includes(i)) return lane;
+    if (kept.has(i)) return { ...lane, preferred: true };
+    const { active: _dropped, ...rest } = lane;
+    return { ...rest, preferred: false, narrowed: true };
+  });
+}
+
+/** The minimal step shape `guidanceLanesForStep` reads, shared by the phone and the car. */
+export interface LaneStep {
+  distance: number;
+  maneuver?: { type?: string; modifier?: string };
+  motorway?: boolean;
+}
+
+/**
+ * The lanes to show for the upcoming maneuver: what the caller resolved for it
+ * today, narrowed for a close second maneuver. The one entry point the banner
+ * and the car card share, so they always show the same set.
+ */
+export function guidanceLanesForStep(
+  steps: readonly LaneStep[],
+  upcomingIndex: number,
+  lanes: ManeuverLane[] | undefined,
+  nextLanes: ManeuverLane[] | undefined,
+): ManeuverLane[] | undefined {
+  const step = steps[upcomingIndex];
+  if (!lanes || !step || !nextLanes) return lanes;
+  const motorway =
+    steps[upcomingIndex - 1]?.motorway === true || steps[upcomingIndex]?.motorway === true;
+  return narrowForNextManeuver(
+    lanes,
+    nextLanes,
+    step.distance,
+    motorway,
+    steps[upcomingIndex + 1]?.maneuver?.modifier,
+  );
+}
+
 /** Retained API: unknown or rejected lanes never become guessed recommendations. */
 export function resolveRecommendedLanes(
   lanes: ManeuverLane[] | undefined,

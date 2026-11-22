@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MatchResult } from "../types/routing";
 
 import { cumulativeDistances } from "./deadReckon";
-import { extractTrafficSignals, windowGeometry } from "./trafficSignals";
+import { extractTrafficSignals, signalAlongDistances, windowGeometry } from "./trafficSignals";
 
 function match(partial: Partial<MatchResult>): MatchResult {
   return {
@@ -166,5 +166,46 @@ describe("windowGeometry", () => {
     expect(w.trace).toEqual([]);
     expect(w.done).toBe(true);
     expect(w.nextStart).toBe(6);
+  });
+});
+
+describe("signalAlongDistances", () => {
+  // An eastbound line along the equator, ~111 m per 0.001°.
+  const line: [number, number][] = [
+    [0, 0],
+    [0.001, 0],
+    [0.002, 0],
+    [0.003, 0],
+    [0.004, 0],
+  ];
+  const cum = cumulativeDistances(line);
+
+  it("signal along-distances follow route order and drop far signals", () => {
+    const along = signalAlongDistances(
+      [
+        [0.0025, 0.00005], // ~5.6 m north of the line at ~278 m
+        [0.0005, 0], // on the line at ~56 m
+        [0.0015, 0.0003], // ~33 m off: not on the route
+      ],
+      line,
+      cum,
+      0,
+      4,
+    );
+    expect(along).toHaveLength(2);
+    expect(along[0]).toBeCloseTo(55.66, 0);
+    expect(along[1]).toBeCloseTo(278.3, 0);
+  });
+
+  it("only projects onto the window's own segments", () => {
+    // The window spans vertices 2–4; the signal at ~56 m lies before it.
+    expect(signalAlongDistances([[0.0005, 0]], line, cum, 2, 4)).toEqual([]);
+    const inside = signalAlongDistances([[0.0035, 0]], line, cum, 2, 4);
+    expect(inside[0]).toBeCloseTo(389.6, 0);
+  });
+
+  it("gives none without signals or segments", () => {
+    expect(signalAlongDistances([], line, cum, 0, 4)).toEqual([]);
+    expect(signalAlongDistances([[0.0005, 0]], line, cum, 3, 3)).toEqual([]);
   });
 });

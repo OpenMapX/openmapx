@@ -19,7 +19,8 @@ import {
 } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
-import { ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
+import { useNavRouteWidthLatitude } from "@/lib/navigation/useNavRouteWidthLatitude";
+import { navRouteWidths, ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import {
   activeSpanFilter,
   type BandRoute,
@@ -71,6 +72,8 @@ function RouteTrafficContent({ drawn }: { drawn: DrawnDirectionsRoutes }) {
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
 
   const navigating = navStatus !== "idle";
+  const widthLatitude = useNavRouteWidthLatitude();
+  const navWidths = useMemo(() => navRouteWidths(widthLatitude), [widthLatitude]);
   const mode = navigating ? navMode : drawn.mode;
   const enabled = MOTORISED.has(mode);
 
@@ -150,7 +153,8 @@ function RouteTrafficContent({ drawn }: { drawn: DrawnDirectionsRoutes }) {
     // `route-traffic-active` and `route-traffic-current` share paint by
     // value, not by object reference: each layer gets its own literal so
     // nothing can mutate one and silently affect the other.
-    const activeLineWidth = navigating ? ROUTE_WIDTHS.nav.line : ROUTE_WIDTHS.planning.line;
+    // While navigating, the bands follow the route's own lane-wide ribbon.
+    const activeLineWidth = navigating ? navWidths.line : ROUTE_WIDTHS.planning.line;
     return {
       sources: {
         [SOURCE]: { type: "geojson", data: staticFeatures },
@@ -203,7 +207,7 @@ function RouteTrafficContent({ drawn }: { drawn: DrawnDirectionsRoutes }) {
         },
       ] satisfies SlottedLayer[],
     };
-  }, [staticFeatures, currentFeatures, navigating]);
+  }, [staticFeatures, currentFeatures, navigating, navWidths]);
   useMapLayerGroup(group);
   // Must run after `useMapLayerGroup` so its effect fires after the layer exists.
   useMapDynamicLineState(dynamicState);

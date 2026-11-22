@@ -5,7 +5,10 @@ export {
   type FormatCueOptions,
   NavigationCueError,
   type NavigationCueIntent,
+  type NavigationCueReference,
+  type NavigationLandmarkCategory,
 } from "./navigationCueFormatter";
+export { startsWithReferenceStarter } from "./navigationReferenceStarters";
 
 /**
  * Cue formatting over the full registered catalogues, for headless consumers

@@ -7,6 +7,7 @@ import androidx.car.app.navigation.model.Maneuver
 import androidx.car.app.testing.TestCarContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -56,6 +57,114 @@ class CarMappingTest {
       )
     assertEquals(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW, roundabout.maneuver!!.type)
     assertEquals(3, roundabout.maneuver!!.roundaboutExitNumber)
+  }
+
+  /** The glyph the phone draws for Strausberger Platz's 2nd exit (`roundaboutGlyph`). */
+  private fun strausbergerGlyph() =
+    JSONObject()
+      .put(
+        "strokes",
+        org.json.JSONArray()
+          .put(JSONObject().put("d", "M8.61 9.88 A4 4 0 0 0 12 16").put("width", 2.2).put("opacity", 0.4))
+          .put(JSONObject().put("d", "M12 21 L12 16 A4 4 0 1 0 8.61 9.88 L5.64 8.03").put("width", 3)),
+      )
+      .put("fills", org.json.JSONArray().put("M2.25 5.91 L3.84 10.91 L7.44 5.14 Z"))
+
+  @Test
+  fun roundaboutsTellTheHostTheirExitAngleAndLeavingStep() {
+    val context = RuntimeEnvironment.getApplication()
+    val entering =
+      CarTripMapper.step(
+        context,
+        JSONObject()
+          .put("instruction", "Take the 2nd exit")
+          .put("maneuverIcon", "RoundaboutLeft")
+          .put("roundabout", JSONObject().put("exit", 2).put("clockwise", false).put("angle", 238))
+          .put("maneuverGlyph", strausbergerGlyph()),
+      )
+    assertEquals(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE, entering.maneuver!!.type)
+    assertEquals(238, entering.maneuver!!.roundaboutExitAngle)
+    assertEquals(2, entering.maneuver!!.roundaboutExitNumber)
+    val clockwise =
+      CarTripMapper.step(
+        context,
+        JSONObject()
+          .put("instruction", "Take the 1st exit")
+          .put("maneuverIcon", "RoundaboutLeft")
+          .put("roundabout", JSONObject().put("exit", 1).put("clockwise", true).put("angle", 90)),
+      )
+    assertEquals(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW_WITH_ANGLE, clockwise.maneuver!!.type)
+    val leaving =
+      CarTripMapper.step(
+        context,
+        JSONObject()
+          .put("instruction", "Exit the roundabout")
+          .put("maneuverIcon", "RoundaboutLeft")
+          .put(
+            "roundabout",
+            JSONObject().put("exit", 2).put("clockwise", false).put("angle", 239).put("leaving", true),
+          ),
+      )
+    assertEquals(Maneuver.TYPE_ROUNDABOUT_EXIT_CCW, leaving.maneuver!!.type)
+  }
+
+  @Test
+  @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+  fun roundaboutGlyphsDrawFromThePhonesPaths() {
+    val context = RuntimeEnvironment.getApplication()
+    val bitmap = ManeuverIcons.bitmap(context, "RoundaboutLeft", strausbergerGlyph())
+    assertEquals(128, bitmap.width)
+    // The way in comes up the middle, where the Material drawable has no stem.
+    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(64, 100)))
+    // The arrowhead, up and to the left of the circle, is drawn.
+    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(24, 39)))
+    // The middle of the circle stays empty.
+    assertEquals(0, android.graphics.Color.alpha(bitmap.getPixel(64, 64)))
+    // It is the glyph, not the named drawable it stands in for.
+    assertFalse(bitmap.sameAs(ManeuverIcons.bitmap(context, "RoundaboutLeft")))
+  }
+
+  @Test
+  fun projectionParserBoundsRoundaboutsAndGlyphs() {
+    val p =
+      JSONObject()
+        .put("sessionId", "s")
+        .put("instruction", "Take the 2nd exit")
+        .put("locale", "en")
+        .put("units", "metric")
+        .put("maneuverIcon", "RoundaboutLeft")
+        .put("maneuverDistance", parts(1.0, "m", 0))
+        .put("remainingDistanceDisplay", parts(1.0, "m", 0))
+    for (key in
+      listOf(
+        "revision",
+        "distanceToManeuver",
+        "secondsToManeuver",
+        "maneuverEtaMs",
+        "remainingDistance",
+        "remainingSeconds",
+        "etaMs",
+      )) p.put(key, 1)
+    assertNotNull(CarProjection.parse(p))
+    assertNotNull(CarProjection.parse(JSONObject(p.toString()).put("maneuverGlyph", strausbergerGlyph())))
+    val script = strausbergerGlyph()
+    script.getJSONArray("fills").put(0, "M0 0 <script>")
+    assertNull(CarProjection.parse(JSONObject(p.toString()).put("maneuverGlyph", script)))
+    val wide = strausbergerGlyph()
+    wide.getJSONArray("strokes").getJSONObject(0).put("width", 40)
+    assertNull(CarProjection.parse(JSONObject(p.toString()).put("maneuverGlyph", wide)))
+    val roundabout = JSONObject().put("exit", 2).put("clockwise", false)
+    assertNotNull(CarProjection.parse(JSONObject(p.toString()).put("roundabout", roundabout)))
+    assertNull(
+      CarProjection.parse(
+        JSONObject(p.toString()).put("roundabout", JSONObject(roundabout.toString()).put("angle", 0))
+      )
+    )
+    assertNull(
+      CarProjection.parse(
+        JSONObject(p.toString()).put("roundabout", JSONObject(roundabout.toString()).put("exit", 0))
+      )
+    )
   }
 
   @Test

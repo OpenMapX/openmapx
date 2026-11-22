@@ -299,11 +299,42 @@ export function parseLicensing(raw: unknown): Licensing | undefined {
   return { version: 1, bindings, ...(declarations === undefined ? {} : { declarations }) };
 }
 
+/**
+ * Where a standard licence's name links, where the SPDX list's own reference
+ * is outdated or not the page a credit should give: the licence steward's
+ * current address, and for Creative Commons the deed its attribution
+ * guidance asks credits to link. Every credit naming a licence links the same
+ * page, so equal credits from different sources collapse into one.
+ */
+const LICENCE_LINKS: Readonly<Record<string, string>> = {
+  "ODbL-1.0": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "PDDL-1.0": "https://opendatacommons.org/licenses/pddl/1-0/",
+  "CC-BY-2.0": "https://creativecommons.org/licenses/by/2.0/",
+  "CC-BY-3.0": "https://creativecommons.org/licenses/by/3.0/",
+  "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
+  "CC-BY-ND-2.0": "https://creativecommons.org/licenses/by-nd/2.0/",
+  "CC-BY-SA-2.0": "https://creativecommons.org/licenses/by-sa/2.0/",
+  "CC-BY-SA-3.0": "https://creativecommons.org/licenses/by-sa/3.0/",
+  "CC-BY-SA-3.0-DE": "https://creativecommons.org/licenses/by-sa/3.0/de/",
+  "CC-BY-SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "CC0-1.0": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "CDLA-Permissive-2.0": "https://cdla.dev/permissive-2-0/",
+  "NLOD-2.0": "https://data.norge.no/nlod/en/2.0",
+  "OGL-UK-3.0": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  "etalab-2.0": "https://www.etalab.gouv.fr/wp-content/uploads/2018/11/open-licence.pdf",
+};
+
+/** The page a standard licence's name links to, or undefined for an unknown identifier. */
+export function licenceLink(id: string): string | undefined {
+  const canonical = canonicalSpdxId(id) ?? id;
+  return LICENCE_LINKS[canonical] ?? spdxLicenseList[canonical]?.url;
+}
+
 function licenceAtoms(tree: Expression): { label: string; url?: string }[] {
   if ("license" in tree) {
     const id = canonicalSpdxId(tree.license) ?? tree.license;
     return [
-      { label: id, url: spdxLicenseList[id]?.url },
+      { label: id, url: licenceLink(id) },
       ...(tree.exception
         ? [{ label: tree.exception, url: `https://spdx.org/licenses/${tree.exception}.html` }]
         : []),

@@ -34,6 +34,7 @@ import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
 import { GroundCoastingScheduler } from "./ground/GroundCoastingScheduler";
+import { GroundReferenceService } from "./ground/GroundReferenceService";
 import { GroundRerouteService } from "./ground/GroundRerouteService";
 import type { BridgePort, NavigationCoordinator, SessionEnded } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
@@ -304,6 +305,7 @@ export async function createForegroundNavigation(
   });
 
   const rerouteService = new GroundRerouteService({ apiOrigin: options.apiOrigin, now });
+  const referenceService = new GroundReferenceService({ apiOrigin: options.apiOrigin });
   let remote: ReturnType<typeof createRemoteWork> | null = null;
 
   const bridge: BridgePort = { send: options.send };
@@ -436,6 +438,7 @@ export async function createForegroundNavigation(
       remote: {
         reroute: async (requestId) => remote?.port.reroute(requestId),
         transitRefresh: async (requestId) => remote?.port.transitRefresh(requestId),
+        references: async (requestId) => remote?.port.references?.(requestId),
       },
       diagnostics: { record },
     },
@@ -467,6 +470,8 @@ export async function createForegroundNavigation(
     transitRefresh: new TransitRefreshService({ apiOrigin: options.apiOrigin, now }),
     applyTransitRefresh: (outcome) => coordinator.applyTransitRefresh(outcome),
     applyReroute: (outcome) => coordinatorRef?.applyReroute(outcome) ?? Promise.resolve(),
+    references: referenceService,
+    applyReferences: (outcome) => coordinatorRef?.applyReferences(outcome) ?? Promise.resolve(),
     now,
     diagnostics: { record },
     track: (work) => coordinator.trackRemoteWork(work),
