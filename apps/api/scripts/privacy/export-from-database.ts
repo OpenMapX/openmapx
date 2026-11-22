@@ -19,6 +19,7 @@
  */
 import { createWriteStream } from "node:fs";
 import { parseArgs } from "node:util";
+import { DATABASE_SESSION_TIME_ZONE } from "@openmapx/core/database-session";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -58,7 +59,6 @@ if (Number.isNaN(receivedAt.getTime())) throw new Error("--received-at must be a
 // can ever be used.
 process.env.DATABASE_URL = "postgresql://scratch-export-only.invalid/none";
 const schema = await import("../../src/db/schema.js");
-const { DATABASE_SESSION_TIME_ZONE } = await import("../../src/db/index.js");
 const { prepareSubjectExport } = await import("../../src/privacy/subject-export.js");
 
 const connection = { TimeZone: DATABASE_SESSION_TIME_ZONE };

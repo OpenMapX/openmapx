@@ -26,6 +26,10 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./database-session": {
+      "types": "./src/database-session.ts",
+      "default": "./src/database-session.ts"
+    },
     "./deployment-secret-policy": {
       "types": "./src/deployment-secret-policy.ts",
       "default": "./src/deployment-secret-policy.ts"

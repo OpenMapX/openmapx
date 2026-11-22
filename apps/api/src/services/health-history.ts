@@ -32,12 +32,11 @@ export async function getTimeline(
   }>
 > {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const hour = sql<string>`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`;
 
   const rows = await db
     .select({
-      hour: sql<string>`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`.as(
-        "hour",
-      ),
+      hour: hour.as("hour"),
       total: sql<number>`count(*)::int`.as("total"),
       healthy: sql<number>`count(*) filter (where ${healthHistory.status} = 'healthy')::int`.as(
         "healthy",
@@ -48,8 +47,8 @@ export async function getTimeline(
     })
     .from(healthHistory)
     .where(and(eq(healthHistory.serviceId, serviceId), gt(healthHistory.checkedAt, since)))
-    .groupBy(sql`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`)
-    .orderBy(sql`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`);
+    .groupBy(hour)
+    .orderBy(hour);
 
   return rows.map((r) => ({
     hour: r.hour,

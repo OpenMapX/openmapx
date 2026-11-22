@@ -62,6 +62,7 @@ const SERVER = [
   "./catalog-pins/types",
   "./coordinates",
   "./data-manager-sdk",
+  "./database-session",
   "./deployment-secret-policy",
   "./erasure-cleanup",
   "./erasure-journal",

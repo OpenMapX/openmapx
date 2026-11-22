@@ -1,3 +1,4 @@
+import { DATABASE_SESSION_TIME_ZONE } from "@openmapx/core/database-session";
 import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-secret-policy";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -9,13 +10,6 @@ const connectionString = resolveDatabaseUrl(
 );
 
 assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
-
-/**
- * Every session runs in UTC, whatever the database's default time zone.
- * Better Auth's `timestamp` columns hold UTC wall time only because of this,
- * and casts between text and time stay unambiguous.
- */
-export const DATABASE_SESSION_TIME_ZONE = "UTC";
 
 /**
  * Sessions, admin, saved data and control work. No statement timeout: control
