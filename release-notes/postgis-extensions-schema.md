@@ -32,5 +32,6 @@ service, give it a search path of its own schemas and `extensions`, for
 OpenConditions `ALTER ROLE … SET search_path = conditions, extensions`, before
 the service first starts. Create both OpenConditions roles before its ingest
 service first starts, and grant nothing in `conditions` yourself; its
-migration grants each role what it uses. In your own superuser `psql` sessions, run
-`SET search_path = pg_catalog, extensions` before calling a PostGIS function.
+migration grants each role what it uses. In your own superuser `psql` sessions,
+run `SET search_path = pg_catalog, extensions` before calling a PostGIS
+function.

@@ -531,10 +531,10 @@ installation does not prove that their database and feed credentials are valid.
    `public_license_policy` and the use of `segment_flow`,
    `flow_public_licenses` and `flow_osm_credit`. The migration grants only to
    roles that exist when it runs, which is why both roles come first. The
-   contributions service waits until the ingest service has migrated. No OpenMapX role can read OpenConditions'
-   credentials or crowd reports. The roles live outside the database, so a
-   backup restore keeps their grants only while the roles still exist, and
-   those roles must be able to log in.
+   contributions service waits until the ingest service has migrated. No
+   OpenMapX role can read OpenConditions' credentials or crowd reports. The
+   roles live outside the database, so a backup restore keeps their grants
+   only while the roles still exist, and those roles must be able to log in.
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
