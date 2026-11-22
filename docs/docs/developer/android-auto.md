@@ -409,6 +409,12 @@ notification behavior, frame/memory observations and inspected screenshots.
 
 {/* <!-- screenshots: added after DHU verification --> */}
 
+The car surface keeps the flat 2D navigation map. The phone's 3D navigation view
+(raised buildings, lane highlight on the road, raised arrow) never reaches it:
+the car map has its own JavaScript context, and its camera profile is always the
+2D one. A 3D car view is a follow-up that needs its own frame-time and template
+review.
+
 ## Checks and remaining qualification
 
 Focused source suites exist for protocol/reconciliation, destination scoping,
