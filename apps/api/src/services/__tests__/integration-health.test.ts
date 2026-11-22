@@ -1494,24 +1494,69 @@ describe("scheduled integration health checks", () => {
 });
 
 describe("built-in integration manifest health-check hygiene", () => {
-  const BANNED_PATTERNS: Array<[RegExp, string]> = [
-    [/\/api\/v1\/geocode\b/, "use /api/v1/health instead of MOTIS/Transitous geocode"],
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
-    [/photon\}\/api\?q=/, "use ${endpoint:photon}/status instead of search"],
-    [/REQUEST=GetFeature\b/i, "use WFS GetCapabilities instead of GetFeature"],
-    [/nextbike-live\.json\?limit=0/, "limit=0 returns ~28 MB; filter by city instead"],
-    [/\/route\/v1\//, "use /nearest/v1/ instead of full OSRM routing"],
-    [/api\.brightsky\.dev\/current_weather/, "use https://api.brightsky.dev/"],
-    [/api\.panoramax\.xyz\/api\/search/, "use https://api.panoramax.xyz/api/"],
-    [/api\.github\.com\/repos\/.*\/git\/trees\//, "exhausts anonymous GitHub API quota"],
-    [/tile\.openstreetmap\.org/, "violates OSM tile usage policy"],
-    [/method=flickr\.photos\.search/, "use method=flickr.test.echo"],
-    [/api\.opensensemap\.org\/stats\b/, "use https://api.opensensemap.org/"],
-    [/harbour\.openseamap\.org\/getHarbours\.php\?/, "use queryless ping on getHarbours.php"],
-    [/tide_request=stationlist/, "use https://vannstand.kartverket.no/"],
-    [/query=stationlist/, "use queryless ping on service.php"],
-    [/\/api\/bbox\?/, "avoid spatial bbox queries in health checks"],
-    [/\/api\/v1\/list\/search\?/, "avoid full-text search in health checks"],
+  const BANNED_RULES: Array<[(target: string, parsed: URL | null) => boolean, string]> = [
+    [
+      (target) => target.includes("/api/v1/geocode"),
+      "use /api/v1/health instead of MOTIS/Transitous geocode",
+    ],
+    [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      (target) => target.includes("${endpoint:photon}/api?q="),
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      "use ${endpoint:photon}/status instead of search",
+    ],
+    [
+      (target) => target.toLowerCase().includes("request=getfeature"),
+      "use WFS GetCapabilities instead of GetFeature",
+    ],
+    [
+      (target) => target.includes("nextbike-live.json?limit=0"),
+      "limit=0 returns ~28 MB; filter by city instead",
+    ],
+    [(target) => target.includes("/route/v1/"), "use /nearest/v1/ instead of full OSRM routing"],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.brightsky.dev" && parsed.pathname.startsWith("/current_weather"),
+      "use https://api.brightsky.dev/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.panoramax.xyz" && parsed.pathname.startsWith("/api/search"),
+      "use https://api.panoramax.xyz/api/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.github.com" &&
+        parsed.pathname.startsWith("/repos/") &&
+        parsed.pathname.includes("/git/trees/"),
+      "exhausts anonymous GitHub API quota",
+    ],
+    [
+      (_, parsed) => parsed?.hostname === "tile.openstreetmap.org",
+      "violates OSM tile usage policy",
+    ],
+    [(target) => target.includes("method=flickr.photos.search"), "use method=flickr.test.echo"],
+    [
+      (_, parsed) => parsed?.hostname === "api.opensensemap.org" && parsed.pathname === "/stats",
+      "use https://api.opensensemap.org/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "harbour.openseamap.org" &&
+        parsed.pathname === "/getHarbours.php" &&
+        parsed.search.length > 0,
+      "use queryless probe on getHarbours.php",
+    ],
+    [
+      (target) => target.includes("tide_request=stationlist"),
+      "use https://vannstand.kartverket.no/",
+    ],
+    [(target) => target.includes("query=stationlist"), "use queryless ping on service.php"],
+    [(target) => target.includes("/api/bbox?"), "avoid spatial bbox queries in health checks"],
+    [
+      (target) => target.includes("/api/v1/list/search?"),
+      "avoid full-text search in health checks",
+    ],
   ];
 
   it("enforces considerate health-check endpoints and wiring across all built-in manifests", () => {
@@ -1559,8 +1604,14 @@ describe("built-in integration manifest health-check hygiene", () => {
 
       for (const check of checks) {
         const target = check.urlTemplate ?? check.url ?? "";
-        for (const [pattern, guidance] of BANNED_PATTERNS) {
-          if (pattern.test(target)) {
+        let parsed: URL | null = null;
+        try {
+          parsed = new URL(target);
+        } catch {
+          parsed = null;
+        }
+        for (const [matches, guidance] of BANNED_RULES) {
+          if (matches(target, parsed)) {
             violations.push(`${manifest.id}: "${target}" — ${guidance}`);
           }
         }
