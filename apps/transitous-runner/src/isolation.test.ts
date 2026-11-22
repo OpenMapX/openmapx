@@ -105,9 +105,9 @@ describe("Transitous runner isolation", () => {
     expect(dockerfile).toMatch(/^USER transitous:transitous$/m);
   });
 
-  it("installs upstream Python from the same pinned, hash-checked lock", () => {
+  it("installs upstream Python from its pinned, hash-checked lock", () => {
     expect(dockerfile).toContain(
-      "COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt",
+      "COPY apps/transitous-runner/requirements.txt /tmp/transitous-requirements.txt",
     );
     expect(dockerfile).toContain("pip3 install --no-cache-dir --require-hashes");
   });

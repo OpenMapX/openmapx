@@ -10,7 +10,7 @@
 # checkout.
 #
 # IMPORTANT: build context MUST be the repo root; the runtime stage picks up
-# the pinned, hash-checked lock `services/motis/tools/transitous/requirements.txt`.
+# the pinned, hash-checked lock `apps/transitous-runner/requirements.txt`.
 #
 # Build command (from repo root):
 #   docker build -t openmapx-transitous-runner -f apps/transitous-runner/Dockerfile .
@@ -19,7 +19,7 @@ FROM docker.io/golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
-COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
+COPY --chmod=0755 apps/transitous-runner/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
 FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS base
@@ -109,7 +109,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 
-COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
+COPY apps/transitous-runner/requirements.txt /tmp/transitous-requirements.txt
 RUN pip3 install --no-cache-dir --require-hashes -r /tmp/transitous-requirements.txt \
     && rm -f /tmp/transitous-requirements.txt
 COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean

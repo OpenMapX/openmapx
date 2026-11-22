@@ -467,13 +467,12 @@ describe("Docker release trust gate", () => {
     ]) {
       expect(read(dockerfile)).toContain("--from=runtime-packages /runtime/node_modules");
     }
-    for (const dockerfile of [
-      "apps/transitous-runner/Dockerfile",
-      "services/data-manager/Dockerfile",
-    ]) {
-      expect(read(dockerfile)).toContain("build-gtfsclean.sh");
-    }
-    expect(read("services/motis/tools/transitous/build-gtfsclean.sh")).toContain(
+    expect(read("apps/transitous-runner/Dockerfile")).toContain("build-gtfsclean.sh");
+    // Upstream Python and gtfsclean run only in the runner.
+    expect(read("services/data-manager/Dockerfile")).not.toMatch(
+      /build-gtfsclean|bin\/gtfsclean|python3|pip3/,
+    );
+    expect(read("apps/transitous-runner/build-gtfsclean.sh")).toContain(
       "golang.org/x/text@v0.43.0",
     );
   });

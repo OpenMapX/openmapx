@@ -130,7 +130,7 @@ describe("production supply-chain policy", () => {
   it("requires hashes for downloaded executable and Python artifacts", () => {
     const dataManagerDockerfile = read("services/data-manager/Dockerfile");
     const transitousRunnerDockerfile = read("apps/transitous-runner/Dockerfile");
-    const requirements = read("services/motis/tools/transitous/requirements.txt");
+    const requirements = read("apps/transitous-runner/requirements.txt");
 
     // DuckDB CLI and its pre-installed extensions are both checksum-verified.
     expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(2);
@@ -148,13 +148,11 @@ describe("production supply-chain policy", () => {
       }
     }
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
-    expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
-    // The private runner executes the upstream Python, so it installs it from
-    // the hash-locked requirements.
+    // Only the private runner executes the upstream Python, so it alone
+    // installs it, from the hash-locked requirements.
+    expect(dataManagerDockerfile).not.toMatch(/pip3 install/);
     expect(transitousRunnerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
-    expect(transitousRunnerDockerfile).toContain(
-      "COPY services/motis/tools/transitous/requirements.txt",
-    );
+    expect(transitousRunnerDockerfile).toContain("COPY apps/transitous-runner/requirements.txt");
     expect(requirements).toContain("--hash=sha256:");
   });
 });

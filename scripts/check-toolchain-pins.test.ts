@@ -127,7 +127,7 @@ describe("collectToolchainPinViolations", () => {
   });
 
   it("rejects a Python lock with an unhashed package", () => {
-    const rel = "services/motis/tools/transitous/requirements.txt";
+    const rel = "apps/transitous-runner/requirements.txt";
     const violations = violationsFor(
       rel,
       withChange(rel, (contents) => contents.replaceAll("--hash=sha256:", "--hash=")),

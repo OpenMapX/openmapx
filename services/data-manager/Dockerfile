@@ -5,21 +5,15 @@
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
 #     resolution of the workspace packages the data-manager bundles)
 #   - the bundled workspace sources and scripts/build-runtime-bundles.mjs
-#   - services/motis/tools/transitous/requirements.txt (pulled into the
-#     runtime stage for the Transitous GTFS pipeline)
+#
+# Transitous's upstream Python and gtfsclean run in the transitous-runner
+# image, never here.
 #
 # Build command (from repo root):
 #   docker build -t openmapx-data-manager -f services/data-manager/Dockerfile .
 #
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
-
-FROM docker.io/golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f907977686c126cf AS build-gtfsclean
-# Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
-# instead of @latest so the build is reproducible and can't silently pull new code.
-WORKDIR /tmp/gtfsclean-build
-COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
-RUN build-gtfsclean
 
 FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS base
 
@@ -97,16 +91,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # point release already fixes CVE-2026-86145, CVE-2026-89157 and
 # CVE-2026-89161, so it needs no floor. libbrotli1 1.1.0-2+deb13u1 fixes
 # CVE-2026-111497 (DSA-6582-1). libssl3t64 and openssl 3.5.7-1~deb13u3 fix
-# CVE-2026-84782 (DSA-6531-1); curl, git, Python and ca-certificates pull them
-# in, and a release build can restore this layer from the registry build cache
+# CVE-2026-84782 (DSA-6531-1); curl, git and ca-certificates pull them in, and
+# a release build can restore this layer from the registry build cache
 # with the versions it held then. Raising a version check here changes the
 # instruction, so that layer is not reused.
 # apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
 # zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1 fixes CVE-2026-76844 and CVE-2026-85091.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
-      git python3 python3-pip python3-venv wget rsync openssh-client \
+      osmium-tool curl unzip bzip2 lbzip2 ca-certificates git \
       apt libapt-pkg7.0 libexpat1 libpcre2-8-0 libbrotli1 libssl3t64 openssl zlib1g \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
@@ -187,13 +180,8 @@ RUN set -eux; \
     chmod -R a+rX /opt/duckdb; \
     duckdb -bail -c "SET extension_directories=['${ext_dir}']; SET autoinstall_known_extensions=false; SET autoload_known_extensions=false; LOAD httpfs; LOAD spatial; LOAD postgres; LOAD h3; SELECT CASE WHEN h3_latlng_to_cell_string(52.52, 13.405, 8) = '881f1d4895fffff' THEN 'ok' ELSE error('h3 mismatch') END;"
 ENV OVERTURE_DUCKDB_EXTENSION_DIR=/opt/duckdb/extensions
-RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
-COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
-RUN pip3 install --no-cache-dir --require-hashes -r /tmp/transitous-requirements.txt
-COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 
 ENV NODE_ENV=production
-ENV PYTHONDONTWRITEBYTECODE=1
 
 # Run as a dedicated non-root user. The data-manager writes to /data which is
 # bind-mounted from the host — the host-side permissions need to allow writes

@@ -301,7 +301,7 @@ The ingestion group runs the Transitous Python worker directly. In a Python
 environment, install its production dependencies first:
 
 ```bash
-python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
+python3 -m pip install --require-hashes -r apps/transitous-runner/requirements.txt
 ```
 
 Run the export group with:

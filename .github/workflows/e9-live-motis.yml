@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: services/motis/tools/transitous/requirements.txt
+          cache-dependency-path: apps/transitous-runner/requirements.txt
 
       - name: Install Transitous Python deps
         # The feed-proxy variables snippet that gen-full-config runs imports
@@ -52,7 +52,7 @@ jobs:
         # canary runs the runner's fixed argv with host python3, so install the
         # same requirements here — otherwise config generation catches the
         # missing module and refuses an unproxied config.
-        run: python3 -m pip install -r services/motis/tools/transitous/requirements.txt
+        run: python3 -m pip install -r apps/transitous-runner/requirements.txt
 
       - name: Pre-pull motis image
         # Pulling here (rather than letting the test do it) gives us a

@@ -412,7 +412,7 @@ describe("selective release planning", () => {
     const sources = dockerInputs(actual.readDockerfile("apps/transitous-runner/Dockerfile"), ".");
     expect(sources).toContain("packages/core");
     expect(sources).not.toContain("packages");
-    expect(sources).toContain("services/motis/tools/transitous/requirements.txt");
+    expect(sources).toContain("apps/transitous-runner/requirements.txt");
   });
 });
 
