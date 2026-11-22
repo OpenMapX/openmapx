@@ -26,8 +26,8 @@ SSH client; the Transitous runner runs the catalog scripts.
 
 MOTIS export is not available in this release. `data export motis` needs a
 MOTIS build record, which transit sync does not write yet, so a candidate that
-transit sync promoted cannot be exported. Build MOTIS on the host that serves
-it; exporting a managed candidate is planned.
+transit sync promoted cannot be exported. Run the transit sync on the host that
+serves MOTIS; exporting a managed candidate is planned.
 
 ## Who is affected
 
