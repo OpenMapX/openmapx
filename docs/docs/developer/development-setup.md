@@ -392,3 +392,20 @@ anything or the folder holds uncommitted changes. It also regenerates the
 baseline into a temporary folder and fails unless `0000_baseline.sql` is
 byte-identical to the committed file and its snapshot differs only in `id` and
 `prevId`, so a hand edit to the generated SQL is refused.
+
+Better Auth's tables are declared in `apps/api/src/db/auth-schema.ts`, which is
+exactly what `pnpm auth:generate` writes, formatted by Biome; it is never edited
+by hand. Indexes Better Auth does not declare itself come from the local plugin
+in `apps/api/src/auth/schema-indexes-plugin.ts`: Better Auth merges a plugin's
+`indexes` into its tables, and the CLI writes them into `auth-schema.ts`. To
+change them:
+
+1. Edit the plugin.
+2. From `apps/api`, run `pnpm auth:generate` with `BETTER_AUTH_SECRET` set and
+   `DATABASE_URL` pointing at a disposable database migrated to the current
+   baseline. The CLI loads `src/auth.ts`, which reads the authentication policy
+   from that database. When the CLI cannot load the configuration, it leaves
+   `auth-schema.ts` empty; restore it with `git checkout` and try again.
+3. From the repository root, run
+   `pnpm exec biome check --write apps/api/src/db/auth-schema.ts`.
+4. Regenerate the migrations as described above.

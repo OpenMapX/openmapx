@@ -23,6 +23,7 @@ import {
 } from "./account/credential-change-policy";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
 import { shareGenericOAuthProviders } from "./account/shared-oauth-providers";
+import { schemaIndexes } from "./auth/schema-indexes-plugin";
 import {
   exchangeMapillaryAuthorizationCode,
   fetchMapillaryUserInfo,
@@ -425,6 +426,8 @@ function createPolicyAuth(
       }),
       jwt(),
       oauthProvider(managedOAuthProviderOptions),
+      // After the plugins whose tables it indexes.
+      schemaIndexes(),
     ],
   } satisfies BetterAuthOptions;
 

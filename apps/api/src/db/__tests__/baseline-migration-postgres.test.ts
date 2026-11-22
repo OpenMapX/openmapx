@@ -88,6 +88,54 @@ integration("the API migration baseline", () => {
     }
   }, 120_000);
 
+  it("a second account with the same provider and account id is refused", async () => {
+    const sql = await freshDatabase("account_identity");
+    try {
+      await migrateToHead(sql);
+      await sql`
+        INSERT INTO "user" (id, name, email, updated_at) VALUES
+          ('user-a', 'A', 'a@example.test', now()),
+          ('user-b', 'B', 'b@example.test', now())
+      `;
+      await sql`
+        INSERT INTO account (id, account_id, provider_id, user_id, updated_at)
+        VALUES ('account-a', 'osm-42', 'osm', 'user-a', now())
+      `;
+      await expect(
+        sql`
+          INSERT INTO account (id, account_id, provider_id, user_id, updated_at)
+          VALUES ('account-b', 'osm-42', 'osm', 'user-b', now())
+        `,
+      ).rejects.toMatchObject({ constraint_name: "account_provider_id_account_id_key" });
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("a duplicate passkey credential id is refused", async () => {
+    const sql = await freshDatabase("passkey_credential");
+    try {
+      await migrateToHead(sql);
+      await sql`
+        INSERT INTO "user" (id, name, email, updated_at) VALUES
+          ('user-a', 'A', 'a@example.test', now()),
+          ('user-b', 'B', 'b@example.test', now())
+      `;
+      await sql`
+        INSERT INTO passkey (id, public_key, user_id, credential_id, counter, device_type, backed_up)
+        VALUES ('passkey-a', 'key-a', 'user-a', 'credential-1', 0, 'singleDevice', false)
+      `;
+      await expect(
+        sql`
+          INSERT INTO passkey (id, public_key, user_id, credential_id, counter, device_type, backed_up)
+          VALUES ('passkey-b', 'key-b', 'user-b', 'credential-1', 0, 'singleDevice', false)
+        `,
+      ).rejects.toMatchObject({ constraint_name: "passkey_credential_id_key" });
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
   it("indexes every data_manager foreign key that cascades or nulls on delete", async () => {
     const sql = await freshDatabase("data_manager_fk_indexes");
     try {

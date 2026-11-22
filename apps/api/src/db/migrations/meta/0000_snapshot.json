@@ -1,5 +1,5 @@
 {
-  "id": "e66debc4-dbd3-400b-b77b-6a74d708ea5a",
+  "id": "123a60e9-ee27-45df-a3e6-c424137fffc4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -89,6 +89,27 @@
         }
       },
       "indexes": {
+        "account_provider_id_account_id_key": {
+          "name": "account_provider_id_account_id_key",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "account_userId_idx": {
           "name": "account_userId_idx",
           "columns": [
@@ -4445,6 +4466,21 @@
         }
       },
       "indexes": {
+        "oauth_access_token_expires_at_idx": {
+          "name": "oauth_access_token_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "oauthAccessToken_clientId_idx": {
           "name": "oauthAccessToken_clientId_idx",
           "columns": [
@@ -5245,6 +5281,21 @@
         }
       },
       "indexes": {
+        "oauth_refresh_token_expires_at_idx": {
+          "name": "oauth_refresh_token_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "oauthRefreshToken_clientId_idx": {
           "name": "oauthRefreshToken_clientId_idx",
           "columns": [
@@ -5686,6 +5737,21 @@
         }
       },
       "indexes": {
+        "passkey_credential_id_key": {
+          "name": "passkey_credential_id_key",
+          "columns": [
+            {
+              "expression": "credential_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "passkey_userId_idx": {
           "name": "passkey_userId_idx",
           "columns": [
@@ -6708,6 +6774,21 @@
         }
       },
       "indexes": {
+        "session_expires_at_idx": {
+          "name": "session_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "session_userId_idx": {
           "name": "session_userId_idx",
           "columns": [

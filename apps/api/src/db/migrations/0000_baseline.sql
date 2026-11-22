@@ -953,6 +953,7 @@ ALTER TABLE "share_link" ADD CONSTRAINT "share_link_user_id_user_id_fk" FOREIGN 
 ALTER TABLE "transit_credential_preview" ADD CONSTRAINT "transit_credential_preview_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_application_receipt" ADD CONSTRAINT "integration_application_receipt_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "account_provider_id_account_id_key" ON "account" USING btree ("provider_id","account_id");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "account_action_actor_time_idx" ON "account_action_receipt" USING btree ("actor_id","created_at");--> statement-breakpoint
 CREATE INDEX "account_action_target_time_idx" ON "account_action_receipt" USING btree ("target_id","created_at");--> statement-breakpoint
@@ -1006,6 +1007,7 @@ CREATE INDEX "integrationConfig_integrationId_idx" ON "integration_config" USING
 CREATE INDEX "integrationSecret_integrationId_idx" ON "integration_secret" USING btree ("integration_id");--> statement-breakpoint
 CREATE INDEX "labeledPlace_userId_idx" ON "labeled_place" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "mobile_auth_handoff_user_expires_idx" ON "mobile_auth_handoff" USING btree ("user_id","expires_at");--> statement-breakpoint
+CREATE INDEX "oauth_access_token_expires_at_idx" ON "oauth_access_token" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_clientId_idx" ON "oauth_access_token" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_sessionId_idx" ON "oauth_access_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_userId_idx" ON "oauth_access_token" USING btree ("user_id");--> statement-breakpoint
@@ -1017,11 +1019,13 @@ CREATE INDEX "oauthClientResource_clientId_idx" ON "oauth_client_resource" USING
 CREATE INDEX "oauthClientResource_resourceId_idx" ON "oauth_client_resource" USING btree ("resource_id");--> statement-breakpoint
 CREATE INDEX "oauthConsent_clientId_idx" ON "oauth_consent" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthConsent_userId_idx" ON "oauth_consent" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "oauth_refresh_token_expires_at_idx" ON "oauth_refresh_token" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_clientId_idx" ON "oauth_refresh_token" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauth_refresh_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
 CREATE INDEX "parkedLocation_userId_idx" ON "parked_location" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "passkey_credential_id_key" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "passkey_userId_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_credentialID_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "personalTimelineConnection_userId_idx" ON "personal_timeline_connection" USING btree ("user_id");--> statement-breakpoint
@@ -1033,6 +1037,7 @@ CREATE INDEX "savedList_userId_idx" ON "saved_list" USING btree ("user_id");--> 
 CREATE INDEX "savedPlace_listId_idx" ON "saved_place" USING btree ("list_id");--> statement-breakpoint
 CREATE INDEX "serviceConfig_serviceId_idx" ON "service_config" USING btree ("service_id");--> statement-breakpoint
 CREATE INDEX "serviceSecret_serviceId_idx" ON "service_secret" USING btree ("service_id");--> statement-breakpoint
+CREATE INDEX "session_expires_at_idx" ON "session" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_auth_assurance_user_idx" ON "session_auth_assurance" USING btree ("user_id","authenticated_at");--> statement-breakpoint
 CREATE INDEX "shareLink_userId_idx" ON "share_link" USING btree ("user_id");--> statement-breakpoint

@@ -1,6 +1,6 @@
 {
-  "id": "7acd9232-b68e-40fa-9496-87e9f2582dc2",
-  "prevId": "e66debc4-dbd3-400b-b77b-6a74d708ea5a",
+  "id": "0c3ff7a7-ff8d-4581-8fcf-feee2728e784",
+  "prevId": "123a60e9-ee27-45df-a3e6-c424137fffc4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -89,6 +89,27 @@
         }
       },
       "indexes": {
+        "account_provider_id_account_id_key": {
+          "name": "account_provider_id_account_id_key",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "account_userId_idx": {
           "name": "account_userId_idx",
           "columns": [
@@ -4445,6 +4466,21 @@
         }
       },
       "indexes": {
+        "oauth_access_token_expires_at_idx": {
+          "name": "oauth_access_token_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "oauthAccessToken_clientId_idx": {
           "name": "oauthAccessToken_clientId_idx",
           "columns": [
@@ -5245,6 +5281,21 @@
         }
       },
       "indexes": {
+        "oauth_refresh_token_expires_at_idx": {
+          "name": "oauth_refresh_token_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "oauthRefreshToken_clientId_idx": {
           "name": "oauthRefreshToken_clientId_idx",
           "columns": [
@@ -5686,6 +5737,21 @@
         }
       },
       "indexes": {
+        "passkey_credential_id_key": {
+          "name": "passkey_credential_id_key",
+          "columns": [
+            {
+              "expression": "credential_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "passkey_userId_idx": {
           "name": "passkey_userId_idx",
           "columns": [
@@ -6708,6 +6774,21 @@
         }
       },
       "indexes": {
+        "session_expires_at_idx": {
+          "name": "session_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "session_userId_idx": {
           "name": "session_userId_idx",
           "columns": [

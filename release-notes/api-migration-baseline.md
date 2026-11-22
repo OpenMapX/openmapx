@@ -7,7 +7,12 @@ impacts: [breaking, migration]
 The API's database migration history is replaced by a single baseline: one
 migration that drizzle-kit generates from the schema code, and one that adds the
 roles' grants, the account role check and the last-administrator guard. The
-resulting schema is the same as before, apart from the order of some columns.
+resulting schema is the same as before, apart from the order of some columns and
+the changes below.
+
+The database refuses a second account for the same sign-in provider identity and
+a second passkey with the same credential ID. Session and OAuth token expiry are
+indexed for pruning.
 
 ## Who is affected
 
