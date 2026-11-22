@@ -6,8 +6,10 @@ const APPROACH_END_M = 5;
 
 /**
  * The OSM way the car arrives on at each maneuver (immersive navigation spec
- * §4.2, §9.2): the last matched edge, in route order, that ends within 5 m of
- * the maneuver point. Maneuvers without such an edge get no entry, so the lane
+ * §4.2, §9.2): the matched edge whose end lies nearest the maneuver point,
+ * within 5 m; on a tie the later one in route order. Nearest rather than last,
+ * because an outgoing way split a few metres past the junction also ends
+ * within 5 m. Maneuvers without such an edge get no entry, so the lane
  * highlight draws nothing there.
  */
 export function approachWayIdsFromWindow(
@@ -19,9 +21,15 @@ export function approachWayIdsFromWindow(
 ): Record<number, number> {
   const ids: Record<number, number> = {};
   for (const { stepIndex, point } of maneuverPoints) {
+    let nearest = APPROACH_END_M;
     for (const edge of matched.edges) {
       const end = matched.geometry[edge.endShapeIndex];
-      if (end && haversineDistance(end, point) <= APPROACH_END_M) ids[stepIndex] = edge.wayId;
+      if (!end) continue;
+      const distance = haversineDistance(end, point);
+      if (distance <= nearest) {
+        nearest = distance;
+        ids[stepIndex] = edge.wayId;
+      }
     }
   }
   return ids;

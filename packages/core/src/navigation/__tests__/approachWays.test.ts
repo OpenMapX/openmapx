@@ -26,6 +26,21 @@ describe("approachWayIdsFromWindow", () => {
     expect(ids).toEqual({ 2: 23 });
   });
 
+  it("prefers the edge ending at the junction over a short outgoing piece within 5 m", () => {
+    const withStub: LngLat[] = [...geometry.slice(0, 3), [0, 203 * M], [0, 300 * M]];
+    const ids = approachWayIdsFromWindow([{ stepIndex: 2, point: [0, 200 * M] }], {
+      geometry: withStub,
+      edges: [
+        { wayId: 11, endShapeIndex: 1 },
+        { wayId: 22, endShapeIndex: 2 },
+        // The outgoing way is split 3 m past the junction.
+        { wayId: 44, endShapeIndex: 3 },
+        { wayId: 45, endShapeIndex: 4 },
+      ],
+    });
+    expect(ids).toEqual({ 2: 22 });
+  });
+
   it("accepts an edge end within 5 m", () => {
     const ids = approachWayIdsFromWindow([{ stepIndex: 1, point: [0, 104 * M] }], {
       geometry,
