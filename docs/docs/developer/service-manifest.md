@@ -203,10 +203,11 @@ joins the proxy's shared network, and Docker can resolve a bare ID such as
 attached to that shared network.
 
 The prefix is reserved: validation refuses a service ID, a declared
-`networkAliases` entry or a `containerName` that starts with `openmapx-`, and an
-installed community
-service whose environment, command or configuration defaults reach a built-in
-service by its bare ID (`http://overpass:80`). Write `http://openmapx-overpass:80`.
+`networkAliases` entry or a `containerName` that starts with `openmapx-`. An
+installed community service is refused when its environment, command,
+healthcheck or configuration defaults reach a built-in service by its bare ID:
+in a URL (`http://overpass:80`), a host setting (`DB_HOST=postgis`) or a
+`host:port` value (`redis:6379`). Write `http://openmapx-overpass:80`.
 
 ### Network isolation
 
