@@ -4,13 +4,14 @@ import {
   assertSupportedOvertureContributors,
   parseOvertureSourceCatalogue,
 } from "@openmapx/core/places/overtureSource";
+import { resolveOsmPolyUrl } from "../download-osm.js";
 import type { captureOvertureCatalogue } from "./attribution-capture.js";
 import type { RegionBbox } from "./pull.js";
 
 export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";
 export const OVERTURE_THEME = "places";
 export const OVERTURE_TYPE = "place";
-export const OVERTURE_PULL_CONTRACT_VERSION = 2;
+export const OVERTURE_PULL_CONTRACT_VERSION = 3;
 
 export const OVERTURE_PLACE_COLUMNS = [
   "id",
@@ -75,13 +76,25 @@ export interface OverturePullValidation {
   contributors: string[];
 }
 
+export type OvertureRegionClip =
+  | {
+      kind: "geofabrik-poly";
+      url: string;
+      sha256: string;
+      outerRings: number;
+      exclusionRings: number;
+      vertices: number;
+    }
+  | { kind: "none" };
+
 export interface OverturePullContract extends OvertureStacReleaseContract {
   contractVersion: typeof OVERTURE_PULL_CONTRACT_VERSION;
   sourceCatalog: typeof OVERTURE_STAC_URL;
   theme: typeof OVERTURE_THEME;
   type: typeof OVERTURE_TYPE;
   region: string;
-  regionBbox: RegionBbox;
+  regionEnvelopes: RegionBbox[];
+  regionClip: OvertureRegionClip;
   columns: readonly string[];
   parquetFile: string;
   parquetSizeBytes: number;
@@ -265,12 +278,69 @@ function parseStacItem(
   };
 }
 
+function isValidRegionBbox(value: unknown): value is RegionBbox {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  const { west, south, east, north } = candidate;
+  return (
+    typeof west === "number" &&
+    typeof south === "number" &&
+    typeof east === "number" &&
+    typeof north === "number" &&
+    Number.isFinite(west) &&
+    Number.isFinite(south) &&
+    Number.isFinite(east) &&
+    Number.isFinite(north) &&
+    west >= -180 &&
+    east <= 180 &&
+    south >= -90 &&
+    north <= 90 &&
+    west <= east &&
+    south <= north
+  );
+}
+
+function isValidRegionEnvelopes(value: unknown): value is RegionBbox[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2) return false;
+  if (!value.every(isValidRegionBbox)) return false;
+  if (value.length === 2) {
+    const first = value[0];
+    const second = value[1];
+    if (!first || !second || first.east >= second.west) return false;
+  }
+  return true;
+}
+
+function isValidRegionClip(region: string, value: unknown): value is OvertureRegionClip {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const clip = value as Record<string, unknown>;
+  if (region === "planet") return clip.kind === "none";
+  if (clip.kind !== "geofabrik-poly") return false;
+  return (
+    typeof clip.url === "string" &&
+    clip.url === resolveOsmPolyUrl(region) &&
+    typeof clip.sha256 === "string" &&
+    /^[0-9a-f]{64}$/.test(clip.sha256) &&
+    Number.isSafeInteger(clip.outerRings) &&
+    (clip.outerRings as number) >= 1 &&
+    Number.isSafeInteger(clip.exclusionRings) &&
+    (clip.exclusionRings as number) >= 0 &&
+    Number.isSafeInteger(clip.vertices) &&
+    (clip.vertices as number) >= 3
+  );
+}
+
 export async function resolveOvertureStacContract(
   release: string,
-  regionBbox: RegionBbox,
+  regionEnvelopes: readonly RegionBbox[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<OvertureStacReleaseContract> {
   assertValidOvertureRelease(release);
+  if (!isValidRegionEnvelopes(regionEnvelopes)) {
+    throw new Error(
+      "Overture STAC resolution requires 1 or 2 valid non-overlapping region envelopes",
+    );
+  }
   const root = await fetchStacDocument(OVERTURE_STAC_URL, fetchImpl, "Overture STAC catalog");
   const latestRelease = latestReleaseFromCatalog(root);
   const matchingReleaseLinks = linksOf(root, "Overture STAC catalog")
@@ -355,7 +425,7 @@ export async function resolveOvertureStacContract(
   if (new Set(ids).size !== ids.length) throw new Error("Overture Places item IDs are not unique");
 
   const assets = parsedItems
-    .filter((item) => bboxIntersects(item.bbox, regionBbox))
+    .filter((item) => regionEnvelopes.some((envelope) => bboxIntersects(item.bbox, envelope)))
     .map(({ stacVersion: _stacVersion, ...asset }) => asset)
     .sort((a, b) => a.itemId.localeCompare(b.itemId));
   if (assets.length === 0) {
@@ -378,12 +448,19 @@ export function pullContractPath(dataDir: string, release: string, region: strin
 export function buildOverturePullContract(
   stac: OvertureStacReleaseContract,
   region: string,
-  regionBbox: RegionBbox,
+  regionEnvelopes: readonly RegionBbox[],
+  regionClip: OvertureRegionClip,
   parquetPath: string,
   validation: OverturePullValidation,
   publishedParquetFile: string = basename(parquetPath),
   sourcesCatalogue: ReturnType<typeof captureOvertureCatalogue>,
 ): OverturePullContract {
+  if (!isValidRegionEnvelopes(regionEnvelopes)) {
+    throw new Error(`Overture pull contract for ${region} has invalid region envelopes`);
+  }
+  if (!isValidRegionClip(region, regionClip)) {
+    throw new Error(`Overture pull contract for ${region} has invalid region clip metadata`);
+  }
   if (!Number.isSafeInteger(validation.rowCount) || validation.rowCount <= 0) {
     throw new Error("Overture regional snapshot contains no rows");
   }
@@ -401,7 +478,8 @@ export function buildOverturePullContract(
     type: OVERTURE_TYPE,
     ...stac,
     region,
-    regionBbox,
+    regionEnvelopes: regionEnvelopes.map((envelope) => ({ ...envelope })),
+    regionClip: structuredClone(regionClip),
     columns: [...OVERTURE_PLACE_COLUMNS],
     parquetFile: publishedParquetFile,
     parquetSizeBytes,
@@ -469,6 +547,8 @@ function assertPullContract(
     contract.theme !== OVERTURE_THEME ||
     contract.type !== OVERTURE_TYPE ||
     contract.region !== region ||
+    !isValidRegionEnvelopes(contract.regionEnvelopes) ||
+    !isValidRegionClip(region, contract.regionClip) ||
     contract.parquetFile !== expectedFile ||
     !validAssets ||
     contract.selectedAssetRows !== assetRows ||

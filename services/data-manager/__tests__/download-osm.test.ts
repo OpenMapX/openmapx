@@ -19,15 +19,18 @@ describe("resolveOsmUrl", () => {
     );
   });
 
-  it("returns Geofabrik URL for region", () => {
-    expect(resolveOsmUrl("europe/germany")).toBe(
-      "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
+  it("returns Geofabrik URL for 1-, 2-, 3- and 4-segment regions", () => {
+    expect(resolveOsmUrl("europe")).toBe(
+      "https://download.geofabrik.de/europe/europe-latest.osm.pbf",
     );
-  });
-
-  it("returns Geofabrik URL for nested region", () => {
+    expect(resolveOsmUrl("europe/germany")).toBe(
+      "https://download.geofabrik.de/europe/germany/germany-latest.osm.pbf",
+    );
     expect(resolveOsmUrl("north-america/us/california")).toBe(
-      "https://download.geofabrik.de/north-america/us/california-latest.osm.pbf",
+      "https://download.geofabrik.de/north-america/us/california/california-latest.osm.pbf",
+    );
+    expect(resolveOsmUrl("europe/germany/nordrhein-westfalen/koeln-regbez")).toBe(
+      "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez/koeln-regbez-latest.osm.pbf",
     );
   });
 
@@ -37,9 +40,16 @@ describe("resolveOsmUrl", () => {
 });
 
 describe("resolveOsmPolyUrl", () => {
-  it("returns the Geofabrik .poly boundary URL for a region path", () => {
+  it("returns the canonical Geofabrik .poly boundary URL for 1- to 4-segment region paths", () => {
+    expect(resolveOsmPolyUrl("europe")).toBe("https://download.geofabrik.de/europe/europe.poly");
+    expect(resolveOsmPolyUrl("europe/germany")).toBe(
+      "https://download.geofabrik.de/europe/germany/germany.poly",
+    );
     expect(resolveOsmPolyUrl("europe/germany/berlin")).toBe(
-      "https://download.geofabrik.de/europe/germany/berlin.poly",
+      "https://download.geofabrik.de/europe/germany/berlin/berlin.poly",
+    );
+    expect(resolveOsmPolyUrl("europe/germany/nordrhein-westfalen/koeln-regbez")).toBe(
+      "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez/koeln-regbez.poly",
     );
   });
 
@@ -55,7 +65,7 @@ describe("resolveOsmPolyUrl", () => {
 describe("resolveOsmMd5Url", () => {
   it("appends .md5 to the PBF URL for checksum verification", () => {
     expect(resolveOsmMd5Url(resolveOsmUrl("europe/germany"))).toBe(
-      "https://download.geofabrik.de/europe/germany-latest.osm.pbf.md5",
+      "https://download.geofabrik.de/europe/germany/germany-latest.osm.pbf.md5",
     );
     expect(resolveOsmMd5Url(resolveOsmUrl("planet"))).toBe(
       "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf.md5",

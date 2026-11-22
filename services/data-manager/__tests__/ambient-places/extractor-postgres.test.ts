@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AMBIENT_POLICY_VERSION } from "@openmapx/core/ambient-places";
 import { assert, describe, expect, it } from "vitest";
 import { buildAmbientPlaces } from "../../src/jobs/ambient-places/build.js";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
@@ -59,7 +60,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           bounds: [6.58, 50.89, 7.07, 51.31],
         });
         expect(manifest.placeCount).toBe(1);
-        expect(manifest.policyVersion).toBe(2);
+        expect(manifest.policyVersion).toBe(AMBIENT_POLICY_VERSION);
         expect(
           await pg.sql.unsafe(
             `SELECT id,min_zoom FROM ambient_places.features WHERE generation=$1`,

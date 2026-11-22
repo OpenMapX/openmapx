@@ -24,7 +24,7 @@ import type { CategoryPlace } from "./types/category";
 import type { Place } from "./types/place";
 import { haversineDistance } from "./utils/coordinates";
 
-export const AMBIENT_POLICY_VERSION = 2;
+export const AMBIENT_POLICY_VERSION = 3;
 export const AMBIENT_FORMAT_VERSION = 2;
 /** Generic Overture receipt for an ambient record that carries no captured contributors. */
 const AMBIENT_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
@@ -205,6 +205,14 @@ function landmarkZoom(category: string, tags: Record<string, string>): 14 | 15 |
   if (!heritage && !designated) return null;
   return designated || /^[1-3]$/.test(tags.heritage ?? "") ? 14 : 15;
 }
+/**
+ * Maps Overture confidence in [0.5, 1.0] into importance [0, 0.49] so Overture
+ * gaps occupy sub-ranks 0..49 within each tier, strictly below OSM's 50..99.
+ */
+export function overtureRankImportance(confidence: number): number {
+  if (!Number.isFinite(confidence)) return 0;
+  return Math.min(0.49, Math.max(0, (confidence - 0.5) * 0.98));
+}
 function policy(
   category: string,
   importance: number,
@@ -319,7 +327,7 @@ export function ambientPlaceFromOverture(row: AmbientOvertureRow): AmbientPlace 
     names,
     coordinates: [row.longitude, row.latitude],
     category,
-    ...policy(category, 0, false),
+    ...policy(category, overtureRankImportance(row.confidence), false),
     tenant: false,
     sources: "overture",
   };
