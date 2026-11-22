@@ -3,6 +3,7 @@
 import {
   cumulativeDistances,
   guidanceApproachMeters,
+  laneShiftedArrowLine,
   type ManeuverArrowSpans,
   maneuverArrowLine,
   maneuverArrowSpans,
@@ -57,6 +58,7 @@ export function NavManeuverArrowLayer() {
   const distanceToNextManeuver = useNavigationStore((s) => s.progress?.distanceToNextManeuver);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps);
 
+  const highlightSpan = useNavigationSceneStore((s) => s.highlightSpan);
   const upcomingIndex = route
     ? upcomingManeuverIndex(currentStepIndex ?? 0, route.steps?.length ?? 0)
     : 0;
@@ -74,7 +76,18 @@ export function NavManeuverArrowLayer() {
     const cum = cumulativeDistances(route.geometry);
     const alongMeters = maneuverStartMeters(route, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
-    const line = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
+    const routeLine = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
+    // With a lane highlight, the arrow runs in the highlighted lane and rejoins
+    // the route line at the turn, so the two never point at different lanes.
+    const laneOffset = highlightSpan?.offsetMeters;
+    const line =
+      routeLine && laneOffset
+        ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), {
+            untilAlong: highlightSpan.toAlong,
+            maneuverAlong: alongMeters,
+            offsetMeters: laneOffset,
+          })
+        : routeLine;
     const tip = line?.at(-1);
     if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
@@ -103,7 +116,7 @@ export function NavManeuverArrowLayer() {
           : []),
       ],
     };
-  }, [status, route, upcomingIndex, approaching, mode]);
+  }, [status, route, upcomingIndex, approaching, mode, highlightSpan]);
 
   // In 3D navigation, from z16.5 (where 2.4 m is wide enough to read), the
   // arrow stands in the scene instead of being painted over it.

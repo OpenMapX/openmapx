@@ -131,6 +131,7 @@ export function LaneHighlight({
         setHighlightSpan({
           fromAlong: maneuverAlong - answer.startBeforeManeuver,
           toAlong: maneuverAlong - answer.endBeforeManeuver,
+          offsetMeters: answer.laneOffsetMeters,
         });
       })
       .catch(() => undefined);

@@ -99,6 +99,25 @@ describe("laneHighlight", () => {
     expect("startBeforeManeuver" in answer && answer.startBeforeManeuver).toBeGreaterThan(120);
   });
 
+  it("reports how far the recommended lane lies to the side of the route line", () => {
+    const answer = laneHighlight(input());
+    if (!answer.polygons || !("laneOffsetMeters" in answer)) throw new Error("no highlight");
+    const metresPerDegree = (Math.PI / 180) * 6371008.8;
+    const southOfRoad =
+      -northOfRoad(answer.polygons[0] as [number, number][], berlin.lngLat(0, 0)[1]) *
+      metresPerDegree;
+    // Positive is to the right of travel; eastbound, right is south.
+    expect(answer.laneOffsetMeters).toBeGreaterThan(0);
+    expect(answer.laneOffsetMeters).toBeCloseTo(southOfRoad, 0);
+  });
+
+  it("with several recommended lanes, takes the one nearest the route line", () => {
+    const both = laneHighlight(input({ recommended: [0, 1] }));
+    const right = laneHighlight(input({ recommended: [1] }));
+    if (!("laneOffsetMeters" in both) || !("laneOffsetMeters" in right)) throw new Error("none");
+    expect(Math.abs(both.laneOffsetMeters)).toBeLessThan(Math.abs(right.laneOffsetMeters));
+  });
+
   it("no polygons when indications disagree", () => {
     expect(laneHighlight(input({ engineLanes: engine(["left"], ["right"]) }))).toEqual({
       polygons: null,

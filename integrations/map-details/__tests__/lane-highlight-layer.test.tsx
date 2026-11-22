@@ -133,7 +133,12 @@ describe("LaneHighlight", () => {
     mount();
     expect(queries[0]).toMatchObject({ wayId: 1234, recommended: [1] });
     await act(async () =>
-      answers[0]?.({ polygons: [POLYGON], startBeforeManeuver: 80, endBeforeManeuver: 5 }),
+      answers[0]?.({
+        polygons: [POLYGON],
+        startBeforeManeuver: 80,
+        endBeforeManeuver: 5,
+        laneOffsetMeters: 0,
+      }),
     );
     expect(drawn()).toBe(1);
     expect(fake.state.layers.get(LAYER)).toMatchObject({ type: "fill" });
@@ -141,6 +146,19 @@ describe("LaneHighlight", () => {
     const span = useNavigationSceneStore.getState().highlightSpan;
     expect(span?.fromAlong).toBeCloseTo(120, 0);
     expect(span?.toAlong).toBeCloseTo(195, 0);
+  });
+
+  it("publishes the recommended lane's offset with the span, for the manoeuvre arrow", async () => {
+    mount();
+    await act(async () =>
+      answers[0]?.({
+        polygons: [POLYGON],
+        startBeforeManeuver: 80,
+        endBeforeManeuver: 5,
+        laneOffsetMeters: 4.8,
+      }),
+    );
+    expect(useNavigationSceneStore.getState().highlightSpan?.offsetMeters).toBe(4.8);
   });
 
   it.each([
@@ -165,7 +183,12 @@ describe("LaneHighlight", () => {
     mount();
     act(() => useNavigationStore.getState().applyReroute(makeRoute(301)));
     await act(async () =>
-      answers[0]?.({ polygons: [POLYGON], startBeforeManeuver: 80, endBeforeManeuver: 5 }),
+      answers[0]?.({
+        polygons: [POLYGON],
+        startBeforeManeuver: 80,
+        endBeforeManeuver: 5,
+        laneOffsetMeters: 0,
+      }),
     );
     expect(drawn()).toBe(0);
     expect(useNavigationSceneStore.getState().highlightSpan).toBeNull();
@@ -174,7 +197,12 @@ describe("LaneHighlight", () => {
   it("clears the highlight and the route's transparent span when 3D turns off", async () => {
     mount();
     await act(async () =>
-      answers[0]?.({ polygons: [POLYGON], startBeforeManeuver: 80, endBeforeManeuver: 5 }),
+      answers[0]?.({
+        polygons: [POLYGON],
+        startBeforeManeuver: 80,
+        endBeforeManeuver: 5,
+        laneOffsetMeters: 0,
+      }),
     );
     expect(drawn()).toBe(1);
     act(() => useNavigationSceneStore.getState().setActive(false));
@@ -195,7 +223,12 @@ describe("LaneHighlight", () => {
   it("a reroute mid-approach clears and re-requests for the new route", async () => {
     mount();
     await act(async () =>
-      answers[0]?.({ polygons: [POLYGON], startBeforeManeuver: 80, endBeforeManeuver: 5 }),
+      answers[0]?.({
+        polygons: [POLYGON],
+        startBeforeManeuver: 80,
+        endBeforeManeuver: 5,
+        laneOffsetMeters: 0,
+      }),
     );
     expect(drawn()).toBe(1);
     act(() => {

@@ -2,7 +2,12 @@ import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
 import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
-import { maneuverArrowLine, maneuverArrowTipBearing, raisedArrowPolygon } from "../maneuverArrow";
+import {
+  laneShiftedArrowLine,
+  maneuverArrowLine,
+  maneuverArrowTipBearing,
+  raisedArrowPolygon,
+} from "../maneuverArrow";
 
 // ~1.1 km straight east, so every distance check is against a known geometry.
 const geometry: LngLat[] = [
@@ -103,5 +108,42 @@ describe("raisedArrowPolygon", () => {
         5,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("laneShiftedArrowLine", () => {
+  // Eastbound along the equator, a vertex every 10 m from 0 to 60 m.
+  const M_PER_DEG = 111_195.08;
+  const east = (m: number): LngLat => [m / M_PER_DEG, 0];
+  const line = [0, 10, 20, 30, 40, 50, 60].map(east);
+  const southOf = (p: LngLat) => -p[1] * M_PER_DEG;
+  const shift = { untilAlong: 30, maneuverAlong: 40, offsetMeters: 3 };
+
+  it("runs in the lane before the junction, positive offsets to the right", () => {
+    const shifted = laneShiftedArrowLine(line, 0, shift);
+    expect(southOf(shifted[0] as LngLat)).toBeCloseTo(3, 1);
+    expect(southOf(shifted[2] as LngLat)).toBeCloseTo(3, 1);
+  });
+
+  it("tapers back to the route line at the manoeuvre and follows it after", () => {
+    const shifted = laneShiftedArrowLine(line, 0, { ...shift, untilAlong: 20 });
+    expect(southOf(shifted[3] as LngLat)).toBeCloseTo(1.5, 1);
+    expect(southOf(shifted[4] as LngLat)).toBeCloseTo(0, 3);
+    expect(shifted.at(-1)).toEqual(east(60));
+  });
+
+  it("adds vertices where the taper starts and ends", () => {
+    const shifted = laneShiftedArrowLine(line, 5, {
+      untilAlong: 27,
+      maneuverAlong: 33,
+      offsetMeters: -2,
+    });
+    expect(shifted.length).toBe(line.length + 2);
+    // A negative offset lies to the left: north when heading east.
+    expect(southOf(shifted[0] as LngLat)).toBeCloseTo(-2, 1);
+  });
+
+  it("returns the line unchanged without an offset", () => {
+    expect(laneShiftedArrowLine(line, 0, { ...shift, offsetMeters: 0 })).toEqual(line);
   });
 });

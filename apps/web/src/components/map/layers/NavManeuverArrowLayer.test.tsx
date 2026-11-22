@@ -139,6 +139,25 @@ describe("NavManeuverArrowLayer in 3D", () => {
     expect(useNavigationSceneStore.getState().arrowSpan).toBeNull();
   });
 
+  it("runs the arrow in the highlighted lane, back on the route line at the turn", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    const lineOf = () =>
+      features().find((f) => f.geometry.type === "LineString")?.geometry as GeoJSON.LineString;
+    const plain = lineOf().coordinates as [number, number][];
+    const along = maneuverStartMeters(route as unknown as Route, 1);
+    act(() =>
+      useNavigationSceneStore
+        .getState()
+        .setHighlightSpan({ fromAlong: along - 80, toAlong: along - 5, offsetMeters: 3 }),
+    );
+    const shifted = lineOf().coordinates as [number, number][];
+    // The first vertex moved 3 m sideways; the tip did not.
+    expect(haversineDistance(nth(shifted, 0), nth(plain, 0))).toBeCloseTo(3, 0);
+    expect(nth(shifted, -1)).toEqual(nth(plain, -1));
+  });
+
   it("3D off restores the 2D arrow", () => {
     render(<NavManeuverArrowLayer />);
     setZoom(17);

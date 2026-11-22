@@ -34,6 +34,12 @@ export type LaneHighlightAnswer =
       startBeforeManeuver: number;
       /** Metres back from the maneuver where it ends (the junction cut-back). */
       endBeforeManeuver: number;
+      /**
+       * Sideways distance from the route line to the centre of the recommended
+       * lane nearest it, positive to the right of travel. The manoeuvre arrow
+       * runs there, so it points into the same lane as the highlight.
+       */
+      laneOffsetMeters: number;
     }
   | { polygons: null; reason: LaneHighlightReason };
 
@@ -234,16 +240,26 @@ export function laneHighlight(input: LaneHighlightInput): LaneHighlightAnswer {
   if (start - cut < MIN_HIGHLIGHT_M) return { polygons: null, reason: "no-way" };
 
   const centre = slice(approach, cum, total - start, total - cut);
+  let laneOffsetMeters: number | null = null;
   const polygons = input.recommended.flatMap((engineIndex) => {
     const osmIndex = match.engineToOsm[engineIndex];
     const lane = osmIndex === undefined ? undefined : travelLanes[osmIndex];
     if (!lane) return [];
     const offset = sideSign * lane.offset;
+    if (laneOffsetMeters === null || Math.abs(offset) < Math.abs(laneOffsetMeters)) {
+      laneOffsetMeters = offset;
+    }
     const leftEdge = offsetLine(centre, offset - lane.width / 2);
     const rightEdge = offsetLine(centre, offset + lane.width / 2);
     const ring = [...leftEdge, ...rightEdge.reverse()];
     ring.push(ring[0] as P);
     return [ring.map(frame.toLngLat)];
   });
-  return { polygons, startBeforeManeuver: start, endBeforeManeuver: cut };
+  if (laneOffsetMeters === null) return { polygons: null, reason: "no-lanes" };
+  return {
+    polygons,
+    startBeforeManeuver: start,
+    endBeforeManeuver: cut,
+    laneOffsetMeters,
+  };
 }

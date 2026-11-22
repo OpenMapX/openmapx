@@ -8,10 +8,20 @@ import { create } from "zustand";
  * has its own JS context, so this stays inactive there). Integrations read it
  * through `useSceneSlot` and need no navigation knowledge of their own.
  */
+export interface HighlightSpan {
+  fromAlong: number;
+  toAlong: number;
+  offsetMeters?: number;
+}
+
 export interface NavigationSceneState {
   active: boolean;
-  /** Along-route metres the lane highlight covers; the route is transparent there. */
-  highlightSpan: { fromAlong: number; toAlong: number } | null;
+  /**
+   * Along-route metres the lane highlight covers; the route is transparent
+   * there. `offsetMeters` is the recommended lane's sideways distance from
+   * the route line (positive right), where the manoeuvre arrow runs.
+   */
+  highlightSpan: HighlightSpan | null;
   /**
    * Along-route metres the raised manoeuvre arrow covers; the route ghost is
    * transparent there, or its 35% tint would turn the white arrow blue.
@@ -20,7 +30,7 @@ export interface NavigationSceneState {
   /** Map details draw traffic signals in the scene, so the flat signal icons step aside. */
   streetObjectsDrawn: boolean;
   setActive(active: boolean): void;
-  setHighlightSpan(span: { fromAlong: number; toAlong: number } | null): void;
+  setHighlightSpan(span: HighlightSpan | null): void;
   setArrowSpan(span: { fromAlong: number; toAlong: number } | null): void;
   setStreetObjectsDrawn(drawn: boolean): void;
 }

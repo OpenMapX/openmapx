@@ -165,6 +165,8 @@ export {
 } from "./laneTags";
 export { isLiveNavigationStatus } from "./liveStatus";
 export {
+  type ArrowLaneShift,
+  laneShiftedArrowLine,
   type ManeuverArrowSpans,
   maneuverArrowLine,
   maneuverArrowSpans,

@@ -126,6 +126,7 @@ export {
   laneArrowStemShift,
   laneDestinationsAt,
   laneIndicationIconName,
+  laneShiftedArrowLine,
   lookAheadBearing,
   lookAheadMeters,
   type ManeuverArrowSpans,

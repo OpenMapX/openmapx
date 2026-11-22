@@ -142,3 +142,78 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
   ring.push(ring[0] as LngLat);
   return ring.map(toLngLat);
 }
+
+/** A taper mark this close to an existing vertex reuses it. */
+const MARK_EPSILON_M = 0.01;
+
+/** Where the arrow runs in the recommended lane, and where it rejoins the route line. */
+export interface ArrowLaneShift {
+  /** Along-route metres up to which the arrow runs fully in the lane. */
+  untilAlong: number;
+  /** Along-route metres of the manoeuvre, where it is back on the route line. */
+  maneuverAlong: number;
+  /** Sideways distance to the lane centre, positive to the right of travel. */
+  offsetMeters: number;
+}
+
+/**
+ * The arrow line moved sideways into the recommended lane before the junction,
+ * tapering back to the route line between `untilAlong` and the manoeuvre and
+ * following it from there, so the arrow points into the same lane as the lane
+ * highlight. `lineStartAlong` is the along-route distance of `line[0]`.
+ */
+export function laneShiftedArrowLine(
+  line: LngLat[],
+  lineStartAlong: number,
+  shift: ArrowLaneShift,
+): LngLat[] {
+  const tip = line.at(-1);
+  if (!tip || line.length < 2 || shift.offsetMeters === 0) return line;
+  const cos = Math.cos((tip[1] * Math.PI) / 180);
+  const k = (Math.PI / 180) * EARTH_RADIUS_M;
+  const toLocal = ([lng, lat]: LngLat): LngLat => [(lng - tip[0]) * k * cos, (lat - tip[1]) * k];
+  const toLngLat = ([x, y]: LngLat): LngLat => [tip[0] + x / (k * cos), tip[1] + y / k];
+
+  // Vertices with their along-route distance, plus vertices where the taper
+  // starts and ends so it bends exactly there.
+  const points: { p: LngLat; along: number; original?: LngLat }[] = [];
+  let along = lineStartAlong;
+  line.forEach((vertex, i) => {
+    const p = toLocal(vertex);
+    if (i > 0) {
+      const prev = points[points.length - 1] as { p: LngLat; along: number };
+      const length = Math.hypot(p[0] - prev.p[0], p[1] - prev.p[1]);
+      const next = along + length;
+      for (const mark of [shift.untilAlong, shift.maneuverAlong]) {
+        if (mark > along + MARK_EPSILON_M && mark < next - MARK_EPSILON_M) {
+          const t = (mark - along) / length;
+          points.push({
+            p: [prev.p[0] + (p[0] - prev.p[0]) * t, prev.p[1] + (p[1] - prev.p[1]) * t],
+            along: mark,
+          });
+        }
+      }
+      along = next;
+    }
+    points.push({ p, along, original: vertex });
+  });
+  points.sort((a, b) => a.along - b.along);
+
+  const span = Math.max(shift.maneuverAlong - shift.untilAlong, 1e-6);
+  const offsetAt = (a: number): number => {
+    if (a <= shift.untilAlong) return shift.offsetMeters;
+    if (a >= shift.maneuverAlong) return 0;
+    return (shift.offsetMeters * (shift.maneuverAlong - a)) / span;
+  };
+  return points.map(({ p, along: a, original }, i) => {
+    const offset = offsetAt(a);
+    if (offset === 0 && original) return original;
+    const before = (points[Math.max(0, i - 1)] as { p: LngLat }).p;
+    const after = (points[Math.min(points.length - 1, i + 1)] as { p: LngLat }).p;
+    const dx = after[0] - before[0];
+    const dy = after[1] - before[1];
+    const length = Math.hypot(dx, dy) || 1;
+    // Facing (dx, dy) with y north, the right-hand normal is (dy, −dx).
+    return toLngLat([p[0] + (dy / length) * offset, p[1] - (dx / length) * offset]);
+  });
+}
