@@ -164,9 +164,10 @@ export function LaneHighlight({
                 type: "fill",
                 source: LAYER_ID,
                 paint: { "fill-color": PRIMARY_BLUE_HEX, "fill-opacity": HIGHLIGHT_OPACITY },
-                // Above the street paint, below the route casing (order 2).
+                // Above the street paint and the planning route line (order 1), below
+                // the navigation route casing (order 2).
                 slot: "route-active",
-                order: 1,
+                order: 1.5,
               },
             ],
           }
