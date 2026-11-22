@@ -1,20 +1,24 @@
-import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   ambientSchemaDDL,
   ensureAmbientSchema,
 } from "../../../../../services/data-manager/src/jobs/ambient-places/schema.js";
+import {
+  connectProductionPostgis,
+  API_MIGRATIONS as MIGRATIONS,
+  productionPostgisPasswords,
+  PRODUCTION_POSTGIS_SYNCED as SYNCED,
+  startProductionPostgis,
+} from "../../test/production-postgis";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
-const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
-const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const TRAFFIC_FLOW = join(import.meta.dirname, "fixtures", "openconditions-traffic-flow.sql");
 /** What OpenConditions' migration grants the tile function's role: the
  * tables and functions `conditions.segment_flow` reads, and nothing else. */
@@ -26,21 +30,7 @@ const TILE_CONTRACT = `
     conditions.flow_public_licenses(text[]), conditions.flow_osm_credit() TO openmapx_tiles_owner;
 `;
 const TILE_CONTRACT_TABLES = ["public_license_policy", "road_segment", "segment_speed", "source"];
-const { container: manifest } = JSON.parse(
-  readFileSync(join(repoRoot, "services", "postgis", "service.json"), "utf8"),
-) as { container: { image: string; tag: string; digest: string } };
-const IMAGE = `${manifest.image}:${manifest.tag}@${manifest.digest}`;
-const ENTRYPOINT = "/usr/local/bin/openmapx-postgis-entrypoint.sh";
-const IMAGE_INITDB = "/docker-entrypoint-initdb.d/10_postgis.sh";
-const SYNCED =
-  "pg_isready -h 127.0.0.1 -U postgres -d openmapx -q && test -f /var/run/postgresql/openmapx-password-synced";
-const passwords = {
-  superuser: randomBytes(24).toString("base64url"),
-  api: randomBytes(32).toString("base64url"),
-  dataManager: randomBytes(32).toString("base64url"),
-  tiles: randomBytes(32).toString("base64url"),
-  openConditions: randomBytes(32).toString("base64url"),
-};
+const passwords = productionPostgisPasswords();
 
 let container: StartedPostgreSqlContainer;
 let api: Sql;
@@ -48,57 +38,15 @@ let dataManager: Sql;
 let superuser: Sql;
 
 function connect(role: string, password: string, on = container): Sql {
-  const url = new URL(on.getConnectionUri());
-  url.username = role;
-  url.password = password;
-  return postgres(url.toString(), { max: 1, onnotice: () => {} });
+  return connectProductionPostgis(on, role, password);
 }
 
 async function permissionDenied(statement: Promise<unknown>): Promise<void> {
   await expect(statement).rejects.toMatchObject({ code: "42501" });
 }
 
-/** The pinned PostGIS image running the production entrypoint, with the
- * image's own initdb script replaced and both role password files, as
- * service.json mounts them. */
-async function startPostgis(environment: Record<string, string> = {}) {
-  return new PostgreSqlContainer(IMAGE)
-    .withDatabase("openmapx")
-    .withUsername("postgres")
-    .withPassword(passwords.superuser)
-    .withEnvironment({
-      OPENMAPX_API_DB_PASSWORD_FILE: "/run/secrets/postgres-api-password",
-      OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: "/run/secrets/postgres-data-manager-password",
-      ...environment,
-    })
-    .withCopyContentToContainer([
-      {
-        content: readFileSync(join(repoRoot, "services/postgis/scripts/sync-password.sh")),
-        target: ENTRYPOINT,
-        mode: 0o755,
-      },
-      {
-        content: readFileSync(join(repoRoot, "services/postgis/scripts/initdb-extensions.sh")),
-        target: IMAGE_INITDB,
-        mode: 0o755,
-      },
-      { content: passwords.api, target: "/run/secrets/postgres-api-password", mode: 0o600 },
-      {
-        content: passwords.dataManager,
-        target: "/run/secrets/postgres-data-manager-password",
-        mode: 0o600,
-      },
-    ])
-    .withEntrypoint([ENTRYPOINT])
-    .withCommand(["postgres"])
-    .withHealthCheck({
-      test: ["CMD-SHELL", SYNCED],
-      interval: 250,
-      timeout: 1000,
-      retries: 1000,
-    })
-    .withStartupTimeout(120_000)
-    .start();
+function startPostgis(environment: Record<string, string> = {}) {
+  return startProductionPostgis(passwords, environment);
 }
 
 /** The production PostGIS entrypoint creates the roles before the API migrates as its own role. */

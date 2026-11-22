@@ -1,5 +1,5 @@
 {
-  "id": "438bfe85-03ee-4082-9bd9-ce21a35bfeed",
+  "id": "3105b5cf-4466-4c38-96cc-ecd02453515b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -695,6 +695,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_user_id": {
+          "name": "target_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "action": {
           "name": "action",
           "type": "text",
@@ -772,6 +778,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "admin_audit_log_target_user_id_idx": {
+          "name": "admin_audit_log_target_user_id_idx",
+          "columns": [
+            {
+              "expression": "target_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -781,6 +802,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "admin_audit_log_target_user_id_fkey": {
+          "name": "admin_audit_log_target_user_id_fkey",
+          "tableFrom": "admin_audit_log",
+          "tableTo": "user",
+          "columnsFrom": [
+            "target_user_id"
           ],
           "columnsTo": [
             "id"
@@ -2782,8 +2816,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2838,6 +2872,21 @@
           "method": "btree",
           "with": {}
         },
+        "data_subject_request_event_actor_user_id_idx": {
+          "name": "data_subject_request_event_actor_user_id_idx",
+          "columns": [
+            {
+              "expression": "actor_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "data_subject_request_event_idempotency_idx": {
           "name": "data_subject_request_event_idempotency_idx",
           "columns": [
@@ -2873,6 +2922,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "data_subject_request_event_actor_user_id_fkey": {
+          "name": "data_subject_request_event_actor_user_id_fkey",
+          "tableFrom": "data_subject_request_event",
+          "tableTo": "user",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -7122,8 +7184,38 @@
           "notNull": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "system_settings_updated_by_idx": {
+          "name": "system_settings_updated_by_idx",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "system_settings_updated_by_fkey": {
+          "name": "system_settings_updated_by_fkey",
+          "tableFrom": "system_settings",
+          "tableTo": "user",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -78,6 +78,7 @@ CREATE TABLE "admin_audit_log" (
 	"actor_id" text,
 	"target_id" text,
 	"target_type" text,
+	"target_user_id" text,
 	"action" text NOT NULL,
 	"details" jsonb,
 	"ip_address" text,
@@ -323,7 +324,7 @@ CREATE TABLE "data_subject_request_event" (
 	"request_id" uuid NOT NULL,
 	"event_type" text NOT NULL,
 	"actor_kind" text NOT NULL,
-	"actor_id" text,
+	"actor_user_id" text,
 	"payload_version" integer DEFAULT 1 NOT NULL,
 	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"idempotency_key" text,
@@ -901,6 +902,7 @@ ALTER TABLE "account_mail_outbox" ADD CONSTRAINT "account_mail_outbox_request_ke
 ALTER TABLE "account_mail_outbox" ADD CONSTRAINT "account_mail_outbox_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_action_reauthentication" ADD CONSTRAINT "admin_action_reauthentication_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_audit_log" ADD CONSTRAINT "admin_audit_log_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "admin_audit_log" ADD CONSTRAINT "admin_audit_log_target_user_id_fkey" FOREIGN KEY ("target_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_job" ADD CONSTRAINT "admin_job_created_by_user_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_job_log" ADD CONSTRAINT "admin_job_log_job_id_admin_job_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."admin_job"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "auth_policy_application" ADD CONSTRAINT "auth_policy_application_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -913,6 +915,7 @@ ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_user_id_
 ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_actor_session_id_session_id_fk" FOREIGN KEY ("actor_session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_event" ADD CONSTRAINT "data_subject_request_event_request_id_data_subject_request_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."data_subject_request"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_subject_request_event" ADD CONSTRAINT "data_subject_request_event_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_notification" ADD CONSTRAINT "data_subject_request_notification_request_id_data_subject_request_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."data_subject_request"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_notification" ADD CONSTRAINT "data_subject_request_notification_recipient_user_id_user_id_fk" FOREIGN KEY ("recipient_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_preservation" ADD CONSTRAINT "data_subject_request_preservation_request_id_data_subject_request_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."data_subject_request"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -950,6 +953,7 @@ ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "session_auth_assurance" ADD CONSTRAINT "session_auth_assurance_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session_auth_assurance" ADD CONSTRAINT "session_auth_assurance_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "share_link" ADD CONSTRAINT "share_link_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "system_settings" ADD CONSTRAINT "system_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transit_credential_preview" ADD CONSTRAINT "transit_credential_preview_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_application_receipt" ADD CONSTRAINT "integration_application_receipt_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -964,6 +968,7 @@ CREATE UNIQUE INDEX "admin_reauth_request_uq" ON "admin_action_reauthentication"
 CREATE INDEX "audit_actorId_idx" ON "admin_audit_log" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "audit_action_idx" ON "admin_audit_log" USING btree ("action");--> statement-breakpoint
 CREATE INDEX "audit_createdAt_idx" ON "admin_audit_log" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "admin_audit_log_target_user_id_idx" ON "admin_audit_log" USING btree ("target_user_id");--> statement-breakpoint
 CREATE INDEX "adminJob_status_idx" ON "admin_job" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "adminJob_type_idx" ON "admin_job" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "adminJob_createdAt_idx" ON "admin_job" USING btree ("created_at");--> statement-breakpoint
@@ -990,6 +995,7 @@ CREATE INDEX "data_subject_request_user_state_idx" ON "data_subject_request" USI
 CREATE INDEX "data_subject_request_due_idx" ON "data_subject_request" USING btree ("state","due_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_active_user_kind_idx" ON "data_subject_request" USING btree ("user_id","kind") WHERE "data_subject_request"."user_id" is not null and "data_subject_request"."state" in ('open', 'in_progress', 'waiting_on_requester');--> statement-breakpoint
 CREATE INDEX "data_subject_request_event_request_idx" ON "data_subject_request_event" USING btree ("request_id","created_at");--> statement-breakpoint
+CREATE INDEX "data_subject_request_event_actor_user_id_idx" ON "data_subject_request_event" USING btree ("actor_user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_event_idempotency_idx" ON "data_subject_request_event" USING btree ("request_id","idempotency_key") WHERE "data_subject_request_event"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_notification_event_idx" ON "data_subject_request_notification" USING btree ("request_id","template","channel","recipient_user_id","occurrence_key");--> statement-breakpoint
 CREATE INDEX "data_subject_request_notification_state_idx" ON "data_subject_request_notification" USING btree ("state","next_attempt_at");--> statement-breakpoint
@@ -1041,6 +1047,7 @@ CREATE INDEX "session_expires_at_idx" ON "session" USING btree ("expires_at");--
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_auth_assurance_user_idx" ON "session_auth_assurance" USING btree ("user_id","authenticated_at");--> statement-breakpoint
 CREATE INDEX "shareLink_userId_idx" ON "share_link" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "system_settings_updated_by_idx" ON "system_settings" USING btree ("updated_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "transit_credential_preview_actor_key_uq" ON "transit_credential_preview" USING btree ("actor_id","operation_key");--> statement-breakpoint
 CREATE INDEX "transit_credential_preview_expiry_idx" ON "transit_credential_preview" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "twoFactor_secret_idx" ON "two_factor" USING btree ("secret");--> statement-breakpoint

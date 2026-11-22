@@ -1,6 +1,7 @@
 -- Database objects drizzle-kit cannot generate: roles and grants, the account
--- role CHECK on Better Auth's "user" table, and the last-administrator
--- invariant. Everything else is declared in the schema code.
+-- role CHECK on Better Auth's "user" table, the last-administrator invariant
+-- and the account erasure trigger. Everything else is declared in the schema
+-- code.
 
 -- Data-manager connects as its own role and may change only its own tables.
 -- PostGIS creates the role on every start; a database without that entrypoint
@@ -46,4 +47,51 @@ BEGIN
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
  RETURN NEW;
 END $$;--> statement-breakpoint
-CREATE TRIGGER openmapx_admin_capacity BEFORE INSERT OR UPDATE OF role,banned OR DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION openmapx_preserve_admin_capacity();
+CREATE TRIGGER openmapx_admin_capacity BEFORE INSERT OR UPDATE OF role,banned OR DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION openmapx_preserve_admin_capacity();--> statement-breakpoint
+
+-- Deleting an account clears what still names it and no foreign key reaches,
+-- on every delete path: Better Auth's, the CLI's restore replay and plain SQL.
+-- It runs with the rights of the deleting role (the API's, which owns these
+-- tables). Offline-package rows name the account by a keyed hash only the API
+-- can compute; its delete hook removes them. TRUNCATE "user" fires no row
+-- trigger and skips all of this.
+CREATE FUNCTION openmapx_erase_user_residue() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
+DECLARE
+  -- NULL for an empty value, so a substring test can never match every row.
+  erased_id text := nullif(OLD.id, '');
+  erased_email text := nullif(lower(OLD.email), '');
+BEGIN
+  -- Privacy cases keep their history and record that the account is gone.
+  UPDATE data_subject_request
+  SET account_state = 'deleted', version = version + 1, updated_at = now()
+  WHERE user_id = OLD.id AND account_state <> 'deleted';
+  -- Better Auth's pending challenges for the account or its email.
+  DELETE FROM verification
+  WHERE value = OLD.id
+     OR lower(identifier) = erased_email
+     OR lower(identifier) = lower('change-email:' || OLD.id || ':' || OLD.email);
+  -- Audit rows stay as the record of what happened, without the person.
+  UPDATE admin_audit_log SET actor_id = NULL, ip_address = NULL, user_agent = NULL
+  WHERE actor_id = OLD.id;
+  UPDATE admin_audit_log SET target_id = NULL
+  WHERE target_type = 'user' AND target_id = OLD.id;
+  UPDATE admin_audit_log SET details = NULL
+  WHERE position(erased_id in details::text) > 0
+     OR position(erased_email in lower(details::text)) > 0;
+  DELETE FROM app_logs
+  WHERE position(erased_id in msg) > 0
+     OR position(erased_email in lower(msg)) > 0
+     OR position(erased_id in metadata::text) > 0
+     OR position(erased_email in lower(metadata::text)) > 0;
+  UPDATE data_manager.jobs SET triggered_by = NULL
+  WHERE triggered_by = 'api:user:' || OLD.id;
+  -- A pending administrator confirmation of an action on this account.
+  DELETE FROM admin_action_reauthentication
+  WHERE purpose LIKE 'account.%' AND target_id = OLD.id;
+  -- An impersonation session must not outlive the administrator who started
+  -- it as an ordinary-looking session of the impersonated account.
+  DELETE FROM session WHERE impersonated_by = OLD.id;
+  RETURN OLD;
+END $$;--> statement-breakpoint
+CREATE TRIGGER openmapx_erase_user_residue BEFORE DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION openmapx_erase_user_residue();

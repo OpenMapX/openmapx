@@ -1,6 +1,6 @@
 {
-  "id": "8f20953e-4f31-4dc9-8935-326687e71d4c",
-  "prevId": "438bfe85-03ee-4082-9bd9-ce21a35bfeed",
+  "id": "94354454-e705-4021-93c8-f3104687c42a",
+  "prevId": "3105b5cf-4466-4c38-96cc-ecd02453515b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -695,6 +695,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_user_id": {
+          "name": "target_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "action": {
           "name": "action",
           "type": "text",
@@ -772,6 +778,21 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "admin_audit_log_target_user_id_idx": {
+          "name": "admin_audit_log_target_user_id_idx",
+          "columns": [
+            {
+              "expression": "target_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -780,6 +801,19 @@
           "tableFrom": "admin_audit_log",
           "columnsFrom": [
             "actor_id"
+          ],
+          "tableTo": "user",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "set null"
+        },
+        "admin_audit_log_target_user_id_fkey": {
+          "name": "admin_audit_log_target_user_id_fkey",
+          "tableFrom": "admin_audit_log",
+          "columnsFrom": [
+            "target_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -2782,8 +2816,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2838,6 +2872,21 @@
           "method": "btree",
           "concurrently": false
         },
+        "data_subject_request_event_actor_user_id_idx": {
+          "name": "data_subject_request_event_actor_user_id_idx",
+          "columns": [
+            {
+              "expression": "actor_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "data_subject_request_event_idempotency_idx": {
           "name": "data_subject_request_event_idempotency_idx",
           "columns": [
@@ -2874,6 +2923,19 @@
           ],
           "onUpdate": "no action",
           "onDelete": "cascade"
+        },
+        "data_subject_request_event_actor_user_id_fkey": {
+          "name": "data_subject_request_event_actor_user_id_fkey",
+          "tableFrom": "data_subject_request_event",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "tableTo": "user",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
@@ -7122,8 +7184,38 @@
           "notNull": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "system_settings_updated_by_idx": {
+          "name": "system_settings_updated_by_idx",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "system_settings_updated_by_fkey": {
+          "name": "system_settings_updated_by_fkey",
+          "tableFrom": "system_settings",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "tableTo": "user",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "set null"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
