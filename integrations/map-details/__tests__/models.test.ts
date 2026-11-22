@@ -17,7 +17,16 @@ import {
   ROLE_COLOURS,
 } from "../web/models";
 
-const KINDS: ModelKind[] = ["broadleaf", "conifer", "lamp_arm", "lamp_lantern", "signal", "bench"];
+const KINDS: ModelKind[] = [
+  "broadleaf",
+  "conifer",
+  "lamp_arm",
+  "lamp_lantern",
+  "signal",
+  "bench",
+  "stop",
+  "give_way",
+];
 const triangles = (geometry: BufferGeometry) =>
   (geometry.index ? geometry.index.count : (geometry.getAttribute("position")?.count ?? 0)) / 3;
 const box = (geometry: BufferGeometry) => {
@@ -35,6 +44,8 @@ describe("procedural models", () => {
     ["lamp_lantern", "near", 200],
     ["signal", "near", 200],
     ["bench", "near", 200],
+    ["stop", "near", 200],
+    ["give_way", "near", 200],
   ] as const)("keeps %s (%s) within %i triangles", (kind, lod, max) => {
     const geometry = buildModel(kind, lod);
     expect(triangles(geometry)).toBeGreaterThan(4);
@@ -69,8 +80,33 @@ describe("procedural models", () => {
     },
   );
 
+  it("stop and give_way models build with bounded vertex counts", () => {
+    for (const kind of ["stop", "give_way"] as const) {
+      const geometry = buildModel(kind, "near");
+      expect(triangles(geometry)).toBeLessThanOrEqual(200);
+      const role = geometry.getAttribute("role");
+      const roles = new Set(Array.from({ length: role.count }, (_, i) => role.getX(i)));
+      // A grey post and a red sign face; the give-way face also has a white field.
+      expect(roles.has(MATERIAL_ROLES.indexOf("metal"))).toBe(true);
+      expect(roles.has(MATERIAL_ROLES.indexOf("sign_red"))).toBe(true);
+    }
+    const giveWay = buildModel("give_way", "near").getAttribute("role");
+    expect(
+      Array.from({ length: giveWay.count }, (_, i) => giveWay.getX(i)).includes(
+        MATERIAL_ROLES.indexOf("sign_white"),
+      ),
+    ).toBe(true);
+  });
+
   it("stands the furniture on the ground and points it along +y", () => {
-    for (const kind of ["lamp_arm", "lamp_lantern", "signal", "bench"] as const) {
+    for (const kind of [
+      "lamp_arm",
+      "lamp_lantern",
+      "signal",
+      "bench",
+      "stop",
+      "give_way",
+    ] as const) {
       const { min, max } = box(buildModel(kind, "near"));
       expect(min.z).toBeCloseTo(0, 6);
       expect(max.z).toBeLessThanOrEqual(1 + 1e-6);

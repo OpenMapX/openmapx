@@ -8,7 +8,15 @@ import { EARTH_CIRCUMFERENCE_M, tileCentreLat } from "./units";
  * instance layout for every 3D object.
  */
 
-export type ModelKind = "broadleaf" | "conifer" | "lamp_arm" | "lamp_lantern" | "signal" | "bench";
+export type ModelKind =
+  | "broadleaf"
+  | "conifer"
+  | "lamp_arm"
+  | "lamp_lantern"
+  | "signal"
+  | "bench"
+  | "stop"
+  | "give_way";
 
 /**
  * Floats per instance: x, y (metres east and north of the z16 cell's

@@ -216,7 +216,7 @@ layers:
       - source: osm
         geometry: point
         include_when:
-          highway: [street_lamp, traffic_signals]
+          highway: [street_lamp, traffic_signals, stop, give_way]
           amenity: bench
         attributes:
           - key: kind
@@ -226,10 +226,16 @@ layers:
                 highway: street_lamp
               signals:
                 highway: traffic_signals
+              stop:
+                highway: stop
+              give_way:
+                highway: give_way
               bench:
                 amenity: bench
           - { key: dir, tag_value: direction, type: string }
           - { key: sig_dir, tag_value: "traffic_signals:direction", type: string }
+          - { key: stop_dir, tag_value: "stop:direction", type: string }
+          - { key: stop, tag_value: stop, type: string }
           - { key: mount, tag_value: lamp_mount, type: string }
           - { key: backrest, tag_value: backrest, type: boolean }
 
@@ -472,6 +478,34 @@ examples:
         tags:
           kind: signals
           sig_dir: forward
+  - name: stop sign
+    input:
+      source: osm
+      geometry: point
+      tags:
+        highway: stop
+        direction: forward
+        stop: minor
+    output:
+      - layer: furniture
+        geometry: point
+        tags:
+          kind: stop
+          dir: forward
+          stop: minor
+  - name: give way sign
+    input:
+      source: osm
+      geometry: point
+      tags:
+        highway: give_way
+        "stop:direction": backward
+    output:
+      - layer: furniture
+        geometry: point
+        tags:
+          kind: give_way
+          stop_dir: backward
   - name: bench
     input:
       source: osm

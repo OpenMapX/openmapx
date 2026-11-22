@@ -167,6 +167,88 @@ describe("traffic signals", () => {
   });
 });
 
+describe("stop and give-way signs", () => {
+  // ROAD's vertex at (100, 200) is 100 m from its west end and 200 m from its east end.
+  it("places a forward stop sign on the kerb side of travel", () => {
+    const signs = objects({
+      roads: [ROAD],
+      furniture: [point({ kind: "stop", stop_dir: "forward" }, [100, 200])],
+    });
+    expect(signs).toHaveLength(1);
+    expect(signs[0]?.kind).toBe("stop");
+    expect(signs[0]?.height).toBeCloseTo(2.2, 5);
+    // Eastbound traffic keeps right (south) and sees the sign from the west.
+    expect(signs[0]?.y).toBeCloseTo(200 - 3.25, 3);
+    expect(signs[0]?.bearing).toBeCloseTo(270, 3);
+  });
+
+  it("reads direction when stop:direction is absent", () => {
+    const signs = objects({
+      roads: [ROAD],
+      furniture: [point({ kind: "stop", dir: "backward" }, [100, 200])],
+    });
+    expect(signs).toHaveLength(1);
+    expect(signs[0]?.y).toBeCloseTo(200 + 3.25, 3);
+    expect(signs[0]?.bearing).toBeCloseTo(90, 3);
+  });
+
+  it("an undirected interior sign faces the nearer way end", () => {
+    const signs = objects({ roads: [ROAD], furniture: [point({ kind: "stop" }, [100, 200])] });
+    // The west end is nearer, so the sign is for westbound traffic (north kerb).
+    expect(signs).toHaveLength(1);
+    expect(signs[0]?.y).toBeCloseTo(200 + 3.25, 3);
+    expect(signs[0]?.bearing).toBeCloseTo(90, 3);
+  });
+
+  it("stop=all draws both directions", () => {
+    const signs = objects({
+      roads: [ROAD],
+      furniture: [point({ kind: "stop", stop: "all" }, [100, 200])],
+    });
+    expect(signs).toHaveLength(2);
+  });
+
+  it("a junction-node sign without direction is not drawn", () => {
+    const signs = objects({
+      roads: [line({ class: "primary", lanes: 2 }, [100, 200], [300, 200])],
+      furniture: [point({ kind: "stop" }, [100, 200])],
+    });
+    expect(signs).toHaveLength(0);
+  });
+
+  it("left-hand traffic puts the sign on the left kerb", () => {
+    const signs = objects(
+      { roads: [ROAD], furniture: [point({ kind: "stop", stop_dir: "forward" }, [100, 200])] },
+      true,
+    );
+    expect(signs[0]?.y).toBeCloseTo(200 + 3.25, 3);
+    expect(signs[0]?.bearing).toBeCloseTo(270, 3);
+  });
+
+  it("give_way follows the same direction rules", () => {
+    const signs = objects({ roads: [ROAD], furniture: [point({ kind: "give_way" }, [100, 200])] });
+    expect(signs).toHaveLength(1);
+    expect(signs[0]?.kind).toBe("give_way");
+    expect(signs[0]?.height).toBeCloseTo(2.2, 5);
+    expect(signs[0]?.y).toBeCloseTo(200 + 3.25, 3);
+  });
+
+  it("draws no sign against a one-way road's traffic", () => {
+    const oneway = line(
+      { class: "primary", lanes: 2, oneway: 1 },
+      [0, 200],
+      [100, 200],
+      [300, 200],
+    );
+    expect(
+      objects({
+        roads: [oneway],
+        furniture: [point({ kind: "stop", stop_dir: "backward" }, [100, 200])],
+      }),
+    ).toHaveLength(0);
+  });
+});
+
 describe("benches", () => {
   it("faces a mapped direction", () => {
     const [bench] = objects({ furniture: [point({ kind: "bench", dir: "S" }, [50, 50])] });

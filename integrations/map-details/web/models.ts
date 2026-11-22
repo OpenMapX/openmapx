@@ -26,13 +26,38 @@ import type { ModelKind } from "./derive/forest";
  * from a material role per vertex and a day or night palette.
  */
 
-export const MATERIAL_ROLES = ["crown", "trunk", "metal", "wood", "lens"] as const;
+export const MATERIAL_ROLES = [
+  "crown",
+  "trunk",
+  "metal",
+  "wood",
+  "lens",
+  "sign_red",
+  "sign_white",
+] as const;
 export type MaterialRole = (typeof MATERIAL_ROLES)[number];
 export type Palette = "day" | "night";
 
+// Sign faces are retroreflective, so at night they stay brighter than the metal around them.
 export const ROLE_COLOURS: Record<Palette, Record<MaterialRole, number>> = {
-  day: { crown: 0x5d8c4a, trunk: 0x6b4f3a, metal: 0x59636d, wood: 0x8a6a4a, lens: 0x2b2b2b },
-  night: { crown: 0x1f2f1c, trunk: 0x2a2119, metal: 0x2a3036, wood: 0x382b20, lens: 0xffd28a },
+  day: {
+    crown: 0x5d8c4a,
+    trunk: 0x6b4f3a,
+    metal: 0x59636d,
+    wood: 0x8a6a4a,
+    lens: 0x2b2b2b,
+    sign_red: 0xc8102e,
+    sign_white: 0xf2f2f2,
+  },
+  night: {
+    crown: 0x1f2f1c,
+    trunk: 0x2a2119,
+    metal: 0x2a3036,
+    wood: 0x382b20,
+    lens: 0xffd28a,
+    sign_red: 0x8a1626,
+    sign_white: 0x9a9a9a,
+  },
 };
 
 interface Part {
@@ -177,6 +202,33 @@ function signal(): Part[] {
   ];
 }
 
+/** A thin grey sign post, three quarters of the model's height. */
+function signPost(): Part {
+  return {
+    geometry: upright(new CylinderGeometry(0.012, 0.012, 0.76, 6, 1, true), 0, 0, 0.38),
+    role: "metal",
+  };
+}
+
+function stopSign(): Part[] {
+  // A flat 8-sided cylinder along y is an octagon facing +y; turned a sixteenth
+  // so its top edge is flat.
+  const face = new CylinderGeometry(0.13, 0.13, 0.008, 8).rotateY(Math.PI / 8);
+  return [signPost(), { geometry: face.translate(0, 0.014, 0.85), role: "sign_red" }];
+}
+
+function giveWaySign(): Part[] {
+  // A 3-sided cylinder along y is a triangle facing +y with a corner on top;
+  // turned half a circle, the corner points down.
+  const triangle = (radius: number, depth: number, y: number) =>
+    new CylinderGeometry(radius, radius, depth, 3).rotateY(Math.PI).translate(0, y, 0.85);
+  return [
+    signPost(),
+    { geometry: triangle(0.15, 0.008, 0.014), role: "sign_red" },
+    { geometry: triangle(0.09, 0.004, 0.02), role: "sign_white" },
+  ];
+}
+
 function bench(): Part[] {
   // The sitter faces +y, so the backrest is on the −y side.
   return [
@@ -203,6 +255,10 @@ export function buildModel(kind: ModelKind, lod: "near" | "far"): BufferGeometry
       return merge(signal());
     case "bench":
       return merge(bench());
+    case "stop":
+      return merge(stopSign());
+    case "give_way":
+      return merge(giveWaySign());
   }
 }
 

@@ -6,6 +6,7 @@ import {
   laneList,
   roadWidth,
   signalDirection,
+  stopDirection,
   treeCirc,
   treeCrown,
   treeHeight,
@@ -40,6 +41,16 @@ describe("attribute validation", () => {
     expect(direction("360")).toBe(360);
     for (const value of ["361", "-5", "forward", "", undefined, "NNNE"])
       expect(direction(value as never)).toBeNull();
+  });
+
+  it("reads stop and give-way directions, preferring stop:direction", () => {
+    expect(stopDirection("backward", "forward", undefined)).toBe("forward");
+    expect(stopDirection("backward", undefined, undefined)).toBe("backward");
+    expect(stopDirection(undefined, "both", undefined)).toBe("both");
+    expect(stopDirection("forward", undefined, "all")).toBe("both");
+    // Undirected: the placement decides from the way's geometry.
+    expect(stopDirection("NE", undefined, undefined)).toBeNull();
+    expect(stopDirection(undefined, undefined, "minor")).toBeNull();
   });
 
   it("reads signal directions with both as the fallback", () => {

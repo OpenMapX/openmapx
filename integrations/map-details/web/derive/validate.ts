@@ -56,6 +56,23 @@ export function signalDirection(value: Raw): "forward" | "backward" | "both" {
   return value === "forward" || value === "backward" ? value : "both";
 }
 
+/**
+ * Which travel direction a stop or give-way sign applies to: `stop:direction`
+ * before `direction`; `stop=all` means every direction. Null when the sign is
+ * undirected, so its placement decides from the way it stands on.
+ */
+export function stopDirection(
+  dir: Raw,
+  stopDir: Raw,
+  stop: Raw,
+): "forward" | "backward" | "both" | null {
+  if (stop === "all") return "both";
+  for (const value of [stopDir, dir]) {
+    if (value === "forward" || value === "backward" || value === "both") return value;
+  }
+  return null;
+}
+
 /** A `|`-separated per-lane list, or null unless its length equals the lane count. */
 export function laneList(value: Raw, count: number | null): string[] | null {
   if (typeof value !== "string" || value === "" || count === null) return null;

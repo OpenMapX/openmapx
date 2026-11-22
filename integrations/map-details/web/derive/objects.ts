@@ -4,7 +4,14 @@ import { distanceToPolyline, type Pt, pointAlong, polylineLength } from "./geome
 import { hash2, unit } from "./hash";
 import { crossSection, isMotorRoad } from "./roads";
 import { metresPerUnit } from "./units";
-import { direction, signalDirection, treeCirc, treeCrown, treeHeight } from "./validate";
+import {
+  direction,
+  signalDirection,
+  stopDirection,
+  treeCirc,
+  treeCrown,
+  treeHeight,
+} from "./validate";
 
 /**
  * Street trees, lamps, traffic signals and benches from the street detail
@@ -20,6 +27,7 @@ const CROWN_PER_HEIGHT = 0.6;
 const TRUNK_TO_HEIGHT = 46;
 const LAMP_HEIGHT_M = 6;
 const SIGNAL_HEIGHT_M = 3.5;
+const SIGN_HEIGHT_M = 2.2;
 const BENCH_HEIGHT_M = 0.9;
 const LAMP_ROAD_RADIUS_M = 15;
 const SIGNAL_ROAD_RADIUS_M = 3;
@@ -36,6 +44,8 @@ interface SceneRoad {
   width: number;
   oneway: boolean;
   motor: boolean;
+  /** The lines were reversed for `oneway=-1`, so OSM's forward runs against them. */
+  reversed: boolean;
 }
 
 /** Heading that turns a model's front (+y) to face along `v`. */
@@ -82,6 +92,7 @@ export function streetObjects(
         width: section.width,
         oneway: section.oneway,
         motor: isMotorRoad(road.props),
+        reversed: section.reversed,
       };
     });
   const nearestRoad = (p: Pt, radius: number, motorOnly: boolean) => {
@@ -169,8 +180,88 @@ export function streetObjects(
         place("bench", at, heading, BENCH_HEIGHT_M, BENCH_HEIGHT_M, h);
       } else if (item.props.kind === "signals") {
         placeSignals(raw, at, h, randomHeading, item.props.sig_dir);
+      } else if (item.props.kind === "stop" || item.props.kind === "give_way") {
+        const which = stopDirection(item.props.dir, item.props.stop_dir, item.props.stop);
+        placeSign(item.props.kind, raw, at, h, which);
       }
     }
+  }
+
+  /**
+   * A stop or give-way sign on the kerb of the traffic it applies to (spec
+   * §8.2). Only a sign on a road's interior vertex has a usable direction: an
+   * explicit one, or, when undirected, towards the nearer end of the way (the
+   * junction it guards). A sign on a junction node is not drawn.
+   */
+  function placeSign(
+    kind: "stop" | "give_way",
+    raw: Pt,
+    at: Pt,
+    h: number,
+    which: "forward" | "backward" | "both" | null,
+  ) {
+    let chosen: { road: SceneRoad; travel: Pt; toStart: number; toEnd: number } | null = null;
+    for (const road of roads) {
+      if (!road.motor || chosen) continue;
+      road.tileLines.forEach((line, lineIndex) => {
+        if (chosen) return;
+        const k = line.findIndex(
+          (p) =>
+            Math.abs(p[0] - raw[0]) <= VERTEX_TOLERANCE_UNITS &&
+            Math.abs(p[1] - raw[1]) <= VERTEX_TOLERANCE_UNITS,
+        );
+        if (k <= 0 || k >= line.length - 1) return;
+        const scene = road.lines[lineIndex] as Pt[];
+        const a = scene[k - 1] as Pt;
+        const b = scene[k + 1] as Pt;
+        const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        chosen = {
+          road,
+          travel: [(b[0] - a[0]) / length, (b[1] - a[1]) / length],
+          toStart: polylineLength(scene.slice(0, k + 1)),
+          toEnd: polylineLength(scene.slice(k)),
+        };
+      });
+    }
+    if (!chosen) return;
+    const { road, travel, toStart, toEnd } = chosen as {
+      road: SceneRoad;
+      travel: Pt;
+      toStart: number;
+      toEnd: number;
+    };
+    // The lines already run with traffic on `oneway=-1` roads, so an explicit
+    // OSM direction flips there; the nearer-end rule reads the lines directly.
+    const flip = { forward: "backward", backward: "forward", both: "both" } as const;
+    const direction =
+      which === null
+        ? toEnd < toStart
+          ? "forward"
+          : "backward"
+        : road.reversed
+          ? flip[which]
+          : which;
+    const right: Pt = [travel[1], -travel[0]];
+    const forwardSide: Pt = leftHand ? [-right[0], -right[1]] : right;
+    const half = road.width / 2;
+    if (direction !== "backward")
+      place(
+        kind,
+        [at[0] + forwardSide[0] * half, at[1] + forwardSide[1] * half],
+        headingAlong([-travel[0], -travel[1]]),
+        SIGN_HEIGHT_M,
+        SIGN_HEIGHT_M,
+        h,
+      );
+    if (!road.oneway && direction !== "forward")
+      place(
+        kind,
+        [at[0] - forwardSide[0] * half, at[1] - forwardSide[1] * half],
+        headingAlong(travel),
+        SIGN_HEIGHT_M,
+        SIGN_HEIGHT_M,
+        hash2(h, 1),
+      );
   }
 
   function placeSignals(
