@@ -17,6 +17,7 @@ import type {
   TransportMode,
 } from "@openmapx/mobility-core/transit";
 import {
+  HealthCheckDocument,
   NationalSituationsDocument,
   type SituationFieldsFragment,
 } from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
@@ -272,11 +273,16 @@ export function setup(ctx: IntegrationContext): void {
 
   async function isEnturLiveTransitAvailable(): Promise<boolean> {
     try {
-      await Promise.all([
+      const [vehicles, journeyPlanner] = await Promise.all([
         client.graphQl("vehicles", VehicleHealthCheckDocument, {}, generation.signal),
-        client.graphQl("journeyPlanner", NationalSituationsDocument, {}, generation.signal),
+        client.graphQl(
+          "journeyPlanner",
+          HealthCheckDocument,
+          { id: "NSR:StopPlace:337" },
+          generation.signal,
+        ),
       ]);
-      return true;
+      return Boolean(vehicles.__typename && journeyPlanner.stopPlace?.id);
     } catch (error) {
       if (generation.signal.aborted) throw error;
       return false;

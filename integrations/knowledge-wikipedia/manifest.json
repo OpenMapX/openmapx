@@ -20,12 +20,12 @@
     {
       "name": "Wikipedia",
       "type": "http",
-      "url": "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=Main_Page&prop=extracts&exintro=1&exlimit=1"
+      "url": "https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json"
     },
     {
       "name": "Wikimedia Commons",
       "type": "http",
-      "url": "https://commons.wikimedia.org/w/api.php?action=query&titles=File:Example.jpg&prop=imageinfo&format=json"
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json"
     }
   ],
   "quality": "built-in",

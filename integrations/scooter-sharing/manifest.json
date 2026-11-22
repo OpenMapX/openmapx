@@ -84,7 +84,7 @@
     {
       "name": "Felyx",
       "type": "ping",
-      "url": "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/"
+      "url": "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/"
     },
     {
       "name": "Entur Mobility",
@@ -94,7 +94,7 @@
     {
       "name": "Transitous Rentals",
       "type": "http",
-      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/health"
     },
     {
       "name": "NRW Mobidrom E-Scooter",
@@ -107,8 +107,8 @@
     },
     {
       "name": "MOTIS self-hosted",
-      "type": "ping",
-      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
+      "type": "http",
+      "urlTemplate": "${endpoint:motis}/api/v1/health"
     }
   ],
   "quality": "built-in",

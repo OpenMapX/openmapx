@@ -28,7 +28,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "${endpoint:photon}/api?q=test&limit=1"
+    "urlTemplate": "${endpoint:photon}/status"
   },
   "quality": "built-in",
   "category": "Geocoding",

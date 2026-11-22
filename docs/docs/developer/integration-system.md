@@ -238,7 +238,7 @@ still needs source/privacy disclosures even when the integration stores none.
 ```ts
 {
   healthCheck?: HealthCheck | HealthCheck[];
-  healthCheckIntervalMs?: number;             // background cadence; default 60000, minimum 60000
+  healthCheckIntervalMs?: number;             // override background cadence (minimum 60000)
 }
 
 interface HealthCheck {
@@ -277,11 +277,33 @@ public. Credentials in a URL, such as an operator's `https://user:pass@host`,
 are sent as Basic auth and never shown in the status URL or an error. A
 manifest's own `Authorization` header takes precedence.
 
-Use cheap, static endpoints for third-party reachability checks. Set
-`healthCheckIntervalMs` to a considerate background cadence (Mangrove uses
-900000 ms, or 15 minutes). The scheduler reuses cached results between probes
-and prevents overlapping scheduled probes of the same integration generation.
-Explicit administrator checks still probe immediately.
+Use dedicated health/status endpoints first, then the cheapest real API
+endpoint, and avoid bulk downloads or heavy queries in health checks. When
+`healthCheckIntervalMs` is omitted, the background scheduler picks a per-check
+default based on what the check actually targets:
+
+- **1 minute (`60000` ms)** for local/self-hosted checks (`${service:...}`,
+  self-hosted/operator `${endpoint:...}`, unconfigured checks, or local-service
+  custom checks);
+- **15 minutes (`900000` ms)** for public external checks;
+- **30 minutes (`1800000` ms)** for keyed/credentialed external checks.
+
+When a scheduled check fails (`down`), the scheduler retries it with
+exponential backoff starting at 1 minute (1, 2, 4, 8, 16 minutes up to its
+normal interval) so transient outages recover quickly without hiding features
+for an entire interval. Identical HTTP probes (matching URL, headers and host-exemption
+context) are coalesced within each sweep so shared upstreams are probed once.
+The scheduler reuses cached results between probes, prevents overlapping
+scheduled probes of the same integration generation, and keeps explicit
+administrator checks immediate.
+
+For metered bilateral APIs (such as the Deutsche Bahn RIS family), credentialless
+`ping` probes verify gateway reachability without spending account quota; an
+administrator credential test therefore confirms gateway reachability rather
+than key validity. For `transit-opentransportdata-ch`, the custom health check
+probes OJP rather than polling separate GTFS-RT, SIRI-SX, fare, and formation
+subscriptions on a timer.
+
 An array of checks rolls up into one signal: all must pass. The states and how
 they surface are described on the
 [admin page](../administration/integrations-administration.md#integration-health).

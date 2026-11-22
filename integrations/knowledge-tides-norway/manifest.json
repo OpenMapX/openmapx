@@ -28,7 +28,7 @@
     {
       "name": "Kartverket Sehavnivå station list",
       "type": "http",
-      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlist&type=perm&lang=en"
+      "url": "https://vannstand.kartverket.no/"
     }
   ],
   "dataSources": [

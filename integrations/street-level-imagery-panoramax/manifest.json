@@ -40,7 +40,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "${instanceUrl}/search?limit=1"
+    "urlTemplate": "${instanceUrl}/"
   },
   "quality": "built-in",
   "category": "Imagery",

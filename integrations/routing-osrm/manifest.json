@@ -31,8 +31,8 @@
     "osrm": "endpoint"
   },
   "healthCheck": {
-    "type": "ping",
-    "urlTemplate": "${endpoint:osrm}/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false"
+    "type": "http",
+    "urlTemplate": "${endpoint:osrm}/nearest/v1/driving/13.388860,52.517037?number=1"
   },
   "quality": "built-in",
   "category": "Routing",

@@ -405,8 +405,10 @@ graph LR
    `ctx.registerProvider(domain, …)` for the rest), mounts HTTP routes
    (`ctx.registerRoute`), and reaches its cache, logger, secrets, and bound
    services.
-7. Seed health: an initial health sweep runs ~5 s after startup and repeats
-   every 60 s, populating the per-integration health the admin panel surfaces.
+7. Seed health: an initial health sweep runs ~5 s after startup and ticks every
+   60 s, running each check on its own cadence (1 m local/self-hosted, 15 m
+   external, 30 m keyed external, with exponential retry backoff on failure) and
+   populating the per-integration health the admin panel surfaces.
 
 Integration HTTP routes are not registered as individual Fastify routes. They go
 into one in-memory table that a single catch-all dispatcher consults, so a host reload can replace that table, rediscover manifests, resolve

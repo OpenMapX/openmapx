@@ -49,7 +49,5 @@ query VehiclesByBoundingBox(
 }
 
 query VehicleHealthCheck {
-  vehicles(codespaceId: "RUT", maxDataAge: "PT1H", monitored: true) {
-    lastUpdated
-  }
+  __typename
 }

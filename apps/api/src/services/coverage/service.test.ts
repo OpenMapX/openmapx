@@ -251,6 +251,44 @@ describe("CoverageService", () => {
     ).toBe("unknown");
   });
 
+  it("uses per-integration scheduled timestamps and cadence-scaled freshness windows", () => {
+    const collection = makeCollection(makeStream("2026-09-10T13:00:00.000Z"));
+    collection.catalog = buildCoverageCatalog([integration()]);
+    const checkedAt = Date.parse("2026-09-10T12:00:00.000Z");
+    collection.integrationHealth = {
+      updatedAt: Date.parse("2026-09-10T12:25:00.000Z"),
+      results: [{ id: "parking", name: "parking", category: "test", url: "", status: "up" }],
+      checkedAtById: { parking: checkedAt },
+      intervalMsById: { parking: 15 * 60_000 },
+    };
+    const provider = collection.catalog.providers[0];
+    if (!provider) throw new Error("Fixture provider missing");
+
+    // Still fresh 20 minutes later (within 2 * 15m = 30m window), even past the 2m local floor.
+    expect(
+      runtimeForProvider(provider, collection, new Date("2026-09-10T12:20:00.000Z")),
+    ).toMatchObject({
+      status: "up",
+      observedAt: "2026-09-10T12:00:00.000Z",
+      maxAgeMs: 30 * 60_000,
+    });
+    // Expires once the 30m window elapses, even if another integration updated the global timestamp.
+    expect(
+      runtimeForProvider(provider, collection, new Date("2026-09-10T12:30:00.000Z")).status,
+    ).toBe("unknown");
+
+    // Missing per-ID timestamp must report unknown rather than falling back to global updatedAt.
+    collection.integrationHealth = {
+      updatedAt: Date.parse("2026-09-10T12:25:00.000Z"),
+      results: [{ id: "parking", name: "parking", category: "test", url: "", status: "up" }],
+      checkedAtById: {},
+      intervalMsById: {},
+    };
+    expect(
+      runtimeForProvider(provider, collection, new Date("2026-09-10T12:25:00.000Z")).status,
+    ).toBe("unknown");
+  });
+
   it("does not combine fresh data outside the region with stale local data", async () => {
     const local = {
       ...makeStream("2026-09-10T11:59:00.000Z"),

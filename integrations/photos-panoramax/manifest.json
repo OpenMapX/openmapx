@@ -19,7 +19,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://api.panoramax.xyz/api/search"
+    "url": "https://api.panoramax.xyz/api/"
   },
   "quality": "built-in",
   "category": "Imagery",

@@ -30,7 +30,7 @@
     {
       "name": "openSenseMap",
       "type": "http",
-      "url": "https://api.opensensemap.org/stats"
+      "url": "https://api.opensensemap.org/"
     },
     {
       "name": "Sensor.Community",

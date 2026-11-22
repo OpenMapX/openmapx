@@ -257,12 +257,20 @@ function providerHealthStatus(
   if (!integration.enabled)
     return { status: "unconfigured", reason: "not_configured", observedAt: null };
   const scheduledResult = scheduled.results.find((result) => result.id === integration.id);
-  const scheduledAt = scheduled.updatedAt;
+  const scheduledAt =
+    scheduled.checkedAtById !== undefined
+      ? (scheduled.checkedAtById[integration.id] ?? null)
+      : scheduled.updatedAt;
+  const scheduledIntervalMs =
+    scheduled.intervalMsById?.[integration.id] ??
+    integration.manifest.healthCheckIntervalMs ??
+    60_000;
+  const scheduledMaxAgeMs = Math.max(RUNTIME_MAX_AGE_MS, scheduledIntervalMs * 2);
   const scheduledFresh =
     scheduledAt !== null &&
     Number.isFinite(scheduledAt) &&
     scheduledAt <= at &&
-    at - scheduledAt < RUNTIME_MAX_AGE_MS;
+    at - scheduledAt < scheduledMaxAgeMs;
   const scheduledStatus: RuntimeStatus =
     scheduledFresh && scheduledResult
       ? scheduledResult.status === "up"
@@ -280,7 +288,7 @@ function providerHealthStatus(
           ? ("runtime_down" as const)
           : undefined,
     observedAt: scheduledFresh && scheduledAt !== null ? new Date(scheduledAt).toISOString() : null,
-    maxAgeMs: RUNTIME_MAX_AGE_MS,
+    maxAgeMs: scheduledMaxAgeMs,
     origin: "scheduled" as const,
   };
   const passive = observations.get(provider.providerId);

@@ -1013,12 +1013,12 @@ export function createEnturTransitProvider(
 
   async function isEnturTransitAvailable(): Promise<boolean> {
     try {
-      const [data] = await Promise.all([
+      const [data, vehicles] = await Promise.all([
         fetchGraphQl("journeyPlanner", HealthCheckDocument, { id: "NSR:StopPlace:337" }),
         fetchGraphQl("vehicles", VehicleHealthCheckDocument, {}),
         fetchNsrRecord("/stop-places/NSR:StopPlace:337"),
       ]);
-      return Boolean(data.stopPlace?.id);
+      return Boolean(data.stopPlace?.id && vehicles.__typename);
     } catch (error) {
       if (signal.aborted) throw error;
       return false;

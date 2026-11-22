@@ -151,8 +151,8 @@ export function applyPinToManifest(source: string, lock: TransportApisLock): str
       "JSDelivr health check",
     ],
     [
-      /https:\/\/api\.github\.com\/repos\/public-transport\/transport-apis\/git\/trees\/[0-9a-f]{40}\?recursive=1/,
-      `${TRANSPORT_APIS_API}/git/trees/${commit}?recursive=1`,
+      /https:\/\/raw\.githubusercontent\.com\/public-transport\/transport-apis\/[0-9a-f]{40}\/readme\.md/,
+      `https://raw.githubusercontent.com/${TRANSPORT_APIS_REPO}/${commit}/readme.md`,
       "GitHub health check",
     ],
   ];

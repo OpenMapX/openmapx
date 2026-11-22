@@ -1549,7 +1549,7 @@ describe("Entur generated-operation behavior", () => {
   it("requires the planner probe stop and rejects partial GraphQL errors", async () => {
     mockFetch.mockResolvedValueOnce(mockOk({ data: { stopPlace: { id: "NSR:StopPlace:337" } } }));
     mockFetch
-      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ data: { __typename: "Query" } }))
       .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
     const { isEnturTransitAvailable } = await loadModule();
     expect(await isEnturTransitAvailable()).toBe(true);
@@ -1560,7 +1560,7 @@ describe("Entur generated-operation behavior", () => {
       }),
     );
     mockFetch
-      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ data: { __typename: "Query" } }))
       .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
     expect(await isEnturTransitAvailable()).toBe(false);
   });

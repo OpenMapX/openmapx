@@ -19,12 +19,12 @@
     {
       "name": "NOAA CO-OPS Data API",
       "type": "http",
-      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=8518750&product=predictions&interval=hilo&date=today&datum=MLLW&units=english&time_zone=lst_ldt&format=json&application=OpenMapX"
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/"
     },
     {
       "name": "NOAA CO-OPS Metadata API",
       "type": "http",
-      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&units=english"
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8518750.json"
     }
   ],
   "dataSources": [

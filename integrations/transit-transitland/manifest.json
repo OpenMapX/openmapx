@@ -38,7 +38,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${apiKey}",
+    "urlTemplate": "https://transit.land/api/v2/rest/feeds?limit=1&api_key=${apiKey}",
     "requiredConfigKeys": ["apiKey"]
   },
   "dataSources": [

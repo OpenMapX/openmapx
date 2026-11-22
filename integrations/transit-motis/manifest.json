@@ -68,13 +68,13 @@
   "healthCheck": [
     {
       "name": "MOTIS self-hosted",
-      "type": "ping",
-      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
+      "type": "http",
+      "urlTemplate": "${endpoint:motis}/api/v1/health"
     },
     {
       "name": "Transitous",
       "type": "http",
-      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/health"
     }
   ],
   "dataSources": [

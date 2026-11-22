@@ -76,9 +76,7 @@ export type VehiclesByBoundingBoxQuery = {
 
 export type VehicleHealthCheckQueryVariables = Exact<{ [key: string]: never }>;
 
-export type VehicleHealthCheckQuery = {
-  vehicles: Array<{ lastUpdated: string | null } | null> | null;
-};
+export type VehicleHealthCheckQuery = { __typename: "Query" };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -205,8 +203,6 @@ export const VehiclesByBoundingBoxDocument = new TypedDocumentString(`
 >;
 export const VehicleHealthCheckDocument = new TypedDocumentString(`
     query VehicleHealthCheck {
-  vehicles(codespaceId: "RUT", maxDataAge: "PT1H", monitored: true) {
-    lastUpdated
-  }
+  __typename
 }
     `) as unknown as TypedDocumentString<VehicleHealthCheckQuery, VehicleHealthCheckQueryVariables>;

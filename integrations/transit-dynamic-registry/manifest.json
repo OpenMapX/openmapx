@@ -62,9 +62,10 @@
     {
       "name": "GitHub Registry",
       "type": "http",
-      "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/587514aae841a773b07eddb5de7296f07688507f?recursive=1"
+      "url": "https://raw.githubusercontent.com/public-transport/transport-apis/587514aae841a773b07eddb5de7296f07688507f/readme.md"
     }
   ],
+  "healthCheckIntervalMs": 1800000,
   "dataSources": [
     {
       "sourceId": "jsdelivr",

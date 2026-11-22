@@ -31,10 +31,6 @@
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "url": "https://tile.openstreetmap.org/0/0/0.png"
-  },
   "quality": "built-in",
   "category": "Map Overlays"
 }

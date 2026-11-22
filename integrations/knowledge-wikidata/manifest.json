@@ -20,12 +20,12 @@
     {
       "name": "Wikidata",
       "type": "http",
-      "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en"
+      "url": "https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json"
     },
     {
       "name": "Wikimedia Commons",
       "type": "http",
-      "url": "https://commons.wikimedia.org/w/api.php?action=query&titles=File:Example.jpg&prop=imageinfo&format=json"
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json"
     }
   ],
   "quality": "built-in",
