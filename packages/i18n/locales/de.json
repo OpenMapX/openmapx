@@ -162,6 +162,7 @@
     "alertRailwayCrossing": "Bahnübergang",
     "alertStop": "Stoppschild",
     "alertPedestrianCrossing": "Fußgängerüberweg",
+    "alertGiveWay": "Vorfahrt achten",
     "alertTrafficCalming": "Bremsschwelle",
     "alertTunnel": "Tunnel",
     "incidentAhead": "{type} in {distance} voraus",

@@ -19,11 +19,15 @@ import { useEffect, useRef } from "react";
 import { haptics } from "@/lib/haptics";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 
+/** Alerts that appear on screen only. */
+const QUIET_TYPES = new Set<RoadAlertType>(["pedestrian_crossing", "give_way"]);
+
 const ICON: Record<RoadAlertType, typeof WarningAmberIcon> = {
   traffic_incident: WarningAmberIcon,
   speed_camera: PhotoCameraIcon,
   railway_crossing: TrainIcon,
   stop: WarningAmberIcon,
+  give_way: WarningAmberIcon,
   pedestrian_crossing: WarningAmberIcon,
   traffic_calming: WarningAmberIcon,
   tunnel: WarningAmberIcon,
@@ -34,6 +38,7 @@ const LABEL_KEY: Record<RoadAlertType, string> = {
   speed_camera: "alertSpeedCamera",
   railway_crossing: "alertRailwayCrossing",
   stop: "alertStop",
+  give_way: "alertGiveWay",
   pedestrian_crossing: "alertPedestrianCrossing",
   traffic_calming: "alertTrafficCalming",
   tunnel: "alertTunnel",
@@ -67,9 +72,12 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
   useEffect(() => {
     if (announcedRef.current === alert.alert.id) return;
     announcedRef.current = alert.alert.id;
+    // Zebra crossings and give-way signs are frequent in town: shown, never
+    // spoken or buzzed, so they do not crowd out the turn prompts.
+    if (QUIET_TYPES.has(type)) return;
     haptics.warn();
     if (voiceEnabled) speak(announceText);
-  }, [alert.alert.id, announceText, speak, voiceEnabled]);
+  }, [alert.alert.id, announceText, speak, voiceEnabled, type]);
 
   return (
     <Box

@@ -12,6 +12,7 @@ export type RoadAlertType =
   | "speed_camera"
   | "railway_crossing"
   | "stop"
+  | "give_way"
   | "pedestrian_crossing"
   | "traffic_calming"
   | "tunnel";
@@ -49,6 +50,7 @@ const PRIORITY: Record<RoadAlertType, number> = {
   speed_camera: 1,
   railway_crossing: 2,
   stop: 3,
+  give_way: 3,
   pedestrian_crossing: 4,
   traffic_calming: 5,
   tunnel: 6,
@@ -60,6 +62,7 @@ const APPROACH: Record<RoadAlertType, { leadSec: number; minM: number; maxM: num
   speed_camera: { leadSec: 12, minM: 120, maxM: 500 },
   railway_crossing: { leadSec: 8, minM: 60, maxM: 250 },
   stop: { leadSec: 6, minM: 40, maxM: 150 },
+  give_way: { leadSec: 6, minM: 40, maxM: 150 },
   pedestrian_crossing: { leadSec: 6, minM: 40, maxM: 150 },
   traffic_calming: { leadSec: 5, minM: 30, maxM: 120 },
   tunnel: { leadSec: 8, minM: 60, maxM: 300 },

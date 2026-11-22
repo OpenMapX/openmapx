@@ -162,6 +162,7 @@
     "alertRailwayCrossing": "Railway crossing",
     "alertStop": "Stop sign",
     "alertPedestrianCrossing": "Pedestrian crossing",
+    "alertGiveWay": "Give way",
     "alertTrafficCalming": "Speed bump",
     "alertTunnel": "Tunnel",
     "incidentAhead": "{type} ahead in {distance}",

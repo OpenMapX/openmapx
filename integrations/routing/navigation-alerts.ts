@@ -16,7 +16,18 @@ import { haversineDistance, itemAt, type LngLat, numberAt } from "@openmapx/core
  * `@openmapx/core`); OSM tagging semantics stay here, in one place.
  */
 
-export type RoadAlertType = "speed_camera" | "railway_crossing" | "stop" | "traffic_calming";
+export type RoadAlertType =
+  | "speed_camera"
+  | "railway_crossing"
+  | "stop"
+  | "give_way"
+  | "pedestrian_crossing"
+  | "traffic_calming";
+
+/** Stop and give-way signs share every direction rule: both guard an approach to a junction. */
+function isSign(type: RoadAlertType): boolean {
+  return type === "stop" || type === "give_way";
+}
 
 /** A road carrying a hazard, and the travel directions along it the hazard applies to. */
 export interface RoadAlertRoad {
@@ -160,14 +171,15 @@ export function buildNavigationAlertsQuery({ south, west, north, east }: AlertBo
   return [
     "[out:json][timeout:25];",
     `(node["highway"="speed_camera"](${b});node["railway"="level_crossing"](${b});`,
-    `node["highway"="stop"](${b});node["traffic_calming"](${b});)->.alerts;`,
+    `node["highway"="stop"](${b});node["highway"="give_way"](${b});`,
+    `node["highway"="crossing"](${b});node["traffic_calming"](${b});)->.alerts;`,
     ".alerts out body;",
     'way(bn.alerts)["highway"]->.roads;',
     ".roads out body geom;",
     'node.alerts["railway"="level_crossing"]->.crossings;',
     'way(bn.crossings)["railway"];',
     "out body;",
-    `node.alerts["highway"="stop"]["stop"!="all"]["direction"!~"${explicitDirection}"]`,
+    `node.alerts["highway"~"^(stop|give_way)$"]["stop"!="all"]["direction"!~"${explicitDirection}"]`,
     `["stop:direction"!~"${explicitDirection}"]->.undirected;`,
     'way(bn.undirected)["highway"]->.undirectedRoads;',
     `node(w.undirectedRoads)(around.undirected:${JUNCTION_SEARCH_M})->.near;`,
@@ -187,10 +199,25 @@ function parseMaxspeedKmh(value: string | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+const MARKED_CROSSINGS = new Set(["zebra", "marked", "uncontrolled"]);
+
+/**
+ * A marked crossing without traffic lights: drivers must give way to people on
+ * it, so it is worth a heads-up. Signalised crossings are governed by the
+ * lights instead.
+ */
+function markedCrossing(tags: Record<string, string>): boolean {
+  if (tags.crossing === "traffic_signals") return false;
+  const markings = tags["crossing:markings"];
+  return MARKED_CROSSINGS.has(tags.crossing ?? "") || (markings !== undefined && markings !== "no");
+}
+
 function alertType(tags: Record<string, string>): RoadAlertType | null {
   if (tags.highway === "speed_camera") return "speed_camera";
   if (tags.railway === "level_crossing") return "railway_crossing";
   if (tags.highway === "stop") return "stop";
+  if (tags.highway === "give_way") return "give_way";
+  if (tags.highway === "crossing" && markedCrossing(tags)) return "pedestrian_crossing";
   const calming = tags.traffic_calming;
   if (calming?.split(";").some((value) => VERTICAL_CALMING.has(value.trim()))) {
     return "traffic_calming";
@@ -205,7 +232,9 @@ function alertType(tags: Record<string, string>): RoadAlertType | null {
  * count as unknown.
  */
 function explicitDirection(tags: Record<string, string>, type: RoadAlertType): Direction | null {
-  const candidates = type === "stop" ? [tags["stop:direction"], tags.direction] : [tags.direction];
+  // A pedestrian crossing applies to traffic in both directions.
+  if (type === "pedestrian_crossing") return null;
+  const candidates = isSign(type) ? [tags["stop:direction"], tags.direction] : [tags.direction];
   for (const value of candidates) {
     if (value === "forward" || value === "backward" || value === "both") return value;
   }
@@ -365,13 +394,13 @@ function resolveOnRoad(
 ): Placement[] {
   const explicit = explicitDirection(tags, type);
   const placements: Placement[] = [];
-  const allWay = type === "stop" && (tags.stop === "all" || explicit === "both");
-  const atJunction = type === "stop" && !allWay && junctionDegree(nodeId, waysByNode) >= 3;
+  const allWay = isSign(type) && (tags.stop === "all" || explicit === "both");
+  const atJunction = isSign(type) && !allWay && junctionDegree(nodeId, waysByNode) >= 3;
   const ranks = parents.flatMap((way) => roadRank(way) ?? []);
   const topRank = Math.max(...ranks);
   const ranked = ranks.some((rank) => rank < topRank);
   const inferred =
-    type === "stop" && !allWay && !atJunction && explicit === null
+    isSign(type) && !allWay && !atJunction && explicit === null
       ? inferredStopFlags(nodeId, parents, waysByNode)
       : null;
 
@@ -427,9 +456,8 @@ function resolveOffRoad(
   const candidates = near.filter(
     ({ projection }) => projection.distance <= nearest + OFF_ROAD_TIE_M,
   );
-  const allWay =
-    type === "stop" && (tags.stop === "all" || explicitDirection(tags, type) === "both");
-  if (type === "stop" && !allWay && candidates.length > 1) return [];
+  const allWay = isSign(type) && (tags.stop === "all" || explicitDirection(tags, type) === "both");
+  if (isSign(type) && !allWay && candidates.length > 1) return [];
   return candidates.map(({ way, projection }) => ({
     way,
     flags: { forward: true, backward: true },

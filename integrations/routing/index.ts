@@ -72,7 +72,7 @@ const MAX_ALERT_BBOX_DEG2 = 0.6;
  * Cache namespace of `/navigation/alerts` answers. Versioned with their shape:
  * answers cached before hazards carried their roads must not be served.
  */
-const NAVIGATION_ALERTS_CACHE_PREFIX = "cache:nav:alerts:v2";
+const NAVIGATION_ALERTS_CACHE_PREFIX = "cache:nav:alerts:v3";
 const NAVIGATION_ALERTS_TTL_SECONDS = 86_400;
 /** How long an answer Overpass could not give is held before asking again. */
 const NAVIGATION_ALERTS_RETRY_SECONDS = 60;
