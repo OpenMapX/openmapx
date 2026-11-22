@@ -8,6 +8,13 @@ export function isComposeVarReference(value: string): boolean {
   return COMPOSE_VAR_REFERENCE_REGEX.test(value);
 }
 
+/**
+ * Prefix of the name each service answers to on the stack's networks,
+ * `openmapx-<service-id>`. Reach another service by that name, never by its
+ * bare ID. No service ID or declared network alias may start with it.
+ */
+export const RESERVED_NETWORK_NAME_PREFIX = "openmapx-";
+
 // Capabilities that third-party services may request. This excludes capabilities
 // that can trivially escape a container or affect the host kernel/devices.
 export const COMMUNITY_SAFE_CAPS = new Set([
@@ -48,6 +55,22 @@ function isCommunityMemoryLimit(value: string | undefined): boolean {
 export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestProvenance): string[] {
   const errors: string[] = [];
   const communityNetworkAccess = m.communityNetworkAccess;
+
+  // Every service answers to `openmapx-<service-id>` on the stack's networks,
+  // and services reach each other only by those names. A service ID or alias
+  // with that prefix could answer for another service.
+  if (m.id.toLowerCase().startsWith(RESERVED_NETWORK_NAME_PREFIX)) {
+    errors.push(
+      `reserved_network_name: service id "${m.id}" may not start with "${RESERVED_NETWORK_NAME_PREFIX}"`,
+    );
+  }
+  for (const alias of m.container.networkAliases ?? []) {
+    if (alias.toLowerCase().startsWith(RESERVED_NETWORK_NAME_PREFIX)) {
+      errors.push(
+        `reserved_network_name: network alias "${alias}" may not start with "${RESERVED_NETWORK_NAME_PREFIX}"`,
+      );
+    }
+  }
 
   // The built-in tier and first-party provenance must agree. Enforcing both
   // directions means the tier is a pure function of where the manifest came

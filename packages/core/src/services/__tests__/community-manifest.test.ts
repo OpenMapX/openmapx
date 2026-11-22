@@ -28,6 +28,21 @@ describe("communityServiceManifestProblems", () => {
     expect(communityServiceManifestProblems(manifest({ quality }))).toEqual([]);
   });
 
+  it("accepts built-in services reached by their project-unique names", () => {
+    const container = {
+      image: "registry.example.test/x",
+      tag: "1",
+      digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
+      environment: {
+        DATABASE_URL: "postgresql://ingest@openmapx-postgis:5432/openmapx",
+        OVERPASS_URL: "http://openmapx-overpass:80",
+        UPSTREAM: "https://api.example.test/postgis",
+      },
+    };
+    expect(communityServiceManifestProblems(manifest({ container }))).toEqual([]);
+  });
+
   it.each([
     ["a built-in quality tier", { quality: "built-in" }, /built-in/],
     [
@@ -63,6 +78,47 @@ describe("communityServiceManifestProblems", () => {
       "the id of the built-in API",
       { id: CORE_SERVICE_ID.api },
       /^Service id "[a-z-]+" belongs to a built-in service$/,
+    ],
+    [
+      "an id with the reserved network-name prefix",
+      { id: "openmapx-tiles" },
+      /reserved_network_name/,
+    ],
+    [
+      "a network alias with the reserved network-name prefix",
+      {
+        container: {
+          image: "registry.example.test/x",
+          tag: "1",
+          digest: `sha256:${"a".repeat(64)}`,
+          memory: "256m",
+          networkAliases: ["openmapx-postgis"],
+        },
+      },
+      /^reserved_network_name: network alias "openmapx-postgis"/,
+    ],
+    [
+      "a built-in service reached by its bare ID",
+      {
+        container: {
+          image: "registry.example.test/x",
+          tag: "1",
+          digest: `sha256:${"a".repeat(64)}`,
+          memory: "256m",
+          environment: { DATABASE_URL: "postgresql://ingest@postgis:5432/openmapx" },
+        },
+      },
+      /^Service "maps-tiles" reaches built-in service "postgis" by its bare ID; use "openmapx-postgis"$/,
+    ],
+    [
+      "a built-in service reached by its bare ID in a configuration default",
+      {
+        configSchema: {
+          type: "object",
+          properties: { OVERPASS_URL: { type: "string", default: "http://overpass" } },
+        },
+      },
+      /reaches built-in service "overpass" by its bare ID/,
     ],
   ])("rejects %s", (_label, overrides, problem) => {
     expect(communityServiceManifestProblems(manifest(overrides))).toEqual(

@@ -654,5 +654,6 @@ export {
   COMMUNITY_SAFE_CAPS,
   checkManifestSandbox,
   isComposeVarReference,
+  RESERVED_NETWORK_NAME_PREFIX,
 } from "./service-policy";
 export * from "./service-types";
