@@ -1,8 +1,10 @@
 import {
   getOverlayEntry,
   registerOverlayEntry,
+  setOverlayLayerVisible,
   toggleOverlay,
   useNavigationStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
@@ -69,7 +71,8 @@ function addBaseStyle(): void {
 }
 
 beforeEach(() => {
-  useNavigationStore.setState({ status: "idle" });
+  useNavigationStore.setState({ status: "idle", mode: "driving" });
+  useSettingsStore.setState({ navigation3d: false });
   styleVersion = 0;
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
   mapRef = { current: fake.map };
@@ -199,7 +202,7 @@ describe("BuildingExtrusionLayer", () => {
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
   });
 
-  it("preserves explicit navigation buildings through overview and resets the next session", () => {
+  it("preserves explicit navigation buildings through overview and remembers them for the next trip", () => {
     fake.state.pitch = 0;
     render(<BuildingExtrusionLayer />);
     act(() => useNavigationStore.setState({ status: "navigating" }));
@@ -217,9 +220,91 @@ describe("BuildingExtrusionLayer", () => {
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
     act(() => useNavigationStore.setState({ status: "idle" }));
     expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    // The 3D view choice made during the drive is remembered for the next one.
     act(() => useNavigationStore.setState({ status: "navigating" }));
-    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
     act(() => useNavigationStore.setState({ status: "idle" }));
+  });
+
+  describe("3D navigation choice", () => {
+    afterEach(() => {
+      act(() => useNavigationSceneStore.getState().setActive(false));
+      useNavigationStore.setState({ mode: "driving" });
+    });
+
+    it("trip start keeps 3D on when navigation3d is on for driving", () => {
+      useSettingsStore.setState({ navigation3d: true });
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationStore.setState({ status: "navigating", mode: "driving" }));
+      expect(useBuildingsStore.getState().layerVisible).toBe(true);
+      expect(useBuildingsStore.getState().panelOpen).toBe(false);
+      act(() => useNavigationStore.setState({ status: "idle" }));
+    });
+
+    it("trip start switches 3D off for walking even with navigation3d", () => {
+      useSettingsStore.setState({ navigation3d: true });
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationStore.setState({ status: "navigating", mode: "walking" }));
+      expect(useBuildingsStore.getState().layerVisible).toBe(false);
+      act(() => useNavigationStore.setState({ status: "idle" }));
+    });
+
+    it("turning 3D on mid-trip writes navigation3d and does not ease the pitch", () => {
+      fake.state.pitch = 0;
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationStore.setState({ status: "navigating", mode: "driving" }));
+      fake.state.cameraTransitions.length = 0;
+      act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+      expect(useSettingsStore.getState().navigation3d).toBe(true);
+      expect(fake.state.cameraTransitions.filter((t) => "pitch" in t.options)).toEqual([]);
+      act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+      expect(useSettingsStore.getState().navigation3d).toBe(false);
+      act(() => useNavigationStore.setState({ status: "idle" }));
+    });
+
+    it("an automation change does not write navigation3d", () => {
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationStore.setState({ status: "navigating", mode: "driving" }));
+      act(() =>
+        setOverlayLayerVisible("3d-buildings", true, { kind: "automation", owner: "test" }),
+      );
+      expect(useSettingsStore.getState().navigation3d).toBe(false);
+      act(() => useNavigationStore.setState({ status: "idle" }));
+    });
+
+    it("navigation scene uses the z15.5–16 fade and min zoom", () => {
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      const extrusion = fake.state.layers.get(LAYER_ID) as { minzoom?: number };
+      const contact = fake.state.layers.get(CONTACT_LAYER_ID) as { minzoom?: number };
+      expect(extrusion.minzoom).toBe(15.5);
+      expect(contact.minzoom).toBe(15.5);
+      expect(fake.state.paint.get(LAYER_ID)?.["fill-extrusion-opacity"]).toEqual([
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        15.5,
+        0,
+        16,
+        1,
+      ]);
+    });
+
+    it("leaving the scene restores the z16.5 fade", () => {
+      render(<BuildingExtrusionLayer />);
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      act(() => useNavigationSceneStore.getState().setActive(false));
+      expect((fake.state.layers.get(LAYER_ID) as { minzoom?: number }).minzoom).toBe(16.5);
+      expect(fake.state.paint.get(LAYER_ID)?.["fill-extrusion-opacity"]).toEqual([
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        16.5,
+        0,
+        17,
+        1,
+      ]);
+    });
   });
 
   it("rebinds camera synchronization to a replacement map without resetting manual-off", () => {
