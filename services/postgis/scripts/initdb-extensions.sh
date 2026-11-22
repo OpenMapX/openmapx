@@ -10,6 +10,7 @@
 # installs every extension into the superuser's `extensions` schema on each
 # start, after initialisation. The image executes the file when it looks
 # executable and sources it otherwise, and Docker Desktop's file sharing can
-# make a file look executable that is not, so it is executable and never
-# exits.
+# make a file look executable that is not. So it is executable, and it never
+# calls `exit`, which would end the image's entrypoint when the file is
+# sourced.
 :

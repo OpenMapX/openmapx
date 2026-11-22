@@ -45,6 +45,8 @@ const repoRoot = resolve(import.meta.dirname, "../../..");
 const migrations = join(repoRoot, "apps", "api", "src", "db", "migrations");
 const entrypoint = join(repoRoot, "services", "postgis", "scripts", "sync-password.sh");
 const initdb = join(repoRoot, "services", "postgis", "scripts", "initdb-extensions.sh");
+const API_PASSWORD = "restore-fixture-api-password";
+const DATA_MANAGER_PASSWORD = "restore-fixture-data-manager-password";
 
 interface FixtureState {
   root: string;
@@ -82,10 +84,8 @@ while :; do sleep 3600; done
   // data-manager's roles from these password files.
   const secrets = join(root, "postgis-secrets");
   mkdirSync(secrets, { recursive: true, mode: 0o700 });
-  writeFileSync(join(secrets, "api"), "restore-fixture-api-password", { mode: 0o600 });
-  writeFileSync(join(secrets, "data-manager"), "restore-fixture-data-manager-password", {
-    mode: 0o600,
-  });
+  writeFileSync(join(secrets, "api"), API_PASSWORD, { mode: 0o600 });
+  writeFileSync(join(secrets, "data-manager"), DATA_MANAGER_PASSWORD, { mode: 0o600 });
   const composeYaml = `name: ${project}
 services:
   postgis:
@@ -224,7 +224,14 @@ async function waitForPostgresInitialization(): Promise<void> {
   throw new Error("fixture PostgreSQL initialization did not complete");
 }
 
-async function psql(input: string, database = DATABASE, user = POSTGRES_USER): Promise<string> {
+/** Runs psql in the database container; `asEntrypoint` runs the input as the
+ * entrypoint does: in one transaction, searching only the system catalogs. */
+async function psql(
+  input: string,
+  database = DATABASE,
+  user = POSTGRES_USER,
+  asEntrypoint = false,
+): Promise<string> {
   const result = await execa(
     "docker",
     [
@@ -233,9 +240,11 @@ async function psql(input: string, database = DATABASE, user = POSTGRES_USER): P
       fixture.composeFile,
       "exec",
       "-T",
+      ...(asEntrypoint ? ["-e", `PGOPTIONS=${services.SUPERUSER_PGOPTIONS}`] : []),
       "postgis",
       "psql",
       "-X",
+      ...(asEntrypoint ? ["--single-transaction"] : []),
       "-v",
       "ON_ERROR_STOP=1",
       "-U",
@@ -263,15 +272,40 @@ async function livePostgresUrl(): Promise<string> {
   return `postgresql://${POSTGRES_USER}:restore-fixture-password@127.0.0.1:${port}/${DATABASE}`;
 }
 
+/** The SQL PostGIS's entrypoint runs in the platform database on every start
+ * (roles, the extensions schema, ownership of public and the role guard),
+ * read from the mounted entrypoint itself. psql runs each row of the query
+ * before a `\gexec` as a statement. */
+function entrypointRoleSql(): string {
+  const script = readFileSync(entrypoint, "utf8");
+  const start = script.indexOf('run_sql "$APP_DB" <<SQL\n');
+  const end = script.indexOf("\nSQL\n", start);
+  if (start < 0 || end < 0) throw new Error("The PostGIS entrypoint's role SQL was not found");
+  const values: Record<string, string> = {
+    API_ROLE: "openmapx_api",
+    DATA_MANAGER_ROLE: "openmapx_data_manager",
+    TILES_ROLE: "openmapx_tiles",
+    TILES_OWNER: "openmapx_tiles_owner",
+    ESCAPED_API_PASSWORD: API_PASSWORD,
+    ESCAPED_DATA_MANAGER_PASSWORD: DATA_MANAGER_PASSWORD,
+  };
+  return `${script
+    .slice(script.indexOf("\n", start) + 1, end)
+    .replace(/\$\{([A-Z_]+)\}/g, (match, name: string) => {
+      const value = values[name];
+      if (value === undefined) throw new Error(`The role SQL expands ${match}`);
+      return value;
+    })
+    .replaceAll("\\$", "$")}\n`;
+}
+
 async function resetMigratedDatabase(): Promise<void> {
   await psql(
-    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\nGRANT CREATE ON DATABASE ${DATABASE} TO openmapx_api, openmapx_data_manager;\n`,
+    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\n`,
     "postgres",
   );
   // What PostGIS's entrypoint gives the platform database on start.
-  await psql(
-    `CREATE SCHEMA extensions;\nREVOKE ALL ON SCHEMA extensions FROM PUBLIC;\nGRANT USAGE ON SCHEMA extensions TO PUBLIC;\nCREATE EXTENSION postgis WITH SCHEMA extensions;\nCREATE EXTENSION pg_trgm WITH SCHEMA extensions;\nCREATE EXTENSION fuzzystrmatch WITH SCHEMA extensions;\nCREATE EXTENSION btree_gist WITH SCHEMA extensions;\nALTER SCHEMA public OWNER TO openmapx_api;\nREVOKE CREATE ON SCHEMA public FROM PUBLIC;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT USAGE ON SCHEMAS TO openmapx_api;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;\n`,
-  );
+  await psql(entrypointRoleSql(), DATABASE, POSTGRES_USER, true);
   const result = await execa(
     "docker",
     [

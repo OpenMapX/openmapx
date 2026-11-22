@@ -100,11 +100,11 @@ PostGIS cannot be moved to another schema once installed.
 Each role's search path is set by PostGIS on every start, and settings a role
 gives itself are reset:
 
-| Role                    | Search path          | Notes                                                                   |
-| ----------------------- | -------------------- | ----------------------------------------------------------------------- |
-| `openmapx_api`          | `public, extensions` | Reads its own tables from `public` without a schema                     |
-| `openmapx_data_manager` | `extensions`         | Names the schema of every table; idle transactions end after 10 minutes |
-| `openmapx_tiles`        | `extensions`         | Martin's login; it asks for the PostGIS version when it connects        |
+| Role                    | Search path          | Notes                                                                                           |
+| ----------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| `openmapx_api`          | `public, extensions` | Reads its own tables from `public` without a schema                                             |
+| `openmapx_data_manager` | `extensions`         | Names the schema of every table; a session idle inside a transaction is closed after 10 minutes |
+| `openmapx_tiles`        | `extensions`         | Martin's login; it asks for the PostGIS version when it connects                                |
 
 The tile functions search `pg_catalog, extensions, pg_temp`. OpenConditions'
 roles need `conditions, extensions`; see
