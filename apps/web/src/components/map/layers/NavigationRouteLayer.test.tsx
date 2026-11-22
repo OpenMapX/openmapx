@@ -1,9 +1,11 @@
-import { numberAt } from "@openmapx/core";
+import { numberAt, routeWidthExpression } from "@openmapx/core";
 import { act, render } from "@testing-library/react";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { ROUTE_COLORS } from "@/lib/routeStyle";
 import { createFakeMap, expectStyleSwapIsLossless, nth } from "@/test";
@@ -48,6 +50,19 @@ vi.mock("@/integration-api/overlay/useMapAttributions", async (importOriginal) =
   ...(await importOriginal<Record<string, unknown>>()),
   useMapAttributions: vi.fn(),
 }));
+const renderedAttributionCalls: unknown[][] = [];
+vi.mock("@/integration-api/overlay/useRenderedMapAttributions", async (importOriginal) => {
+  const original = await importOriginal<{
+    useRenderedMapAttributions: (...args: unknown[]) => unknown;
+  }>();
+  return {
+    ...original,
+    useRenderedMapAttributions: (...args: unknown[]) => {
+      renderedAttributionCalls.push(args);
+      return original.useRenderedMapAttributions(...args);
+    },
+  };
+});
 vi.mock("@/lib/routeAttributions", () => ({
   routeAttributions: (
     _registry: unknown,
@@ -239,13 +254,19 @@ describe("NavigationRouteLayer progress-driven gradients", () => {
     }
   });
 
-  it("keeps casing/traveled/remaining widths, opacity, ids and slot order exactly as before", () => {
+  it("keeps 11/7/8 px widths below the lane crossover, opacity, ids and slot order", () => {
     render(<NavigationRouteLayer />);
 
-    expect(fake.state.paint.get(REMAINING_CASING)?.["line-width"]).toBe(11);
-    expect(fake.state.paint.get(TRAVELED)?.["line-width"]).toBe(7);
+    // [interpolate, exponential, zoom, z0, low-zoom width, z1, …]
+    const lowZoomWidth = (id: string) =>
+      (fake.state.paint.get(id)?.["line-width"] as unknown[] | undefined)?.[4];
+    expect(lowZoomWidth(REMAINING_CASING)).toBe(11);
+    expect(lowZoomWidth(TRAVELED)).toBe(7);
     expect(fake.state.paint.get(TRAVELED)?.["line-opacity"]).toBe(0.7);
-    expect(fake.state.paint.get(REMAINING)?.["line-width"]).toBe(8);
+    expect(lowZoomWidth(REMAINING)).toBe(8);
+    expect(fake.state.paint.get(REMAINING)?.["line-width"]).toEqual(
+      routeWidthExpression(8, 3.2, 50),
+    );
 
     const order = [...fake.state.layers.keys()];
     expect(order.indexOf(REMAINING_CASING)).toBeLessThan(order.indexOf(TRAVELED));
@@ -422,6 +443,105 @@ it("projects alternative and proposed geometry with the same captured span contr
   view.unmount();
   navState.routes = originalRoutes;
   navState.fasterRoute = null;
+});
+
+describe("NavigationRouteLayer in 3D navigation", () => {
+  const GHOST = "nav-route-remaining-ghost";
+
+  afterEach(() => {
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    navState.progress = { alongMeters: 0 };
+  });
+
+  it("adds ghost layers in route-ghost only while the navigation scene is active", () => {
+    render(<NavigationRouteLayer />);
+    expect(fake.state.layers.has(GHOST)).toBe(false);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(fake.state.layers.has(GHOST)).toBe(true);
+    expect(layerRegistrations().find((r) => r.id === GHOST)).toMatchObject({
+      slot: "route-ghost",
+      order: 0,
+    });
+    expect(fake.state.paint.get(GHOST)?.["line-opacity"]).toBe(0.35);
+    // The remaining line's progress gradient, without a casing.
+    expect(fake.state.paint.get(GHOST)?.["line-gradient"]).toEqual(
+      fake.state.paint.get(REMAINING)?.["line-gradient"],
+    );
+  });
+
+  it("ghost removed when it ends", () => {
+    render(<NavigationRouteLayer />);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(fake.state.layers.has(GHOST)).toBe(false);
+  });
+
+  it("ghost layers join the rendered-attribution gradient groups only while present", () => {
+    render(<NavigationRouteLayer />);
+    const groups = () => {
+      const call = renderedAttributionCalls.filter((args) => args[0] === "nav-route").at(-1);
+      return (call?.[3] as { complementaryGradientGroups: string[][] }).complementaryGradientGroups;
+    };
+    expect(groups().flat()).not.toContain(GHOST);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(groups()[0]).toContain(GHOST);
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(groups().flat()).not.toContain(GHOST);
+  });
+
+  it("highlight span adds transparent stops without a setData call", () => {
+    const { rerender } = render(<NavigationRouteLayer />);
+    navState.progress = { alongMeters: 300 };
+    rerender(<NavigationRouteLayer />);
+    fake.state.counts.setData.delete(SOURCE);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(true);
+      useNavigationSceneStore.getState().setHighlightSpan({ fromAlong: 900, toAlong: 1100 });
+    });
+    const remaining = fake.state.paint.get(REMAINING)?.["line-gradient"] as unknown[];
+    const casing = fake.state.paint.get(REMAINING_CASING)?.["line-gradient"] as unknown[];
+    const ghost = fake.state.paint.get(GHOST)?.["line-gradient"] as unknown[];
+    const progress = navRouteProgressFraction(preparedRoute, 300);
+    const from = navRouteProgressFraction(preparedRoute, 900);
+    const to = navRouteProgressFraction(preparedRoute, 1100);
+    expect(remaining).toEqual([
+      "step",
+      ["line-progress"],
+      "rgba(0,0,0,0)",
+      progress,
+      ROUTE_COLORS.active,
+      from,
+      "rgba(0,0,0,0)",
+      to,
+      ROUTE_COLORS.active,
+    ]);
+    expect(casing.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.casing]);
+    // The ghost keeps covering the geometry, so the attribution union stays whole.
+    expect(ghost).toHaveLength(5);
+    expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
+  });
+
+  it("toggling the ghost does not call setData on nav-route-source", () => {
+    render(<NavigationRouteLayer />);
+    fake.state.counts.setData.delete(SOURCE);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
+  });
+
+  it("latitude change under 1° does not rebuild the width expression", () => {
+    navState.progress = { alongMeters: 0, snapped: [8, 50] } as typeof navState.progress;
+    const { rerender } = render(<NavigationRouteLayer />);
+    const before = fake.state.paint.get(REMAINING)?.["line-width"];
+    navState.progress = { alongMeters: 10, snapped: [8, 50.6] } as typeof navState.progress;
+    rerender(<NavigationRouteLayer />);
+    expect(fake.state.paint.get(REMAINING)?.["line-width"]).toEqual(before);
+    navState.progress = { alongMeters: 20, snapped: [8, 51.2] } as typeof navState.progress;
+    rerender(<NavigationRouteLayer />);
+    expect(fake.state.paint.get(REMAINING)?.["line-width"]).toEqual(
+      routeWidthExpression(8, 3.2, 51.2),
+    );
+  });
 });
 
 describe("NavigationRouteLayer alternative taps", () => {

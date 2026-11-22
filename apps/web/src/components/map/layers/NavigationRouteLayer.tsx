@@ -10,9 +10,11 @@ import {
   type MapLayerGroup,
   type SlottedLayer,
 } from "@/integration-api/map/mapLayerGroup";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
-import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
+import { useNavRouteWidthLatitude } from "@/lib/navigation/useNavRouteWidthLatitude";
+import { navRouteWidths, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { buildNavRouteLine, navRouteProgressFraction } from "./navRouteSplit";
 import {
   routeGeometryFeatures,
@@ -25,13 +27,55 @@ import { useMapDynamicLineState } from "./useMapDynamicLineState";
 const SOURCE = "nav-route-source";
 const TRAVELED = "nav-route-traveled";
 export const NAV_ROUTE_REMAINING_LAYER_ID = "nav-route-remaining";
-export const NAV_ROUTE_REMAINING_WIDTH = ROUTE_WIDTHS.nav.line;
 const REMAINING_CASING = "nav-route-remaining-casing";
+// A faint copy of the remaining route above the 3D scene, so the part hidden
+// behind buildings still shows through during 3D navigation.
+const REMAINING_GHOST = "nav-route-remaining-ghost";
+const GHOST_OPACITY = 0.35;
 
 const ALT_SOURCE = "nav-route-alts-source";
 const ALT = "nav-route-alts";
 const PROPOSED = "nav-route-proposed";
 const TRANSPARENT = "rgba(0,0,0,0)";
+
+/**
+ * A `step` progress gradient: `before` up to `progress`, then `after`, with
+ * the `[from, to]` span (local fractions) transparent when given — the lane
+ * highlight carries the route there instead.
+ */
+function progressGradient(
+  before: string,
+  progress: number,
+  after: string,
+  span: { from: number; to: number } | null,
+): maplibregl.ExpressionSpecification {
+  const plain = ["step", ["line-progress"], before, progress, after];
+  if (!span || span.to <= progress || span.to <= span.from) {
+    return plain as maplibregl.ExpressionSpecification;
+  }
+  if (span.from <= progress) {
+    return [
+      "step",
+      ["line-progress"],
+      before,
+      progress,
+      TRANSPARENT,
+      span.to,
+      after,
+    ] as maplibregl.ExpressionSpecification;
+  }
+  return [
+    "step",
+    ["line-progress"],
+    before,
+    progress,
+    after,
+    span.from,
+    TRANSPARENT,
+    span.to,
+    after,
+  ] as maplibregl.ExpressionSpecification;
+}
 
 export function NavigationRouteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -41,6 +85,10 @@ export function NavigationRouteLayer() {
   const activeRouteIndex = useNavigationStore((s) => s.activeRouteIndex);
   const fasterRoute = useNavigationStore((s) => s.fasterRoute);
   const progress = useNavigationStore((s) => s.progress);
+  const sceneActive = useNavigationSceneStore((s) => s.active);
+  const highlightSpan = useNavigationSceneStore((s) => s.highlightSpan);
+  const widthLatitude = useNavRouteWidthLatitude();
+  const widths = useMemo(() => navRouteWidths(widthLatitude), [widthLatitude]);
   // Cache the turf line + total length per route so the per-fix update below
   // doesn't re-walk the whole geometry every time the user moves.
   const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
@@ -56,11 +104,16 @@ export function NavigationRouteLayer() {
   const gradientGroups = useMemo(
     () =>
       activeFeatures.features.map((_, index) =>
-        [TRAVELED, NAV_ROUTE_REMAINING_LAYER_ID, REMAINING_CASING].map((id) =>
-          routeSegmentLayerId(id, index),
-        ),
+        [
+          TRAVELED,
+          NAV_ROUTE_REMAINING_LAYER_ID,
+          REMAINING_CASING,
+          // Only while it exists: the tracker ignores a group whose members are
+          // not all live line layers.
+          ...(sceneActive ? [REMAINING_GHOST] : []),
+        ].map((id) => routeSegmentLayerId(id, index)),
       ),
-    [activeFeatures],
+    [activeFeatures, sceneActive],
   );
   useRenderedMapAttributions(
     "nav-route",
@@ -90,24 +143,41 @@ export function NavigationRouteLayer() {
   // instead of the hard edge the driver sees today.
   const dynamicState = useMemo<DynamicLineState>(() => {
     const paint: NonNullable<DynamicLineState["paint"]> = {};
-    activeFeatures.features.forEach((feature, index) => {
-      const localProgress = routeSegmentProgress(
+    const toLocal = (feature: (typeof activeFeatures.features)[number], fraction: number): number =>
+      routeSegmentProgress(
         feature.properties,
         navLine?.mercatorCumulative ?? [],
         navLine?.mercatorTotal ?? 0,
-        progressFraction,
+        fraction,
       );
-      for (const [id, before, after] of [
-        [TRAVELED, ROUTE_COLORS.traveled, TRANSPARENT],
-        [NAV_ROUTE_REMAINING_LAYER_ID, TRANSPARENT, ROUTE_COLORS.active],
-        [REMAINING_CASING, TRANSPARENT, ROUTE_COLORS.casing],
-      ] as const)
-        paint[routeSegmentLayerId(id, index)] = {
-          "line-gradient": ["step", ["line-progress"], before, localProgress, after],
+    activeFeatures.features.forEach((feature, index) => {
+      const localProgress = toLocal(feature, progressFraction);
+      const span =
+        highlightSpan && navLine
+          ? {
+              from: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.fromAlong)),
+              to: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.toAlong)),
+            }
+          : null;
+      paint[routeSegmentLayerId(TRAVELED, index)] = {
+        "line-gradient": progressGradient(ROUTE_COLORS.traveled, localProgress, TRANSPARENT, null),
+      };
+      paint[routeSegmentLayerId(NAV_ROUTE_REMAINING_LAYER_ID, index)] = {
+        "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.active, span),
+      };
+      paint[routeSegmentLayerId(REMAINING_CASING, index)] = {
+        "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.casing, span),
+      };
+      if (sceneActive) {
+        // No transparent span: the ghost keeps covering the whole span, so the
+        // attribution group's alpha union stays complete.
+        paint[routeSegmentLayerId(REMAINING_GHOST, index)] = {
+          "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.active, null),
         };
+      }
     });
     return { paint };
-  }, [activeFeatures, navLine, progressFraction]);
+  }, [activeFeatures, navLine, progressFraction, highlightSpan, sceneActive]);
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FEATURE_COLLECTION;
@@ -172,7 +242,7 @@ export function NavigationRouteLayer() {
                 layout: { "line-cap": "round", "line-join": "round" },
                 // `line-color` is the fallback shown for the one tick before the
                 // gradient in `dynamicState` lands.
-                paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
+                paint: { "line-color": ROUTE_COLORS.casing, "line-width": widths.casing },
                 slot: "route-active",
                 order: 2,
               },
@@ -184,7 +254,7 @@ export function NavigationRouteLayer() {
                 layout: { "line-cap": "round", "line-join": "round" },
                 paint: {
                   "line-color": ROUTE_COLORS.traveled,
-                  "line-width": ROUTE_WIDTHS.nav.traveled,
+                  "line-width": widths.traveled,
                   "line-opacity": 0.7,
                 },
                 slot: "route-active",
@@ -198,16 +268,34 @@ export function NavigationRouteLayer() {
                 layout: { "line-cap": "round", "line-join": "round" },
                 paint: {
                   "line-color": ROUTE_COLORS.active,
-                  "line-width": NAV_ROUTE_REMAINING_WIDTH,
+                  "line-width": widths.line,
                 },
                 slot: "route-active",
                 order: 4,
               },
+              ...(sceneActive
+                ? [
+                    {
+                      id: routeSegmentLayerId(REMAINING_GHOST, index),
+                      type: "line",
+                      source: SOURCE,
+                      filter: ["==", ["get", "geometryPart"], index],
+                      layout: { "line-cap": "round", "line-join": "round" },
+                      paint: {
+                        "line-color": ROUTE_COLORS.active,
+                        "line-width": widths.line,
+                        "line-opacity": GHOST_OPACITY,
+                      },
+                      slot: "route-ghost",
+                      order: 0,
+                    } satisfies SlottedLayer,
+                  ]
+                : []),
             ] satisfies SlottedLayer[],
         ),
       ] satisfies SlottedLayer[],
     }),
-    [activeFeatures, altFeatures],
+    [activeFeatures, altFeatures, widths, sceneActive],
   );
   useMapLayerGroup(group);
   // Must run after `useMapLayerGroup` so its effect fires after the layers

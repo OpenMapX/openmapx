@@ -336,6 +336,7 @@ export {
   routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "./routeStopDetours";
+export { metresToPixels, type RouteWidthExpression, routeWidthExpression } from "./routeWidth";
 export {
   type AlongRouteOptions,
   type AlongRoutePoi,
