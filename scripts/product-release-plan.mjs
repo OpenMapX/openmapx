@@ -217,15 +217,19 @@ export function validateReadiness(readiness, candidate, digest) {
       readiness.candidateManifestDigest === digest,
     "Readiness candidate mismatch",
   );
+  // A release without upgrade origins is qualified for clean installation only.
+  const origins = candidate.manifest.product.upgradeOrigins;
   assert(
     typeof readiness.environment === "string" &&
       readiness.environment.trim().length >= 3 &&
       readiness.platform === "linux/amd64" &&
       validInstant(readiness.testedAt) &&
-      candidate.manifest.product.upgradeOrigins.includes(readiness.upgradeOrigin),
+      (origins.length === 0
+        ? readiness.upgradeOrigin === undefined
+        : origins.includes(readiness.upgradeOrigin)),
     "Incomplete readiness environment/upgrade evidence",
   );
-  for (const check of readinessChecks)
+  for (const check of readinessChecks.filter((name) => name !== "upgrade" || origins.length > 0))
     assert(
       readiness.checks?.[check]?.passed === true &&
         typeof readiness.checks[check].evidence === "string" &&

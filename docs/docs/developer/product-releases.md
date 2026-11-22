@@ -27,13 +27,13 @@ A draft is not a published release. Its `target_commitish` is the exact producer
 
 ## Rehearse and record evidence
 
-This requires separately authorized owned staging. Select the frozen metadata digest, not a moving pointer. Exercise a clean installation and an upgrade from an actual declared origin. For alpha.1 that origin is the real **prebaseline** deployment, not an invented previous named release. Record service health, authentication, navigation, saved places, representative provider failure and credit paths, and privacy evidence. Record recovery only where actually tested; image rollback does not undo migrations. These scripts do not create backups.
+This requires separately authorized owned staging. Select the frozen metadata digest, not a moving pointer. Exercise a clean installation and, for each origin in `upgradeOrigins`, an upgrade from an actual deployment of it. An empty `upgradeOrigins` declares a release for clean installation only; alpha.1 is one, because its database starts from a single migration baseline. Record service health, authentication, navigation, saved places, representative provider failure and credit paths, and privacy evidence. Record recovery only where actually tested; image rollback does not undo migrations. These scripts do not create backups.
 
 Upload a real `readiness.json` asset to the draft. Its strict schema contains:
 
 - `schemaVersion: 1`, the exact `candidateHash` and `candidateManifestDigest` from `candidate.json`.
-- Actual `environment`, `platform: "linux/amd64"`, ISO `testedAt`, declared `upgradeOrigin`, and `limitations` array.
-- `checks` entries `cleanInstall`, `authentication`, `navigation`, `savedPlaces`, `providerFailure`, `credits`, `serviceHealth`, `upgrade`. Each has `passed: true` and an HTTPS `evidence` link to actual results.
+- Actual `environment`, `platform: "linux/amd64"`, ISO `testedAt`, the rehearsed `upgradeOrigin` (one of `upgradeOrigins`; omitted when that list is empty), and `limitations` array.
+- `checks` entries `cleanInstall`, `authentication`, `navigation`, `savedPlaces`, `providerFailure`, `credits`, `serviceHealth`, and `upgrade` when `upgradeOrigins` is not empty. Each has `passed: true` and an HTTPS `evidence` link to actual results.
 - `immutableReleases`: `enabled: true`, `repository`, the same `candidateHash`, maintainer `checkedBy`, ISO `checkedAt` and an HTTPS `evidence` link to the settings readback.
 
 Before approving, the maintainer checks `gh api repos/OpenMapX/openmapx/immutable-releases` with their existing administration authority and records the actual enabled readback. Ordinary GITHUB_TOKEN cannot read this Administration endpoint; no new publishing token or invented YAML permission is used. Readiness JSON is a record, not independent proof: review the referenced evidence. No passing readiness file is generated automatically.

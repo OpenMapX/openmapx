@@ -16,6 +16,7 @@ export const POLICY_CHECKS = [
   "check-image-size-dos",
   "check-docker-context-secrets",
   "check-migration-order",
+  "check-drizzle-drift",
   "check-ops-authority",
   "check-declared-imports",
   "check-integration-cache-writes",

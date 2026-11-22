@@ -22,20 +22,15 @@ export async function installDisposableDataAdmission(
 ): Promise<() => Promise<void>> {
   const existing = await sql.unsafe("SELECT to_regclass('data_manager.jobs') AS table_name");
   if (existing[0]?.table_name) throw Error("Admission fixture requires its new disposable schema");
-  const migrations = resolve(import.meta.dirname, "../../../../apps/api/src/db/migrations");
-  for (const name of [
-    "0004_data_manager_jobs_and_feed_state.sql",
-    "0042_admin_data_execution.sql",
-    "0063_configuration_fence_table.sql",
-    "0066_update_system_job_rows.sql",
-  ]) {
-    // Only the data_manager statements: the disposable schema has no API tables.
-    const statements = readFileSync(join(migrations, name), "utf8")
-      .replace('CREATE SCHEMA "data_manager";', 'CREATE SCHEMA IF NOT EXISTS "data_manager";')
-      .split("--> statement-breakpoint")
-      .filter((statement) => statement.includes('"data_manager"'));
-    await sql.unsafe(statements.join("\n"));
-  }
+  // Only the baseline's data_manager statements: the disposable schema has no
+  // API tables, and the custom migration's grants name roles it lacks.
+  const statements = readFileSync(
+    resolve(import.meta.dirname, "../../../../apps/api/src/db/migrations/0000_baseline.sql"),
+    "utf8",
+  )
+    .split("--> statement-breakpoint")
+    .filter((statement) => statement.includes('"data_manager"'));
+  await sql.unsafe(statements.join("\n"));
   const root = mkdtempSync(join(tmpdir(), "omx-disposable-admission-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
   await provisionControlDirectories(root);

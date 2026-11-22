@@ -1,1 +1,0 @@
-ALTER TABLE "data_subject_request_email_challenge" ADD COLUMN "delivery_lease_id" uuid;

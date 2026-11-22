@@ -14,7 +14,7 @@ import { extensionManifestSchema, verifiedCatalogEntrySchema } from "../services
  *
  * - `apps/api/src/services/__tests__/extension-store.test.ts` (digest before parse)
  * - `apps/api/src/services/__tests__/extension-component-ownership.test.ts`
- * - `apps/api/src/db/__tests__/extension-component-ownership-migration.test.ts`
+ * - `apps/api/src/db/__tests__/baseline-migration-postgres.test.ts` (one owner per component)
  * - `packages/core/src/__tests__/git-clone-budget.test.ts`
  * - `packages/integration-framework/src/__tests__/package-contract.test.ts`
  */

@@ -33,10 +33,11 @@ export function readProductReleaseConfig(bytes) {
       JSON.stringify(config.compatibility.platforms) === '["linux/amd64"]',
     "Unsupported compatibility declaration",
   );
+  // An empty upgradeOrigins declares a release qualified for clean installation only.
   for (const field of ["upgradeOrigins", "limitations"])
     assert(
       Array.isArray(config[field]) &&
-        config[field].length > 0 &&
+        (field === "upgradeOrigins" || config[field].length > 0) &&
         config[field].every(
           (item) => typeof item === "string" && item.trim().length > 0 && item.length <= 2000,
         ),

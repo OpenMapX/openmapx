@@ -155,6 +155,22 @@ dbDescribe("atomic last administrator protection", () => {
     ).rejects.toThrow();
     expect(await active()).toHaveLength(1);
   });
+  it.each(["privacy_admin", "admin,user", "foreign_admin"])(
+    "refuses the account role %s in the database",
+    async (role) => {
+      await expect(
+        fixture.db.insert(user).values({
+          id: `role-${randomUUID()}`,
+          name: "Synthetic account",
+          email: `role-${randomUUID()}@example.test`,
+          role,
+        }),
+      ).rejects.toMatchObject({
+        cause: { constraint_name: "openmapx_canonical_account_role" },
+      });
+      expect(await active()).toHaveLength(1);
+    },
+  );
   it.each(["role", "banned", "emailVerified", "twoFactorEnabled", "email"])(
     "rejects generic admin updates of %s",
     async (field) => {

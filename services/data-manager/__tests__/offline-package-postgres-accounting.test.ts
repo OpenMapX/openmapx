@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
@@ -119,23 +119,7 @@ integration("PostgreSQL offline-package accounting", () => {
     // Production shares its client with drizzle, which replaces the client's
     // date and JSON serializers and its date parsers.
     drizzle(sql);
-    await sql`CREATE SCHEMA data_manager`;
-    const migration = readFileSync(
-      join(
-        import.meta.dirname,
-        "..",
-        "..",
-        "..",
-        "apps",
-        "api",
-        "src",
-        "db",
-        "migrations",
-        "0014_offline_package_accounting.sql",
-      ),
-      "utf8",
-    ).replaceAll("--> statement-breakpoint", "");
-    await sql.unsafe(migration);
+    // Creates every data_manager table, the offline-package accounting included.
     closeAdmission = await installDisposableDataAdmission(sql);
   }, 120_000);
 

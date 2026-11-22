@@ -313,8 +313,8 @@ performance target.
 The large platform-runtime matrix now provisions a worker-owned migrated template
 once and creates a fresh database clone per scenario. The template never consumes
 an external `DATABASE_URL`; failed/unfinished clones are cleaned on worker teardown.
-Isolation and cleanup are tested against real PostGIS. Migration acceptance and
-`throughMigration` boundaries continue using genuine fresh migration histories.
+Isolation and cleanup are tested against real PostGIS. Migration acceptance
+continues to apply the genuine migrations to fresh databases.
 The separate configuration fixture already creates fresh owned schemas and is not
 silently changed to share state.
 

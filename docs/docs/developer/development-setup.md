@@ -150,7 +150,7 @@ working development database: `db:push` synchronizes the declared schema but doe
 not replay custom SQL migrations.
 
 ```bash
-pnpm db:generate    # generate a migration from schema changes
+pnpm db:generate    # check for schema changes; see "API migrations" below
 pnpm db:push        # schema-only experiment on a disposable database
 pnpm db:studio      # open Drizzle Studio, a visual database browser
 pnpm auth:generate  # regenerate the Better Auth schema
@@ -356,12 +356,34 @@ for full local verification and checks that run separately.
 - [CLI reference](./cli-reference.md): every `pnpm openmapx` command,
   including the data and service-lifecycle ones this page only touched on.
 
-## API migration ordering
+## API migrations
 
-The committed `apps/api/src/db/migrations/meta/_journal.json` defines migration
-order. Historical filenames retain their original names after branch merges:
-for example, journal entry45 is `0042_admin_data_execution`, after the earlier
-entries42–44 from main. The numeric filename prefix is not the journal index.
-Use the normal migrator; do not sort SQL filenames or rename/rewrite an applied
-migration to make its prefix match the current index. Generate subsequent
-schema changes as new migrations with the standard Drizzle tooling.
+The API's migrations in `apps/api/src/db/migrations` are two files:
+
+- `0000_baseline.sql`, which `drizzle-kit generate` writes from the schema code
+  (`apps/api/src/db/schema.ts` and the files it re-exports). It is never edited
+  by hand.
+- `0001_database_objects.sql`, a `drizzle-kit generate --custom` migration that
+  holds only what drizzle-kit cannot generate: grants, revokes and default
+  privileges, role-guarded `DO` blocks, functions, triggers, seed rows, and the
+  account role `CHECK` on Better Auth's `user` table.
+  `apps/api/src/db/custom-migration.test.ts` refuses any other statement kind.
+
+No installation predates the baseline, so a schema change regenerates both files
+from an empty folder instead of adding a migration. From `apps/api`:
+
+1. Copy the body of `0001_database_objects.sql` aside.
+2. `git rm -r src/db/migrations`.
+3. `pnpm exec drizzle-kit generate --name baseline`.
+4. `pnpm exec drizzle-kit generate --custom --name database_objects`.
+5. Write the saved body, plus any new custom objects, into the new custom file.
+6. `pnpm exec drizzle-kit generate` must print "No schema changes, nothing to
+   migrate", and `pnpm exec drizzle-kit check` must pass.
+
+drizzle-kit gives every snapshot a random `id` and every journal entry a new
+timestamp; an unchanged regeneration has byte-identical SQL files and snapshots
+that differ only in `id` and `prevId`. A database created before a
+regeneration cannot be migrated and fails with "relation already exists";
+recreate it. `pnpm check-drizzle-drift`, part of `pnpm check:policy`, runs
+`drizzle-kit check` and `drizzle-kit generate` and fails when generation writes
+anything or the folder holds uncommitted changes.

@@ -186,7 +186,8 @@ const productSchema = z.strictObject({
     extensionProtocol: z.string().min(1),
     platforms: z.array(z.literal("linux/amd64")).length(1),
   }),
-  upgradeOrigins: z.array(z.string().min(1)).min(1),
+  // Empty for a release qualified for clean installation only.
+  upgradeOrigins: z.array(z.string().min(1)),
   limitations: z.array(z.string().min(1)),
 });
 const databaseMigrationHeadSchema = z.strictObject({

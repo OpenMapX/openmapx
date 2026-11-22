@@ -1,1 +1,0 @@
-ALTER TABLE "data_manager"."configuration_fence" DROP COLUMN "owner_certificate_digest";

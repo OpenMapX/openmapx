@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,55 +73,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
     const get = () => app.inject({ method: "GET", url: "/api/reviews/keypair" });
 
-    it("preserves historical migration records and drops plaintext columns", async () => {
-      const columns =
-        await fixture.sql`SELECT column_name FROM information_schema.columns WHERE table_name='mangrove_keypair'`;
-      expect(columns.map((c) => c.column_name)).toContain("revision");
-      expect(columns.map((c) => c.column_name)).not.toContain("encryption_mode");
-      expect(columns.map((c) => c.column_name)).not.toContain("private_jwk");
-      const journal = JSON.parse(
-        await readFile(new URL("../../db/migrations/meta/_journal.json", import.meta.url), "utf8"),
-      );
-      expect(journal.entries.map((entry: { tag: string }) => entry.tag)).toContain(
-        "0043_mangrove_encrypted_revision",
-      );
-      const applied =
-        await fixture.sql`SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations`;
-      expect(applied[0]?.count).toBe(journal.entries.length);
-    });
-    it("applies the new migration to historical encrypted and plaintext development rows", async () => {
-      const initialSql = await readFile(
-        new URL("../../db/migrations/0000_initial.sql", import.meta.url),
-        "utf8",
-      );
-      const newSql = await readFile(
-        new URL("../../db/migrations/0043_mangrove_encrypted_revision.sql", import.meta.url),
-        "utf8",
-      );
-      const tableStatements = initialSql
-        .split("--> statement-breakpoint")
-        .filter((statement) => statement.includes('CREATE TABLE "mangrove_keypair'));
-      await fixture.sql.begin(async (sql) => {
-        await sql`CREATE SCHEMA mangrove_migration_fixture`;
-        await sql`SET LOCAL search_path TO mangrove_migration_fixture, public`;
-        for (const statement of tableStatements) await sql.unsafe(statement);
-        await sql`ALTER TABLE mangrove_keypair_wrap ADD FOREIGN KEY (user_id) REFERENCES mangrove_keypair(user_id) ON DELETE CASCADE`;
-        await sql`INSERT INTO mangrove_keypair(user_id,encryption_mode,public_jwk,private_jwk,passphrase_ciphertext) VALUES ('plain','unencrypted','{}','{}',null), ('encrypted','encrypted','{}',null,'retained')`;
-        await sql`INSERT INTO mangrove_keypair_wrap(id,user_id,wrap_type,label) VALUES ('plain-wrap','plain','passphrase','Plain'), ('encrypted-wrap','encrypted','passphrase','Encrypted')`;
-        for (const statement of newSql.split("--> statement-breakpoint"))
-          if (statement.trim()) await sql.unsafe(statement);
-        const rows = await sql`SELECT * FROM mangrove_keypair`;
-        expect(rows).toHaveLength(1);
-        expect(rows[0]?.user_id).toBe("encrypted");
-        expect(rows[0]?.revision).toBeTypeOf("string");
-        expect(rows[0]?.passphrase_ciphertext).toBe("retained");
-        expect(rows[0]).not.toHaveProperty("private_jwk");
-        const wraps = await sql`SELECT * FROM mangrove_keypair_wrap`;
-        expect(wraps).toHaveLength(1);
-        expect(wraps[0]?.user_id).toBe("encrypted");
-        await sql`DROP SCHEMA mangrove_migration_fixture CASCADE`;
-      });
-    });
     it("GET keeps one real transaction snapshot across a concurrent wrap replacement", async () => {
       await create();
       const before = (await get()).json();

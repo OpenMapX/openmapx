@@ -97,6 +97,63 @@ describe("named product candidate", () => {
   });
 });
 
+describe("readiness evidence", () => {
+  const digest = `sha256:${"e".repeat(64)}`;
+  function readinessFor(candidate: ReturnType<typeof release.planProductRelease>) {
+    return {
+      schemaVersion: 1,
+      candidateHash: release.candidateHash(candidate),
+      candidateManifestDigest: digest,
+      environment: "synthetic fixture only",
+      platform: "linux/amd64",
+      testedAt: "2026-10-18T10:00:00Z",
+      checks: Object.fromEntries(
+        release.readinessChecks
+          .filter((name: string) => name !== "upgrade")
+          .map((name: string) => [
+            name,
+            { passed: true, evidence: `https://example.invalid/synthetic/${name}` },
+          ]),
+      ) as Record<string, { passed: boolean; evidence: string }>,
+      limitations: ["Synthetic; no runtime acceptance"],
+      immutableReleases: {
+        enabled: true,
+        repository: candidate.repository,
+        candidateHash: release.candidateHash(candidate),
+        checkedBy: "synthetic-owner",
+        checkedAt: "2026-10-18T10:00:00Z",
+        evidence: "https://example.invalid/synthetic/settings",
+      },
+    } as Record<string, unknown> & { checks: Record<string, unknown> };
+  }
+
+  it("needs no upgrade rehearsal for a clean-installation-only release", () => {
+    const candidate = release.planProductRelease(fixture());
+    expect(candidate.manifest.product.upgradeOrigins).toEqual([]);
+    const readiness = readinessFor(candidate);
+    expect(release.validateReadiness(readiness, candidate, digest)).toBe(readiness);
+    expect(() =>
+      release.validateReadiness({ ...readiness, upgradeOrigin: "prebaseline" }, candidate, digest),
+    ).toThrow(/upgrade evidence/);
+  });
+
+  it("requires an upgrade rehearsal from a declared origin", () => {
+    const input = fixture();
+    input.configuration.upgradeOrigins = ["v0.1.0-alpha.1"];
+    const candidate = release.planProductRelease(input);
+    const readiness = readinessFor(candidate);
+    expect(() => release.validateReadiness(readiness, candidate, digest)).toThrow(
+      /upgrade evidence/,
+    );
+    readiness.upgradeOrigin = "v0.1.0-alpha.1";
+    expect(() => release.validateReadiness(readiness, candidate, digest)).toThrow(
+      "Missing rehearsal evidence: upgrade",
+    );
+    readiness.checks.upgrade = { passed: true, evidence: "https://example.invalid/upgrade" };
+    expect(release.validateReadiness(readiness, candidate, digest)).toBe(readiness);
+  });
+});
+
 it("requires the literal registry hostname rather than a regex wildcard match", () => {
   const input = fixture();
   input.producerManifest.images.api = `ghcrXio/openmapx/api@sha256:${"b".repeat(64)}`;

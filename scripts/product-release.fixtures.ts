@@ -7,7 +7,7 @@ export function fixture() {
     version: "0.1.0-alpha.1",
     notesPath: "docs/docs/releases/0.1.0-alpha.1.md",
     compatibility: { extensionProtocol: "1.0", platforms: ["linux/amd64"] },
-    upgradeOrigins: ["prebaseline"],
+    upgradeOrigins: [] as string[],
     limitations: ["Experimental, no stable support"],
   };
   const producer = {

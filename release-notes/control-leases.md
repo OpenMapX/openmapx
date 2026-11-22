@@ -30,8 +30,7 @@ operation whose outcome is unknown (also settling Data Manager's configuration
 fence for a configuration maintenance), and drops a claim or lock whose holder
 is gone. Every clear and resolve is appended to
 `infra/docker/state/ops-agent/control-audit.jsonl`.
-`services recover-update` is removed. The database migration drops a column of
-Data Manager's configuration fence that the signed certificates used.
+`services recover-update` is removed.
 
 ## Who is affected
 
