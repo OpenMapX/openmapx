@@ -1,8 +1,17 @@
 import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "@openmapx/core";
 import {
+  approachTargetZoom,
   cumulativeDistances,
+  junctionFitZoom,
+  lookAheadBearing,
+  lookAheadMeters,
+  maneuverArrowLine,
+  maneuverArrowSpans,
+  maneuverStartMeters,
+  NAV_CAMERA_PROFILE,
   positionAt,
+  speedZoom,
   stepDeadReckon,
   useNavigationStore,
   useSettingsStore,
@@ -11,7 +20,9 @@ import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import {
-  getCameraPaddingTarget,
+  type CameraViewport,
+  getCameraFrameTarget,
+  measureCameraViewport,
   type ResolvedPadding,
   subscribeCameraPaddingTarget,
 } from "@/lib/cameraPadding";
@@ -58,12 +69,12 @@ const ZOOM_TAU = 1.6;
 const PADDING_TAU = 0.2;
 const USER_CAM_SUSPEND_MS = 350;
 // Approach tilt: inside the maneuver approach window the follow camera leans
-// toward the road ahead and closes in a level, so the maneuver reads as a place.
-// Restored to the mode pitch once the maneuver is passed. 60° is MapLibre's
-// default `maxPitch`; anything steeper is clamped by the map.
-const APPROACH_PITCH = 60;
-const APPROACH_ZOOM_BOOST = 1.0;
-const APPROACH_MAX_ZOOM = 17.5;
+// toward the road ahead and closes in until the maneuver's way in and way out
+// both fit on screen, so the maneuver reads as a place. Restored to the mode
+// pitch once the maneuver is passed. 60° is MapLibre's default `maxPitch`;
+// anything steeper is clamped by the map.
+const APPROACH_PITCH = NAV_CAMERA_PROFILE["2d"].approachPitch;
+const APPROACH_ZOOM_CAP = NAV_CAMERA_PROFILE["2d"].approachZoomCap;
 const PITCH_TAU = 1.0;
 
 type CameraActivityEvent = maplibregl.MapMovementEvent | maplibregl.MapWheelEvent;
@@ -73,15 +84,6 @@ function isProgrammaticCameraEvent(event: CameraActivityEvent): boolean {
   // events at runtime, but intentionally does not include application-owned
   // fields in its event types.
   return "programmatic" in event && event.programmatic === true;
-}
-
-/**
- * Target follow-zoom for a ground speed: close in when slow/stopped, pull back
- * at speed to show more road ahead. ~17 at a standstill → ~14 at motorway speed.
- */
-function targetZoomForSpeed(speedMps: number): number {
-  const z = 17 - (Math.max(speedMps, 0) / 33) * 3;
-  return Math.max(14, Math.min(17, z));
 }
 
 // A bold navigation chevron, seated in a white disc, pointing "up" (north) at
@@ -136,6 +138,17 @@ function easeAngle(current: number, target: number, alpha: number): number {
   return (current + diff * alpha + 360) % 360;
 }
 
+/** Modes whose follow camera aims along the route ahead instead of at the local segment. */
+function looksAhead(mode: string): boolean {
+  return mode === "driving" || mode === "motorcycle";
+}
+
+interface ApproachLegs {
+  route: Route;
+  maneuverIndex: number;
+  legs: LngLat[] | null;
+}
+
 interface RouteLine {
   route: Route;
   cum: number[];
@@ -170,10 +183,13 @@ interface FixTarget {
 export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: number }): void {
   const surfaceRef = useRef(surface);
   surfaceRef.current = surface;
-  const cameraPadding = useCallback(
-    (map: maplibregl.Map) => surfaceRef.current?.padding ?? getCameraPaddingTarget(map),
-    [],
-  );
+  // One container measurement gives both the padding and the viewport the
+  // junction framing fits into; a car surface brings its own padding.
+  const cameraFrame = useCallback((map: maplibregl.Map) => {
+    const surfacePadding = surfaceRef.current?.padding;
+    if (surfacePadding) return { padding: surfacePadding, viewport: measureCameraViewport(map) };
+    return getCameraFrameTarget(map);
+  }, []);
   const cameraPitch = useCallback(
     (pitch: number) => Math.min(pitch, surfaceRef.current?.maxPitch ?? 60),
     [],
@@ -203,6 +219,11 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
   // null = "snap to the next fix" (route just (re)started or changed).
   const displayedRef = useRef<number | null>(null);
   const bearingRef = useRef<number | null>(null);
+  // The camera's own bearing: it aims a few seconds along the route for driving,
+  // so it turns into a bend before the puck does. The puck keeps the local one.
+  const cameraBearingRef = useRef<number | null>(null);
+  // The current maneuver's way in and way out, cut once per approach.
+  const approachLegsRef = useRef<ApproachLegs | null>(null);
   const lastFrameRef = useRef<number | null>(null);
   const settleUntilRef = useRef(0);
   // Last puck pose written to the marker, and last camera pose applied via
@@ -232,6 +253,9 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
   // there would force a reflow every frame. So it is cached until one of its
   // inputs announces a change; null = "recompute on the next frame".
   const paddingTargetRef = useRef<ResolvedPadding | null>(null);
+  // The container size that target was resolved against, measured at the same
+  // moment and cached with it, for the junction framing.
+  const viewportRef = useRef<CameraViewport | null>(null);
   const userZoomedRef = useRef(false);
   const userCamActivityUntilRef = useRef(0);
   // True while a finger/mouse button is down on the map. The follow loop yields
@@ -311,6 +335,8 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       : null;
     displayedRef.current = null;
     bearingRef.current = null;
+    cameraBearingRef.current = null;
+    approachLegsRef.current = null;
     targetRef.current = null;
     lastPuckRef.current = null;
     lastCamRef.current = null;
@@ -364,7 +390,9 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       const enterZoom = userZoomedRef.current
         ? map.getZoom()
         : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
-      const enterPadding = cameraPadding(map);
+      const enterFrame = cameraFrame(map);
+      const enterPadding = enterFrame.padding;
+      viewportRef.current = enterFrame.viewport;
       map.easeTo(
         {
           zoom: enterZoom,
@@ -387,7 +415,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       lastCamRef.current = null;
       requestFrame();
     },
-    [mode, requestFrame, cameraPadding, cameraPitch],
+    [mode, requestFrame, cameraFrame, cameraPitch],
   );
 
   useEffect(() => {
@@ -447,6 +475,13 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       settledFramesRef.current = 0;
       return;
     }
+    // Resolve and cache the padding target and its viewport (one measurement).
+    const resolveFrameTarget = (map: maplibregl.Map) => {
+      const frame = cameraFrame(map);
+      paddingTargetRef.current = frame.padding;
+      viewportRef.current = frame.viewport;
+      return frame;
+    };
     const runFrame = () => {
       const now = performance.now();
       // Set by anything this frame actually sent to MapLibre. A frame that sends
@@ -489,6 +524,20 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
         const bearingAlpha = 1 - Math.exp(-Math.max(dt, 0) / BEARING_TAU);
         bearingRef.current = easeAngle(bearingRef.current ?? bearing, bearing, bearingAlpha);
         const brg = bearingRef.current;
+        const navState = useNavigationStore.getState();
+        const cameraTarget = looksAhead(navState.mode)
+          ? (lookAheadBearing(
+              line.route.geometry,
+              line.cum,
+              displayedRef.current,
+              lookAheadMeters(navState.progress?.speedMps ?? 0),
+            ) ?? bearing)
+          : bearing;
+        cameraBearingRef.current = easeAngle(
+          cameraBearingRef.current ?? cameraTarget,
+          cameraTarget,
+          bearingAlpha,
+        );
 
         const puckPose: PuckPose = { lng: point[0], lat: point[1], bearing: brg };
         if (puckPoseChanged(lastPuckRef.current, puckPose)) {
@@ -514,19 +563,60 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           lastCamRef.current = null;
         } else {
           // Follow center + bearing. Auto-zoom toward the speed-derived target
-          // (boosted inside the maneuver approach window), unless the user has
-          // taken zoom control — then leave zoom untouched so navigation
-          // continues at their chosen zoom.
+          // (pushed in to frame the junction inside the maneuver approach
+          // window), unless the user has taken zoom control — then leave zoom
+          // untouched so navigation continues at their chosen zoom.
           const commandZoom = !userZoomedRef.current;
-          const approaching = approachRef.current !== null;
-          const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
+          const approach = approachRef.current;
+          const approaching = approach !== null;
+          const speed = navState.progress?.speedMps ?? 0;
+          // North-up keeps the map oriented north (the puck still rotates to the
+          // travel bearing); the default course-up rotates the map to it.
+          const cameraBearing = useSettingsStore.getState().mapNorthUp
+            ? 0
+            : cameraBearingRef.current;
           let zoom = map.getZoom();
           if (commandZoom) {
             const base = displayedZoomRef.current ?? zoom;
             const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / ZOOM_TAU);
-            const target = approaching
-              ? Math.min(targetZoomForSpeed(speed) + APPROACH_ZOOM_BOOST, APPROACH_MAX_ZOOM)
-              : targetZoomForSpeed(speed);
+            const plain = speedZoom(speed, "2d");
+            let target = plain;
+            if (approach) {
+              let cached = approachLegsRef.current;
+              if (
+                !cached ||
+                cached.route !== approach.route ||
+                cached.maneuverIndex !== approach.maneuverIndex
+              ) {
+                cached = {
+                  route: approach.route,
+                  maneuverIndex: approach.maneuverIndex,
+                  legs: maneuverArrowLine(
+                    line.route.geometry,
+                    line.cum,
+                    maneuverStartMeters(approach.route, approach.maneuverIndex),
+                    maneuverArrowSpans(navState.mode),
+                  ),
+                };
+                approachLegsRef.current = cached;
+              }
+              const frame = paddingTargetRef.current
+                ? { padding: paddingTargetRef.current, viewport: viewportRef.current }
+                : resolveFrameTarget(map);
+              const fit =
+                cached.legs && frame.viewport
+                  ? junctionFitZoom({
+                      legs: cached.legs,
+                      center: point,
+                      bearing: cameraBearing,
+                      pitch: displayedPitchRef.current ?? cameraPitch(APPROACH_PITCH),
+                      viewport: frame.viewport,
+                      padding: displayedPaddingRef.current ?? frame.padding,
+                      maxZoom: APPROACH_ZOOM_CAP,
+                    })
+                  : plain;
+              target = approachTargetZoom(plain, fit, APPROACH_ZOOM_CAP);
+            }
             displayedZoomRef.current = settleScalar(
               base + (target - base) * zAlpha,
               target,
@@ -552,11 +642,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           // The follow loop owns padding for as long as it owns the camera, so
           // the sync component stays out and the two can't ease against each
           // other.
-          let targetPadding = paddingTargetRef.current;
-          if (!targetPadding) {
-            targetPadding = cameraPadding(map);
-            paddingTargetRef.current = targetPadding;
-          }
+          const targetPadding = paddingTargetRef.current ?? resolveFrameTarget(map).padding;
           const pAlpha = 1 - Math.exp(-Math.max(dt, 0) / PADDING_TAU);
           const padding = easePadding(
             displayedPaddingRef.current ?? map.getPadding(),
@@ -564,9 +650,6 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
             pAlpha,
           );
           displayedPaddingRef.current = padding;
-          // North-up keeps the map oriented north (the puck still rotates to the
-          // travel bearing); the default course-up rotates the map to it.
-          const cameraBearing = useSettingsStore.getState().mapNorthUp ? 0 : brg;
           const camPose: CameraPose = {
             lng: point[0],
             lat: point[1],
@@ -625,7 +708,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       lastFrameRef.current = null;
       settledFramesRef.current = 0;
     };
-  }, [active, mapRef, requestFrame, cameraPadding, cameraPitch]);
+  }, [active, mapRef, requestFrame, cameraFrame, cameraPitch]);
 
   // Hide the puck when not actively navigating, and clear user-control state so
   // the next trip starts in auto-follow. The padding is left where it is: the

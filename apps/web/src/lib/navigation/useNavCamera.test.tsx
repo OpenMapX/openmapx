@@ -3,8 +3,16 @@
 import type { Route } from "@integrations/routing/types";
 import type { LngLat, NavProgress } from "@openmapx/core";
 import {
+  approachTargetZoom,
   cumulativeDistances,
+  junctionFitZoom,
+  lookAheadBearing,
+  lookAheadMeters,
+  maneuverArrowLine,
+  maneuverArrowSpans,
+  maneuverStartMeters,
   positionAt,
+  speedZoom,
   stepDeadReckon,
   useNavigationStore,
   useSettingsStore,
@@ -78,7 +86,11 @@ vi.mock("maplibre-gl", () => {
 
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
-import type { ResolvedPadding } from "@/lib/cameraPadding";
+import {
+  type CameraViewport,
+  getCameraFrameTarget,
+  type ResolvedPadding,
+} from "@/lib/cameraPadding";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { createFakeMap, type FakeMap, nth } from "@/test";
 import { CAMERA_ZOOM_EPSILON } from "./navCameraScheduler";
@@ -236,6 +248,18 @@ function targetZoomForSpeed(speedMps: number): number {
   return Math.max(14, Math.min(17, 17 - (Math.max(speedMps, 0) / 33) * 3));
 }
 
+/** The "Keep left" maneuver's way in and way out, as the approach camera frames them. */
+const approachLegs = (): LngLat[] => {
+  const legs = maneuverArrowLine(
+    geometry,
+    cum,
+    maneuverStartMeters(route, 1),
+    maneuverArrowSpans("driving"),
+  );
+  if (!legs) throw new Error("fixture route carries no arrow");
+  return legs;
+};
+
 interface PuckFrame {
   lng: number;
   lat: number;
@@ -261,8 +285,13 @@ interface Replay {
  * must not disturb: the puck sequence is compared frame by frame and the camera
  * sequence command by command.
  */
-function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraFrame[] } {
+function modelMovingReplay(
+  replay: Replay,
+  frameTarget: { padding: ResolvedPadding; viewport: CameraViewport },
+): { puck: PuckFrame[]; camera: CameraFrame[] } {
   const { rounds, roundFrames, msPerFrame } = replay;
+  const legs = approachLegs();
+  let cameraBearing: number | null = null;
   const roundMs = roundFrames * msPerFrame;
   const fixStepMeters = (SPEED_MPS * roundMs) / 1000;
   const puck: PuckFrame[] = [];
@@ -299,18 +328,34 @@ function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraF
       const bearingAlpha = 1 - Math.exp(-Math.max(dt, 0) / 0.35);
       displayedBearing = easeAngle(displayedBearing ?? bearing, bearing, bearingAlpha);
       puck.push({ lng: point[0], lat: point[1], rotation: displayedBearing });
+      // The camera aims a few seconds along the route, with its own filter.
+      const cameraTarget =
+        lookAheadBearing(geometry, cum, displayed, lookAheadMeters(SPEED_MPS)) ?? bearing;
+      cameraBearing = easeAngle(cameraBearing ?? cameraTarget, cameraTarget, bearingAlpha);
 
       if (now < SETTLE_UNTIL) {
         lastCam = null;
       } else {
         // Approach window active throughout the replay (driving, 100 m out):
-        // the zoom target is boosted one level above the speed zoom and the
-        // pitch leans in, both eased with their own time constants.
-        const approaching = true;
+        // the zoom target pushes in from the speed zoom until the maneuver's
+        // legs fit (capped at 17.5) and the pitch leans in, both eased with
+        // their own time constants.
         const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / 1.6);
-        const zoomTarget = approaching
-          ? Math.min(targetZoomForSpeed(SPEED_MPS) + 1.0, 17.5)
-          : targetZoomForSpeed(SPEED_MPS);
+        const plain = speedZoom(SPEED_MPS, "2d");
+        const zoomTarget = approachTargetZoom(
+          plain,
+          junctionFitZoom({
+            legs,
+            center: point,
+            bearing: cameraBearing,
+            pitch: displayedPitch,
+            viewport: frameTarget.viewport,
+            padding: frameTarget.padding,
+            maxZoom: 17.5,
+          }),
+          17.5,
+        );
+        const approaching = true;
         displayedZoom = displayedZoom + (zoomTarget - displayedZoom) * zAlpha;
         const tAlpha = 1 - Math.exp(-Math.max(dt, 0) / 1.0);
         displayedPitch = displayedPitch + ((approaching ? 60 : 55) - displayedPitch) * tAlpha;
@@ -318,20 +363,20 @@ function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraF
           !lastCam ||
           Math.abs(point[0] - lastCam.lng) > 1e-6 ||
           Math.abs(point[1] - lastCam.lat) > 1e-6 ||
-          Math.abs(((displayedBearing - lastCam.bearing + 540) % 360) - 180) > 0.05 ||
+          Math.abs(((cameraBearing - lastCam.bearing + 540) % 360) - 180) > 0.05 ||
           Math.abs(displayedZoom - lastCam.zoom) > 0.004 ||
           Math.abs(displayedPitch - lastCam.pitch) > 0.2;
         if (moved) {
           camera.push({
             frame,
             center: [point[0], point[1]],
-            bearing: displayedBearing,
+            bearing: cameraBearing,
             zoom: displayedZoom,
           });
           lastCam = {
             lng: point[0],
             lat: point[1],
-            bearing: displayedBearing,
+            bearing: cameraBearing,
             zoom: displayedZoom,
             pitch: displayedPitch,
           };
@@ -474,7 +519,12 @@ describe("useNavCamera moving replay", () => {
       const beforeSetters = harness.marker().setLngLatCount;
       const beforeRequests = harness.frames.requests();
       const actual = runMovingReplay(harness, replay);
-      const expected = modelMovingReplay(replay);
+      const expected = modelMovingReplay(
+        replay,
+        getCameraFrameTarget(
+          harness.fake.map as unknown as Parameters<typeof getCameraFrameTarget>[0],
+        ),
+      );
       const total = replay.rounds * replay.roundFrames;
       expect(actual.puck).toHaveLength(total);
       expect(actual.puck).toEqual(expected.puck);
@@ -1037,13 +1087,29 @@ describe("useNavCamera approach camera", () => {
     return fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").at(-1)?.options;
   }
 
-  it("tilts to the approach pitch and boosts the zoom inside the approach window", async () => {
+  it("approach zoom fits the junction legs between speed zoom and 17.5", async () => {
     const harness = await mountNavCamera();
     applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
-    harness.frames.flush(240, FRAME_MS);
+    // Long enough for the pitch (τ 1 s) and zoom (τ 1.6 s) to converge.
+    harness.frames.flush(900, FRAME_MS);
     const options = lastJump(harness.fake);
     expect(options?.pitch).toBeGreaterThan(59);
-    expect(options?.zoom).toBeGreaterThan(PLAIN_ZOOM + 0.5);
+    const frame = getCameraFrameTarget(
+      harness.fake.map as unknown as Parameters<typeof getCameraFrameTarget>[0],
+    );
+    const fit = junctionFitZoom({
+      legs: approachLegs(),
+      center: options?.center as LngLat,
+      bearing: options?.bearing as number,
+      pitch: options?.pitch as number,
+      viewport: frame.viewport,
+      padding: frame.padding,
+      maxZoom: 17.5,
+    });
+    const expected = approachTargetZoom(speedZoom(APPROACH_SPEED, "2d"), fit, 17.5);
+    expect(expected).toBeGreaterThan(PLAIN_ZOOM);
+    expect(options?.zoom).toBeCloseTo(expected, 1);
+    expect(options?.zoom).toBeLessThanOrEqual(17.5);
   });
 
   it("keeps the plain driving pose far from the maneuver", async () => {
@@ -1188,5 +1254,77 @@ describe("useNavCamera approach camera", () => {
     harness.frames.flush(40, FRAME_MS);
     const firstJump = harness.fake.state.cameraTransitions.find((t) => t.method === "jumpTo");
     expect(firstJump?.options.pitch).toBe(60);
+  });
+});
+
+describe("useNavCamera look-ahead and junction framing", () => {
+  // 38 m before the bend at 668 m, where the route turns from east to north-east.
+  const BEFORE_BEND = 630;
+
+  function jumps(fake: FakeMap) {
+    return fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
+  }
+
+  it("driving camera bearing leads into a bend while the puck keeps the local bearing", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(BEFORE_BEND, SPEED_MPS, 3000);
+    harness.frames.flush(240, FRAME_MS);
+    const cameraBearing = jumps(harness.fake).at(-1)?.options.bearing as number;
+    const puckBearing = harness.marker().rotation;
+    // The puck still points along the eastbound segment; the camera already
+    // aims into the north-eastbound one ahead.
+    expect(puckBearing).toBeCloseTo(90, 0);
+    expect(cameraBearing).toBeLessThan(puckBearing - 5);
+  });
+
+  it.each(["walking", "cycling"] as const)("%s keeps the local bearing", async (mode) => {
+    const harness = await mountNavCamera({ startNavigation: false });
+    act(() => {
+      useNavigationStore.getState().startGroundNavigation(route, mode, [
+        [0, 0],
+        [0.02, 0.003],
+      ]);
+      useNavigationStore.getState().applyProgress(makeProgress(BEFORE_BEND, 1.4, 3000));
+    });
+    harness.frames.flush(240, FRAME_MS);
+    const cameraBearing = jumps(harness.fake).at(-1)?.options.bearing as number;
+    expect(cameraBearing).toBeCloseTo(harness.marker().rotation, 1);
+  });
+
+  it("north-up ignores the look-ahead", async () => {
+    useSettingsStore.setState({ mapNorthUp: true });
+    const harness = await mountNavCamera();
+    applyApproachFix(BEFORE_BEND, SPEED_MPS, 3000);
+    harness.frames.flush(240, FRAME_MS);
+    expect(jumps(harness.fake).at(-1)?.options.bearing).toBe(0);
+    expect(harness.marker().rotation).toBeCloseTo(90, 0);
+  });
+
+  it("a manual zoom disables framing", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 30, 200);
+    harness.frames.flush(60, FRAME_MS);
+    act(() => harness.fake.emit("zoomstart", {}));
+    harness.frames.flush(60, FRAME_MS);
+    const before = jumps(harness.fake).length;
+    applyApproachFix(START_ALONG + 30, 30, 170);
+    harness.frames.flush(240, FRAME_MS);
+    const after = jumps(harness.fake).slice(before);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.every((jump) => jump.options.zoom === undefined)).toBe(true);
+  });
+
+  it("a reroute inside the approach window starts framing for the new route", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 30, 200);
+    harness.frames.flush(300, FRAME_MS);
+    const rerouted = { ...route, distance: routeLengthMeters + 1 } as Route;
+    act(() => {
+      useNavigationStore.getState().applyReroute(rerouted);
+      useNavigationStore.getState().applyProgress(makeProgress(START_ALONG, 30, 200));
+    });
+    harness.frames.flush(900, FRAME_MS);
+    const zoom = jumps(harness.fake).at(-1)?.options.zoom as number;
+    expect(zoom).toBeGreaterThan(speedZoom(30, "2d") + 0.3);
   });
 });
