@@ -259,6 +259,52 @@ describe("LandmarkModelsLayer", () => {
     expect(fake.state.layers.has(LAYER_ID)).toBe(false);
   });
 
+  it("landmarks render during 3D navigation", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => {
+      useNavigationStore.setState({ status: "navigating" });
+      useNavigationSceneStore.getState().setActive(true);
+    });
+    await activate();
+    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(false);
+      useNavigationStore.setState({ status: "idle" });
+    });
+  });
+
+  it("landmarks stay off during 2D navigation", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    await activate();
+    expect(fake.state.layers.has(LAYER_ID)).toBe(false);
+    act(() => useNavigationStore.setState({ status: "idle" }));
+  });
+
+  it("taps do nothing while navigating", async () => {
+    render(<LandmarkModelsLayer />);
+    act(() => {
+      useNavigationStore.setState({ status: "navigating" });
+      useNavigationSceneStore.getState().setActive(true);
+    });
+    await activate();
+    act(() => sceneMock.options?.onFrame(["landmark-models-open-landmarks:arc"]));
+    sceneMock.pick = "landmark-models-open-landmarks:arc";
+    act(() =>
+      fake.emit("click", {
+        target: fake.map,
+        point: { x: 10, y: 10 },
+        lngLat: { lng: 2.2945, lat: 48.8584 },
+        originalEvent: new MouseEvent("click"),
+      }),
+    );
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    act(() => {
+      useNavigationSceneStore.getState().setActive(false);
+      useNavigationStore.setState({ status: "idle" });
+    });
+  });
+
   it("does not import the scene module until first active", async () => {
     render(<LandmarkModelsLayer />);
     await flush();

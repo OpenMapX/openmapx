@@ -124,7 +124,10 @@ export function LandmarkModelsLayer(): null {
   const [scene, setScene] = useState<LandmarkScene | null>(null);
   const sceneRef = useRef<LandmarkScene | null>(null);
   sceneRef.current = scene;
-  const active = selected && cameraReady && !navigating && maskingAvailable && !unsupported;
+  // During navigation only the 3D navigation view draws landmarks.
+  const sceneActive = useNavigationSceneStore((s) => s.active);
+  const active =
+    selected && cameraReady && (!navigating || sceneActive) && maskingAvailable && !unsupported;
 
   const catalogue = useMemo(() => new LandmarkCatalogue({ apiUrl }), [apiUrl]);
   const byId = useRef(new Map<string, Candidate>());
@@ -349,7 +352,8 @@ export function LandmarkModelsLayer(): null {
 
   // Models swallow clicks (no pin under a model) and open the replaced building.
   useEffect(() => {
-    if (!map || !mapReady || !scene || !active) return;
+    // While navigating, models are scenery: a tap goes to the map as usual.
+    if (!map || !mapReady || !scene || !active || navigating) return;
     const unregister = registerCustomMapHitTester(
       map,
       OWNER,
@@ -377,7 +381,7 @@ export function LandmarkModelsLayer(): null {
       unregister();
       map.off("click", onClick);
     };
-  }, [map, mapReady, scene, active]);
+  }, [map, mapReady, scene, active, navigating]);
 
   // The shared pipeline owns the cursor; overlays with rendered hits rank above.
   useMapOverlayInteraction({
