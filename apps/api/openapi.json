@@ -120660,6 +120660,23 @@
         "x-openmapx-source": "integrations/routing/index.ts"
       }
     },
+    "/api/integrations/routing/navigation/landmarks": {
+      "post": {
+        "operationId": "postApiIntegrationsRoutingNavigationLandmarks",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /navigation/landmarks (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
     "/api/integrations/search-nlp/parse": {
       "post": {
         "operationId": "postApiIntegrationsSearchNlpParse",

@@ -46,6 +46,15 @@ import {
   buildNavigationAlertsQuery,
   mapAlertElements,
 } from "./navigation-alerts.js";
+import {
+  buildLandmarksQuery,
+  LANDMARK_CACHE_TTL_SECONDS,
+  type LandmarkPointResult,
+  landmarkCacheKey,
+  mapLandmarkElements,
+  type OverpassLandmarkElement,
+  parseLandmarkPoints,
+} from "./navigation-landmarks.js";
 import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
 import { avoidPlannedClosures, plannedClosureImpact } from "./planned-closures.js";
 import { routingChainError, sendRoutingAdmissionDenied } from "./provider-admission.js";
@@ -907,6 +916,56 @@ export function setup(ctx: IntegrationContext): void {
       });
     } catch {
       reply.send({ junctions: points.map((_point, index) => ({ index, ...unavailable() })) });
+    }
+  });
+
+  /**
+   * POST /navigation/landmarks — landmarks near manoeuvre points that a voice
+   * prompt may name ("At the Aral petrol station, turn left"). Same flow as the
+   * junctions route: one shared Overpass query for the uncached points, a week
+   * of cache per point, and `unavailable: true` with nothing cached when
+   * Overpass fails or answers with a `remark`.
+   */
+  ctx.registerRoute("POST", "/navigation/landmarks", async (req, reply) => {
+    const points = parseLandmarkPoints(req.body);
+    if (!points) {
+      reply.status(400).send({ error: "body must be { points: [...] } with 1–40 valid points" });
+      return;
+    }
+    const unavailable = (): LandmarkPointResult => ({ candidates: [], unavailable: true });
+    try {
+      const keys = points.map(landmarkCacheKey);
+      const cached = await Promise.all(keys.map((key) => ctx.cache.get<LandmarkPointResult>(key)));
+      const missing = points.flatMap((point, index) =>
+        cached[index] ? [] : [{ point, index, key: landmarkCacheKey(point) }],
+      );
+      const fetched = new Map<number, LandmarkPointResult>();
+      if (missing.length > 0) {
+        const writer = await captureCacheWriter(ctx.cache);
+        const data = await overpassQuerySafe(
+          buildLandmarksQuery(missing.map((entry) => entry.point)),
+          null,
+        );
+        if (data && !data.remark) {
+          const elements = (data.elements ?? []) as OverpassLandmarkElement[];
+          await Promise.all(
+            missing.map(async ({ point, index, key }) => {
+              const result: LandmarkPointResult = {
+                candidates: mapLandmarkElements(elements, point),
+              };
+              fetched.set(index, result);
+              await writer.set(key, result, LANDMARK_CACHE_TTL_SECONDS);
+            }),
+          );
+        }
+      }
+      reply.send({
+        results: points.map(
+          (_point, index) => cached[index] ?? fetched.get(index) ?? unavailable(),
+        ),
+      });
+    } catch {
+      reply.send({ results: points.map(() => unavailable()) });
     }
   });
 

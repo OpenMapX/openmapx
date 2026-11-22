@@ -116,6 +116,8 @@ export {
   type JunctionFitInput,
   junctionFitZoom,
   junctionLookupPoints,
+  type LandmarkCandidate,
+  type LandmarkCandidateCategory,
   type LandmarkReference,
   type LaneStep,
   laneArrowStemShift,

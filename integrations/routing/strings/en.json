@@ -1,1 +1,16 @@
-{ "name": "Routing", "description": "Point-to-point routing and directions" }
+{
+  "name": "Routing",
+  "description": "Point-to-point routing and directions",
+  "dataSources": {
+    "overpass": {
+      "purpose": "OpenStreetMap road and place data for turn-by-turn navigation: approach alerts (speed cameras, stop and give-way signs, crossings), lane guidance at motorway junctions, and landmarks named in voice prompts",
+      "dataSent": "Overpass QL queries built from the route: bounding boxes along the route for alerts, short route traces near motorway decision points for lane guidance, and manoeuvre points for landmarks. Sent from the OpenMapX server without any user identifier",
+      "dataReceived": "OSM nodes and ways with their tags and coordinates (traffic signs, crossings, lane tags, fuel stations, places of worship, pharmacies, supermarkets, fast-food brands)"
+    },
+    "overpass-kumi": {
+      "purpose": "Rate-limit fallback Overpass mirror (Kumi Systems e.U., Austria) for the navigation alerts, lane guidance and landmark lookups, used only when the primary Overpass endpoint is rate-limited or unavailable",
+      "dataSent": "The same Overpass QL queries as for the primary endpoint (route bounding boxes, route traces near motorway decision points, manoeuvre points), sent server-side only when the primary endpoint is unavailable",
+      "dataReceived": "OSM nodes and ways with their tags and coordinates"
+    }
+  }
+}
