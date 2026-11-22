@@ -31,7 +31,6 @@
 
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -73,38 +72,57 @@ import type { CommandRunner, StageName } from "../../src/jobs/transitous/types.j
 import { StateStore } from "../../src/state.js";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs.js";
 
-const fixtureOpsState = vi.hoisted(() => ({
-  gbfsLock: {
-    commit: "1".repeat(40),
-    url: "https://example.test/unconfigured-e9-registry.csv",
-    sha256: "0".repeat(64),
-    lockedAt: "2026-07-15T00:00:00.000Z",
-    lockedBy: "e9-fixture",
-  },
-}));
+const fixtureOpsState = vi.hoisted(() => {
+  const registryCommit = "1".repeat(40);
+  return {
+    transitousLock: {
+      ref: `main@${"a".repeat(40)}`,
+      submodules: {},
+      lockedAt: "2026-07-15T00:00:00.000Z",
+      lockedBy: "e9-fixture",
+    },
+    gbfsLock: {
+      schemaVersion: 1 as const,
+      source: "mobilitydata-gbfs" as const,
+      commit: registryCommit,
+      url: `https://raw.githubusercontent.com/MobilityData/gbfs/${registryCommit}/systems.csv`,
+      sha256: "0".repeat(64),
+      lockedAt: "2026-07-15T00:00:00.000Z",
+      lockedBy: "e9-fixture",
+    },
+  };
+});
+
+// The pipeline's agent phases need a durable data execution in production. This
+// canary drives the stages directly, so it uses the same stage collaborator as
+// the stage unit tests: each phase becomes the typed operation the agent runs
+// for it, which the fake agent below executes against the fixture containers.
+// Durable ownership itself is covered by the Postgres-backed execution suites.
+vi.mock("../../src/jobs/transitous/owned-ops.js", async () => {
+  const original = await vi.importActual<typeof import("../../src/jobs/transitous/owned-ops.js")>(
+    "../../src/jobs/transitous/owned-ops.js",
+  );
+  return { ...original, ...(await import("../helpers/owned-transit-unit.js")) };
+});
 
 // Production routes host mutations through the private operations agent. This
 // isolated canary deliberately owns its four disposable containers, so model
 // the same typed boundary while executing those narrowly-scoped effects against
-// the fixture containers. Catalog pins are returned through the inspect
-// operations exactly as they are in production; no production guard is bypassed.
+// the fixture containers. The paired catalog pins are returned the way the agent
+// returns them; no production guard is bypassed.
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(
     async (operation: { kind: string; candidateId?: string; preparedRunId?: string }) => {
       const { execa: run } = await import("execa");
       switch (operation.kind) {
-        case "transitousLock.inspect":
-          return {
-            active: {
-              ref: `main@${"a".repeat(40)}`,
-              submodules: {},
-              lockedAt: "2026-07-15T00:00:00.000Z",
-              lockedBy: "e9-fixture",
-            },
-            proposed: null,
-          };
-        case "gbfsCatalogLock.inspect":
-          return { ...fixtureOpsState.gbfsLock };
+        case "catalogPins.inspect": {
+          const { createCatalogPinSet } = await import("@openmapx/core/catalog-pins");
+          const active = createCatalogPinSet(
+            fixtureOpsState.transitousLock,
+            fixtureOpsState.gbfsLock,
+          );
+          return { active, catalogRevisionId: active.generationId };
+        }
         case "motis.staging.restart":
           await run("docker", ["restart", "motis-staging"], { stdio: "pipe" });
           return { changed: true };
@@ -220,15 +238,17 @@ async function dockerDaemonReachable(): Promise<boolean> {
 /**
  * One MOTIS compose service mirroring the production manifests: pinned
  * `container_name` (the pipeline addresses it by bare name via the docker CLI),
- * a plain writable bind-mount of a pipeline-owned dir, and a wait-for-config
- * command so the container doesn't crash-loop on an empty dir before the
- * pipeline assembles/promotes one — exactly the manifests' command.
+ * the invoking user's uid:gid, a plain writable bind-mount of a pipeline-owned
+ * dir, and a wait-for-config command so the container doesn't crash-loop on an
+ * empty dir before the pipeline assembles/promotes one — exactly the manifests'
+ * command.
  */
 function motisService(name: string, hostPort: number, hostDataDir: string): string[] {
   return [
     `  ${name}:`,
     `    image: ${MOTIS_IMAGE}`,
     `    container_name: ${name}`,
+    `    user: "${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}"`,
     "    working_dir: /motis-data",
     '    entrypoint: ["/bin/sh", "-c"]',
     '    command: ["until [ -f /motis-data/config.yml ]; do sleep 2; done; /motis import && /motis server || { echo failed; while true; do sleep 3600; done; }"]',
@@ -611,17 +631,10 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     mkdirSync(stagingDataDir, { recursive: true });
     mkdirSync(motisDataDir, { recursive: true });
     mkdirSync(join(dataDir, "motis-feed-proxy", "conf"), { recursive: true });
-    // MOTIS runs as `uid=100(motis)` and imports IN PLACE — it writes the compiled
-    // timetable (`data/tt.bin`, …) into the mounted dir. On a native Linux bind
-    // mount (CI) these dirs stay owned by the host runner user (uid 1001, mode
-    // 755), so the container's `motis` user can't write and `motis import` dies
-    // with "basic_ios::clear: iostream error". macOS Docker Desktop hides this by
-    // remapping bind-mount ownership to the container user; production's deploy
-    // step pre-creates the bind dirs container-writable. Replicate that here so a
-    // real cross-uid write is possible — otherwise the canary fails on the runner
-    // for a reason that never reaches production.
-    chmodSync(stagingDataDir, 0o777);
-    chmodSync(motisDataDir, 0o777);
+    // MOTIS imports IN PLACE: it writes the compiled timetable (`data/tt.bin`, …)
+    // into the mounted dir. As in production, both containers run as the user
+    // that owns these dirs (see motisService), so the dirs keep their default
+    // mode; the candidate manifest refuses a group- or world-writable staging dir.
 
     // Build the tiny GTFS fixtures into a sibling dir so the catalog's
     // file:// urls can reference them without leaking host-specific paths
@@ -698,29 +711,12 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       )}\n`,
     );
 
-    const registryCommit = "1".repeat(40);
+    // The agent pins the registry by commit and hash; the GBFS compiler refuses
+    // a download whose hash differs from the pin.
     gbfsRegistryCsv =
       `Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n` +
       `DE,OpenMapX E9 Rentals,Berlin,openmapx-e9-rentals,https://openmapx.example.test/e9,${gbfsBaseUrl}/gbfs.json,2.3,\n`;
-    fixtureOpsState.gbfsLock.url = `https://raw.githubusercontent.com/MobilityData/gbfs/${registryCommit}/systems.csv`;
     fixtureOpsState.gbfsLock.sha256 = createHash("sha256").update(gbfsRegistryCsv).digest("hex");
-    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
-    writeFileSync(
-      join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          source: "mobilitydata-gbfs",
-          commit: registryCommit,
-          url: `https://raw.githubusercontent.com/MobilityData/gbfs/${registryCommit}/systems.csv`,
-          sha256: createHash("sha256").update(gbfsRegistryCsv).digest("hex"),
-          lockedAt: "2026-07-15T00:00:00.000Z",
-          lockedBy: "e9-fixture",
-        },
-        null,
-        2,
-      )}\n`,
-    );
 
     composeFile = writeStagingCompose(dataDir, stagingDataDir, motisDataDir, gbfsFixtureDir);
     // Clean slate. `compose down` only reaps containers in THIS run's project; a
