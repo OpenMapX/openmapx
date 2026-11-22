@@ -158,13 +158,12 @@ pnpm openmapx services build osrm --region europe/germany
 The build prepares files, records provenance, renders configuration, and applies
 hardlinks. Stop **all** consumers before building or importing:
 
-| Build target | Consumers that must be stopped                                | Output below `data/`               |
-| ------------ | ------------------------------------------------------------- | ---------------------------------- |
-| `osrm`       | `osrm`                                                        | `osrm-graph/`                      |
-| `otp`        | `otp`                                                         | `otp-graph/`                       |
-| `pelias`     | `pelias`, `pelias-pip`, `pelias-placeholder`, `elasticsearch` | `pelias/`                          |
-| `tileserver` | `tileserver`                                                  | `tile-mbtiles/`                    |
-| `motis`      | `motis`, `motis-staging`                                      | `motis/live/`, `motis-feed-proxy/` |
+| Build target | Consumers that must be stopped                                | Output below `data/` |
+| ------------ | ------------------------------------------------------------- | -------------------- |
+| `osrm`       | `osrm`                                                        | `osrm-graph/`        |
+| `otp`        | `otp`                                                         | `otp-graph/`         |
+| `pelias`     | `pelias`, `pelias-pip`, `pelias-placeholder`, `elasticsearch` | `pelias/`            |
+| `tileserver` | `tileserver`                                                  | `tile-mbtiles/`      |
 
 For example:
 
@@ -181,8 +180,9 @@ detail (see [Self-hosting map tiles](../guides/map-tiles.md#street-detail)). Bud
 including both Pelias Elasticsearch indexes. OSRM skips an unchanged input/image/
 profile/traffic build. Other build targets do not all share that cache behavior.
 
-MOTIS's low-level build prepares initial/off-host data in place; `--import` also
-runs the runtime import. It is distinct from transactional live transit sync.
+MOTIS has no build target: the managed transit sync acquires its feeds, imports
+and probes a candidate and promotes it, including the first dataset on a fresh
+installation (see [Self-hosting transit engines](../guides/transit-engines.md)).
 Valhalla, Nominatim, and Overpass import within their service containers; they
 have no CLI build hook.
 
@@ -195,7 +195,7 @@ set `NOMINATIM_REPLICATION_URL` to that feed and `NOMINATIM_UPDATE_MODE` to
 at the import's date. For Overpass set `OVERPASS_DIFF_URL`. See
 [Configuration](./configuration.md) for each setting.
 
-`services build-all --region europe/germany` currently plans OSRM, OTP, MOTIS,
+`services build-all --region europe/germany` currently plans OSRM, OTP,
 Pelias, and TileServer GL even when only one is selected. It continues after
 individual failures unless given `--fail-fast`. Explicit `services build <ids>`
 stops on the first failure unless given `--continue-on-error`. Inspect failures
@@ -325,17 +325,15 @@ invocation directory.
 | `pelias`     | `pelias/`, including Elasticsearch     | `openstreetmap/` input                              |
 | `motis`      | Portable compiled candidate and recipe | Credentials and generated proxy/configuration files |
 
-MOTIS export requires a retained portable recipe and compiled candidate from a
-build performed with `--import`, tied to the runtime image. The destination needs
-the same approved paired catalog pins and required managed credentials. Import
-materializes private configuration offline from destination secrets, preserves
-slot aliases and does not inherit the source's successful health check. Stop both
-MOTIS slots on each host:
-
-```bash
-pnpm openmapx services build motis --region europe/germany --import
-pnpm openmapx data export motis motis-germany.tar
-```
+MOTIS is built in place for now: run the transit sync on the serving host.
+Exporting a candidate that transit sync promoted is planned; until then,
+`data export motis` works only for MOTIS data that was itself imported from a
+bundle, because transit sync writes no build record. A MOTIS bundle carries a
+portable recipe and compiled candidate tied to the runtime image. The destination
+needs the same approved paired catalog pins and required managed credentials.
+Import materializes private configuration offline from destination secrets,
+preserves slot aliases and does not inherit the source's successful health
+check. Stop both MOTIS slots on each host.
 
 Valhalla, Nominatim, and Overpass have no supported artifact-bundle workflow.
 Import applies the already-current generation's hardlink plan without rendering,
@@ -362,11 +360,12 @@ pnpm openmapx data update europe/germany --countries de --fail-fast
 ```
 
 This downloads OSM, queues a transit sync, downloads glyphs, builds all installed
-prepared-artifact targets, renders, and links. The transit job is asynchronous;
-this command is not a wait-for-promotion operation. It does not stop or restart
-consumers, filter builds to selected engines, or convert Overpass input. It can
-fail if any planned consumer is running, including MOTIS while the queued sync
-is active. Prefer the targeted procedures above for routine operating updates.
+prepared-artifact targets, renders, and links. The transit sync is the step that
+refreshes MOTIS; the build phase does not touch it. The transit job is
+asynchronous; this command is not a wait-for-promotion operation. It does not
+stop or restart consumers, filter builds to selected engines, or convert
+Overpass input. It can fail if any planned consumer is running. Prefer the
+targeted procedures above for routine operating updates.
 
 ## Cleaning up
 

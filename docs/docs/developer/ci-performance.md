@@ -128,7 +128,7 @@ digest. Hosts then neither download nor restart that service.
 
 In the recorded 200-main-commit planner replay, the same planner rules would have
 rebuilt ops-agent 106 times instead of 139, transitous-runner 97 instead of 121,
-data-manager 118 instead of 130, and transitous-tools 10 instead of 18. API and web include every integration and change
+and data-manager 118 instead of 130. API and web include every integration and change
 in most commits anyway. Most remaining rebuilds come from `packages/core`: every
 image uses it, and ops-agent's CLI imports its barrel, which reaches about 1,000
 of its files. File-level inputs would mostly help transitous-runner, which reaches

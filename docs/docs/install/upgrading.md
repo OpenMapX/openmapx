@@ -28,9 +28,8 @@ unchanged; a release selection renders a new configuration that pins the release
 images but does not replace containers.
 Both operations are followed by an explicit service update.
 
-Application release metadata selects six digest-pinned images, including the
-running API, web, data-manager, ops-agent, and Transitous runner plus matching
-helper images. Some digests can be reused from an earlier release. Do not infer
+Application release metadata selects five digest-pinned images: the API, web,
+data-manager, ops-agent and Transitous runner. Some digests can be reused from an earlier release. Do not infer
 the selected release from one image's source revision or a mutable tag. See
 [Product releases](../developer/product-releases.md) for publication and security
 scan behavior.

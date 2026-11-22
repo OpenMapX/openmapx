@@ -352,11 +352,11 @@ stack. Use `--continue-on-error` (on `build`) or `--fail-fast` (on `build-all`)
 to control behavior when one service's build fails.
 
 `services build-all` builds every installed service declaring a build command,
-including engines outside your selection. It currently plans OSRM, OTP, MOTIS,
+including engines outside your selection. It currently plans OSRM, OTP,
 Pelias, and TileServer GL in that order. Prefer explicit IDs for a small deployment.
 Builds refuse running consumers; [Preparing data](./preparing-data.md#building-prepared-artifacts)
-lists the consumers to stop. MOTIS operating-dataset updates use transactional
-sync instead of the low-level build.
+lists the consumers to stop. MOTIS has no build: the transactional transit sync
+builds, probes and promotes its data.
 
 The source data those builds consume (OSM
 extracts, GTFS feeds, map glyphs) is downloaded and refreshed separately. See
@@ -661,7 +661,9 @@ reconcile that generation before starting them. Partial or unknown outcomes stay
 visible in Activity and retain their original ownership; retrying observation does
 not repeat publication.
 
-MOTIS export requires a retained portable recipe and compiled candidate. Source
+MOTIS export requires a retained portable recipe, a compiled candidate and a
+build record. Transit sync does not write that record yet, so only MOTIS data
+that was itself imported from a bundle can be exported for now. Source
 credentials and generated proxy configuration are excluded from the bundle. The
 destination must have the same approved catalog pins and all required managed feed
 credentials; the preview lists credential identifiers without their values. Host

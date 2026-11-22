@@ -97,9 +97,9 @@ go. Choose the action first; its Build or Update options appear alongside it.
 a separate review with a captured list of enabled, buildable services and its build
 options. Confirmation submits those exact IDs; a later inventory refresh cannot add
 new targets to the request. Updates offer **without dependency recreation**, corresponding to `--no-deps`.
-Builds take an optional region, a "continue on errors" toggle, and MOTIS-only import
-(`--import`) for a selected MOTIS build or Build All with enabled, buildable MOTIS.
-Other actions cannot carry these options. Whole-stack starts explicitly name the
+Builds take an optional region and a "continue on errors" toggle. Other actions
+cannot carry these options. MOTIS is not buildable here: **Data → Transit →
+Sources → Review transit sync** builds, probes and promotes its data. Whole-stack starts explicitly name the
 frozen generated service closure, so they never create a service the generation
 does not enable. Each
 action is queued as a background job — the toast names the job id, and the

@@ -647,8 +647,8 @@ is checked again with a back-off from 5 to 60 seconds.
 ## Release pins and rollback
 
 A generation renders the image of every release service (`api`, `web`,
-`data-manager`, `ops-agent`, `transitous-runner`) and data-manager's Transitous
-tools image from one release manifest, and keeps that canonical manifest as
+`data-manager`, `ops-agent`, `transitous-runner`) from one release manifest, and
+keeps that canonical manifest as
 `release-manifest.json`; its SHA-256 is the release's identity. A render that names
 no release keeps the applied generation's pins. A release update's maintenance
 commits the generation with the release it froze, then the helper verifies the
