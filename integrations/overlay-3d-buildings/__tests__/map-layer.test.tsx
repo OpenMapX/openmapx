@@ -272,29 +272,15 @@ describe("BuildingExtrusionLayer", () => {
       act(() => useNavigationStore.setState({ status: "idle" }));
     });
 
-    it("navigation scene uses the z15.5–16 fade and min zoom", () => {
+    it("navigation scene keeps the browsing z16.5–17 fade", () => {
+      // An earlier fade in 3D navigation (from z15.5) kept the phone too busy
+      // for a 30-minute drive, so navigation fades buildings in as browsing does.
       render(<BuildingExtrusionLayer />);
       act(() => useNavigationSceneStore.getState().setActive(true));
       const extrusion = fake.state.layers.get(LAYER_ID) as { minzoom?: number };
       const contact = fake.state.layers.get(CONTACT_LAYER_ID) as { minzoom?: number };
-      expect(extrusion.minzoom).toBe(15.5);
-      expect(contact.minzoom).toBe(15.5);
-      expect(fake.state.paint.get(LAYER_ID)?.["fill-extrusion-opacity"]).toEqual([
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        15.5,
-        0,
-        16,
-        1,
-      ]);
-    });
-
-    it("leaving the scene restores the z16.5 fade", () => {
-      render(<BuildingExtrusionLayer />);
-      act(() => useNavigationSceneStore.getState().setActive(true));
-      act(() => useNavigationSceneStore.getState().setActive(false));
-      expect((fake.state.layers.get(LAYER_ID) as { minzoom?: number }).minzoom).toBe(16.5);
+      expect(extrusion.minzoom).toBe(16.5);
+      expect(contact.minzoom).toBe(16.5);
       expect(fake.state.paint.get(LAYER_ID)?.["fill-extrusion-opacity"]).toEqual([
         "interpolate",
         ["linear"],

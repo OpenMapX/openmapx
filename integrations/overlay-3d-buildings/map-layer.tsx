@@ -66,7 +66,7 @@ function addExtrusionLayer(
   source: string,
   sourceLayer: string,
 ): void {
-  const minZoom = currentMinZoom();
+  const minZoom = MIN_ZOOM;
   const layer = {
     id: LAYER_ID,
     type: "fill-extrusion",
@@ -90,35 +90,8 @@ function addExtrusionLayer(
 
 const EXTRUSION_ORDER = 5;
 const CONTACT_ORDER = 4.5;
-// 3D navigation drives at z16–17 in town, where the browsing fade (z16.5→17)
-// would leave the buildings half drawn; it fades them in a level earlier.
-const NAVIGATION_MIN_ZOOM = 15.5;
-
-function currentMinZoom(): number {
-  return useNavigationSceneStore.getState().active ? NAVIGATION_MIN_ZOOM : MIN_ZOOM;
-}
-
 function extrusionOpacity(minZoom: number): maplibregl.ExpressionSpecification {
   return ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, 1];
-}
-
-/** Move the existing layers' zoom range and fade to the current scene's. */
-function applyZoomFade(map: maplibregl.Map): void {
-  const minZoom = currentMinZoom();
-  if (map.getLayer(LAYER_ID)) {
-    map.setLayerZoomRange(LAYER_ID, minZoom, 24);
-    map.setPaintProperty(LAYER_ID, "fill-extrusion-opacity", extrusionOpacity(minZoom));
-  }
-  if (map.getLayer(CONTACT_LAYER_ID)) {
-    const basemap = findBuildingSourceReference(map);
-    const roof = basemap ? findBuildingRoofColor(map, basemap) : null;
-    map.setLayerZoomRange(CONTACT_LAYER_ID, minZoom, 24);
-    map.setPaintProperty(
-      CONTACT_LAYER_ID,
-      "line-opacity",
-      contactShadowPaint(roof, minZoom)?.["line-opacity"],
-    );
-  }
 }
 
 /** Above the route during 3D navigation, with the other area overlays otherwise. */
@@ -133,10 +106,10 @@ function addContactLayer(map: maplibregl.Map, basemap: BuildingSourceReference):
     type: "line",
     source: basemap.source,
     "source-layer": basemap.sourceLayer,
-    minzoom: currentMinZoom(),
+    minzoom: MIN_ZOOM,
     filter: ["!=", ["get", "hide_3d"], true],
     layout: { visibility: extrusionVisibility(map) },
-    paint: contactShadowPaint(findBuildingRoofColor(map, basemap), currentMinZoom()),
+    paint: contactShadowPaint(findBuildingRoofColor(map, basemap), MIN_ZOOM),
   };
   addLayerInSlot(map, layer, currentSceneSlot(), CONTACT_ORDER);
 }
@@ -199,14 +172,6 @@ export function BuildingExtrusionLayer() {
       }),
     [],
   );
-
-  useEffect(() => {
-    void styleVersion;
-    void slot;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    applyZoomFade(map);
-  }, [slot, mapReady, styleVersion, mapRef]);
 
   useEffect(() => {
     void styleVersion;

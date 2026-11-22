@@ -380,7 +380,7 @@ next trips. In 3D:
 - the camera sits lower and closer, tilts further and looks a few seconds ahead
   along the route. Before a turn at a junction it keeps to the street and turns
   with you as you cross the junction;
-- buildings rise from zoom 15.5, and landmarks, street paint, traffic signals
+- buildings rise from zoom 16.5, as outside navigation, and landmarks, street paint, traffic signals
   and stop and give-way signs stand in the scene. The route passes behind
   buildings that stand in front of it and shows faintly through them;
 - the route is drawn at the real width of a lane;
