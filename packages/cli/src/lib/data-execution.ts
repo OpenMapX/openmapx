@@ -32,6 +32,7 @@ import {
   startDataExecution,
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import {
   createControlRootOperationKey,
   normalizeExecutionAdmission,
@@ -282,7 +283,8 @@ export async function runCliDataStep(
           execution: {
             executor: "data-manager",
             principal: "host-cli",
-            executionId: randomUUID(),
+            // Becomes data-manager's job id.
+            executionId: uuidv7(),
             operationKey: controlChildOperationKey(operationKey, "data-step", 0),
           },
         },

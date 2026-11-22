@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { uuidv7 } from "./uuidv7";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The generator keeps the last millisecond and sequence at module level, so
+// every test takes a fresh module and none depends on another's clock.
+let uuidv7: typeof import("./uuidv7").uuidv7;
 
 const FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -8,6 +11,11 @@ function timestampOf(id: string): number {
 }
 
 describe("uuidv7", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ uuidv7 } = await import("./uuidv7"));
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   ACTIVE_REQUEST_STATES,
   acceptsCaseDecision,
@@ -197,7 +196,6 @@ export class PrivacyRequestService {
       const existing = await this.activeRequestFor(parsed.userId, parsed.kind);
       if (existing) return existing;
     }
-    const id = randomUUID();
     const locatorType = parsed.subject?.locatorType ?? "user_id";
     const locatorValue = parsed.subject?.locator ?? parsed.userId;
     if (!locatorValue) throw new PrivacyRequestError("SUBJECT_LOCATOR_REQUIRED", 400);
@@ -229,7 +227,7 @@ export class PrivacyRequestService {
           timeZone: parsed.timeZone,
         })
       : undefined;
-    let resultId: string = id;
+    let resultId: string | undefined;
     try {
       await withPreservationRetentionLock(this.database, async (tx) => {
         if (parsed.idempotencyKey && createDigest) {
@@ -246,7 +244,6 @@ export class PrivacyRequestService {
         const [created] = await tx
           .insert(dataSubjectRequest)
           .values({
-            id,
             kind: parsed.kind,
             channel: parsed.channel,
             userId: parsed.userId,
@@ -272,8 +269,10 @@ export class PrivacyRequestService {
           })
           .returning();
         if (!created) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 500);
+        // The database assigns the request's id.
+        const id = created.id;
+        resultId = id;
         await tx.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
           requestId: id,
           eventType: "received",
           actorKind: selfService ? "subject" : "admin",
@@ -324,7 +323,6 @@ export class PrivacyRequestService {
           const publicCode = `${registration.source}-preservation-action-required`;
           if (operatorTask)
             await tx.insert(dataSubjectRequestTask).values({
-              id: randomUUID(),
               requestId: id,
               registrationId: registration.id,
               source: registration.source,
@@ -334,7 +332,6 @@ export class PrivacyRequestService {
               updatedAt: now,
             });
           await tx.insert(dataSubjectRequestPreservation).values({
-            id: randomUUID(),
             requestId: id,
             registrationId: registration.id,
             sourceCutoffAt: now,
@@ -368,6 +365,7 @@ export class PrivacyRequestService {
       }
       throw error;
     }
+    if (resultId === undefined) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 500);
     return this.getById(resultId);
   }
 
@@ -454,7 +452,6 @@ export class PrivacyRequestService {
       .returning();
     if (!updated) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
     await tx.insert(dataSubjectRequestEvent).values({
-      id: randomUUID(),
       requestId: current.id,
       eventType: `state_${input.to}`,
       actorKind: input.actor.kind,
@@ -690,7 +687,6 @@ export class PrivacyRequestService {
           .returning();
         if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
         await tx.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
           requestId: current.id,
           eventType: "task_resolved",
           actorKind: "admin",
@@ -757,7 +753,6 @@ export class PrivacyRequestService {
           .returning();
         if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
         await tx.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
           requestId: current.id,
           eventType: "extended",
           actorKind: "admin",
@@ -818,7 +813,6 @@ export class PrivacyRequestService {
       request = await this.database.transaction(async (tx) => {
         if (verifying)
           await tx.insert(dataSubjectRequestEvent).values({
-            id: randomUUID(),
             requestId: current.id,
             eventType: "identity_verified",
             actorKind: "subject",
@@ -900,7 +894,6 @@ export class PrivacyRequestService {
   ): Promise<RequestRow> {
     const now = this.now();
     await this.database.insert(dataSubjectRequestEvent).values({
-      id: randomUUID(),
       requestId: request.id,
       eventType,
       actorKind: actor.kind,
@@ -922,7 +915,6 @@ export class PrivacyRequestService {
   /** Record an export failure without identifiers in the payload. */
   async recordExportFailure(requestId: string, reasonCode: string): Promise<void> {
     await this.database.insert(dataSubjectRequestEvent).values({
-      id: randomUUID(),
       requestId,
       eventType: "export_failed",
       actorKind: "system",

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { accountMailOutbox } from "../db/schema";
 import { configuredTrustedWebOrigins } from "../utils/csrf";
 import type { MailOptions } from "../utils/email";
@@ -36,7 +36,8 @@ export async function enqueueCapturedAccountMail(message: MailOptions): Promise<
   if (!owner) return false;
   if (owner.count || message.disclosure?.userId !== owner.userId)
     throw Error("Account mail target changed");
-  const id = randomUUID();
+  // Sealed into the delivery's idempotency key, so it exists before the insert.
+  const id = uuidv7();
   await owner.database.insert(accountMailOutbox).values({
     id,
     requestKey: owner.requestKey,

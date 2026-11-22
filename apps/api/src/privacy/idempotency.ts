@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
@@ -112,7 +112,6 @@ export async function recordIdempotentEvent(
   });
   try {
     await database.insert(dataSubjectRequestEvent).values({
-      id: randomUUID(),
       requestId: input.requestId,
       eventType: input.eventType,
       actorKind: input.actorKind.slice(0, 32),
