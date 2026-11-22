@@ -229,6 +229,26 @@ describe("street paint layer", () => {
       expect(paintFilter() ?? null).toBeNull();
     });
 
+    it("navigation draws the real-width roads from zoom 16, browsing from 16.5", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      const layer = () => fake.state.layers.get(PAINT_LAYER_ID) as { minzoom?: number };
+      expect(layer().minzoom).toBe(16.5);
+      enter3dNavigation();
+      await flush();
+      expect(layer().minzoom).toBe(16);
+      expect(fake.state.paint.get(PAINT_LAYER_ID)?.["fill-opacity"]).toEqual(
+        paintOpacity(1, "navigation"),
+      );
+      act(() => {
+        useNavigationSceneStore.getState().setActive(false);
+        useNavigationStore.setState({ status: "idle" });
+      });
+      await flush();
+      expect(layer().minzoom).toBe(16.5);
+      expect(fake.state.paint.get(PAINT_LAYER_ID)?.["fill-opacity"]).toEqual(paintOpacity(1));
+    });
+
     it("a style swap keeps navigation mode", async () => {
       render(<MapDetailsLayer />);
       await activate();

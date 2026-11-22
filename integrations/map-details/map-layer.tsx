@@ -21,8 +21,10 @@ import { ensurePaintProtocol, PAINT_SOURCE_ID, PAINT_TEMPLATE } from "./web/pain
 import {
   type ColourScheme,
   PAINT_LAYER_ID,
+  type PaintMode,
   paintColour,
   paintLayerSpec,
+  paintMinZoom,
   paintOpacity,
 } from "./web/paint-style";
 import {
@@ -57,8 +59,17 @@ export function MapDetailsLayer() {
   const wantsStreetDetail = streetDetailTilesUrl !== "" && !offline;
   const hasSource = wantsStreetDetail && template !== null;
   const paintVisible = active && !satellite;
-  const live = useRef({ scheme, pitchFade, paintVisible, template, client, paintFilter });
-  live.current = { scheme, pitchFade, paintVisible, template, client, paintFilter };
+  const paintMode: PaintMode = mode === "navigation" ? "navigation" : "full";
+  const live = useRef({
+    scheme,
+    pitchFade,
+    paintVisible,
+    template,
+    client,
+    paintFilter,
+    paintMode,
+  });
+  live.current = { scheme, pitchFade, paintVisible, template, client, paintFilter, paintMode };
 
   // One worker for all derivation, from the first activation until unmount. A ref
   // owns it so a remounting effect (React's development double run) never leaks one.
@@ -124,15 +135,16 @@ export function MapDetailsLayer() {
           pitchFade: fade,
           paintVisible: visible,
           paintFilter: filter,
+          paintMode: currentMode,
         } = live.current;
-        const spec = paintLayerSpec(currentScheme);
+        const spec = paintLayerSpec(currentScheme, currentMode);
         addLayerInSlot(
           map,
           {
             ...spec,
             ...(filter ? { filter } : {}),
             layout: { ...spec.layout, visibility: visible ? "visible" : "none" },
-            paint: { ...spec.paint, "fill-opacity": paintOpacity(fade) },
+            paint: { ...spec.paint, "fill-opacity": paintOpacity(fade, currentMode) },
           },
           "area-overlays",
           PAINT_SLOT_ORDER,
@@ -153,9 +165,10 @@ export function MapDetailsLayer() {
   }, [map, paintVisible]);
 
   useEffect(() => {
-    if (map?.getLayer(PAINT_LAYER_ID))
-      map.setPaintProperty(PAINT_LAYER_ID, "fill-opacity", paintOpacity(pitchFade));
-  }, [map, pitchFade]);
+    if (!map?.getLayer(PAINT_LAYER_ID)) return;
+    map.setLayerZoomRange(PAINT_LAYER_ID, paintMinZoom(paintMode), 24);
+    map.setPaintProperty(PAINT_LAYER_ID, "fill-opacity", paintOpacity(pitchFade, paintMode));
+  }, [map, pitchFade, paintMode]);
 
   useEffect(() => {
     if (map?.getLayer(PAINT_LAYER_ID)) map.setFilter(PAINT_LAYER_ID, paintFilter);

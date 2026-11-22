@@ -5,8 +5,21 @@ import { PAINT_SOURCE_ID } from "./paint-protocol";
 /** The street paint fill layer (spec §6.5). */
 
 export const PAINT_LAYER_ID = "openmapx-street-detail-paint";
-const PAINT_MIN_ZOOM = 16.5;
-const PAINT_FULL_ZOOM = 17;
+/**
+ * Zoom range over which the paint fades in. In 3D navigation it is fully drawn
+ * by the camera's city cruising zoom (about z16.6), so the real-width route
+ * lies on real-width roads between junctions too, not only near a turn.
+ */
+const PAINT_FADE = {
+  full: { min: 16.5, full: 17 },
+  navigation: { min: 16, full: 16.5 },
+} as const;
+export type PaintMode = keyof typeof PAINT_FADE;
+
+/** The layer's minimum zoom in a mode. */
+export function paintMinZoom(mode: PaintMode = "full"): number {
+  return PAINT_FADE[mode].min;
+}
 
 /** Draw order within one OSM `layer`: surfaces first, markings and arrows last. */
 export const KIND_RANK: Record<PaintKind, number> = {
@@ -69,24 +82,28 @@ export function paintColour(scheme: ColourScheme): ExpressionSpecification {
   return byKind(PAINT_PALETTE[scheme], PAINT_PALETTE[scheme].surface);
 }
 
-/** Fade in from zoom 16.5 to 17, scaled by the tilt fade (0 flat … 1 tilted). */
-export function paintOpacity(pitchFade: number): ExpressionSpecification {
-  return ["interpolate", ["linear"], ["zoom"], PAINT_MIN_ZOOM, 0, PAINT_FULL_ZOOM, pitchFade];
+/** Fade in over the mode's zoom range, scaled by the tilt fade (0 flat … 1 tilted). */
+export function paintOpacity(pitchFade: number, mode: PaintMode = "full"): ExpressionSpecification {
+  const { min, full } = PAINT_FADE[mode];
+  return ["interpolate", ["linear"], ["zoom"], min, 0, full, pitchFade];
 }
 
-export function paintLayerSpec(scheme: ColourScheme): FillLayerSpecification {
+export function paintLayerSpec(
+  scheme: ColourScheme,
+  mode: PaintMode = "full",
+): FillLayerSpecification {
   return {
     id: PAINT_LAYER_ID,
     type: "fill",
     source: PAINT_SOURCE_ID,
     "source-layer": "paint",
-    minzoom: PAINT_MIN_ZOOM,
+    minzoom: paintMinZoom(mode),
     layout: {
       "fill-sort-key": ["+", ["*", ["get", "layer"], 100], byKind(KIND_RANK, 0)],
     },
     paint: {
       "fill-color": paintColour(scheme),
-      "fill-opacity": paintOpacity(1),
+      "fill-opacity": paintOpacity(1, mode),
       "fill-antialias": true,
     },
   };
