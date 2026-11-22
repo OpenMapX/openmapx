@@ -62,7 +62,7 @@ describe("GET /navigation/alerts", () => {
     expect(body.alerts.every((alert) => alert.roads.length > 0)).toBe(true);
     expect(nth(overpassQuerySafe.mock.calls, 0)[0]).toContain('way(bn.alerts)["highway"]');
     expect(stored).toEqual([
-      { key: expect.stringMatching(/^cache:nav:alerts:v2/), ttl: 86_400, cached: true },
+      { key: expect.stringMatching(/^cache:nav:alerts:v3/), ttl: 86_400, cached: true },
     ]);
     expect(reply.header).toHaveBeenCalledWith("Cache-Control", "public, max-age=86400");
   });
