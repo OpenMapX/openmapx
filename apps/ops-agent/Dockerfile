@@ -66,6 +66,7 @@ COPY --parents \
     services/martin/config/martin.yaml \
     services/otp/config/ \
     services/pelias/config/pelias.json \
+    services/postgis/scripts/initdb-extensions.sh \
     services/postgis/scripts/sync-password.sh \
     services/tileserver/config/config.json \
     services/traefik/config/ \

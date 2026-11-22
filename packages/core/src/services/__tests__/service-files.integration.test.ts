@@ -187,8 +187,10 @@ describe.runIf(runTests)("containers reading the release's files from the store"
     const workers = docker("exec", nginx, "ps", "-o", "user,args");
     expect(workers).toMatch(/nginx\s+nginx: worker process/);
 
-    // PostGIS's server runs as 999; its entrypoint wrapper comes from the store.
+    // PostGIS's server runs as 999; its entrypoint wrapper comes from the
+    // store, and so does the no-op that replaces the image's initdb script.
     const entrypoint = "/usr/local/bin/openmapx-postgis-entrypoint.sh";
+    const initdb = "/docker-entrypoint-initdb.d/10_postgis.sh";
     const read = docker(
       "run",
       "--rm",
@@ -200,15 +202,18 @@ describe.runIf(runTests)("containers reading the release's files from the store"
       "999:999",
       "--entrypoint",
       "sh",
-      ...renderedVolumes("postgis", (target) => target === entrypoint),
+      ...renderedVolumes("postgis", (target) => target === entrypoint || target === initdb),
       pinned("postgis"),
       "-c",
-      `id -u; test -x ${entrypoint} && sha256sum ${entrypoint}`,
+      `id -u; test -x ${entrypoint} && sha256sum ${entrypoint} && test -r ${initdb} && sha256sum ${initdb}`,
     );
-    const [uid, digest] = read.split("\n");
+    const [uid, digest, initdbDigest] = read.split("\n");
     expect(uid).toBe("999");
     expect(digest?.split(" ")[0]).toBe(
       sha256(readFileSync(join(REPOSITORY, "services/postgis/scripts/sync-password.sh"))),
+    );
+    expect(initdbDigest?.split(" ")[0]).toBe(
+      sha256(readFileSync(join(REPOSITORY, "services/postgis/scripts/initdb-extensions.sh"))),
     );
   }, 120_000);
 

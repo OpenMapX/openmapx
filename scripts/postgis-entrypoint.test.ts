@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -279,13 +287,26 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(roles).toContain("ALTER ROLE openmapx_api RESET ALL;");
       expect(roles).toContain("ALTER ROLE openmapx_data_manager RESET ALL;");
       expect(f.read("tile-sync-sql")).toContain("ALTER ROLE openmapx_tiles_owner RESET ALL;");
-      expect(roles).toContain("ALTER ROLE openmapx_api SET search_path = public;");
-      expect(roles).toContain("ALTER ROLE openmapx_data_manager SET search_path = public;");
+      expect(roles).toContain("ALTER ROLE openmapx_api SET search_path = public, extensions;");
+      expect(roles).toContain("ALTER ROLE openmapx_data_manager SET search_path = extensions;");
+      expect(roles).toContain(
+        "ALTER ROLE openmapx_data_manager SET idle_in_transaction_session_timeout = '10min';",
+      );
+      // Role settings are set after they are reset, or the reset would undo them.
+      expect(roles.indexOf("ALTER ROLE openmapx_data_manager RESET ALL;")).toBeLessThan(
+        roles.indexOf("ALTER ROLE openmapx_data_manager SET search_path"),
+      );
+      expect(roles).toContain("CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION CURRENT_USER;");
+      expect(roles).toContain("GRANT USAGE ON SCHEMA extensions TO PUBLIC;");
+      for (const extension of ["postgis", "pg_trgm", "fuzzystrmatch", "btree_gist"])
+        expect(roles).toContain(
+          `CREATE EXTENSION IF NOT EXISTS ${extension} WITH SCHEMA extensions;`,
+        );
+      expect(roles).not.toContain("WITH SCHEMA public");
       expect(roles).toContain(
         "CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start",
       );
       expect(roles).toContain("CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end");
-      expect(roles).toContain("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;");
       expect(roles).toContain(
         "CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start EXECUTE FUNCTION",
       );
@@ -305,7 +326,15 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(f.read("tile-sync-sql")).toContain(
         "ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO openmapx_tiles_owner;",
       );
-      expect(f.read("tile-sync-sql")).toContain("SET search_path = pg_catalog, public, pg_temp");
+      expect(f.read("tile-sync-sql")).toContain(
+        "SET search_path = pg_catalog, extensions, pg_temp",
+      );
+      expect(f.read("tile-sync-sql")).toContain(
+        "ALTER ROLE openmapx_tiles RESET ALL;\nALTER ROLE openmapx_tiles_owner RESET ALL;",
+      );
+      expect(f.read("tile-sync-sql")).toContain(
+        "\\gexec\nALTER ROLE openmapx_tiles SET search_path = extensions;",
+      );
       expect(f.read("tile-sync-sql")).toContain(
         "GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO openmapx_tiles_owner",
       );
@@ -363,6 +392,37 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(existsSync(join(root, "synced"))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("PostGIS image initialisation", () => {
+  it("replaces the image's initdb script, which would install PostGIS into public, with a no-op", async () => {
+    const manifest = JSON.parse(readFileSync(resolve("services/postgis/service.json"), "utf8")) as {
+      bindMounts: { source: string; target: string; readOnly?: boolean }[];
+    };
+    expect(manifest.bindMounts).toContainEqual({
+      source: "scripts/initdb-extensions.sh",
+      target: "/docker-entrypoint-initdb.d/10_postgis.sh",
+      readOnly: true,
+    });
+    // The image's entrypoint executes the script when it looks executable,
+    // and sources it inside its own shell otherwise.
+    const script = resolve("services/postgis/scripts/initdb-extensions.sh");
+    expect(statSync(script).mode & 0o111).toBe(0o111);
+    for (const command of ['"$1"; echo still-running', 'source "$1"; echo still-running']) {
+      const child = spawn("bash", ["-euc", command, "initdb", script], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk;
+      });
+      const code = await new Promise<number | null>((done) => child.once("exit", done));
+      expect({ command, code, output }).toEqual({ command, code: 0, output: "still-running\n" });
     }
   });
 });

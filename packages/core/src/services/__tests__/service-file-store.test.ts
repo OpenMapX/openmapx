@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
@@ -132,6 +132,13 @@ describe("the release's service files in the store", () => {
     );
     // PostGIS runs it as 999, nginx's workers read as another user again.
     expect(mode(script)).toBe(0o555);
+    // The image's initdb script is replaced from the same tree.
+    const initdb = mountOf(infraDir, "postgis", "/docker-entrypoint-initdb.d/10_postgis.sh");
+    expect(relative(dirname(script), initdb)).toBe("initdb-extensions.sh");
+    expect(readFileSync(initdb)).toEqual(
+      readFileSync(join(REPOSITORY, "services/postgis/scripts/initdb-extensions.sh")),
+    );
+    expect(mode(initdb)).toBe(0o555);
     expect(mode(mountOf(infraDir, "well-known", "/opt/openmapx/well-known/app-links.sh"))).toBe(
       0o444,
     );

@@ -17,6 +17,7 @@ const { container: manifest } = JSON.parse(
 ) as { container: { image: string; tag: string; digest: string } };
 const IMAGE = `${manifest.image}:${manifest.tag}@${manifest.digest}`;
 const ENTRYPOINT = "/usr/local/bin/openmapx-postgis-entrypoint.sh";
+const IMAGE_INITDB = "/docker-entrypoint-initdb.d/10_postgis.sh";
 const SYNCED =
   "pg_isready -h 127.0.0.1 -U postgres -d openmapx -q && test -f /var/run/postgresql/openmapx-password-synced";
 const passwords = {
@@ -43,7 +44,9 @@ async function permissionDenied(statement: Promise<unknown>): Promise<void> {
   await expect(statement).rejects.toMatchObject({ code: "42501" });
 }
 
-/** The pinned PostGIS image running the production entrypoint with both role password files. */
+/** The pinned PostGIS image running the production entrypoint, with the
+ * image's own initdb script replaced and both role password files, as
+ * service.json mounts them. */
 async function startPostgis(environment: Record<string, string> = {}) {
   return new PostgreSqlContainer(IMAGE)
     .withDatabase("openmapx")
@@ -58,6 +61,11 @@ async function startPostgis(environment: Record<string, string> = {}) {
       {
         content: readFileSync(join(repoRoot, "services/postgis/scripts/sync-password.sh")),
         target: ENTRYPOINT,
+        mode: 0o755,
+      },
+      {
+        content: readFileSync(join(repoRoot, "services/postgis/scripts/initdb-extensions.sh")),
+        target: IMAGE_INITDB,
         mode: 0o755,
       },
       { content: passwords.api, target: "/run/secrets/postgres-api-password", mode: 0o600 },
@@ -99,7 +107,6 @@ integration("database roles", () => {
       SELECT pg_get_userbyid(c.relowner) AS owner, count(*)::int AS tables
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE c.relkind = 'r' AND n.nspname IN ('public', 'data_manager', 'drizzle')
-        AND c.relname <> 'spatial_ref_sys'
       GROUP BY 1`;
     expect(owners).toEqual([{ owner: "openmapx_api", tables: expect.any(Number) }]);
     // The API owns its schemas; the database stays the superuser's, so the API
@@ -110,6 +117,68 @@ integration("database roles", () => {
       FROM pg_database WHERE datname = current_database()`;
     expect(database).toEqual({ owner: "postgres", public: "openmapx_api" });
     await permissionDenied(api.unsafe("ALTER DATABASE openmapx SET search_path = public"));
+  });
+
+  it("installs the extensions into a schema only the superuser can change", async () => {
+    expect(
+      await superuser`
+        SELECT e.extname AS name, n.nspname AS schema, pg_get_userbyid(e.extowner) AS owner
+        FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+        WHERE e.extname <> 'plpgsql' ORDER BY 1`,
+    ).toEqual(
+      ["btree_gist", "fuzzystrmatch", "pg_trgm", "postgis"].map((name) => ({
+        name,
+        schema: "extensions",
+        owner: "postgres",
+      })),
+    );
+    expect(
+      await superuser`
+        SELECT count(*)::int AS objects FROM pg_depend d JOIN pg_extension e ON e.oid = d.refobjid
+        WHERE d.deptype = 'e' AND d.classid = 'pg_proc'::regclass
+          AND (SELECT pronamespace FROM pg_proc WHERE oid = d.objid) = 'public'::regnamespace`,
+    ).toEqual([{ objects: 0 }]);
+    expect(
+      await superuser`
+        SELECT pg_get_userbyid(nspowner) AS owner,
+          has_schema_privilege('openmapx_api', oid, 'USAGE') AS api_usage,
+          has_schema_privilege('openmapx_api', oid, 'CREATE') AS api_create,
+          has_schema_privilege('openmapx_data_manager', oid, 'CREATE') AS data_manager_create,
+          has_schema_privilege('openmapx_tiles', oid, 'CREATE') AS tiles_create
+        FROM pg_namespace WHERE nspname = 'extensions'`,
+    ).toEqual([
+      {
+        owner: "postgres",
+        api_usage: true,
+        api_create: false,
+        data_manager_create: false,
+        tiles_create: false,
+      },
+    ]);
+    await permissionDenied(
+      api.unsafe(
+        "CREATE FUNCTION extensions.openmapx_probe() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+      ),
+    );
+    // The image's add-ons that nothing uses are never installed.
+    expect(
+      await superuser`
+        SELECT (SELECT array_agg(nspname ORDER BY nspname) FROM pg_namespace
+            WHERE nspname IN ('topology', 'tiger', 'tiger_data')) AS schemas,
+          (SELECT array_agg(datname ORDER BY datname) FROM pg_database
+            WHERE datname NOT IN ('postgres', 'openmapx', 'template0', 'template1')) AS databases`,
+    ).toEqual([{ schemas: null, databases: null }]);
+  });
+
+  it("gives each role its search path and data-manager an idle-transaction limit", async () => {
+    expect(await api.unsafe("SHOW search_path")).toEqual([{ search_path: "public, extensions" }]);
+    expect(await dataManager.unsafe("SHOW search_path")).toEqual([{ search_path: "extensions" }]);
+    expect(await dataManager.unsafe("SHOW idle_in_transaction_session_timeout")).toEqual([
+      { idle_in_transaction_session_timeout: "10min" },
+    ]);
+    expect(await api.unsafe("SHOW idle_in_transaction_session_timeout")).toEqual([
+      { idle_in_transaction_session_timeout: "0" },
+    ]);
   });
 
   it("keeps data-manager away from the API's tables", async () => {
@@ -141,8 +210,6 @@ integration("database roles", () => {
   });
 
   it("stops data-manager from taking a schema name another role trusts", async () => {
-    expect(await api.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
-    expect(await dataManager.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
     for (const name of ["openmapx_api", "conditions", "tiles_shadow", "Osm_search"])
       await permissionDenied(dataManager.unsafe(`CREATE SCHEMA "${name}"`));
     await dataManager.unsafe("CREATE SCHEMA notable_places__staging");
@@ -373,7 +440,9 @@ integration("code planted for another role", () => {
     ])
       await roles.dataManager.unsafe(statement).catch(() => undefined);
     await roles.api.unsafe("SELECT * FROM osm_search.v").catch(() => undefined);
-    expect(await roles.api.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
+    expect(await roles.api.unsafe("SHOW search_path")).toEqual([
+      { search_path: "public, extensions" },
+    ]);
     expect(await roles.api.unsafe(`SELECT email FROM "user" WHERE email = 'forged@x'`)).toEqual([]);
     for (const statement of [
       "CREATE DOMAIN osm_search.d2 AS text",
@@ -500,10 +569,12 @@ integration("code planted for another role", () => {
   });
 
   it("renders OpenConditions' traffic tile as a read-only role without superuser rights", async () => {
-    // OpenConditions installed after PostGIS started, as its own role, with
-    // its real tile function and the functions and tables it reads.
+    // OpenConditions installed after PostGIS started, as its own role with
+    // the documented search path, with its real tile function and the
+    // functions and tables it reads.
     await roles.superuser.unsafe(`
       CREATE ROLE openconditions_fixture LOGIN PASSWORD '${passwords.openConditions}';
+      ALTER ROLE openconditions_fixture SET search_path = conditions, extensions;
       GRANT CREATE ON DATABASE openmapx TO openconditions_fixture;
     `);
     const openConditions = connect("openconditions_fixture", passwords.openConditions, db);
@@ -542,8 +613,10 @@ integration("code planted for another role", () => {
     // visibly and nothing runs with more rights.
     await permissionDenied(tile());
     await restart();
-    const [direct] = await roles.superuser<{ tile: Buffer }[]>`
-      SELECT conditions.segment_flow(0, 0, 0, '{}') AS tile`;
+    const [direct] = await roles.superuser.begin(async (tx) => {
+      await tx.unsafe("SET LOCAL search_path = pg_catalog, extensions");
+      return tx<{ tile: Buffer }[]>`SELECT conditions.segment_flow(0, 0, 0, '{}') AS tile`;
+    });
     expect(direct?.tile.includes("speed_ratio")).toBe(true);
     expect(await tile()).toEqual(direct?.tile);
     expect(
@@ -553,58 +626,62 @@ integration("code planted for another role", () => {
         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
         WHERE p.oid = 'tiles.segment_flow(integer, integer, integer, json)'::regprocedure`,
     ).toEqual([{ owner: "openmapx_tiles_owner", definer: true, superuser: false, writes: false }]);
-    const martin = connect("openmapx_tiles", passwords.tiles, db);
-    try {
-      for (const table of ["conditions.road_segment", "conditions.source", 'public."user"'])
-        await permissionDenied(martin.unsafe(`SELECT 1 FROM ${table} LIMIT 1`));
-    } finally {
-      await martin.end();
-    }
-    // The API can put a PostGIS overload in the public schema it owns, which
-    // the tile function resolves before PostGIS's own: it runs as the tile
-    // owner, never with more rights.
+    // The API can put PostGIS overloads in the public schema it owns, each a
+    // closer match than PostGIS's own for the calls below. No other role
+    // searches public, so none of them runs.
     await roles.api.unsafe(`
-      CREATE TABLE public.openmapx_overload_runs (who text, superuser boolean);
+      CREATE TABLE public.openmapx_overload_runs (who text);
       GRANT INSERT ON public.openmapx_overload_runs TO PUBLIC;
       CREATE FUNCTION public.st_asmvt(r record, name text, extent integer, geom text) RETURNS bytea
         LANGUAGE plpgsql AS $$
         BEGIN
-          INSERT INTO public.openmapx_overload_runs
-            SELECT current_user, rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user;
+          INSERT INTO public.openmapx_overload_runs VALUES (current_user);
           RETURN ''::bytea;
         END $$;
+      CREATE FUNCTION public.st_makepoint(integer, integer) RETURNS extensions.geometry
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          INSERT INTO public.openmapx_overload_runs VALUES (current_user);
+          RETURN extensions.st_makepoint($1::double precision, $2::double precision);
+        END $$;
     `);
-    expect(await tile()).toEqual(Buffer.alloc(0));
-    expect(await roles.api`SELECT who, superuser FROM public.openmapx_overload_runs`).toEqual([
-      { who: "openmapx_tiles_owner", superuser: false },
-    ]);
-    // Acting as the tile owner through such an overload, the API may create
-    // nothing: a restore would recreate the object, and the tile owner cannot
-    // log in to do it.
-    await roles.api.unsafe(`
-      DROP FUNCTION public.st_asmvt(record, text, integer, text);
-      CREATE FUNCTION public.openmapx_pwn_as_tiles() RETURNS int LANGUAGE plpgsql AS $$
-      BEGIN IF (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user)
-        THEN EXECUTE 'ALTER ROLE openmapx_api SUPERUSER'; END IF; RETURN 1; END $$;
-      GRANT USAGE, CREATE ON SCHEMA public TO openmapx_tiles_owner;
-      CREATE FUNCTION public.plant_as_tiles_owner() RETURNS void LANGUAGE plpgsql AS $$
-      BEGIN IF pg_catalog.to_regclass('public.tiles_owner_t') IS NULL THEN
-        EXECUTE 'CREATE TABLE public.tiles_owner_t (id int CHECK (public.openmapx_pwn_as_tiles() = 1))';
-        EXECUTE 'INSERT INTO public.tiles_owner_t VALUES (1)'; END IF; END $$;
-      CREATE FUNCTION public.st_asmvt(r record, name text, extent integer, geom text) RETURNS bytea
-        LANGUAGE plpgsql AS $$ BEGIN
-        IF current_user = 'openmapx_tiles_owner' THEN PERFORM public.plant_as_tiles_owner(); END IF;
-        RETURN ''::bytea; END $$;
-    `);
-    await permissionDenied(tile());
     expect(
-      await roles.superuser`SELECT pg_catalog.to_regclass('public.tiles_owner_t') AS planted`,
-    ).toEqual([{ planted: null }]);
+      await roles.api`SELECT extensions.st_astext(public.st_makepoint(1, 2)) AS point`,
+    ).toEqual([{ point: "POINT(1 2)" }]);
+    await roles.api`DELETE FROM public.openmapx_overload_runs`;
+    expect(await tile()).toEqual(direct?.tile);
+    const point = "SELECT ST_AsText(ST_MakePoint(1, 2)) AS point";
+    expect(await roles.dataManager.unsafe(point)).toEqual([{ point: "POINT(1 2)" }]);
+    const reader = connect("openconditions_fixture", passwords.openConditions, db);
+    const martin = connect("openmapx_tiles", passwords.tiles, db);
+    try {
+      for (const table of ["conditions.road_segment", "conditions.source", 'public."user"'])
+        await permissionDenied(martin.unsafe(`SELECT 1 FROM ${table} LIMIT 1`));
+      expect(await reader.unsafe(point)).toEqual([{ point: "POINT(1 2)" }]);
+      expect(await martin.unsafe(point)).toEqual([{ point: "POINT(1 2)" }]);
+      // Martin asks for the PostGIS version when it opens its pool.
+      const [version] = await martin.unsafe("SELECT postgis_lib_version() AS version");
+      expect(version?.version).toMatch(/^3\./);
+      expect(await martin.unsafe("SHOW search_path")).toEqual([{ search_path: "extensions" }]);
+    } finally {
+      await Promise.allSettled([reader.end(), martin.end()]);
+    }
+    expect(await roles.api`SELECT who FROM public.openmapx_overload_runs`).toEqual([]);
+    // The tile owner may create nothing, even where it is granted the right:
+    // a restore would recreate the object, and the tile owner cannot log in
+    // to do it.
+    await roles.api.unsafe("GRANT USAGE, CREATE ON SCHEMA public TO openmapx_tiles_owner");
+    await permissionDenied(
+      roles.superuser.begin(async (tx) => {
+        await tx.unsafe("SET LOCAL ROLE openmapx_tiles_owner");
+        await tx.unsafe("CREATE TABLE public.tiles_owner_t (id int)");
+      }),
+    );
     await roles.api.unsafe(`
-      DROP FUNCTION public.st_asmvt(record, text, integer, text);
-      DROP FUNCTION public.plant_as_tiles_owner();
-      DROP FUNCTION public.openmapx_pwn_as_tiles();
       REVOKE CREATE ON SCHEMA public FROM openmapx_tiles_owner;
+      DROP FUNCTION public.st_asmvt(record, text, integer, text);
+      DROP FUNCTION public.st_makepoint(integer, integer);
+      DROP TABLE public.openmapx_overload_runs;
     `);
   }, 180_000);
 
@@ -675,14 +752,27 @@ integration("code planted for another role", () => {
         RETURN 1;
       END $$;
       CREATE VIEW data_manager.pwnv AS
-        SELECT 'POINT(0 0)'::public.geometry AS g, public.openmapx_pwn() AS x;
+        SELECT 'POINT(0 0)'::extensions.geometry AS g, public.openmapx_pwn() AS x;
       CREATE TABLE public.harmless (id int, CHECK (pg_catalog.length(COALESCE(
-        public.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
+        extensions.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
       INSERT INTO public.harmless VALUES (1);
     `);
+    // A PostGIS column and a PostGIS expression index of each role, which its
+    // own restore session builds from the superuser's extensions schema.
+    await roles.api.unsafe(`
+      CREATE TABLE public.openmapx_spatial (geom geometry(Point, 4326) NOT NULL);
+      CREATE INDEX openmapx_spatial_mercator_idx ON public.openmapx_spatial
+        USING gist (ST_Transform(geom, 3857));
+      INSERT INTO public.openmapx_spatial VALUES (ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));
+    `);
     await roles.dataManager.unsafe(`
-      CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
-        'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
+      CREATE TABLE osm_search.points (geom geometry(Point, 4326) NOT NULL);
+      CREATE INDEX points_geohash_idx ON osm_search.points (ST_GeoHash(geom, 6));
+      INSERT INTO osm_search.points VALUES (ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));
+    `);
+    await roles.dataManager.unsafe(`
+      CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(extensions.st_findextent('osm_search', 't',
+        'g") AS extent FROM (SELECT NULL::extensions.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
          WHERE rolname = current_user) THEN pg_catalog.length(pg_catalog.query_to_xml(''SELECT pg_catalog.lo_from_bytea(4242, ''''pwn'''')'', true, false, '''')::text) ELSE 0 END >= 0 --')::text, '')) >= 0));
       INSERT INTO osm_search.planted VALUES (1);
     `);
@@ -788,7 +878,37 @@ integration("code planted for another role", () => {
     expect(await roles.api.unsafe("SELECT name FROM osm_search.places")).toEqual([
       { name: "kept" },
     ]);
-    await permissionDenied(roles.dataManager.unsafe(`SELECT 1 FROM "user"`));
+    expect(
+      await roles.superuser`
+        SELECT c.relname AS index, pg_get_userbyid(c.relowner) AS owner, i.indisvalid AS valid,
+          (SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+            WHERE e.extname = 'postgis') AS postgis,
+          has_schema_privilege('openmapx_tiles', 'extensions', 'USAGE') AS usable
+        FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.relname IN ('openmapx_spatial_mercator_idx', 'points_geohash_idx')
+        ORDER BY 1`,
+    ).toEqual([
+      {
+        index: "openmapx_spatial_mercator_idx",
+        owner: "openmapx_api",
+        valid: true,
+        postgis: "extensions",
+        usable: true,
+      },
+      {
+        index: "points_geohash_idx",
+        owner: "openmapx_data_manager",
+        valid: true,
+        postgis: "extensions",
+        usable: true,
+      },
+    ]);
+    expect(
+      await roles.api.unsafe(`
+        SELECT (SELECT ST_AsText(geom) FROM public.openmapx_spatial) AS api,
+          (SELECT ST_AsText(geom) FROM osm_search.points) AS data_manager`),
+    ).toEqual([{ api: "POINT(13.4 52.5)", data_manager: "POINT(13.4 52.5)" }]);
+    await permissionDenied(roles.dataManager.unsafe(`SELECT 1 FROM public."user"`));
     await permissionDenied(roles.dataManager.unsafe("CREATE SCHEMA conditions_shadow"));
     // The CLI changes API tables as the API's role, over PostGIS's local socket.
     await run(

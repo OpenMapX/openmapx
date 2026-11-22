@@ -44,6 +44,7 @@ const WRONG_KEY = Buffer.alloc(32, 29);
 const repoRoot = resolve(import.meta.dirname, "../../..");
 const migrations = join(repoRoot, "apps", "api", "src", "db", "migrations");
 const entrypoint = join(repoRoot, "services", "postgis", "scripts", "sync-password.sh");
+const initdb = join(repoRoot, "services", "postgis", "scripts", "initdb-extensions.sh");
 
 interface FixtureState {
   root: string;
@@ -104,6 +105,7 @@ services:
       - scratch:/fixture-scratch
       - ${JSON.stringify(`${migrations}:/migrations:ro`)}
       - ${JSON.stringify(`${entrypoint}:/usr/local/bin/openmapx-postgis-entrypoint.sh:ro`)}
+      - ${JSON.stringify(`${initdb}:/docker-entrypoint-initdb.d/10_postgis.sh:ro`)}
       - ${JSON.stringify(`${join(secrets, "api")}:/run/secrets/postgres-api-password:ro`)}
       - ${JSON.stringify(`${join(secrets, "data-manager")}:/run/secrets/postgres-data-manager-password:ro`)}
     healthcheck:
@@ -268,7 +270,7 @@ async function resetMigratedDatabase(): Promise<void> {
   );
   // What PostGIS's entrypoint gives the platform database on start.
   await psql(
-    `CREATE EXTENSION IF NOT EXISTS postgis;\nALTER SCHEMA public OWNER TO openmapx_api;\nREVOKE CREATE ON SCHEMA public FROM PUBLIC;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT USAGE ON SCHEMAS TO openmapx_api;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;\n`,
+    `CREATE SCHEMA extensions;\nREVOKE ALL ON SCHEMA extensions FROM PUBLIC;\nGRANT USAGE ON SCHEMA extensions TO PUBLIC;\nCREATE EXTENSION postgis WITH SCHEMA extensions;\nCREATE EXTENSION pg_trgm WITH SCHEMA extensions;\nCREATE EXTENSION fuzzystrmatch WITH SCHEMA extensions;\nCREATE EXTENSION btree_gist WITH SCHEMA extensions;\nALTER SCHEMA public OWNER TO openmapx_api;\nREVOKE CREATE ON SCHEMA public FROM PUBLIC;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT USAGE ON SCHEMAS TO openmapx_api;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;\n`,
   );
   const result = await execa(
     "docker",
@@ -561,18 +563,25 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
         RETURN 1;
       END $$;
       CREATE VIEW data_manager.pwnv AS
-        SELECT 'POINT(0 0)'::public.geometry AS g, public.openmapx_pwn() AS x;
+        SELECT 'POINT(0 0)'::extensions.geometry AS g, public.openmapx_pwn() AS x;
       CREATE TABLE public.harmless (id int, CHECK (pg_catalog.length(COALESCE(
-        public.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
-      INSERT INTO public.harmless VALUES (1);\n`,
+        extensions.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
+      INSERT INTO public.harmless VALUES (1);
+      CREATE TABLE public.openmapx_spatial (geom geometry(Point, 4326) NOT NULL);
+      CREATE INDEX openmapx_spatial_mercator_idx ON public.openmapx_spatial
+        USING gist (ST_Transform(geom, 3857));
+      INSERT INTO public.openmapx_spatial VALUES (ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));\n`,
       DATABASE,
       "openmapx_api",
     );
     await psql(
-      `CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
-        'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
+      `CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(extensions.st_findextent('osm_search', 't',
+        'g") AS extent FROM (SELECT NULL::extensions.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
          WHERE rolname = current_user) THEN pg_catalog.length(pg_catalog.query_to_xml(''SELECT pg_catalog.lo_from_bytea(4242, ''''pwn'''')'', true, false, '''')::text) ELSE 0 END >= 0 --')::text, '')) >= 0));
-      INSERT INTO osm_search.planted VALUES (1);\n`,
+      INSERT INTO osm_search.planted VALUES (1);
+      CREATE TABLE osm_search.points (geom geometry(Point, 4326) NOT NULL);
+      CREATE INDEX points_geohash_idx ON osm_search.points (ST_GeoHash(geom, 6));
+      INSERT INTO osm_search.points VALUES (ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));\n`,
       DATABASE,
       "openmapx_data_manager",
     );
@@ -588,6 +597,22 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
         (SELECT count(*) FROM pg_roles WHERE rolsuper AND rolname <> '${POSTGRES_USER}'),
         (SELECT count(*) FROM pg_largeobject_metadata));`),
     ).toBe("1 1 0 0");
+    // Each role's PostGIS column and expression index came back as its own.
+    expect(
+      await psql(`SELECT string_agg(concat_ws(' ', c.relname, pg_get_userbyid(c.relowner), i.indisvalid), ', '
+          ORDER BY c.relname)
+        FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.relname IN ('openmapx_spatial_mercator_idx', 'points_geohash_idx');`),
+    ).toBe(
+      "openmapx_spatial_mercator_idx openmapx_api t, points_geohash_idx openmapx_data_manager t",
+    );
+    expect(
+      await psql(
+        "SELECT ST_AsText(geom) FROM public.openmapx_spatial UNION ALL SELECT ST_AsText(geom) FROM osm_search.points;",
+        DATABASE,
+        "openmapx_api",
+      ),
+    ).toBe("POINT(13.4 52.5)\nPOINT(13.4 52.5)");
 
     expect(
       await psql(`SELECT concat_ws(' ',

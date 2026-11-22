@@ -321,8 +321,8 @@ conditions` (or for one of its tables) in Martin's log, and no code runs with
 more rights.
 
 PostGIS grants every role read access to its own catalogue tables:
-`spatial_ref_sys`, `geometry_columns`, `geography_columns`, `topology.topology`
-and `topology.layer`. The tile roles can read them as well.
+`spatial_ref_sys`, `geometry_columns` and `geography_columns`. The tile roles
+can read them as well.
 
 Only the superuser can create or replace the functions in `tiles`, and only
 the superuser and the owner of `conditions` those in `conditions`. Until
@@ -331,8 +331,9 @@ other than the API's and data-manager's could create it, so grant that right
 only to the services that need it. The tile roles may create no objects of
 their own.
 
-The tile functions call PostGIS without a schema, so a compromised API could
-run code as the tile owner; see
+The tile functions and Martin's login find PostGIS in the superuser's
+`extensions` schema and never search `public`, so no function the API creates
+can run as the tile owner; see
 [Database roles](../install/configuration.md#database-roles).
 
 Martin is independent of TileServer GL. Most deployments that only need a

@@ -89,6 +89,29 @@ before it reports healthy.
   ambient places). The API can read those schemas. Data-manager has no access to
   accounts, administrative jobs or saved configuration.
 
+PostGIS, `pg_trgm`, `fuzzystrmatch` and `btree_gist` live in the `extensions`
+schema. It belongs to the superuser, and only the superuser can create objects
+in it; every role may use it. PostGIS installs the extensions there on every
+start, before it reports healthy. The image's own initialisation script, which
+would install PostGIS into `public` together with the topology and TIGER
+geocoder extensions and a `template_postgis` database, is replaced by a no-op.
+PostGIS cannot be moved to another schema once installed.
+
+Each role's search path is set by PostGIS on every start, and settings a role
+gives itself are reset:
+
+| Role                    | Search path          | Notes                                                                   |
+| ----------------------- | -------------------- | ----------------------------------------------------------------------- |
+| `openmapx_api`          | `public, extensions` | Reads its own tables from `public` without a schema                     |
+| `openmapx_data_manager` | `extensions`         | Names the schema of every table; idle transactions end after 10 minutes |
+| `openmapx_tiles`        | `extensions`         | Martin's login; it asks for the PostGIS version when it connects        |
+
+The tile functions search `pg_catalog, extensions, pg_temp`. OpenConditions'
+roles need `conditions, extensions`; see
+[Community extensions](../administration/community-extensions.md). No service's
+role but the API's searches `public`, so no function the API creates there can
+stand in for one another service calls without a schema.
+
 Data-manager is the least trusted of the two: its code must never run with the
 API's or the superuser's rights. Two structural rules keep it that way:
 
@@ -123,34 +146,19 @@ OpenConditions uses.
 
 These guarantees have known limits:
 
-- PostGIS lives in `public`, which the API owns, and the API may create
-  functions and operators there. Every role finds PostGIS, and any other
-  function or operator called without a schema, through `public`. A compromised
-  API can therefore make any role that calls such a name, with or without the
-  `public.` prefix, run the API's code instead, when the API's version matches
-  the call's types more closely: data-manager, OpenConditions' roles, including
-  the owner of `conditions`, and `openmapx_tiles_owner` through the tile
-  function. It can also run code as data-manager through a trigger, rule, policy
-  or default on the `data_manager` tables it owns. Each such move gives the API
-  that role's rights: data-manager's right to change its schemas,
-  OpenConditions' right to change its tables and functions, the tile owner's
-  right to read every OpenConditions table. None reaches the superuser, as long
-  as no service connects as the superuser. Moving PostGIS into a schema the API
-  cannot write would close this, but PostGIS cannot be moved in place: it would
-  have to be reinstalled, with every spatial column and index that depends on
-  it, and the new schema put ahead of `public` on every role's search path.
-- As the owner of `public`, a compromised API can revoke other roles' use of
-  it, so that data-manager, OpenConditions and the tile function no longer find
-  PostGIS. That stops them working but gives the API none of their rights.
+- A compromised API can run code as data-manager through a trigger, rule,
+  policy or default on the `data_manager` tables it owns. That gives the API
+  data-manager's right to change its schemas, never the superuser's rights, as
+  long as no service connects as the superuser.
 - A superuser session of your own runs a role's code with superuser rights
   when it reads or writes an object that role owns, such as a view, or a table
   with a trigger, default or check constraint, and when it calls a function or
-  operator in `public`, PostGIS's among them, whether by its `public.` name or
-  through its search path. Connect as the owning role, or run
-  `SET search_path = pg_catalog` first and call no PostGIS function.
+  operator in `public` by its `public.` name or through the default search
+  path, which includes `public`. Connect as the owning role, or run
+  `SET search_path = pg_catalog, extensions` first; that also finds PostGIS,
+  which the default search path does not.
 - PostGIS grants every role read access to its catalogue tables
-  (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
-  `topology.topology` and `topology.layer`).
+  (`spatial_ref_sys`, `geometry_columns` and `geography_columns`).
 - OpenConditions installed after PostGIS started needs a PostGIS restart before
   traffic tiles work. Until then tiles fail with a permission error, and nothing
   runs as the superuser.

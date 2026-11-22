@@ -491,11 +491,9 @@ installation does not prove that their database and feed credentials are valid.
    Never give a community service the PostgreSQL superuser's URL, even when its
    own documentation suggests one, nor the `openmapx_api` and
    `openmapx_data_manager` roles: any of them would let it read and change
-   accounts and the platform's configuration. The superuser is worse still. A
-   service that calls PostGIS runs whatever functions the API's role has put in
-   `public` (see below), so with the superuser's URL a compromised API would
-   gain superuser rights over the whole server, including running commands in
-   the database container. Create a dedicated role for each service with only
+   accounts and the platform's configuration. The superuser is worse still: it
+   can change every role and run commands in the database container. Create a
+   dedicated role for each service with only
    what it needs, as shown below, and use
    `postgresql://<role>:<password>@openmapx-postgis:5432/openmapx` with a correctly
    URL-encoded password. The contributions service also declares
@@ -503,7 +501,10 @@ installation does not prove that their database and feed credentials are valid.
    separate values with `openssl rand -hex 32`.
    A role is created once, as the superuser, in the `postgis` container. A
    service that creates its own schemas needs `CREATE` on the database; it then
-   owns those schemas. Grant another service only the access it needs to them:
+   owns those schemas. Give each role a search path of its own schemas and
+   `extensions`, where PostGIS lives, before the service first starts; leave
+   out `public`, which the API's role owns. Grant another service only the
+   access it needs to them:
 
    ```bash
    docker exec -it postgis psql -U postgres -d openmapx
@@ -511,8 +512,10 @@ installation does not prove that their database and feed credentials are valid.
 
    ```sql
    CREATE ROLE openconditions_ingest LOGIN PASSWORD '<openssl rand -hex 32>';
+   ALTER ROLE openconditions_ingest SET search_path = conditions, extensions;
    GRANT CREATE ON DATABASE openmapx TO openconditions_ingest;
    CREATE ROLE openconditions_contributions LOGIN PASSWORD '<openssl rand -hex 32>';
+   ALTER ROLE openconditions_contributions SET search_path = conditions, extensions;
    -- After the ingest service has created its schema:
    GRANT USAGE ON SCHEMA conditions TO openconditions_contributions;
    ```
@@ -525,10 +528,6 @@ installation does not prove that their database and feed credentials are valid.
    [Martin overlays](../guides/map-tiles.md#martin-overlays). The roles live
    outside the database, so a backup restore keeps their grants only while the
    roles still exist, and those roles must be able to log in.
-
-   A compromised API can make any role that calls PostGIS run its code (see
-   [Database roles](../install/configuration.md#database-roles)); weigh this
-   before giving a service's role rights the API should not have.
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and

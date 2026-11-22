@@ -142,5 +142,12 @@ describe("the ops-agent's fixed CLI", () => {
         executable: true,
       }),
     );
+    expect(index.files).toContainEqual(
+      expect.objectContaining({
+        serviceId: "postgis",
+        path: "scripts/initdb-extensions.sh",
+        executable: true,
+      }),
+    );
   }, 60_000);
 });

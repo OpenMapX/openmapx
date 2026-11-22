@@ -17,6 +17,7 @@ docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$SHELLCHECK_IMAGE" \
   scripts/verify-full.sh \
   services/dawarich-app/scripts/openmapx-entrypoint.sh \
   services/dawarich-sidekiq/scripts/openmapx-entrypoint.sh \
+  services/postgis/scripts/initdb-extensions.sh \
   services/postgis/scripts/sync-password.sh
 
 docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$HADOLINT_IMAGE" /bin/hadolint \

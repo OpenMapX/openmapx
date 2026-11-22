@@ -528,17 +528,11 @@ export class CrashHost {
     url.password = password;
     this.databaseUrl = url.toString();
     this.databaseServer = { hostname: url.hostname, port: url.port || "5432" };
-    const database = postgres(this.databaseUrl, { max: 1, onnotice: () => {} });
-    try {
-      await database`CREATE EXTENSION IF NOT EXISTS postgis`;
-    } finally {
-      await database.end({ timeout: 2 });
-    }
   }
 
-  /** Creates the API's and data-manager's roles in this host's database as
-   * the PostGIS entrypoint does when PostGIS starts: its own SQL, with the
-   * passwords `compose render` wrote. psql's `\gexec` runs each row of the
+  /** Creates the API's and data-manager's roles and the extensions in this
+   * host's database as the PostGIS entrypoint does when PostGIS starts: its
+   * own SQL, with the passwords `compose render` wrote. psql's `\gexec` runs each row of the
    * preceding query as a statement. The roles are server-wide, so each host
    * sets their passwords again. */
   private async provisionDatabaseRoles() {

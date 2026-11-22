@@ -74,6 +74,11 @@
       "readOnly": true
     },
     {
+      "source": "scripts/initdb-extensions.sh",
+      "target": "/docker-entrypoint-initdb.d/10_postgis.sh",
+      "readOnly": true
+    },
+    {
       "source": "@infra:secrets/postgres-api-password",
       "target": "/run/secrets/postgres-api-password",
       "readOnly": true
