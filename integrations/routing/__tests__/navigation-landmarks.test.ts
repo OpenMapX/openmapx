@@ -185,7 +185,7 @@ describe("POST /navigation/landmarks", () => {
     const store = new Map<string, unknown>();
     const cache = {
       get: vi.fn(async (key: string) => store.get(key) ?? null),
-      set: vi.fn(async (key: string, value: unknown) => {
+      set: vi.fn(async (key: string, value: unknown, _ttlSeconds?: number) => {
         store.set(key, value);
       }),
     };
