@@ -7,6 +7,9 @@ import {
   maneuverIconName,
   measurementDistanceParts,
   presentGuidanceLanes,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutTurnAt,
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
 import { z } from "zod";
@@ -43,9 +46,33 @@ export const carTripProjectionSchema = z.object({
     )
     .max(12)
     .optional(),
-  /** A roundabout's exit number and circling direction; the turn type follows the glyph. */
+  /**
+   * A roundabout's exit number and circling direction; `angle` is how far round
+   * the exit lies in the direction of travel (Android for Cars' exit angle), and
+   * `leaving` marks the step that leaves it.
+   */
   roundabout: z
-    .object({ exit: z.number().int().min(1).max(99), clockwise: z.boolean() })
+    .object({
+      exit: z.number().int().min(1).max(99),
+      clockwise: z.boolean(),
+      angle: z.number().int().min(1).max(360).optional(),
+      leaving: z.literal(true).optional(),
+    })
+    .optional(),
+  /** A glyph drawn for this maneuver instead of `maneuverIcon` (a roundabout's way round). */
+  maneuverGlyph: z
+    .object({
+      strokes: z
+        .array(
+          z.object({
+            d: z.string().max(512),
+            width: z.number().positive().max(6),
+            opacity: z.number().min(0).max(1).optional(),
+          }),
+        )
+        .max(4),
+      fills: z.array(z.string().max(512)).max(4),
+    })
     .optional(),
   distanceToManeuver: nonnegative,
   maneuverDistance: displayDistance,
@@ -76,6 +103,12 @@ const stepSchema = z.object({
     .max(12)
     .optional(),
   roundaboutExitCount: z.number().optional(),
+  bearingBefore: z.number().finite().optional(),
+  bearingAfter: z.number().finite().optional(),
+  coordinates: z
+    .array(z.tuple([z.number().finite(), z.number().finite()]))
+    .max(20_000)
+    .optional(),
   motorway: z.boolean().optional(),
   sign: z.unknown().optional(),
   maneuver: z
@@ -108,6 +141,41 @@ function readStep(steps: unknown[], index: number): { step: CarStep | undefined 
   return parsed.success ? { step: parsed.data } : null;
 }
 
+const isRoundaboutEntry = (type: string | undefined) => type === "roundabout" || type === "rotary";
+const isRoundaboutExit = (type: string | undefined) =>
+  type === "exit roundabout" || type === "exit rotary";
+
+/**
+ * The roundabout at the upcoming step, entered or left there: its exit number
+ * and the turn read from the steps around it. Those neighbours are read only
+ * for a roundabout, and a malformed one only costs the turn.
+ */
+function upcomingRoundabout(
+  steps: unknown[],
+  index: number,
+  step: CarStep | undefined,
+): {
+  exitCount?: number;
+  drivingSide?: "left" | "right";
+  turn?: RoundaboutTurn;
+  leaving: boolean;
+} | null {
+  const type = step?.maneuver?.type;
+  const leaving = isRoundaboutExit(type);
+  if (!isRoundaboutEntry(type) && !leaving) return null;
+  const entryIndex = leaving ? index - 1 : index;
+  const window = [entryIndex - 1, entryIndex, entryIndex + 1].map((i) => readStep(steps, i)?.step);
+  const entry = window[1];
+  if (leaving && !isRoundaboutEntry(entry?.maneuver?.type))
+    return { leaving, drivingSide: step?.drivingSide };
+  return {
+    leaving,
+    exitCount: entry?.roundaboutExitCount,
+    drivingSide: entry?.drivingSide,
+    turn: roundaboutTurnAt(window, 1),
+  };
+}
+
 /** The maneuver is at the START of the next step, not the step being driven. */
 export function buildCarTripProjection(
   snapshot: Pick<
@@ -137,7 +205,7 @@ export function buildCarTripProjection(
   if (!upcoming || !current) return null;
   const step = upcoming.step;
   const m = step?.maneuver;
-  const roundabout = m?.type === "roundabout" || m?.type === "rotary";
+  const roundabout = upcomingRoundabout(steps, upcomingIndex, step);
   const reroute = rerouteSchema.safeParse(snapshot.reroute);
   const currentStep = current.step;
   const showLanes =
@@ -191,10 +259,18 @@ export function buildCarTripProjection(
     ...(roundabout
       ? {
           roundabout: {
-            exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))),
-            // Left-hand traffic circles clockwise.
-            clockwise: step?.drivingSide === "left",
+            exit: Math.min(99, Math.max(1, Math.trunc(roundabout.exitCount ?? 1))),
+            // Left-hand traffic circles clockwise; the turn reads it from the path
+            // where the engine names no driving side.
+            clockwise: roundabout.turn
+              ? roundabout.turn.circulation === "cw"
+              : roundabout.drivingSide === "left",
+            ...(roundabout.turn
+              ? { angle: Math.min(360, Math.max(1, Math.round(roundabout.turn.exitAngle))) }
+              : {}),
+            ...(roundabout.leaving ? { leaving: true as const } : {}),
           },
+          ...(roundabout.turn ? { maneuverGlyph: roundaboutGlyph(roundabout.turn) } : {}),
         }
       : {}),
     distanceToManeuver: p.distanceToNextManeuver,

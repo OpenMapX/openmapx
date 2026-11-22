@@ -3,7 +3,11 @@ package org.openmapx.androidauto
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.PathParser
+import org.json.JSONObject
 
 /**
  * The phone's guidance glyphs (Material icons, named as in `@openmapx/core`
@@ -55,9 +59,57 @@ object ManeuverIcons {
     drawable.draw(canvas)
   }
 
-  fun bitmap(context: Context, icon: String): Bitmap {
+  /**
+   * The maneuver's glyph: [glyph], the path data the phone drew (a roundabout's way
+   * round, validated by `CarProjection`), when given; otherwise the named [icon].
+   */
+  fun bitmap(context: Context, icon: String, glyph: JSONObject? = null): Bitmap {
     val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
-    draw(context, Canvas(bitmap), icon, 0f, 0f, SIZE)
+    val canvas = Canvas(bitmap)
+    if (glyph == null || !drawGlyph(canvas, glyph, SIZE)) draw(context, canvas, icon, 0f, 0f, SIZE)
     return bitmap
+  }
+
+  /** Path data on the phone's 24 × 24 grid, or null when it does not parse. */
+  private fun path(data: String): Path? =
+    try {
+      PathParser.createPathFromPathData(data)
+    } catch (_: RuntimeException) {
+      null
+    }
+
+  /** Strokes then fills, white, scaled to [size]; false when any path fails to parse. */
+  private fun drawGlyph(canvas: Canvas, glyph: JSONObject, size: Int): Boolean {
+    val strokes = glyph.optJSONArray("strokes") ?: return false
+    val fills = glyph.optJSONArray("fills") ?: return false
+    val stroked =
+      (0 until strokes.length()).map { i ->
+        val stroke = strokes.getJSONObject(i)
+        Triple(path(stroke.optString("d")) ?: return false, stroke.optDouble("width"), stroke.optDouble("opacity", 1.0))
+      }
+    val filled = (0 until fills.length()).map { i -> path(fills.optString(i)) ?: return false }
+    canvas.save()
+    canvas.scale(size / 24f, size / 24f)
+    for ((p, width, opacity) in stroked) {
+      canvas.drawPath(
+        p,
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          style = Paint.Style.STROKE
+          color = android.graphics.Color.WHITE
+          alpha = (opacity.coerceIn(0.0, 1.0) * 255).toInt()
+          strokeWidth = width.toFloat()
+          strokeCap = Paint.Cap.ROUND
+          strokeJoin = Paint.Join.ROUND
+        },
+      )
+    }
+    val fill =
+      Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = android.graphics.Color.WHITE
+      }
+    for (p in filled) canvas.drawPath(p, fill)
+    canvas.restore()
+    return true
   }
 }

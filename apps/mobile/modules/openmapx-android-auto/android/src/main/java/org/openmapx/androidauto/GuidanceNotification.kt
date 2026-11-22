@@ -55,7 +55,9 @@ object GuidanceNotification {
     lastManeuver = key
     val extender =
       CarAppExtender.Builder()
-        .setLargeIcon(ManeuverIcons.bitmap(context, p.optString("maneuverIcon")))
+        .setLargeIcon(
+          ManeuverIcons.bitmap(context, p.optString("maneuverIcon"), p.optJSONObject("maneuverGlyph"))
+        )
         .setContentTitle(p.optString("instruction"))
         .setContentText(distanceText(p))
         // The routing card already shows a new turn while OpenMapX is on the car screen;

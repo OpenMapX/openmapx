@@ -1,4 +1,9 @@
-import type { GroundFullSnapshot } from "@openmapx/core/navigation";
+import {
+  type GroundFullSnapshot,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutTurnAt,
+} from "@openmapx/core/navigation";
 import { buildCarTripProjection } from "./CarTripProjection";
 
 const snapshot = {
@@ -176,4 +181,65 @@ it("never touches the steps it does not read", () => {
     maneuverId: `s:${CURRENT + 1}`,
   });
   expect(touched).toBe(0);
+});
+
+// Strausberger Platz, Berlin: in from Alexanderstraße, out at the 2nd exit,
+// as Valhalla returns it (no driving side, enter and exit as two steps).
+const strausberger = [
+  {
+    instruction: "Turn right onto Alexanderstraße",
+    distance: 200,
+    duration: 30,
+    maneuver: { type: "turn", modifier: "right" },
+    coordinates: [
+      [13.427501, 52.5185],
+      [13.427641, 52.518406],
+    ],
+  },
+  {
+    instruction: "Enter Strausberger Platz and take the 2nd exit",
+    distance: 74,
+    duration: 11,
+    roundaboutExitCount: 2,
+    maneuver: { type: "roundabout" },
+    bearingBefore: 137,
+    bearingAfter: 146,
+    coordinates: [
+      [13.427641, 52.518406],
+      [13.427859, 52.518257],
+      [13.428045, 52.518177],
+      [13.428345, 52.518135],
+      [13.428592, 52.518146],
+    ],
+  },
+  {
+    instruction: "Exit the roundabout",
+    distance: 400,
+    duration: 30,
+    maneuver: { type: "exit roundabout" },
+    bearingBefore: 73,
+    bearingAfter: 78,
+    coordinates: [
+      [13.428592, 52.518146],
+      [13.429106, 52.518204],
+    ],
+  },
+  { instruction: "Arrive", distance: 0, duration: 0, maneuver: { type: "arrive" } },
+];
+
+it("tells the car how far round a counter-clockwise roundabout the exit lies", () => {
+  const projection = buildCarTripProjection(withSteps(strausberger, 0), 1000);
+  const turn = roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn;
+  expect(turn.circulation).toBe("ccw");
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 239 });
+  // The car draws the phone's glyph, not a drawable that circles the wrong way.
+  expect(projection?.maneuverGlyph).toEqual(roundaboutGlyph(turn));
+});
+
+it("names the roundabout's exit step as leaving it", () => {
+  const projection = buildCarTripProjection(withSteps(strausberger, 1), 1000);
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 239, leaving: true });
+  expect(projection?.maneuverGlyph).toEqual(
+    roundaboutGlyph(roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn),
+  );
 });

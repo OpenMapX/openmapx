@@ -15,6 +15,7 @@ import { useMemo } from "react";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { OSM_ATTRIBUTION } from "@/lib/map";
 import { useNavLaneGuidanceStore } from "@/lib/navigation/laneGuidanceStore";
+import { stepManeuver } from "@/lib/navigation/maneuverIcon";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 const OSM_CREDIT = [OSM_ATTRIBUTION];
@@ -95,9 +96,9 @@ export function NavManeuverSlot() {
     <ManeuverBanner
       instruction={step.instruction}
       distanceToManeuver={distanceToManeuver}
-      maneuver={step.maneuver}
+      maneuver={stepManeuver(route?.steps ?? [], upcomingIndex)}
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
-      nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
+      nextManeuver={showNextStep ? stepManeuver(route?.steps ?? [], upcomingIndex + 1) : undefined}
       lanes={showLanes ? resolvedLanes : undefined}
       laneSource={usesOsmLanes ? "osm" : "engine"}
       sign={step.sign}

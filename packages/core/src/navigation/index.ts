@@ -325,6 +325,14 @@ export {
   updateOffRouteScore,
 } from "./reroute";
 export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
+export {
+  type GuidanceGlyph,
+  type RoundaboutCirculation,
+  type RoundaboutStep,
+  type RoundaboutTurn,
+  roundaboutGlyph,
+  roundaboutTurnAt,
+} from "./roundabout";
 export { isNearRoute, ROUTE_CORRIDOR_METERS } from "./routeCorridor";
 export {
   appendCountrySpans,

@@ -36,12 +36,21 @@ object CarTripMapper {
 
   /**
    * The host's turn type, for the cluster and HUD, from the shared glyph the phone draws
-   * (`maneuverIconName`); only a roundabout's circling direction comes separately.
+   * (`maneuverIconName`). A roundabout comes separately: its circling direction, how
+   * far round the exit lies, and whether this step leaves it.
    */
   fun maneuverType(p: JSONObject): Int {
     p.optJSONObject("roundabout")?.let {
-      return if (it.optBoolean("clockwise")) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
-      else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW
+      val clockwise = it.optBoolean("clockwise")
+      return when {
+        it.optBoolean("leaving") ->
+          if (clockwise) Maneuver.TYPE_ROUNDABOUT_EXIT_CW else Maneuver.TYPE_ROUNDABOUT_EXIT_CCW
+        it.has("angle") ->
+          if (clockwise) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW_WITH_ANGLE
+          else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE
+        clockwise -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
+        else -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW
+      }
     }
     return when (p.optString("maneuverIcon")) {
       "TurnLeft" -> Maneuver.TYPE_TURN_NORMAL_LEFT
@@ -62,12 +71,20 @@ object CarTripMapper {
       .setManeuver(
         Maneuver.Builder(maneuverType(p))
           .apply {
-            p.optJSONObject("roundabout")?.let {
+            // Leaving a roundabout takes neither an exit number nor an angle.
+            p.optJSONObject("roundabout")?.takeUnless { it.optBoolean("leaving") }?.let {
               setRoundaboutExitNumber(it.optInt("exit", 1).coerceIn(1, 99))
+              if (it.has("angle")) setRoundaboutExitAngle(it.optInt("angle").coerceIn(1, 360))
             }
             setIcon(
               CarIcon.Builder(
-                  IconCompat.createWithBitmap(ManeuverIcons.bitmap(context, p.optString("maneuverIcon")))
+                  IconCompat.createWithBitmap(
+                    ManeuverIcons.bitmap(
+                      context,
+                      p.optString("maneuverIcon"),
+                      p.optJSONObject("maneuverGlyph"),
+                    )
+                  )
                 )
                 .build()
             )

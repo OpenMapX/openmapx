@@ -27,6 +27,7 @@ import { StepRow } from "@/components/panels/directions/StepRow";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import type { StartFailure } from "@/lib/mobile/useStartNavigation";
+import { stepManeuver } from "@/lib/navigation/maneuverIcon";
 import { RouteStartButton, RouteStartError } from "./routeCardChrome";
 
 /**
@@ -227,7 +228,7 @@ export function DetailsView({
                 duration={step.duration}
                 units={units}
                 lanes={step.lanes}
-                maneuver={step.maneuver}
+                maneuver={stepManeuver(route.steps, i)}
                 sign={step.sign}
                 country={countries[i]}
               />
@@ -353,7 +354,7 @@ function LegByLegView({
                     duration={step.duration}
                     units={units}
                     lanes={step.lanes}
-                    maneuver={step.maneuver}
+                    maneuver={stepManeuver(leg.steps, j)}
                     sign={step.sign}
                     country={legCountries[j]}
                   />

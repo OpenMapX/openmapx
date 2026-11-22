@@ -24,6 +24,15 @@ object CarProjection {
       if (!number.toDouble().isFinite() || number.toDouble() < 0) return null
     }
     if (value.optString("maneuverIcon") !in ManeuverIcons.names) return null
+    if (value.has("roundabout")) {
+      val roundabout = value.optJSONObject("roundabout") ?: return null
+      if (roundabout.opt("exit") !is Int || roundabout.optInt("exit") !in 1..99) return null
+      if (roundabout.opt("clockwise") !is Boolean) return null
+      if (roundabout.has("angle") && (roundabout.opt("angle") !is Int || roundabout.optInt("angle") !in 1..360))
+        return null
+      if (roundabout.has("leaving") && roundabout.opt("leaving") != true) return null
+    }
+    if (value.has("maneuverGlyph") && !validGlyph(value.optJSONObject("maneuverGlyph"))) return null
     for (key in listOf("maneuverDistance", "remainingDistanceDisplay")) {
       val parts = value.optJSONObject(key) ?: return null
       if (parts.optString("unit") !in setOf("m", "km", "ft", "mi")) return null
@@ -48,5 +57,28 @@ object CarProjection {
       }
     }
     return value
+  }
+
+  /** Path commands the phone's glyphs use, nothing else. */
+  private val pathData = Regex("^[MLAZ0-9 .-]{1,512}$")
+
+  private fun validGlyph(glyph: JSONObject?): Boolean {
+    val strokes = glyph?.optJSONArray("strokes") ?: return false
+    val fills = glyph.optJSONArray("fills") ?: return false
+    if (strokes.length() > 4 || fills.length() > 4) return false
+    for (i in 0 until strokes.length()) {
+      val stroke = strokes.optJSONObject(i) ?: return false
+      if (!pathData.matches(stroke.optString("d"))) return false
+      val width = stroke.opt("width") as? Number ?: return false
+      if (!width.toDouble().isFinite() || width.toDouble() <= 0 || width.toDouble() > 6) return false
+      if (stroke.has("opacity")) {
+        val opacity = stroke.opt("opacity") as? Number ?: return false
+        if (opacity.toDouble() !in 0.0..1.0) return false
+      }
+    }
+    for (i in 0 until fills.length()) {
+      if (!pathData.matches(fills.opt(i) as? String ?: return false)) return false
+    }
+    return true
   }
 }

@@ -465,10 +465,12 @@ export function valhallaManeuverType(t: number): { type: string; modifier?: stri
     case 37:
     case 38:
       return { type: "merge" };
-    // Roundabouts (26 enter, 27 exit).
+    // Roundabouts: entering (26) and leaving (27) are distinct maneuvers, named
+    // as OSRM names them, so the leaving step is not read as another roundabout.
     case 26:
-    case 27:
       return { type: "roundabout" };
+    case 27:
+      return { type: "exit roundabout" };
     // Pedestrian/indoor: 39 kElevatorEnter, 40 kStepsEnter, 41 kEscalatorEnter.
     // Surface a dedicated glyph (escalator maps to stairs — closest icon) so foot
     // routing shows "take the lift/stairs" instead of a bare straight arrow.
