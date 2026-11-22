@@ -4,6 +4,7 @@ import {
   buildFeedProxyConfig,
   FEED_PROXY_CONFIG_FILENAME,
   FEED_PROXY_CONFIG_SUBDIR,
+  FEED_PROXY_ORIGIN,
   FEED_PROXY_VARS_FILENAME,
   writeFeedProxyVarsFile,
 } from "@openmapx/motis-feed-proxy-config";
@@ -12,7 +13,6 @@ import { CANDIDATE_PROXY_DIRNAME } from "./candidate.js";
 import { applyConfigOverrides } from "./config-overrides.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
-const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
 const HOSTED_TRANSIT_RUNTIME_DOMAINS = ["transitous.org", "triptix.tech"] as const;
 
 function assertSovereignRuntimeConfig(config: string): void {
@@ -172,7 +172,7 @@ export const run: StageFn = async (ctx) => {
     // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
     // operator hasn't set it, and "" must fall through to the default.
     const feedProxyUrl =
-      ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || DEFAULT_FEED_PROXY_URL;
+      ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || FEED_PROXY_ORIGIN;
     let rtRewritten = 0;
     let gbfsProxyRewritten = 0;
     if (existsSync(configPath)) {

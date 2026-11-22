@@ -3,7 +3,7 @@
     "apiVersion": "7.x",
     "hosts": [
       {
-        "host": "elasticsearch",
+        "host": "openmapx-elasticsearch",
         "port": 9200
       }
     ]
@@ -20,10 +20,10 @@
   "api": {
     "services": {
       "placeholder": {
-        "url": "http://pelias-placeholder:4100"
+        "url": "http://openmapx-pelias-placeholder:4100"
       },
       "pip": {
-        "url": "http://pelias-pip:4200"
+        "url": "http://openmapx-pelias-pip:4200"
       }
     },
     "targets": {

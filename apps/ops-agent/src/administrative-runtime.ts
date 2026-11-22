@@ -65,7 +65,7 @@ const MAX_CLI_DURATION_MS = 30 * 60_000;
 // data-manager on the stack's private network. The CLI's default, its
 // published loopback port, is the host's; inside this container it reaches
 // nothing.
-const FIXED_CLI_DATA_MANAGER_URL = "http://data-manager:4000";
+const FIXED_CLI_DATA_MANAGER_URL = "http://openmapx-data-manager:4000";
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;

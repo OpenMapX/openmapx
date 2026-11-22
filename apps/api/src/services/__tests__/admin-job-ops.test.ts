@@ -898,7 +898,7 @@ it.each([false, true])(
       });
     };
     const client = () =>
-      new OpsClient({ baseUrl: "http://ops-agent:4300", tokenFile, fetch: fetcher });
+      new OpsClient({ baseUrl: "http://openmapx-ops-agent:4300", tokenFile, fetch: fetcher });
     let durable: Record<string, unknown> | undefined;
     let durableProtocol: AdminJobProtocol | undefined;
     const first = context();
@@ -966,7 +966,7 @@ it.each([false, true])(
           },
         });
       else await expect(observation).resolves.toEqual({ backupId: "original" });
-      vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:4300");
+      vi.stubEnv("OPS_AGENT_URL", "http://openmapx-ops-agent:4300");
       vi.stubGlobal("fetch", fetcher);
       const reconciled = context();
       reconciled.jobType = "backup.operation";

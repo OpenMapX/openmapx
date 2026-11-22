@@ -25,7 +25,7 @@ function send(answers: (() => Response | Promise<Response>)[], lifetimeMs = 60_0
   });
   const deadlineAt = Date.now() + lifetimeMs;
   const result = linkGeneration({
-    transport: createDataManagerTransport({ baseUrl: "http://data-manager", fetch }),
+    transport: createDataManagerTransport({ baseUrl: "http://openmapx-data-manager", fetch }),
     operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     deadlineAt,
     revisionId: `cfg1_${"a".repeat(43)}`,

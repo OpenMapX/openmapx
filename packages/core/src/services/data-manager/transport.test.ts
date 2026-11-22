@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) =>
 describe("canonical data-manager acquisition", () => {
   it("rejects fabricated success rather than inventing defaults", async () => {
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: vi.fn().mockResolvedValue(json({})),
     });
     await expect(
@@ -21,7 +21,7 @@ describe("canonical data-manager acquisition", () => {
   it("keeps operation identity in its closure even with forged options", async () => {
     const acquire = vi.fn().mockResolvedValue(json({ ok: true }));
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
     });
     await expect(
@@ -35,7 +35,7 @@ describe("canonical data-manager acquisition", () => {
   });
   it("preserves declared non-success responses and checked HTTP status policy", async () => {
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: vi.fn().mockResolvedValue(json({ error: "absent" }, 404)),
     });
     const result = await bindDataManagerOperation("getSearchIndexStatus")<{
@@ -51,7 +51,7 @@ describe("canonical data-manager acquisition", () => {
   it("uses bearer auth with redirect rejection and preserves configured budgets", async () => {
     const acquire = vi.fn().mockResolvedValue(json({ datasets: [] }));
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       authToken: "secret",
       fetch: acquire,
       maxJsonBytes: 4,
@@ -70,7 +70,7 @@ describe("canonical data-manager acquisition", () => {
       json({ secret: true }, 418),
     ]) {
       const transport = createDataManagerTransport({
-        baseUrl: "http://data-manager",
+        baseUrl: "http://openmapx-data-manager",
         fetch: vi.fn().mockResolvedValue(response),
       });
       await expect(
@@ -90,7 +90,7 @@ describe("canonical data-manager acquisition", () => {
       { headers: { "content-type": "application/json" } },
     );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       requestTimeoutMs: 5,
       fetch: vi.fn().mockResolvedValue(response),
     });
@@ -107,6 +107,11 @@ describe("canonical data-manager acquisition", () => {
     expect(
       validateDataManagerBaseUrl("http://example.org", { allowPlaintextHosts: ["example.org"] }),
     ).toBe("http://example.org");
+    expect(validateDataManagerBaseUrl("http://openmapx-data-manager:4000")).toBe(
+      "http://openmapx-data-manager:4000",
+    );
+    // The bare service ID can name another project's container on a shared network.
+    expect(() => validateDataManagerBaseUrl("http://data-manager:4000")).toThrow();
   });
   it("preserves raw ranges, headers and explicit HEAD without buffering a Blob", async () => {
     const archive = new Response("bytes", {
@@ -134,7 +139,7 @@ describe("canonical data-manager acquisition", () => {
         }),
       );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
       maxJsonBytes: 1,
     });
@@ -171,7 +176,7 @@ describe("canonical data-manager acquisition", () => {
       }),
     );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
     });
     const request = bindDataManagerOperation("getOfflineGlyph");
@@ -204,7 +209,7 @@ describe("canonical data-manager acquisition", () => {
         }),
       );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
       authToken: "secret",
     });
@@ -220,7 +225,7 @@ describe("canonical data-manager acquisition", () => {
   it("honors explicit custom-token authentication without adding bearer auth", async () => {
     const acquire = vi.fn().mockResolvedValue(json({ datasets: [] }));
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
       authToken: "default",
     });
@@ -253,7 +258,7 @@ describe("canonical data-manager acquisition", () => {
         }),
       );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
     });
     const accepted = await bindDataManagerOperation("addTransitSource")<{
@@ -275,7 +280,7 @@ describe("canonical data-manager acquisition", () => {
   });
   it("redacts malformed JSON diagnostics and retains ownership of late fetch responses", async () => {
     const malformed = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: vi
         .fn()
         .mockResolvedValue(
@@ -291,7 +296,7 @@ describe("canonical data-manager acquisition", () => {
     let resolve!: (value: Response) => void;
     let canceled = false;
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       requestTimeoutMs: 5,
       fetch: vi.fn().mockImplementation(
         () =>

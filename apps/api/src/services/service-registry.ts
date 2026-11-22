@@ -171,7 +171,7 @@ export function getServiceRegistryWarnings(): string[] {
 /**
  * Resolve a reachable URL for a service by its id, using internal Docker networking.
  * Services only expose `expose:` ports (no host binding by default), reachable by
- * service hostname within the `openmapx` network.
+ * their project-unique name (`openmapx-<id>`) on the stack's internal networks.
  */
 export function serviceUrl(serviceId: string): string | null {
   if (!registry) return null;
@@ -179,7 +179,7 @@ export function serviceUrl(serviceId: string): string | null {
   if (!svc?.enabled) return null;
   const port = svc.manifest.container.expose?.[0];
   if (!port) return null;
-  return `http://${serviceId}:${port}`;
+  return `http://${services.serviceNetworkAlias(serviceId)}:${port}`;
 }
 
 export interface ResolvedRequiredService {

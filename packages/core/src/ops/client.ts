@@ -110,7 +110,9 @@ function validateBaseUrl(value: string): string {
     ) {
       throw new Error("suffix");
     }
-    const privateHosts = new Set(["ops-agent", "localhost", "127.0.0.1", "[::1]", "::1"]);
+    // The agent's project-unique name, never its bare service ID, which could
+    // resolve to another project's container on a shared proxy network.
+    const privateHosts = new Set(["openmapx-ops-agent", "localhost", "127.0.0.1", "[::1]", "::1"]);
     if (
       !privateHosts.has(parsed.hostname.toLowerCase()) ||
       (parsed.protocol !== "http:" && parsed.protocol !== "https:")

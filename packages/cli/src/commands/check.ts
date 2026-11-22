@@ -144,7 +144,7 @@ async function runDeepProbe(serviceId: string, network: string): Promise<ProbeRe
   if (probe === null) return { status: "skipped", detail: "no app-level probe" };
   if (probe === undefined) return { status: "skipped", detail: "unknown service" };
 
-  const url = `http://${serviceId}:${probe.port}${probe.path}`;
+  const url = `http://${coreServices.serviceNetworkAlias(serviceId)}:${probe.port}${probe.path}`;
   const result = await dockerRun(buildProbeArgs(network, url));
 
   if (result.exitCode !== 0) {

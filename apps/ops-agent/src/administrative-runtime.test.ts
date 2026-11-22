@@ -420,7 +420,7 @@ describe("the fixed CLI", () => {
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(lines).toEqual(["stdout: data link http://data-manager:4000/ inherited"]);
+    expect(lines).toEqual(["stdout: data link http://openmapx-data-manager:4000/ inherited"]);
   });
 });
 

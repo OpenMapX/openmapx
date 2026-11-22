@@ -11,7 +11,9 @@ import {
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-const connectionString = resolveDatabaseUrl("postgresql://postgres:postgres@postgis:5432/openmapx");
+const connectionString = resolveDatabaseUrl(
+  "postgresql://postgres:postgres@openmapx-postgis:5432/openmapx",
+);
 
 assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 

@@ -402,8 +402,8 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
       // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
       expect(appEnvironment).toMatchObject({
         RAILS_ENV: "production",
-        REDIS_URL: "redis://dawarich-redis:6379",
-        DATABASE_HOST: "dawarich-postgis",
+        REDIS_URL: "redis://openmapx-dawarich-redis:6379",
+        DATABASE_HOST: "openmapx-dawarich-postgis",
         DATABASE_PORT: "5432",
         DATABASE_USERNAME: "postgres",
         DATABASE_NAME: "dawarich_production",
@@ -542,34 +542,29 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
           networks: Record<string, unknown>;
         };
       };
-      // A service with network aliases lists its networks in Compose's long form.
-      const networkNames = (networks: string[] | Record<string, unknown> | undefined) =>
-        Array.isArray(networks) ? networks : Object.keys(networks ?? {});
+      // Each service answers to its project-unique name on every network it joins.
+      const on = (id: string, networks: string[]) =>
+        Object.fromEntries(networks.map((network) => [network, { aliases: [`openmapx-${id}`] }]));
 
       const doc = render(true);
-      expect(doc.services["dawarich-app"]?.networks).toEqual([
-        "openmapx-private-dawarich",
-        "openmapx-private-dawarich-ingress",
-      ]);
+      expect(doc.services["dawarich-app"]?.networks).toEqual(
+        on("dawarich-app", ["openmapx-private-dawarich", "openmapx-private-dawarich-ingress"]),
+      );
       for (const id of ["dawarich-sidekiq", "dawarich-postgis", "dawarich-redis"]) {
-        expect(doc.services[id]?.networks).toEqual(["openmapx-private-dawarich"]);
+        expect(doc.services[id]?.networks).toEqual(on(id, ["openmapx-private-dawarich"]));
       }
       for (const id of ["traefik", "api"]) {
-        expect(networkNames(doc.services[id]?.networks)).toContain(
-          "openmapx-private-dawarich-ingress",
+        expect(doc.services[id]?.networks).toEqual(
+          on(id, ["openmapx", "openmapx-private-dawarich-ingress"]),
         );
-        expect(networkNames(doc.services[id]?.networks)).not.toContain("openmapx-private-dawarich");
       }
       for (const id of ["postgis", "redis"]) {
-        expect(doc.services[id]?.networks).toEqual(["openmapx"]);
+        expect(doc.services[id]?.networks).toEqual(on(id, ["openmapx"]));
       }
 
       const withoutDawarich = render(false);
-      expect(withoutDawarich.services.traefik?.networks).toEqual(["openmapx"]);
-      // The API's project-unique alias exists only on the internal network.
-      expect(withoutDawarich.services.api?.networks).toEqual({
-        openmapx: { aliases: ["openmapx-api"] },
-      });
+      expect(withoutDawarich.services.traefik?.networks).toEqual(on("traefik", ["openmapx"]));
+      expect(withoutDawarich.services.api?.networks).toEqual(on("api", ["openmapx"]));
       expect(Object.keys(withoutDawarich.networks)).toEqual(["openmapx"]);
     });
 
@@ -663,7 +658,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
 
       for (const serviceId of ["dawarich-app", "dawarich-sidekiq"]) {
         const service = compose.services[serviceId];
-        expect(service?.environment?.DATABASE_HOST).toBe("dawarich-postgis");
+        expect(service?.environment?.DATABASE_HOST).toBe("openmapx-dawarich-postgis");
         expect(service?.environment?.DATABASE_NAME).toBe("dawarich_production");
         expect(service?.environment?.OIDC_CLIENT_ID).toBeDefined();
         expect(service?.environment?.OPENMAPX_PROVISIONING_GENERATION).toBe(provisioningGeneration);

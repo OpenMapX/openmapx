@@ -27,6 +27,16 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
   };
 }
 
+/** A service's rendered networks: on each, it answers to its project-unique name. */
+function onNetworks(id: string, networks: string[], declared: Record<string, string[]> = {}) {
+  return Object.fromEntries(
+    networks.map((network) => [
+      network,
+      { aliases: [`openmapx-${id}`, ...(declared[network] ?? [])] },
+    ]),
+  );
+}
+
 function communitySvc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
   const service = svc(id, { ...opts, quality: "community" });
   return {
@@ -429,7 +439,7 @@ describe("renderServiceSnippet", () => {
     expect(snippet.image).toBe("t/alpha:1.2.3");
     expect(snippet.expose).toEqual(["80", "81"]);
     expect(snippet.restart).toBe("unless-stopped");
-    expect(snippet.networks).toEqual(["openmapx"]);
+    expect(snippet.networks).toEqual(onNetworks("alpha", ["openmapx"]));
     expect(snippet.deploy?.resources?.limits?.memory).toBe("512m");
   });
 
@@ -439,17 +449,21 @@ describe("renderServiceSnippet", () => {
       {},
     );
     const doc = parseYaml(composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: Record<string, unknown> }>;
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
-    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
-    expect(doc.services["bike-share"]?.networks).toEqual(["openmapx-community-bike-share"]);
+    expect(doc.services.redis?.networks).toEqual(onNetworks("redis", ["openmapx"]));
+    expect(doc.services["weather-feed"]?.networks).toEqual(
+      onNetworks("weather-feed", ["openmapx-community-weather-feed"]),
+    );
+    expect(doc.services["bike-share"]?.networks).toEqual(
+      onNetworks("bike-share", ["openmapx-community-bike-share"]),
+    );
     expect(doc.networks).toHaveProperty("openmapx-community-weather-feed");
     expect(doc.networks).toHaveProperty("openmapx-community-bike-share");
-    expect(doc.services["weather-feed"]?.networks).not.toContain("openmapx");
-    expect(doc.services["bike-share"]?.networks).not.toContain("openmapx");
+    expect(doc.services["weather-feed"]?.networks).not.toHaveProperty("openmapx");
+    expect(doc.services["bike-share"]?.networks).not.toHaveProperty("openmapx");
   });
 
   it("lets only an audited built-in explicitly join a named community network", () => {
@@ -459,14 +473,15 @@ describe("renderServiceSnippet", () => {
     } as never);
     const { composeYaml } = renderCompose([bridge, extension], {});
     const doc = parseYaml(composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
     };
 
-    expect(doc.services["audited-bridge"]?.networks).toEqual([
-      "openmapx",
-      "openmapx-community-weather-feed",
-    ]);
-    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx", "openmapx-community-weather-feed"]),
+    );
+    expect(doc.services["weather-feed"]?.networks).toEqual(
+      onNetworks("weather-feed", ["openmapx-community-weather-feed"]),
+    );
   });
 
   it("skips an audited bridge target that is disabled or not installed, silently", () => {
@@ -476,11 +491,13 @@ describe("renderServiceSnippet", () => {
     });
     const result = renderCompose([bridge, extension], {});
     const doc = parseYaml(result.composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services["audited-bridge"]?.networks).toEqual(["openmapx"]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx"]),
+    );
     expect(doc.networks).not.toHaveProperty("openmapx-community-weather-feed");
     expect(result.warnings).toBeUndefined();
   });
@@ -501,12 +518,11 @@ describe("renderServiceSnippet", () => {
     });
     const result = renderCompose([bridge, communitySvc("weather-feed")], {});
     const doc = parseYaml(result.composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
     };
-    expect(doc.services["audited-bridge"]?.networks).toEqual([
-      "openmapx",
-      "openmapx-community-weather-feed",
-    ]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx", "openmapx-community-weather-feed"]),
+    );
   });
 
   it("still rejects a built-in bridge target", () => {
@@ -537,16 +553,19 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, { enable_ipv6?: boolean; ipam?: { config: { subnet: string }[] } }>;
     };
 
-    expect(doc.services["bundle-web"]?.networks).toEqual([
-      "openmapx-private-bundle",
-      "openmapx-private-bundle-ingress",
-    ]);
-    expect(doc.services["bundle-worker"]?.networks).toEqual(["openmapx-private-bundle"]);
-    expect(doc.services["bundle-db"]?.networks).toEqual({
-      "openmapx-private-bundle": { aliases: ["db"] },
-    });
-    expect(doc.services.gateway?.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
-    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
+    expect(doc.services["bundle-web"]?.networks).toEqual(
+      onNetworks("bundle-web", ["openmapx-private-bundle", "openmapx-private-bundle-ingress"]),
+    );
+    expect(doc.services["bundle-worker"]?.networks).toEqual(
+      onNetworks("bundle-worker", ["openmapx-private-bundle"]),
+    );
+    expect(doc.services["bundle-db"]?.networks).toEqual(
+      onNetworks("bundle-db", ["openmapx-private-bundle"], { "openmapx-private-bundle": ["db"] }),
+    );
+    expect(doc.services.gateway?.networks).toEqual(
+      onNetworks("gateway", ["openmapx", "openmapx-private-bundle-ingress"]),
+    );
+    expect(doc.services.redis?.networks).toEqual(onNetworks("redis", ["openmapx"]));
     const bundleNet = doc.networks["openmapx-private-bundle"];
     const ingressNet = doc.networks["openmapx-private-bundle-ingress"];
     expect(bundleNet?.enable_ipv6).toBe(true);
@@ -565,7 +584,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.gateway?.networks).toEqual(["openmapx"]);
+    expect(doc.services.gateway?.networks).toEqual(onNetworks("gateway", ["openmapx"]));
     expect(doc.networks).not.toHaveProperty("openmapx-private-bundle-ingress");
   });
 
@@ -794,12 +813,14 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
+    // The project-unique name and declared aliases stay off the shared network,
+    // where another project's containers resolve names too.
     expect(doc.services.alpha?.networks).toEqual({
-      openmapx: { aliases: ["a"] },
+      openmapx: { aliases: ["openmapx-alpha", "a"] },
       "openmapx-proxy": {},
     });
     expect(doc.services.alpha?.labels?.["traefik.docker.network"]).toBe("proxy");
-    expect(doc.services.beta?.networks).toEqual(["openmapx"]);
+    expect(doc.services.beta?.networks).toEqual(onNetworks("beta", ["openmapx"]));
     expect(doc.networks["openmapx-proxy"]).toEqual({ name: "proxy", external: true });
   });
 
@@ -812,7 +833,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.alpha?.networks).toEqual(["openmapx"]);
+    expect(doc.services.alpha?.networks).toEqual(onNetworks("alpha", ["openmapx"]));
     expect(doc.networks["openmapx-proxy"]).toBeUndefined();
   });
 

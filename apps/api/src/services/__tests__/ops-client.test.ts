@@ -50,14 +50,14 @@ describe("API ops client construction", () => {
     expect(() => createApiOpsClient({})).toThrow("Ops agent configuration is unavailable");
     expect(() =>
       createApiOpsClient({
-        OPS_AGENT_URL: "http://ops-agent:4300",
+        OPS_AGENT_URL: "http://openmapx-ops-agent:4300",
         OPS_AGENT_TOKEN: "secret-must-not-be-supported",
       }),
     ).toThrow("Ops agent configuration is unavailable");
 
     expect(
       createApiOpsClient({
-        OPS_AGENT_URL: "http://ops-agent:4300",
+        OPS_AGENT_URL: "http://openmapx-ops-agent:4300",
         OPS_AGENT_TOKEN_FILE: "/run/secrets/ops-agent-api-token",
       }),
     ).toBeDefined();

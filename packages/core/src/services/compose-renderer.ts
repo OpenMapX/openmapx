@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
 import { resolveConsumesDependencies } from "./consumes-dependencies";
+import { serviceNetworkAlias } from "./core-service-ids";
 import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
@@ -737,6 +738,14 @@ export function renderServiceSnippet(
   if (c.devices?.length) snippet.devices = c.devices;
   if (c.privileged) snippet.privileged = true;
 
+  // Every service answers to its project-unique name on each of the stack's own
+  // networks, and internal callers use only that name. Compose also registers
+  // the bare service ID, but a service that joins an operator's shared proxy
+  // network could resolve a bare ID there to another project's container.
+  const uniqueAlias = serviceNetworkAlias(m.id);
+  const aliasesWith = (declared: readonly string[]) => ({
+    aliases: [...new Set([uniqueAlias, ...declared])],
+  });
   const communityNetworkAccess = m.communityNetworkAccess;
   if (c.networkMode === "host") {
     if (communityNetworkAccess?.length) {
@@ -746,10 +755,7 @@ export function renderServiceSnippet(
     }
     snippet.network_mode = "host";
   } else if (!service.isBuiltIn) {
-    const network = communityNetworkName(m.id);
-    snippet.networks = c.networkAliases?.length
-      ? { [network]: { aliases: [...c.networkAliases] } }
-      : [network];
+    snippet.networks = { [communityNetworkName(m.id)]: aliasesWith(c.networkAliases ?? []) };
   } else {
     const allServices = ctx.allServices ?? [service];
     const networks = [
@@ -771,19 +777,17 @@ export function renderServiceSnippet(
       networks.push(communityNetworkName(targetId));
     }
     // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
-    // Aliases go on the service's home network: `openmapx`, or its private
-    // networks when it stays off the shared one.
+    // Declared aliases go on the service's home network: `openmapx`, or its
+    // private networks when it stays off the shared one.
     const aliasNetworks = networks.includes("openmapx")
       ? ["openmapx"]
       : networks.filter((network) => network.startsWith(PRIVATE_NETWORK_PREFIX));
-    snippet.networks = c.networkAliases?.length
-      ? Object.fromEntries(
-          networks.map((network) => [
-            network,
-            aliasNetworks.includes(network) ? { aliases: [...(c.networkAliases ?? [])] } : {},
-          ]),
-        )
-      : networks;
+    snippet.networks = Object.fromEntries(
+      networks.map((network) => [
+        network,
+        aliasesWith(aliasNetworks.includes(network) ? (c.networkAliases ?? []) : []),
+      ]),
+    );
   }
 
   // Behind an operator-run proxy, a routed first-party service also joins that

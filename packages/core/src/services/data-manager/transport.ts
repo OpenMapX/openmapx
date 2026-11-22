@@ -27,7 +27,9 @@ export function validateDataManagerBaseUrl(
     "127.0.0.1",
     "[::1]",
     "::1",
-    "data-manager",
+    // The data-manager's project-unique name; its bare service ID could resolve
+    // to another project's container on a shared proxy network.
+    "openmapx-data-manager",
     ...(options.allowPlaintextHosts ?? configured.split(","))
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),

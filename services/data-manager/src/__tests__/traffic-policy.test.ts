@@ -55,6 +55,20 @@ describe("traffic policy client", () => {
     expect(sent?.redirect).toBe("error");
     expect(sent?.headers).toEqual({ Authorization: "Bearer test" });
   });
+  it("refuses plaintext to the API's bare service ID before sending the token", async () => {
+    let called = false;
+    await expect(
+      fetchTrafficPolicy({
+        baseUrl: "http://api:3001",
+        token: "test",
+        fetch: async () => {
+          called = true;
+          return new Response("{}");
+        },
+      }),
+    ).rejects.toThrow("Data-manager destination must use HTTPS");
+    expect(called).toBe(false);
+  });
   it("carries the operator's policy for unclear and non-commercial rights", async () => {
     const policy = await fetchTrafficPolicy({
       baseUrl: "http://openmapx-api:3001",

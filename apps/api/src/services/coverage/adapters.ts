@@ -55,7 +55,7 @@ export class DataManagerEvidenceUnavailableError extends Error {
 function baseUrl(): string {
   const configured = process.env.DATA_MANAGER_URL?.trim();
   if (configured) return configured;
-  return serviceUrl("data-manager") ?? "http://data-manager:4000";
+  return serviceUrl("data-manager") ?? "http://openmapx-data-manager:4000";
 }
 
 function combinePages(

@@ -764,10 +764,10 @@ describe("renderComposeForRepo", () => {
     expect(mounts("data-manager")).toContain("postgres-data-manager-password");
     expect(mounts("data-manager")).not.toContain("postgres-api-password");
     expect(rendered.services.api?.environment?.DATABASE_URL).toBe(
-      "postgresql://openmapx_api@postgis:5432/openmapx",
+      "postgresql://openmapx_api@openmapx-postgis:5432/openmapx",
     );
     expect(rendered.services["data-manager"]?.environment?.DATABASE_URL).toBe(
-      "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+      "postgresql://openmapx_data_manager@openmapx-postgis:5432/openmapx",
     );
 
     await renderComposeForRepo({

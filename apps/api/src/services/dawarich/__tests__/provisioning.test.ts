@@ -260,8 +260,8 @@ describe("provisionManagedDawarich", () => {
     expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)).toMatchObject({
       APPLICATION_HOSTS: "timeline.example.test",
       APPLICATION_URL: "https://timeline.example.test",
-      DATABASE_HOST: "dawarich-postgis",
-      REDIS_URL: "redis://dawarich-redis:6379",
+      DATABASE_HOST: "openmapx-dawarich-postgis",
+      REDIS_URL: "redis://openmapx-dawarich-redis:6379",
       OIDC_ISSUER: "https://example.test/api/auth",
       OIDC_CLIENT_ID: "client-1",
       OIDC_PKCE_ENABLED: "true",

@@ -21,7 +21,7 @@ describe("ops-agent deployment manifest", () => {
       composeOutDir: join(root, "infra", "docker"),
     });
     expect(ops.expose).toEqual(["4300"]);
-    expect(ops.networks).toEqual(["openmapx"]);
+    expect(ops.networks).toEqual({ openmapx: { aliases: ["openmapx-ops-agent"] } });
     expect(ops.group_add).toEqual([expect.stringContaining("DOCKER_GID:?DOCKER_GID must be set")]);
     expect(ops).not.toHaveProperty("ports");
     expect(ops).not.toHaveProperty("labels");

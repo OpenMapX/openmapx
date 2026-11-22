@@ -125,6 +125,8 @@ export {
   PROTECTED_CONFIGURATION_SERVICE_IDS,
   RELEASE_PINNED_SERVICE_IDS,
   type ReleasePinnedServiceId,
+  SERVICE_NETWORK_ALIAS_PREFIX,
+  serviceNetworkAlias,
 } from "./core-service-ids";
 export {
   composeCreationDependencyIds,

@@ -20,6 +20,20 @@ export const CORE_SERVICE_ID = {
 
 export type CoreServiceId = (typeof CORE_SERVICE_ID)[keyof typeof CORE_SERVICE_ID];
 
+/** Prefix of every service's project-unique DNS name; no service ID or declared alias may use it. */
+export const SERVICE_NETWORK_ALIAS_PREFIX = "openmapx-";
+
+/**
+ * The DNS name a service answers to on the stack's own networks, such as
+ * `openmapx-postgis`. Internal URLs use it, never the bare service ID: a
+ * service routed by an operator's proxy also joins that proxy's shared
+ * network, where a bare ID such as `redis` can resolve to another project's
+ * container.
+ */
+export function serviceNetworkAlias(serviceId: string): string {
+  return `${SERVICE_NETWORK_ALIAS_PREFIX}${serviceId}`;
+}
+
 const { api, web, dataManager, opsAgent, transitousRunner, traefik, postgis, redis, wellKnown } =
   CORE_SERVICE_ID;
 

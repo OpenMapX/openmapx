@@ -238,7 +238,7 @@ export function createTrafficLiveService(deps: TrafficLiveServiceDeps) {
   let lastMissingWaysRefreshAt = 0;
 
   const valhallaUrl =
-    options.valhallaUrl ?? envString("TRAFFIC_VALHALLA_URL", "http://valhalla:8002");
+    options.valhallaUrl ?? envString("TRAFFIC_VALHALLA_URL", "http://openmapx-valhalla:8002");
   const spanEdgeCachePath =
     options.spanEdgeCachePath ?? join(deps.dataDir, "traffic", "span-edges-cache.json");
   const traceSpan = options.traceSpanEdges ?? traceSpanEdgesDefault;

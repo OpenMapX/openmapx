@@ -7,6 +7,9 @@ export const DAWARICH_APP_SERVICE_ID = "dawarich-app";
 export const DAWARICH_WORKER_SERVICE_ID = "dawarich-sidekiq";
 export const DAWARICH_POSTGIS_SERVICE_ID = "dawarich-postgis";
 export const DAWARICH_REDIS_SERVICE_ID = "dawarich-redis";
+/** Where the Dawarich containers reach their database and Redis: each one's project-unique name. */
+export const DAWARICH_DATABASE_HOST = `openmapx-${DAWARICH_POSTGIS_SERVICE_ID}`;
+export const DAWARICH_REDIS_URL = `redis://openmapx-${DAWARICH_REDIS_SERVICE_ID}:6379`;
 export const DAWARICH_VERSION = "1.19.0";
 export const DAWARICH_PROVISIONING_GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
 export const DAWARICH_OIDC_RECOVERY_REQUIRED_KEY = "OPENMAPX_OIDC_RECOVERY_REQUIRED";

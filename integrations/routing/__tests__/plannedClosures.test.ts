@@ -76,7 +76,7 @@ function environment(mode: "active" | "shadow" | "down") {
     ],
     contextOverrides: {
       http: { get: httpGet } as never,
-      getRequiredService: () => ({ url: "http://data-manager:4000" }) as never,
+      getRequiredService: () => ({ url: "http://openmapx-data-manager:4000" }) as never,
     },
   });
   return { env, getRoute, httpGet };

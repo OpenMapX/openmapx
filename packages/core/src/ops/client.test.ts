@@ -120,7 +120,7 @@ describe("ops client", () => {
       );
     });
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
       now: () => new Date("2026-08-23T18:00:00.000Z"),
@@ -142,7 +142,7 @@ describe("ops client", () => {
     "accepts only canonical host-update errors (canonical: %s)",
     async (canonical, expectedCode) => {
       const client = new ProtocolTestClient({
-        baseUrl: "http://ops-agent:4300",
+        baseUrl: "http://openmapx-ops-agent:4300",
         tokenFile: tokenFile(),
         fetch: async (_url, init) =>
           new Response(
@@ -177,7 +177,7 @@ describe("ops client", () => {
     const path = tokenFile(token);
     const secretBody = `remote docker stderr ${token}`.repeat(100);
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: path,
       maxResponseBytes: 256,
       fetch: async () => new Response(secretBody, { status: 500 }),
@@ -201,7 +201,7 @@ describe("ops client", () => {
         }),
     );
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
       requestTimeoutMs: 5,
@@ -213,7 +213,12 @@ describe("ops client", () => {
   });
 
   it("rejects non-private destinations without echoing the URL", () => {
-    for (const baseUrl of ["http://evil.example/steal?token=x", "https://evil.example"]) {
+    for (const baseUrl of [
+      "http://evil.example/steal?token=x",
+      "https://evil.example",
+      // The bare service ID can name another project's agent on a shared network.
+      "http://ops-agent:4300",
+    ]) {
       expect(() => new ProtocolTestClient({ baseUrl, tokenFile: tokenFile() })).toThrow(
         "Invalid ops agent destination",
       );
@@ -256,7 +261,7 @@ describe("ops client", () => {
       expect(
         () =>
           new ProtocolTestClient({
-            baseUrl: "http://ops-agent:4300",
+            baseUrl: "http://openmapx-ops-agent:4300",
             tokenFile: tokenFile(),
             ...options,
           }),
@@ -265,13 +270,13 @@ describe("ops client", () => {
     expect(
       () =>
         new ProtocolTestClient({
-          baseUrl: "http://ops-agent:4300",
+          baseUrl: "http://openmapx-ops-agent:4300",
           tokenFile: tokenFile(),
           maxResponseBytes: OPS_MAX_HTTP_RESPONSE_BYTES,
         }),
     ).not.toThrow();
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 4),
       fetch: async (_input, init) => {
@@ -320,7 +325,7 @@ describe("ops client", () => {
       );
     });
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 8),
       fetch,
@@ -359,7 +364,7 @@ describe("ops client", () => {
     const operationId = "job1_cancelOperation000";
     const token = Buffer.alloc(32, 17).toString("base64url");
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      expect(String(input)).toBe(`http://ops-agent:4300/v1/operations/${operationId}`);
+      expect(String(input)).toBe(`http://openmapx-ops-agent:4300/v1/operations/${operationId}`);
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -381,7 +386,7 @@ describe("ops client", () => {
       );
     });
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
       randomBytes: () => Buffer.alloc(18, 6),
@@ -404,7 +409,9 @@ describe("ops client", () => {
     } as const;
     const fingerprints: string[] = [];
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      expect(String(input)).toBe(`http://ops-agent:4300/v1/operation-keys/${operationKey}`);
+      expect(String(input)).toBe(
+        `http://openmapx-ops-agent:4300/v1/operation-keys/${operationKey}`,
+      );
       const fingerprint = new Headers(init?.headers).get("x-ops-body-fingerprint");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
       expect(new Headers(init?.headers).get("x-ops-protocol-version")).toBe("2");
@@ -429,7 +436,7 @@ describe("ops client", () => {
       );
     });
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
       randomBytes: () => Buffer.alloc(18, 8),
@@ -448,7 +455,7 @@ describe("ops client", () => {
     const controller = new AbortController();
     let requested = false;
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
       fetch: async (_input, init) =>
@@ -474,7 +481,7 @@ describe("ops client", () => {
   it("carries caller AbortSignal through admission and retained status requests", async () => {
     const signals: AbortSignal[] = [];
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
       fetch: async (_input, init) =>
@@ -517,7 +524,7 @@ describe("ops client", () => {
     ] as const;
     let index = 0;
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 12),
       fetch: async (_input, init) => {
@@ -562,7 +569,7 @@ describe("ops client", () => {
 
   it("strictly parses typed retained status and bounded event pages", async () => {
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 9),
       fetch: async (input, init) => {
@@ -612,7 +619,7 @@ describe("ops client", () => {
     let eventId = "job1_anotherOperation00",
       nextCursor = 3;
     const client = new ProtocolTestClient({
-      baseUrl: "http://ops-agent:4300",
+      baseUrl: "http://openmapx-ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 10),
       fetch: async (input, init) => {
@@ -656,7 +663,7 @@ describe("ops client", () => {
 it("fix1 refuses an older agent before any version2 mutation admission", async () => {
   let posts = 0;
   const client = new OpsClient({
-    baseUrl: "http://ops-agent:4300",
+    baseUrl: "http://openmapx-ops-agent:4300",
     tokenFile: tokenFile(),
     fetch: async (_url, init) => {
       if (init?.method !== "POST")
@@ -693,7 +700,7 @@ it("fix1 refuses an older agent before any version2 mutation admission", async (
 it("reports an agent that does not answer as unreachable, not as one needing an update", async () => {
   let posts = 0;
   const client = new OpsClient({
-    baseUrl: "http://ops-agent:4300",
+    baseUrl: "http://openmapx-ops-agent:4300",
     tokenFile: tokenFile(),
     fetch: async (_url, init) => {
       if (init?.method === "POST") posts++;

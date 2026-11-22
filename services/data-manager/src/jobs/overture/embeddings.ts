@@ -3,7 +3,7 @@ import pMap from "p-map";
 import type postgres from "postgres";
 
 export const DEFAULT_MODEL = "mxbai-embed-large";
-const DEFAULT_OLLAMA_URL = "http://local-ai:11434";
+const DEFAULT_OLLAMA_URL = "http://openmapx-local-ai:11434";
 const MAX_CONCURRENCY = 8;
 
 export interface EmbeddingCache {

@@ -48,7 +48,7 @@ const config = {
     datasets: {
       "de-demo": {
         path: "de_demo.gtfs.zip",
-        rt: [{ url: "http://motis-feed-proxy/feed/de-demo-0", protocol: "gtfsrt" }],
+        rt: [{ url: "http://openmapx-motis-feed-proxy/feed/de-demo-0", protocol: "gtfsrt" }],
       },
     },
   },

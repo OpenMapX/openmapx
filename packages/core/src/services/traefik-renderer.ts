@@ -1,4 +1,5 @@
 import { dump as yamlDump } from "js-yaml";
+import { serviceNetworkAlias } from "./core-service-ids";
 import type { ServiceManifest } from "./types";
 
 // Generated Traefik dynamic (file-provider) configuration.
@@ -107,12 +108,12 @@ export function renderTraefikServiceConfiguration(
   return {
     http: {
       routers,
-      // The container name is the Docker-network hostname the socket provider
-      // used to discover; naming it explicitly is what removes the need for it.
+      // Naming the backend's project-unique hostname explicitly is what removes
+      // the need for the socket provider's discovery.
       services: {
         [id]: {
           loadBalancer: {
-            servers: [{ url: `http://${manifest.container.containerName ?? id}:${targetPort}` }],
+            servers: [{ url: `http://${serviceNetworkAlias(id)}:${targetPort}` }],
           },
         },
       },
