@@ -51,8 +51,10 @@ Planet mode additionally requires operator-provided capacity at or above the exp
 ## Two-slot activation and recovery
 
 Set `MOTIS_TWO_SLOT=true` to use `data/motis/slots/A|B`; new installations should
-set it before their first transit sync, which then seeds slot A from empty slots.
-Turning it on later moves an existing `data/motis/live` directory into slot A.
+set it before their first transit sync. That sync creates both empty slots,
+imports into the inactive one and promotes it, so after it `slot-state.json`
+names that slot as active. Turning it on later moves an existing
+`data/motis/live` directory into the active slot.
 MOTIS data is built only by transit sync; there is no separate MOTIS build
 command. The inactive slot can import for as long as needed. Promotion stops both MOTIS processes, selects the
 candidate slot, force-recreates the query-facing service so Docker resolves its
