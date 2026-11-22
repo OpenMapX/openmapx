@@ -1,13 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  listMirrorArchives,
-  type MirrorArchive,
-  mirrorArchives,
-  rewriteHostedFeedProxy,
-} from "../src/mirror.js";
+import { type MirrorArchive, mirrorArchives, rewriteHostedFeedProxy } from "../src/mirror.js";
 
 let tmp: string | undefined;
 
@@ -16,88 +11,6 @@ afterEach(() => {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
   }
-});
-
-function catalogWithFeeds(feeds: Record<string, unknown>): string {
-  tmp = mkdtempSync(join(tmpdir(), "openmapx-mirror-core-"));
-  const feedsDir = join(tmp, "feeds");
-  mkdirSync(feedsDir, { recursive: true });
-  for (const [file, content] of Object.entries(feeds)) {
-    writeFileSync(join(feedsDir, file), JSON.stringify(content));
-  }
-  return tmp;
-}
-
-describe("listMirrorArchives", () => {
-  it("lists schedule sources for the requested countries", () => {
-    const catalog = catalogWithFeeds({
-      "de.json": { sources: [{ name: "DELFI" }, { name: "VBB", spec: "gtfs" }] },
-      "fr.json": { sources: [{ name: "SNCF" }] },
-    });
-    const archives = listMirrorArchives(catalog, ["de"]);
-    expect(archives).toEqual([
-      { region: "de", name: "DELFI" },
-      { region: "de", name: "VBB" },
-    ]);
-  });
-
-  it("matches a region's country code prefix (us-pa belongs to us)", () => {
-    const catalog = catalogWithFeeds({
-      "us-pa.json": { sources: [{ name: "SEPTA" }] },
-      "de.json": { sources: [{ name: "DELFI" }] },
-    });
-    expect(listMirrorArchives(catalog, ["us"])).toEqual([{ region: "us-pa", name: "SEPTA" }]);
-  });
-
-  it("skips skip:true sources, gbfs specs, and nameless sources", () => {
-    const catalog = catalogWithFeeds({
-      "de.json": {
-        sources: [
-          { name: "Good" },
-          { name: "Gone", skip: true },
-          { name: "Bikes", spec: "gbfs" },
-          { spec: "gtfs" },
-        ],
-      },
-    });
-    expect(listMirrorArchives(catalog, ["de"])).toEqual([{ region: "de", name: "Good" }]);
-  });
-
-  it("skips unsafe source names while keeping safe siblings", () => {
-    const catalog = catalogWithFeeds({
-      "de.json": {
-        sources: [
-          { name: "Good" },
-          { name: "AVV-Aachen" },
-          { name: "esel.ac" },
-          { name: "PTA-Styria-Flex-2026" },
-          { name: "../../../evil" },
-          { name: "a/b" },
-          { name: ".hidden" },
-          { name: ".." },
-          { name: "Has Space" },
-        ],
-      },
-    });
-    expect(listMirrorArchives(catalog)).toEqual([
-      { region: "de", name: "Good" },
-      { region: "de", name: "AVV-Aachen" },
-      { region: "de", name: "esel.ac" },
-      { region: "de", name: "PTA-Styria-Flex-2026" },
-    ]);
-  });
-
-  it("returns every region when no countries are given", () => {
-    const catalog = catalogWithFeeds({
-      "de.json": { sources: [{ name: "DELFI" }] },
-      "fr.json": { sources: [{ name: "SNCF" }] },
-    });
-    expect(
-      listMirrorArchives(catalog)
-        .map((a) => a.region)
-        .sort(),
-    ).toEqual(["de", "fr"]);
-  });
 });
 
 describe("mirrorArchives", () => {

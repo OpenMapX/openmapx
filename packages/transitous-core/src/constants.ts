@@ -5,11 +5,6 @@
  */
 export type TransitSource = "mirror" | "build";
 
-/** Resolve {@link TransitSource} from `TRANSIT_SOURCE` (default `mirror`). */
-export function parseTransitSource(env: NodeJS.ProcessEnv = process.env): TransitSource {
-  return env.TRANSIT_SOURCE?.trim().toLowerCase() === "build" ? "build" : "mirror";
-}
-
 /** Upstream Transitous git repo (the GTFS catalog + MOTIS config scripts). */
 export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/transitous.git";
 
