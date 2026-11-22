@@ -34,6 +34,9 @@ export const OVERTURE_PLACE_COLUMNS = [
 ] as const;
 
 const RELEASE_RE = /^\d{4}-\d{2}-\d{2}\.\d+$/;
+const RELEASE_CHILD_PATH_RE = new RegExp(
+  `^\\/(${RELEASE_RE.source.slice(1, -1)})\\/catalog\\.json$`,
+);
 const STAC_HOST = "stac.overturemaps.org";
 const AWS_ASSET_HOST = "overturemaps-us-west-2.s3.us-west-2.amazonaws.com";
 
@@ -113,6 +116,46 @@ export class OvertureCatalogueRefusedError extends Error {
   }
 }
 
+/** Numeric YYYY-MM-DD.N ordering; positive means `left` is newer. */
+export function compareOvertureReleases(left: string, right: string): number {
+  assertValidOvertureRelease(left);
+  assertValidOvertureRelease(right);
+  const [leftDate = "", leftRevision = "0"] = left.split(".");
+  const [rightDate = "", rightRevision = "0"] = right.split(".");
+  return leftDate.localeCompare(rightDate) || Number(leftRevision) - Number(rightRevision);
+}
+
+/** A requested Overture release is not published upstream (expired past 60-day retention or not yet published). */
+export class OvertureReleaseUnavailableError extends Error {
+  readonly release: string;
+  readonly availableReleases: readonly string[];
+  readonly latestRelease: string;
+
+  constructor(release: string, availableReleases: readonly string[], latestRelease: string) {
+    const available = availableReleases.length > 0 ? availableReleases.join(", ") : "none listed";
+    const isFuture = compareOvertureReleases(release, latestRelease) > 0;
+    super(
+      isFuture
+        ? `Overture release ${release} is not published yet (latest: ${latestRelease}); available: ${available}`
+        : `Overture release ${release} is not published (Overture retains public releases for about 60 days); available: ${available} (latest: ${latestRelease})`,
+    );
+    this.name = "OvertureReleaseUnavailableError";
+    this.release = release;
+    this.availableReleases = [...availableReleases];
+    this.latestRelease = latestRelease;
+  }
+}
+
+class StacHttpError extends Error {
+  readonly status: number;
+
+  constructor(label: string, status: number) {
+    super(`${label} returned HTTP ${status}`);
+    this.name = "StacHttpError";
+    this.status = status;
+  }
+}
+
 export function assertValidOvertureRelease(release: string): void {
   if (!RELEASE_RE.test(release)) {
     throw new Error(
@@ -175,7 +218,7 @@ async function fetchStacDocument(
   } catch (error) {
     throw new Error(`Could not fetch ${label}: ${(error as Error).message}`);
   }
-  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
+  if (!response.ok) throw new StacHttpError(label, response.status);
   return asDocument(await response.json(), label);
 }
 
@@ -343,28 +386,48 @@ export async function resolveOvertureStacContract(
   }
   const root = await fetchStacDocument(OVERTURE_STAC_URL, fetchImpl, "Overture STAC catalog");
   const latestRelease = latestReleaseFromCatalog(root);
-  const matchingReleaseLinks = linksOf(root, "Overture STAC catalog")
-    .filter((link) => link.rel === "child")
-    .map((link) => resolveStacUrl(link.href, OVERTURE_STAC_URL, "Overture release child"))
-    .filter((url) => new URL(url).pathname === `/${release}/catalog.json`);
-  if (
-    matchingReleaseLinks.length > 1 ||
-    (release === latestRelease && matchingReleaseLinks.length !== 1)
-  ) {
+  // Overture retains public S3 releases for about 60 days and lists the live
+  // release set as root `child` links. Older releases are deleted upstream and
+  // are no longer addressable, so only listed releases can be resolved.
+  const releaseUrls = new Map<string, string[]>();
+  for (const link of linksOf(root, "Overture STAC catalog")) {
+    if (link.rel !== "child") continue;
+    const url = resolveStacUrl(link.href, OVERTURE_STAC_URL, "Overture release child");
+    const match = RELEASE_CHILD_PATH_RE.exec(new URL(url).pathname);
+    const childRelease = match?.[1];
+    if (!childRelease) continue;
+    const list = releaseUrls.get(childRelease);
+    if (list) list.push(url);
+    else releaseUrls.set(childRelease, [url]);
+  }
+  const latestLinks = releaseUrls.get(latestRelease) ?? [];
+  if (latestLinks.length !== 1) {
     throw new Error(
-      `Overture STAC catalog must expose exactly one child for current release ${release}`,
+      `Overture STAC catalog must expose exactly one child for current release ${latestRelease}`,
     );
   }
-  // The root intentionally links only the current and previous releases. Older
-  // archived releases remain addressable by their validated, immutable STAC
-  // path and are still verified below before any asset is trusted.
-  const releaseUrl =
-    matchingReleaseLinks[0] ?? new URL(`./${release}/catalog.json`, OVERTURE_STAC_URL).toString();
-  const releaseCatalog = await fetchStacDocument(
-    releaseUrl,
-    fetchImpl,
-    `Overture release ${release}`,
+  const availableReleases = [...releaseUrls.keys()].sort((left, right) =>
+    compareOvertureReleases(right, left),
   );
+  const matchingReleaseLinks = releaseUrls.get(release) ?? [];
+  if (matchingReleaseLinks.length > 1) {
+    throw new Error(`Overture STAC catalog must expose exactly one child for release ${release}`);
+  }
+  const releaseUrl = matchingReleaseLinks[0];
+  if (!releaseUrl) {
+    throw new OvertureReleaseUnavailableError(release, availableReleases, latestRelease);
+  }
+  let releaseCatalog: StacDocument;
+  try {
+    releaseCatalog = await fetchStacDocument(releaseUrl, fetchImpl, `Overture release ${release}`);
+  } catch (error) {
+    // STAC delisting and S3 60-day lifecycle deletion are not strictly atomic;
+    // translate a 404/410 on a still-listed release into the same clear error.
+    if (error instanceof StacHttpError && (error.status === 404 || error.status === 410)) {
+      throw new OvertureReleaseUnavailableError(release, availableReleases, latestRelease);
+    }
+    throw error;
+  }
   if (releaseCatalog.id !== release) {
     throw new Error(`Overture release catalog identity does not match ${release}`);
   }
