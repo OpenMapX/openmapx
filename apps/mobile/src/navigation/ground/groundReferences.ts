@@ -12,23 +12,23 @@ import { validateGroundStartPackage } from "./groundSession";
 const REFERENCE_MODES: ReadonlySet<string> = new Set(["driving", "motorcycle"]);
 
 /**
- * The request for a driving session whose start package carries no references,
- * keyed by the route's fingerprint; nothing otherwise.
+ * The request for a driving session whose start package carries no traffic
+ * signals (landmarks from the page may already be there), keyed by the route's
+ * fingerprint; nothing otherwise.
  */
 export function referenceRequestEffects(session: MobileNavigationSession): SessionEffect[] {
   if (session.kind !== "ground") return [];
   const { startPackage } = session.payload;
   if (!REFERENCE_MODES.has(startPackage.mode)) return [];
-  if (startPackage.signalsAlong !== undefined || startPackage.landmarkReferences !== undefined) {
-    return [];
-  }
+  if (startPackage.signalsAlong !== undefined) return [];
   return [{ kind: "request-references", requestId: routeFingerprint(startPackage.route.geometry) }];
 }
 
 /**
  * The mutation that writes an answer into the start package, or null when it
  * is a failure, belongs to another session or route, or does not fit the
- * package's bounds. Prompts stay plain in every null case.
+ * package's bounds. Prompts stay plain in every null case. Only what the
+ * package lacks is filled: evidence the page handed over is kept.
  */
 export function applyGroundReferences(
   session: MobileNavigationSession,
@@ -42,9 +42,14 @@ export function applyGroundReferences(
 
   const validated = validateGroundStartPackage({
     ...startPackage,
-    ...(outcome.signalsAlong && { signalsAlong: outcome.signalsAlong }),
-    ...(outcome.signalSpans && { signalSpans: outcome.signalSpans }),
-    ...(outcome.landmarkReferences && { landmarkReferences: outcome.landmarkReferences }),
+    ...(startPackage.signalsAlong === undefined &&
+      outcome.signalsAlong &&
+      outcome.signalSpans && {
+        signalsAlong: outcome.signalsAlong,
+        signalSpans: outcome.signalSpans,
+      }),
+    ...(startPackage.landmarkReferences === undefined &&
+      outcome.landmarkReferences && { landmarkReferences: outcome.landmarkReferences }),
   });
   if (!validated.ok) return null;
   return {
