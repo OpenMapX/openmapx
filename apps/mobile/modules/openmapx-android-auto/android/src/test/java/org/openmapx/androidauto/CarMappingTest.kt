@@ -65,10 +65,10 @@ class CarMappingTest {
       .put(
         "strokes",
         org.json.JSONArray()
-          .put(JSONObject().put("d", "M7.71 8.42 A5 5 0 0 0 12 16").put("width", 2.2).put("opacity", 0.4))
-          .put(JSONObject().put("d", "M12 23 L12 16 A5 5 0 1 0 7.71 8.42 L6.86 7.91").put("width", 3)),
+          .put(JSONObject().put("d", "M8.61 9.88 A4 4 0 0 0 12 16").put("width", 2.2).put("opacity", 0.4))
+          .put(JSONObject().put("d", "M12 21 L12 16 A4 4 0 1 0 8.61 9.88 L5.64 8.03").put("width", 3)),
       )
-      .put("fills", org.json.JSONArray().put("M3 5.59 L5 11 L8.71 4.82 Z"))
+      .put("fills", org.json.JSONArray().put("M2.25 5.91 L3.84 10.91 L7.44 5.14 Z"))
 
   @Test
   fun roundaboutsTellTheHostTheirExitAngleAndLeavingStep() {
@@ -79,11 +79,11 @@ class CarMappingTest {
         JSONObject()
           .put("instruction", "Take the 2nd exit")
           .put("maneuverIcon", "RoundaboutLeft")
-          .put("roundabout", JSONObject().put("exit", 2).put("clockwise", false).put("angle", 239))
+          .put("roundabout", JSONObject().put("exit", 2).put("clockwise", false).put("angle", 238))
           .put("maneuverGlyph", strausbergerGlyph()),
       )
     assertEquals(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE, entering.maneuver!!.type)
-    assertEquals(239, entering.maneuver!!.roundaboutExitAngle)
+    assertEquals(238, entering.maneuver!!.roundaboutExitAngle)
     assertEquals(2, entering.maneuver!!.roundaboutExitNumber)
     val clockwise =
       CarTripMapper.step(
@@ -115,11 +115,11 @@ class CarMappingTest {
     val bitmap = ManeuverIcons.bitmap(context, "RoundaboutLeft", strausbergerGlyph())
     assertEquals(128, bitmap.width)
     // The way in comes up the middle, where the Material drawable has no stem.
-    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(64, 118)))
+    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(64, 100)))
     // The arrowhead, up and to the left of the circle, is drawn.
-    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(30, 38)))
+    assertEquals(255, android.graphics.Color.alpha(bitmap.getPixel(24, 39)))
     // The middle of the circle stays empty.
-    assertEquals(0, android.graphics.Color.alpha(bitmap.getPixel(64, 59)))
+    assertEquals(0, android.graphics.Color.alpha(bitmap.getPixel(64, 64)))
     // It is the glyph, not the named drawable it stands in for.
     assertFalse(bitmap.sameAs(ManeuverIcons.bitmap(context, "RoundaboutLeft")))
   }

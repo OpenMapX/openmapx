@@ -9,6 +9,7 @@ import {
   presentGuidanceLanes,
   type RoundaboutTurn,
   roundaboutGlyph,
+  roundaboutRole,
   roundaboutTurnAt,
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
@@ -141,9 +142,7 @@ function readStep(steps: unknown[], index: number): { step: CarStep | undefined 
   return parsed.success ? { step: parsed.data } : null;
 }
 
-const isRoundaboutEntry = (type: string | undefined) => type === "roundabout" || type === "rotary";
-const isRoundaboutExit = (type: string | undefined) =>
-  type === "exit roundabout" || type === "exit rotary";
+const ROUNDABOUT_TYPES = new Set(["roundabout", "rotary", "exit roundabout", "exit rotary"]);
 
 /**
  * The roundabout at the upcoming step, entered or left there: its exit number
@@ -160,19 +159,18 @@ function upcomingRoundabout(
   turn?: RoundaboutTurn;
   leaving: boolean;
 } | null {
-  const type = step?.maneuver?.type;
-  const leaving = isRoundaboutExit(type);
-  if (!isRoundaboutEntry(type) && !leaving) return null;
-  const entryIndex = leaving ? index - 1 : index;
-  const window = [entryIndex - 1, entryIndex, entryIndex + 1].map((i) => readStep(steps, i)?.step);
-  const entry = window[1];
-  if (leaving && !isRoundaboutEntry(entry?.maneuver?.type))
-    return { leaving, drivingSide: step?.drivingSide };
+  if (!ROUNDABOUT_TYPES.has(step?.maneuver?.type ?? "")) return null;
+  // The upcoming step sits at window[2], between the two steps before it (the
+  // roundabout it may leave, and the road into that) and the one after it.
+  const window = [index - 2, index - 1, index, index + 1].map((i) => readStep(steps, i)?.step);
+  const role = roundaboutRole(window, 2);
+  if (!role) return null;
+  const entry = role === "exit" ? window[1] : window[2];
   return {
-    leaving,
+    leaving: role === "exit",
     exitCount: entry?.roundaboutExitCount,
     drivingSide: entry?.drivingSide,
-    turn: roundaboutTurnAt(window, 1),
+    turn: roundaboutTurnAt(window, 2),
   };
 }
 

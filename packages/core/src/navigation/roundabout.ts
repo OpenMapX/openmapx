@@ -1,4 +1,5 @@
 import type { LngLat } from "../types/geometry";
+import { haversineDistance } from "../utils/coordinates";
 import { bearingBetween } from "./bearing";
 
 /**
@@ -26,12 +27,33 @@ export interface RoundaboutStep {
   bearingBefore?: number;
   bearingAfter?: number;
   drivingSide?: "left" | "right";
+  roundaboutExitCount?: number;
 }
 
-const isEntry = (step: RoundaboutStep | undefined) =>
+const namedEntry = (step: RoundaboutStep | undefined) =>
   step?.maneuver?.type === "roundabout" || step?.maneuver?.type === "rotary";
-const isExit = (step: RoundaboutStep | undefined) =>
+const namedExit = (step: RoundaboutStep | undefined) =>
   step?.maneuver?.type === "exit roundabout" || step?.maneuver?.type === "exit rotary";
+
+/**
+ * Whether the step `index` enters a roundabout or leaves the one before it.
+ * Valhalla's leaving step used to come through as a second roundabout, with no
+ * exit count of its own; saved routes still carry that, so it reads as leaving.
+ */
+export function roundaboutRole(
+  steps: readonly (RoundaboutStep | undefined)[],
+  index: number,
+): "entry" | "exit" | undefined {
+  const step = steps[index];
+  const previous = steps[index - 1];
+  if (namedExit(step)) return namedEntry(previous) ? "exit" : undefined;
+  if (!namedEntry(step)) return undefined;
+  const unnamedExit =
+    namedEntry(previous) &&
+    previous?.roundaboutExitCount !== undefined &&
+    step?.roundaboutExitCount === undefined;
+  return unnamedExit ? "exit" : "entry";
+}
 
 /** Bend round the circle, in degrees, below which the path says nothing about circulation. */
 const MIN_BEND_DEG = 15;
@@ -77,21 +99,70 @@ function circulationOf(step: RoundaboutStep): RoundaboutCirculation {
   return "ccw";
 }
 
+/** The point `metres` along the path from its first point, or its end when shorter. */
+function pointAlong(path: readonly LngLat[], metres: number): LngLat | undefined {
+  let left = metres;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as LngLat;
+    const b = path[i] as LngLat;
+    const d = haversineDistance(a, b);
+    if (d >= left && d > 0) {
+      const t = left / d;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    left -= d;
+  }
+  return path.at(-1);
+}
+
+function pathLength(path: readonly LngLat[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++)
+    total += haversineDistance(path[i - 1] as LngLat, path[i] as LngLat);
+  return total;
+}
+
+/** Where the road runs, measured this far from the roundabout: clear of its slip lanes. */
+const ROAD_NEAR_M = 25;
+const ROAD_FAR_M = 80;
+/** A road shorter than this says nothing reliable about its direction. */
+const MIN_ROAD_M = 8;
+
+/**
+ * The direction of travel along the road leading away from the roundabout
+ * (`path` starts at the roundabout), measured between 25 and 80 m out, or
+ * closer on a short road. Slip lanes bend onto the circle; the road does not.
+ */
+function roadHeading(path: readonly LngLat[]): number | undefined {
+  const length = pathLength(path);
+  if (length < MIN_ROAD_M) return undefined;
+  const near = pointAlong(path, Math.min(ROAD_NEAR_M, length / 3));
+  const far = pointAlong(path, Math.min(ROAD_FAR_M, length));
+  return near && far && (near[0] !== far[0] || near[1] !== far[1])
+    ? bearingBetween(near, far)
+    : undefined;
+}
+
 function turnOf(
   previous: RoundaboutStep | undefined,
   step: RoundaboutStep,
   next: RoundaboutStep | undefined,
+  nextLeaves: boolean,
 ): RoundaboutTurn | undefined {
   const path = step.coordinates ?? [];
-  const entry = finite(step.bearingBefore)
-    ? step.bearingBefore
-    : (segmentBearings(previous?.coordinates ?? []).at(-1) ?? segmentBearings(path)[0]);
-  // The exit step starts where the roundabout is left; without one (OSRM),
+  // The road in, read backwards from the roundabout, then turned round.
+  const back = roadHeading([...(previous?.coordinates ?? [])].reverse());
+  const entry =
+    back !== undefined
+      ? (back + 180) % 360
+      : finite(step.bearingBefore)
+        ? step.bearingBefore
+        : segmentBearings(path)[0];
+  // The leaving step starts where the roundabout is left; without one (OSRM),
   // the roundabout step runs on along the exit road.
-  const exit = isExit(next)
-    ? finite(next?.bearingAfter)
-      ? next.bearingAfter
-      : segmentBearings(next?.coordinates ?? [])[0]
+  const exit = nextLeaves
+    ? (roadHeading(next?.coordinates ?? []) ??
+      (finite(next?.bearingAfter) ? next.bearingAfter : undefined))
     : segmentBearings(path).at(-1);
   if (entry === undefined || exit === undefined) return undefined;
   const circulation = circulationOf(step);
@@ -108,10 +179,16 @@ export function roundaboutTurnAt(
   steps: readonly (RoundaboutStep | undefined)[],
   index: number,
 ): RoundaboutTurn | undefined {
+  const role = roundaboutRole(steps, index);
+  if (role === "exit") return roundaboutTurnAt(steps, index - 1);
   const step = steps[index];
-  if (isExit(step) && isEntry(steps[index - 1])) return roundaboutTurnAt(steps, index - 1);
-  if (!step || !isEntry(step)) return undefined;
-  return turnOf(steps[index - 1], step, steps[index + 1]);
+  if (role !== "entry" || !step) return undefined;
+  return turnOf(
+    steps[index - 1],
+    step,
+    steps[index + 1],
+    roundaboutRole(steps, index + 1) === "exit",
+  );
 }
 
 /** A glyph as SVG path data on a 24 × 24 grid: lines to stroke, shapes to fill. */
@@ -121,12 +198,17 @@ export interface GuidanceGlyph {
   fills: string[];
 }
 
-const CENTRE: LngLat = [12, 11];
-const RADIUS = 5;
-/** The exit from the circle to the arrow's tip, and the head's length and half-width. */
-const EXIT_LENGTH = 5.5;
-const HEAD_LENGTH = 4.5;
-const HEAD_HALF_WIDTH = 3.6;
+const CENTRE: LngLat = [12, 12];
+const RADIUS = 4;
+/**
+ * The exit from the circle to the arrow's tip, and the head's length and
+ * half-width: a clear stretch of road before the head, so the exit reads as one.
+ */
+const EXIT_LENGTH = 7.5;
+const HEAD_LENGTH = 4;
+const HEAD_HALF_WIDTH = 3.4;
+/** The way in, up to the circle: shorter than the way out, which carries the news. */
+const ENTRY_LENGTH = 5;
 /** Exits closer to the way in than this are drawn this far round, beside it. */
 const MIN_DRAWN_DEG = 30;
 
@@ -166,7 +248,7 @@ export function roundaboutGlyph(turn: RoundaboutTurn): GuidanceGlyph {
     strokes: [
       { d: `M${point(out)} ${arcTo(angle, 360)}`, width: 2.2, opacity: 0.4 },
       {
-        d: `M12 23 L${point(entry)} ${arcTo(0, angle)} L${point(headBase)}`,
+        d: `M${point([entry[0], entry[1] + ENTRY_LENGTH])} L${point(entry)} ${arcTo(0, angle)} L${point(headBase)}`,
         width: 3,
       },
     ],

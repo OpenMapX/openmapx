@@ -1,6 +1,78 @@
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
-import { type RoundaboutStep, roundaboutGlyph, roundaboutTurnAt } from "../roundabout";
+import {
+  type RoundaboutStep,
+  roundaboutGlyph,
+  roundaboutRole,
+  roundaboutTurnAt,
+} from "../roundabout";
+
+// Großer Stern, Berlin, as the server returned it before the exit step had its
+// own name: 100 m of the road in, the way round, and 100 m of the road out.
+const grosserStern: RoundaboutStep[] = [
+  {
+    maneuver: { type: "depart" },
+    bearingAfter: 84,
+    coordinates: [
+      [13.347287, 52.514243],
+      [13.348075, 52.514299],
+      [13.348323, 52.514316],
+      [13.348387, 52.51432],
+      [13.348469, 52.514325],
+      [13.348558, 52.514327],
+      [13.348673, 52.514326],
+      [13.348786, 52.51431],
+      [13.348895, 52.514279],
+      [13.349009, 52.514244],
+      [13.349231, 52.514162],
+    ],
+  },
+  {
+    maneuver: { type: "roundabout" },
+    roundaboutExitCount: 2,
+    bearingBefore: 121,
+    bearingAfter: 137,
+    coordinates: [
+      [13.349231, 52.514162],
+      [13.349314, 52.514097],
+      [13.34941, 52.514039],
+      [13.349518, 52.513989],
+      [13.349636, 52.513948],
+      [13.349698, 52.513933],
+      [13.349761, 52.513917],
+      [13.349892, 52.513896],
+      [13.350032, 52.513886],
+      [13.350173, 52.513887],
+      [13.350339, 52.513901],
+      [13.350403, 52.513915],
+      [13.350447, 52.513924],
+      [13.350576, 52.513959],
+      [13.350648, 52.513984],
+      [13.350716, 52.514014],
+      [13.35078, 52.514046],
+      [13.350839, 52.514081],
+      [13.350894, 52.514119],
+      [13.350944, 52.51416],
+      [13.350988, 52.514203],
+      [13.351026, 52.514248],
+    ],
+  },
+  {
+    maneuver: { type: "roundabout" },
+    bearingBefore: 34,
+    bearingAfter: 49,
+    coordinates: [
+      [13.351026, 52.514248],
+      [13.351276, 52.514378],
+      [13.351439, 52.514454],
+      [13.351552, 52.514496],
+      [13.351707, 52.514538],
+      [13.351736, 52.514543],
+      [13.351808, 52.514554],
+      [13.352386, 52.514591],
+    ],
+  },
+];
 
 // Strausberger Platz, Berlin: in from Alexanderstraße, out at the 2nd exit
 // onto Karl-Marx-Allee, as Valhalla returns it (enter, then exit roundabout).
@@ -68,8 +140,29 @@ describe("roundaboutTurnAt", () => {
   it("circles counter-clockwise where traffic drives on the right", () => {
     const turn = roundaboutTurnAt(strausberger, 1);
     expect(turn?.circulation).toBe("ccw");
-    // 59° left of the way in: past the straight-on point, before the left exit.
-    expect(turn?.exitAngle).toBeCloseTo(239, 0);
+    // Karl-Marx-Allee leaves left of the way in: past straight on, before the left exit.
+    expect(turn?.exitAngle).toBeGreaterThan(200);
+    expect(turn?.exitAngle).toBeLessThan(250);
+  });
+
+  it("reads the roads in and out, not the slip lanes onto the circle", () => {
+    // Großer Stern, Berlin: in on Straße des 17. Juni from the west, out at the
+    // 2nd exit along it to the east. The slip lanes bend to 121° in and 49° out,
+    // which would read as a left exit; the roads themselves run nearly straight.
+    const turn = roundaboutTurnAt(grosserStern, 1);
+    expect(turn?.circulation).toBe("ccw");
+    expect(turn?.exitAngle).toBeGreaterThan(180);
+    expect(turn?.exitAngle).toBeLessThan(215);
+  });
+
+  it("recognises the exit step a server named as a second roundabout", () => {
+    // Before Valhalla's exit was named `exit roundabout`, it came through as a
+    // `roundabout` without an exit count; saved routes still carry that.
+    expect(roundaboutRole(grosserStern, 1)).toBe("entry");
+    expect(roundaboutRole(grosserStern, 2)).toBe("exit");
+    expect(roundaboutRole(strausberger, 2)).toBe("exit");
+    expect(roundaboutRole(strausberger, 0)).toBeUndefined();
+    expect(roundaboutTurnAt(grosserStern, 2)).toEqual(roundaboutTurnAt(grosserStern, 1));
   });
 
   it("describes the exit step by the roundabout it leaves", () => {
@@ -112,7 +205,7 @@ describe("roundaboutGlyph", () => {
   it("enters from below and leaves towards the exit", () => {
     const [rx, ry] = tip({ circulation: "ccw", exitAngle: 90 });
     expect(rx).toBeGreaterThan(20);
-    expect(ry).toBeCloseTo(11, 0);
+    expect(ry).toBeCloseTo(12, 0);
     const [sx, sy] = tip({ circulation: "ccw", exitAngle: 180 });
     expect(sx).toBeCloseTo(12, 0);
     expect(sy).toBeLessThan(3);
@@ -122,7 +215,7 @@ describe("roundaboutGlyph", () => {
   it("draws the way round counter-clockwise for right-hand traffic", () => {
     // The arc starts at the bottom of the circle and runs up its right side.
     const travelled = roundaboutGlyph({ circulation: "ccw", exitAngle: 180 }).strokes.at(-1)?.d;
-    expect(travelled).toMatch(/A5 5 0 0 0 12 6$|A5 5 0 0 0 12 6 /);
+    expect(travelled).toMatch(/A4 4 0 0 0 12 8$|A4 4 0 0 0 12 8 /);
   });
 
   it("mirrors the glyph for clockwise circulation", () => {
@@ -135,6 +228,27 @@ describe("roundaboutGlyph", () => {
       5,
     );
     expect(cw.strokes.length).toBe(ccw.strokes.length);
+  });
+
+  it.each([90, 180, 239, 270])("leaves the circle along a stretch of road at %d°", (exitAngle) => {
+    // From where the exit leaves the circle (the dimmed rest starts there) to
+    // the arrowhead's base, so the exit reads as a road and not a bare head.
+    const [rest, travelled] = roundaboutGlyph({ circulation: "ccw", exitAngle }).strokes;
+    const numbers = (d: string | undefined) =>
+      (d ?? "").replace(/[MLA]/g, " ").trim().split(/\s+/).map(Number);
+    const [ox, oy] = numbers(rest?.d);
+    const [by, bx] = numbers(travelled?.d).reverse();
+    expect(Math.hypot((bx ?? 0) - (ox ?? 0), (by ?? 0) - (oy ?? 0))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps the way in shorter than the way out", () => {
+    // The stroke starts at the foot of the way in and reaches the circle at its bottom.
+    const travelled =
+      roundaboutGlyph({ circulation: "ccw", exitAngle: 180 }).strokes.at(-1)?.d ?? "";
+    const [, , x, y] = travelled.replace(/[MLA]/g, " ").trim().split(/\s+/).map(Number);
+    const [, footY] = travelled.replace(/[MLA]/g, " ").trim().split(/\s+/).map(Number);
+    expect(x).toBe(12);
+    expect((footY ?? 0) - (y ?? 0)).toBeLessThanOrEqual(5);
   });
 
   it("puts a U-turn's exit beside the way in rather than on it", () => {

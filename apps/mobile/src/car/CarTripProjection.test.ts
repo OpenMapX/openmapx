@@ -231,15 +231,24 @@ it("tells the car how far round a counter-clockwise roundabout the exit lies", (
   const projection = buildCarTripProjection(withSteps(strausberger, 0), 1000);
   const turn = roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn;
   expect(turn.circulation).toBe("ccw");
-  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 239 });
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238 });
   // The car draws the phone's glyph, not a drawable that circles the wrong way.
   expect(projection?.maneuverGlyph).toEqual(roundaboutGlyph(turn));
 });
 
 it("names the roundabout's exit step as leaving it", () => {
   const projection = buildCarTripProjection(withSteps(strausberger, 1), 1000);
-  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 239, leaving: true });
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238, leaving: true });
   expect(projection?.maneuverGlyph).toEqual(
     roundaboutGlyph(roundaboutTurnAt(strausberger as never, 1) as RoundaboutTurn),
   );
+});
+
+it("names an exit step a server sent as a second roundabout as leaving it", () => {
+  // Saved routes from before the exit step had its own name carry this shape.
+  const legacy = strausberger.map((step, i) =>
+    i === 2 ? { ...step, maneuver: { type: "roundabout" } } : step,
+  );
+  const projection = buildCarTripProjection(withSteps(legacy, 1), 1000);
+  expect(projection?.roundabout).toEqual({ exit: 2, clockwise: false, angle: 238, leaving: true });
 });

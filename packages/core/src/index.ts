@@ -205,6 +205,7 @@ export {
   resolveLaneGuidance,
   resolveRecommendedLanes,
   roundaboutGlyph,
+  roundaboutRole,
   roundaboutTurnAt,
   routeAheadBounds,
   routeFingerprint,

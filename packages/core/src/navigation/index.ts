@@ -331,6 +331,7 @@ export {
   type RoundaboutStep,
   type RoundaboutTurn,
   roundaboutGlyph,
+  roundaboutRole,
   roundaboutTurnAt,
 } from "./roundabout";
 export { isNearRoute, ROUTE_CORRIDOR_METERS } from "./routeCorridor";
