@@ -1,0 +1,42 @@
+"use client";
+
+import { create } from "zustand";
+
+/**
+ * Whether 3D navigation is active on the main map, and what its layers share.
+ * Set by `Navigation3dController` (the car map never mounts it, and its WebView
+ * has its own JS context, so this stays inactive there). Integrations read it
+ * through `useSceneSlot` and need no navigation knowledge of their own.
+ */
+export interface NavigationSceneState {
+  active: boolean;
+  /** Along-route metres the lane highlight covers; the route is transparent there. */
+  highlightSpan: { fromAlong: number; toAlong: number } | null;
+  /** Map details draw traffic signals in the scene, so the flat signal icons step aside. */
+  streetObjectsDrawn: boolean;
+  setActive(active: boolean): void;
+  setHighlightSpan(span: { fromAlong: number; toAlong: number } | null): void;
+  setStreetObjectsDrawn(drawn: boolean): void;
+}
+
+export const useNavigationSceneStore = create<NavigationSceneState>((set) => ({
+  active: false,
+  highlightSpan: null,
+  streetObjectsDrawn: false,
+  setActive: (active) =>
+    set(active ? { active } : { active, highlightSpan: null, streetObjectsDrawn: false }),
+  setHighlightSpan: (highlightSpan) => set({ highlightSpan }),
+  setStreetObjectsDrawn: (streetObjectsDrawn) => set({ streetObjectsDrawn }),
+}));
+
+export type SceneSlot = "scene-3d" | "area-overlays";
+
+/** The slot the 3D scene's layers belong in. */
+export function sceneSlot(active: boolean): SceneSlot {
+  return active ? "scene-3d" : "area-overlays";
+}
+
+/** The 3D scene's slot right now; re-renders when 3D navigation starts or ends. */
+export function useSceneSlot(): SceneSlot {
+  return sceneSlot(useNavigationSceneStore((state) => state.active));
+}
