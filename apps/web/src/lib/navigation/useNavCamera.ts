@@ -63,6 +63,10 @@ const SETTLE_MS = ENTER_EASE_MS + 20;
 const POS_TAU = 0.45;
 const MAX_LEAD = 1.5;
 const BEARING_TAU = 0.35;
+/** Time constant (s) of the puck sliding into or out of a highlighted lane. */
+const LANE_OFFSET_TAU = 0.4;
+/** Closer than this (m) the puck snaps onto the lane offset it is easing toward. */
+const LANE_OFFSET_SNAP_M = 0.02;
 // Auto-zoom eases gently toward a speed-derived zoom — until the user takes
 // zoom control. While a user camera gesture is in flight the follow loop is
 // suspended (it must not run jumpTo, which calls stop() and would cancel the
@@ -260,6 +264,8 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
   const rafRef = useRef(0);
   const runFrameRef = useRef<(() => void) | null>(null);
   const settledFramesRef = useRef(0);
+  // The puck's applied sideways offset into a highlighted lane, in metres.
+  const laneOffsetRef = useRef(0);
   // Eased follow-zoom; whether the user has taken manual zoom control (then the
   // loop follows at their zoom instead of auto-zooming); and the time until
   // which a recent user camera gesture suspends the follow loop.
@@ -582,10 +588,17 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
 
         // Before a lane-guided turn the puck is drawn in the highlighted lane,
         // like the arrow; the route position itself stays on the route line.
+        // The applied offset eases toward the lane path's, so a highlight that
+        // arrives late or ends at the manoeuvre slides the puck rather than
+        // jumping it; the eased puck bearing keeps vertices inside the span
+        // from kinking it sideways.
         const lanePath = highlightLanePath(useNavigationSceneStore.getState().highlightSpan);
-        const puckPoint = lanePath
-          ? offsetLngLat(point, bearing, laneOffsetAt(displayedRef.current, lanePath))
-          : point;
+        const laneTarget = lanePath ? laneOffsetAt(displayedRef.current, lanePath) : 0;
+        const laneAlpha = 1 - Math.exp(-Math.max(dt, 0) / LANE_OFFSET_TAU);
+        let laneOffset = laneOffsetRef.current + (laneTarget - laneOffsetRef.current) * laneAlpha;
+        if (Math.abs(laneTarget - laneOffset) < LANE_OFFSET_SNAP_M) laneOffset = laneTarget;
+        laneOffsetRef.current = laneOffset;
+        const puckPoint = laneOffset !== 0 ? offsetLngLat(point, brg, laneOffset) : point;
         const puckPose: PuckPose = { lng: puckPoint[0], lat: puckPoint[1], bearing: brg };
         if (puckPoseChanged(lastPuckRef.current, puckPose)) {
           marker.setLngLat(puckPoint as LngLat).setRotation(brg);
@@ -758,6 +771,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       rafRef.current = 0;
       lastFrameRef.current = null;
       settledFramesRef.current = 0;
+      laneOffsetRef.current = 0;
     };
   }, [active, mapRef, requestFrame, cameraFrame, cameraPitch]);
 

@@ -1333,6 +1333,36 @@ describe("useNavCamera look-ahead and junction framing", () => {
     act(() => useNavigationSceneStore.getState().setHighlightSpan(null));
   });
 
+  describe("the puck's lane offset", () => {
+    const span = { fromAlong: 400, toAlong: 650, rejoinAlong: 700, offsetMeters: 3 };
+    const southMeters = (harness: Harness) => -harness.marker().lngLat[1] * 111_195;
+    afterEach(() => act(() => useNavigationSceneStore.getState().setHighlightSpan(null)));
+
+    it("slides back when the highlight ends mid-taper, rather than jumping", async () => {
+      const harness = await mountNavCamera();
+      act(() => useNavigationSceneStore.getState().setHighlightSpan(span));
+      applyApproachFix(START_ALONG, SPEED_MPS, 100);
+      harness.frames.flush(240, FRAME_MS);
+      expect(southMeters(harness)).toBeCloseTo(3, 0);
+      act(() => useNavigationSceneStore.getState().setHighlightSpan(null));
+      harness.frames.flush(1, FRAME_MS);
+      expect(southMeters(harness)).toBeGreaterThan(2);
+      harness.frames.flush(180, FRAME_MS);
+      expect(southMeters(harness)).toBeLessThan(0.2);
+    });
+
+    it("eases in when the highlight arrives with the puck already inside it", async () => {
+      const harness = await mountNavCamera();
+      applyApproachFix(START_ALONG, SPEED_MPS, 100);
+      harness.frames.flush(240, FRAME_MS);
+      act(() => useNavigationSceneStore.getState().setHighlightSpan(span));
+      harness.frames.flush(1, FRAME_MS);
+      expect(southMeters(harness)).toBeLessThan(1);
+      harness.frames.flush(180, FRAME_MS);
+      expect(southMeters(harness)).toBeCloseTo(3, 0);
+    });
+  });
+
   it.each(["walking", "cycling"] as const)("%s keeps the local bearing", async (mode) => {
     const harness = await mountNavCamera({ startNavigation: false });
     act(() => {
