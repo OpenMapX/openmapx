@@ -81,7 +81,7 @@ export function NavManeuverArrowLayer() {
     // car is drawn, so they never point at different lanes. That lane is on
     // the turning side, so the arrow cuts the corner through the junction and
     // rejoins the route line just before its head.
-    const lanePath = highlightLanePath(highlightSpan);
+    const lanePath = highlightLanePath(highlightSpan, route, upcomingIndex);
     const line =
       routeLine && lanePath
         ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), lanePath)

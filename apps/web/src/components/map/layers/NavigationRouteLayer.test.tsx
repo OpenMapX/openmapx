@@ -469,6 +469,22 @@ describe("NavigationRouteLayer in 3D navigation", () => {
     );
   });
 
+  it("a new ghost layer starts transparent, so its first frame paints no travelled route", () => {
+    render(<NavigationRouteLayer />);
+    const added: Record<string, unknown>[] = [];
+    const addLayer = fake.map.addLayer.bind(fake.map);
+    const spy = vi.spyOn(fake.map, "addLayer").mockImplementation((layer, before) => {
+      added.push(layer as unknown as Record<string, unknown>);
+      return addLayer(layer, before);
+    });
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    spy.mockRestore();
+    const ghost = added.find((layer) => layer.id === GHOST) as
+      | { paint: Record<string, unknown> }
+      | undefined;
+    expect(ghost?.paint["line-color"]).toBe("rgba(0,0,0,0)");
+  });
+
   it("ghost removed when it ends", () => {
     render(<NavigationRouteLayer />);
     act(() => useNavigationSceneStore.getState().setActive(true));

@@ -592,7 +592,10 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
         // arrives late or ends at the manoeuvre slides the puck rather than
         // jumping it; the eased puck bearing keeps vertices inside the span
         // from kinking it sideways.
-        const lanePath = highlightLanePath(useNavigationSceneStore.getState().highlightSpan);
+        const lanePath = highlightLanePath(
+          useNavigationSceneStore.getState().highlightSpan,
+          line.route,
+        );
         const laneTarget = lanePath ? laneOffsetAt(displayedRef.current, lanePath) : 0;
         const laneAlpha = 1 - Math.exp(-Math.max(dt, 0) / LANE_OFFSET_TAU);
         let laneOffset = laneOffsetRef.current + (laneTarget - laneOffsetRef.current) * laneAlpha;

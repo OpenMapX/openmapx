@@ -134,6 +134,8 @@ export function LaneHighlight({
           toAlong: maneuverAlong - answer.endBeforeManeuver,
           offsetMeters: answer.laneOffsetMeters,
           rejoinAlong: laneRejoinAlong(maneuverAlong, navMode),
+          route,
+          stepIndex: upcoming,
         });
       })
       .catch(() => undefined);

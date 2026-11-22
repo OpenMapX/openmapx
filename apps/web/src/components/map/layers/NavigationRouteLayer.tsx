@@ -154,7 +154,9 @@ export function NavigationRouteLayer() {
     activeFeatures.features.forEach((feature, index) => {
       const localProgress = toLocal(feature, progressFraction);
       const span =
-        highlightSpan && navLine
+        highlightSpan &&
+        navLine &&
+        (highlightSpan.route === undefined || highlightSpan.route === route)
           ? {
               from: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.fromAlong)),
               to: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.toAlong)),
@@ -170,10 +172,11 @@ export function NavigationRouteLayer() {
         "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.casing, span),
       };
       if (sceneActive) {
-        // The ghost keeps covering the lane highlight's span, so the attribution
-        // group's alpha union stays complete there. It leaves only the raised
-        // arrow's few metres open: drawn above the scene, its tint would turn
-        // the white arrow blue, and the arrow itself marks the route there.
+        // The ghost keeps covering the lane highlight's span, except where the
+        // raised arrow stands: drawn above the scene, its tint would turn the
+        // white arrow blue, and the arrow marks the route there. Where the two
+        // spans overlap neither the route nor the ghost paints, so the
+        // attribution union has a gap there; that only ever over-credits.
         const ghostSpan =
           arrowSpan && navLine
             ? {
@@ -192,7 +195,7 @@ export function NavigationRouteLayer() {
       }
     });
     return { paint };
-  }, [activeFeatures, navLine, progressFraction, highlightSpan, arrowSpan, sceneActive]);
+  }, [activeFeatures, navLine, progressFraction, highlightSpan, arrowSpan, sceneActive, route]);
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FEATURE_COLLECTION;
@@ -297,7 +300,9 @@ export function NavigationRouteLayer() {
                       filter: ["==", ["get", "geometryPart"], index],
                       layout: { "line-cap": "round", "line-join": "round" },
                       paint: {
-                        "line-color": ROUTE_COLORS.active,
+                        // Transparent until its progress gradient lands, so the
+                        // first frame never paints the travelled part.
+                        "line-color": TRANSPARENT,
                         "line-width": widths.line,
                         "line-opacity": GHOST_OPACITY,
                       },

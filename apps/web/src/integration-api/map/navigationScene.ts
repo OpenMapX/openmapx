@@ -16,11 +16,27 @@ export interface HighlightSpan {
   offsetMeters?: number;
   /** Where the car and the arrow are back on the route line, past the turn. */
   rejoinAlong?: number;
+  /** The route and manoeuvre step it was computed for, so stale geometry is never shifted. */
+  route?: object;
+  stepIndex?: number;
 }
 
-/** The display-only lane path a highlight defines, when it has a lane offset. */
-export function highlightLanePath(span: HighlightSpan | null): LanePath | null {
+/**
+ * The display-only lane path a highlight defines, when it has a lane offset
+ * and belongs to `route` (and to `stepIndex`, when given). Between a reroute
+ * or a step change and the highlight's own cleanup, the old span must not
+ * shift the new geometry.
+ */
+export function highlightLanePath(
+  span: HighlightSpan | null,
+  route?: object | null,
+  stepIndex?: number,
+): LanePath | null {
   if (!span?.offsetMeters || span.rejoinAlong === undefined) return null;
+  if (span.route !== undefined && route !== undefined && span.route !== route) return null;
+  if (span.stepIndex !== undefined && stepIndex !== undefined && span.stepIndex !== stepIndex) {
+    return null;
+  }
   return {
     fromAlong: span.fromAlong,
     toAlong: span.toAlong,
