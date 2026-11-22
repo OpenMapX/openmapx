@@ -66,7 +66,7 @@ export const TRANSPORT_APIS_LOCKED_AT = "old-time";
           url: `https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@${oldCommit}`,
         },
         {
-          url: `https://api.github.com/repos/public-transport/transport-apis/git/trees/${oldCommit}?recursive=1`,
+          url: `https://raw.githubusercontent.com/public-transport/transport-apis/${oldCommit}/readme.md`,
         },
       ],
     });

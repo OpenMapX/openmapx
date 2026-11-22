@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SafeFetchStatusOptions } from "@openmapx/core/server";
@@ -687,20 +687,19 @@ describe("integration-health ${endpoint:...} placeholders", () => {
       id: "geocoding-photon",
       statusId: "geocoding-photon",
       env: { PHOTON_URL: "https://photon.example.org" },
-      probe: "https://photon.example.org/api?q=test&limit=1",
+      probe: "https://photon.example.org/status",
       trustedHost: "photon.example.org",
     },
     {
       id: "geocoding-photon",
       statusId: "geocoding-photon",
-      probe: "https://photon.komoot.io/api?q=test&limit=1",
+      probe: "https://photon.komoot.io/status",
     },
     {
       id: "routing-osrm",
       statusId: "routing-osrm",
       env: { OSRM_URL: "https://osrm.example.org/" },
-      probe:
-        "https://osrm.example.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false",
+      probe: "https://osrm.example.org/nearest/v1/driving/13.388860,52.517037?number=1",
       trustedHost: "osrm.example.org",
     },
     {
@@ -714,14 +713,14 @@ describe("integration-health ${endpoint:...} placeholders", () => {
       id: "transit-motis",
       statusId: "transit-motis:MOTIS self-hosted",
       config: { endpoint: "http://motis.lan:8080" },
-      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      probe: "http://motis.lan:8080/api/v1/health",
       trustedHost: "motis.lan",
     },
     {
       id: "transit-motis",
       statusId: "transit-motis:Transitous",
       config: { transitousUrl: "https://transitous.example.org" },
-      probe: "https://transitous.example.org/api/v1/geocode?text=test",
+      probe: "https://transitous.example.org/api/v1/health",
       trustedHost: "transitous.example.org",
     },
     {
@@ -729,19 +728,19 @@ describe("integration-health ${endpoint:...} placeholders", () => {
       statusId: "live-transit-motis:MOTIS self-hosted",
       services: { motis: "http://motis:8080" },
       config: { endpoint: "http://motis.lan:8080" },
-      probe: "http://motis:8080/api/v1/geocode?text=test",
+      probe: "http://motis:8080/api/v1/health",
       trustedHost: "motis",
     },
     {
       id: "geocoding-motis",
       statusId: "geocoding-motis:Transitous",
-      probe: "https://api.transitous.org/api/v1/geocode?text=test",
+      probe: "https://api.transitous.org/api/v1/health",
     },
     {
       id: "bike-sharing",
       statusId: "bike-sharing:MOTIS self-hosted",
       env: { MOTIS_URL: "http://motis.lan:8080" },
-      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      probe: "http://motis.lan:8080/api/v1/health",
       trustedHost: "motis.lan",
     },
   ])(
@@ -1115,8 +1114,8 @@ describe("Entur composite health dispatch", () => {
           url.includes("/stop-places/")
             ? { id: "NSR:StopPlace:337" }
             : url.includes("/vehicles/")
-              ? { data: { vehicles: [] } }
-              : { data: { stopPlace: { id: "NSR:StopPlace:337" }, situations: [] } },
+              ? { data: { __typename: "Query" } }
+              : { data: { stopPlace: { id: "NSR:StopPlace:337" } } },
         ),
       }));
       const ctx = createMockIntegrationContext({ id, manifest, http });
@@ -1174,7 +1173,7 @@ describe("Entur composite health dispatch", () => {
         body: JSON.stringify(
           url.includes("/stop-places/")
             ? { id: "NSR:StopPlace:337" }
-            : { data: { stopPlace: { id: "NSR:StopPlace:337" }, vehicles: [], situations: [] } },
+            : { data: { __typename: "Query", stopPlace: { id: "NSR:StopPlace:337" } } },
         ),
       })),
     });
@@ -1239,16 +1238,237 @@ describe("scheduled integration health checks", () => {
     expect(globalThis.fetch).toHaveBeenCalledOnce();
   });
 
-  it("keeps the default minute cadence and permits explicit on-demand checks", async () => {
-    const normal = makeIntegration({ type: "http", url: "https://example.org/health" });
-    const external = mangrove();
-    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+  it("uses 1m cadence for local checks, 15m for external, 30m for keyed, and allows explicit on-demand checks", async () => {
+    const local = makeIntegration({
+      type: "http",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      urlTemplate: "${service:valhalla}/status",
+    });
+    local.id = "cadence-local";
+    const external = makeIntegration({ type: "http", url: "https://example.org/health" });
+    external.id = "cadence-external";
+    const keyed = makeIntegration({
+      type: "http",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      urlTemplate: "https://api.example.org/check?key=${apiKey}",
+      requiredConfigKeys: ["apiKey"],
+    });
+    keyed.config = { apiKey: "secret-key-value" };
+    keyed.id = "cadence-keyed";
+
+    await executeAllIntegrationHealthChecks([local, external, keyed], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    const initialSnapshot = getCachedIntegrationHealthSnapshot([local, external, keyed]);
+    expect(initialSnapshot.intervalMsById).toMatchObject({
+      "cadence-local": 60_000,
+      "cadence-external": 15 * 60_000,
+      "cadence-keyed": 30 * 60_000,
+    });
     vi.mocked(globalThis.fetch).mockClear();
+
+    // After 1 minute: only local re-runs.
     vi.setSystemTime(Date.now() + 60_000);
-    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+    await executeAllIntegrationHealthChecks([local, external, keyed], { scheduled: true });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-    await executeAllIntegrationHealthChecks([external]);
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toBe(
+      "http://valhalla:8002/status",
+    );
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // After 15 minutes total: local + external run; keyed still cached.
+    vi.setSystemTime(Date.now() + 14 * 60_000);
+    await executeAllIntegrationHealthChecks([local, external, keyed], { scheduled: true });
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(
+      vi
+        .mocked(globalThis.fetch)
+        .mock.calls.map((c) => String(c[0]))
+        .sort(),
+    ).toEqual(["http://valhalla:8002/status", "https://example.org/health"]);
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // After 30 minutes total: all three run.
+    vi.setSystemTime(Date.now() + 15 * 60_000);
+    await executeAllIntegrationHealthChecks([local, external, keyed], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // Explicit on-demand sweep probes immediately regardless of cadence.
+    await executeAllIntegrationHealthChecks([external]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries failed external checks with exponential backoff starting at 1m and resets on recovery", async () => {
+    const external = makeIntegration({ type: "http", url: "https://flaky.example.org/health" });
+    external.id = "cadence-backoff";
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 503 }));
+
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(getCachedIntegrationHealthSnapshot([external]).results[0]?.status).toBe("down");
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // 1st failure → retry after 1m
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // 2nd failure → backoff 2m (skip at +1m, retry at +2m)
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    vi.setSystemTime(Date.now() + 60_000);
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(getCachedIntegrationHealthSnapshot([external]).results[0]?.status).toBe("up");
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // Recovered → back to 15m interval (no probe after 1m or 14m, probes at 15m)
+    vi.setSystemTime(Date.now() + 14 * 60_000);
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([external], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("schedules mixed local and keyed sub-checks independently and aggregates oldest/largest freshness", async () => {
+    const mixed = makeIntegration([
+      {
+        name: "Local",
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+        urlTemplate: "${service:valhalla}/status",
+      },
+      {
+        name: "Keyed",
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+        urlTemplate: "https://api.example.org/check?key=${apiKey}",
+        requiredConfigKeys: ["apiKey"],
+      },
+    ]);
+    mixed.config = { apiKey: "secret-key-value" };
+    mixed.id = "cadence-mixed";
+
+    const t0 = Date.now();
+    await executeAllIntegrationHealthChecks([mixed], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    vi.mocked(globalThis.fetch).mockClear();
+
+    // At +1m only Local re-runs; aggregate remains up and keeps Keyed's oldest checkedAt & 30m interval.
+    vi.setSystemTime(t0 + 60_000);
+    await executeAllIntegrationHealthChecks([mixed], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toBe(
+      "http://valhalla:8002/status",
+    );
+    const snap = getCachedIntegrationHealthSnapshot([mixed]);
+    expect(snap.checkedAtById?.["cadence-mixed:Local"]).toBe(t0 + 60_000);
+    expect(snap.checkedAtById?.["cadence-mixed:Keyed"]).toBe(t0);
+    expect(snap.checkedAtById?.["cadence-mixed"]).toBe(t0);
+    expect(snap.intervalMsById?.["cadence-mixed"]).toBe(30 * 60_000);
+
+    // If Local fails on a subsequent 1m tick while Keyed stays cached, aggregate flips to down immediately.
+    vi.mocked(globalThis.fetch).mockClear();
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(null, { status: 503 }));
+    vi.setSystemTime(t0 + 120_000);
+    await executeAllIntegrationHealthChecks([mixed], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const downSnap = getCachedIntegrationHealthSnapshot([mixed]);
+    expect(downSnap.results.find((r) => r.id === "cadence-mixed:Local")?.status).toBe("down");
+    expect(downSnap.results.find((r) => r.id === "cadence-mixed:Keyed")?.status).toBe("up");
+    expect(downSnap.results.find((r) => r.id === "cadence-mixed")?.status).toBe("down");
+  });
+
+  it("classifies custom health checks by required local service, required config keys, and unconfigured status", async () => {
+    const localCustom = makeIntegration({ type: "custom" });
+    localCustom.id = "custom-local-db";
+    localCustom.manifest.requires = [{ service: "postgis", optional: false }];
+    localCustom.customHealthCheck = vi.fn().mockResolvedValue({ status: "up" });
+
+    const keyedCustom = makeIntegration({ type: "custom", requiredConfigKeys: ["apiKey"] });
+    keyedCustom.id = "custom-keyed-api";
+    keyedCustom.config = { apiKey: "my-key" };
+    keyedCustom.customHealthCheck = vi.fn().mockResolvedValue({ status: "up" });
+
+    const unconfiguredCustom = makeIntegration({ type: "custom" });
+    unconfiguredCustom.id = "custom-unconfigured";
+    unconfiguredCustom.customHealthCheck = vi
+      .fn()
+      .mockResolvedValue({ status: "unconfigured", error: "not configured" });
+
+    await executeAllIntegrationHealthChecks([localCustom, keyedCustom, unconfiguredCustom], {
+      scheduled: true,
+    });
+    const snap = getCachedIntegrationHealthSnapshot([localCustom, keyedCustom, unconfiguredCustom]);
+    expect(snap.intervalMsById).toMatchObject({
+      "custom-local-db": 60_000,
+      "custom-keyed-api": 30 * 60_000,
+      "custom-unconfigured": 60_000,
+    });
+  });
+
+  it("coalesces identical HTTP probes within a sweep but never across distinct headers or SSRF contexts", async () => {
+    const a = makeIntegration({ type: "http", url: "https://shared.example.org/health" });
+    a.id = "dedup-a";
+    const b = makeIntegration({ type: "ping", url: "https://shared.example.org/health" });
+    b.id = "dedup-b";
+    const authA = makeIntegration({
+      type: "http",
+      url: "https://shared.example.org/health",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      headers: { Authorization: "Bearer ${apiKey}" },
+      requiredConfigKeys: ["apiKey"],
+    });
+    authA.config = { apiKey: "token-alpha" };
+    authA.id = "dedup-auth-a";
+    const authB = makeIntegration({
+      type: "http",
+      url: "https://shared.example.org/health",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      headers: { Authorization: "Bearer ${apiKey}" },
+      requiredConfigKeys: ["apiKey"],
+    });
+    authB.config = { apiKey: "token-beta" };
+    authB.id = "dedup-auth-b";
+    // Same URL as a/b, but resolved through an operator-trusted endpoint (hostExempt=true).
+    vi.stubEnv("NOMINATIM_URL", "https://shared.example.org");
+    const trusted = makeIntegration({
+      type: "http",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      urlTemplate: "${endpoint:nominatim}/health",
+    });
+    trusted.id = "dedup-trusted";
+    trusted.isBuiltIn = true;
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 404 }));
+    const results = await executeAllIntegrationHealthChecks([a, b, authA, authB, trusted]);
+
+    // a & b share 1 unauthenticated public probe; authA, authB, and trusted each run separately.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(4);
+    expect(results.find((r) => r.id === "dedup-a")?.status).toBe("down");
+    expect(results.find((r) => r.id === "dedup-b")?.status).toBe("up");
+    expect(results.find((r) => r.id === "dedup-auth-a")?.status).toBe("down");
+    expect(results.find((r) => r.id === "dedup-auth-b")?.status).toBe("down");
+    expect(results.find((r) => r.id === "dedup-trusted")?.status).toBe("down");
+    vi.unstubAllEnvs();
+  });
+
+  it("isolates unexpected throws so sibling sub-checks persist and failed checks still back off", async () => {
+    const integration = makeIntegration([
+      { name: "Broken", type: "tcp", url: "not a valid url :::" },
+      { name: "Healthy", type: "http", url: "https://sibling.example.org/health" },
+    ]);
+    integration.id = "throw-isolation";
+
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const snap = getCachedIntegrationHealthSnapshot([integration]);
+    expect(snap.results.find((r) => r.id === "throw-isolation:Healthy")?.status).toBe("up");
   });
 
   it("does not overlap slow scheduled probes and seeds replacement generations", async () => {
@@ -1270,5 +1490,179 @@ describe("scheduled integration health checks", () => {
     await executeAllIntegrationHealthChecks([replacement], { scheduled: true });
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(getCachedIntegrationHealthSnapshot([replacement]).results[0]?.status).toBe("up");
+  });
+});
+
+describe("built-in integration manifest health-check hygiene", () => {
+  const BANNED_RULES: Array<[(target: string, parsed: URL | null) => boolean, string]> = [
+    [
+      (target) => target.includes("/api/v1/geocode"),
+      "use /api/v1/health instead of MOTIS/Transitous geocode",
+    ],
+    [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      (target) => target.includes("${endpoint:photon}/api?q="),
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest placeholder literal
+      "use ${endpoint:photon}/status instead of search",
+    ],
+    [
+      (target) => target.toLowerCase().includes("request=getfeature"),
+      "use WFS GetCapabilities instead of GetFeature",
+    ],
+    [
+      (target) => target.includes("nextbike-live.json?limit=0"),
+      "limit=0 returns ~28 MB; filter by city instead",
+    ],
+    [(target) => target.includes("/route/v1/"), "use /nearest/v1/ instead of full OSRM routing"],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.brightsky.dev" && parsed.pathname.startsWith("/current_weather"),
+      "use https://api.brightsky.dev/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.panoramax.xyz" && parsed.pathname.startsWith("/api/search"),
+      "use https://api.panoramax.xyz/api/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "api.github.com" &&
+        parsed.pathname.startsWith("/repos/") &&
+        parsed.pathname.includes("/git/trees/"),
+      "exhausts anonymous GitHub API quota",
+    ],
+    [
+      (_, parsed) => parsed?.hostname === "tile.openstreetmap.org",
+      "violates OSM tile usage policy",
+    ],
+    [(target) => target.includes("method=flickr.photos.search"), "use method=flickr.test.echo"],
+    [
+      (_, parsed) => parsed?.hostname === "api.opensensemap.org" && parsed.pathname === "/stats",
+      "use https://api.opensensemap.org/",
+    ],
+    [
+      (_, parsed) =>
+        parsed?.hostname === "harbour.openseamap.org" &&
+        parsed.pathname === "/getHarbours.php" &&
+        parsed.search.length > 0,
+      "use queryless probe on getHarbours.php",
+    ],
+    [
+      (target) => target.includes("tide_request=stationlist"),
+      "use https://vannstand.kartverket.no/",
+    ],
+    [(target) => target.includes("query=stationlist"), "use queryless ping on service.php"],
+    [(target) => target.includes("/api/bbox?"), "avoid spatial bbox queries in health checks"],
+    [
+      (target) => target.includes("/api/v1/list/search?"),
+      "avoid full-text search in health checks",
+    ],
+  ];
+
+  it("enforces considerate health-check endpoints and wiring across all built-in manifests", () => {
+    const integrationsDir = resolve(REPO_ROOT, "integrations");
+    const violations: string[] = [];
+
+    for (const entry of readdirSync(integrationsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
+      const manifestPath = resolve(integrationsDir, entry.name, "manifest.json");
+      let manifest: {
+        id: string;
+        healthCheck?:
+          | { type: string; url?: string; urlTemplate?: string }
+          | Array<{ type: string; url?: string; urlTemplate?: string }>;
+        healthCheckIntervalMs?: number;
+      };
+      try {
+        manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      } catch {
+        continue;
+      }
+      if (!manifest.healthCheck) continue;
+      const checks = Array.isArray(manifest.healthCheck)
+        ? manifest.healthCheck
+        : [manifest.healthCheck];
+
+      if (checks.length > 1 && checks.some((check) => check.type === "custom")) {
+        violations.push(`${manifest.id}: type "custom" is ignored inside a multi-check array`);
+      }
+
+      if (
+        manifest.healthCheckIntervalMs !== undefined &&
+        manifest.healthCheckIntervalMs < 900_000
+      ) {
+        const hasExternal = checks.some((check) => {
+          const target = check.urlTemplate ?? check.url ?? "";
+          return /^https?:\/\//.test(target);
+        });
+        if (hasExternal) {
+          violations.push(
+            `${manifest.id}: explicit healthCheckIntervalMs (${manifest.healthCheckIntervalMs}) is below 15m for an external URL`,
+          );
+        }
+      }
+
+      for (const check of checks) {
+        const target = check.urlTemplate ?? check.url ?? "";
+        let parsed: URL | null = null;
+        try {
+          parsed = new URL(target);
+        } catch {
+          parsed = null;
+        }
+        for (const [matches, guidance] of BANNED_RULES) {
+          if (matches(target, parsed)) {
+            violations.push(`${manifest.id}: "${target}" — ${guidance}`);
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("routes transit-opentransportdata-ch to its registered custom check and geocoding-db-ris to credentialless ping", async () => {
+    const swissManifest = JSON.parse(
+      readFileSync(
+        resolve(REPO_ROOT, "integrations/transit-opentransportdata-ch/manifest.json"),
+        "utf8",
+      ),
+    );
+    expect(Array.isArray(swissManifest.healthCheck)).toBe(false);
+    expect(swissManifest.healthCheck).toMatchObject({
+      type: "custom",
+      requiredConfigKeys: ["apiKey"],
+    });
+    const customSpy = vi.fn().mockResolvedValue({ status: "up" as const });
+    const swissUnconfigured = {
+      ...makeIntegration(swissManifest.healthCheck),
+      id: "transit-opentransportdata-ch",
+      manifest: swissManifest,
+      customHealthCheck: customSpy,
+    };
+    const unconfiguredRes = await executeIntegrationHealthCheck(swissUnconfigured);
+    expect(unconfiguredRes[0]?.status).toBe("unconfigured");
+    expect(customSpy).not.toHaveBeenCalled();
+
+    const swissConfigured = {
+      ...makeIntegration(swissManifest.healthCheck),
+      id: "transit-opentransportdata-ch",
+      manifest: swissManifest,
+      config: { apiKey: "swiss-key" },
+      customHealthCheck: customSpy,
+    };
+    const configuredRes = await executeIntegrationHealthCheck(swissConfigured);
+    expect(configuredRes[0]?.status).toBe("up");
+    expect(customSpy).toHaveBeenCalledOnce();
+
+    const dbRisManifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "integrations/geocoding-db-ris/manifest.json"), "utf8"),
+    );
+    expect(dbRisManifest.healthCheck).toMatchObject({
+      type: "ping",
+      url: "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
+      requiredConfigKeys: ["clientId", "apiKey"],
+    });
+    expect(dbRisManifest.healthCheck).not.toHaveProperty("headers");
   });
 });

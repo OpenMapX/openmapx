@@ -75,17 +75,17 @@
     {
       "name": "Nextbike",
       "type": "http",
-      "url": "https://maps.nextbike.net/maps/nextbike-live.json?limit=0"
+      "url": "https://maps.nextbike.net/maps/nextbike-live.json?city=99999999"
     },
     {
       "name": "CityBikes",
       "type": "http",
-      "url": "https://api.citybik.es/v2/networks?fields=id&limit=1"
+      "url": "https://api.citybik.es/v2/"
     },
     {
       "name": "Donkey Republic",
       "type": "ping",
-      "url": "https://stables.donkey.bike/api/public/nearby?latitude=52.52&longitude=13.405&radius=1"
+      "url": "https://stables.donkey.bike/api/public/"
     },
     {
       "name": "Deutsche Bahn GBFS",
@@ -105,12 +105,12 @@
     {
       "name": "Transitous Rentals",
       "type": "http",
-      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/health"
     },
     {
       "name": "MOTIS self-hosted",
-      "type": "ping",
-      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
+      "type": "http",
+      "urlTemplate": "${endpoint:motis}/api/v1/health"
     }
   ],
   "quality": "built-in",

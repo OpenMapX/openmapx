@@ -297,7 +297,11 @@ export function collectToolchainPinViolations(
         "integrations/transit-dynamic-registry/manifest.json: JSDelivr health check is not pinned to TRANSPORT_APIS_COMMIT",
       );
     }
-    if (!manifest.includes(`git/trees/${registryCommit}?recursive=1`)) {
+    if (
+      !manifest.includes(
+        `raw.githubusercontent.com/public-transport/transport-apis/${registryCommit}/readme.md`,
+      )
+    ) {
       errors.push(
         "integrations/transit-dynamic-registry/manifest.json: GitHub health check is not pinned to TRANSPORT_APIS_COMMIT",
       );

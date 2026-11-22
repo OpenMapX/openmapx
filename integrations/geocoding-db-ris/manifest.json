@@ -55,7 +55,8 @@
     }
   },
   "healthCheck": {
-    "type": "custom",
+    "type": "ping",
+    "url": "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
     "requiredConfigKeys": ["clientId", "apiKey"]
   },
   "quality": "built-in",

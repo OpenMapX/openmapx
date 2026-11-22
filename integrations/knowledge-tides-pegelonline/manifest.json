@@ -28,7 +28,7 @@
     {
       "name": "WSV Pegelonline",
       "type": "http",
-      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=NORDSEE,OSTSEE&prettyprint=false"
+      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/waters.json"
     }
   ],
   "dataSources": [

@@ -39,7 +39,7 @@
     {
       "name": "Cambio",
       "type": "http",
-      "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations"
+      "url": "https://cwapi.cambio-carsharing.com/"
     },
     {
       "name": "Stadtteilauto Münster",
@@ -48,13 +48,13 @@
     },
     {
       "name": "GBFS Catalog",
-      "type": "ping",
+      "type": "http",
       "url": "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv"
     },
     {
       "name": "Stadt Bielefeld",
       "type": "http",
-      "url": "https://www.bielefeld01.de/md/WFS/carsharing/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=carsharing_p&SRSNAME=EPSG:4326&OUTPUTFORMAT=text/csv"
+      "url": "https://www.bielefeld01.de/md/WFS/carsharing/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetCapabilities"
     },
     {
       "name": "Stadt Wuppertal",
@@ -69,7 +69,7 @@
     {
       "name": "Transitous Rentals",
       "type": "http",
-      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/health"
     },
     {
       "name": "Communauto",
@@ -88,8 +88,8 @@
     },
     {
       "name": "MOTIS self-hosted",
-      "type": "ping",
-      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
+      "type": "http",
+      "urlTemplate": "${endpoint:motis}/api/v1/health"
     }
   ],
   "quality": "built-in",

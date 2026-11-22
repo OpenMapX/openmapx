@@ -142,25 +142,53 @@ export function applyPinToSource(source: string, lock: TransportApisLock): strin
   return updated;
 }
 
+function replacePinnedHealthCheckUrl(
+  source: string,
+  urls: readonly string[],
+  prefix: string,
+  suffix: string,
+  commit: string,
+  label: string,
+): string {
+  const match = urls.find(
+    (url) =>
+      url.startsWith(prefix) &&
+      url.endsWith(suffix) &&
+      /^[0-9a-f]{40}$/.test(url.slice(prefix.length, url.length - suffix.length)),
+  );
+  if (!match) throw new Error(`Could not update ${label} in manifest.json`);
+  return source.replace(`"${match}"`, `"${prefix}${commit}${suffix}"`);
+}
+
 export function applyPinToManifest(source: string, lock: TransportApisLock): string {
   const { commit } = decodeTransportApisLock(lock);
-  const replacements: Array<[RegExp, string, string]> = [
-    [
-      /https:\/\/data\.jsdelivr\.com\/v1\/packages\/gh\/public-transport\/transport-apis@[0-9a-f]{40}/,
-      `https://data.jsdelivr.com/v1/packages/gh/${TRANSPORT_APIS_REPO}@${commit}`,
-      "JSDelivr health check",
-    ],
-    [
-      /https:\/\/api\.github\.com\/repos\/public-transport\/transport-apis\/git\/trees\/[0-9a-f]{40}\?recursive=1/,
-      `${TRANSPORT_APIS_API}/git/trees/${commit}?recursive=1`,
-      "GitHub health check",
-    ],
-  ];
-  let updated = source;
-  for (const [pattern, replacement, label] of replacements) {
-    if (!pattern.test(updated)) throw new Error(`Could not update ${label} in manifest.json`);
-    updated = updated.replace(pattern, replacement);
-  }
+  const parsed = JSON.parse(source) as {
+    healthCheck?: { url?: unknown } | Array<{ url?: unknown }>;
+  };
+  const checks = Array.isArray(parsed.healthCheck)
+    ? parsed.healthCheck
+    : parsed.healthCheck
+      ? [parsed.healthCheck]
+      : [];
+  const urls = checks
+    .map((check) => check.url)
+    .filter((url): url is string => typeof url === "string");
+  let updated = replacePinnedHealthCheckUrl(
+    source,
+    urls,
+    `https://data.jsdelivr.com/v1/packages/gh/${TRANSPORT_APIS_REPO}@`,
+    "",
+    commit,
+    "JSDelivr health check",
+  );
+  updated = replacePinnedHealthCheckUrl(
+    updated,
+    urls,
+    `https://raw.githubusercontent.com/${TRANSPORT_APIS_REPO}/`,
+    "/readme.md",
+    commit,
+    "GitHub health check",
+  );
   return updated;
 }
 

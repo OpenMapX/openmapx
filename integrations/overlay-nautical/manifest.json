@@ -99,12 +99,12 @@
     {
       "name": "OpenSeaMap harbour API",
       "type": "http",
-      "url": "https://harbour.openseamap.org/getHarbours.php?b=42&t=43&l=10&r=11&zoom=10"
+      "url": "https://harbour.openseamap.org/getHarbours.php"
     },
     {
       "name": "NOAA CO-OPS MDAPI",
       "type": "http",
-      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&units=english"
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8518750.json"
     },
     {
       "name": "Kartverket Sjøkart 2",
@@ -119,17 +119,17 @@
     {
       "name": "Kartverket Sehavnivå (Norway) station list",
       "type": "http",
-      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlist&type=perm&lang=en"
+      "url": "https://vannstand.kartverket.no/"
     },
     {
       "name": "WSV Pegelonline (Germany) coastal stations",
       "type": "http",
-      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=NORDSEE,OSTSEE&prettyprint=false"
+      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/waters.json"
     },
     {
       "name": "IOC Sea Level Monitoring",
-      "type": "http",
-      "url": "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+      "type": "ping",
+      "url": "https://www.ioc-sealevelmonitoring.org/service.php"
     },
     {
       "name": "EMODnet Physics tide gauges",

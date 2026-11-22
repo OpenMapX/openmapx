@@ -27,8 +27,8 @@
   "healthCheck": [
     {
       "name": "IOC Sea Level Monitoring",
-      "type": "http",
-      "url": "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+      "type": "ping",
+      "url": "https://www.ioc-sealevelmonitoring.org/service.php"
     }
   ],
   "dataSources": [

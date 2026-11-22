@@ -19,6 +19,40 @@ import { serviceUrl } from "./service-registry";
 
 const TIMEOUT = 5_000;
 const UA = USER_AGENT;
+const LOCAL_HEALTH_CHECK_INTERVAL_MS = 60_000;
+const EXTERNAL_HEALTH_CHECK_INTERVAL_MS = 15 * 60_000;
+const KEYED_HEALTH_CHECK_INTERVAL_MS = 30 * 60_000;
+// Tolerate small Node setInterval jitter (e.g., 59,999 ms on a 60 s tick) so
+// due checks do not slip by an entire extra tick.
+const SCHEDULE_JITTER_SLACK_MS = 5_000;
+
+type HealthCheckCadenceClass = "local" | "external" | "keyed";
+
+type RawHttpProbeOutcome =
+  | { ok: true; status: number; responseTime: number }
+  | { ok: false; error: unknown; responseTime: number };
+
+interface HealthCheckExecution {
+  status: ServiceStatus;
+  cadence: HealthCheckCadenceClass;
+}
+
+function defaultIntervalForCadence(cadence: HealthCheckCadenceClass): number {
+  switch (cadence) {
+    case "local":
+      return LOCAL_HEALTH_CHECK_INTERVAL_MS;
+    case "keyed":
+      return KEYED_HEALTH_CHECK_INTERVAL_MS;
+    case "external":
+      return EXTERNAL_HEALTH_CHECK_INTERVAL_MS;
+  }
+}
+
+function hasRequiredLocalService(integration: LoadedIntegration): boolean {
+  return (integration.manifest.requires ?? []).some(
+    (req) => "service" in req && req.optional !== true,
+  );
+}
 
 function tcpCheck(
   address: string,
@@ -175,7 +209,8 @@ async function executeSingleHealthCheck(
     category?: string;
   },
   suffix?: string,
-): Promise<ServiceStatus | null> {
+  inFlightProbes?: Map<string, Promise<RawHttpProbeOutcome>>,
+): Promise<HealthCheckExecution | null> {
   const category =
     hc.category ??
     ((integration.manifest as Record<string, unknown>).category as string) ??
@@ -186,6 +221,10 @@ async function executeSingleHealthCheck(
     ? `${toIntegrationMeta(integration).name} — ${hc.name}`
     : toIntegrationMeta(integration).name;
   let redactSecrets = secretRedactor(integration);
+  const secretKeyNames = new Set(
+    getSecretFields(integration.manifest.configSchema).map((field) => field.key),
+  );
+  const requiredKeyNames = new Set(hc.requiredConfigKeys ?? []);
 
   // Skip the probe when any required config key is unresolved (no value from
   // defaults / DB / vault / env). The cascade is populated at integration
@@ -193,17 +232,25 @@ async function executeSingleHealthCheck(
   if (hc.requiredConfigKeys?.some((k: string) => !resolveConfigValue(integration, k))) {
     const missing = hc.requiredConfigKeys?.find((k: string) => !resolveConfigValue(integration, k));
     return {
-      id,
-      name,
-      category,
-      url: `${missing} not configured`,
-      status: "unconfigured",
+      status: {
+        id,
+        name,
+        category,
+        url: `${missing} not configured`,
+        status: "unconfigured",
+      },
+      cadence: "local",
     };
   }
 
   // Custom health check (registered via ctx.registerHealthCheck) — only for primary
   if (!suffix && integration.customHealthCheck) {
     const start = Date.now();
+    const customCadence: HealthCheckCadenceClass = hasRequiredLocalService(integration)
+      ? "local"
+      : requiredKeyNames.size > 0
+        ? "keyed"
+        : "external";
     try {
       const result = await integration.customHealthCheck();
       // Normalize the unconfigured-with-message shape to match the
@@ -213,23 +260,29 @@ async function executeSingleHealthCheck(
       // which path produced it.
       const isUnconfigured = result.status === "unconfigured";
       return {
-        id,
-        name,
-        category,
-        url: isUnconfigured && result.error ? redactSecrets(result.error) : (hc.url ?? ""),
-        status: result.status,
-        responseTime: result.responseTime ?? Date.now() - start,
-        error: isUnconfigured || !result.error ? undefined : redactSecrets(result.error),
+        status: {
+          id,
+          name,
+          category,
+          url: isUnconfigured && result.error ? redactSecrets(result.error) : (hc.url ?? ""),
+          status: result.status,
+          responseTime: result.responseTime ?? Date.now() - start,
+          error: isUnconfigured || !result.error ? undefined : redactSecrets(result.error),
+        },
+        cadence: isUnconfigured ? "local" : customCadence,
       };
     } catch (err) {
       return {
-        id,
-        name,
-        category,
-        url: hc.url ?? "",
-        status: "down",
-        responseTime: Date.now() - start,
-        error: errMsg(err, redactSecrets),
+        status: {
+          id,
+          name,
+          category,
+          url: hc.url ?? "",
+          status: "down",
+          responseTime: Date.now() - start,
+          error: errMsg(err, redactSecrets),
+        },
+        cadence: customCadence,
       };
     }
   }
@@ -249,51 +302,63 @@ async function executeSingleHealthCheck(
       );
     } catch (error) {
       return {
-        id,
-        name,
-        category,
-        url: `${host}:${port}`,
-        status: "down",
-        responseTime: Date.now() - start,
-        error:
-          errMsg(error) === "Timeout"
-            ? "Timeout"
-            : "health-check host not allowed (non-public host)",
+        status: {
+          id,
+          name,
+          category,
+          url: `${host}:${port}`,
+          status: "down",
+          responseTime: Date.now() - start,
+          error:
+            errMsg(error) === "Timeout"
+              ? "Timeout"
+              : "health-check host not allowed (non-public host)",
+        },
+        cadence: "external",
       };
     }
     const address = addresses[0];
     if (!address) {
       return {
-        id,
-        name,
-        category,
-        url: `${host}:${port}`,
-        status: "down",
-        responseTime: Date.now() - start,
-        error: "health-check host not allowed (non-public host)",
+        status: {
+          id,
+          name,
+          category,
+          url: `${host}:${port}`,
+          status: "down",
+          responseTime: Date.now() - start,
+          error: "health-check host not allowed (non-public host)",
+        },
+        cadence: "external",
       };
     }
     const remainingMs = TIMEOUT - (Date.now() - start);
     if (timeoutSignal.aborted || remainingMs <= 0) {
       return {
-        id,
-        name,
-        category,
-        url: `${host}:${port}`,
-        status: "down",
-        responseTime: Date.now() - start,
-        error: "Timeout",
+        status: {
+          id,
+          name,
+          category,
+          url: `${host}:${port}`,
+          status: "down",
+          responseTime: Date.now() - start,
+          error: "Timeout",
+        },
+        cadence: "external",
       };
     }
     const result = await tcpCheck(address.address, port, remainingMs);
     return {
-      id,
-      name,
-      category,
-      url: `${host}:${port}`,
-      status: result.ok ? "up" : "down",
-      responseTime: Date.now() - start,
-      error: result.error ? redactSecrets(result.error) : undefined,
+      status: {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: result.ok ? "up" : "down",
+        responseTime: Date.now() - start,
+        error: result.error ? redactSecrets(result.error) : undefined,
+      },
+      cadence: "external",
     };
   }
 
@@ -318,6 +383,7 @@ async function executeSingleHealthCheck(
   // that origin, as Basic auth.
   let endpointMisuse: string | null = null;
   let resolvedEndpoint: ProbeEndpoint | null = null;
+  let usedCredentialPlaceholder = false;
   // Hosts the deployment chose (a registered service or the operator's own
   // instance URL), which may be internal; manifest-literal and config-derived
   // hosts must be public.
@@ -374,7 +440,11 @@ async function executeSingleHealthCheck(
       }
       return url;
     }
-    return resolveConfigValue(integration, key) ?? "";
+    const value = resolveConfigValue(integration, key);
+    if (value && (requiredKeyNames.has(key) || secretKeyNames.has(key))) {
+      usedCredentialPlaceholder = true;
+    }
+    return value ?? "";
   }
   if (hc.urlTemplate) {
     const template = hc.urlTemplate as string;
@@ -386,20 +456,26 @@ async function executeSingleHealthCheck(
     );
     if (unsatisfiedService) {
       return {
-        id,
-        name,
-        category,
-        url: `${unsatisfiedService} service not enabled`,
-        status: "unconfigured",
+        status: {
+          id,
+          name,
+          category,
+          url: `${unsatisfiedService} service not enabled`,
+          status: "unconfigured",
+        },
+        cadence: "local",
       };
     }
     if (unsatisfiedEndpoint) {
       return {
-        id,
-        name,
-        category,
-        url: `${unsatisfiedEndpoint} endpoint not configured`,
-        status: "unconfigured",
+        status: {
+          id,
+          name,
+          category,
+          url: `${unsatisfiedEndpoint} endpoint not configured`,
+          status: "unconfigured",
+        },
+        cadence: "local",
       };
     }
     const hasHost = /^https?:\/\/[^/]/.test(resolved);
@@ -455,12 +531,15 @@ async function executeSingleHealthCheck(
   }
   if (endpointMisuse) {
     return {
-      id,
-      name,
-      category,
-      url: "health check misconfigured",
-      status: "down",
-      error: endpointMisuse,
+      status: {
+        id,
+        name,
+        category,
+        url: "health check misconfigured",
+        status: "down",
+        error: endpointMisuse,
+      },
+      cadence: "local",
     };
   }
   // A manifest's own Authorization header takes precedence over URL credentials.
@@ -490,60 +569,105 @@ async function executeSingleHealthCheck(
       validatePublicUrl(checkUrl);
     } catch {
       return {
+        status: {
+          id,
+          name,
+          category,
+          url: displayUrl,
+          status: "down",
+          error: "health-check URL not allowed (non-public host)",
+        },
+        cadence: "local",
+      };
+    }
+  }
+
+  const cadence: HealthCheckCadenceClass = hostExempt
+    ? "local"
+    : credentialHeader || usedCredentialPlaceholder
+      ? "keyed"
+      : "external";
+
+  const runProbe = async (): Promise<RawHttpProbeOutcome> => {
+    const start = Date.now();
+    try {
+      const res = await safeFetchStatus(checkUrl, {
+        headers: {
+          "User-Agent": UA,
+          ...interpolatedHeaders,
+        },
+        timeoutMs: TIMEOUT,
+        allowedRedirectOrigin:
+          Object.keys(interpolatedHeaders).length > 0 ? new URL(checkUrl).origin : undefined,
+        allowPrivateHosts: hostExempt ? [new URL(checkUrl).hostname] : [],
+      });
+      return { ok: true, status: res.status, responseTime: Date.now() - start };
+    } catch (error) {
+      return { ok: false, error, responseTime: Date.now() - start };
+    }
+  };
+
+  let outcome: RawHttpProbeOutcome;
+  if (inFlightProbes) {
+    // Key strictly in memory per sweep; includes exact headers & host exemption so
+    // distinct credentials or SSRF contexts never coalesce. Never log this key.
+    const sortedHeaders = Object.entries(interpolatedHeaders)
+      .map(([k, v]) => [k.toLowerCase(), v] as const)
+      .sort(([a], [b]) => a.localeCompare(b));
+    const dedupKey = JSON.stringify([checkUrl, sortedHeaders, hostExempt]);
+    let shared = inFlightProbes.get(dedupKey);
+    if (!shared) {
+      shared = runProbe();
+      inFlightProbes.set(dedupKey, shared);
+    }
+    outcome = await shared;
+  } else {
+    outcome = await runProbe();
+  }
+
+  if (!outcome.ok) {
+    return {
+      status: {
         id,
         name,
         category,
         url: displayUrl,
         status: "down",
-        error: "health-check URL not allowed (non-public host)",
-      };
-    }
-  }
-
-  const start = Date.now();
-  try {
-    const res = await safeFetchStatus(checkUrl, {
-      headers: {
-        "User-Agent": UA,
-        ...interpolatedHeaders,
+        responseTime: outcome.responseTime,
+        error: errMsg(outcome.error, redactSecrets),
       },
-      timeoutMs: TIMEOUT,
-      allowedRedirectOrigin:
-        Object.keys(interpolatedHeaders).length > 0 ? new URL(checkUrl).origin : undefined,
-      allowPrivateHosts: hostExempt ? [new URL(checkUrl).hostname] : [],
-    });
-    const ms = Date.now() - start;
-
-    if (hc.type === "ping") {
-      if (res.status < 500) {
-        return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
-      }
-    } else {
-      if (res.status >= 200 && res.status < 300) {
-        return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
-      }
-    }
-
-    return {
-      id,
-      name,
-      category,
-      url: displayUrl,
-      status: "down",
-      responseTime: ms,
-      error: `HTTP ${res.status}`,
-    };
-  } catch (err) {
-    return {
-      id,
-      name,
-      category,
-      url: displayUrl,
-      status: "down",
-      responseTime: Date.now() - start,
-      error: errMsg(err, redactSecrets),
+      cadence,
     };
   }
+
+  const isUp =
+    hc.type === "ping" ? outcome.status < 500 : outcome.status >= 200 && outcome.status < 300;
+  if (isUp) {
+    return {
+      status: {
+        id,
+        name,
+        category,
+        url: displayUrl,
+        status: "up",
+        responseTime: outcome.responseTime,
+      },
+      cadence,
+    };
+  }
+
+  return {
+    status: {
+      id,
+      name,
+      category,
+      url: displayUrl,
+      status: "down",
+      responseTime: outcome.responseTime,
+      error: `HTTP ${outcome.status}`,
+    },
+    cadence,
+  };
 }
 
 export async function executeIntegrationHealthCheck(
@@ -563,72 +687,211 @@ export async function executeIntegrationHealthCheck(
     ),
   );
 
-  return results.filter((r): r is ServiceStatus => r !== null);
+  return results.filter((r): r is HealthCheckExecution => r !== null).map((r) => r.status);
 }
 
-// Key by the loaded generation so a reload seeds fresh health immediately.
-const scheduledChecks = new WeakMap<LoadedIntegration, { startedAt: number; pending: boolean }>();
+interface ScheduledCheckState {
+  startedAt: number;
+  pending: boolean;
+  normalIntervalMs: number;
+  nextDelayMs: number;
+  consecutiveFailures: number;
+}
+
+// Key by loaded generation, then per-check key so a reload seeds fresh health
+// immediately and mixed local/external checks schedule independently.
+const scheduledChecks = new WeakMap<LoadedIntegration, Map<string, ScheduledCheckState>>();
+
+function persistHealthResult(status: ServiceStatus, checkedAt: number, intervalMs: number): void {
+  healthCache.set(status.id, status);
+  healthCacheCheckedAt.set(status.id, checkedAt);
+  healthCacheIntervalMs.set(status.id, intervalMs);
+  recordHealthResult(
+    status.id,
+    status.status === "up"
+      ? "healthy"
+      : status.status === "unconfigured"
+        ? "degraded"
+        : "unhealthy",
+    status.responseTime,
+    status.error,
+  ).catch((err) =>
+    processLogger.error(
+      { component: "health-history", err },
+      "Integration health history was not saved",
+    ),
+  );
+}
 
 export async function executeAllIntegrationHealthChecks(
   integrations: LoadedIntegration[],
   options: { scheduled?: boolean } = {},
 ): Promise<ServiceStatus[]> {
   const now = Date.now();
-  const checks = integrations.filter((integration) => {
-    if (!integration.manifest.healthCheck) return false;
-    if (!options.scheduled) return true;
-    const previous = scheduledChecks.get(integration);
-    const interval = integration.manifest.healthCheckIntervalMs ?? 60_000;
-    if (previous && (previous.pending || now - previous.startedAt < interval)) return false;
-    scheduledChecks.set(integration, { startedAt: now, pending: true });
-    return true;
-  });
-  if (options.scheduled && checks.length === 0) {
+  const inFlightProbes = new Map<string, Promise<RawHttpProbeOutcome>>();
+
+  interface ScheduledWorkItem {
+    integration: LoadedIntegration;
+    checks: Array<{
+      hc: NonNullable<LoadedIntegration["manifest"]["healthCheck"]> extends infer T
+        ? T extends Array<infer U>
+          ? U
+          : T
+        : never;
+      suffix?: string;
+      state?: ScheduledCheckState;
+    }>;
+    allSubIds: string[];
+  }
+
+  const workItems: ScheduledWorkItem[] = [];
+
+  for (const integration of integrations) {
+    const raw = integration.manifest.healthCheck;
+    if (!raw) continue;
+    const checks = Array.isArray(raw) ? raw : [raw];
+    const allSubIds =
+      checks.length > 1
+        ? checks.map((hc, i) => `${integration.id}:${hc.name ?? String(i)}`)
+        : [integration.id];
+    let generationMap = options.scheduled ? scheduledChecks.get(integration) : undefined;
+    if (options.scheduled && !generationMap) {
+      generationMap = new Map();
+      scheduledChecks.set(integration, generationMap);
+    }
+
+    const dueChecks: ScheduledWorkItem["checks"] = [];
+    for (let i = 0; i < checks.length; i++) {
+      const hc = checks[i];
+      if (!hc) continue;
+      const suffix = checks.length > 1 ? (hc.name ?? String(i)) : undefined;
+      const checkKey = suffix ?? "";
+      if (!options.scheduled) {
+        dueChecks.push({ hc, suffix });
+        continue;
+      }
+      const previous = generationMap?.get(checkKey);
+      if (
+        previous &&
+        (previous.pending ||
+          now - previous.startedAt < Math.max(0, previous.nextDelayMs - SCHEDULE_JITTER_SLACK_MS))
+      ) {
+        continue;
+      }
+      const initialInterval =
+        integration.manifest.healthCheckIntervalMs ?? LOCAL_HEALTH_CHECK_INTERVAL_MS;
+      const state: ScheduledCheckState = previous
+        ? { ...previous, startedAt: now, pending: true }
+        : {
+            startedAt: now,
+            pending: true,
+            normalIntervalMs: initialInterval,
+            nextDelayMs: initialInterval,
+            consecutiveFailures: 0,
+          };
+      generationMap?.set(checkKey, state);
+      dueChecks.push({ hc, suffix, state });
+    }
+
+    if (dueChecks.length > 0) {
+      workItems.push({ integration, checks: dueChecks, allSubIds });
+    }
+  }
+
+  if (options.scheduled && workItems.length === 0) {
     return getCachedIntegrationHealthSnapshot(integrations).results;
   }
+
   const results = await Promise.all(
-    checks.map(async (integration) => {
-      let subResults: ServiceStatus[];
-      try {
-        subResults = await executeIntegrationHealthCheck(integration);
-      } finally {
-        if (options.scheduled) {
-          const state = scheduledChecks.get(integration);
-          if (state) state.pending = false;
+    workItems.map(async ({ integration, checks, allSubIds }) => {
+      const ran = await Promise.all(
+        checks.map(async ({ hc, suffix, state }) => {
+          let execution: HealthCheckExecution | null = null;
+          let threw = false;
+          try {
+            execution = await executeSingleHealthCheck(integration, hc, suffix, inFlightProbes);
+          } catch (err) {
+            threw = true;
+            processLogger.warn(
+              { component: "integration-health", integrationId: integration.id, err },
+              "Integration health check threw unexpectedly",
+            );
+          } finally {
+            if (state) {
+              state.pending = false;
+              const normalIntervalMs =
+                integration.manifest.healthCheckIntervalMs ??
+                (execution ? defaultIntervalForCadence(execution.cadence) : state.normalIntervalMs);
+              state.normalIntervalMs = normalIntervalMs;
+              if (threw || execution?.status.status === "down") {
+                state.consecutiveFailures += 1;
+                state.nextDelayMs = Math.min(
+                  normalIntervalMs,
+                  LOCAL_HEALTH_CHECK_INTERVAL_MS * 2 ** (state.consecutiveFailures - 1),
+                );
+              } else {
+                state.consecutiveFailures = 0;
+                state.nextDelayMs = normalIntervalMs;
+              }
+            }
+          }
+          if (!execution) return null;
+          const normalIntervalMs =
+            integration.manifest.healthCheckIntervalMs ??
+            defaultIntervalForCadence(execution.cadence);
+          return { status: execution.status, intervalMs: normalIntervalMs };
+        }),
+      );
+
+      const completed = ran.filter(
+        (entry): entry is { status: ServiceStatus; intervalMs: number } => entry !== null,
+      );
+      const checkedAt = Date.now();
+      for (const entry of completed) {
+        persistHealthResult(entry.status, checkedAt, entry.intervalMs);
+      }
+
+      const returned: ServiceStatus[] = completed.map((entry) => entry.status);
+
+      // Multi-check integrations (e.g. bike-sharing or routing-valhalla) write
+      // entries under composite ids `<integration>:<sub>`, never under the
+      // bare id. Synthesize an aggregate from all cached sub-checks so callers
+      // reading the bare id see the combined state even when only a subset of
+      // sub-checks was due on this tick.
+      if (allSubIds.length > 1) {
+        const allSubResults: ServiceStatus[] = [];
+        let oldestCheckedAt = checkedAt;
+        let largestIntervalMs = LOCAL_HEALTH_CHECK_INTERVAL_MS;
+        for (const subId of allSubIds) {
+          const cached = healthCache.get(subId);
+          if (!cached) continue;
+          allSubResults.push(cached);
+          const subCheckedAt = healthCacheCheckedAt.get(subId);
+          if (subCheckedAt !== undefined && subCheckedAt < oldestCheckedAt) {
+            oldestCheckedAt = subCheckedAt;
+          }
+          const subIntervalMs = healthCacheIntervalMs.get(subId);
+          if (subIntervalMs !== undefined && subIntervalMs > largestIntervalMs) {
+            largestIntervalMs = subIntervalMs;
+          }
+        }
+        if (allSubResults.length > 1 && allSubResults.every((r) => r.id !== integration.id)) {
+          const aggregate = aggregateHealth(integration.id, allSubResults);
+          if (aggregate) {
+            persistHealthResult(aggregate, oldestCheckedAt, largestIntervalMs);
+            returned.push(aggregate);
+          }
         }
       }
-      // Multi-check integrations (e.g. fuel with 4 country sub-checks) write
-      // entries under composite ids `<integration>:<sub>`, never under the
-      // bare id. The integration-list endpoint looks up the bare id, gets
-      // undefined, and the status dot renders orange "Unconfigured" even
-      // when the underlying probes succeed. Synthesize an aggregate for
-      // those integrations so callers that just want a single yes/no
-      // signal can rely on the bare id too.
-      if (subResults.length > 1 && subResults.every((r) => r.id !== integration.id)) {
-        const aggregate = aggregateHealth(integration.id, subResults);
-        if (aggregate) subResults.push(aggregate);
-      }
-      return subResults;
+
+      return returned;
     }),
   );
-  const filtered = results.flat();
 
-  // Update the shared health cache and persist to health_history
-  for (const r of filtered) {
-    healthCache.set(r.id, r);
-    recordHealthResult(
-      r.id,
-      r.status === "up" ? "healthy" : r.status === "unconfigured" ? "degraded" : "unhealthy",
-      r.responseTime,
-      r.error,
-    ).catch((err) =>
-      processLogger.error(
-        { component: "health-history", err },
-        "Integration health history was not saved",
-      ),
-    );
+  const filtered = results.flat();
+  if (filtered.length > 0) {
+    healthCacheUpdatedAt = Date.now();
   }
-  healthCacheUpdatedAt = Date.now();
 
   return options.scheduled ? getCachedIntegrationHealthSnapshot(integrations).results : filtered;
 }
@@ -676,8 +939,10 @@ function aggregateHealth(integrationId: string, subResults: ServiceStatus[]): Se
   };
 }
 
-// Shared health cache: latest health status per integration ID
+// Shared health cache: latest health status and scheduling metadata per check ID
 const healthCache = new Map<string, ServiceStatus>();
+const healthCacheCheckedAt = new Map<string, number>();
+const healthCacheIntervalMs = new Map<string, number>();
 let healthCacheUpdatedAt = 0;
 
 /** How fresh the cache is (ms since last update). */
@@ -693,6 +958,10 @@ export function getCachedHealthStatus(id: string): ServiceStatus | undefined {
 export interface IntegrationHealthSnapshot {
   updatedAt: number | null;
   results: ServiceStatus[];
+  /** Per-result-ID timestamp of the check that produced the cached status. */
+  checkedAtById?: Readonly<Record<string, number>>;
+  /** Per-result-ID normal background interval (ms) used when scheduling the check. */
+  intervalMsById?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -704,6 +973,18 @@ export function getCachedIntegrationHealthSnapshot(
   integrations: LoadedIntegration[],
 ): IntegrationHealthSnapshot {
   const results: ServiceStatus[] = [];
+  const checkedAtById: Record<string, number> = {};
+  const intervalMsById: Record<string, number> = {};
+
+  const include = (id: string) => {
+    const cached = healthCache.get(id);
+    if (!cached) return;
+    results.push(cached);
+    const checkedAt = healthCacheCheckedAt.get(id);
+    if (checkedAt !== undefined) checkedAtById[id] = checkedAt;
+    const intervalMs = healthCacheIntervalMs.get(id);
+    if (intervalMs !== undefined) intervalMsById[id] = intervalMs;
+  };
 
   for (const integration of integrations) {
     const raw = integration.manifest.healthCheck;
@@ -711,25 +992,24 @@ export function getCachedIntegrationHealthSnapshot(
 
     const checks = Array.isArray(raw) ? raw : [raw];
     if (checks.length === 1) {
-      const cached = healthCache.get(integration.id);
-      if (cached) results.push(cached);
+      include(integration.id);
       continue;
     }
 
     for (let i = 0; i < checks.length; i++) {
       const check = checks[i];
       if (!check) continue;
-      const cached = healthCache.get(`${integration.id}:${check.name ?? String(i)}`);
-      if (cached) results.push(cached);
+      include(`${integration.id}:${check.name ?? String(i)}`);
     }
 
-    const aggregate = healthCache.get(integration.id);
-    if (aggregate) results.push(aggregate);
+    include(integration.id);
   }
 
   return {
     updatedAt: healthCacheUpdatedAt || null,
     results,
+    checkedAtById,
+    intervalMsById,
   };
 }
 
