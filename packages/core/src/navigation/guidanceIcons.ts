@@ -181,12 +181,11 @@ export function presentGuidanceLanes(
   // recommended ourselves stay blank rather than gain a guessed arrow.
   const engineChose = source === "engine" && (lanes?.some((l) => l.valid) ?? false);
   const unmarkedIcon = engineChose ? unmarkedLaneIconName(maneuver) : null;
-  // A lane narrowed away before a close second maneuver (no longer preferred,
-  // no active arrow, while another lane is) stays highlighted but its arrow is
-  // not drawn bright.
-  const somePreferred = resolved.some((lane) => lane.preferred === true);
   return resolved.map((lane) => {
-    const demoted = somePreferred && lane.preferred === false && !lane.active;
+    // A lane narrowed away before a close second maneuver stays highlighted,
+    // but its arrow is not drawn bright. A usable lane the engine merely did
+    // not prefer keeps its bright arrow.
+    const demoted = lane.narrowed === true;
     const marked = lane.indications.flatMap((indication) => {
       const icon = laneIndicationIconName(indication);
       return icon ? [{ indication, icon }] : [];

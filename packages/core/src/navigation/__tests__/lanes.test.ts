@@ -306,7 +306,12 @@ describe("narrowForNextManeuver", () => {
   it("drops the active arrow of a narrowed-away lane", () => {
     const withActive = current.map((l) => ({ ...l, preferred: true, active: "through" }));
     const narrowed = narrowForNextManeuver(withActive, nextRight, 100, false, "right");
-    expect(narrowed[0]).toEqual({ indications: ["through"], valid: true, preferred: false });
+    expect(narrowed[0]).toEqual({
+      indications: ["through"],
+      valid: true,
+      preferred: false,
+      narrowed: true,
+    });
     expect(narrowed[2]?.active).toBe("through");
   });
 });

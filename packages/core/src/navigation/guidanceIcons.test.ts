@@ -28,10 +28,10 @@ describe("guidance glyphs", () => {
 });
 
 describe("presentGuidanceLanes narrowing", () => {
-  it("a demoted lane keeps its highlight but loses its bright arrow", () => {
+  it("a narrowed lane keeps its highlight but loses its bright arrow", () => {
     const cells = presentGuidanceLanes(
       [
-        { indications: ["through"], valid: true, preferred: false },
+        { indications: ["through"], valid: true, preferred: false, narrowed: true },
         { indications: ["through"], valid: true, preferred: true },
       ],
       { type: "continue" },
@@ -39,6 +39,17 @@ describe("presentGuidanceLanes narrowing", () => {
     expect(cells[0]?.valid).toBe(true);
     expect(cells[0]?.arrows.map((a) => a.active)).toEqual([false]);
     expect(cells[1]?.arrows.map((a) => a.active)).toEqual([true]);
+  });
+
+  it("a usable lane the engine did not prefer stays as bright as the preferred one", () => {
+    const cells = presentGuidanceLanes(
+      [
+        { indications: ["left"], valid: true, preferred: true },
+        { indications: ["left"], valid: true, preferred: false },
+      ],
+      { type: "turn", modifier: "left" },
+    );
+    expect(cells.map((cell) => cell.arrows.map((a) => a.active))).toEqual([[true], [true]]);
   });
 
   it("Valhalla valid-but-not-active lanes render unchanged", () => {

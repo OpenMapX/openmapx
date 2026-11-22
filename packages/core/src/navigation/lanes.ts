@@ -126,7 +126,7 @@ export function narrowForNextManeuver(
     if (!recommended.includes(i)) return lane;
     if (kept.has(i)) return { ...lane, preferred: true };
     const { active: _dropped, ...rest } = lane;
-    return { ...rest, preferred: false };
+    return { ...rest, preferred: false, narrowed: true };
   });
 }
 
