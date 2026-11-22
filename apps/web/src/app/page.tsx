@@ -43,6 +43,7 @@ import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapPaddingSync } from "@/components/map/MapPaddingSync";
 import { MapScaleBar } from "@/components/map/MapScaleBar";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
+import { Navigation3dController } from "@/components/map/Navigation3dController";
 import { ParkedVehicleMarkers } from "@/components/map/ParkedVehicleMarkers";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
@@ -108,6 +109,7 @@ export default function HomePage() {
             <MapLayerStack />
             <RouteLayer />
             <NavigationRouteLayer />
+            <Navigation3dController />
             <NavManeuverArrowLayer />
             <RouteTrafficLayer />
             <NavTrafficSignalsLayer />
