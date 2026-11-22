@@ -16,7 +16,8 @@ cascades and clears every other column that names the account through a
 foreign key or the database's erasure trigger, which runs on every deletion of
 an account row: from the app, from the restore replay or from plain SQL. The
 trigger deletes verification challenges, persisted log entries that mention
-the account's ID or email, pending administrator confirmations of account
+the account's ID or its email as a whole address (in any letter case, but not
+a longer address that contains it), pending administrator confirmations of account
 actions and the sessions the account impersonated as an administrator. It
 clears the account from data jobs it started. Audit events and privacy case
 events may remain for accountability, but the deleted actor's ID, IP address,

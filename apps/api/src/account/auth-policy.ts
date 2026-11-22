@@ -13,6 +13,7 @@ import {
   systemSettings,
   user,
 } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 export const defaultAuthPolicySettings: Readonly<AuthPolicySettings> = Object.freeze({
   emailVerificationRequired: true,
@@ -163,10 +164,10 @@ export async function applyAuthPolicy(
     for (const [key, value] of Object.entries(request.settings))
       await tx
         .insert(systemSettings)
-        .values({ key, value, updatedBy: actorId })
+        .values({ key, value, updatedBy: actorUserIdOrNull(actorId) })
         .onConflictDoUpdate({
           target: systemSettings.key,
-          set: { value, updatedBy: actorId, updatedAt: new Date() },
+          set: { value, updatedBy: actorUserIdOrNull(actorId), updatedAt: new Date() },
         });
     await tx.insert(adminAuditLog).values({
       actorId,

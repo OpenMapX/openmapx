@@ -3,6 +3,7 @@ import { APIError } from "better-auth/api";
 import { and, eq, sql } from "drizzle-orm";
 import z from "zod/v4";
 import { adminAuditLog, session, user } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import {
   type AccountMutationContext,
   currentAccountMutation,
@@ -147,7 +148,7 @@ async function roleChange<T>(input: RoleChange, tx: AuthDatabase, write: () => P
       actorId: input.actorId,
       targetId: input.userId,
       targetType: "user",
-      targetUserId: input.userId,
+      targetUserId: actorUserIdOrNull(input.userId),
       action: "user.role.change",
       details: {
         previousRole,

@@ -36,7 +36,10 @@ setting, the actor of a privacy case event, the data jobs the account started,
 pending administrator confirmations of actions on the account, and the
 sessions an administrator was impersonating, which are deleted with that
 administrator. The restore replay now deletes erased accounts and leaves the
-rest to that trigger. Offline-package records of an account erased by a
+rest to that trigger. Audit details and log entries are cleared when they
+mention the account's id or its email address as a whole address, ignoring
+case; a longer address that merely contains it, such as
+`alice.bob@example.com` for `bob@example.com`, is no longer affected. Offline-package records of an account erased by a
 restore remain until their 30-day retention ends; a deletion in the app removes
 them at once.
 

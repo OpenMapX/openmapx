@@ -817,7 +817,7 @@ export class PrivacyRequestService {
             requestId: current.id,
             eventType: "identity_verified",
             actorKind: "subject",
-            actorUserId: input.userId,
+            actorUserId: actorUserIdOrNull(input.userId),
             payload: boundedEventPayload({ reasonCode: "account_session" }),
             payloadVersion: 1,
             createdAt: now,

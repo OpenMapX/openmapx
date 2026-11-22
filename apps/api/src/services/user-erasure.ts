@@ -86,14 +86,13 @@ function journalPath(): string {
  * (the default path absent and nothing configured) the API never derived a
  * principal, so no row can hold one.
  */
-async function offlinePackagePrincipalKey(
+export async function offlinePackagePrincipalKey(
   env: NodeJS.ProcessEnv = process.env,
+  defaultPath: string = OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
 ): Promise<Buffer | undefined> {
   const configured = env.OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE?.trim();
-  if (!configured && !existsSync(OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT)) return undefined;
-  return readOfflinePackagePrincipalKeyFile(
-    configured || OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
-  );
+  if (!configured && !existsSync(defaultPath)) return undefined;
+  return readOfflinePackagePrincipalKeyFile(configured || defaultPath);
 }
 
 /**

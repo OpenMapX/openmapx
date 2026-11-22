@@ -1,8 +1,12 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
-import { createUserErasureHooks, readJournalKey } from "../user-erasure";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createUserErasureHooks,
+  offlinePackagePrincipalKey,
+  readJournalKey,
+} from "../user-erasure";
 
 const CURRENT_UID = process.geteuid?.() ?? process.getuid?.() ?? 0;
 
@@ -105,5 +109,34 @@ describe("erasure journal key loading", () => {
         ERASURE_JOURNAL_KEY_UID: "not-a-uid",
       }),
     ).toThrow(/owner UID is invalid/i);
+  });
+});
+
+describe("offline-package principal key for account deletion", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("skips the step where no key is configured and the default file is absent", async () => {
+    const missing = join(mkdtempSync(join(tmpdir(), "openmapx-api-offline-key-")), "absent");
+    await expect(offlinePackagePrincipalKey({}, missing)).resolves.toBeUndefined();
+  });
+
+  it("reads a configured key", async () => {
+    vi.stubEnv("OFFLINE_PACKAGE_PRINCIPAL_KEY_UID", undefined);
+    const path = join(mkdtempSync(join(tmpdir(), "openmapx-api-offline-key-")), "key");
+    const key = Buffer.alloc(32, 23);
+    writeFileSync(path, key.toString("base64url"), { mode: 0o444 });
+
+    await expect(
+      offlinePackagePrincipalKey({ OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE: path }, "/unused"),
+    ).resolves.toEqual(key);
+  });
+
+  it("fails the deletion when a configured key cannot be read", async () => {
+    const missing = join(mkdtempSync(join(tmpdir(), "openmapx-api-offline-key-")), "absent");
+    await expect(
+      offlinePackagePrincipalKey({ OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE: missing }, "/unused"),
+    ).rejects.toThrow(/missing or unreadable/);
   });
 });

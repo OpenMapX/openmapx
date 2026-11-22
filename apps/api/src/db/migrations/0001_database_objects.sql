@@ -61,6 +61,14 @@ DECLARE
   -- NULL for an empty value, so a substring test can never match every row.
   erased_id text := nullif(OLD.id, '');
   erased_email text := nullif(lower(OLD.email), '');
+  -- The address as a whole word: no address character may come directly
+  -- before it, and neither a further label nor a hostname character after
+  -- it, so deleting bob@example.com leaves alice.bob@example.com and
+  -- bob@example.com.evil alone. Matched case-insensitively with ~*.
+  erased_email_re text := CASE WHEN erased_email IS NOT NULL THEN
+    '(?<![[:alnum:].!#$%&''*+/=?^_`{|}~-])'
+    || regexp_replace(erased_email, '([^[:alnum:]@_-])', '\\\1', 'g')
+    || '(?![[:alnum:]-]|\.[[:alnum:]])' END;
 BEGIN
   -- Privacy cases keep their history and record that the account is gone.
   UPDATE data_subject_request
@@ -76,14 +84,25 @@ BEGIN
   WHERE actor_id = OLD.id;
   UPDATE admin_audit_log SET target_id = NULL
   WHERE target_type = 'user' AND target_id = OLD.id;
+  -- In jsonb the string values are tested too: in the text form an escape
+  -- such as \n would stand directly before the address. The substring test
+  -- first keeps the regular expressions off rows that cannot match.
   UPDATE admin_audit_log SET details = NULL
   WHERE position(erased_id in details::text) > 0
-     OR position(erased_email in lower(details::text)) > 0;
+     OR (position(erased_email in lower(details::text)) > 0
+         AND (details::text ~* erased_email_re
+              OR EXISTS (SELECT FROM jsonb_path_query(details, 'strict $.**') AS item(value)
+                         WHERE jsonb_typeof(item.value) = 'string'
+                           AND item.value #>> '{}' ~* erased_email_re)));
   DELETE FROM app_logs
   WHERE position(erased_id in msg) > 0
-     OR position(erased_email in lower(msg)) > 0
      OR position(erased_id in metadata::text) > 0
-     OR position(erased_email in lower(metadata::text)) > 0;
+     OR (position(erased_email in lower(msg)) > 0 AND msg ~* erased_email_re)
+     OR (position(erased_email in lower(metadata::text)) > 0
+         AND (metadata::text ~* erased_email_re
+              OR EXISTS (SELECT FROM jsonb_path_query(metadata, 'strict $.**') AS item(value)
+                         WHERE jsonb_typeof(item.value) = 'string'
+                           AND item.value #>> '{}' ~* erased_email_re)));
   UPDATE data_manager.jobs SET triggered_by = NULL
   WHERE triggered_by = 'api:user:' || OLD.id;
   -- A pending administrator confirmation of an action on this account.

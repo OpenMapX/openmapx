@@ -18,6 +18,7 @@ import {
   systemSettings,
   user,
 } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import { jobOwnership } from "./admin-job-state";
 import { platformJobMatchesPreview } from "./platform-configuration-job";
 import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
@@ -177,7 +178,7 @@ export async function commitPlatformConfigurationIntent(
   const written = prior
     ? await tx
         .update(systemSettings)
-        .set({ value, updatedAt: new Date(), updatedBy: input.actorId })
+        .set({ value, updatedAt: new Date(), updatedBy: actorUserIdOrNull(input.actorId) })
         .where(
           and(
             eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING),
@@ -187,7 +188,11 @@ export async function commitPlatformConfigurationIntent(
         .returning({ rowVersion: sql<string>`xmin::text` })
     : await tx
         .insert(systemSettings)
-        .values({ key: PLATFORM_CONFIGURATION_SETTING, value, updatedBy: input.actorId })
+        .values({
+          key: PLATFORM_CONFIGURATION_SETTING,
+          value,
+          updatedBy: actorUserIdOrNull(input.actorId),
+        })
         .onConflictDoNothing()
         .returning({ rowVersion: sql<string>`xmin::text` });
   if (written.length !== 1) throw new PlatformPreviewConflict();

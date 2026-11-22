@@ -34,6 +34,7 @@ import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
 import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
+import { actorUserIdOrNull } from "./utils/actor";
 import { type AdminAuditCtx, handleAdminAuditEvent } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendAuthMail } from "./utils/email";
@@ -202,7 +203,7 @@ function createPolicyAuth(
             actorId: null,
             targetType: "user",
             targetId: user.id,
-            targetUserId: user.id,
+            targetUserId: actorUserIdOrNull(user.id),
             action: "user.password.reset",
             details: { channel: "email" },
           });

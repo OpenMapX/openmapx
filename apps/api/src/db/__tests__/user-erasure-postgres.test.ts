@@ -1,19 +1,28 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  initializeErasureJournal,
+  isErasedSubject,
+  readErasureJournal,
+} from "@openmapx/core/erasure-journal";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   DIRECT_USER_FK_CLASSIFICATIONS,
   NON_USER_ID_COLUMNS,
   USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY,
 } from "../../../../../scripts/check-subject-data";
+import { withAccountMutation } from "../../account/account-mutations";
 import { PrivacyRequestService } from "../../privacy/request-service";
 import { deriveOfflinePackagePrincipal } from "../../services/offline-package-principal";
 import { saveSystemSettings } from "../../services/settings";
-import { createUserErasureHooks, removeOfflinePackageOwnership } from "../../services/user-erasure";
+import { userErasureHooks } from "../../services/user-erasure";
 import {
   API_MIGRATIONS,
   connectProductionPostgis,
@@ -208,7 +217,20 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
   });
 
   it("the API delete path also removes offline-package rows for the user's principal", async () => {
+    // The production hooks, journal and key files, in the transaction a
+    // self-service deletion runs them in.
+    const files = mkdtempSync(join(tmpdir(), "openmapx-erasure-hook-"));
+    const journalKey = randomBytes(32);
     const key = randomBytes(32);
+    const journalPath = join(files, "journal.jsonl");
+    initializeErasureJournal(journalPath, journalKey, new Date());
+    writeFileSync(join(files, "journal-key"), journalKey.toString("base64url"), { mode: 0o444 });
+    writeFileSync(join(files, "offline-key"), key.toString("base64url"), { mode: 0o444 });
+    vi.stubEnv("ERASURE_JOURNAL_PATH", journalPath);
+    vi.stubEnv("ERASURE_JOURNAL_KEY_FILE", join(files, "journal-key"));
+    vi.stubEnv("ERASURE_JOURNAL_KEY_UID", String(process.getuid?.() ?? 0));
+    vi.stubEnv("OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE", join(files, "offline-key"));
+    vi.stubEnv("OFFLINE_PACKAGE_PRINCIPAL_KEY_UID", undefined);
     const userId = `erasure-offline-${randomUUID()}`;
     const principal = deriveOfflinePackagePrincipal(userId, key);
     const otherPrincipal = deriveOfflinePackagePrincipal(`${userId}-other`, key);
@@ -240,16 +262,26 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       })),
     );
     try {
-      const hooks = createUserErasureHooks({
-        request: async () => "receipt",
-        cleanup: (subject) => removeOfflinePackageOwnership(subject.id, key),
-        complete: async () => {},
-      });
       const subject = { id: userId, email: `${userId}@example.test` };
-      await hooks.before(subject);
-      await db.delete(user).where(eq(user.id, userId));
-      await hooks.after(subject);
+      await withAccountMutation(
+        {
+          actorId: userId,
+          targetId: userId,
+          action: "delete",
+          mutationKey: `erasure-hook-${userId}`,
+          selfServiceDelete: true,
+        },
+        async (tx) => {
+          await userErasureHooks.before(subject);
+          await tx.delete(user).where(eq(user.id, userId));
+          await userErasureHooks.after(subject);
+        },
+        db,
+      );
 
+      expect(isErasedSubject(readErasureJournal(journalPath, journalKey), journalKey, userId)).toBe(
+        true,
+      );
       expect(
         await db
           .select({ principal: dataManagerOfflinePackageJobOwners.principal })
@@ -270,6 +302,8 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
         .delete(dataManagerOfflinePackageJobs)
         .where(eq(dataManagerOfflinePackageJobs.id, jobId));
       await db.delete(user).where(eq(user.id, userId));
+      vi.unstubAllEnvs();
+      rmSync(files, { recursive: true, force: true });
     }
   });
 });
@@ -382,7 +416,7 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     await api`INSERT INTO app_logs (level, source, msg, metadata)
       VALUES ('warn', ${`erased-${suffix}`}, ${`failure for ${email.toUpperCase()}`}, NULL),
              ('warn', ${`erased-${suffix}`}, 'no identifier', ${JSON.stringify({ subject: userId })}::jsonb),
-             ('warn', ${`kept-${suffix}`}, ${`failure for ${otherId}`}, NULL)`;
+             ('warn', ${`kept-${suffix}`}, ${`failure for ${otherEmail}`}, NULL)`;
     const [job] = await api<{ id: string }[]>`
       INSERT INTO data_manager.jobs (kind, status, triggered_by)
       VALUES ('erasure-fixture', 'ok', ${`api:user:${userId}`}) RETURNING id`;
@@ -459,6 +493,46 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     expect(
       await api`SELECT target_id FROM admin_action_reauthentication WHERE actor_id = ${otherId}`,
     ).toEqual([{ target_id: otherId }]);
+  });
+
+  it("erases mentions of the deleted address as a whole address, not of longer ones", async () => {
+    const userId = `whole-address-${randomUUID()}`;
+    const tag = `whole-address-${randomUUID()}`;
+    await insertUser(userId, "Bob@Example.com");
+    const mentions = {
+      mixedCase: "login BOB@example.COM",
+      sentenceFinal: "Mail sent to bob@example.com.",
+      inJsonLine: "first line\nbob@example.com",
+      longerLocalPart: "login alice.bob@example.com",
+      longerDomain: "mail to bob@example.com.evil",
+    };
+    for (const [name, text] of Object.entries(mentions)) {
+      await api`INSERT INTO app_logs (level, source, msg, metadata)
+        VALUES ('info', ${tag}, ${`${name}: ${text}`}, NULL)`;
+      await api`INSERT INTO admin_audit_log (action, details)
+        VALUES (${`${tag}:${name}`}, ${JSON.stringify({ note: text })}::jsonb)`;
+    }
+
+    await api`DELETE FROM "user" WHERE id = ${userId}`;
+
+    const remainingLogs = await api<{ msg: string }[]>`
+      SELECT msg FROM app_logs WHERE source = ${tag} ORDER BY msg`;
+    expect(remainingLogs.map((row) => row.msg.split(":")[0])).toEqual([
+      "longerDomain",
+      "longerLocalPart",
+    ]);
+    const audits = await api<{ action: string; scrubbed: boolean }[]>`
+      SELECT action, details IS NULL AS scrubbed FROM admin_audit_log
+      WHERE action LIKE ${`${tag}:%`} ORDER BY action`;
+    expect(
+      Object.fromEntries(audits.map((row) => [row.action.split(":")[1], row.scrubbed])),
+    ).toEqual({
+      inJsonLine: true,
+      longerDomain: false,
+      longerLocalPart: false,
+      mixedCase: true,
+      sentenceFinal: true,
+    });
   });
 
   it("deleting an admin deletes the sessions they were impersonating in", async () => {
