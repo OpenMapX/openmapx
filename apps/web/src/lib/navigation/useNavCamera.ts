@@ -145,6 +145,15 @@ function looksAhead(mode: string): boolean {
   return mode === "driving" || mode === "motorcycle";
 }
 
+const JUNCTION_TURN_TYPES = new Set(["turn", "end of road"]);
+const JUNCTION_TURN_MODIFIERS = new Set(["left", "right", "sharp left", "sharp right"]);
+
+/** A turn at a junction, not a fork or a slight bend the road itself makes. */
+function isJunctionTurn(maneuver: { type: string; modifier?: string } | undefined): boolean {
+  if (!maneuver?.modifier || !JUNCTION_TURN_TYPES.has(maneuver.type)) return false;
+  return JUNCTION_TURN_MODIFIERS.has(maneuver.modifier.toLowerCase().replace(/[-_]/g, " "));
+}
+
 /** The 3D profile while 3D navigation is active on this (non-car) map, else today's 2D one. */
 function cameraProfile(mode: string, hasSurface: boolean): NavCameraProfileName {
   return !hasSurface && looksAhead(mode) && useNavigationSceneStore.getState().active ? "3d" : "2d";
@@ -544,12 +553,23 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
         bearingRef.current = easeAngle(bearingRef.current ?? bearing, bearing, bearingAlpha);
         const brg = bearingRef.current;
         const navState = useNavigationStore.getState();
+        const turnApproach = approachRef.current;
+        // Before a junction turn the camera keeps to the street and turns as the
+        // puck crosses the junction: aiming into the new road early swings the
+        // pitched camera behind the corner buildings, which then hide the puck.
+        const limitAlong =
+          turnApproach &&
+          turnApproach.route === line.route &&
+          isJunctionTurn(turnApproach.route.steps[turnApproach.maneuverIndex]?.maneuver)
+            ? maneuverStartMeters(turnApproach.route, turnApproach.maneuverIndex)
+            : undefined;
         const cameraTarget = looksAhead(navState.mode)
           ? (lookAheadBearing(
               line.route.geometry,
               line.cum,
               displayedRef.current,
               lookAheadMeters(navState.progress?.speedMps ?? 0),
+              limitAlong,
             ) ?? bearing)
           : bearing;
         cameraBearingRef.current = easeAngle(

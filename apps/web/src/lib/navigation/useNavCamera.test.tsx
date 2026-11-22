@@ -1284,6 +1284,36 @@ describe("useNavCamera look-ahead and junction framing", () => {
     expect(cameraBearing).toBeLessThan(puckBearing - 5);
   });
 
+  it.each([
+    ["turn", "left", false],
+    ["end of road", "sharp left", false],
+    ["keep", "left", true],
+  ] as const)(
+    "inside the approach window of a %s %s the camera leads into it: %s",
+    async (type, modifier, leads) => {
+      const harness = await mountNavCamera({ startNavigation: false });
+      const turning = {
+        ...route,
+        steps: route.steps.map((step, index) =>
+          index === 1 ? { ...step, maneuver: { type, modifier } } : step,
+        ),
+      } as Route;
+      act(() => {
+        useNavigationStore.getState().startGroundNavigation(turning, "driving", [
+          [0, 0],
+          [0.02, 0.003],
+        ]);
+        useNavigationStore.getState().applyProgress(makeProgress(BEFORE_BEND, SPEED_MPS, 38));
+      });
+      harness.frames.flush(240, FRAME_MS);
+      const cameraBearing = jumps(harness.fake).at(-1)?.options.bearing as number;
+      // Before a junction turn the camera keeps to the street, where buildings
+      // do not stand between it and the puck; a fork it still leads into.
+      if (leads) expect(cameraBearing).toBeLessThan(harness.marker().rotation - 5);
+      else expect(cameraBearing).toBeCloseTo(harness.marker().rotation, 0);
+    },
+  );
+
   it.each(["walking", "cycling"] as const)("%s keeps the local bearing", async (mode) => {
     const harness = await mountNavCamera({ startNavigation: false });
     act(() => {

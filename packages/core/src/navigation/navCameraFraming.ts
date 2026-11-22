@@ -28,6 +28,7 @@ const LOOK_AHEAD_SECONDS = 3;
 const LOOK_AHEAD_MIN_M = 25;
 const LOOK_AHEAD_MAX_M = 150;
 const LOOK_AHEAD_END_M = 5;
+const LOOK_AHEAD_LIMIT_MIN_M = 2;
 
 /** How far along the route the camera aims: three seconds of travel, 25–150 m. */
 export function lookAheadMeters(speedMps: number): number {
@@ -40,19 +41,30 @@ export function lookAheadMeters(speedMps: number): number {
  * further along the route, so the camera turns into a bend before the puck
  * does. Past the end of the route it aims at the final point; on the last 5 m
  * it returns null and the caller keeps the local bearing.
+ *
+ * `limitAlong` stops the target there when it lies ahead: before a junction
+ * turn the camera keeps to the street, where buildings do not stand between it
+ * and the puck, and turns as the puck crosses the junction. Within 2 m of the
+ * limit there is nothing to aim at and it returns null.
  */
 export function lookAheadBearing(
   geometry: LngLat[],
   cum: number[],
   alongMeters: number,
   aheadMeters: number,
+  limitAlong?: number,
 ): number | null {
   if (geometry.length < 2) return null;
   const total = distanceAtVertex(cum, geometry.length - 1);
   const along = Math.min(Math.max(alongMeters, 0), total);
   if (total - along < LOOK_AHEAD_END_M) return null;
+  let target = Math.min(along + Math.max(aheadMeters, 0), total);
+  if (limitAlong !== undefined && limitAlong > along) {
+    if (limitAlong - along < LOOK_AHEAD_LIMIT_MIN_M) return null;
+    target = Math.min(target, limitAlong);
+  }
   const from = positionAt(geometry, cum, along).point;
-  const to = positionAt(geometry, cum, Math.min(along + Math.max(aheadMeters, 0), total)).point;
+  const to = positionAt(geometry, cum, target).point;
   return bearingBetween(from, to);
 }
 

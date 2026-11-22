@@ -55,6 +55,15 @@ describe("navCameraFraming", () => {
     expect(bearing ?? 0).toBeLessThan(90);
   });
 
+  it("aims no further than a limit, such as the junction of an upcoming turn", () => {
+    // Limited to 90 m, the target stays on the northbound leg.
+    expect(lookAheadBearing(lShape, lShapeCum, 80, 42, 90)).toBeCloseTo(0, 0);
+    // Within 2 m of the limit there is nothing to aim at: the caller keeps the local bearing.
+    expect(lookAheadBearing(lShape, lShapeCum, 89, 42, 90)).toBeNull();
+    // A limit behind the position is ignored.
+    expect(lookAheadBearing(lShape, lShapeCum, 80, 42, 50)).toBeGreaterThan(20);
+  });
+
   it("aims at the final point when the route ends inside the look-ahead", () => {
     expect(lookAheadBearing(straightEast, eastCum, 190, 42)).toBeCloseTo(90, 0);
   });
