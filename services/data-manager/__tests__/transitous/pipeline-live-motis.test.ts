@@ -280,6 +280,10 @@ function writeStagingCompose(
     `  ${FEED_PROXY_SERVICE}:`,
     "    image: nginx:1.31.8-alpine",
     `    container_name: ${FEED_PROXY_SERVICE}`,
+    // MOTIS configs reach the proxy by its project-unique name, as in production.
+    "    networks:",
+    "      default:",
+    `        aliases: [openmapx-${FEED_PROXY_SERVICE}]`,
     "    volumes:",
     `      - ${join(dataDir, "motis-feed-proxy", "conf")}:/etc/nginx/conf.d`,
     "    extra_hosts:",
