@@ -81,6 +81,142 @@ export function maneuverArrowTipBearing(line: LngLat[]): number {
 
 const EARTH_RADIUS_M = 6371008.8;
 
+type XY = [number, number];
+
+/** A sharp corner's mitre reaches at most this many offsets out, then is cut short. */
+const MITER_LIMIT = 2;
+
+/** Unit right-hand normal of the travel direction from `a` to `b`; undefined for a point. */
+function rightNormal(a: XY, b: XY): XY | undefined {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length = Math.hypot(dx, dy);
+  // Facing (dx, dy) with y north, the right-hand normal is (dy, −dx).
+  return length > 1e-9 ? [dy / length, -dx / length] : undefined;
+}
+
+/**
+ * Each point moved `offsetAt(i)` metres to the right of travel (negative:
+ * left). A corner is mitred, so both segments meeting there keep the offset;
+ * moving it along the averaged normal instead notches an inner corner, and the
+ * notch folds the outline over itself.
+ */
+function offsetPoints(points: readonly XY[], offsetAt: (i: number) => number): XY[] {
+  return points.map((p, i) => {
+    const offset = offsetAt(i);
+    if (offset === 0) return p;
+    const before = i > 0 ? rightNormal(points[i - 1] as XY, p) : undefined;
+    const after = i < points.length - 1 ? rightNormal(p, points[i + 1] as XY) : undefined;
+    const a = before ?? after;
+    const b = after ?? before;
+    if (!a || !b) return p;
+    const cos = a[0] * b[0] + a[1] * b[1];
+    // The mitre m meets both offset segments: a·m = b·m = 1.
+    let m: XY = cos > -1 + 1e-9 ? [(a[0] + b[0]) / (1 + cos), (a[1] + b[1]) / (1 + cos)] : a;
+    const reach = Math.hypot(m[0], m[1]);
+    if (reach > MITER_LIMIT) m = [(m[0] / reach) * MITER_LIMIT, (m[1] / reach) * MITER_LIMIT];
+    return [p[0] + m[0] * offset, p[1] + m[1] * offset];
+  });
+}
+
+/**
+ * The moved points without those that step backwards against the source's
+ * travel direction. Inside a corner tighter than the offset, a mitre lands
+ * behind the point before it and the line doubles back on itself. The first
+ * and last points always stay.
+ */
+function withoutReversals<T extends { p: XY }>(source: readonly XY[], moved: readonly T[]): T[] {
+  const kept: T[] = [];
+  let keptIndex = 0;
+  moved.forEach((point, i) => {
+    const previous = kept.at(-1);
+    if (!previous || i === moved.length - 1) {
+      kept.push(point);
+      keptIndex = i;
+      return;
+    }
+    const s0 = source[keptIndex] as XY;
+    const s1 = source[i] as XY;
+    const forward =
+      (point.p[0] - previous.p[0]) * (s1[0] - s0[0]) +
+      (point.p[1] - previous.p[1]) * (s1[1] - s0[1]);
+    if (forward > 0) {
+      kept.push(point);
+      keptIndex = i;
+    }
+  });
+  return kept;
+}
+
+/** Where segments ab and cd cross, or undefined when they do not. */
+function crossing(a: XY, b: XY, c: XY, d: XY): XY | undefined {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  const sx = d[0] - c[0];
+  const sy = d[1] - c[1];
+  const denominator = rx * sy - ry * sx;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / denominator;
+  const u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / denominator;
+  return t > 0 && t < 1 && u > 0 && u < 1 ? [a[0] + rx * t, a[1] + ry * t] : undefined;
+}
+
+/**
+ * The line with every loop shorter than `maxLoopMeters` cut out at the point
+ * where it crosses itself. An offset line loops on the inside of a corner
+ * tighter than its offset; MapLibre then fills the crossed outline across the
+ * whole arrow. A longer loop is the road's own (a ramp), and stays.
+ */
+function cutShortLoops<T extends { p: XY }>(
+  points: readonly T[],
+  maxLoopMeters: number,
+  at: (p: XY) => T,
+): T[] {
+  const out = [...points];
+  for (let i = 0; i < out.length - 3; i++) {
+    let loop = 0;
+    let longest = i + 2;
+    for (let j = i + 1; j < out.length - 1 && loop <= maxLoopMeters; j++) {
+      loop += Math.hypot(
+        (out[j] as T).p[0] - (out[j - 1] as T).p[0],
+        (out[j] as T).p[1] - (out[j - 1] as T).p[1],
+      );
+      if (loop <= maxLoopMeters) longest = j + 1;
+    }
+    for (let j = Math.min(longest, out.length - 2); j > i + 1; j--) {
+      const x = crossing(
+        (out[i] as T).p,
+        (out[i + 1] as T).p,
+        (out[j] as T).p,
+        (out[j + 1] as T).p,
+      );
+      if (x) {
+        out.splice(i + 1, j - i, at(x));
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** The points without any closer than `gap` metres to the one kept before it; the last always stays. */
+function withoutCrowding(points: readonly XY[], gap: number): XY[] {
+  const last = points.at(-1);
+  if (!last) return [];
+  const kept: XY[] = [];
+  for (const p of points.slice(0, -1)) {
+    const previous = kept.at(-1);
+    if (!previous || Math.hypot(p[0] - previous[0], p[1] - previous[1]) >= gap) kept.push(p);
+  }
+  while (kept.length > 1) {
+    const previous = kept.at(-1) as XY;
+    if (Math.hypot(last[0] - previous[0], last[1] - previous[1]) >= gap) break;
+    kept.pop();
+  }
+  kept.push(last);
+  return kept;
+}
+
 /**
  * The arrow line as one closed outline on the ground, for the raised 3D arrow
  * (immersive navigation spec §9.3): a shaft `widthMeters` wide and, at the
@@ -94,7 +230,9 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
   const k = (Math.PI / 180) * EARTH_RADIUS_M;
   const toLocal = ([lng, lat]: LngLat): LngLat => [(lng - tip[0]) * k * cos, (lat - tip[1]) * k];
   const toLngLat = ([x, y]: LngLat): LngLat => [tip[0] + x / (k * cos), tip[1] + y / k];
-  const local = line.map(toLocal);
+  // Points a hair apart give a segment whose direction is noise.
+  const gap = widthMeters / 4;
+  const local = withoutCrowding(line.map(toLocal), gap);
   const cum = [0];
   for (let i = 1; i < local.length; i++) {
     const a = local[i - 1] as LngLat;
@@ -114,29 +252,38 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
       const b = local[i] as LngLat;
       const span = (cum[i] as number) - (cum[i - 1] as number);
       const t = span > 0 ? (baseAlong - (cum[i - 1] as number)) / span : 0;
-      shaft.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      const base: LngLat = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const previous = shaft.at(-1);
+      if (
+        shaft.length > 1 &&
+        previous &&
+        Math.hypot(base[0] - previous[0], base[1] - previous[1]) < gap
+      ) {
+        shaft.pop();
+      }
+      shaft.push(base);
       break;
     }
   }
-  // Facing (dx, dy) with y north, the right-hand normal is (dy, −dx).
-  const normalAt = (i: number): LngLat => {
-    const a = shaft[Math.max(0, i - 1)] as LngLat;
-    const b = shaft[Math.min(shaft.length - 1, i + 1)] as LngLat;
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    const length = Math.hypot(dx, dy) || 1;
-    return [dy / length, -dx / length];
-  };
-  const side = (offset: number) =>
-    shaft.map((p, i): LngLat => {
-      const n = normalAt(i);
-      return [p[0] + n[0] * offset, p[1] + n[1] * offset];
-    });
+  const base = shaft[shaft.length - 1] as LngLat;
+  // The head points from its base to the tip, and the shaft's end is mitred
+  // against that direction, so the shaft meets the head square.
+  const n = rightNormal(base, [0, 0]) ?? [0, 0];
   const half = widthMeters / 2;
+  const withTip = [...shaft, [0, 0] as XY];
+  const side = (offset: number) =>
+    cutShortLoops(
+      withoutReversals(
+        shaft,
+        offsetPoints(withTip, () => offset)
+          .slice(0, -1)
+          .map((p) => ({ p })),
+      ),
+      2 * widthMeters,
+      (p) => ({ p }),
+    ).map(({ p }) => p);
   const left = side(-half);
   const right = side(half);
-  const base = shaft[shaft.length - 1] as LngLat;
-  const n = normalAt(shaft.length - 1);
   const headLeft: LngLat = [base[0] - n[0] * widthMeters, base[1] - n[1] * widthMeters];
   const headRight: LngLat = [base[0] + n[0] * widthMeters, base[1] + n[1] * widthMeters];
   const ring = [...left, headLeft, [0, 0] as LngLat, headRight, ...right.reverse()];
@@ -206,15 +353,14 @@ export function laneShiftedArrowLine(
   });
   points.sort((a, b) => a.along - b.along);
 
-  return points.map(({ p, along: a, original }, i) => {
-    const offset = laneOffsetAt(a, shift);
-    if (offset === 0 && original) return original;
-    const before = (points[Math.max(0, i - 1)] as { p: LngLat }).p;
-    const after = (points[Math.min(points.length - 1, i + 1)] as { p: LngLat }).p;
-    const dx = after[0] - before[0];
-    const dy = after[1] - before[1];
-    const length = Math.hypot(dx, dy) || 1;
-    // Facing (dx, dy) with y north, the right-hand normal is (dy, −dx).
-    return toLngLat([p[0] + (dy / length) * offset, p[1] - (dx / length) * offset]);
+  const offsets = points.map(({ along: a }) => laneOffsetAt(a, shift));
+  const source = points.map(({ p }) => p);
+  const moved = offsetPoints(source, (i) => offsets[i] ?? 0).map((p, i) => {
+    const { original } = points[i] as { original?: LngLat };
+    return { p, original: offsets[i] === 0 ? original : undefined };
   });
+  return cutShortLoops(withoutReversals(source, moved), 4 * Math.abs(shift.offsetMeters), (p) => ({
+    p,
+    original: undefined,
+  })).map(({ p, original }) => original ?? toLngLat(p));
 }
