@@ -174,7 +174,7 @@ pnpm openmapx compose release --status
 pnpm openmapx compose release --check
 ```
 
-The check pulls only the small metadata image, validates the six immutable
+The check pulls only the small metadata image, validates the five immutable
 image pins, and caches the canonical manifest under its digest. It prints a
 **Checked release** ID and a **Manifest digest**. It does not change the applied
 configuration's pins, download application images or replace containers. Configuration changes
@@ -268,7 +268,7 @@ lifecycle commands keep the applied pins; a Data Manager update needs
 the coordinated producer above. Updating other services individually does not
 complete an application release and API migrations move forward only.
 
-For bootstrap, the CLI validates all six image pins before selecting. `main` is
+For bootstrap, the CLI validates all five image pins before selecting. `main` is
 the development pointer; `preview` is the latest deliberately published named
 prerelease. Exact versions or metadata
 image digests pin a particular selection. A missing preview or pin fails without

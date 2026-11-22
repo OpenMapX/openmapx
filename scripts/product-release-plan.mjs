@@ -72,7 +72,7 @@ export function validateProducerManifest(manifest, repository, run) {
     Object.keys(manifest.images ?? {})
       .sort()
       .join() === [...productImageNames].sort().join(),
-    "Incomplete six-image manifest",
+    "Incomplete product image manifest",
   );
   for (const name of productImageNames) {
     const prefix = `${namespace}/${name}@`;

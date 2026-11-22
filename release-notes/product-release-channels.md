@@ -4,7 +4,7 @@ impacts: [breaking, operator-action]
 
 ## What changes
 
-Product release selection uses main, preview, an exact prerelease version or metadata digest, or explicit local mode. A selected release pins its six images in the configuration generation; there is no hand-written release overlay. Admin apply uses the exact checked release and fails if its selection configuration changed.
+Product release selection uses main, preview, an exact prerelease version or metadata digest, or explicit local mode. A selected release pins its five images in the configuration generation; there is no hand-written release overlay. Admin apply uses the exact checked release and fails if its selection configuration changed.
 
 ## Who is affected
 
