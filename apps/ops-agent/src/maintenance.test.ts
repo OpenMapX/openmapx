@@ -820,6 +820,207 @@ describe("configuration maintenance in the agent", () => {
     );
     expect(order.filter((entry) => entry === "release")).toHaveLength(releases);
   });
+
+  it("skips a maintenance in tick while its fence settlement is already in flight", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    let finishFence!: () => void;
+    const settleFence = adapters.settleFence;
+    adapters.settleFence = vi.fn(async (file, outcome, signal) => {
+      await new Promise<void>((resolve) => (finishFence = resolve));
+      return settleFence(file, outcome, signal);
+    });
+    const settling = maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settling");
+    // Periodic check returns immediately without sending a second settlement.
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    expect(lease.held).toBe(true);
+    finishFence();
+    expect((await settling).state).toBe("settled");
+    expect(lease.held).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+  });
+
+  it("coalesces a concurrent settle onto an in-flight fence settlement", async () => {
+    const file = admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    let finishFence!: () => void;
+    const settleFence = adapters.settleFence;
+    adapters.settleFence = vi.fn(async (current, outcome, signal) => {
+      await new Promise<void>((resolve) => (finishFence = resolve));
+      return settleFence(current, outcome, signal);
+    });
+    adapters.now = () => new Date(file.plan.prepare.deadlineAt + 1);
+    const ticking = maintenance.tick(AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    let secondSettled = false;
+    const second = maintenance
+      .settle(maintenanceId, "complete", AbortSignal.timeout(5000))
+      .then((record) => {
+        secondSettled = true;
+        return record;
+      });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(secondSettled).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    finishFence();
+    const [, record] = await Promise.all([ticking, second]);
+    expect(record.state).toBe("settled");
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
+    expect(lease.held).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+  });
+
+  it("joins an in-flight settlement when abandon races with cancel on a prepared record", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    let finishFence!: () => void;
+    const settleFence = adapters.settleFence;
+    adapters.settleFence = vi.fn(async (current, outcome, signal) => {
+      await new Promise<void>((resolve) => (finishFence = resolve));
+      return settleFence(current, outcome, signal);
+    });
+    const cancelling = maintenance.cancel(maintenanceId, AbortSignal.timeout(5000));
+    const abandoning = maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    finishFence();
+    const [cancelled, abandoned] = await Promise.all([cancelling, abandoning]);
+    expect(cancelled.state).toBe("settled");
+    expect(abandoned.state).toBe("settled");
+    expect(lease.held).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+  });
+
+  it("returns settling when a secondary waiter aborts while waiting without cancelling the in-flight settlement", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    let finishFence!: () => void;
+    let primarySignal: AbortSignal | undefined;
+    const settleFence = adapters.settleFence;
+    adapters.settleFence = vi.fn(async (file, outcome, signal) => {
+      primarySignal = signal;
+      await new Promise<void>((resolve) => (finishFence = resolve));
+      return settleFence(file, outcome, signal);
+    });
+    const primary = maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    const secondaryAbort = new AbortController();
+    const addListener = vi.spyOn(secondaryAbort.signal, "addEventListener");
+    const secondary = maintenance.settle(maintenanceId, "complete", secondaryAbort.signal);
+    await vi.waitFor(() =>
+      expect(addListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true }),
+    );
+    secondaryAbort.abort();
+    expect((await secondary).state).toBe("settling");
+    expect(primarySignal?.aborted).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    finishFence();
+    expect((await primary).state).toBe("settled");
+    expect(lease.held).toBe(false);
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+  });
+
+  it("propagates a permanent settlement refusal to waiting callers without resending", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    let rejectFence!: (error: Error) => void;
+    adapters.settleFence = vi.fn(
+      () => new Promise<never>((_resolve, reject) => (rejectFence = reject)),
+    );
+    const primary = maintenance.settle(maintenanceId, "abandon", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    const secondaryController = new AbortController();
+    const addListener = vi.spyOn(secondaryController.signal, "addEventListener");
+    const secondary = maintenance.settle(maintenanceId, "complete", secondaryController.signal);
+    await vi.waitFor(() =>
+      expect(addListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true }),
+    );
+    rejectFence(new MaintenanceSettlementRefused(Error("404")));
+    const [first, second] = await Promise.all([primary, secondary]);
+    expect(first).toMatchObject({ state: "recovery_required", fenceOutcome: "unused" });
+    expect(second).toMatchObject({ state: "recovery_required", fenceOutcome: "unused" });
+    expect(lease.held).toBe(true);
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+  });
+
+  it("propagates an unexpected fence_settled refusal to waiting callers and clears the guard", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    let finishFirst!: () => void;
+    const settleFence = adapters.settleFence;
+    let attempt = 0;
+    adapters.settleFence = vi.fn(async (file, outcome, signal) => {
+      attempt += 1;
+      if (attempt === 1) {
+        await new Promise<void>((resolve) => (finishFirst = resolve));
+        return {
+          ...fence("settled", file),
+          candidateId: "22222222-2222-4222-8222-222222222299",
+        };
+      }
+      return settleFence(file, outcome, signal);
+    });
+    const primary = maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    const secondaryController = new AbortController();
+    const addListener = vi.spyOn(secondaryController.signal, "addEventListener");
+    const secondary = maintenance.settle(maintenanceId, "complete", secondaryController.signal);
+    await vi.waitFor(() =>
+      expect(addListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true }),
+    );
+    finishFirst();
+    const [firstResult, secondResult] = await Promise.allSettled([primary, secondary]);
+    expect(firstResult.status).toBe("rejected");
+    expect(secondResult.status).toBe("rejected");
+    if (firstResult.status === "rejected")
+      expect(firstResult.reason).toBeInstanceOf(MaintenanceTransitionRefused);
+    if (secondResult.status === "rejected")
+      expect(secondResult.reason).toBeInstanceOf(MaintenanceTransitionRefused);
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledTimes(2);
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
+    expect(lease.held).toBe(false);
+  });
+
+  it("clears the in-flight guard after a transient settlement failure so tick retries and settles", async () => {
+    admit();
+    const maintenance = new ConfigurationMaintenance(installation, adapters);
+    await maintenance.prepare(maintenanceId, AbortSignal.timeout(5000));
+    await maintenance.applySteps(maintenanceId, apiJobId, AbortSignal.timeout(5000));
+    let failFirst!: (error: Error) => void;
+    const settleFence = adapters.settleFence;
+    let attempt = 0;
+    adapters.settleFence = vi.fn(async (file, outcome, signal) => {
+      attempt += 1;
+      if (attempt === 1) {
+        await new Promise<never>((_resolve, reject) => (failFirst = reject));
+      }
+      return settleFence(file, outcome, signal);
+    });
+    const first = maintenance.settle(maintenanceId, "complete", AbortSignal.timeout(5000));
+    await vi.waitFor(() => expect(adapters.settleFence).toHaveBeenCalledOnce());
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledOnce();
+    failFirst(Error("data-manager unreachable"));
+    expect((await first).state).toBe("settling");
+    expect(lease.held).toBe(true);
+    await maintenance.tick(AbortSignal.timeout(5000));
+    expect(adapters.settleFence).toHaveBeenCalledTimes(2);
+    expect(readMaintenance(installation, maintenanceId).record.state).toBe("settled");
+    expect(lease.held).toBe(false);
+  });
 });
 
 describe("helper outcome", () => {
