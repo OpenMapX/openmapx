@@ -1,4 +1,5 @@
 import {
+  bearingBetween,
   cumulativeDistances,
   haversineDistance,
   laneRejoinAlong,
@@ -212,7 +213,10 @@ describe("NavManeuverArrowLayer", () => {
     ) as GeoJSON.Feature<GeoJSON.LineString>;
     expect(line).toBeTruthy();
     expect(typeof line.properties?.bearing).toBe("number");
-    expect(line.geometry.coordinates.some(([lng, lat]) => lng === 8 && lat === 50.01)).toBe(true);
+    const nearest = Math.min(
+      ...line.geometry.coordinates.map((p) => haversineDistance(p as [number, number], [8, 50.01])),
+    );
+    expect(nearest).toBeLessThan(0.5);
     navState.progress = {
       currentStepIndex: 0,
       distanceToNextManeuver: 5000,
@@ -221,6 +225,34 @@ describe("NavManeuverArrowLayer", () => {
     };
     view.rerender(<NavManeuverArrowLayer />);
     expect(features()).toHaveLength(0);
+  });
+
+  it("irons a sideways step in the route out of the arrow", () => {
+    // 3 m sideways, 25 m before the maneuver, as where a road splits into two
+    // carriageways.
+    const stepped: [number, number][] = [
+      [8, 50],
+      [8, 50.008768],
+      [8.000042, 50.008795],
+      [8.000042, 50.02],
+    ];
+    navState.route = { ...route, geometry: stepped };
+    render(<NavManeuverArrowLayer />);
+    const line = features().find((f) => f.geometry.type === "LineString")
+      ?.geometry as GeoJSON.LineString;
+    const points = line.coordinates as [number, number][];
+    let sharpest = 0;
+    for (let i = 2; i < points.length; i++) {
+      const turn = Math.abs(
+        ((bearingBetween(nth(points, i - 1), nth(points, i)) -
+          bearingBetween(nth(points, i - 2), nth(points, i - 1)) +
+          540) %
+          360) -
+          180,
+      );
+      sharpest = Math.max(sharpest, turn);
+    }
+    expect(sharpest).toBeLessThan(10);
   });
 
   it("uses the short spans for a walking route", () => {

@@ -1,6 +1,7 @@
 import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
+import { bearingBetween } from "../bearing";
 import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
 import {
   laneRejoinAlong,
@@ -8,6 +9,7 @@ import {
   maneuverArrowLine,
   maneuverArrowTipBearing,
   raisedArrowPolygon,
+  smoothArrowLine,
 } from "../maneuverArrow";
 
 // ~1.1 km straight east, so every distance check is against a known geometry.
@@ -212,6 +214,8 @@ describe("the raised arrow outline never crosses itself", () => {
     const ring = raisedArrowPolygon(shifted, 2.4, 5);
     expect(ring.length).toBeGreaterThan(4);
     expect(crossings(ring)).toEqual([]);
+    // The layer smooths the line first; that must not tangle the outline either.
+    expect(crossings(raisedArrowPolygon(smoothArrowLine(shifted), 2.4, 5))).toEqual([]);
   });
 
   const M = 1 / 111_195;
@@ -264,5 +268,93 @@ describe("the raised arrow outline never crosses itself", () => {
     }
     corner.push([40 * M, 1.5 * M]);
     expect(crossings(raisedArrowPolygon(corner, 2.4, 5))).toEqual([]);
+  });
+});
+
+describe("smoothArrowLine", () => {
+  // The right turn from Alt-Moabit into Gotzkowskystraße (Berlin) as the route
+  // draws it: about 15 m before the corner the line steps some 3 m sideways
+  // onto the divided carriageway, which the wide arrow shows as a zig-zag.
+  const gotzkowsky: LngLat[] = [
+    [13.32892, 52.52397],
+    [13.328962, 52.523961],
+    [13.329159, 52.523914],
+    [13.329352, 52.523862],
+    [13.329423, 52.523806],
+    [13.329452, 52.523796],
+    [13.329479, 52.523785],
+    [13.329557, 52.52376],
+    [13.329636, 52.523734],
+    [13.329623, 52.523699],
+    [13.329608, 52.523653],
+    [13.329605, 52.523615],
+    [13.329584, 52.523446],
+  ];
+  const corner: LngLat = [13.329636, 52.523734];
+
+  /**
+   * The largest change of direction between consecutive 1 m chords of the
+   * line, from its start to `stopMeters` before `corner`: a kink shows up
+   * however the line happens to be divided into vertices.
+   */
+  function sharpestKink(line: LngLat[], stopMeters: number): number {
+    const lineCum = cumulativeDistances(line);
+    const total = distanceAtVertex(lineCum, lineCum.length - 1);
+    const points: LngLat[] = [];
+    for (let at = 0; at <= total; at += 1) {
+      const point = positionAt(line, lineCum, at).point;
+      if (haversineDistance(point, corner) < stopMeters) break;
+      points.push(point);
+    }
+    let sharpest = 0;
+    for (let i = 2; i < points.length; i++) {
+      const [a, b, c] = [points[i - 2], points[i - 1], points[i]] as [LngLat, LngLat, LngLat];
+      const turn = Math.abs(((bearingBetween(b, c) - bearingBetween(a, b) + 540) % 360) - 180);
+      sharpest = Math.max(sharpest, turn);
+    }
+    return sharpest;
+  }
+
+  it("irons out the sideways step before the turn", () => {
+    expect(sharpestKink(gotzkowsky, 10)).toBeGreaterThan(10);
+    expect(sharpestKink(smoothArrowLine(gotzkowsky), 10)).toBeLessThan(4);
+  });
+
+  it("keeps the ends and the direction of the head", () => {
+    const smooth = smoothArrowLine(gotzkowsky);
+    expect(smooth[0]).toEqual(gotzkowsky[0]);
+    expect(smooth.at(-1)).toEqual(gotzkowsky.at(-1));
+    const tipTurn = Math.abs(
+      ((maneuverArrowTipBearing(smooth) - maneuverArrowTipBearing(gotzkowsky) + 540) % 360) - 180,
+    );
+    expect(tipTurn).toBeLessThan(3);
+  });
+
+  it("stays on the road", () => {
+    const cumRaw = cumulativeDistances(gotzkowsky);
+    const total = distanceAtVertex(cumRaw, cumRaw.length - 1);
+    const samples = Array.from(
+      { length: Math.ceil(total * 4) + 1 },
+      (_, i) => positionAt(gotzkowsky, cumRaw, Math.min(i / 4, total)).point,
+    );
+    for (const p of smoothArrowLine(gotzkowsky)) {
+      const nearest = Math.min(...samples.map((s) => haversineDistance(p, s)));
+      expect(nearest).toBeLessThan(2);
+    }
+  });
+
+  it("leaves a straight line straight and short lines alone", () => {
+    const straight = smoothArrowLine([
+      [0, 0],
+      [0.004, 0],
+      [0.01, 0],
+    ]);
+    for (const p of straight) expect(Math.abs(p[1])).toBeLessThan(1e-9);
+    const stub: LngLat[] = [
+      [0, 0],
+      [0.000005, 0],
+      [0.000005, 0.000005],
+    ];
+    expect(smoothArrowLine(stub)).toEqual(stub);
   });
 });

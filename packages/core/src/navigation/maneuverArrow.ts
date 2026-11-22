@@ -79,6 +79,75 @@ export function maneuverArrowTipBearing(line: LngLat[]): number {
   return bearingBetween(from, to);
 }
 
+/** How far either way `smoothArrowLine` averages: enough to iron out a lane-wide step. */
+const SMOOTH_RADIUS_M = 8;
+const SMOOTH_STEP_M = 1;
+
+/**
+ * The arrow line with its sub-lane wiggles ironed out. Routes step sideways
+ * where a road splits into two carriageways or gains a turn lane, often just
+ * before the junction, and the wide arrow shows each step as a zig-zag. The
+ * line is resampled every metre and each point averaged with its neighbours
+ * up to `radiusMeters` either way, fewer towards the ends, so both ends and
+ * the head's direction stay put. Corners round off by a metre or two, the way
+ * a car drives them.
+ */
+export function smoothArrowLine(line: LngLat[], radiusMeters = SMOOTH_RADIUS_M): LngLat[] {
+  const first = line[0];
+  const last = line.at(-1);
+  if (!first || !last || line.length < 3) return line;
+  const cos = Math.cos((first[1] * Math.PI) / 180);
+  const k = (Math.PI / 180) * EARTH_RADIUS_M;
+  const local = line.map(([lng, lat]): XY => [(lng - first[0]) * k * cos, (lat - first[1]) * k]);
+
+  // Resample every SMOOTH_STEP_M, keeping the far end.
+  const samples: XY[] = [local[0] as XY];
+  const along: number[] = [0];
+  let walked = 0;
+  let next = SMOOTH_STEP_M;
+  for (let i = 1; i < local.length; i++) {
+    const a = local[i - 1] as XY;
+    const b = local[i] as XY;
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    while (next < walked + length) {
+      const t = (next - walked) / length;
+      samples.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      along.push(next);
+      next += SMOOTH_STEP_M;
+    }
+    walked += length;
+  }
+  if (walked < 2 * SMOOTH_STEP_M) return line;
+  if (walked - (along.at(-1) as number) < SMOOTH_STEP_M / 2) {
+    samples.pop();
+    along.pop();
+  }
+  samples.push(local.at(-1) as XY);
+  along.push(walked);
+
+  const smoothed = samples.map((point, i): LngLat => {
+    const at = along[i] as number;
+    const reach = Math.min(radiusMeters, at, walked - at);
+    if (reach < SMOOTH_STEP_M) return [first[0] + point[0] / (k * cos), first[1] + point[1] / k];
+    let x = 0;
+    let y = 0;
+    let weights = 0;
+    for (let j = 0; j < samples.length; j++) {
+      const d = Math.abs((along[j] as number) - at);
+      if (d > reach) continue;
+      const w = 1 - d / (reach + SMOOTH_STEP_M);
+      const p = samples[j] as XY;
+      x += p[0] * w;
+      y += p[1] * w;
+      weights += w;
+    }
+    return [first[0] + x / weights / (k * cos), first[1] + y / weights / k];
+  });
+  smoothed[0] = first;
+  smoothed[smoothed.length - 1] = last;
+  return smoothed;
+}
+
 const EARTH_RADIUS_M = 6371008.8;
 
 type XY = [number, number];

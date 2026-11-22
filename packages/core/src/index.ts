@@ -227,6 +227,7 @@ export {
   signalCoordKey,
   signHeadline,
   simulatePositions,
+  smoothArrowLine,
   snapPreparedRoute,
   speedZoom,
   stepDeadReckon,

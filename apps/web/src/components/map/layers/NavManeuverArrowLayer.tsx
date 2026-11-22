@@ -10,6 +10,7 @@ import {
   maneuverArrowTipBearing,
   maneuverStartMeters,
   raisedArrowPolygon,
+  smoothArrowLine,
   upcomingManeuverIndex,
   useNavigationStore,
 } from "@openmapx/core";
@@ -82,10 +83,13 @@ export function NavManeuverArrowLayer() {
     // the turning side, so the arrow cuts the corner through the junction and
     // rejoins the route line just before its head.
     const lanePath = highlightLanePath(highlightSpan, route, upcomingIndex);
-    const line =
+    const followed =
       routeLine && lanePath
         ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), lanePath)
         : routeLine;
+    // Smoothed, so a sideways step in the route (a road splitting into two
+    // carriageways near the junction) reads as a gentle bend, not a zig-zag.
+    const line = followed && smoothArrowLine(followed);
     const tip = line?.at(-1);
     if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
