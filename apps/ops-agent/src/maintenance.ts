@@ -310,10 +310,31 @@ async function withRecord<T>(maintenanceId: string, work: () => Promise<T> | T):
   }
 }
 
+/** Awaits `promise` until it settles or `signal` aborts; aborting does not
+ * cancel `promise` and leaves no listener behind. */
+function waitWithSignal(promise: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => resolve();
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export class ConfigurationMaintenance {
   /** Maintenances whose helper launch runs in this process: not observed meanwhile. */
   private readonly launching = new Set<string>();
   private readonly observing = new Map<string, Promise<MaintenanceStepOutcome | "running">>();
+  private readonly settling = new Map<string, Promise<void>>();
   private ticking: Promise<void> | undefined;
 
   constructor(
@@ -425,25 +446,9 @@ export class ConfigurationMaintenance {
         case "apply_failed":
           outcome.value = effect.outcome === "unknown" ? "unknown" : "contained";
           break;
-        case "settle_fence": {
-          let fence: DataConfigurationFenceReceipt;
-          try {
-            fence = await this.adapters.settleFence(file, effect.outcome, signal);
-          } catch (error) {
-            console.warn("Configuration fence settlement failed", maintenanceId, error);
-            // A settlement refused for good is not sent again: the maintenance
-            // waits for `openmapx control resolve`.
-            if (error instanceof MaintenanceSettlementRefused)
-              await this.change(maintenanceId, { type: "settlement_refused" });
-            // Otherwise the record stays settling with its outcome fixed; the
-            // agent's own check sends the same idempotent settlement again.
-            break;
-          }
-          queue.unshift(
-            ...(await this.change(maintenanceId, { type: "fence_settled", fence })).effects,
-          );
+        case "settle_fence":
+          await this.settleFenceSingleFlight(maintenanceId, file, effect.outcome, signal);
           break;
-        }
         case "release_lease":
           await this.finish(file);
           break;
@@ -504,6 +509,48 @@ export class ConfigurationMaintenance {
     };
   }
 
+  /** Settles the fence one at a time per maintenance; concurrent callers wait on
+   * it. The first caller's signal governs the shared request; if it aborts, the
+   * record remains settling and the next check retries it. */
+  private settleFenceSingleFlight(
+    maintenanceId: string,
+    file: MaintenanceFile,
+    outcome: MaintenanceFenceOutcome,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const running = this.settling.get(maintenanceId);
+    if (running) return waitWithSignal(running, signal);
+    if (this.read(maintenanceId).record.state !== "settling") return Promise.resolve();
+    const settlement = this.settleFenceOnce(maintenanceId, file, outcome, signal).finally(() => {
+      this.settling.delete(maintenanceId);
+    });
+    this.settling.set(maintenanceId, settlement);
+    return settlement;
+  }
+
+  private async settleFenceOnce(
+    maintenanceId: string,
+    file: MaintenanceFile,
+    outcome: MaintenanceFenceOutcome,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let fence: DataConfigurationFenceReceipt;
+    try {
+      fence = await this.adapters.settleFence(file, outcome, signal);
+    } catch (error) {
+      console.warn("Configuration fence settlement failed", maintenanceId, error);
+      // A settlement refused for good is not sent again: the maintenance
+      // waits for `openmapx control resolve`.
+      if (error instanceof MaintenanceSettlementRefused)
+        await this.change(maintenanceId, { type: "settlement_refused" });
+      // Otherwise the record stays settling with its outcome fixed; the
+      // agent's own check sends the same idempotent settlement again.
+      return;
+    }
+    const settled = await this.change(maintenanceId, { type: "fence_settled", fence });
+    await this.run(maintenanceId, settled.effects, signal);
+  }
+
   /** Releases the lease of a settled record. A failure leaves the lease for the
    * agent's own check, which releases it later: the record already settled. */
   private async finish(file: MaintenanceFile): Promise<void> {
@@ -527,7 +574,9 @@ export class ConfigurationMaintenance {
     const file = this.read(maintenanceId);
     const current = file.record;
     if (current.state === "settled") {
-      await this.finish(file);
+      const running = this.settling.get(maintenanceId);
+      if (running) await waitWithSignal(running, signal);
+      else await this.finish(file);
       return current;
     }
     if (current.handoff && current.state === "applying") await this.observeHelper(maintenanceId);
@@ -544,7 +593,11 @@ export class ConfigurationMaintenance {
           ? "abandon"
           : "settle_complete",
     });
-    await this.run(maintenanceId, next.effects, signal);
+    if (next.effects.length > 0) await this.run(maintenanceId, next.effects, signal);
+    else {
+      const running = this.settling.get(maintenanceId);
+      if (running) await waitWithSignal(running, signal);
+    }
     return this.read(maintenanceId).record;
   }
 
@@ -632,6 +685,7 @@ export class ConfigurationMaintenance {
     for (const file of files) {
       const { record } = file;
       const maintenanceId = record.maintenanceId;
+      if (this.settling.has(maintenanceId)) continue;
       try {
         if (record.state === "applying" && record.handoff) await this.observeHelper(maintenanceId);
         else if (
