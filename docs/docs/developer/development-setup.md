@@ -150,7 +150,7 @@ working development database: `db:push` synchronizes the declared schema but doe
 not replay custom SQL migrations.
 
 ```bash
-pnpm db:generate    # check for schema changes; see "API migrations" below
+pnpm db:generate    # write a migration for schema changes (see "API migrations")
 pnpm db:push        # schema-only experiment on a disposable database
 pnpm db:studio      # open Drizzle Studio, a visual database browser
 pnpm auth:generate  # regenerate the Better Auth schema
@@ -370,7 +370,9 @@ The API's migrations in `apps/api/src/db/migrations` are two files:
   `apps/api/src/db/custom-migration.test.ts` refuses any other statement kind.
 
 No installation predates the baseline, so a schema change regenerates both files
-from an empty folder instead of adding a migration. From `apps/api`:
+from an empty folder instead of adding a migration: `pnpm db:generate` on its own
+would write a new `0002_*` migration, which this repository does not keep. From
+`apps/api`:
 
 1. Copy the body of `0001_database_objects.sql` aside.
 2. `git rm -r src/db/migrations`.
@@ -386,4 +388,7 @@ that differ only in `id` and `prevId`. A database created before a
 regeneration cannot be migrated and fails with "relation already exists";
 recreate it. `pnpm check-drizzle-drift`, part of `pnpm check:policy`, runs
 `drizzle-kit check` and `drizzle-kit generate` and fails when generation writes
-anything or the folder holds uncommitted changes.
+anything or the folder holds uncommitted changes. It also regenerates the
+baseline into a temporary folder and fails unless `0000_baseline.sql` is
+byte-identical to the committed file and its snapshot differs only in `id` and
+`prevId`, so a hand edit to the generated SQL is refused.

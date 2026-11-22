@@ -16,7 +16,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;--> statement-breakpoint
 GRANT USAGE ON SCHEMA "data_manager" TO openmapx_data_manager;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "data_manager" TO openmapx_data_manager;--> statement-breakpoint
--- Tables later migrations add to `data_manager` follow the same grant.
+-- Tables the API role creates in `data_manager` after this migration get the
+-- same grant.
 ALTER DEFAULT PRIVILEGES IN SCHEMA "data_manager" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO openmapx_data_manager;--> statement-breakpoint
 -- PostgreSQL 15 and later no longer let every role create objects in
 -- `public`; state it, since data-manager must never place tables beside the
@@ -28,8 +29,9 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;--> statement-breakpoint
 ALTER TABLE "user" ADD CONSTRAINT openmapx_canonical_account_role CHECK (role IS NULL OR role IN ('user','admin'));--> statement-breakpoint
 
 -- At least one active administrator always remains. The guard row counts the
--- active administrators; the trigger keeps it in step with every change to
--- "user" and refuses the change that would bring it to zero.
+-- active administrators; the trigger keeps it in step with every insert and
+-- delete on "user" and every change of role or ban, and refuses the change
+-- that would bring it to zero.
 INSERT INTO account_admin_guard(id,active_count) SELECT 1,count(*)::integer FROM "user" WHERE role='admin' AND banned IS NOT TRUE;--> statement-breakpoint
 CREATE FUNCTION openmapx_preserve_admin_capacity() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE old_active integer:=0; new_active integer:=0; delta integer;
