@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { RESERVED_NETWORK_NAME_PREFIX } from "@openmapx/extension-contracts/service";
 import { describe, expect, it } from "vitest";
 import { configurationReleaseServiceImagesSchema } from "../../ops/configuration-release-downloads";
 import { releaseProvenance } from "../__fixtures__/release-provenance";
@@ -9,6 +10,8 @@ import {
   CORE_SERVICE_ID,
   PROTECTED_CONFIGURATION_SERVICE_IDS,
   RELEASE_PINNED_SERVICE_IDS,
+  SERVICE_NETWORK_ALIAS_PREFIX,
+  serviceNetworkAlias,
 } from "../core-service-ids";
 import { RELEASE_BUILT_IN_SERVICE_IDS } from "../release-authority-inventory";
 import { type ReleaseManifest, releaseServiceImages } from "../release-manifest";
@@ -39,6 +42,14 @@ describe("core service IDs", () => {
       ) as { id?: unknown };
       expect(raw.id).toBe(id);
     }
+  });
+
+  it("gives services the network names community manifests may not claim", () => {
+    // core-service-ids imports nothing, so it keeps its own copy of the contract's prefix.
+    expect(SERVICE_NETWORK_ALIAS_PREFIX).toBe(RESERVED_NETWORK_NAME_PREFIX);
+    expect(
+      serviceNetworkAlias(CORE_SERVICE_ID.postgis).startsWith(RESERVED_NETWORK_NAME_PREFIX),
+    ).toBe(true);
   });
 
   it("restarts only control-plane services through the core-restart workflow", () => {
