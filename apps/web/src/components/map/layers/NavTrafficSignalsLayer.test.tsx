@@ -1,5 +1,6 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
 
 const fake = createFakeMap({
@@ -35,6 +36,19 @@ describe("NavTrafficSignalsLayer", () => {
     render(<NavTrafficSignalsLayer />);
     const data = fake.state.sources.get(SOURCE)?.data as { features: unknown[] };
     expect(data.features).toHaveLength(2);
+  });
+
+  it("2D traffic-light icons hide while street objects draw signals", () => {
+    render(<NavTrafficSignalsLayer />);
+    const visibility = () => fake.map.getLayoutProperty("nav-traffic-signals", "visibility");
+    expect(visibility()).not.toBe("none");
+    act(() => {
+      useNavigationSceneStore.getState().setActive(true);
+      useNavigationSceneStore.getState().setStreetObjectsDrawn(true);
+    });
+    expect(visibility()).toBe("none");
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(visibility()).toBe("visible");
   });
 
   it("keeps the signals and re-registers the icon across a style change", () => {

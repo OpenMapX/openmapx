@@ -3,6 +3,7 @@
 import { useLayerStore, useNavigationStore } from "@openmapx/core";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useState } from "react";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 
 /** The 3D view draws extrusions only while the camera is tilted past this. */
@@ -17,6 +18,11 @@ export function pitchFadeOf(pitch: number): number {
 
 export interface MapDetailsActivation {
   active: boolean;
+  /**
+   * `navigation` during 3D navigation: street paint without pitches and only
+   * the street signs (signals, stop, give way), no trees, lamps or benches.
+   */
+  mode: "full" | "navigation";
   zoom: number;
   pitchFade: number;
   satellite: boolean;
@@ -24,12 +30,15 @@ export interface MapDetailsActivation {
 
 /**
  * Map details are part of the 3D view (spec §6.2): active while the 3D view is
- * selected, the map is tilted and no navigation runs. The tilt fade updates at
- * most every 100 ms while the camera tilts and exactly when it settles.
+ * selected and the map is tilted. While navigating only the 3D navigation view
+ * draws them, in navigation mode (immersive navigation spec §7.2). The tilt
+ * fade updates at most every 100 ms while the camera tilts and exactly when it
+ * settles.
  */
 export function useMapDetailsActive(map: MaplibreMap | null): MapDetailsActivation {
   const selected = useOverlayLayerVisible("3d-buildings");
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  const sceneActive = useNavigationSceneStore((s) => s.active);
   const satellite = useLayerStore((s) => s.activeLayer) === "satellite";
   const [camera, setCamera] = useState(() => ({
     pitch: map?.getPitch() ?? 0,
@@ -68,7 +77,8 @@ export function useMapDetailsActive(map: MaplibreMap | null): MapDetailsActivati
   }, [map]);
 
   return {
-    active: selected && camera.pitch > TILT_THRESHOLD && !navigating,
+    active: selected && camera.pitch > TILT_THRESHOLD && (!navigating || sceneActive),
+    mode: navigating && sceneActive ? "navigation" : "full",
     zoom: camera.zoom,
     pitchFade: pitchFadeOf(camera.pitch),
     satellite,

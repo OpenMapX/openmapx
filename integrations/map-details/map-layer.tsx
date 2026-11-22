@@ -3,9 +3,11 @@
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useOfflinePackageActive } from "@/integration-api/map/offlinePackage";
 import { useSceneLight } from "@/integration-api/map/sceneLight";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
@@ -30,6 +32,7 @@ import {
 
 /** Above basemap roads, below the building extrusions (order 5) and every other area overlay. */
 const PAINT_SLOT_ORDER = 0;
+const NAVIGATION_PAINT_FILTER: maplibregl.FilterSpecification = ["!=", ["get", "kind"], "pitch"];
 const DATA_SOURCE_ID = "osm-street-detail";
 
 /**
@@ -42,7 +45,9 @@ export function MapDetailsLayer(): null {
   const map = mapReady ? mapRef.current : null;
   const { streetDetailTilesUrl } = useEnv();
   const offline = useOfflinePackageActive();
-  const { active, pitchFade, satellite } = useMapDetailsActive(map);
+  const { active, mode, zoom, pitchFade, satellite } = useMapDetailsActive(map);
+  // Navigation mode leaves out pitch markings: they are no help to a driver.
+  const paintFilter = mode === "navigation" ? NAVIGATION_PAINT_FILTER : null;
   const night = useSceneLight((light) => light.night);
   const scheme: ColourScheme = night ? "dark" : "light";
   const [client, setClient] = useState<MapDetailsWorkerClient | null>(null);
@@ -51,8 +56,8 @@ export function MapDetailsLayer(): null {
   const wantsStreetDetail = streetDetailTilesUrl !== "" && !offline;
   const hasSource = wantsStreetDetail && template !== null;
   const paintVisible = active && !satellite;
-  const live = useRef({ scheme, pitchFade, paintVisible, template, client });
-  live.current = { scheme, pitchFade, paintVisible, template, client };
+  const live = useRef({ scheme, pitchFade, paintVisible, template, client, paintFilter });
+  live.current = { scheme, pitchFade, paintVisible, template, client, paintFilter };
 
   // One worker for all derivation, from the first activation until unmount. A ref
   // owns it so a remounting effect (React's development double run) never leaks one.
@@ -113,12 +118,18 @@ export function MapDetailsLayer(): null {
           maxzoom: 18,
         });
       if (!map.getLayer(PAINT_LAYER_ID)) {
-        const { scheme: currentScheme, pitchFade: fade, paintVisible: visible } = live.current;
+        const {
+          scheme: currentScheme,
+          pitchFade: fade,
+          paintVisible: visible,
+          paintFilter: filter,
+        } = live.current;
         const spec = paintLayerSpec(currentScheme);
         addLayerInSlot(
           map,
           {
             ...spec,
+            ...(filter ? { filter } : {}),
             layout: { ...spec.layout, visibility: visible ? "visible" : "none" },
             paint: { ...spec.paint, "fill-opacity": paintOpacity(fade) },
           },
@@ -144,6 +155,18 @@ export function MapDetailsLayer(): null {
     if (map?.getLayer(PAINT_LAYER_ID))
       map.setPaintProperty(PAINT_LAYER_ID, "fill-opacity", paintOpacity(pitchFade));
   }, [map, pitchFade]);
+
+  useEffect(() => {
+    if (map?.getLayer(PAINT_LAYER_ID)) map.setFilter(PAINT_LAYER_ID, paintFilter);
+  }, [map, paintFilter]);
+
+  // In 3D navigation the street objects draw the traffic signals, so the flat
+  // signal icons step aside — but only where street objects can draw at all.
+  const streetObjectsDrawn = active && mode === "navigation" && hasSource && zoom >= 16;
+  useEffect(() => {
+    useNavigationSceneStore.getState().setStreetObjectsDrawn(streetObjectsDrawn);
+  }, [streetObjectsDrawn]);
+  useEffect(() => () => useNavigationSceneStore.getState().setStreetObjectsDrawn(false), []);
 
   useEffect(() => {
     if (map?.getLayer(PAINT_LAYER_ID))
@@ -183,6 +206,7 @@ export function MapDetailsLayer(): null {
   useMapDetailsObjects({
     map,
     active,
+    mode,
     client,
     streetTemplate: hasSource ? template : null,
     satellite,
