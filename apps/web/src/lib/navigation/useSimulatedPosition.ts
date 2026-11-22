@@ -55,7 +55,11 @@ export function useSimulatedPosition(active: boolean, onFix: (fix: FixInput) => 
       const now = Date.now();
       const steps = lastTickAt === null ? 1 : Math.max(1, Math.round((now - lastTickAt) / tickMs));
       lastTickAt = now;
-      const index = idxRef.current + steps - 1;
+      // A stall past the end still delivers the final fix, so the drive arrives.
+      const index = Math.min(
+        idxRef.current + steps - 1,
+        Math.max(idxRef.current, fixes.length - 1),
+      );
       const fix = fixes[index];
       if (!fix) {
         clearInterval(id);

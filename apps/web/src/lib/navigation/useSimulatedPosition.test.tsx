@@ -76,6 +76,17 @@ describe("useSimulatedPosition", () => {
     expect(haversineDistance(before.coords, after.coords)).toBeCloseTo(28, 0);
   });
 
+  it("a late tick near the end still delivers the final position", () => {
+    const fixes: FixInput[] = [];
+    renderHook(() => useSimulatedPosition(true, (fix) => fixes.push(fix)));
+    // About 2.4 km at 14 m/s: a few seconds short of the end.
+    vi.advanceTimersByTime(165_000);
+    // Then the main thread stalls past the end of the drive.
+    vi.setSystemTime(Date.now() + 30_000);
+    vi.advanceTimersByTime(5000);
+    expect(haversineDistance(nth(fixes, -1).coords, [6.72, 51.1985])).toBeLessThan(1);
+  });
+
   it("keeps the synthetic position, heading and speed", () => {
     const fixes: FixInput[] = [];
     renderHook(() => useSimulatedPosition(true, (fix) => fixes.push(fix)));
