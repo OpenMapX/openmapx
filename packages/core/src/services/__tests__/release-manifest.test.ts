@@ -18,7 +18,6 @@ const manifest: ReleaseManifest = {
     "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
     "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
-    "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
   },
   ...releaseProvenance(),
 };
@@ -74,8 +73,8 @@ describe("shared release manifest", () => {
     ).toThrow(/images\.api/);
   });
 
-  it("pins only the six release images and no privacy collector or validation evidence", () => {
-    expect(Object.keys(manifest.images)).toHaveLength(6);
+  it("pins only the five release images and no privacy collector or validation evidence", () => {
+    expect(Object.keys(manifest.images)).toHaveLength(5);
     expect(Object.keys(releaseServiceImages(manifest))).toHaveLength(5);
     expect(canonicalReleaseManifest(manifest)).not.toMatch(/privacy/i);
   });

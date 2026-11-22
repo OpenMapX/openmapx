@@ -10,8 +10,7 @@
 # checkout.
 #
 # IMPORTANT: build context MUST be the repo root; the runtime stage picks up
-# `services/motis/tools/transitous/requirements.txt`, which is the same pinned,
-# hash-checked lock the transitous-tools image uses.
+# the pinned, hash-checked lock `services/motis/tools/transitous/requirements.txt`.
 #
 # Build command (from repo root):
 #   docker build -t openmapx-transitous-runner -f apps/transitous-runner/Dockerfile .

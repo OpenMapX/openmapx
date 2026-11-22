@@ -322,7 +322,6 @@ it("requires every published version alias without repairing missing or changed 
     "data-manager",
     "ops-agent",
     "transitous-runner",
-    "transitous-tools",
     "release-manifest",
   ]) {
     for (const mutation of ["missing", "changed"]) {

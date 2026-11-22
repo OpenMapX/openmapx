@@ -1,14 +1,7 @@
 const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 export function fixture() {
-  const names = [
-    "api",
-    "web",
-    "data-manager",
-    "ops-agent",
-    "transitous-runner",
-    "transitous-tools",
-  ];
+  const names = ["api", "web", "data-manager", "ops-agent", "transitous-runner"];
   const configuration = {
     schemaVersion: 1,
     version: "0.1.0-alpha.1",

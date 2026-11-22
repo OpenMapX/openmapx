@@ -960,12 +960,10 @@ describe("administrative release runtime", () => {
       schemaVersion: 1,
       release: releaseId,
       images: Object.fromEntries(
-        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-          (name, index) => [
-            name,
-            `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-          ],
-        ),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner"].map((name, index) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+        ]),
       ),
       ...releaseProvenance(),
     };
@@ -1042,17 +1040,12 @@ describe("administrative release runtime", () => {
             schemaVersion: 1,
             release: releaseId,
             images: Object.fromEntries(
-              [
-                "api",
-                "web",
-                "data-manager",
-                "ops-agent",
-                "transitous-runner",
-                "transitous-tools",
-              ].map((name, index) => [
-                name,
-                `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-              ]),
+              ["api", "web", "data-manager", "ops-agent", "transitous-runner"].map(
+                (name, index) => [
+                  name,
+                  `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+                ],
+              ),
             ),
             ...releaseProvenance(),
           }),

@@ -68,14 +68,7 @@ const SHIM = fileURLToPath(new URL("./support/docker-shim.mjs", import.meta.url)
 const TSX = createRequire(import.meta.url).resolve("tsx/esm");
 const REGISTRY = "registry.crash.test/openmapx";
 const MANIFEST_REPOSITORY = `${REGISTRY}/release-manifest`;
-const RELEASE_IMAGES = [
-  "api",
-  "web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-  "transitous-tools",
-] as const;
+const RELEASE_IMAGES = ["api", "web", "data-manager", "ops-agent", "transitous-runner"] as const;
 const SERVICE_OF_ROLE: Record<Role, string> = {
   api: "api",
   agent: "ops-agent",

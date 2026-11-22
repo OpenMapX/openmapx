@@ -17,7 +17,6 @@ import {
   type ProducerIndex,
   selectProducer,
 } from "./producer-index";
-import { TRANSITOUS_TOOLS_IMAGE_ENV } from "./release-manifest";
 import { detectConsumesCycle } from "./resolver";
 import {
   isRuntimeResourceKey,
@@ -143,13 +142,9 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 }
 
 export interface RenderContext {
-  /**
-   * The release a generation pins: the image of each pinned built-in service,
-   * and the Transitous tools image data-manager runs its jobs with.
-   */
+  /** The release a generation pins: the image of each pinned built-in service. */
   releasePins?: {
     images: Readonly<Record<string, string>>;
-    transitousTools: string;
   };
   platform?: import("./platform-configuration").PlatformConfiguration;
   platformValues?: import("./platform-configuration").PlatformValues;
@@ -719,11 +714,6 @@ export function renderServiceSnippet(
       );
     snippet.environment = env;
   }
-  if (service.isBuiltIn && m.id === "data-manager" && ctx.releasePins)
-    snippet.environment = {
-      ...snippet.environment,
-      [TRANSITOUS_TOOLS_IMAGE_ENV]: ctx.releasePins.transitousTools,
-    };
   // Vault secrets (the container track): mount each as a Docker secret at
   // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
   // the environment (which is exposed via `docker inspect`/`/proc/environ`);

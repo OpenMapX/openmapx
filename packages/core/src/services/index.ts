@@ -301,7 +301,6 @@ export {
   releaseManifestImage,
   releaseSelection,
   releaseServiceImages,
-  TRANSITOUS_TOOLS_IMAGE_ENV,
   validateResolvedSelection,
 } from "./release-manifest";
 export {

@@ -1459,10 +1459,7 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   const context: RenderContext = {
     ...(release
       ? {
-          releasePins: {
-            images: releaseServiceImages(release),
-            transitousTools: release.images["transitous-tools"],
-          },
+          releasePins: { images: releaseServiceImages(release) },
         }
       : {}),
     domain: input.domain,

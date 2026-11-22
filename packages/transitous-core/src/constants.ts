@@ -25,16 +25,15 @@ export const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
  * Keep in lockstep with upstream when bumping the catalog.
  *
  * This is the **single source of truth** for the MOTIS pin; the `motis` /
- * `motis-staging` service.json tags, the transitous-tools Dockerfile ARG, and
- * the `@motis-project/motis-client` deps must all match it — enforced by
- * `pnpm check-toolchain-pins`.
+ * `motis-staging` service.json tags and the `@motis-project/motis-client` deps
+ * must all match it — enforced by `pnpm check-toolchain-pins`.
  */
 export const MOTIS_VERSION = "2.11.4";
 
 /**
  * Pinned `gtfsclean` build (the GTFS post-processor fetch.py runs). Single
- * source of truth for the commit baked into both the transitous-tools and
- * data-manager images — enforced by `pnpm check-toolchain-pins`.
+ * source of truth for the commit baked into every image that ships it —
+ * enforced by `pnpm check-toolchain-pins`.
  */
 export const GTFSCLEAN_COMMIT = "013af793337b759e782c3f8919e0b535cb702944";
 

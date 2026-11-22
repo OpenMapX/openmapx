@@ -157,17 +157,6 @@ export function collectToolchainPinViolations(
     }
   }
 
-  // MOTIS version: transitous-tools Dockerfile ARG (v-prefixed release tag).
-  if (
-    !read("services/motis/tools/transitous/Dockerfile").includes(
-      `ARG MOTIS_VERSION=v${MOTIS_VERSION}`,
-    )
-  ) {
-    errors.push(
-      `services/motis/tools/transitous/Dockerfile: ARG MOTIS_VERSION != v${MOTIS_VERSION}`,
-    );
-  }
-
   // MOTIS version: @motis-project/motis-client deps (caret range).
   for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json"]) {
     const deps = (JSON.parse(read(rel)) as { dependencies?: Record<string, string> }).dependencies;
@@ -195,7 +184,6 @@ export function collectToolchainPinViolations(
     );
   }
   for (const [rel, source] of [
-    ["services/motis/tools/transitous/Dockerfile", "build-gtfsclean.sh"],
     ["services/data-manager/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
     ["apps/transitous-runner/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
   ] as const) {
@@ -231,19 +219,6 @@ export function collectToolchainPinViolations(
     );
   }
 
-  const transitousDockerfile = read("services/motis/tools/transitous/Dockerfile");
-  for (const arch of ["AMD64", "ARM64"] as const) {
-    const value = transitousDockerfile.match(
-      new RegExp(`ARG MOTIS_SHA256_${arch}=([a-f0-9]{64})`),
-    )?.[1];
-    if (!value || !SHA256.test(value)) {
-      errors.push(`services/motis/tools/transitous/Dockerfile: MOTIS_SHA256_${arch} is not pinned`);
-    }
-  }
-  if (!transitousDockerfile.includes("sha256sum -c -")) {
-    errors.push("services/motis/tools/transitous/Dockerfile: MOTIS download is not checksummed");
-  }
-
   const requirementsInput = read("services/motis/tools/transitous/requirements.in");
   const requirementsLock = read("services/motis/tools/transitous/requirements.txt");
   for (const requirement of requirementsInput
@@ -269,7 +244,6 @@ export function collectToolchainPinViolations(
   }
   for (const [rel, dockerfile] of [
     ["services/data-manager/Dockerfile", dataManagerDockerfile],
-    ["services/motis/tools/transitous/Dockerfile", transitousDockerfile],
     ["apps/transitous-runner/Dockerfile", read("apps/transitous-runner/Dockerfile")],
   ] as const) {
     if (!dockerfile.includes("pip3 install --no-cache-dir --require-hashes")) {

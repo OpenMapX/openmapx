@@ -11,7 +11,6 @@ export const CONFIGURATION_RELEASE_IMAGE_NAMES = [
   "data-manager",
   "ops-agent",
   "transitous-runner",
-  "transitous-tools",
 ] as const;
 export const CONFIGURATION_RELEASE_IMAGE_BYTES = 8 * 1024 ** 3;
 export const CONFIGURATION_RELEASE_TOTAL_BYTES = 32 * 1024 ** 3;

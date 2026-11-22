@@ -208,7 +208,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
       downloads: {
         version: 1 as const,
         platform: "linux/amd64" as const,
-        declaredBytes: 6 * 512,
+        declaredBytes: 5 * 512,
         images: RELEASE_IMAGE_NAMES.map((image) => ({
           image,
           reference: manifest.images[image],

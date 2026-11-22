@@ -68,9 +68,9 @@ export const transitousRunnerScriptSchema = z.discriminatedUnion("script", [
     feedProxy: z.boolean(),
     countries: z.array(countrySchema).max(64),
   }),
-  // The upstream `run.sh` merges the `--feed-proxy` YAML output with the
-  // catalog whitelist and emits JSON. The runner owns that fixed snippet so no
-  // caller ever supplies Python source.
+  // Merges the `--feed-proxy` YAML output with the catalog whitelist and emits
+  // JSON. The runner owns that fixed snippet so no caller ever supplies Python
+  // source.
   z.strictObject({ script: z.literal("feed-proxy-vars-to-json") }),
 ]);
 
@@ -125,9 +125,9 @@ export function transitousRunnerArgv(run: TransitousRunnerScript): string[] {
 }
 
 /**
- * Fixed inline snippet, owned here rather than supplied by a caller. Mirrors
- * upstream `run.sh`: merge the `--feed-proxy` YAML output with the catalog's
- * feed whitelist and emit JSON into `out/`.
+ * Fixed inline snippet, owned here rather than supplied by a caller: merge the
+ * `--feed-proxy` YAML output with the catalog's feed whitelist and emit JSON
+ * into `out/`.
  */
 export const FEED_PROXY_VARS_TO_JSON_PY = `import json
 from pathlib import Path

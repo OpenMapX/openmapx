@@ -29,16 +29,14 @@ import z from "zod/v4";
 import { CORE_SERVICE_ID, type ReleasePinnedServiceId } from "./core-service-ids";
 
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
-export const TRANSITOUS_TOOLS_IMAGE_ENV = "OPENMAPX_TRANSITOUS_TOOLS_IMAGE";
 
-/** The six application images; documentation publishes independently. */
+/** The five application images; documentation publishes independently. */
 export const RELEASE_IMAGE_NAMES = [
   "api",
   "web",
   "data-manager",
   "ops-agent",
   "transitous-runner",
-  "transitous-tools",
 ] as const;
 const DIGEST = "sha256:[a-f0-9]{64}";
 const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -294,7 +292,6 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
       "data-manager": manifest.images["data-manager"],
       "ops-agent": manifest.images["ops-agent"],
       "transitous-runner": manifest.images["transitous-runner"],
-      "transitous-tools": manifest.images["transitous-tools"],
     },
     producer: stableObject(manifest.producer),
     buildMetadata: stableObject(manifest.buildMetadata),

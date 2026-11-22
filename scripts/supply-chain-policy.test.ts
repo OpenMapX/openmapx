@@ -129,7 +129,6 @@ describe("production supply-chain policy", () => {
 
   it("requires hashes for downloaded executable and Python artifacts", () => {
     const dataManagerDockerfile = read("services/data-manager/Dockerfile");
-    const transitousDockerfile = read("services/motis/tools/transitous/Dockerfile");
     const transitousRunnerDockerfile = read("apps/transitous-runner/Dockerfile");
     const requirements = read("services/motis/tools/transitous/requirements.txt");
 
@@ -150,12 +149,8 @@ describe("production supply-chain policy", () => {
     }
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
-    expect(transitousDockerfile).not.toContain('MOTIS_SHA256_AMD64=""');
-    expect(transitousDockerfile).not.toContain('MOTIS_SHA256_ARM64=""');
-    expect(transitousDockerfile).toContain("sha256sum -c -");
-    expect(transitousDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
-    // The private runner executes the same upstream Python, so it installs it
-    // from the same hash-locked requirements rather than a second lock.
+    // The private runner executes the upstream Python, so it installs it from
+    // the hash-locked requirements.
     expect(transitousRunnerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
     expect(transitousRunnerDockerfile).toContain(
       "COPY services/motis/tools/transitous/requirements.txt",

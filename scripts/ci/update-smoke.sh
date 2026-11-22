@@ -50,18 +50,8 @@ registry_certs=""
 update_timeout_seconds="${UPDATE_SMOKE_UPDATE_TIMEOUT_SECONDS:-1200}"
 admin_email="update-smoke@openmapx.org"
 admin_password=""
-release_images=(api web data-manager ops-agent transitous-runner transitous-tools)
+release_images=(api web data-manager ops-agent transitous-runner)
 cases="${UPDATE_SMOKE_CASES:-happy unhealthy}"
-
-# The image this checkout builds for a release image name, as the manifests
-# name it. Each pinned service is named like its release image.
-built_image() {
-  if [[ "$1" == transitous-tools ]]; then
-    echo "openmapx-update-smoke/transitous-tools:local"
-  else
-    manifest_image "$1"
-  fi
-}
 
 registry_up() {
   curl --fail --silent --max-time 5 --cacert "$registry_certs/registry.crt" \
@@ -168,7 +158,8 @@ publish_release() {
   step "Publish release $release"
   for name in "${release_images[@]}"; do
     if ((release_counter == 1)); then
-      base="$(built_image "$name")"
+      # The image this checkout built for the pinned service of that name.
+      base="$(manifest_image "$name")"
     else
       base="$registry/$name:update-smoke-r$((release_counter - 1))"
     fi
@@ -447,8 +438,6 @@ update_main() {
   trap 'exit 143' TERM
 
   build_images
-  step "Build openmapx-update-smoke/transitous-tools:local"
-  docker build --quiet --tag "$(built_image transitous-tools)" services/motis/tools/transitous >/dev/null
   pull_third_party_images
   start_registry
   local name

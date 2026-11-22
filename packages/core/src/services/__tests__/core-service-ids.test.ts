@@ -28,7 +28,6 @@ const manifest: ReleaseManifest = {
     "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
     "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
-    "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
   },
   ...releaseProvenance(),
 };

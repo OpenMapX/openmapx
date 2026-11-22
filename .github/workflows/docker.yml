@@ -131,9 +131,6 @@ jobs:
           - app: transitous-runner
             context: .
             dockerfile: apps/transitous-runner/Dockerfile
-          - app: transitous-tools
-            context: services/motis/tools/transitous
-            dockerfile: services/motis/tools/transitous/Dockerfile
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -339,7 +336,7 @@ jobs:
           mkdir -p release-manifest
           first=true
           image_lines=""
-          for app in api web data-manager ops-agent transitous-runner transitous-tools; do
+          for app in api web data-manager ops-agent transitous-runner; do
             shopt -s nullglob
             digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
@@ -439,7 +436,7 @@ jobs:
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
         run: |
-          for app in api web data-manager ops-agent transitous-runner transitous-tools; do
+          for app in api web data-manager ops-agent transitous-runner; do
             shopt -s nullglob
             digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then

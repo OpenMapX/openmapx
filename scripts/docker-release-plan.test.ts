@@ -38,9 +38,7 @@ const dockerfiles: Record<string, string> = Object.fromEntries(
     target.dockerfile,
     target.app === "docs"
       ? "FROM scratch\nCOPY . /docs\n"
-      : target.app === "transitous-tools"
-        ? "FROM scratch\nCOPY requirements.txt /app\n"
-        : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
+      : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
   ]),
 );
 const options = {

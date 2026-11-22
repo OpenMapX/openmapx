@@ -41,7 +41,6 @@ import {
   RELEASE_IMAGE_NAMES,
   type ReleaseManifest,
   releaseManifestDigest,
-  TRANSITOUS_TOOLS_IMAGE_ENV,
 } from "../release-manifest";
 import type { LoadedService } from "../types";
 
@@ -493,9 +492,12 @@ describe("release pins in the generation", () => {
     const rendered = compose(infraDir);
     expect(rendered.services.api?.image).toBe(first.images.api);
     expect(rendered.services["data-manager"]?.image).toBe(first.images["data-manager"]);
-    expect(rendered.services["data-manager"]?.environment?.[TRANSITOUS_TOOLS_IMAGE_ENV]).toBe(
-      first.images["transitous-tools"],
-    );
+    // Release images reach services only as their own image, never as environment.
+    expect(
+      Object.values(rendered.services["data-manager"]?.environment ?? {}).filter((value) =>
+        Object.values(first.images).includes(value),
+      ),
+    ).toEqual([]);
     // A service the release does not cover keeps its manifest's image.
     expect(rendered.services.alpha?.image).toBe("example/alpha:1");
     expect(readAppliedRelease(infraDir)).toEqual({
