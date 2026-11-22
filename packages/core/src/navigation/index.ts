@@ -244,6 +244,17 @@ export {
   transitSnapshotWireSchema,
 } from "./nativeSnapshot";
 export {
+  approachTargetZoom,
+  type JunctionFitInput,
+  junctionFitZoom,
+  lookAheadBearing,
+  lookAheadMeters,
+  NAV_CAMERA_PROFILE,
+  type NavCameraProfile,
+  type NavCameraProfileName,
+  speedZoom,
+} from "./navCameraFraming";
+export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
   NAVIGATION_SESSION_MAX_AGE_MS,
