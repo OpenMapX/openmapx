@@ -130,6 +130,10 @@ describe("ServiceRegistry communityServices", () => {
     expect(registry.get("maps-tiles")).toMatchObject({ isBuiltIn: false, enabled: true });
     // A community service can never shadow a built-in one.
     expect(registry.get("postgis")).toMatchObject({ isBuiltIn: true });
-    expect(warnings).toEqual([expect.stringContaining('Duplicate service id "postgis"')]);
+    expect(warnings).toEqual([
+      expect.stringMatching(
+        /^Community service "postgis" .+ its ID belongs to a built-in service$/,
+      ),
+    ]);
   });
 });
