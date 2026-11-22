@@ -23,7 +23,7 @@ let floor: RateLimiter;
 const registered: { id: string | undefined; auth: unknown }[] = [];
 const timestamp = "2026-10-01T00:00:00.000Z";
 const list = {
-  id: "list",
+  id: "0193e4a0-0000-7000-8000-000000000001",
   name: "Trip",
   icon: null,
   isPrivate: true,
@@ -38,8 +38,8 @@ const capture = {
   lng: [],
 };
 const place = {
-  id: "place",
-  listId: "list",
+  id: "0193e4a0-0000-7000-8000-000000000101",
+  listId: "0193e4a0-0000-7000-8000-000000000001",
   name: "Cafe",
   address: null,
   lat: 52,
@@ -113,31 +113,45 @@ describe("saved serialized wire contracts", () => {
     const created = sdk.unwrapSavedResponse(await sdk.createSavedList({ name: "New" }, { client }));
     expect(created).toEqual({ id: expect.any(String), name: "New", icon: null, isPrivate: true });
     database.queueSelect([{ name: "Trip" }]);
-    database.queueUpdate([{ id: "list" }]);
+    database.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
     expect(
-      sdk.unwrapSavedResponse(await sdk.updateSavedList("list", { name: "Changed" }, { client })),
+      sdk.unwrapSavedResponse(
+        await sdk.updateSavedList(
+          "0193e4a0-0000-7000-8000-000000000001",
+          { name: "Changed" },
+          { client },
+        ),
+      ),
     ).toEqual({ ok: true });
     database.queueSelect([{ name: "Trip" }]);
-    expect(sdk.unwrapSavedResponse(await sdk.deleteSavedList("list", { client }))).toEqual({
+    expect(
+      sdk.unwrapSavedResponse(
+        await sdk.deleteSavedList("0193e4a0-0000-7000-8000-000000000001", { client }),
+      ),
+    ).toEqual({
       ok: true,
     });
-    database.queueSelect([{ id: "list" }]);
+    database.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
     database.queueSelect([place]);
-    expect(sdk.unwrapSavedResponse(await sdk.listSavedListPlaces("list", { client }))).toEqual({
+    expect(
+      sdk.unwrapSavedResponse(
+        await sdk.listSavedListPlaces("0193e4a0-0000-7000-8000-000000000001", { client }),
+      ),
+    ).toEqual({
       places: [place],
     });
     database.queueSelect([]); // account quota lock
-    database.queueSelect([{ id: "list" }]);
+    database.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
     const added = sdk.unwrapSavedResponse(
       await sdk.createSavedPlace(
-        "list",
+        "0193e4a0-0000-7000-8000-000000000001",
         { name: "Cafe", lat: 52, lng: 13, fieldContributors: capture },
         { client },
       ),
     );
     expect(added).toEqual({
       id: expect.any(String),
-      listId: "list",
+      listId: "0193e4a0-0000-7000-8000-000000000001",
       name: "Cafe",
       address: null,
       lat: 52,
@@ -146,16 +160,34 @@ describe("saved serialized wire contracts", () => {
       note: null,
       fieldContributors: capture,
     });
-    database.queueSelect([{ placeId: "place", listUserId: "saved-sdk-user" }]);
+    database.queueSelect([
+      { placeId: "0193e4a0-0000-7000-8000-000000000101", listUserId: "saved-sdk-user" },
+    ]);
     expect(
-      sdk.unwrapSavedResponse(await sdk.updateSavedPlace("place", { note: "Edited" }, { client })),
+      sdk.unwrapSavedResponse(
+        await sdk.updateSavedPlace(
+          "0193e4a0-0000-7000-8000-000000000101",
+          { note: "Edited" },
+          { client },
+        ),
+      ),
     ).toEqual({ ok: true });
-    database.queueSelect([{ placeId: "place", listUserId: "saved-sdk-user", listId: "list" }]);
-    expect(sdk.unwrapSavedResponse(await sdk.deleteSavedPlace("place", { client }))).toEqual({
+    database.queueSelect([
+      {
+        placeId: "0193e4a0-0000-7000-8000-000000000101",
+        listUserId: "saved-sdk-user",
+        listId: "0193e4a0-0000-7000-8000-000000000001",
+      },
+    ]);
+    expect(
+      sdk.unwrapSavedResponse(
+        await sdk.deleteSavedPlace("0193e4a0-0000-7000-8000-000000000101", { client }),
+      ),
+    ).toEqual({
       ok: true,
     });
     const label = {
-      id: "label",
+      id: "0193e4a0-0000-7000-8000-000000000201",
       label: "home / café",
       icon: null,
       name: "Home",
@@ -175,36 +207,45 @@ describe("saved serialized wire contracts", () => {
         await sdk.writeSavedLabel("home / café", { name: "Home", lat: 52, lng: 13 }, { client }),
       ),
     ).toEqual({ id: expect.any(String), label: "home / café" });
-    database.queueDelete([{ id: "label" }]);
+    database.queueDelete([{ id: "0193e4a0-0000-7000-8000-000000000201" }]);
     expect(sdk.unwrapSavedResponse(await sdk.deleteSavedLabel("home / café", { client }))).toEqual({
       ok: true,
     });
-    database.queueSelect([{ listId: "list" }]);
+    database.queueSelect([{ listId: "0193e4a0-0000-7000-8000-000000000001" }]);
     expect(
       sdk.unwrapSavedResponse(await sdk.checkSavedPlace({ placeId: "osm:node:1" }, { client })),
-    ).toEqual({ listIds: ["list"] });
+    ).toEqual({ listIds: ["0193e4a0-0000-7000-8000-000000000001"] });
     database.queueSelect([]); // account quota lock
-    database.queueSelect([{ id: "list", name: "Trip" }]);
+    database.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }]);
     database.queueSelect([]);
     expect(
       sdk.unwrapSavedResponse(
         await sdk.importSavedPlaces(
           {
-            target: { listId: "list" },
+            target: { listId: "0193e4a0-0000-7000-8000-000000000001" },
             places: [{ name: "Imported", lat: 52, lng: 13, fieldContributors: capture }],
           },
           { client },
         ),
       ),
-    ).toEqual({ listId: "list", name: "Trip", imported: 1, skippedDuplicates: 0 });
+    ).toEqual({
+      listId: "0193e4a0-0000-7000-8000-000000000001",
+      name: "Trip",
+      imported: 1,
+      skippedDuplicates: 0,
+    });
     for (const [format, media, marker] of [
       ["gpx", "application/gpx+xml", "<gpx"],
       ["geojson", "application/geo+json", "FeatureCollection"],
       ["kml", "application/vnd.google-earth.kml+xml", "<kml"],
     ] as const) {
-      database.queueSelect([{ id: "list", name: "Trip" }]);
+      database.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }]);
       database.queueSelect([place]);
-      const response = await sdk.exportSavedList("list", { format }, { client });
+      const response = await sdk.exportSavedList(
+        "0193e4a0-0000-7000-8000-000000000001",
+        { format },
+        { client },
+      );
       const blob = sdk.unwrapSavedResponse(response);
       expect(blob.type.split(";", 1)[0]).toBe(media);
       expect(response.headers.get("content-disposition")).toContain(`Trip.${format}`);
@@ -222,10 +263,24 @@ describe("saved serialized wire contracts", () => {
   });
   it("retains cross-account absence without mutation and rejects malformed bodies before mutation", async () => {
     database.queueSelect([]);
-    expect((await sdk.updateSavedList("foreign", { name: "New" }, { client })).status).toBe(404);
+    expect(
+      (
+        await sdk.updateSavedList(
+          "0193e4a0-0000-7000-8000-000000000f01",
+          { name: "New" },
+          { client },
+        )
+      ).status,
+    ).toBe(404);
     expect(database.db.update).not.toHaveBeenCalled();
     expect(
-      (await sdk.createSavedPlace("list", { name: "X", lat: 91, lng: 13 }, { client })).status,
+      (
+        await sdk.createSavedPlace(
+          "0193e4a0-0000-7000-8000-000000000001",
+          { name: "X", lat: 91, lng: 13 },
+          { client },
+        )
+      ).status,
     ).toBe(400);
     expect(database.db.insert).not.toHaveBeenCalled();
   });
@@ -243,8 +298,12 @@ describe("saved serialized wire contracts", () => {
 
 it("clears a custom list icon with the null value sent by the existing editor", async () => {
   database.queueSelect([{ name: "Trip" }]);
-  database.queueUpdate([{ id: "list" }]);
-  const response = await sdk.updateSavedList("list", { icon: null }, { client });
+  database.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
+  const response = await sdk.updateSavedList(
+    "0193e4a0-0000-7000-8000-000000000001",
+    { icon: null },
+    { client },
+  );
   expect(response.status).toBe(200);
 });
 

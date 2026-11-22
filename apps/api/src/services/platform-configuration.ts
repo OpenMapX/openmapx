@@ -1,6 +1,5 @@
 /** Platform target authorization. Host effects remain behind the nominal
  * configuration participant and typed maintenance/handoff operations. */
-import { randomUUID } from "node:crypto";
 import {
   type AdminPlatformPreview,
   adminPlatformConfirmationSchema,
@@ -205,7 +204,6 @@ export async function commitPlatformConfigurationIntent(
     .returning({ id: platformConfigurationPreview.id });
   if (consumed.length !== 1) throw new PlatformPreviewConflict();
   await tx.insert(adminAuditLog).values({
-    id: randomUUID(),
     actorId: input.actorId,
     targetType: "platform",
     targetId: preview.previewId,

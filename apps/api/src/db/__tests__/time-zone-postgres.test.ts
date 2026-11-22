@@ -144,13 +144,13 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
     const halfHour = 30 * 60 * 1000;
     await api.db.insert(adminAuditLog).values([
       {
-        id: "time-zone-before-cutoff",
+        id: "0193e4a0-0000-7000-8007-000000000001",
         actorId: "time-zone-subject",
         action: "fixture.before",
         createdAt: new Date(hold.cutoff.getTime() - halfHour),
       },
       {
-        id: "time-zone-after-cutoff",
+        id: "0193e4a0-0000-7000-8007-000000000002",
         actorId: "time-zone-subject",
         action: "fixture.after",
         createdAt: new Date(hold.cutoff.getTime() + halfHour),
@@ -161,7 +161,10 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
       .from(adminAuditLog)
       .where(
         and(
-          inArray(adminAuditLog.id, ["time-zone-before-cutoff", "time-zone-after-cutoff"]),
+          inArray(adminAuditLog.id, [
+            "0193e4a0-0000-7000-8007-000000000001",
+            "0193e4a0-0000-7000-8007-000000000002",
+          ]),
           preservationAllowsDeletion({
             registrationId: "admin-audit-attribution",
             candidateTimestamp: adminAuditLog.createdAt,
@@ -169,6 +172,6 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
           }),
         ),
       );
-    expect(deletable).toEqual([{ id: "time-zone-after-cutoff" }]);
+    expect(deletable).toEqual([{ id: "0193e4a0-0000-7000-8007-000000000002" }]);
   });
 });

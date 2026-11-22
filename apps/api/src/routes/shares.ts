@@ -71,10 +71,11 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         return sendPublic(toPublicListShare("snapshot", snap));
       }
 
+      if (share.targetId === null) throw gone();
       const lists = await db
         .select()
         .from(savedList)
-        .where(and(eq(savedList.id, share.targetId ?? ""), eq(savedList.userId, share.userId)))
+        .where(and(eq(savedList.id, share.targetId), eq(savedList.userId, share.userId)))
         .limit(1);
       const list = lists[0];
       if (!list) throw gone();
@@ -125,7 +126,6 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
           const expiresAt = body.expiresInDays
             ? new Date(now.getTime() + body.expiresInDays * DAY_MS)
             : null;
-          const id = crypto.randomUUID();
           const token = generateShareToken();
 
           let row: typeof shareLink.$inferInsert;
@@ -158,7 +158,6 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
               if (!snapshot) throw httpError(400, "Invalid list snapshot");
             }
             row = {
-              id,
               userId,
               tokenHash: hashShareToken(token),
               targetType: "list",
@@ -174,7 +173,6 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
             const route = validateRouteShare(body.route);
             if (!route) throw httpError(400, "Invalid route payload");
             row = {
-              id,
               userId,
               tokenHash: hashShareToken(token),
               targetType: "route",
@@ -188,7 +186,9 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
             };
           }
 
-          await tx.insert(shareLink).values(row);
+          const [inserted] = await tx.insert(shareLink).values(row).returning({ id: shareLink.id });
+          if (!inserted) throw httpError(500, "Share link was not created");
+          const { id } = inserted;
           return {
             id,
             token,

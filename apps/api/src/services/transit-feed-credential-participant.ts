@@ -1,7 +1,6 @@
 /** One finite managed-map adapter in the existing configuration writer/transaction. */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
 import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import {
@@ -530,7 +529,6 @@ export async function persistPreparedFeedCredentialRow(input: {
     .returning({ id: transitCredentialPreview.id });
   if (marked.length !== 1) throw new TransitCredentialConflict();
   await tx.insert(adminAuditLog).values({
-    id: randomUUID(),
     action: "transit.credentials.update",
     actorId: input.writer.actorId,
     targetType: "transit.credentials",

@@ -6,7 +6,7 @@ import { user } from "./auth-schema";
 export const dataDisclosureEvent = pgTable(
   "data_disclosure_event",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recipientId: text("recipient_id").notNull(),

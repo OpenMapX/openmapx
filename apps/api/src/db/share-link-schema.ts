@@ -1,5 +1,5 @@
-import { relations } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -13,7 +13,7 @@ import { user } from "./auth-schema";
 export const shareLink = pgTable(
   "share_link",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

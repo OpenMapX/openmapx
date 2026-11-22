@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   CREDENTIAL_TRANSFER_PREVIEW_INTENT,
@@ -71,7 +70,6 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           actorId: actor.user.id,
         });
         await db.insert(adminAuditLog).values({
-          id: randomUUID(),
           action: "credentials.export",
           actorId: actor.user.id,
           targetType: "credential-transfer",
@@ -115,7 +113,6 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           actorId: actor.user.id,
         });
         await db.insert(adminAuditLog).values({
-          id: randomUUID(),
           action: "credentials.import.preview",
           actorId: actor.user.id,
           targetType: "credential-transfer",

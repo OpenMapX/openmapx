@@ -26,7 +26,7 @@ function activityDetail(source = "application") {
   const date = new Date("2026-10-19T10:00:00.000Z");
   return {
     source,
-    id: "job-1",
+    id: "0193e4a0-0000-7000-8001-000000000001",
     type: "operation",
     status: source === "application" ? "running" : "partial",
     payload: { nested: [null, { extra: true }] },
@@ -39,14 +39,23 @@ function activityDetail(source = "application") {
     startedAt: date,
     finishedAt: null,
     cancelable: source === "application",
-    logs: [{ id: "log", jobId: "job-1", seq: 1, stream: "stderr", line: "hello", createdAt: date }],
+    logs: [
+      {
+        id: "log",
+        jobId: "0193e4a0-0000-7000-8001-000000000001",
+        seq: 1,
+        stream: "stderr",
+        line: "hello",
+        createdAt: date,
+      },
+    ],
     stages:
       source === "application"
         ? []
         : [
             {
               id: "stage",
-              jobId: "job-1",
+              jobId: "0193e4a0-0000-7000-8001-000000000001",
               stage: "download",
               status: "partial",
               startedAt: date,
@@ -118,7 +127,9 @@ describe("Activity canonical producer", () => {
       const job = activityDetail(source);
       detail.mockResolvedValue(job);
       try {
-        const res = await app.inject(`/admin/jobs/job-1?source=${source}`);
+        const res = await app.inject(
+          `/admin/jobs/0193e4a0-0000-7000-8001-000000000001?source=${source}`,
+        );
         expect(res.statusCode).toBe(200);
         expect(res.json()).toEqual(JSON.parse(JSON.stringify(job)));
       } finally {
@@ -133,14 +144,14 @@ describe("Activity canonical producer", () => {
     try {
       const blocked = await app.inject({
         method: "POST",
-        url: "/api/admin/jobs/job-1/cancel",
+        url: "/api/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel",
         headers: { cookie: "session=fake", origin: "https://evil.test" },
       });
       expect(blocked.statusCode).toBe(403);
       expect(cancel).not.toHaveBeenCalled();
       const accepted = await app.inject({
         method: "POST",
-        url: "/api/admin/jobs/job-1/cancel",
+        url: "/api/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel",
         headers: { cookie: "session=fake", origin: "https://app.test" },
       });
       expect(accepted.statusCode).toBe(200);
@@ -148,20 +159,25 @@ describe("Activity canonical producer", () => {
       expect(mocks.writeAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "job.cancel",
-          targetId: "job-1",
+          targetId: "0193e4a0-0000-7000-8001-000000000001",
           actorId: mocks.session.user.id,
         }),
       );
       cancel.mockResolvedValue(false);
       expect(
-        (await app.inject({ method: "POST", url: "/api/admin/jobs/job-1/cancel" })).statusCode,
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel",
+          })
+        ).statusCode,
       ).toBe(400);
       cancel.mockClear();
       expect(
         (
           await app.inject({
             method: "POST",
-            url: "/api/admin/jobs/job-1/cancel?source=data-manager",
+            url: "/api/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel?source=data-manager",
           })
         ).statusCode,
       ).toBe(400);
@@ -173,14 +189,16 @@ describe("Activity canonical producer", () => {
   it("returns canonical missing, exception and malformed-output errors", async () => {
     const app = await createAdminTestApp(adminActivityRoute);
     try {
-      expect((await app.inject("/admin/jobs/missing")).statusCode).toBe(404);
+      expect(
+        (await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000f03")).statusCode,
+      ).toBe(404);
       list.mockRejectedValueOnce(new Error("Domain failed"));
       expect((await app.inject("/admin/jobs")).json()).toMatchObject({
         statusCode: 500,
         message: "Domain failed",
       });
       detail.mockResolvedValue({ ...activityDetail(), secret: "must-not-leak" });
-      const res = await app.inject("/admin/jobs/job-1");
+      const res = await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000001");
       expect(res.statusCode).toBe(500);
       expect(res.body).not.toContain("must-not-leak");
     } finally {
@@ -214,12 +232,22 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
       for (const source of ["application", "data-manager"] as const) {
         const job = activityDetail(source);
         detail.mockResolvedValue(job);
-        expect(await sdk.getAdminActivityJob("job-1", { source }, { client })).toMatchObject({
+        expect(
+          await sdk.getAdminActivityJob(
+            "0193e4a0-0000-7000-8001-000000000001",
+            { source },
+            { client },
+          ),
+        ).toMatchObject({
           status: 200,
           data: JSON.parse(JSON.stringify(job)),
         });
       }
-      expect(await sdk.cancelAdminActivityJob("job-1", undefined, { client })).toMatchObject({
+      expect(
+        await sdk.cancelAdminActivityJob("0193e4a0-0000-7000-8001-000000000001", undefined, {
+          client,
+        }),
+      ).toMatchObject({
         status: 200,
         data: { ok: true },
       });
@@ -245,14 +273,14 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
     try {
       const response = await app.inject({
         method: "POST",
-        url: "/admin/jobs/durable-data-id/cancel?source=data-manager",
+        url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000f04/cancel?source=data-manager",
       });
       expect(response.statusCode).toBe(200);
-      expect(cancelData).toHaveBeenCalledWith("durable-data-id");
+      expect(cancelData).toHaveBeenCalledWith("0193e4a0-0000-7000-8001-000000000f04");
       expect(cancel).not.toHaveBeenCalled();
       expect(mocks.writeAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          targetId: "durable-data-id",
+          targetId: "0193e4a0-0000-7000-8001-000000000f04",
           targetType: "data-manager-job",
           action: "job.cancel",
         }),
@@ -278,12 +306,23 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
         });
       }
       expect(
-        await sdk.cancelAdminActivityJob("job-1", { source: "data-manager" }, { client }),
+        await sdk.cancelAdminActivityJob(
+          "0193e4a0-0000-7000-8001-000000000001",
+          { source: "data-manager" },
+          { client },
+        ),
       ).toMatchObject({
         status: 400,
         data: { error: "Job cannot be canceled (not running or queued)" },
       });
       expect(await sdk.getAdminActivityJob("missing", undefined, { client })).toMatchObject({
+        status: 400,
+      });
+      expect(
+        await sdk.getAdminActivityJob("0193e4a0-0000-7000-8001-000000000f03", undefined, {
+          client,
+        }),
+      ).toMatchObject({
         status: 404,
         data: { error: "Job not found" },
       });
@@ -350,7 +389,7 @@ it("serializes retained failure and observation evidence through the actual SDK 
       },
     };
     detail.mockResolvedValue({ ...activityDetail(), status: "cancel_pending", result: evidence });
-    const response = await app.inject("/admin/jobs/job-1");
+    const response = await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000001");
     expect(response.statusCode).toBe(200);
     expect(response.json().result).toEqual(evidence);
     // The generated JSON result decoder must preserve this same producer shape.
@@ -363,14 +402,16 @@ it("serializes retained failure and observation evidence through the actual SDK 
         }),
     );
     const client = createApiClient({ baseUrl: "http://api.test" });
-    expect(await getAdminActivityJob("job-1", {}, { client })).toMatchObject({
+    expect(
+      await getAdminActivityJob("0193e4a0-0000-7000-8001-000000000001", {}, { client }),
+    ).toMatchObject({
       data: { result: evidence },
     });
     detail.mockResolvedValue({
       ...activityDetail(),
       result: { _execution: { owner: "private", version: 1 } },
     });
-    const rejected = await app.inject("/admin/jobs/job-1");
+    const rejected = await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000001");
     expect(rejected.statusCode).toBe(500);
     expect(rejected.body).not.toContain("private");
   } finally {
@@ -384,8 +425,8 @@ it.each([401, 403])(
     const app = await createAdminTestApp(adminActivityRoute);
     try {
       for (const [method, url] of [
-        ["GET", "/admin/jobs/job-1"],
-        ["POST", "/admin/jobs/job-1/cancel"],
+        ["GET", "/admin/jobs/0193e4a0-0000-7000-8001-000000000001"],
+        ["POST", "/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel"],
       ] as const) {
         mocks.requireAdmin.mockRejectedValueOnce(
           Object.assign(new Error("Denied"), { statusCode }),

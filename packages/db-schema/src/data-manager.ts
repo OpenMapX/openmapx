@@ -25,7 +25,7 @@ export const dataManager = pgSchema("data_manager");
 export const jobs = dataManager.table(
   "jobs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     /** e.g. "transit-sync", "download-osm" */
     kind: text("kind").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
@@ -139,7 +139,7 @@ export const configurationFence = dataManager.table(
 export const jobStages = dataManager.table(
   "job_stages",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     jobId: uuid("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
@@ -160,7 +160,7 @@ export const jobStages = dataManager.table(
 );
 
 export const feedState = dataManager.table("feed_state", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().default(sql`uuidv7()`),
   /** e.g. "de" */
   region: text("region").notNull(),
   /** Source name from feeds/<region>.json */

@@ -35,7 +35,7 @@ CREATE TABLE "account_admin_guard" (
 );
 --> statement-breakpoint
 CREATE TABLE "account_mail_outbox" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"request_key" text NOT NULL,
 	"user_id" text NOT NULL,
 	"kind" text NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE "account_mail_outbox" (
 );
 --> statement-breakpoint
 CREATE TABLE "admin_action_reauthentication" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"actor_id" text NOT NULL,
 	"starting_session_id" text NOT NULL,
 	"purpose" text NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE "admin_action_reauthentication" (
 );
 --> statement-breakpoint
 CREATE TABLE "admin_audit_log" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"actor_id" text,
 	"target_id" text,
 	"target_type" text,
@@ -86,7 +86,7 @@ CREATE TABLE "admin_audit_log" (
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"type" text NOT NULL,
 	"status" text DEFAULT 'queued' NOT NULL,
 	"payload" jsonb,
@@ -102,7 +102,7 @@ CREATE TABLE "admin_job" (
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
 	"id" text PRIMARY KEY NOT NULL,
-	"job_id" text NOT NULL,
+	"job_id" uuid NOT NULL,
 	"seq" integer NOT NULL,
 	"stream" text DEFAULT 'stdout' NOT NULL,
 	"line" text NOT NULL,
@@ -110,7 +110,7 @@ CREATE TABLE "admin_job_log" (
 );
 --> statement-breakpoint
 CREATE TABLE "app_logs" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "app_logs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
 	"level" text NOT NULL,
 	"source" text NOT NULL,
 	"msg" text NOT NULL,
@@ -146,7 +146,7 @@ CREATE TABLE "capability_binding" (
 );
 --> statement-breakpoint
 CREATE TABLE "configuration_migration_preview" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"actor_id" text NOT NULL,
 	"kind" text NOT NULL,
 	"intent_fingerprint" text NOT NULL,
@@ -154,13 +154,13 @@ CREATE TABLE "configuration_migration_preview" (
 	"iv" text NOT NULL,
 	"tag" text NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
-	"consumed_by_job_id" text,
+	"consumed_by_job_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "configuration_migration_preview_bounds" CHECK ("configuration_migration_preview"."kind" in ('migration','credentials') and length("configuration_migration_preview"."id") = 36 and "configuration_migration_preview"."intent_fingerprint" ~ '^[a-f0-9]{64}$' and octet_length("configuration_migration_preview"."ciphertext") <= 1572864 and length("configuration_migration_preview"."iv") = 16 and length("configuration_migration_preview"."tag") = 24 and "configuration_migration_preview"."expires_at" > "configuration_migration_preview"."created_at" and "configuration_migration_preview"."expires_at" <= "configuration_migration_preview"."created_at" + interval '10 minutes' and ("configuration_migration_preview"."consumed_by_job_id" is null or length("configuration_migration_preview"."consumed_by_job_id") = 36))
+	CONSTRAINT "configuration_migration_preview_bounds" CHECK ("configuration_migration_preview"."kind" in ('migration','credentials') and "configuration_migration_preview"."intent_fingerprint" ~ '^[a-f0-9]{64}$' and octet_length("configuration_migration_preview"."ciphertext") <= 1572864 and length("configuration_migration_preview"."iv") = 16 and length("configuration_migration_preview"."tag") = 24 and "configuration_migration_preview"."expires_at" > "configuration_migration_preview"."created_at" and "configuration_migration_preview"."expires_at" <= "configuration_migration_preview"."created_at" + interval '10 minutes')
 );
 --> statement-breakpoint
 CREATE TABLE "data_disclosure_event" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text,
 	"occurred_at" timestamp with time zone NOT NULL,
 	"recipient_id" text NOT NULL,
@@ -197,7 +197,7 @@ CREATE TABLE "data_manager"."configuration_fence" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."feed_state" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"region" text NOT NULL,
 	"name" text NOT NULL,
 	"last_fetched_at" timestamp with time zone,
@@ -210,7 +210,7 @@ CREATE TABLE "data_manager"."feed_state" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."job_stages" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"job_id" uuid NOT NULL,
 	"stage" text NOT NULL,
 	"status" text NOT NULL,
@@ -223,7 +223,7 @@ CREATE TABLE "data_manager"."job_stages" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."jobs" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"kind" text NOT NULL,
 	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"finished_at" timestamp with time zone,
@@ -283,7 +283,7 @@ CREATE TABLE "data_manager"."offline_package_jobs" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"kind" text NOT NULL,
 	"channel" text NOT NULL,
 	"user_id" text,
@@ -319,7 +319,7 @@ CREATE TABLE "data_subject_request" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request_event" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"request_id" uuid NOT NULL,
 	"event_type" text NOT NULL,
 	"actor_kind" text NOT NULL,
@@ -332,7 +332,7 @@ CREATE TABLE "data_subject_request_event" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request_notification" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"request_id" uuid NOT NULL,
 	"recipient_user_id" text,
 	"template" text NOT NULL,
@@ -354,7 +354,7 @@ CREATE TABLE "data_subject_request_notification" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request_preservation" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"request_id" uuid NOT NULL,
 	"registration_id" text NOT NULL,
 	"source_cutoff_at" timestamp with time zone NOT NULL,
@@ -366,7 +366,7 @@ CREATE TABLE "data_subject_request_preservation" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request_task" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"request_id" uuid NOT NULL,
 	"registration_id" text NOT NULL,
 	"source" text NOT NULL,
@@ -380,7 +380,7 @@ CREATE TABLE "data_subject_request_task" (
 );
 --> statement-breakpoint
 CREATE TABLE "health_history" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "health_history_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
 	"service_id" text NOT NULL,
 	"status" text NOT NULL,
 	"response_time" integer,
@@ -457,7 +457,7 @@ CREATE TABLE "jwks" (
 );
 --> statement-breakpoint
 CREATE TABLE "labeled_place" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"label" text NOT NULL,
 	"icon" text,
@@ -480,7 +480,7 @@ CREATE TABLE "mangrove_keypair" (
 );
 --> statement-breakpoint
 CREATE TABLE "mangrove_keypair_wrap" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"wrap_type" text NOT NULL,
 	"label" text NOT NULL,
@@ -631,9 +631,9 @@ CREATE TABLE "oauth_resource" (
 );
 --> statement-breakpoint
 CREATE TABLE "parked_location" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
-	"vehicle_id" text,
+	"vehicle_id" uuid,
 	"lat" double precision NOT NULL,
 	"lng" double precision NOT NULL,
 	"address" text,
@@ -661,7 +661,7 @@ CREATE TABLE "passkey" (
 );
 --> statement-breakpoint
 CREATE TABLE "personal_timeline_connection" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"mode" text NOT NULL,
 	"public_origin" text NOT NULL,
@@ -683,7 +683,7 @@ CREATE TABLE "personal_timeline_connection" (
 );
 --> statement-breakpoint
 CREATE TABLE "personal_vehicle" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"kind" text NOT NULL,
@@ -698,7 +698,7 @@ CREATE TABLE "personal_vehicle" (
 );
 --> statement-breakpoint
 CREATE TABLE "platform_configuration_preview" (
-	"id" uuid PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"actor_id" text NOT NULL,
 	"operation_key" text NOT NULL,
 	"request_fingerprint" text NOT NULL,
@@ -716,7 +716,7 @@ CREATE TABLE "platform_configuration_preview" (
 );
 --> statement-breakpoint
 CREATE TABLE "saved_list" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"icon" text,
@@ -728,8 +728,8 @@ CREATE TABLE "saved_list" (
 );
 --> statement-breakpoint
 CREATE TABLE "saved_place" (
-	"id" text PRIMARY KEY NOT NULL,
-	"list_id" text NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"list_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"address" text,
 	"lat" double precision NOT NULL,
@@ -798,7 +798,7 @@ CREATE TABLE "session_auth_assurance" (
 );
 --> statement-breakpoint
 CREATE TABLE "share_link" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" text NOT NULL,
 	"token_hash" text NOT NULL,
 	"target_type" text NOT NULL,
@@ -820,7 +820,7 @@ CREATE TABLE "system_settings" (
 );
 --> statement-breakpoint
 CREATE TABLE "transit_credential_preview" (
-	"id" uuid PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"actor_id" text NOT NULL,
 	"operation_key" text NOT NULL,
 	"intent_fingerprint" text NOT NULL,

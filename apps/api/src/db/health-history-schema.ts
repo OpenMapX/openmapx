@@ -1,9 +1,9 @@
-import { index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const healthHistory = pgTable(
   "health_history",
   {
-    id: serial("id").primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     serviceId: text("service_id").notNull(),
     status: text("status").notNull(), // healthy | unhealthy | degraded | error
     responseTime: integer("response_time"), // ms

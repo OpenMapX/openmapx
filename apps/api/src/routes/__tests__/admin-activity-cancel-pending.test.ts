@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 it("keeps the real runner's durable pending outcome observable through Fastify and the generated SDK", async () => {
   const at = "2026-10-19 10:00:00+00"; // PostgreSQL timestamptz driver value in a UTC session.
   const row = {
-    id: "pending-job",
+    id: "0193e4a0-0000-7000-8001-000000000005",
     type: "data.operation",
     status: "running",
     payload: { operation: "link" },

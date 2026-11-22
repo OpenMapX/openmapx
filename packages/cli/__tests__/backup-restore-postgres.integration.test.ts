@@ -491,8 +491,8 @@ INSERT INTO data_subject_request
 VALUES
   ('${ACTIVE_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'in_progress', now(), now() + interval '30 days', 'account_session', now()),
   ('${TERMINAL_REQUEST_ID}', 'access_and_portability', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'completed', now(), now() + interval '30 days', 'account_session', now());
-INSERT INTO admin_audit_log (id, actor_id, target_id, target_type, action, details, ip_address, user_agent)
-VALUES ('deleted-audit', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
+INSERT INTO admin_audit_log (actor_id, target_id, target_type, action, details, ip_address, user_agent)
+VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
 INSERT INTO app_logs (level, source, msg, metadata)
 VALUES ('warn', 'fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
 COMMIT;
@@ -574,7 +574,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     ).toBe("completed:deleted");
     expect(
       await psql(
-        "SELECT (actor_id IS NULL)::text || ':' || (target_id IS NULL)::text || ':' || (details IS NULL)::text || ':' || (ip_address IS NULL)::text || ':' || (user_agent IS NULL)::text FROM admin_audit_log WHERE id = 'deleted-audit';",
+        "SELECT (actor_id IS NULL)::text || ':' || (target_id IS NULL)::text || ':' || (details IS NULL)::text || ':' || (ip_address IS NULL)::text || ':' || (user_agent IS NULL)::text FROM admin_audit_log WHERE action = 'fixture';",
       ),
     ).toBe("true:true:true:true:true");
     expect(await psql("SELECT count(*) FROM app_logs WHERE source = 'fixture';")).toBe("0");
@@ -792,15 +792,15 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
     const sent = (observed: string) =>
       `[{"ordinal":0,"evidence":null,"binding":{},"delegation":{},"owner":{"cancellationRequestedAt":null,"observed":${observed}}}]`;
     await psql(`
-INSERT INTO admin_job (id, type, status, finished_at)
+INSERT INTO admin_job (payload, type, status, finished_at)
 VALUES
-  ('job-queued', 'system.update', 'queued', NULL),
-  ('job-running', 'service.start', 'running', NULL),
-  ('job-cancel-pending', 'backup.operation', 'cancel_pending', NULL),
-  ('job-success', 'system.update', 'success', now()),
-  ('job-failed', 'system.update', 'failed', now()),
-  ('job-canceled', 'system.diagnostics', 'canceled', now());
-UPDATE admin_job SET error = 'original failure' WHERE id = 'job-failed';
+  ('{"label":"job-queued"}', 'system.update', 'queued', NULL),
+  ('{"label":"job-running"}', 'service.start', 'running', NULL),
+  ('{"label":"job-cancel-pending"}', 'backup.operation', 'cancel_pending', NULL),
+  ('{"label":"job-success"}', 'system.update', 'success', now()),
+  ('{"label":"job-failed"}', 'system.update', 'failed', now()),
+  ('{"label":"job-canceled"}', 'system.diagnostics', 'canceled', now());
+UPDATE admin_job SET error = 'original failure' WHERE payload->>'label' = 'job-failed';
 INSERT INTO data_manager.jobs (id, kind, status, finished_at, metadata)
 VALUES
   ('00000000-0000-4000-8000-000000000001', 'transitous-sync', 'running', NULL, '{"region":"de"}'),
@@ -831,7 +831,11 @@ VALUES
 
     await restoreBackup({ rootDir: fixture.root, name: "in-progress-jobs", stopRunning: true });
 
-    expect(await psql("SELECT id || '=' || status FROM admin_job ORDER BY id COLLATE \"C\";")).toBe(
+    expect(
+      await psql(
+        "SELECT payload->>'label' || '=' || status FROM admin_job ORDER BY payload->>'label' COLLATE \"C\";",
+      ),
+    ).toBe(
       [
         "job-cancel-pending=failed",
         "job-canceled=canceled",
@@ -843,7 +847,7 @@ VALUES
     );
     expect(
       await psql(
-        "SELECT id || '|' || error FROM admin_job WHERE status = 'failed' AND error IS NOT NULL ORDER BY id COLLATE \"C\";",
+        "SELECT payload->>'label' || '|' || error FROM admin_job WHERE status = 'failed' AND error IS NOT NULL ORDER BY payload->>'label' COLLATE \"C\";",
       ),
     ).toBe(
       [

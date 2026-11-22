@@ -5,7 +5,7 @@ import { user } from "./auth-schema";
 export const transitCredentialPreview = pgTable(
   "transit_credential_preview",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     actorId: text("actor_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

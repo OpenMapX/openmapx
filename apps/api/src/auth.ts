@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { i18n } from "@better-auth/i18n";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
@@ -200,7 +199,6 @@ function createPolicyAuth(
         await currentAuthDatabase()
           .insert(adminAuditLog)
           .values({
-            id: randomUUID(),
             actorId: null,
             targetType: "user",
             targetId: user.id,

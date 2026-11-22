@@ -61,7 +61,7 @@ export type PrivacyNotificationState = (typeof PRIVACY_NOTIFICATION_STATES)[numb
 export const dataSubjectRequest = pgTable(
   "data_subject_request",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     kind: text("kind").$type<RequestKind>().notNull(),
     channel: text("channel").$type<RequestChannel>().notNull(),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
@@ -128,7 +128,7 @@ export const dataSubjectRequest = pgTable(
 export const dataSubjectRequestEvent = pgTable(
   "data_subject_request_event",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id")
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
@@ -155,7 +155,7 @@ export const dataSubjectRequestEvent = pgTable(
 export const dataSubjectRequestTask = pgTable(
   "data_subject_request_task",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id")
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
@@ -181,7 +181,7 @@ export const dataSubjectRequestTask = pgTable(
 export const dataSubjectRequestPreservation = pgTable(
   "data_subject_request_preservation",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id")
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
@@ -211,7 +211,7 @@ export const dataSubjectRequestPreservation = pgTable(
 export const dataSubjectRequestNotification = pgTable(
   "data_subject_request_notification",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id")
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),

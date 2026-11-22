@@ -30,6 +30,10 @@
       "types": "./src/database-session.ts",
       "default": "./src/database-session.ts"
     },
+    "./ids/uuidv7": {
+      "types": "./src/ids/uuidv7.ts",
+      "default": "./src/ids/uuidv7.ts"
+    },
     "./deployment-secret-policy": {
       "types": "./src/deployment-secret-policy.ts",
       "default": "./src/deployment-secret-policy.ts"

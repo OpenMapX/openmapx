@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { APIError } from "better-auth/api";
 import { and, eq, sql } from "drizzle-orm";
 import z from "zod/v4";
@@ -144,7 +144,6 @@ async function roleChange<T>(input: RoleChange, tx: AuthDatabase, write: () => P
   if (changed) {
     await tx.delete(session).where(eq(session.userId, input.userId));
     await tx.insert(adminAuditLog).values({
-      id: randomUUID(),
       actorId: input.actorId,
       targetId: input.userId,
       targetType: "user",

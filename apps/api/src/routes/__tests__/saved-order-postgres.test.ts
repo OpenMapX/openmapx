@@ -19,6 +19,7 @@ vi.mock("../../utils/require-auth", () => ({
 
 const EARLIER = new Date("2026-10-01T10:00:00Z");
 const LATER = new Date("2026-10-01T11:00:00Z");
+const LIST_ID = "0193e4a0-0000-7000-8000-0000000000b1";
 
 // Equal positions only tie in a real table, and the row order a database returns
 // for a tie is unspecified, so a mocked query cannot show that the order is fixed.
@@ -54,10 +55,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 60_000);
 
-    const place = (id: string, sortOrder: number, createdAt: Date) => ({
-      id,
-      listId: "order-places",
-      name: id,
+    // Ids sort in the same order as the names.
+    const PLACE_IDS: Record<string, string> = {
+      a: "0193e4a0-0000-7000-8000-000000000011",
+      b: "0193e4a0-0000-7000-8000-000000000012",
+      x: "0193e4a0-0000-7000-8000-000000000013",
+      y: "0193e4a0-0000-7000-8000-000000000014",
+      z: "0193e4a0-0000-7000-8000-000000000015",
+    };
+    const place = (name: string, sortOrder: number, createdAt: Date) => ({
+      id: PLACE_IDS[name],
+      listId: LIST_ID,
+      name,
       lat: 52,
       lng: 13,
       sortOrder,
@@ -67,7 +76,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     async function seedPlaces(): Promise<void> {
       await fixture.db
         .insert(savedList)
-        .values({ id: "order-places", userId: "order-user", name: "Ties" });
+        .values({ id: LIST_ID, userId: "order-user", name: "Ties" });
       // Inserted in an order that matches none of the expected results.
       await fixture.db
         .insert(savedPlace)
@@ -85,15 +94,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("lists places with equal positions in creation then id order", async () => {
       await seedPlaces();
-      const res = await app.inject({ method: "GET", url: "/api/saved/lists/order-places/places" });
+      const res = await app.inject({ method: "GET", url: `/api/saved/lists/${LIST_ID}/places` });
       expect(res.statusCode).toBe(200);
-      expect(res.json().places.map((p: { id: string }) => p.id)).toEqual(EXPECTED);
+      expect(res.json().places.map((p: { name: string }) => p.name)).toEqual(EXPECTED);
     });
 
     it("exports places with equal positions in the same order", async () => {
       const res = await app.inject({
         method: "GET",
-        url: "/api/saved/lists/order-places/export?format=geojson",
+        url: `/api/saved/lists/${LIST_ID}/export?format=geojson`,
       });
       expect(res.statusCode).toBe(200);
       expect(
@@ -105,7 +114,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const created = await app.inject({
         method: "POST",
         url: "/api/shares",
-        payload: { targetType: "list", targetId: "order-places", mode: "live" },
+        payload: { targetType: "list", targetId: LIST_ID, mode: "live" },
       });
       expect(created.statusCode).toBe(201);
       const shared = await app.inject({
@@ -127,10 +136,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       await fixture.db
         .insert(savedList)
-        .values([list("l-c", LATER), list("l-b", EARLIER), list("l-a", EARLIER)]);
+        .values([
+          list("0193e4a0-0000-7000-8000-0000000000c3", LATER),
+          list("0193e4a0-0000-7000-8000-0000000000c2", EARLIER),
+          list("0193e4a0-0000-7000-8000-0000000000c1", EARLIER),
+        ]);
       const res = await app.inject({ method: "GET", url: "/api/saved/lists" });
       expect(res.statusCode).toBe(200);
-      expect(res.json().lists.map((l: { id: string }) => l.id)).toEqual(["l-a", "l-b", "l-c"]);
+      expect(res.json().lists.map((l: { id: string }) => l.id)).toEqual([
+        "0193e4a0-0000-7000-8000-0000000000c1",
+        "0193e4a0-0000-7000-8000-0000000000c2",
+        "0193e4a0-0000-7000-8000-0000000000c3",
+      ]);
     });
   },
 );

@@ -259,9 +259,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
         .onConflictDoNothing()
         .returning({ revision: mangroveKeypair.revision });
       if (!created) throw httpError(409, "Keypair revision conflict");
-      await tx
-        .insert(mangroveKeypairWrap)
-        .values(state.wraps.map((w) => ({ id: randomUUID(), userId, ...w })));
+      await tx.insert(mangroveKeypairWrap).values(state.wraps.map((w) => ({ userId, ...w })));
     });
     return reply.status(201).send({ revision });
   });
@@ -284,9 +282,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
         .returning({ revision: mangroveKeypair.revision });
       if (!updated) throw httpError(409, "Keypair revision conflict");
       await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
-      await tx
-        .insert(mangroveKeypairWrap)
-        .values(state.wraps.map((w) => ({ id: randomUUID(), userId, ...w })));
+      await tx.insert(mangroveKeypairWrap).values(state.wraps.map((w) => ({ userId, ...w })));
     });
     return reply.send({ revision });
   });

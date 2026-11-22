@@ -7,11 +7,13 @@ vi.mock("../../utils/require-auth.js", () => ({
   getUserId: vi.fn(() => "user-1"),
 }));
 
-const listRows: Array<{ id: string; name: string }> = [{ id: "list-1", name: "$favorites" }];
+const listRows: Array<{ id: string; name: string }> = [
+  { id: "0193e4a0-0000-7000-8000-000000000001", name: "$favorites" },
+];
 const placeRows: Array<Record<string, unknown>> = [
   {
-    id: "pl-1",
-    listId: "list-1",
+    id: "0193e4a0-0000-7000-8000-000000000101",
+    listId: "0193e4a0-0000-7000-8000-000000000001",
     name: "Brandenburg Gate",
     address: "Pariser Platz",
     lat: 52.5163,
@@ -71,7 +73,10 @@ function primeListAndPlaces() {
 describe("GET /api/saved/lists/:id/export", () => {
   it("defaults to geojson and returns a FeatureCollection with [lng,lat]", async () => {
     primeListAndPlaces();
-    const res = await app.inject({ method: "GET", url: "/api/saved/lists/list-1/export" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export",
+    });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("application/geo+json");
     const fc = res.json();
@@ -82,7 +87,10 @@ describe("GET /api/saved/lists/:id/export", () => {
 
   it("reads places by position, then creation time, then id so equal positions export in one order", async () => {
     primeListAndPlaces();
-    await app.inject({ method: "GET", url: "/api/saved/lists/list-1/export" });
+    await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export",
+    });
     const placeQuery = itemAt(mockSelect.mock.results, 1).value as {
       orderBy: { mock: { calls: unknown[][] } };
     };
@@ -93,7 +101,7 @@ describe("GET /api/saved/lists/:id/export", () => {
     primeListAndPlaces();
     const res = await app.inject({
       method: "GET",
-      url: "/api/saved/lists/list-1/export?format=gpx",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export?format=gpx",
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("application/gpx+xml");
@@ -107,7 +115,7 @@ describe("GET /api/saved/lists/:id/export", () => {
     primeListAndPlaces();
     const res = await app.inject({
       method: "GET",
-      url: "/api/saved/lists/list-1/export?format=kml",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export?format=kml",
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("kml");
@@ -119,7 +127,10 @@ describe("GET /api/saved/lists/:id/export", () => {
   it("404s when the list is not owned / not found", async () => {
     selectQueue.length = 0;
     selectQueue.push([]);
-    const res = await app.inject({ method: "GET", url: "/api/saved/lists/nope/export" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000f03/export",
+    });
     expect(res.statusCode).toBe(404);
   });
 
@@ -127,7 +138,7 @@ describe("GET /api/saved/lists/:id/export", () => {
     primeListAndPlaces();
     const res = await app.inject({
       method: "GET",
-      url: "/api/saved/lists/list-1/export?format=csv",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export?format=csv",
     });
     expect(res.statusCode).toBe(400);
   });

@@ -1,4 +1,5 @@
 import type { EvVehicleSpec, ParkedSource, VehicleKind, VehiclePowertrain } from "@openmapx/core";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -8,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
@@ -22,7 +24,7 @@ export const PERSONAL_VEHICLE_NAME_UNIQUE = "personalVehicle_userId_name_unq";
 export const personalVehicle = pgTable(
   "personal_vehicle",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -58,11 +60,11 @@ export const personalVehicle = pgTable(
 export const parkedLocation = pgTable(
   "parked_location",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    vehicleId: text("vehicle_id").references(() => personalVehicle.id, { onDelete: "cascade" }),
+    vehicleId: uuid("vehicle_id").references(() => personalVehicle.id, { onDelete: "cascade" }),
     lat: doublePrecision("lat").notNull(),
     lng: doublePrecision("lng").notNull(),
     address: text("address"),

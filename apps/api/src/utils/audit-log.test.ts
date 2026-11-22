@@ -52,7 +52,8 @@ describe("writeAuditLog", () => {
       ipAddress: "203.0.113.5",
       userAgent: "vitest-ua",
     });
-    expect(typeof values.id).toBe("string");
+    // The database assigns the id.
+    expect(values).not.toHaveProperty("id");
   });
 
   it("maps the loopback sentinel actor to null with a tagged user-agent", async () => {

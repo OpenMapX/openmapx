@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   type AuthPolicySettings,
   type AuthPolicySnapshot,
@@ -169,7 +169,6 @@ export async function applyAuthPolicy(
           set: { value, updatedBy: actorId, updatedAt: new Date() },
         });
     await tx.insert(adminAuditLog).values({
-      id: randomUUID(),
       actorId,
       targetType: "auth-policy",
       targetId: result.revision,

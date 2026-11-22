@@ -1,6 +1,6 @@
 {
-  "id": "43994a87-6df1-4c92-b773-9dd40029e29a",
-  "prevId": "a4462ec4-a669-4c28-8eea-382383fc6cdb",
+  "id": "8f20953e-4f31-4dc9-8935-326687e71d4c",
+  "prevId": "438bfe85-03ee-4082-9bd9-ce21a35bfeed",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -323,7 +323,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "request_key": {
           "name": "request_key",
@@ -490,7 +490,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "actor_id": {
           "name": "actor_id",
@@ -672,9 +672,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "actor_id": {
           "name": "actor_id",
@@ -800,9 +801,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "type": {
           "name": "type",
@@ -970,7 +972,7 @@
         },
         "job_id": {
           "name": "job_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1045,9 +1047,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "app_logs_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
+          }
         },
         "level": {
           "name": "level",
@@ -1334,9 +1347,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "actor_id": {
           "name": "actor_id",
@@ -1382,7 +1396,7 @@
         },
         "consumed_by_job_id": {
           "name": "consumed_by_job_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1453,7 +1467,7 @@
       "checkConstraints": {
         "configuration_migration_preview_bounds": {
           "name": "configuration_migration_preview_bounds",
-          "value": "\"configuration_migration_preview\".\"kind\" in ('migration','credentials') and length(\"configuration_migration_preview\".\"id\") = 36 and \"configuration_migration_preview\".\"intent_fingerprint\" ~ '^[a-f0-9]{64}$' and octet_length(\"configuration_migration_preview\".\"ciphertext\") <= 1572864 and length(\"configuration_migration_preview\".\"iv\") = 16 and length(\"configuration_migration_preview\".\"tag\") = 24 and \"configuration_migration_preview\".\"expires_at\" > \"configuration_migration_preview\".\"created_at\" and \"configuration_migration_preview\".\"expires_at\" <= \"configuration_migration_preview\".\"created_at\" + interval '10 minutes' and (\"configuration_migration_preview\".\"consumed_by_job_id\" is null or length(\"configuration_migration_preview\".\"consumed_by_job_id\") = 36)"
+          "value": "\"configuration_migration_preview\".\"kind\" in ('migration','credentials') and \"configuration_migration_preview\".\"intent_fingerprint\" ~ '^[a-f0-9]{64}$' and octet_length(\"configuration_migration_preview\".\"ciphertext\") <= 1572864 and length(\"configuration_migration_preview\".\"iv\") = 16 and length(\"configuration_migration_preview\".\"tag\") = 24 and \"configuration_migration_preview\".\"expires_at\" > \"configuration_migration_preview\".\"created_at\" and \"configuration_migration_preview\".\"expires_at\" <= \"configuration_migration_preview\".\"created_at\" + interval '10 minutes'"
         }
       },
       "isRLSEnabled": false
@@ -1467,7 +1481,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -1773,7 +1787,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "region": {
           "name": "region",
@@ -1849,7 +1863,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "job_id": {
           "name": "job_id",
@@ -1954,7 +1968,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "kind": {
           "name": "kind",
@@ -2435,7 +2449,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "kind": {
           "name": "kind",
@@ -2748,7 +2762,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "request_id": {
           "name": "request_id",
@@ -2882,7 +2896,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "request_id": {
           "name": "request_id",
@@ -3120,7 +3134,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "request_id": {
           "name": "request_id",
@@ -3247,7 +3261,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "request_id": {
           "name": "request_id",
@@ -3377,9 +3391,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "health_history_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
+          }
         },
         "service_id": {
           "name": "service_id",
@@ -4000,9 +4025,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -4176,9 +4202,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -5532,9 +5559,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -5544,7 +5572,7 @@
         },
         "vehicle_id": {
           "name": "vehicle_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -5810,9 +5838,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -5973,9 +6002,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -6096,7 +6126,8 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "actor_id": {
           "name": "actor_id",
@@ -6263,9 +6294,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -6367,13 +6399,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "list_id": {
           "name": "list_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -6945,9 +6978,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
@@ -7104,7 +7138,8 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "uuidv7()"
         },
         "actor_id": {
           "name": "actor_id",

@@ -416,6 +416,20 @@ declare it as `timestamp("…", { withTimezone: true })`. Better Auth's columns 
 OpenMapX opens runs with `TimeZone=UTC`, whatever the database's default time
 zone. The API's and data-manager's pools set it as a connection parameter, and
 the CLI sets `PGTZ=UTC` for every `psql`, `pg_dump` and `pg_restore` it runs in
-the database container. A new connection or database client must do the same.
+the database container. A new connection or database client must do the same,
+taking the zone from `DATABASE_SESSION_TIME_ZONE` in
+`@openmapx/core/database-session`.
 `apps/api/src/db/__tests__/time-zone-postgres.test.ts` checks the column types
 and the API's sessions on a database whose default time zone is not UTC.
+
+A random id in the app's own tables is a native `uuid` that the database
+assigns: ``uuid("id").primaryKey().default(sql`uuidv7()`)``. Insert without an
+id and read it back with `.returning()`. Where the code needs the id before
+the insert, for example to seal it into encrypted content, it takes one from
+`uuidv7()` in `@openmapx/core/ids/uuidv7`. A column that references such an id
+is `uuid` too, and a request schema that carries one uses `z.uuid()`, so a
+malformed id is refused with 400 before it reaches PostgreSQL. A counter key is
+`integer("id").primaryKey().generatedAlwaysAsIdentity()`, never `serial`.
+Better Auth's ids and natural keys, such as extension and integration ids, stay
+text. `apps/api/src/db/__tests__/id-strategy-postgres.test.ts` checks these
+rules in the catalog.

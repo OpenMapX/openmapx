@@ -1,5 +1,4 @@
 /** Closed staged issuers. Legacy batch intents cannot construct these participants. */
-import { randomUUID } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
 import { sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../../account/admin-reauthentication";
@@ -340,7 +339,6 @@ export async function prepareStagedMigrationParticipant(input: {
         }
       }
       await tx.insert(adminAuditLog).values({
-        id: randomUUID(),
         actorId: writer.actorId,
         action:
           stage.kind === "credentials"

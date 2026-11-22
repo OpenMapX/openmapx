@@ -145,7 +145,7 @@ describe("GET /api/saved/lists", () => {
   it("returns the caller's lists, scoped to their userId", async () => {
     dbMock.queueSelect([
       {
-        id: "list-1",
+        id: "0193e4a0-0000-7000-8000-000000000001",
         name: "$favorites",
         icon: "heart",
         isPrivate: true,
@@ -160,7 +160,7 @@ describe("GET /api/saved/lists", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().lists).toHaveLength(1);
-    expect(res.json().lists[0].id).toBe("list-1");
+    expect(res.json().lists[0].id).toBe("0193e4a0-0000-7000-8000-000000000001");
     // The list query must be filtered by the authenticated user's id.
     const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
@@ -170,7 +170,7 @@ describe("GET /api/saved/lists", () => {
   it("orders lists by position, then creation time, then id so equal positions keep one order", async () => {
     dbMock.queueSelect([
       {
-        id: "list-1",
+        id: "0193e4a0-0000-7000-8000-000000000001",
         name: "a",
         icon: "heart",
         isPrivate: true,
@@ -202,8 +202,10 @@ describe("GET /api/saved/lists", () => {
         0,
         0,
       );
+      // The database assigns the ids of the seeded rows.
       return makeQueryChain(
-        inserted.map(({ userId: _userId, ...row }) => ({
+        inserted.map(({ userId: _userId, ...row }, index) => ({
+          id: `0193e4a0-0000-7000-8000-00000000040${index}`,
           ...row,
           isPrivate: true,
           placeCount: 0,
@@ -224,7 +226,7 @@ describe("GET /api/saved/lists", () => {
     dbMock.queueInsert([]); // The competing request inserted the default names first.
     dbMock.queueSelect([
       {
-        id: "persisted-favorites",
+        id: "0193e4a0-0000-7000-8000-000000000301",
         name: "$favorites",
         icon: "heart",
         isPrivate: true,
@@ -234,7 +236,7 @@ describe("GET /api/saved/lists", () => {
         placeCount: 2,
       },
       {
-        id: "persisted-want-to-go",
+        id: "0193e4a0-0000-7000-8000-000000000302",
         name: "$wantToGo",
         icon: "flag",
         isPrivate: true,
@@ -244,7 +246,7 @@ describe("GET /api/saved/lists", () => {
         placeCount: 0,
       },
       {
-        id: "persisted-starred",
+        id: "0193e4a0-0000-7000-8000-000000000303",
         name: "$starredPlaces",
         icon: "star",
         isPrivate: true,
@@ -259,9 +261,9 @@ describe("GET /api/saved/lists", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().lists.map((list: { id: string }) => list.id)).toEqual([
-      "persisted-favorites",
-      "persisted-want-to-go",
-      "persisted-starred",
+      "0193e4a0-0000-7000-8000-000000000301",
+      "0193e4a0-0000-7000-8000-000000000302",
+      "0193e4a0-0000-7000-8000-000000000303",
     ]);
     expect(res.json().lists.map((list: { placeCount: number }) => list.placeCount)).toEqual([
       2, 0, 1,
@@ -346,7 +348,7 @@ describe("PATCH /api/saved/lists/:id name conflicts", () => {
     );
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/lists/list-1",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001",
       payload: { name: "Taken" },
     });
     expect(res.statusCode).toBe(409);
@@ -367,7 +369,7 @@ describe("PATCH /api/saved/lists/:id name conflicts", () => {
     );
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/lists/list-1",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001",
       payload: { name: "Taken" },
     });
     expect(res.statusCode).toBe(500);
@@ -377,11 +379,11 @@ describe("PATCH /api/saved/lists/:id name conflicts", () => {
 describe("PATCH /api/saved/lists/:id", () => {
   it("updates a list owned by the caller and scopes the update by userId", async () => {
     dbMock.queueSelect([{ name: "My Places" }]); // ownership lookup
-    dbMock.queueUpdate([{ id: "list-9" }]); // returning() rows
+    dbMock.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000009" }]); // returning() rows
 
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/lists/list-9",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000009",
       payload: { name: "Renamed" },
     });
 
@@ -398,7 +400,7 @@ describe("PATCH /api/saved/lists/:id", () => {
 
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/lists/someone-elses-list",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000f02",
       payload: { name: "Hijack" },
     });
 
@@ -412,11 +414,11 @@ describe("PATCH /api/saved/lists/:id", () => {
 
   it("does not rename a default ($) list but still applies allowed fields", async () => {
     dbMock.queueSelect([{ name: "$favorites" }]);
-    dbMock.queueUpdate([{ id: "list-1" }]);
+    dbMock.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
 
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/lists/list-1",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001",
       payload: { name: "Hacked", sortOrder: 5 },
     });
 
@@ -436,7 +438,10 @@ describe("DELETE /api/saved/lists/:id", () => {
   it("deletes a user-owned non-default list, scoped by userId", async () => {
     dbMock.queueSelect([{ name: "Trip" }]);
 
-    const res = await app.inject({ method: "DELETE", url: "/api/saved/lists/list-7" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000007",
+    });
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
@@ -448,16 +453,30 @@ describe("DELETE /api/saved/lists/:id", () => {
   it("404s and issues no delete when the list isn't owned by the caller", async () => {
     dbMock.queueSelect([]);
 
-    const res = await app.inject({ method: "DELETE", url: "/api/saved/lists/foreign" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000f01",
+    });
 
     expect(res.statusCode).toBe(404);
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses an id that is not a UUID before reading the database", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/api/saved/lists/list-1" });
+
+    expect(res.statusCode).toBe(400);
+    expect(dbMock.db.select).not.toHaveBeenCalled();
     expect(dbMock.db.delete).not.toHaveBeenCalled();
   });
 
   it("refuses to delete a default ($) list with 400", async () => {
     dbMock.queueSelect([{ name: "$favorites" }]);
 
-    const res = await app.inject({ method: "DELETE", url: "/api/saved/lists/list-1" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001",
+    });
 
     expect(res.statusCode).toBe(400);
     expect(dbMock.db.delete).not.toHaveBeenCalled();
@@ -466,11 +485,11 @@ describe("DELETE /api/saved/lists/:id", () => {
 
 describe("GET /api/saved/lists/:id/places", () => {
   it("returns a list's places after confirming ownership", async () => {
-    dbMock.queueSelect([{ id: "list-1" }]); // ownership lookup
+    dbMock.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001" }]); // ownership lookup
     dbMock.queueSelect([
       {
-        id: "pl-1",
-        listId: "list-1",
+        id: "0193e4a0-0000-7000-8000-000000000101",
+        listId: "0193e4a0-0000-7000-8000-000000000001",
         name: "Gate",
         address: null,
         lat: 52,
@@ -482,11 +501,14 @@ describe("GET /api/saved/lists/:id/places", () => {
       },
     ]); // places
 
-    const res = await app.inject({ method: "GET", url: "/api/saved/lists/list-1/places" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/places",
+    });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().places).toHaveLength(1);
-    expect(res.json().places[0].id).toBe("pl-1");
+    expect(res.json().places[0].id).toBe("0193e4a0-0000-7000-8000-000000000101");
     // Ownership lookup must filter by userId.
     const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
@@ -494,10 +516,13 @@ describe("GET /api/saved/lists/:id/places", () => {
   });
 
   it("orders places by position, then creation time, then id so equal positions keep one order", async () => {
-    dbMock.queueSelect([{ id: "list-1" }]);
+    dbMock.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001" }]);
     dbMock.queueSelect([]);
 
-    await app.inject({ method: "GET", url: "/api/saved/lists/list-1/places" });
+    await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/places",
+    });
 
     expect(orderByArgs(dbMock, "select", 1)).toEqual([
       "saved_place.sort_order",
@@ -509,7 +534,10 @@ describe("GET /api/saved/lists/:id/places", () => {
   it("404s for a list owned by another user without reading its places", async () => {
     dbMock.queueSelect([]); // ownership lookup returns nothing
 
-    const res = await app.inject({ method: "GET", url: "/api/saved/lists/foreign/places" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000f01/places",
+    });
 
     expect(res.statusCode).toBe(404);
     // Only the ownership lookup ran; the places query must not be reached.
@@ -520,17 +548,17 @@ describe("GET /api/saved/lists/:id/places", () => {
 describe("POST /api/saved/lists/:id/places", () => {
   it("adds a place after confirming the list is owned by the caller", async () => {
     dbMock.queueSelect([]); // account quota lock
-    dbMock.queueSelect([{ id: "list-1" }]); // ownership lookup
+    dbMock.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000001" }]); // ownership lookup
 
     const res = await app.inject({
       method: "POST",
-      url: "/api/saved/lists/list-1/places",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/places",
       payload: { name: "Brandenburg Gate", lat: 52.5163, lng: 13.3777 },
     });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.listId).toBe("list-1");
+    expect(body.listId).toBe("0193e4a0-0000-7000-8000-000000000001");
     expect(body.name).toBe("Brandenburg Gate");
     expect(body.lat).toBe(52.5163);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
@@ -545,7 +573,7 @@ describe("POST /api/saved/lists/:id/places", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/api/saved/lists/foreign/places",
+      url: "/api/saved/lists/0193e4a0-0000-7000-8000-000000000f01/places",
       payload: { name: "X", lat: 1, lng: 2 },
     });
 
@@ -556,11 +584,11 @@ describe("POST /api/saved/lists/:id/places", () => {
 
 describe("PATCH /api/saved/places/:id", () => {
   it("updates a place whose list belongs to the caller", async () => {
-    dbMock.queueSelect([{ placeId: "pl-1", listUserId: USER_ID }]);
+    dbMock.queueSelect([{ placeId: "0193e4a0-0000-7000-8000-000000000101", listUserId: USER_ID }]);
 
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/places/pl-1",
+      url: "/api/saved/places/0193e4a0-0000-7000-8000-000000000101",
       payload: { note: "Updated" },
     });
 
@@ -573,11 +601,11 @@ describe("PATCH /api/saved/places/:id", () => {
 
   it("404s and issues no update when the place's list is owned by another user", async () => {
     // Ownership row exists but is owned by someone else.
-    dbMock.queueSelect([{ placeId: "pl-1", listUserId: "user-B" }]);
+    dbMock.queueSelect([{ placeId: "0193e4a0-0000-7000-8000-000000000101", listUserId: "user-B" }]);
 
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/saved/places/pl-1",
+      url: "/api/saved/places/0193e4a0-0000-7000-8000-000000000101",
       payload: { note: "Hijack" },
     });
 
@@ -588,9 +616,12 @@ describe("PATCH /api/saved/places/:id", () => {
 
 describe("DELETE /api/saved/places/:id", () => {
   it("deletes a place whose list belongs to the caller", async () => {
-    dbMock.queueSelect([{ placeId: "pl-1", listUserId: USER_ID }]);
+    dbMock.queueSelect([{ placeId: "0193e4a0-0000-7000-8000-000000000101", listUserId: USER_ID }]);
 
-    const res = await app.inject({ method: "DELETE", url: "/api/saved/places/pl-1" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/saved/places/0193e4a0-0000-7000-8000-000000000101",
+    });
 
     expect(res.statusCode).toBe(200);
     const where = whereArgs(dbMock, "delete");
@@ -598,9 +629,12 @@ describe("DELETE /api/saved/places/:id", () => {
   });
 
   it("404s and issues no delete when the place is owned by another user", async () => {
-    dbMock.queueSelect([{ placeId: "pl-1", listUserId: "user-B" }]);
+    dbMock.queueSelect([{ placeId: "0193e4a0-0000-7000-8000-000000000101", listUserId: "user-B" }]);
 
-    const res = await app.inject({ method: "DELETE", url: "/api/saved/places/pl-1" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/saved/places/0193e4a0-0000-7000-8000-000000000101",
+    });
 
     expect(res.statusCode).toBe(404);
     expect(dbMock.db.delete).not.toHaveBeenCalled();
@@ -611,7 +645,7 @@ describe("GET /api/saved/labels", () => {
   it("returns only the caller's labels", async () => {
     dbMock.queueSelect([
       {
-        id: "lab-1",
+        id: "0193e4a0-0000-7000-8000-000000000201",
         label: "home",
         icon: null,
         name: "Home",
@@ -662,7 +696,7 @@ describe("PUT /api/saved/labels/:label", () => {
   });
 
   it("updates an existing label instead of inserting a duplicate", async () => {
-    dbMock.queueSelect([{ id: "lab-1" }]); // existing label found
+    dbMock.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000201" }]); // existing label found
 
     const res = await app.inject({
       method: "PUT",
@@ -671,7 +705,7 @@ describe("PUT /api/saved/labels/:label", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().id).toBe("lab-1");
+    expect(res.json().id).toBe("0193e4a0-0000-7000-8000-000000000201");
     expect(dbMock.db.update).toHaveBeenCalledTimes(1);
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
@@ -695,7 +729,7 @@ describe("PUT /api/saved/labels/:label", () => {
   });
 
   it("keeps the label when it names itself as replaced", async () => {
-    dbMock.queueSelect([{ id: "lab-1" }]);
+    dbMock.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000201" }]);
 
     const res = await app.inject({
       method: "PUT",
@@ -711,7 +745,7 @@ describe("PUT /api/saved/labels/:label", () => {
 
 describe("DELETE /api/saved/labels/:label", () => {
   it("deletes a label scoped by userId", async () => {
-    dbMock.queueDelete([{ id: "lab-1" }]); // returning() rows
+    dbMock.queueDelete([{ id: "0193e4a0-0000-7000-8000-000000000201" }]); // returning() rows
 
     const res = await app.inject({ method: "DELETE", url: "/api/saved/labels/home" });
 
@@ -733,12 +767,18 @@ describe("DELETE /api/saved/labels/:label", () => {
 
 describe("GET /api/saved/check", () => {
   it("returns the list ids holding a placeId, scoped to the caller", async () => {
-    dbMock.queueSelect([{ listId: "list-1" }, { listId: "list-2" }]);
+    dbMock.queueSelect([
+      { listId: "0193e4a0-0000-7000-8000-000000000001" },
+      { listId: "0193e4a0-0000-7000-8000-000000000002" },
+    ]);
 
     const res = await app.inject({ method: "GET", url: "/api/saved/check?placeId=p-1" });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().listIds).toEqual(["list-1", "list-2"]);
+    expect(res.json().listIds).toEqual([
+      "0193e4a0-0000-7000-8000-000000000001",
+      "0193e4a0-0000-7000-8000-000000000002",
+    ]);
     const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);

@@ -118,7 +118,7 @@ describe("routeShareLabel", () => {
 describe("list snapshot + public projections", () => {
   const dbPlace = {
     id: "place-1",
-    listId: "list-1",
+    listId: "0193e4a0-0000-7000-8000-000000000001",
     name: "Cafe",
     address: "Street 1",
     lat: 52.5,
@@ -140,7 +140,9 @@ describe("list snapshot + public projections", () => {
       note: "good",
       placeId: "osm:node/123",
     });
-    expect(JSON.stringify(snap)).not.toMatch(/place-1|list-1|sortOrder|createdAt/);
+    expect(JSON.stringify(snap)).not.toMatch(
+      /place-1|0193e4a0-0000-7000-8000-000000000001|sortOrder|createdAt/,
+    );
   });
 
   it("parseStoredListSnapshot rejects malformed values", () => {
@@ -166,11 +168,11 @@ describe("list snapshot + public projections", () => {
 describe("toOwnerShare", () => {
   it("copies fields explicitly with ISO timestamps and no tokenHash/snapshot", () => {
     const row = {
-      id: "share-1",
+      id: "0193e4a0-0000-7000-8000-000000000701",
       userId: "user-1",
       tokenHash: "HASH",
       targetType: "list",
-      targetId: "list-1",
+      targetId: "0193e4a0-0000-7000-8000-000000000001",
       mode: "live",
       label: "Trip",
       snapshot: null,
@@ -180,9 +182,9 @@ describe("toOwnerShare", () => {
     };
     const owner = toOwnerShare(row);
     expect(owner).toEqual({
-      id: "share-1",
+      id: "0193e4a0-0000-7000-8000-000000000701",
       targetType: "list",
-      targetId: "list-1",
+      targetId: "0193e4a0-0000-7000-8000-000000000001",
       mode: "live",
       label: "Trip",
       createdAt: "2026-08-30T10:00:00.000Z",

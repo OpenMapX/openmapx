@@ -37,7 +37,7 @@ function parseSse(body: string): ParsedFrame[] {
 function jobRow(overrides: Record<string, unknown> = {}) {
   return {
     source: "application",
-    id: "job-1",
+    id: "0193e4a0-0000-7000-8001-000000000001",
     type: "data.operation",
     status: "running",
     payload: { operation: "link" },
@@ -71,7 +71,7 @@ let app: FastifyInstance;
 let jobCounter = 0;
 function nextJobId() {
   jobCounter += 1;
-  return `job-${jobCounter}`;
+  return `0193e4a0-0000-7000-8001-${String(jobCounter).padStart(12, "0")}`;
 }
 
 beforeAll(async () => {
@@ -135,9 +135,15 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("rejects data-manager sources and unknown jobs", async () => {
     mockGetActivityJob.mockResolvedValue(null);
-    const dm = await app.inject({ method: "GET", url: "/admin/jobs/x/events?source=data-manager" });
+    const dm = await app.inject({
+      method: "GET",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events?source=data-manager",
+    });
     expect(dm.statusCode).toBe(400);
-    const missing = await app.inject({ method: "GET", url: "/admin/jobs/x/events" });
+    const missing = await app.inject({
+      method: "GET",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events",
+    });
     expect(missing.statusCode).toBe(404);
   });
 
@@ -145,7 +151,10 @@ describe("GET /admin/jobs/:id/events", () => {
     mockRequireAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),
     );
-    const res = await app.inject({ method: "GET", url: "/admin/jobs/x/events" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events",
+    });
     expect(res.statusCode).toBe(401);
   });
 
@@ -158,15 +167,24 @@ describe("GET /admin/jobs/:id/events", () => {
       "cursor=1&cursor=2",
       "source=invalid",
     ]) {
-      const response = await app.inject(`/admin/jobs/x/events?${query}`);
+      const response = await app.inject(
+        `/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events?${query}`,
+      );
       expect(response.statusCode, query).toBe(400);
     }
     expect(
-      (await app.inject({ url: "/admin/jobs/x/events", headers: { "last-event-id": "2suffix" } }))
-        .statusCode,
+      (
+        await app.inject({
+          url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events",
+          headers: { "last-event-id": "2suffix" },
+        })
+      ).statusCode,
     ).toBe(400);
     mockRequireAdmin.mockRejectedValueOnce(Object.assign(new Error("Denied"), { statusCode: 403 }));
-    expect((await app.inject("/admin/jobs/x/events?cursor=secret")).statusCode).toBe(403);
+    expect(
+      (await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000f01/events?cursor=secret"))
+        .statusCode,
+    ).toBe(403);
     expect(mockGetActivityJob).not.toHaveBeenCalled();
   });
 
@@ -174,7 +192,7 @@ describe("GET /admin/jobs/:id/events", () => {
     mockGetActivityJob.mockResolvedValue(
       jobRow({ payload: { secret: "redact" }, status: "unknown" }),
     );
-    const response = await app.inject("/admin/jobs/invalid/events");
+    const response = await app.inject("/admin/jobs/0193e4a0-0000-7000-8001-000000000f02/events");
     expect(response.statusCode).toBe(500);
     expect(response.body).not.toContain("redact");
     expect(response.headers["content-type"]).toContain("application/json");

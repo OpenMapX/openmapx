@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { currentAccountMutation } from "../account/account-context";
 import { currentAuthDatabase } from "../account/auth-database";
@@ -33,7 +32,6 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
     await currentAuthDatabase()
       .insert(adminAuditLog)
       .values({
-        id: randomUUID(),
         actorId: isLoopback ? null : (entry.actorId ?? null),
         targetId: entry.targetId ?? null,
         targetType: entry.targetType ?? null,

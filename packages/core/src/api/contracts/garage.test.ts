@@ -12,7 +12,7 @@ import {
 
 const at = "2026-10-23T00:00:00.000Z";
 const vehicle = {
-  id: "car",
+  id: "0193e4a0-0000-7000-8000-000000000501",
   name: "Car",
   kind: "car",
   powertrain: "petrol",
@@ -24,6 +24,7 @@ const vehicle = {
 describe("garage contracts", () => {
   it("distinguishes creation receipts from persisted records and excludes owner metadata", () => {
     expect(garageVehicleCreatedSchema.safeParse(vehicle).success).toBe(true);
+    expect(garageVehicleCreatedSchema.safeParse({ ...vehicle, id: "car" }).success).toBe(false);
     expect(garageVehicleSchema.safeParse(vehicle).success).toBe(false);
     expect(
       garageVehicleSchema.safeParse({ ...vehicle, createdAt: at, updatedAt: at }).success,
@@ -63,7 +64,7 @@ describe("garage contracts", () => {
   it("accepts historical expiry reads independently of the write-only future horizon", () => {
     expect(
       garageParkedSchema.safeParse({
-        id: "parked",
+        id: "0193e4a0-0000-7000-8000-000000000601",
         vehicleId: null,
         lat: 52,
         lng: 13,

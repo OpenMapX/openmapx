@@ -144,7 +144,7 @@ describe("corsOptions", () => {
         expect(init.credentials).toBe("include");
         const response = await app.inject({
           method: "GET",
-          url: `/api/saved/lists/list/export?format=${format}`,
+          url: `/api/saved/lists/0193e4a0-0000-7000-8000-000000000001/export?format=${format}`,
           headers: { origin: "https://web.example" },
         });
         expect(response.statusCode).toBe(200);
@@ -164,7 +164,7 @@ describe("corsOptions", () => {
       try {
         const result = unwrapSavedResponse(
           await exportSavedList(
-            "list",
+            "0193e4a0-0000-7000-8000-000000000001",
             { format },
             {
               client: createApiClient({ baseUrl: "https://api.example", credentials: "include" }),

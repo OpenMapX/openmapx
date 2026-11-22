@@ -8,7 +8,7 @@ type ReauthenticationState = "pending" | "completed" | "consumed" | "superseded"
 export const adminActionReauthentication = pgTable(
   "admin_action_reauthentication",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     actorId: text("actor_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

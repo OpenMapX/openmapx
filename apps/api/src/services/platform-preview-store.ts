@@ -84,7 +84,7 @@ export async function prunePlatformConfigurationPreviews(
             isNotNull(table.retiredAt),
             sql`exists (
             select 1 from ${adminJob}
-            where ${adminJob.id} = ${table.consumedByJobId}::text
+            where ${adminJob.id} = ${table.consumedByJobId}
               and ${adminJob.status} in ('success','failed','canceled')
               and ${adminJob.finishedAt} is not null
               and greatest(${table.retiredAt},${adminJob.finishedAt}) < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz

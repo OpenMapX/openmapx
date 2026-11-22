@@ -181,7 +181,7 @@ export const adminActivityJobsQuerySchema = z.strictObject({
   limit: integerQuery(1, 200).default(50),
   offset: integerQuery(0, Number.MAX_SAFE_INTEGER).default(0),
 });
-export const adminActivityJobParamsSchema = z.strictObject({ id: z.string().min(1) });
+export const adminActivityJobParamsSchema = z.strictObject({ id: z.uuid() });
 export const adminActivityJobQuerySchema = z.strictObject({
   source: adminActivityJobSourceSchema.optional(),
 });

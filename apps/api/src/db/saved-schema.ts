@@ -1,5 +1,5 @@
 import type { SavedPlaceFieldContributors } from "@openmapx/core/saved-place-contributors";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
@@ -19,7 +20,7 @@ export const SAVED_LIST_NAME_UNIQUE = "savedList_userId_name_unq";
 export const savedList = pgTable(
   "saved_list",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -42,8 +43,8 @@ export const savedList = pgTable(
 export const savedPlace = pgTable(
   "saved_place",
   {
-    id: text("id").primaryKey(),
-    listId: text("list_id")
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    listId: uuid("list_id")
       .notNull()
       .references(() => savedList.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
@@ -62,7 +63,7 @@ export const savedPlace = pgTable(
 export const labeledPlace = pgTable(
   "labeled_place",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

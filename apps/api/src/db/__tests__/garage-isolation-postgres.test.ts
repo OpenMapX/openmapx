@@ -58,7 +58,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .values(["a", "b"].map((id) => ({ id, name: id, email: `${id}@example.test` })));
       await fixture.db.insert(personalVehicle).values(
         ["a", "b"].map((id) => ({
-          id: `v-${id}`,
+          id: `0193e4a0-0000-7000-8004-00000000000${id}`,
           userId: id,
           name: `Car ${id}`,
           kind: "car" as const,
@@ -68,9 +68,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       await fixture.db.insert(parkedLocation).values(
         ["a", "b"].map((id, i) => ({
-          id: `p-${id}`,
+          id: `0193e4a0-0000-7000-8005-00000000000${id}`,
           userId: id,
-          vehicleId: `v-${id}`,
+          vehicleId: `0193e4a0-0000-7000-8004-00000000000${id}`,
           lat: 50.123456 + i,
           lng: 6.654321 + i,
           note: `Private ${id}`,
@@ -104,22 +104,34 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const vehicles = await request("GET", "/vehicles", undefined, caller);
         expect(vehicles.statusCode).toBe(200);
         expect(vehicles.headers["cache-control"]).toBe("no-store");
-        expect(vehicles.json().vehicles.map((v: { id: string }) => v.id)).toEqual([`v-${caller}`]);
+        expect(vehicles.json().vehicles.map((v: { id: string }) => v.id)).toEqual([
+          `0193e4a0-0000-7000-8004-00000000000${caller}`,
+        ]);
         const parking = await request("GET", "/parking", undefined, caller);
         expect(parking.statusCode).toBe(200);
         expect(parking.headers["cache-control"]).toBe("no-store");
-        expect(parking.json().parked.map((p: { id: string }) => p.id)).toEqual([`p-${caller}`]);
+        expect(parking.json().parked.map((p: { id: string }) => p.id)).toEqual([
+          `0193e4a0-0000-7000-8005-00000000000${caller}`,
+        ]);
       }
     });
 
     it("denies foreign PATCH, DELETE and parking assignment without modifying B", async () => {
       const before = await bState();
       for (const [method, path, payload] of [
-        ["PATCH", "/vehicles/v-b", { name: "Stolen", isDefault: true }],
-        ["DELETE", "/vehicles/v-b", undefined],
-        ["PATCH", "/parking/p-b", { note: "Stolen", lat: 1 }],
-        ["DELETE", "/parking/p-b", undefined],
-        ["PUT", "/parking", { vehicleId: "v-b", lat: 1, lng: 2, source: "manual" }],
+        [
+          "PATCH",
+          "/vehicles/0193e4a0-0000-7000-8004-00000000000b",
+          { name: "Stolen", isDefault: true },
+        ],
+        ["DELETE", "/vehicles/0193e4a0-0000-7000-8004-00000000000b", undefined],
+        ["PATCH", "/parking/0193e4a0-0000-7000-8005-00000000000b", { note: "Stolen", lat: 1 }],
+        ["DELETE", "/parking/0193e4a0-0000-7000-8005-00000000000b", undefined],
+        [
+          "PUT",
+          "/parking",
+          { vehicleId: "0193e4a0-0000-7000-8004-00000000000b", lat: 1, lng: 2, source: "manual" },
+        ],
       ] as const) {
         const response = await request(method, path, payload);
         expect(response.statusCode, `${method} ${path}`).toBe(404);
@@ -132,22 +144,30 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         (
           await request("PUT", "/parking", {
-            vehicleId: "v-a",
+            vehicleId: "0193e4a0-0000-7000-8004-00000000000a",
             lat: 48.123456,
             lng: 11.654321,
             source: "manual" as const,
           })
         ).statusCode,
       ).toBe(200);
-      expect((await request("PATCH", "/parking/p-a", { note: "Level 3" })).statusCode).toBe(200);
+      expect(
+        (
+          await request("PATCH", "/parking/0193e4a0-0000-7000-8005-00000000000a", {
+            note: "Level 3",
+          })
+        ).statusCode,
+      ).toBe(200);
       const [own] = await fixture.db
         .select()
         .from(parkedLocation)
-        .where(eq(parkedLocation.id, "p-a"));
+        .where(eq(parkedLocation.id, "0193e4a0-0000-7000-8005-00000000000a"));
       assert.isDefined(own);
       expect(own.lat).toBeCloseTo(48.123456, 6);
       expect(own.note).toBe("Level 3");
-      expect((await request("DELETE", "/parking/p-a")).statusCode).toBe(200);
+      expect(
+        (await request("DELETE", "/parking/0193e4a0-0000-7000-8005-00000000000a")).statusCode,
+      ).toBe(200);
       expect(
         await fixture.db.select().from(parkedLocation).where(eq(parkedLocation.userId, "a")),
       ).toEqual([]);
@@ -170,10 +190,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .map((v) => v.id);
       expect(await defaults()).toEqual([id]);
       expect(await bState()).toEqual(before);
-      expect((await request("PATCH", "/vehicles/v-a", { isDefault: true })).statusCode).toBe(200);
-      expect(await defaults()).toEqual(["v-a"]);
+      expect(
+        (
+          await request("PATCH", "/vehicles/0193e4a0-0000-7000-8004-00000000000a", {
+            isDefault: true,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(await defaults()).toEqual(["0193e4a0-0000-7000-8004-00000000000a"]);
       expect(await bState()).toEqual(before);
-      expect((await request("DELETE", "/vehicles/v-a")).statusCode).toBe(200);
+      expect(
+        (await request("DELETE", "/vehicles/0193e4a0-0000-7000-8004-00000000000a")).statusCode,
+      ).toBe(200);
       expect(await defaults()).toEqual([id]);
       expect(
         await fixture.db.select().from(parkedLocation).where(eq(parkedLocation.userId, "a")),
@@ -252,7 +280,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const [vehicle] = await fixture.db
         .select()
         .from(personalVehicle)
-        .where(eq(personalVehicle.id, "v-a"));
+        .where(eq(personalVehicle.id, "0193e4a0-0000-7000-8004-00000000000a"));
       expect(vehicle?.isDefault).toBe(true);
       const other = await request("POST", "/vehicles", {
         name: "Second car",
@@ -279,7 +307,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("serializes concurrent creates at the last garage slot", async () => {
       await fixture.db.insert(personalVehicle).values(
         Array.from({ length: 10 }, (_, i) => ({
-          id: `extra-${i}`,
           userId: "a",
           name: `Extra ${i}`,
           kind: "car" as const,

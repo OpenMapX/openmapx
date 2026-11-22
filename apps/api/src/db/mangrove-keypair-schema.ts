@@ -1,5 +1,6 @@
+import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -47,7 +48,7 @@ export const mangroveKeypair = pgTable("mangrove_keypair", {
  * material — so it's safe to store cleartext.
  */
 export const mangroveKeypairWrap = pgTable("mangrove_keypair_wrap", {
-  id: text("id").primaryKey(),
+  id: uuid("id").primaryKey().default(sql`uuidv7()`),
   // FK points at `mangrove_keypair.user_id` (not directly at `user.id`) so
   // deleting a keypair also drops its wraps. `mangrove_keypair.user_id` itself
   // cascades from `user.id`, so user deletion still propagates all the way.

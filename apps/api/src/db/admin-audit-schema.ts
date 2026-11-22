@@ -1,10 +1,11 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const adminAuditLog = pgTable(
   "admin_audit_log",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
     targetId: text("target_id"),
     targetType: text("target_type"),

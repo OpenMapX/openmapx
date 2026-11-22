@@ -56,7 +56,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("admits only one simultaneous creation into the last share slot", async () => {
       await fixture.db.insert(shareLink).values(
         Array.from({ length: 99 }, (_, i) => ({
-          id: `existing-${i}`,
           userId: "share-cap-user",
           tokenHash: `hash-${i}`,
           targetType: "route",
@@ -222,18 +221,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           email: "foreign-share@example.test",
         });
         await fixture.db.insert(shareLink).values({
-          id: "foreign-share",
+          id: "0193e4a0-0000-7000-8000-000000000f09",
           userId: "foreign-share-user",
           tokenHash: hashShareToken("F".repeat(43)),
           targetType: "route",
           mode: "snapshot",
           label: "Foreign",
         });
-        expect((await sdk.rotateShareToken("foreign-share", { client })).status).toBe(404);
-        expect((await sdk.revokeShare("foreign-share", { client })).status).toBe(404);
         expect(
-          (await fixture.db.select().from(shareLink).where(eq(shareLink.id, "foreign-share")))[0]
-            ?.tokenHash,
+          (await sdk.rotateShareToken("0193e4a0-0000-7000-8000-000000000f09", { client })).status,
+        ).toBe(404);
+        expect(
+          (await sdk.revokeShare("0193e4a0-0000-7000-8000-000000000f09", { client })).status,
+        ).toBe(404);
+        expect(
+          (
+            await fixture.db
+              .select()
+              .from(shareLink)
+              .where(eq(shareLink.id, "0193e4a0-0000-7000-8000-000000000f09"))
+          )[0]?.tokenHash,
         ).toBe(hashShareToken("F".repeat(43)));
       } finally {
         vi.unstubAllGlobals();

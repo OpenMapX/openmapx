@@ -40,7 +40,6 @@ try {
       Array.from({ length: Math.min(250, recordCount - offset) }, (_, index) => {
         const sequence = offset + index;
         return {
-          id: `memory-list-${sequence.toString().padStart(8, "0")}-${suffix}`,
           userId,
           name: `${sequence.toString().padStart(8, "0")}:${payload}`,
           createdAt,

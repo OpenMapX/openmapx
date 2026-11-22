@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   assertExecutionRowCapacity,
   type ContainedDataExecution,
@@ -21,6 +21,7 @@ import {
   SHORT_DATA_EXECUTION_KINDS,
 } from "@openmapx/core/data-manager-contracts";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import {
   canonicalJson,
   type ExecutionRef,
@@ -603,7 +604,7 @@ export function createPostgresDataExecutionStore(
           parent: admission.parent,
         });
         const status = dataExecutionStatusSchema.parse({
-          id: admission.id ?? randomUUID(),
+          id: admission.id ?? uuidv7(),
           operationKey: admission.operationKey,
           ...normalized,
           kind: input.kind,

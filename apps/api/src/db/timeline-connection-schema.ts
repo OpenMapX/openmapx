@@ -1,11 +1,12 @@
 import type { TimelineConnectionMode, TimelineConnectionStatus } from "@openmapx/core";
-import { index, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const personalTimelineConnection = pgTable(
   "personal_timeline_connection",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

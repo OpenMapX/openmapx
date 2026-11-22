@@ -283,7 +283,6 @@ export async function prepareIntegrationBindingChange(
           },
         });
         await tx.insert(adminAuditLog).values({
-          id: randomUUID(),
           actorId,
           targetType: "integration",
           targetId: input.integrationId,

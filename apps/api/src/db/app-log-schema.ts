@@ -1,9 +1,9 @@
-import { index, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const appLog = pgTable(
   "app_logs",
   {
-    id: serial("id").primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     level: text("level").notNull(),
     source: text("source").notNull(),
     msg: text("msg").notNull(),

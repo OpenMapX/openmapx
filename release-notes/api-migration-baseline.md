@@ -20,6 +20,13 @@ cutoffs and legal holds stay correct when the database's default time zone is
 not UTC, for example after `ALTER DATABASE … SET timezone` or on a managed
 PostgreSQL.
 
+OpenMapX's own tables use one kind of id. Records such as saved lists and
+places, vehicles, parking records, share links, admin jobs and audit entries
+have native UUID ids that the database assigns with `uuidv7()`; log and health
+history rows have identity columns instead of serial sequences. The API refuses
+an id in a request path or body that is not a UUID with status 400 instead of
+looking it up. A version 7 UUID contains the time it was created.
+
 ## Who is affected
 
 Every database created by an earlier development build, including local

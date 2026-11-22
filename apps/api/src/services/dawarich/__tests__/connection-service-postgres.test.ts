@@ -48,7 +48,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await state.fixture.db.delete(personalTimelineConnection);
       const encrypted = encrypt("stored-key");
       await state.fixture.db.insert(personalTimelineConnection).values({
-        id: "timeline-store-connection",
+        id: "0193e4a0-0000-7000-8006-000000000001",
         userId: USER_ID,
         mode: "external",
         publicOrigin: "https://timeline.example.test",
@@ -195,7 +195,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const previous = await store.findByUserId(USER_ID);
           assert.exists(previous, "the user has no connection to replace");
           await store.deleteForUser(USER_ID);
-          await store.replaceForUser({ ...previous, id: "replacement-connection" });
+          await store.replaceForUser({ ...previous, id: "0193e4a0-0000-7000-8006-000000000005" });
         }
         await store.updateForUser(USER_ID, {
           publicOrigin: "https://new.example",
@@ -260,7 +260,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       assert.exists(first, "the user has no connection");
       await store.replaceForUser({
         ...first,
-        id: "other-connection",
+        id: "0193e4a0-0000-7000-8006-000000000006",
         userId: "timeline-other-user",
       });
       const service = new ConnectionService({ store, audit: async () => {} });

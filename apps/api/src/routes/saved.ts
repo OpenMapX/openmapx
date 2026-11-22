@@ -134,7 +134,6 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     if (lists.length === 0) {
       const now = new Date();
       const rows = DEFAULT_LISTS.map((d) => ({
-        id: crypto.randomUUID(),
         userId,
         name: d.name,
         icon: d.icon,
@@ -159,29 +158,36 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "List names cannot start with $" });
     }
 
-    const id = crypto.randomUUID();
     const now = new Date();
     const created = await db
       .transaction(async (tx) => {
         await lockSavedQuota(tx, userId);
         if ((await countSavedLists(tx, userId)) >= MAX_SAVED_LISTS_PER_USER) return false;
-        await tx.insert(savedList).values({
-          id,
-          userId,
-          name: body.name,
-          icon: body.icon ?? null,
-          isPrivate: body.isPrivate ?? true,
-          createdAt: now,
-          updatedAt: now,
-        });
-        return true;
+        const [row] = await tx
+          .insert(savedList)
+          .values({
+            userId,
+            name: body.name,
+            icon: body.icon ?? null,
+            isPrivate: body.isPrivate ?? true,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: savedList.id });
+        if (!row) throw new Error("Saved list was not created");
+        return row;
       })
       .catch(rethrowUnlessNameTaken);
     if (created === "name-taken")
       return reply.status(409).send(conflictBody("SAVED_LIST_NAME_TAKEN"));
     if (!created) return reply.status(409).send(conflictBody("SAVED_LIST_LIMIT"));
 
-    return { id, name: body.name, icon: body.icon ?? null, isPrivate: body.isPrivate ?? true };
+    return {
+      id: created.id,
+      name: body.name,
+      icon: body.icon ?? null,
+      isPrivate: body.isPrivate ?? true,
+    };
   });
 
   registerSavedImportRoute(
@@ -225,15 +231,14 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
             const base = name;
             for (let suffix = 1; ; suffix++) {
               name = suffixedListName(base, suffix);
-              const id = crypto.randomUUID();
               // ON CONFLICT permits concurrent imports and ordinary list creation to race safely.
-              const inserted = await tx
+              const [inserted] = await tx
                 .insert(savedList)
-                .values({ id, userId, name })
+                .values({ userId, name })
                 .onConflictDoNothing({ target: [savedList.userId, savedList.name] })
                 .returning({ id: savedList.id });
-              if (inserted.length) {
-                listId = id;
+              if (inserted) {
+                listId = inserted.id;
                 break;
               }
             }
@@ -251,7 +256,6 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           const rows: (typeof savedPlace.$inferInsert)[] = plan.accepted.map(
             ({ place, sortOrder }) => ({
               ...place,
-              id: crypto.randomUUID(),
               listId,
               placeId: null,
               sortOrder,
@@ -457,7 +461,6 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         : parseSavedPlaceContributors(body.fieldContributors);
     if (body.fieldContributors !== undefined && captured === undefined)
       return reply.status(400).send({ error: "Invalid fieldContributors" });
-    const id = crypto.randomUUID();
     const outcome = await db.transaction(async (tx) => {
       await lockSavedQuota(tx, userId);
       const list = await tx
@@ -469,24 +472,27 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       if ((await countSavedPlaces(tx, userId)) >= MAX_SAVED_PLACES_PER_USER) {
         return "limit" as const;
       }
-      await tx.insert(savedPlace).values({
-        id,
-        listId,
-        name: body.name,
-        address: body.address ?? null,
-        lat: body.lat,
-        lng: body.lng,
-        placeId: body.placeId ?? null,
-        fieldContributors: captured ?? null,
-        note: body.note ?? null,
-      });
-      return "created" as const;
+      const [created] = await tx
+        .insert(savedPlace)
+        .values({
+          listId,
+          name: body.name,
+          address: body.address ?? null,
+          lat: body.lat,
+          lng: body.lng,
+          placeId: body.placeId ?? null,
+          fieldContributors: captured ?? null,
+          note: body.note ?? null,
+        })
+        .returning({ id: savedPlace.id });
+      if (!created) throw new Error("Saved place was not created");
+      return created;
     });
     if (outcome === "missing") return reply.status(404).send({ error: "List not found" });
     if (outcome === "limit") return reply.status(409).send(conflictBody("SAVED_PLACE_LIMIT"));
 
     return {
-      id,
+      id: outcome.id,
       listId,
       name: body.name,
       address: body.address ?? null,
@@ -640,9 +646,12 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         return { id: existing.id, label };
       }
 
-      const id = crypto.randomUUID();
-      await tx.insert(labeledPlace).values({ id, userId, label, ...fields });
-      return { id, label };
+      const [created] = await tx
+        .insert(labeledPlace)
+        .values({ userId, label, ...fields })
+        .returning({ id: labeledPlace.id });
+      if (!created) throw new Error("Saved label was not created");
+      return { id: created.id, label };
     });
   });
 

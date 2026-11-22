@@ -14,7 +14,7 @@ import { user } from "./auth-schema";
 export const platformConfigurationPreview = pgTable(
   "platform_configuration_preview",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     actorId: text("actor_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

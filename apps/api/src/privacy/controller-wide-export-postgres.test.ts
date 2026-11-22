@@ -163,14 +163,14 @@ async function seedSubject() {
   ]);
   await db.insert(savedList).values([
     {
-      id: "controller-acceptance-list",
+      id: "0193e4a0-0000-7000-8006-000000000002",
       userId: SUBJECT_ID,
       name: "Subject hiking list",
       createdAt,
       updatedAt: createdAt,
     },
     {
-      id: "controller-acceptance-foreign-list",
+      id: "0193e4a0-0000-7000-8006-000000000003",
       userId: FOREIGN_ID,
       name: "FOREIGN-SAVED-LIST",
       createdAt,
@@ -178,7 +178,7 @@ async function seedSubject() {
     },
   ]);
   await db.insert(personalTimelineConnection).values({
-    id: "controller-acceptance-timeline",
+    id: "0193e4a0-0000-7000-8006-000000000004",
     userId: SUBJECT_ID,
     mode: "managed",
     publicOrigin: "https://timeline.example.test",

@@ -47,7 +47,7 @@ export const accountActionReceipt = pgTable(
 export const accountMailOutbox = pgTable(
   "account_mail_outbox",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestKey: text("request_key")
       .notNull()
       .references(() => accountActionReceipt.key, { onDelete: "cascade" }),

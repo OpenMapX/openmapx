@@ -272,22 +272,25 @@ class AdminJobRunner {
   ): Promise<string> {
     const durablePayload =
       type === "extension.install" ? normalizeExtensionInstallPayload(payload) : payload;
-    const id = randomUUID();
+    let created: { id: string } | undefined;
     try {
-      await db.insert(adminJob).values({
-        id,
-        type,
-        status: "queued",
-        payload: durablePayload,
-        // Synthetic (loopback) actors have no user row → store null, not a FK violation.
-        createdBy: dbActorId(createdBy),
-      });
+      [created] = await db
+        .insert(adminJob)
+        .values({
+          type,
+          status: "queued",
+          payload: durablePayload,
+          // Synthetic (loopback) actors have no user row → store null, not a FK violation.
+          createdBy: dbActorId(createdBy),
+        })
+        .returning({ id: adminJob.id });
     } catch (error) {
       if (isActiveMaintenanceViolation(error)) throw new ActiveMaintenanceConflict();
       throw error;
     }
+    if (!created) throw new JobPersistenceUnavailable("Administrative job unavailable");
     this.schedulePump();
-    return id;
+    return created.id;
   }
 
   async enqueueMaintenance(
@@ -341,23 +344,25 @@ class AdminJobRunner {
           throw new RetainedJobConflict("Mutation key belongs to a different standalone request");
         return { jobId: old.id, operationId: retained.operationId };
       }
-      const jobId = randomUUID(),
-        operationId = randomUUID();
-      await tx.insert(adminJob).values({
-        id: jobId,
-        type,
-        status: "queued",
-        createdBy: dbActorId(actorId),
-        payload: {
-          ...payload,
-          ownerId: actorId,
-          operationId,
-          _standaloneActor: actorId,
-          _standaloneKey: key,
-          _requestDigest: digest,
-        },
-      });
-      return { jobId, operationId };
+      const operationId = randomUUID();
+      const [created] = await tx
+        .insert(adminJob)
+        .values({
+          type,
+          status: "queued",
+          createdBy: dbActorId(actorId),
+          payload: {
+            ...payload,
+            ownerId: actorId,
+            operationId,
+            _standaloneActor: actorId,
+            _standaloneKey: key,
+            _requestDigest: digest,
+          },
+        })
+        .returning({ id: adminJob.id });
+      if (!created) throw new JobPersistenceUnavailable("Administrative job unavailable");
+      return { jobId: created.id, operationId };
     });
     this.schedulePump();
     return accepted;
@@ -408,12 +413,10 @@ class AdminJobRunner {
           if (lock?.held !== true) throw new JobObservationPending("recovery_required");
           const current = await find(tx);
           if (current.length) return current;
-          const id = randomUUID(),
-            execution = { owner: randomUUID(), version: 1 };
+          const execution = { owner: randomUUID(), version: 1 };
           const [created] = await tx
             .insert(adminJob)
             .values({
-              id,
               type: options.type,
               status: "running",
               startedAt: new Date(),

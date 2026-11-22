@@ -1,5 +1,5 @@
 /** Finite queued maintenance requests, retained in the existing admin job table. */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
 import { and, sql } from "drizzle-orm";
 import { db } from "../db";
@@ -62,18 +62,20 @@ export async function retainMaintenanceJob(
         throw new MaintenanceRequestConflict("Mutation key belongs to another maintenance request");
       return old.id;
     }
-    const id = randomUUID();
-    await tx.insert(adminJob).values({
-      id,
-      type,
-      status: "queued",
-      createdBy: dbActorId(actorId),
-      payload: {
-        ...payload,
-        _maintenanceRequest: { actorId, key, digest },
-      },
-    });
-    return id;
+    const [created] = await tx
+      .insert(adminJob)
+      .values({
+        type,
+        status: "queued",
+        createdBy: dbActorId(actorId),
+        payload: {
+          ...payload,
+          _maintenanceRequest: { actorId, key, digest },
+        },
+      })
+      .returning({ id: adminJob.id });
+    if (!created) throw new Error("Maintenance job was not retained");
+    return created.id;
   });
 }
 

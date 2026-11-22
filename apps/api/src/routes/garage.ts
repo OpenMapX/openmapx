@@ -69,15 +69,18 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
         const existing = counted[0]?.count ?? 0;
         if (existing >= MAX_VEHICLES_PER_USER) return null;
         const isDefault = draft.value.isDefault || existing === 0;
-        const id = crypto.randomUUID();
         if (isDefault) {
           await tx
             .update(personalVehicle)
             .set({ isDefault: false })
             .where(eq(personalVehicle.userId, userId));
         }
-        await tx.insert(personalVehicle).values({ id, userId, ...draft.value, isDefault });
-        return { id, ...draft.value, isDefault };
+        const [row] = await tx
+          .insert(personalVehicle)
+          .values({ userId, ...draft.value, isDefault })
+          .returning({ id: personalVehicle.id });
+        if (!row) throw new Error("Vehicle was not created");
+        return { id: row.id, ...draft.value, isDefault };
       })
       .catch(rethrowUnlessNameTaken);
     if (!created)
@@ -191,7 +194,6 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const rows = await db
       .insert(parkedLocation)
       .values({
-        id: crypto.randomUUID(),
         userId,
         ...draft.value,
         expiresAt,

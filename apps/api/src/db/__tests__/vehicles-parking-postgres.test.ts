@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,12 @@ vi.mock("../../utils/require-auth", () => ({
 }));
 
 const TEST_USER = "vehicles-parking-test-user";
+
+/** A stable UUID for a readable test label. */
+function idOf(label: string): string {
+  const hex = createHash("sha256").update(label).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 const skipDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 async function reset(): Promise<void> {
@@ -93,16 +100,21 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
     ).toHaveLength(12);
   });
 
-  async function addVehicle(id: string, name: string): Promise<void> {
+  async function addVehicle(label: string, name: string): Promise<void> {
     await db
       .insert(personalVehicle)
-      .values({ id, userId: TEST_USER, name, kind: "car", powertrain: "petrol" });
+      .values({ id: idOf(label), userId: TEST_USER, name, kind: "car", powertrain: "petrol" });
   }
 
-  async function park(id: string, vehicleId: string | null, lat: number): Promise<void> {
-    await db
-      .insert(parkedLocation)
-      .values({ id, userId: TEST_USER, vehicleId, lat, lng: 6.6, source: "manual" });
+  async function park(label: string, vehicle: string | null, lat: number): Promise<void> {
+    await db.insert(parkedLocation).values({
+      id: idOf(label),
+      userId: TEST_USER,
+      vehicleId: vehicle === null ? null : idOf(vehicle),
+      lat,
+      lng: 6.6,
+      source: "manual",
+    });
   }
 
   it("rejects a second vehicle with the same name for one user", async () => {
@@ -124,7 +136,7 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
     await db
       .insert(parkedLocation)
       .values({
-        id: "p-second-attempt",
+        id: idOf("p-second-attempt"),
         userId: TEST_USER,
         vehicleId: null,
         lat: 48.13,
@@ -140,7 +152,7 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
 
     const rows = await db.select().from(parkedLocation).where(eq(parkedLocation.userId, TEST_USER));
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe("p1");
+    expect(rows[0]?.id).toBe(idOf("p1"));
     expect(rows[0]?.lat).toBeCloseTo(48.13);
     expect(rows[0]?.source).toBe("device");
   });
@@ -161,11 +173,11 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
 
     // `ON DELETE SET NULL` would fail here: nulling vehicle_id collides with the
     // unassigned row under the same NULLS NOT DISTINCT constraint.
-    await db.delete(personalVehicle).where(eq(personalVehicle.id, "v1"));
+    await db.delete(personalVehicle).where(eq(personalVehicle.id, idOf("v1")));
 
     const rows = await db.select().from(parkedLocation).where(eq(parkedLocation.userId, TEST_USER));
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe("p-null");
+    expect(rows[0]?.id).toBe(idOf("p-null"));
     expect(rows[0]?.vehicleId).toBeNull();
   });
 
@@ -195,7 +207,7 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
       connectors: ["ccs2" as const],
     };
     await db.insert(personalVehicle).values({
-      id: "v-ev",
+      id: idOf("v-ev"),
       userId: TEST_USER,
       name: "Blue Leaf",
       kind: "car",
@@ -206,7 +218,7 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
     const [row] = await db
       .select()
       .from(personalVehicle)
-      .where(and(eq(personalVehicle.id, "v-ev"), eq(personalVehicle.userId, TEST_USER)));
+      .where(and(eq(personalVehicle.id, idOf("v-ev")), eq(personalVehicle.userId, TEST_USER)));
     expect(row?.ev).toEqual(ev);
   });
 });

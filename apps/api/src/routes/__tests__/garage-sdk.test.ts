@@ -38,9 +38,14 @@ const draft = {
   ev: null,
   fuelConsumptionLPer100Km: 6,
 };
-const vehicle = { id: "vehicle", ...draft, createdAt: at, updatedAt: at };
+const vehicle = {
+  id: "0193e4a0-0000-7000-8000-000000000501",
+  ...draft,
+  createdAt: at,
+  updatedAt: at,
+};
 const parked = {
-  id: "parked",
+  id: "0193e4a0-0000-7000-8000-000000000601",
   vehicleId: null,
   lat: 52,
   lng: 13,
@@ -104,13 +109,21 @@ it("round-trips all eight serialized producers through the generated SDK", async
   database.queueSelect([vehicle]);
   expect(
     sdk.unwrapGarageResponse(
-      await sdk.updateGarageVehicle("vehicle", { name: "Changed" }, { client }),
+      await sdk.updateGarageVehicle(
+        "0193e4a0-0000-7000-8000-000000000501",
+        { name: "Changed" },
+        { client },
+      ),
     ),
   ).toEqual({ ok: true });
 
   database.queueSelect([{ id: "garage-user" }]);
-  database.queueSelect([{ id: "vehicle", isDefault: false }]);
-  expect(sdk.unwrapGarageResponse(await sdk.deleteGarageVehicle("vehicle", { client }))).toEqual({
+  database.queueSelect([{ id: "0193e4a0-0000-7000-8000-000000000501", isDefault: false }]);
+  expect(
+    sdk.unwrapGarageResponse(
+      await sdk.deleteGarageVehicle("0193e4a0-0000-7000-8000-000000000501", { client }),
+    ),
+  ).toEqual({
     ok: true,
   });
 
@@ -126,11 +139,19 @@ it("round-trips all eight serialized producers through the generated SDK", async
   database.queueSelect([parked]);
   expect(
     sdk.unwrapGarageResponse(
-      await sdk.updateGarageParking("parked", { note: "Updated" }, { client }),
+      await sdk.updateGarageParking(
+        "0193e4a0-0000-7000-8000-000000000601",
+        { note: "Updated" },
+        { client },
+      ),
     ),
   ).toEqual({ ok: true });
-  database.queueDelete([{ id: "parked" }]);
-  expect(sdk.unwrapGarageResponse(await sdk.deleteGarageParking("parked", { client }))).toEqual({
+  database.queueDelete([{ id: "0193e4a0-0000-7000-8000-000000000601" }]);
+  expect(
+    sdk.unwrapGarageResponse(
+      await sdk.deleteGarageParking("0193e4a0-0000-7000-8000-000000000601", { client }),
+    ),
+  ).toEqual({
     ok: true,
   });
 });
@@ -158,7 +179,13 @@ it("preserves cap conflict and refuses malformed or ownership-changing intent", 
     (await sdk.createGarageVehicle({ ...draft, isDefault: "yes" } as never, { client })).status,
   ).toBe(400);
   expect(
-    (await sdk.updateGarageParking("parked", { vehicleId: "foreign" } as never, { client })).status,
+    (
+      await sdk.updateGarageParking(
+        "0193e4a0-0000-7000-8000-000000000601",
+        { vehicleId: "0193e4a0-0000-7000-8000-000000000f05" } as never,
+        { client },
+      )
+    ).status,
   ).toBe(400);
   expect(database.db.insert).not.toHaveBeenCalled();
   expect(database.db.update).not.toHaveBeenCalled();
@@ -166,16 +193,28 @@ it("preserves cap conflict and refuses malformed or ownership-changing intent", 
 it("keeps foreign vehicle and parking IDs absent without mutation", async () => {
   database.queueSelect([{ id: "garage-user" }]);
   database.queueSelect([]);
-  expect((await sdk.updateGarageVehicle("foreign", { name: "Other" }, { client })).status).toBe(
-    404,
-  );
-  expect((await sdk.updateGarageParking("foreign", { note: "Other" }, { client })).status).toBe(
-    404,
-  );
+  expect(
+    (
+      await sdk.updateGarageVehicle(
+        "0193e4a0-0000-7000-8000-000000000f05",
+        { name: "Other" },
+        { client },
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await sdk.updateGarageParking(
+        "0193e4a0-0000-7000-8000-000000000f05",
+        { note: "Other" },
+        { client },
+      )
+    ).status,
+  ).toBe(404);
   expect(
     (
       await sdk.saveGarageParking(
-        { vehicleId: "foreign", lat: 52, lng: 13, source: "manual" },
+        { vehicleId: "0193e4a0-0000-7000-8000-000000000f05", lat: 52, lng: 13, source: "manual" },
         { client },
       )
     ).status,
@@ -198,7 +237,7 @@ it.each(["create", "update"])(
     const response =
       operation === "create"
         ? await sdk.createGarageVehicle(input, { client })
-        : await sdk.updateGarageVehicle("vehicle", input, { client });
+        : await sdk.updateGarageVehicle("0193e4a0-0000-7000-8000-000000000501", input, { client });
     expect(response.status).toBe(400);
     expect(database.db.select).not.toHaveBeenCalled();
     expect(database.db.insert).not.toHaveBeenCalled();

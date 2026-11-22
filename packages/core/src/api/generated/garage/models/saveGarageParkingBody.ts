@@ -3,7 +3,6 @@
 import type { SaveGarageParkingBodySource } from "./saveGarageParkingBodySource";
 
 export type SaveGarageParkingBody = {
-  /** @nullable */
   vehicleId?: string | null;
   /**
    * @minimum -90

@@ -1,4 +1,5 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { canonicalJson } from "@openmapx/core/ops";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../../db";
@@ -47,7 +48,7 @@ export async function pruneMigrationStages() {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
         sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
       ),
@@ -83,7 +84,7 @@ export async function retainMigrationStage(input: {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
         ),
       );
     const [counts] = await tx
@@ -96,7 +97,7 @@ export async function retainMigrationStage(input: {
     const stage: MigrationStage = {
       ...input,
       version: 1,
-      previewId: randomUUID(),
+      previewId: uuidv7(),
       fingerprint: randomBytes(32).toString("hex"),
       expiresAt: new Date(Date.now() + 600000).toISOString(),
     };

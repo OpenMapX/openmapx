@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /** Admission is arbitrated by this index; it must stay in step with the system routes. */
@@ -8,7 +17,7 @@ export const ACTIVE_SYSTEM_MAINTENANCE_INDEX = "adminJob_one_active_system_maint
 export const adminJob = pgTable(
   "admin_job",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     type: text("type").notNull(),
     status: text("status").notNull().default("queued"), // queued|running|success|failed|canceled
     payload: jsonb("payload"),
@@ -40,7 +49,7 @@ export const adminJobLog = pgTable(
   "admin_job_log",
   {
     id: text("id").primaryKey(),
-    jobId: text("job_id")
+    jobId: uuid("job_id")
       .notNull()
       .references(() => adminJob.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),

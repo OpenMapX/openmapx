@@ -21,6 +21,9 @@ vi.mock("../../utils/require-auth", () => ({
   getUserId: () => "import-user",
 }));
 
+const BULK_LIST = "0193e4a0-0000-7000-8000-0000000000d1";
+const OTHER_LIST = "0193e4a0-0000-7000-8000-0000000000d2";
+
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "saved imports in PostgreSQL",
   () => {
@@ -191,7 +194,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     });
     it("admits only one of two concurrent list creations at the last free slot", async () => {
       await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
-      await fixture.sql`INSERT INTO saved_list (id, user_id, name) SELECT 'cap-' || n, 'import-user', 'Cap ' || n FROM generate_series(1, 499) AS n`;
+      await fixture.sql`INSERT INTO saved_list (user_id, name) SELECT 'import-user', 'Cap ' || n FROM generate_series(1, 499) AS n`;
       const created = await Promise.all(
         ["Last A", "Last B"].map((name) =>
           app.inject({ method: "POST", url: "/api/saved/lists", payload: { name } }),
@@ -210,8 +213,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     });
     it("applies only one of two concurrent imports that together pass the place limit", async () => {
       await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
-      await fixture.sql`INSERT INTO saved_list (id, user_id, name) VALUES ('bulk', 'import-user', 'Bulk')`;
-      await fixture.sql`INSERT INTO saved_place (id, list_id, name, lat, lng) SELECT 'bulk-' || n, 'bulk', 'Bulk ' || n, 10, 10 FROM generate_series(1, 49000) AS n`;
+      await fixture.sql`INSERT INTO saved_list (id, user_id, name) VALUES (${BULK_LIST}, 'import-user', 'Bulk')`;
+      await fixture.sql`INSERT INTO saved_place (list_id, name, lat, lng) SELECT ${BULK_LIST}, 'Bulk ' || n, 10, 10 FROM generate_series(1, 49000) AS n`;
       const batch = (prefix: string) =>
         Array.from({ length: 600 }, (_, index) => ({
           name: `${prefix} ${index}`,
@@ -237,14 +240,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(lists).toHaveLength(1);
       const single = await app.inject({
         method: "POST",
-        url: `/api/saved/lists/bulk/places`,
+        url: `/api/saved/lists/${BULK_LIST}/places`,
         payload: { name: "Fits", lat: 1, lng: 1 },
       });
       expect(single.statusCode).toBe(200);
-      await fixture.sql`INSERT INTO saved_place (id, list_id, name, lat, lng) SELECT 'fill-' || n, 'bulk', 'Fill ' || n, 11, 11 FROM generate_series(1, 399) AS n`;
+      await fixture.sql`INSERT INTO saved_place (list_id, name, lat, lng) SELECT ${BULK_LIST}, 'Fill ' || n, 11, 11 FROM generate_series(1, 399) AS n`;
       const full = await app.inject({
         method: "POST",
-        url: `/api/saved/lists/bulk/places`,
+        url: `/api/saved/lists/${BULK_LIST}/places`,
         payload: { name: "Over", lat: 1, lng: 1 },
       });
       expect(full.statusCode).toBe(409);
@@ -257,8 +260,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .values({ id: "other-import-user", name: "Other", email: "other-import@example.test" });
       await fixture.db
         .insert(savedList)
-        .values({ id: "other-import-list", userId: "other-import-user", name: "Other" });
-      expect((await send({ listId: "other-import-list" })).statusCode).toBe(404);
+        .values({ id: OTHER_LIST, userId: "other-import-user", name: "Other" });
+      expect((await send({ listId: OTHER_LIST })).statusCode).toBe(404);
     });
     it("replaces a label atomically and keeps the old one when the new write fails", async () => {
       const writeLabel = (label: string, payload: object) =>
