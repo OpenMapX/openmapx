@@ -89,6 +89,37 @@ describe("ServiceRegistry.load", () => {
     expect(registry.get("extra")?.isBuiltIn).toBe(false);
   });
 
+  it("reports, not silently drops, a community service that reuses a built-in ID", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    const communityDir = join(tmp, "infra", "docker", "state", "ops-agent", "community", "abc123");
+    mkdirSync(communityDir, { recursive: true });
+    writeFileSync(
+      join(communityDir, "service.json"),
+      JSON.stringify({ ...baseManifest, id: "alpha", quality: "community" }),
+    );
+    const supplied = {
+      manifest: { ...baseManifest, id: "alpha", quality: "community" as const },
+      directory: "/community/alpha",
+      isBuiltIn: false,
+      enabled: true,
+    };
+
+    for (const options of [{}, { communityServices: [supplied] }]) {
+      const warnings: string[] = [];
+      const registry = new ServiceRegistry({ rootDir: tmp, warnings, ...options });
+      await registry.load();
+
+      expect(registry.list().map((service) => [service.manifest.id, service.isBuiltIn])).toEqual([
+        ["alpha", true],
+      ]);
+      expect(warnings).toEqual([
+        expect.stringMatching(
+          /^Community service "alpha" at .+ is not loaded: its ID belongs to a built-in service$/,
+        ),
+      ]);
+    }
+  });
+
   it("skips a community manifest that claims the built-in quality tier", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     const communityDir = join(

@@ -89,11 +89,19 @@ export class ServiceRegistry {
     });
   }
 
+  /** Why a service with this ID cannot be added, or null when the ID is free. */
+  private duplicateWarning(id: string, directory: string, isBuiltIn: boolean): string | null {
+    const existing = this.services.find((candidate) => candidate.manifest.id === id);
+    if (!existing) return null;
+    return existing.isBuiltIn && !isBuiltIn
+      ? `Community service "${id}" at ${directory} is not loaded: its ID belongs to a built-in service`
+      : `Duplicate service id "${id}" at ${directory} — keeping first`;
+  }
+
   private addCommunityService(service: LoadedService, warnings: string[]): void {
-    if (this.services.some((existing) => existing.manifest.id === service.manifest.id)) {
-      warnings.push(
-        `Duplicate service id "${service.manifest.id}" at ${service.directory} — keeping first`,
-      );
+    const duplicate = this.duplicateWarning(service.manifest.id, service.directory, false);
+    if (duplicate) {
+      warnings.push(duplicate);
       return;
     }
     this.services.push({
@@ -147,8 +155,9 @@ export class ServiceRegistry {
     }
 
     const manifest = raw as ServiceManifest;
-    if (this.services.some((s) => s.manifest.id === manifest.id)) {
-      warnings.push(`Duplicate service id "${manifest.id}" at ${directory} — keeping first`);
+    const duplicate = this.duplicateWarning(manifest.id, directory, isBuiltIn);
+    if (duplicate) {
+      warnings.push(duplicate);
       return;
     }
 
