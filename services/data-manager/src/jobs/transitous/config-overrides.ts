@@ -263,8 +263,7 @@ export function applyRouteShapesOverride(configPath: string, logger: JobLogger):
  * Point the generated config's `osm:` line at the OSM extract for the
  * deployment's build region, so MOTIS imports the same area as the rest of the
  * stack (osrm/otp/overpass/...). The region resolves from `MOTIS_REGION` then
- * `OPENMAPX_REGION` — the same precedence the CLI's `resolveBuildRegion("motis")`
- * uses — and maps to a filename via {@link osmPbfName} (e.g. `europe/germany` →
+ * `OPENMAPX_REGION`, and maps to a filename via {@link osmPbfName} (e.g. `europe/germany` →
  * `europe-germany.osm.pbf`). Upstream Transitous templates `planet-latest.osm.pbf`
  * because it builds a global instance; a regional deployment overrides it here.
  *
