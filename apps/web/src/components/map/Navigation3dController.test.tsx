@@ -74,7 +74,7 @@ describe("Navigation3dController", () => {
     expect(fake.state.maxPitch).toBe(60);
   });
 
-  it("restores after 3 s even if the pitch never eases", () => {
+  it("after 3 s eases a camera nobody brought down, rather than snapping it", () => {
     render(<Navigation3dController />);
     act(() => useNavigationStore.setState({ status: "navigating" }));
     fake.state.pitch = 68;
@@ -82,7 +82,33 @@ describe("Navigation3dController", () => {
     act(() => {
       vi.advanceTimersByTime(3000);
     });
+    // A free camera the user pitched above the old limit is eased down to it.
+    expect(fake.state.cameraTransitions.at(-1)).toMatchObject({
+      method: "easeTo",
+      options: { pitch: 60 },
+    });
+    // Lowered as the eased camera arrives, before the fallback would fire.
+    expect(fake.state.pitch).toBe(60);
+    act(() => fake.emit("move"));
     expect(fake.state.maxPitch).toBe(60);
+  });
+
+  it("lowers the limit even if that ease is interrupted", () => {
+    render(<Navigation3dController />);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    fake.state.pitch = 68;
+    act(() => useNavigationStore.setState({ status: "idle" }));
+    // The ease never lands (another gesture took over).
+    const easeTo = vi.spyOn(fake.map, "easeTo").mockImplementation(() => fake.map);
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(fake.state.maxPitch).toBe(70);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(fake.state.maxPitch).toBe(60);
+    easeTo.mockRestore();
   });
 
   it("unmount restores maxPitch and deactivates", () => {

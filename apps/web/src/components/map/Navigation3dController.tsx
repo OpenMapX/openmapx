@@ -9,6 +9,10 @@ import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStor
 
 /** How long a lowered pitch limit may wait for the camera to come down to it. */
 const RESTORE_TIMEOUT_MS = 3000;
+/** The ease that brings a camera nobody lowered down to the old limit. */
+const EASE_DOWN_MS = 600;
+/** Extra wait before lowering the limit if that ease was interrupted. */
+const RESTORE_GRACE_MS = 400;
 
 /**
  * Decides whether 3D navigation is active on the main map (immersive
@@ -55,7 +59,13 @@ export function Navigation3dController(): null {
     const onMove = () => {
       if (map.getPitch() <= saved.maxPitch) restore();
     };
-    const timer = setTimeout(restore, RESTORE_TIMEOUT_MS);
+    // Nothing brought the camera down (the user owns a free camera pitched
+    // above the old limit): ease it down rather than letting the limit snap
+    // it, and lower the limit once it arrives, or shortly after regardless.
+    let timer = setTimeout(() => {
+      timer = setTimeout(restore, EASE_DOWN_MS + RESTORE_GRACE_MS);
+      map.easeTo({ pitch: saved.maxPitch, duration: EASE_DOWN_MS });
+    }, RESTORE_TIMEOUT_MS);
     map.on("move", onMove);
     onMove();
     return () => {
