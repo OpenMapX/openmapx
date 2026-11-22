@@ -794,9 +794,7 @@ searches `public`, so the API's functions there stand in for nothing another
 role calls. The API is trusted more, and can still run code as data-manager
 through the `data_manager` tables it owns;
 [Database roles](../install/configuration.md#database-roles) states this and
-how an operator's own superuser session must avoid running a role's code. OpenConditions
-installed after PostGIS started needs a PostGIS restart before traffic tiles
-work; until then they fail with a permission error.
+how an operator's own superuser session must avoid running a role's code.
 
 **In-process data work a crash interrupted is settled automatically.** When
 data-manager restarts, in-process work the old process left behind ends

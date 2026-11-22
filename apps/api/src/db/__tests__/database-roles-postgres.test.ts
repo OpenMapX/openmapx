@@ -7,11 +7,25 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres, { type Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  ambientSchemaDDL,
+  ensureAmbientSchema,
+} from "../../../../../services/data-manager/src/jobs/ambient-places/schema.js";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const TRAFFIC_FLOW = join(import.meta.dirname, "fixtures", "openconditions-traffic-flow.sql");
+/** What OpenConditions' migration grants the tile function's role: the
+ * tables and functions `conditions.segment_flow` reads, and nothing else. */
+const TILE_CONTRACT = `
+  GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
+  GRANT SELECT ON conditions.road_segment, conditions.segment_speed, conditions.source,
+    conditions.public_license_policy TO openmapx_tiles_owner;
+  GRANT EXECUTE ON FUNCTION conditions.segment_flow(integer, integer, integer, json),
+    conditions.flow_public_licenses(text[]), conditions.flow_osm_credit() TO openmapx_tiles_owner;
+`;
+const TILE_CONTRACT_TABLES = ["public_license_policy", "road_segment", "segment_speed", "source"];
 const { container: manifest } = JSON.parse(
   readFileSync(join(repoRoot, "services", "postgis", "service.json"), "utf8"),
 ) as { container: { image: string; tag: string; digest: string } };
@@ -221,19 +235,73 @@ integration("database roles", () => {
     await permissionDenied(api.unsafe("CREATE SCHEMA api_probe"));
   });
 
+  it("the guard refuses a schema outside the pattern", async () => {
+    // Each schema data-manager builds, publishes or keeps as the previous copy.
+    for (const name of [
+      "osm_search",
+      "osm_search__staging",
+      "osm_search__previous",
+      "notable_places",
+      "notable_places__staging",
+      "notable_places__previous",
+      "overture_places",
+      "overture_places__staging",
+      "overture_places__previous",
+      "ambient_places",
+      "overture_embeddings",
+    ]) {
+      await dataManager.unsafe(`CREATE SCHEMA "${name}"`);
+      await dataManager.unsafe(`DROP SCHEMA "${name}"`);
+    }
+    // Overture's ODbL themes, which the places schema must never mix with,
+    // and copies no build makes.
+    for (const name of [
+      "overture_buildings",
+      "overture_transportation",
+      "overture_divisions",
+      "overture_base",
+      "overture_places_extra",
+      "overture_embeddings__staging",
+      "ambient_places__previous",
+      "osm_search__old",
+    ])
+      await permissionDenied(dataManager.unsafe(`CREATE SCHEMA "${name}"`));
+    await dataManager.unsafe("CREATE SCHEMA overture_places__staging");
+    await permissionDenied(
+      dataManager.unsafe("ALTER SCHEMA overture_places__staging RENAME TO overture_buildings"),
+    );
+    await dataManager.unsafe("DROP SCHEMA overture_places__staging");
+  });
+
+  it("ensureAmbientSchema succeeds under the guard", async () => {
+    await ensureAmbientSchema(dataManager);
+    // A later build checks the same objects again.
+    await dataManager.unsafe(ambientSchemaDDL);
+    expect(
+      await superuser`
+        SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner FROM pg_class c
+        WHERE c.relnamespace = 'ambient_places'::regnamespace`,
+    ).toEqual([{ owner: "openmapx_data_manager" }]);
+    expect(await api.unsafe("SELECT singleton, enabled FROM ambient_places.state")).toEqual([
+      { singleton: 1, enabled: true },
+    ]);
+    await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
+  });
+
   it("lets data-manager write tables but no code or view that the API could run", async () => {
-    // The tables data-manager's ambient-places build creates, and its old view.
+    // The tables data-manager's ambient-places build creates.
     await dataManager.unsafe(`
       CREATE SCHEMA ambient_places;
       CREATE TABLE ambient_places.features (generation uuid NOT NULL, name text NOT NULL);
       INSERT INTO ambient_places.features VALUES ('00000000-0000-4000-8000-000000000001', 'kept');
-      DROP VIEW IF EXISTS ambient_places.features_all;
     `);
     expect(await api.unsafe("SELECT name FROM ambient_places.features")).toEqual([
       { name: "kept" },
     ]);
     for (const statement of [
       "CREATE VIEW ambient_places.features_all AS SELECT name FROM ambient_places.features",
+      // Refused before PostgreSQL looks for the view.
+      "DROP VIEW IF EXISTS ambient_places.features_all",
       "CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS 'SELECT 1'",
       "CREATE PROCEDURE ambient_places.probe() LANGUAGE sql AS 'SELECT 1'",
       "DO $$ BEGIN EXECUTE 'CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS ''SELECT 1'''; END $$",
@@ -580,10 +648,32 @@ integration("code planted for another role", () => {
     ).toEqual([{ large_objects: 0 }]);
   });
 
-  it("renders OpenConditions' traffic tile as a read-only role without superuser rights", async () => {
+  /** A traffic tile as Martin requests it. */
+  const tile = async () => {
+    const martin = connect("openmapx_tiles", passwords.tiles, db);
+    try {
+      const [row] = await martin<{ tile: Buffer }[]>`
+        SELECT tiles.segment_flow(0, 0, 0, '{}') AS tile`;
+      return row?.tile;
+    } finally {
+      await martin.end();
+    }
+  };
+  /** The same tile rendered by the superuser, with no grant involved. */
+  const directTile = async () => {
+    const [direct] = await roles.superuser.begin(async (tx) => {
+      await tx.unsafe("SET LOCAL search_path = pg_catalog, extensions");
+      return tx<{ tile: Buffer }[]>`SELECT conditions.segment_flow(0, 0, 0, '{}') AS tile`;
+    });
+    expect(direct?.tile.includes("speed_ratio")).toBe(true);
+    return direct?.tile;
+  };
+
+  it("an OpenConditions schema created after PostGIS started serves tiles without a restart", async () => {
     // OpenConditions installed after PostGIS started, as its own role with
-    // the documented search path, with its real tile function and the
-    // functions and tables it reads.
+    // the documented search path, with its real tile function, the functions
+    // and tables it reads, a table holding credentials, and the grants its
+    // migration gives the tile function's role.
     await roles.superuser.unsafe(`
       CREATE ROLE openconditions_fixture LOGIN PASSWORD '${passwords.openConditions}';
       ALTER ROLE openconditions_fixture SET search_path = conditions, extensions;
@@ -607,30 +697,40 @@ integration("code planted for another role", () => {
            permission_licenses, updated_at)
         VALUES ('s1', 30, 50, 0.6, 'moderate', 'high', ARRAY['open'], ARRAY['ODbL-1.0'], now());
         INSERT INTO conditions.public_license_policy VALUES ('ODbL-1.0');
+        CREATE TABLE conditions.oauth_grant (
+          source_id text PRIMARY KEY, refresh_token text NOT NULL, access_token text,
+          access_token_expires_at timestamptz);
+        INSERT INTO conditions.oauth_grant VALUES ('open', 'refresh-secret', 'access-secret', now());
       `);
+      await openConditions.unsafe(TILE_CONTRACT);
     } finally {
       await openConditions.end();
     }
-    const tile = async () => {
-      const martin = connect("openmapx_tiles", passwords.tiles, db);
-      try {
-        const [row] = await martin<{ tile: Buffer }[]>`
-          SELECT tiles.segment_flow(0, 0, 0, '{}') AS tile`;
-        return row?.tile;
-      } finally {
-        await martin.end();
-      }
-    };
-    // Until PostGIS grants the tile function's role access, a tile fails
-    // visibly and nothing runs with more rights.
-    await permissionDenied(tile());
+    expect(await tile()).toEqual(await directTile());
+  });
+
+  it("the tile owner cannot read a conditions table outside the contract", async () => {
+    // A PostGIS start grants nothing in conditions, and the tile still renders.
     await restart();
-    const [direct] = await roles.superuser.begin(async (tx) => {
-      await tx.unsafe("SET LOCAL search_path = pg_catalog, extensions");
-      return tx<{ tile: Buffer }[]>`SELECT conditions.segment_flow(0, 0, 0, '{}') AS tile`;
-    });
-    expect(direct?.tile.includes("speed_ratio")).toBe(true);
-    expect(await tile()).toEqual(direct?.tile);
+    expect(await tile()).toEqual(await directTile());
+    expect(
+      await roles.superuser`
+        SELECT has_table_privilege('openmapx_tiles_owner', 'conditions.oauth_grant', 'SELECT') AS secret,
+          (SELECT array_agg(c.relname::text ORDER BY c.relname) FROM pg_class c
+            WHERE c.relnamespace = 'conditions'::regnamespace AND c.relkind = 'r'
+              AND has_table_privilege('openmapx_tiles_owner', c.oid, 'SELECT')) AS readable`,
+    ).toEqual([{ secret: false, readable: TILE_CONTRACT_TABLES }]);
+    await permissionDenied(
+      roles.superuser.begin(async (tx) => {
+        await tx.unsafe("SET LOCAL ROLE openmapx_tiles_owner");
+        await tx.unsafe("SELECT refresh_token FROM conditions.oauth_grant");
+      }),
+    );
+  }, 120_000);
+
+  it("renders OpenConditions' traffic tile as a read-only role without superuser rights", async () => {
+    const direct = await directTile();
+    expect(await tile()).toEqual(direct);
     expect(
       await roles.superuser`
         SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS definer, r.rolsuper AS superuser,
@@ -661,7 +761,7 @@ integration("code planted for another role", () => {
       await roles.api`SELECT extensions.st_astext(public.st_makepoint(1, 2)) AS point`,
     ).toEqual([{ point: "POINT(1 2)" }]);
     await roles.api`DELETE FROM public.openmapx_overload_runs`;
-    expect(await tile()).toEqual(direct?.tile);
+    expect(await tile()).toEqual(direct);
     const point = "SELECT ST_AsText(ST_MakePoint(1, 2)) AS point";
     expect(await roles.dataManager.unsafe(point)).toEqual([{ point: "POINT(1 2)" }]);
     const reader = connect("openconditions_fixture", passwords.openConditions, db);
@@ -873,7 +973,8 @@ integration("code planted for another role", () => {
             WHERE oid = 'tiles.segment_flow(integer, integer, integer, json)'::regprocedure) AS tiles,
           (SELECT array_agg(evtname ORDER BY evtname) FROM pg_event_trigger) AS guards,
           has_database_privilege('openmapx_data_manager', d.datname, 'CREATE') AS data_manager_create,
-          has_table_privilege('openmapx_tiles_owner', 'conditions.road_segment', 'SELECT') AS tile_read
+          has_table_privilege('openmapx_tiles_owner', 'conditions.road_segment', 'SELECT') AS tile_read,
+          has_table_privilege('openmapx_tiles_owner', 'conditions.oauth_grant', 'SELECT') AS secret_read
         FROM pg_database d WHERE d.datname = 'openmapx'`,
     ).toEqual([
       {
@@ -885,6 +986,7 @@ integration("code planted for another role", () => {
         guards: ["openmapx_guard_check_ddl", "openmapx_guard_refuse_code"],
         data_manager_create: true,
         tile_read: true,
+        secret_read: false,
       },
     ]);
     expect(await roles.api.unsafe("SELECT name FROM osm_search.places")).toEqual([

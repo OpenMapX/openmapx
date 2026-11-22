@@ -140,9 +140,11 @@ The tile server's roles may create nothing at all. PostGIS creates the tile
 function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
 a backup holding any other object of a role that cannot log in, so code that
 runs as the tile owner can leave nothing behind for a restoring superuser.
-PostGIS also revokes from every role but the superuser the right to create
-large objects, which no event trigger sees and nothing in OpenMapX or
-OpenConditions uses.
+The tile owner reads in `conditions` only the tables and functions
+OpenConditions' migration grants it; PostGIS grants it nothing there (see
+[Martin overlays](../guides/map-tiles.md#martin-overlays)). PostGIS also
+revokes from every role but the superuser the right to create large objects,
+which no event trigger sees and nothing in OpenMapX or OpenConditions uses.
 
 These guarantees have known limits:
 
@@ -159,9 +161,6 @@ These guarantees have known limits:
   which the default search path does not.
 - PostGIS grants every role read access to its catalogue tables
   (`spatial_ref_sys`, `geometry_columns` and `geography_columns`).
-- OpenConditions installed after PostGIS started needs a PostGIS restart before
-  traffic tiles work. Until then tiles fail with a permission error, and nothing
-  runs as the superuser.
 
 There are no environment variables for these passwords. To change one, delete
 its file, render again and restart PostGIS, `api` and `data-manager`.

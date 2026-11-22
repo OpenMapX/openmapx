@@ -299,8 +299,7 @@ SELECT format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', p.oid::regprocedure)
 -- Code data-manager writes must never run with another role's rights. The
 -- API reads its schemas, and a function, rule, trigger, policy, domain check,
 -- coercion, extension or view runs as whoever's query reaches it, so
--- data-manager may create only tables, indexes, sequences and schemas, and
--- drop the view it created before this rule. Check
+-- data-manager may create only tables, indexes, sequences and schemas. Check
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
 -- The API may install no extension: a trusted extension's script runs as the
@@ -320,8 +319,7 @@ BEGIN
       'CREATE SCHEMA', 'ALTER SCHEMA', 'DROP SCHEMA',
       'CREATE TABLE', 'CREATE TABLE AS', 'ALTER TABLE', 'DROP TABLE',
       'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
-      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
-      'DROP VIEW'))
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE'))
     OR (current_user = '${API_ROLE}' AND tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION'))
     OR current_user IN ('${TILES_ROLE}', '${TILES_OWNER}')
   THEN
@@ -335,14 +333,15 @@ CREATE OR REPLACE FUNCTION openmapx_guard.check_ddl()
   SET search_path = pg_catalog
 AS \$\$
 DECLARE
-  data_manager_schemas constant text := '^((osm_search|notable_places)(__staging|__previous)?|ambient_places|overture_[a-z0-9_]{1,55})\$';
+  data_manager_schemas constant text := '^((osm_search|notable_places|overture_places)(__staging|__previous)?|ambient_places|overture_embeddings)\$';
   api_schemas constant text := '^(data_manager|drizzle)\$';
   command record;
 BEGIN
   FOR command IN SELECT object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
     -- Each role creates only the schemas it needs, so neither can take a name
     -- another component trusts, such as a role's name or the schemas the
-    -- tile server's functions read.
+    -- tile server's functions read. No schema for one of Overture's
+    -- ODbL-licensed themes can sit beside data-manager's Overture places.
     IF command.object_type = 'schema' AND (
       (current_user = '${DATA_MANAGER_ROLE}' AND command.object_identity !~ data_manager_schemas)
       OR (current_user = '${API_ROLE}' AND command.object_identity !~ api_schemas))
@@ -374,11 +373,11 @@ echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} rea
 # tables through its own helper functions and calls PostGIS unqualified,
 # hence `extensions` on the search path. Martin itself asks for the PostGIS
 # version unqualified when it connects, so its login searches `extensions`
-# too; neither searches public. PostGIS grants the owner role read
-# access to every table in `conditions` on each start, so a tile keeps working
-# when OpenConditions' functions read another of its tables; a restore keeps
-# the grants. OpenConditions installed after PostGIS started needs a PostGIS
-# restart, and until then tiles fail with a permission error.
+# too; neither searches public. PostGIS grants the owner role nothing in
+# `conditions`: OpenConditions' own migration grants it exactly the tables and
+# functions `conditions.segment_flow` reads, so tiles render as soon as
+# OpenConditions has migrated, and its credentials and crowd data stay
+# unreadable. A restore keeps the grants.
 # Without MARTIN_DB_PASSWORD the tile server cannot log in.
 if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
   ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}
@@ -415,15 +414,6 @@ END;
 ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO ${TILES_OWNER};
 REVOKE ALL ON FUNCTION tiles.segment_flow(integer, integer, integer, json) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO ${TILES_ROLE};
-SELECT 'GRANT USAGE ON SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
-SELECT 'GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
-SELECT 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
 SQL
 echo "[openmapx-postgis] tile server role ${TILES_ROLE} ready"
 

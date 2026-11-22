@@ -317,7 +317,10 @@ describe("PostGIS entrypoint child ownership", () => {
       );
       expect(roles).toContain("tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION')");
       expect(roles).toContain("AS $$");
-      expect(roles).toContain("overture_[a-z0-9_]{1,55})$'");
+      expect(roles).toContain(
+        "'^((osm_search|notable_places|overture_places)(__staging|__previous)?|ambient_places|overture_embeddings)$'",
+      );
+      expect(roles).not.toContain("'DROP VIEW'");
       expect(f.read("tile-sync-sql")).toContain(
         "NOINHERIT LOGIN PASSWORD 'synthetic-tile''password'",
       );
@@ -336,9 +339,8 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(f.read("tile-sync-sql")).toContain(
         "\\gexec\nALTER ROLE openmapx_tiles SET search_path = extensions;",
       );
-      expect(f.read("tile-sync-sql")).toContain(
-        "GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO openmapx_tiles_owner",
-      );
+      // OpenConditions grants the tile function's role what it reads.
+      expect(f.read("tile-sync-sql")).not.toMatch(/GRANT [^;]* (SCHEMA )?conditions\b/);
       f.mark("exit-now");
       expect(await f.finished).toEqual({ code: 0, childExited: true, synced: true });
     });

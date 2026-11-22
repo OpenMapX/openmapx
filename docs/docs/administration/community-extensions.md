@@ -498,13 +498,18 @@ installation does not prove that their database and feed credentials are valid.
    `postgresql://<role>:<password>@openmapx-postgis:5432/openmapx` with a correctly
    URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
-   separate values with `openssl rand -hex 32`.
+   separate values with `openssl rand -hex 32`. `OPENCONDITIONS_SECRETS_KEY`
+   encrypts the OAuth grants and private keys OpenConditions stores in the
+   database: generate one value with `openssl rand -hex 32` (64 hexadecimal
+   characters) and set the same value on every OpenConditions service that
+   declares it, on its **Credentials** page. Keep a copy outside the server:
+   the encrypted values in a database backup cannot be read without it.
    A role is created once, as the superuser, in the `postgis` container. A
    service that creates its own schemas needs `CREATE` on the database; it then
    owns those schemas. Give each role a search path of its own schemas and
-   `extensions`, where PostGIS lives, before the service first starts; leave
-   out `public`, which the API's role owns. Grant another service only the
-   access it needs to them:
+   `extensions`, where PostGIS lives; leave out `public`, which the API's role
+   owns. Create both OpenConditions roles before the ingest service first
+   starts:
 
    ```bash
    docker exec -it postgis psql -U postgres -d openmapx
@@ -516,18 +521,20 @@ installation does not prove that their database and feed credentials are valid.
    GRANT CREATE ON DATABASE openmapx TO openconditions_ingest;
    CREATE ROLE openconditions_contributions LOGIN PASSWORD '<openssl rand -hex 32>';
    ALTER ROLE openconditions_contributions SET search_path = conditions, extensions;
-   -- After the ingest service has created its schema:
-   GRANT USAGE ON SCHEMA conditions TO openconditions_contributions;
    ```
 
-   Read each service's setup guide for the schemas and tables it uses, and
-   grant no more. Martin's traffic tiles call `conditions.segment_flow` as
-   `openmapx_tiles_owner`, which PostGIS grants read access to every table in
-   `conditions` when it starts; after installing or upgrading OpenConditions,
-   restart PostGIS or run the grants in
-   [Martin overlays](../guides/map-tiles.md#martin-overlays). The roles live
-   outside the database, so a backup restore keeps their grants only while the
-   roles still exist, and those roles must be able to log in.
+   Grant nothing in `conditions` yourself. Only the ingest service migrates:
+   it creates the `conditions` schema and owns it, and its migration grants
+   `openconditions_contributions` exactly what the contributions service uses,
+   and `openmapx_tiles_owner`, the role Martin's traffic tiles run as, read
+   access to `road_segment`, `segment_speed`, `source` and
+   `public_license_policy` and the use of `segment_flow`,
+   `flow_public_licenses` and `flow_osm_credit`. The migration grants only to
+   roles that exist when it runs, which is why both roles come first. The
+   contributions service waits until the ingest service has migrated. No OpenMapX role can read OpenConditions'
+   credentials or crowd reports. The roles live outside the database, so a
+   backup restore keeps their grants only while the roles still exist, and
+   those roles must be able to log in.
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
