@@ -7,6 +7,15 @@ export interface TileFeature {
   type: 1 | 2 | 3;
   geometry: Pt[][];
   props: Record<string, string | number | boolean>;
+  /** The vector-tile feature id; Planetiler writes OSM elements as `osmId × 10 + kind`. */
+  id?: number;
+}
+
+/** The OSM way id of a feature Planetiler built from a way (kind 2), else null. */
+export function wayIdOf(feature: TileFeature): number | null {
+  const id = feature.id;
+  if (id === undefined || !Number.isSafeInteger(id) || id % 10 !== 2) return null;
+  return (id - 2) / 10;
 }
 
 export interface DecodedTile {
@@ -31,6 +40,7 @@ export function decodeLayers(bytes: Uint8Array, names: readonly string[]): Decod
           type: feature.type,
           geometry: feature.loadGeometry().map((ring) => ring.map((p): Pt => [p.x, p.y])),
           props: feature.properties as Record<string, string | number | boolean>,
+          ...(typeof feature.id === "number" ? { id: feature.id } : {}),
         });
       }
     }

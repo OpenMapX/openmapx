@@ -98,6 +98,14 @@ describe("street detail schema", () => {
     expect(schema.attribution).toContain("OpenStreetMap");
   });
 
+  it("roads layer has no tile_post_process merge", () => {
+    // The lane highlight reads each road's OSM way id from Planetiler's feature
+    // id (osmId × 10 + 2); merging lines would drop it.
+    const roads = schema.layers.find((entry) => entry.id === "roads") as Record<string, unknown>;
+    expect(roads.tile_post_process).toBeUndefined();
+    expect(STREET_DETAIL_SCHEMA).not.toContain("tile_post_process");
+  });
+
   it("reads the local extract and never downloads", () => {
     expect(schema.sources).toEqual({ osm: { type: "osm", local_path: "/osm/input.osm.pbf" } });
   });

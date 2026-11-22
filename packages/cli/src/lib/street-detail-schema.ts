@@ -9,6 +9,10 @@
  * `local_path` is a placeholder and there is no `url`, so nothing downloads.
  *
  * Quote `"yes"` and `"no"`: Planetiler reads YAML 1.1, where they are booleans.
+ *
+ * Planetiler gives every feature the vector-tile id `osmId × 10 + kind` (2 for
+ * ways). The navigation lane highlight reads a road's OSM way id from it, so no
+ * layer here may add a `tile_post_process` merge, which would drop the ids.
  */
 
 export const STREET_DETAIL_LAYERS = [
