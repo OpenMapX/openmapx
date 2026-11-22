@@ -468,10 +468,22 @@ integration("code planted for another role", () => {
         END IF;
         RETURN fmt;
       END $$`);
+    // A grant made by hand on the extensions schema does not survive a start.
+    await roles.superuser.unsafe(`
+      GRANT CREATE ON SCHEMA extensions TO openmapx_api WITH GRANT OPTION;
+      SET ROLE openmapx_api;
+      GRANT CREATE ON SCHEMA extensions TO openmapx_data_manager;
+      RESET ROLE;
+      REVOKE USAGE ON SCHEMA extensions FROM PUBLIC;
+    `);
     await restart();
     expect(
       await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
     ).toEqual([{ rolsuper: false }]);
+    expect(
+      await roles.superuser`
+        SELECT n.nspacl::text[] AS acl FROM pg_namespace n WHERE n.nspname = 'extensions'`,
+    ).toEqual([{ acl: ["postgres=UC/postgres", "=U/postgres"] }]);
     await roles.api.unsafe("DROP FUNCTION public.format(text, name)");
   }, 120_000);
 

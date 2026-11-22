@@ -274,9 +274,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT SELECT ON TABLES TO
 -- here, as no other role may install one; the image's own initdb script,
 -- which would put PostGIS into public, is replaced by a no-op. PostGIS
 -- cannot move to another schema once installed.
+-- Only the grants set here survive a start.
 CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION CURRENT_USER;
 ALTER SCHEMA extensions OWNER TO CURRENT_USER;
-REVOKE ALL ON SCHEMA extensions FROM PUBLIC;
+SELECT DISTINCT format('REVOKE ALL ON SCHEMA extensions FROM %s CASCADE',
+    CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END)
+  FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
+  WHERE n.nspname = 'extensions' AND a.grantee <> n.nspowner
+\gexec
 GRANT USAGE ON SCHEMA extensions TO PUBLIC;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;

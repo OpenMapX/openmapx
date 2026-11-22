@@ -297,6 +297,7 @@ describe("PostGIS entrypoint child ownership", () => {
         roles.indexOf("ALTER ROLE openmapx_data_manager SET search_path"),
       );
       expect(roles).toContain("CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION CURRENT_USER;");
+      expect(roles).toContain("REVOKE ALL ON SCHEMA extensions FROM %s CASCADE");
       expect(roles).toContain("GRANT USAGE ON SCHEMA extensions TO PUBLIC;");
       for (const extension of ["postgis", "pg_trgm", "fuzzystrmatch", "btree_gist"])
         expect(roles).toContain(
