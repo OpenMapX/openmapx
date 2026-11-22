@@ -13,26 +13,34 @@ import {
 } from "./atomic-download.js";
 import { publishOsmFingerprint } from "./osm-fingerprints.js";
 
+function geofabrikLeaf(region: string): string {
+  const leaf = region.split("/").at(-1);
+  if (!leaf) throw new Error(`Invalid Geofabrik region "${region}"`);
+  return leaf;
+}
+
 export function resolveOsmUrl(region: string): string {
   if (!region) throw new Error("region is required");
   if (region === "planet") {
     return "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
   }
-  return `https://download.geofabrik.de/${region}-latest.osm.pbf`;
+  const leaf = geofabrikLeaf(region);
+  return `https://download.geofabrik.de/${region}/${leaf}-latest.osm.pbf`;
 }
 
 /**
  * Geofabrik publishes a `.poly` boundary file next to every region's PBF (e.g.
- * `europe/germany/berlin.poly`). It's a few KB and is the authoritative source
- * for a region's extent — used to derive the Overture pull bbox without
- * hardcoding per-region coordinates. Region identifiers are Geofabrik paths.
+ * `europe/germany/berlin/berlin.poly`). It's a few KB and is the authoritative
+ * source for a region's extent — used to clip Overture pulls without hardcoding
+ * per-region coordinates. Region identifiers are Geofabrik paths.
  */
 export function resolveOsmPolyUrl(region: string): string {
   if (!region) throw new Error("region is required");
   if (region === "planet") {
     throw new Error("planet has no Geofabrik .poly boundary; specify a Geofabrik region");
   }
-  return `https://download.geofabrik.de/${region}.poly`;
+  const leaf = geofabrikLeaf(region);
+  return `https://download.geofabrik.de/${region}/${leaf}.poly`;
 }
 
 /**

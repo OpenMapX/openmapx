@@ -54,6 +54,23 @@ describe("BRouter coverage", () => {
     await expect(shell('select_segments "$1" planet', [index])).rejects.toThrow();
   });
 
+  it("resolves canonical Geofabrik .poly URLs for 1- to 4-segment regions", async () => {
+    expect(await shell('region_poly_url "$1"', ["europe"])).toBe(
+      "https://download.geofabrik.de/europe/europe.poly",
+    );
+    expect(await shell('region_poly_url "$1"', ["europe/germany"])).toBe(
+      "https://download.geofabrik.de/europe/germany/germany.poly",
+    );
+    expect(await shell('region_poly_url "$1"', ["europe/germany/berlin"])).toBe(
+      "https://download.geofabrik.de/europe/germany/berlin/berlin.poly",
+    );
+    expect(
+      await shell('region_poly_url "$1"', ["europe/germany/nordrhein-westfalen/koeln-regbez"]),
+    ).toBe(
+      "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez/koeln-regbez.poly",
+    );
+  });
+
   it("reads polygon bounds and rejects invalid or empty polygons", async () => {
     const directory = await mkdtemp(join(tmpdir(), "brouter-poly-"));
     directories.push(directory);

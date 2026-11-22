@@ -99,7 +99,7 @@ limits; the layer is not a complete business directory.
 
 New publications use manifest/feature format `2`. The Overture pull captures
 trusted built-in source notices before acquisition, stores that catalogue in its
-version 2 pull contract, and retains it once per release as
+version 3 pull contract, and retains it once per release as
 `overture_places.conflation_state.sources_catalogue`. Field receipts apply Overture JSON Pointer inheritance to the scalar
 actually retained: a specific property overrides its ancestors, including the
 whole-feature root. A phone-only supplier does not become a label supplier.
@@ -142,10 +142,12 @@ The Germany build body is:
 ```
 
 Country bounds cannot be customized with this flag. Geography is the installed
-snapshot inside the rollout envelope, not political-border clipping: a
-rectangular Overture extract can include neighbouring-country places. The
-snapshot's region label and ingest validation provide source provenance; a
-publication does not independently prove that every place in Germany is present.
+snapshot inside the rollout envelope: regional Overture pulls are clipped to the
+same Geofabrik `.poly` boundary as the OSM extract, so both sources share its
+buffered border without pulling neighbouring-country places across the bounding
+rectangle. The snapshot's region label and ingest validation provide source
+provenance; a publication does not independently prove that every place in
+Germany is present.
 
 ## Germany preparation and resource limits
 
@@ -444,14 +446,16 @@ retain their existing coordinate fallback.
 - Labels: supplied German/English names, otherwise the source name; the shared
   style localization pass accepts colon and underscore language fields; at most 120
   Unicode characters. No inferred opening hours, ratings or popularity.
-- Ranking (policy 2): essential destinations at zoom 13; corroborated cathedral/
+- Ranking (policy 3): essential destinations at zoom 13; corroborated cathedral/
   basilica or heritage levels 1 to 3 destinations at 14; other registered cultural
   landmarks and everyday businesses at 15; other places at 16. Cultural landmarks
   require a valid Wikidata/language-prefixed Wikipedia identity plus registered
   heritage or explicit cathedral/basilica designation. Ordinary worship buildings
-  without that evidence stay at 16. Importance orders within utility tiers;
-  exact source ID breaks ties. Indexed `key/value` categories such as
-  `amenity/hospital` normalize to their value.
+  without that evidence stay at 16. Within each utility tier, OSM importance
+  orders places in the 50–99 sub-band and Overture confidence orders unmatched
+  Overture gaps in the 0–49 sub-band, strictly below OSM; exact source ID breaks
+  ties. Indexed `key/value` categories such as `amenity/hospital` normalize to
+  their value.
 - Tenant handling: interior/node/building-part non-ground records stay at 18.
   A corroborated whole cultural-building footprint is a building destination;
   its level metadata does not imply an interior tenant or an entrance claim.

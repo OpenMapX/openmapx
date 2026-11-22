@@ -10,6 +10,11 @@ normalize_region() {
   printf '%s\n' "$region"
 }
 
+region_poly_url() {
+  local region="$1"
+  printf 'https://download.geofabrik.de/%s/%s.poly\n' "$region" "${region##*/}"
+}
+
 region_bounds() {
   awk '
     NF == 2 && $1 ~ /^[-+0-9.]+([Ee][-+0-9]+)?$/ && $2 ~ /^[-+0-9.]+([Ee][-+0-9]+)?$/ {
@@ -64,7 +69,7 @@ prepare_generation() {
   trap 'exit 130' INT
   bounds=planet
   if [[ "$region" != planet ]]; then
-    fetch_file "https://download.geofabrik.de/$region.poly" "$stage/region.poly" 10000000
+    fetch_file "$(region_poly_url "$region")" "$stage/region.poly" 10000000
     bounds=$(region_bounds "$stage/region.poly")
   fi
   fetch_file "$base" "$stage/index.html" 5000000

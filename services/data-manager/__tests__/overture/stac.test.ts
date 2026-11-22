@@ -88,7 +88,7 @@ describe("Overture STAC release contract", () => {
   it("follows the catalog hierarchy and selects only intersecting exact assets", async () => {
     const contract = await resolveOvertureStacContract(
       release,
-      { west: 6, south: 50, east: 7, north: 51 },
+      [{ west: 6, south: 50, east: 7, north: 51 }],
       stacFetch(),
     );
 
@@ -108,11 +108,41 @@ describe("Overture STAC release contract", () => {
     });
   });
 
+  it("selects assets intersecting either envelope of an antimeridian region without pulling the middle band", async () => {
+    const westPacific = item("00000", [-180, -25, -170, -10], 100);
+    const midWorld = item("00001", [-100, -25, 100, -10], 999);
+    const eastPacific = item("00002", [170, -25, 180, -10], 150);
+    const contract = await resolveOvertureStacContract(
+      release,
+      [
+        { west: -180, south: -21, east: -178.4, north: -16 },
+        { west: 177.1, south: -21, east: 180, north: -16 },
+      ],
+      stacFetch({
+        [collectionUrl]: {
+          type: "Collection",
+          id: "place",
+          links: [
+            { rel: "item", href: "./00000/00000.json" },
+            { rel: "item", href: "./00001/00001.json" },
+            { rel: "item", href: "./00002/00002.json" },
+          ],
+        },
+        [`https://stac.overturemaps.org/${release}/places/place/00000/00000.json`]: westPacific,
+        [`https://stac.overturemaps.org/${release}/places/place/00001/00001.json`]: midWorld,
+        [`https://stac.overturemaps.org/${release}/places/place/00002/00002.json`]: eastPacific,
+      }),
+    );
+
+    expect(contract.assets.map((asset) => asset.itemId)).toEqual(["00000", "00002"]);
+    expect(contract.selectedAssetRows).toBe(250);
+  });
+
   it("fails closed when an archived release has no STAC catalog", async () => {
     await expect(
       resolveOvertureStacContract(
         "2026-06-17.0",
-        { west: 6, south: 50, east: 7, north: 51 },
+        [{ west: 6, south: 50, east: 7, north: 51 }],
         stacFetch(),
       ),
     ).rejects.toThrow(/HTTP 404/);
@@ -126,7 +156,7 @@ describe("Overture STAC release contract", () => {
     await expect(
       resolveOvertureStacContract(
         release,
-        { west: 6, south: 50, east: 7, north: 51 },
+        [{ west: 6, south: 50, east: 7, north: 51 }],
         stacFetch({ [itemUrl]: invalid }),
       ),
     ).rejects.toThrow(/unexpected AWS asset URL/);
@@ -167,7 +197,15 @@ describe("local Overture pull contract", () => {
         selectedAssetRows: 200,
       },
       region,
-      { west: 13, south: 52, east: 14, north: 53 },
+      [{ west: 13, south: 52, east: 14, north: 53 }],
+      {
+        kind: "geofabrik-poly",
+        url: "https://download.geofabrik.de/europe/germany/berlin/berlin.poly",
+        sha256: "b".repeat(64),
+        outerRings: 1,
+        exclusionRings: 0,
+        vertices: 4,
+      },
       parquetPath,
       { rowCount: 42, contributors: ["meta", "Overture", "meta"] },
       undefined,
@@ -240,7 +278,27 @@ describe("local Overture pull contract", () => {
     ]);
     writeFileSync(
       pullContractPath(dataDir, release, region),
-      JSON.stringify({ ...contract, contractVersion: 1 }),
+      JSON.stringify({ ...contract, contractVersion: 2 }),
+    );
+    expect(() => readOverturePullContract(dataDir, release, region)).toThrow(
+      `Overture pull contract does not match ${release}/${region}`,
+    );
+    writeFileSync(
+      pullContractPath(dataDir, release, region),
+      JSON.stringify({ ...contract, regionClip: { kind: "none" } }),
+    );
+    expect(() => readOverturePullContract(dataDir, release, region)).toThrow(
+      `Overture pull contract does not match ${release}/${region}`,
+    );
+    writeFileSync(
+      pullContractPath(dataDir, release, region),
+      JSON.stringify({
+        ...contract,
+        regionEnvelopes: [
+          { west: 13, south: 52, east: 14, north: 53 },
+          { west: 13.5, south: 52, east: 15, north: 53 },
+        ],
+      }),
     );
     expect(() => readOverturePullContract(dataDir, release, region)).toThrow(
       `Overture pull contract does not match ${release}/${region}`,
@@ -273,7 +331,15 @@ describe("local Overture pull contract", () => {
         selectedAssetRows: 200,
       },
       region,
-      { west: 13, south: 52, east: 14, north: 53 },
+      [{ west: 13, south: 52, east: 14, north: 53 }],
+      {
+        kind: "geofabrik-poly",
+        url: "https://download.geofabrik.de/europe/germany/berlin/berlin.poly",
+        sha256: "b".repeat(64),
+        outerRings: 1,
+        exclusionRings: 0,
+        vertices: 4,
+      },
       parquetPath,
       { rowCount: 1, contributors: ["meta"] },
       undefined,
@@ -314,7 +380,7 @@ it("selects all worldwide assets while bounding catalog request concurrency", as
   };
   const contract = await resolveOvertureStacContract(
     release,
-    { west: -180, south: -90, east: 180, north: 90 },
+    [{ west: -180, south: -90, east: 180, north: 90 }],
     fetchImpl,
   );
   expect(contract.assets).toHaveLength(24);

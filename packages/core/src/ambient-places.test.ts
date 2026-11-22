@@ -1,5 +1,6 @@
 import { assert, describe, expect, it } from "vitest";
 import {
+  AMBIENT_POLICY_VERSION,
   ambientCategory,
   ambientOvertureIdentityEvidence,
   ambientPlaceContributors,
@@ -9,6 +10,7 @@ import {
   ambientPlaceToCategoryPlace,
   matchAmbientBasemap,
   mergeAmbientPlaces,
+  overtureRankImportance,
   validateAmbientRegion,
 } from "./ambient-places";
 
@@ -266,6 +268,53 @@ describe("ambient place policy", () => {
       expect(ambientPlaceFromOverture({ ...overture, ...patch })).toBeNull();
     }
     expect(ambientPlaceFromOverture({ ...overture, confidence: 0.5 })).not.toBeNull();
+  });
+  it("ranks Overture gaps monotonically by confidence within 0..49, strictly below OSM in every tier", () => {
+    expect(AMBIENT_POLICY_VERSION).toBe(3);
+    expect(overtureRankImportance(0.5)).toBe(0);
+    expect(overtureRankImportance(1.0)).toBeCloseTo(0.49, 6);
+    expect(overtureRankImportance(Number.NaN)).toBe(0);
+
+    const confidences = [0.5, 0.6, 0.77, 0.92, 0.99, 1.0];
+    const cafeRanks = confidences.map(
+      (confidence) =>
+        accepted(ambientPlaceFromOverture({ ...overture, basic_category: "cafe", confidence }))
+          .rank,
+    );
+    expect(cafeRanks).toEqual([2000, 2010, 2026, 2041, 2048, 2049]);
+    for (let i = 1; i < cafeRanks.length; i++) {
+      expect(cafeRanks[i]).toBeGreaterThan(cafeRanks[i - 1] ?? -1);
+    }
+
+    for (const [osmCategory, overtureCategory, tierBase] of [
+      ["tourism/artwork", "artwork", 1000],
+      ["amenity/cafe", "cafe", 2000],
+      ["amenity/hospital", "hospital", 3000],
+    ] as const) {
+      const osmMin = accepted(
+        ambientPlaceFromOsm({ ...osm, category: osmCategory, importance: 0.5, tags: {} }),
+      );
+      const overtureMax = accepted(
+        ambientPlaceFromOverture({
+          ...overture,
+          basic_category: overtureCategory,
+          confidence: 1.0,
+        }),
+      );
+      expect(Number.isInteger(overtureMax.rank)).toBe(true);
+      expect(overtureMax.rank).toBe(tierBase + 49);
+      expect(osmMin.rank).toBe(tierBase + 50);
+      expect(overtureMax.rank).toBeLessThan(osmMin.rank);
+      expect(overtureMax.rank < 2500 || overtureMax.rank >= 2600).toBe(true);
+    }
+
+    const osmHospital = accepted(
+      ambientPlaceFromOsm({ ...osm, category: "amenity/hospital", importance: 0.7, tags: {} }),
+    );
+    const overtureHospital = accepted(
+      ambientPlaceFromOverture({ ...overture, basic_category: "hospital", confidence: 1.0 }),
+    );
+    expect(overtureHospital.rank).toBeLessThan(osmHospital.rank);
   });
   it("normalizes indexed slash categories", () => {
     expect(ambientCategory("amenity/hospital")).toBe("hospital");
