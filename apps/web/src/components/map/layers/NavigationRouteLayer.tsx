@@ -151,15 +151,33 @@ export function NavigationRouteLayer() {
         navLine?.mercatorTotal ?? 0,
         fraction,
       );
+    // Where the lane highlight and the raised arrow carry the route, the route
+    // line, its casing and its ghost all step aside: a lane-wide line left on
+    // the centre line would read as another lane, and the ghost's tint would
+    // turn the white arrow blue. The two spans meet, so one stretch covers both.
+    // Nothing paints the route there, so the attribution union has a gap; that
+    // only ever over-credits.
+    const highlight =
+      highlightSpan && (highlightSpan.route === undefined || highlightSpan.route === route)
+        ? highlightSpan
+        : null;
+    const spans = [highlight, arrowSpan].filter(
+      (span): span is { fromAlong: number; toAlong: number } => span !== null,
+    );
+    const carried =
+      spans.length > 0
+        ? {
+            fromAlong: Math.min(...spans.map((span) => span.fromAlong)),
+            toAlong: Math.max(...spans.map((span) => span.toAlong)),
+          }
+        : null;
     activeFeatures.features.forEach((feature, index) => {
       const localProgress = toLocal(feature, progressFraction);
       const span =
-        highlightSpan &&
-        navLine &&
-        (highlightSpan.route === undefined || highlightSpan.route === route)
+        carried && navLine
           ? {
-              from: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.fromAlong)),
-              to: toLocal(feature, navRouteProgressFraction(navLine, highlightSpan.toAlong)),
+              from: toLocal(feature, navRouteProgressFraction(navLine, carried.fromAlong)),
+              to: toLocal(feature, navRouteProgressFraction(navLine, carried.toAlong)),
             }
           : null;
       paint[routeSegmentLayerId(TRAVELED, index)] = {
@@ -172,25 +190,8 @@ export function NavigationRouteLayer() {
         "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.casing, span),
       };
       if (sceneActive) {
-        // The ghost keeps covering the lane highlight's span, except where the
-        // raised arrow stands: drawn above the scene, its tint would turn the
-        // white arrow blue, and the arrow marks the route there. Where the two
-        // spans overlap neither the route nor the ghost paints, so the
-        // attribution union has a gap there; that only ever over-credits.
-        const ghostSpan =
-          arrowSpan && navLine
-            ? {
-                from: toLocal(feature, navRouteProgressFraction(navLine, arrowSpan.fromAlong)),
-                to: toLocal(feature, navRouteProgressFraction(navLine, arrowSpan.toAlong)),
-              }
-            : null;
         paint[routeSegmentLayerId(REMAINING_GHOST, index)] = {
-          "line-gradient": progressGradient(
-            TRANSPARENT,
-            localProgress,
-            ROUTE_COLORS.active,
-            ghostSpan,
-          ),
+          "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.active, span),
         };
       }
     });

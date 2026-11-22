@@ -532,12 +532,13 @@ describe("NavigationRouteLayer in 3D navigation", () => {
       ROUTE_COLORS.active,
     ]);
     expect(casing.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.casing]);
-    // The ghost keeps covering the geometry, so the attribution union stays whole.
-    expect(ghost).toHaveLength(5);
+    // The ghost leaves the span too: over the highlight it would read as a
+    // second, lane-wide highlighted lane on the centre line.
+    expect(ghost.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.active]);
     expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
   });
 
-  it("the ghost leaves the raised arrow's span transparent, so the arrow stays white", () => {
+  it("the route and its ghost leave the raised arrow's span to the arrow", () => {
     const { rerender } = render(<NavigationRouteLayer />);
     navState.progress = { alongMeters: 300 };
     rerender(<NavigationRouteLayer />);
@@ -549,8 +550,28 @@ describe("NavigationRouteLayer in 3D navigation", () => {
     const from = navRouteProgressFraction(preparedRoute, 950);
     const to = navRouteProgressFraction(preparedRoute, 1050);
     expect(ghost.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.active]);
-    // The opaque route under the arrow is untouched.
-    expect(fake.state.paint.get(REMAINING)?.["line-gradient"]).toHaveLength(5);
+    // The arrow runs in the highlighted lane; a route line left on the centre
+    // line beside it would point at another lane.
+    const remaining = fake.state.paint.get(REMAINING)?.["line-gradient"] as unknown[];
+    expect(remaining.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.active]);
+  });
+
+  it("joins the highlight and arrow spans into one transparent stretch", () => {
+    const { rerender } = render(<NavigationRouteLayer />);
+    navState.progress = { alongMeters: 300 };
+    rerender(<NavigationRouteLayer />);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(true);
+      useNavigationSceneStore.getState().setHighlightSpan({ fromAlong: 850, toAlong: 990 });
+      useNavigationSceneStore.getState().setArrowSpan({ fromAlong: 940, toAlong: 1040 });
+    });
+    const remaining = fake.state.paint.get(REMAINING)?.["line-gradient"] as unknown[];
+    expect(remaining.slice(5)).toEqual([
+      navRouteProgressFraction(preparedRoute, 850),
+      "rgba(0,0,0,0)",
+      navRouteProgressFraction(preparedRoute, 1040),
+      ROUTE_COLORS.active,
+    ]);
   });
 
   it("toggling the ghost does not call setData on nav-route-source", () => {
