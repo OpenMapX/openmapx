@@ -4,6 +4,7 @@ import {
   approachTargetZoom,
   cumulativeDistances,
   junctionFitZoom,
+  laneOffsetAt,
   lookAheadBearing,
   lookAheadMeters,
   maneuverArrowLine,
@@ -11,6 +12,7 @@ import {
   maneuverStartMeters,
   NAV_CAMERA_PROFILE,
   type NavCameraProfileName,
+  offsetLngLat,
   positionAt,
   speedZoom,
   stepDeadReckon,
@@ -20,7 +22,7 @@ import {
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
+import { highlightLanePath, useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   type CameraViewport,
   getCameraFrameTarget,
@@ -578,9 +580,15 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           bearingAlpha,
         );
 
-        const puckPose: PuckPose = { lng: point[0], lat: point[1], bearing: brg };
+        // Before a lane-guided turn the puck is drawn in the highlighted lane,
+        // like the arrow; the route position itself stays on the route line.
+        const lanePath = highlightLanePath(useNavigationSceneStore.getState().highlightSpan);
+        const puckPoint = lanePath
+          ? offsetLngLat(point, bearing, laneOffsetAt(displayedRef.current, lanePath))
+          : point;
+        const puckPose: PuckPose = { lng: puckPoint[0], lat: puckPoint[1], bearing: brg };
         if (puckPoseChanged(lastPuckRef.current, puckPose)) {
-          marker.setLngLat(point as LngLat).setRotation(brg);
+          marker.setLngLat(puckPoint as LngLat).setRotation(brg);
           lastPuckRef.current = puckPose;
           published = true;
         }

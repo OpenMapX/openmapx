@@ -3,6 +3,7 @@ import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
 import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
 import {
+  laneRejoinAlong,
   laneShiftedArrowLine,
   maneuverArrowLine,
   maneuverArrowTipBearing,
@@ -117,7 +118,7 @@ describe("laneShiftedArrowLine", () => {
   const east = (m: number): LngLat => [m / M_PER_DEG, 0];
   const line = [0, 10, 20, 30, 40, 50, 60].map(east);
   const southOf = (p: LngLat) => -p[1] * M_PER_DEG;
-  const shift = { untilAlong: 30, rejoinAlong: 40, offsetMeters: 3 };
+  const shift = { fromAlong: -100, toAlong: 30, rejoinAlong: 40, offsetMeters: 3 };
 
   it("runs in the lane before the junction, positive offsets to the right", () => {
     const shifted = laneShiftedArrowLine(line, 0, shift);
@@ -126,7 +127,7 @@ describe("laneShiftedArrowLine", () => {
   });
 
   it("tapers back to the route line by the rejoin point and follows it after", () => {
-    const shifted = laneShiftedArrowLine(line, 0, { ...shift, untilAlong: 20 });
+    const shifted = laneShiftedArrowLine(line, 0, { ...shift, toAlong: 20 });
     expect(southOf(shifted[3] as LngLat)).toBeCloseTo(1.5, 1);
     expect(southOf(shifted[4] as LngLat)).toBeCloseTo(0, 3);
     expect(shifted.at(-1)).toEqual(east(60));
@@ -134,7 +135,8 @@ describe("laneShiftedArrowLine", () => {
 
   it("adds vertices where the taper starts and ends", () => {
     const shifted = laneShiftedArrowLine(line, 5, {
-      untilAlong: 27,
+      fromAlong: -100,
+      toAlong: 27,
       rejoinAlong: 33,
       offsetMeters: -2,
     });
@@ -145,5 +147,21 @@ describe("laneShiftedArrowLine", () => {
 
   it("returns the line unchanged without an offset", () => {
     expect(laneShiftedArrowLine(line, 0, { ...shift, offsetMeters: 0 })).toEqual(line);
+  });
+
+  it("rejoins the route line just before the arrow head", () => {
+    expect(laneRejoinAlong(500, "driving")).toBe(535);
+    expect(laneRejoinAlong(500, "walking")).toBe(515);
+  });
+
+  it("eases into the lane where the highlight begins, like the car", () => {
+    const shifted = laneShiftedArrowLine(line, 0, {
+      fromAlong: 0,
+      toAlong: 40,
+      rejoinAlong: 50,
+      offsetMeters: 3,
+    });
+    expect(southOf(shifted[0] as LngLat)).toBeCloseTo(0, 3);
+    expect(southOf(shifted[1] as LngLat)).toBeCloseTo(2, 1);
   });
 });

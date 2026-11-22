@@ -1,6 +1,7 @@
 import {
   cumulativeDistances,
   haversineDistance,
+  laneRejoinAlong,
   maneuverArrowSpans,
   maneuverStartMeters,
   numberAt,
@@ -148,9 +149,12 @@ describe("NavManeuverArrowLayer in 3D", () => {
     const plain = lineOf().coordinates as [number, number][];
     const along = maneuverStartMeters(route as unknown as Route, 1);
     act(() =>
-      useNavigationSceneStore
-        .getState()
-        .setHighlightSpan({ fromAlong: along - 80, toAlong: along - 5, offsetMeters: 3 }),
+      useNavigationSceneStore.getState().setHighlightSpan({
+        fromAlong: along - 80,
+        toAlong: along - 5,
+        rejoinAlong: laneRejoinAlong(along, "driving"),
+        offsetMeters: 3,
+      }),
     );
     const shifted = lineOf().coordinates as [number, number][];
     // The first vertex moved 3 m sideways; the tip did not.

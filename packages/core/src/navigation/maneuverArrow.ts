@@ -2,6 +2,7 @@ import type { LngLat } from "../types/geometry";
 import type { TravelMode } from "../types/routing";
 import { bearingBetween } from "./bearing";
 import { distanceAtVertex, positionAt } from "./deadReckon";
+import { LANE_ENTRY_M, type LanePath, laneOffsetAt } from "./lanePath";
 
 /** How much route the arrow shows before / after the maneuver point. */
 export interface ManeuverArrowSpans {
@@ -143,29 +144,29 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
   return ring.map(toLngLat);
 }
 
+/** The raised and flat arrow heads are this long. */
+export const ARROW_HEAD_M = 5;
+
+/**
+ * Where the car and the arrow are back on the route line after a lane-guided
+ * turn: at the base of the arrow head, so the head points along the route.
+ */
+export function laneRejoinAlong(maneuverAlong: number, mode: TravelMode): number {
+  return maneuverAlong + Math.max(0, maneuverArrowSpans(mode).after - ARROW_HEAD_M);
+}
+
 /** A taper mark this close to an existing vertex reuses it. */
 const MARK_EPSILON_M = 0.01;
 
-/** Where the arrow runs in the recommended lane, and where it rejoins the route line. */
-export interface ArrowLaneShift {
-  /** Along-route metres up to which the arrow runs fully in the lane. */
-  untilAlong: number;
-  /** Along-route metres where it is back on the route line: past the turn, before the head. */
-  rejoinAlong: number;
-  /** Sideways distance to the lane centre, positive to the right of travel. */
-  offsetMeters: number;
-}
-
 /**
- * The arrow line moved sideways into the recommended lane before the junction,
- * tapering back to the route line between `untilAlong` and `rejoinAlong` and
- * following it from there, so the arrow points into the same lane as the lane
- * highlight. `lineStartAlong` is the along-route distance of `line[0]`.
+ * The arrow line moved sideways along the lane path (see `laneOffsetAt`), so
+ * the arrow runs where the car is drawn and points into the same lane as the
+ * lane highlight. `lineStartAlong` is the along-route distance of `line[0]`.
  */
 export function laneShiftedArrowLine(
   line: LngLat[],
   lineStartAlong: number,
-  shift: ArrowLaneShift,
+  shift: LanePath,
 ): LngLat[] {
   const tip = line.at(-1);
   if (!tip || line.length < 2 || shift.offsetMeters === 0) return line;
@@ -174,8 +175,14 @@ export function laneShiftedArrowLine(
   const toLocal = ([lng, lat]: LngLat): LngLat => [(lng - tip[0]) * k * cos, (lat - tip[1]) * k];
   const toLngLat = ([x, y]: LngLat): LngLat => [tip[0] + x / (k * cos), tip[1] + y / k];
 
-  // Vertices with their along-route distance, plus vertices where the taper
-  // starts and ends so it bends exactly there.
+  // Vertices with their along-route distance, plus vertices where the offset
+  // starts or stops changing, so it bends exactly there.
+  const marks = [
+    shift.fromAlong,
+    shift.fromAlong + Math.min(LANE_ENTRY_M, Math.max(shift.toAlong - shift.fromAlong, 0)),
+    shift.toAlong,
+    shift.rejoinAlong,
+  ];
   const points: { p: LngLat; along: number; original?: LngLat }[] = [];
   let along = lineStartAlong;
   line.forEach((vertex, i) => {
@@ -184,7 +191,7 @@ export function laneShiftedArrowLine(
       const prev = points[points.length - 1] as { p: LngLat; along: number };
       const length = Math.hypot(p[0] - prev.p[0], p[1] - prev.p[1]);
       const next = along + length;
-      for (const mark of [shift.untilAlong, shift.rejoinAlong]) {
+      for (const mark of marks) {
         if (mark > along + MARK_EPSILON_M && mark < next - MARK_EPSILON_M) {
           const t = (mark - along) / length;
           points.push({
@@ -199,14 +206,8 @@ export function laneShiftedArrowLine(
   });
   points.sort((a, b) => a.along - b.along);
 
-  const span = Math.max(shift.rejoinAlong - shift.untilAlong, 1e-6);
-  const offsetAt = (a: number): number => {
-    if (a <= shift.untilAlong) return shift.offsetMeters;
-    if (a >= shift.rejoinAlong) return 0;
-    return (shift.offsetMeters * (shift.rejoinAlong - a)) / span;
-  };
   return points.map(({ p, along: a, original }, i) => {
-    const offset = offsetAt(a);
+    const offset = laneOffsetAt(a, shift);
     if (offset === 0 && original) return original;
     const before = (points[Math.max(0, i - 1)] as { p: LngLat }).p;
     const after = (points[Math.min(points.length - 1, i + 1)] as { p: LngLat }).p;

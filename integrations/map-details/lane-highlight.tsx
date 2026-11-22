@@ -4,6 +4,7 @@ import {
   cumulativeDistances,
   guidanceApproachMeters,
   guidanceLanesForStep,
+  laneRejoinAlong,
   maneuverArrowLine,
   maneuverStartMeters,
   resolveLaneGuidance,
@@ -132,6 +133,7 @@ export function LaneHighlight({
           fromAlong: maneuverAlong - answer.startBeforeManeuver,
           toAlong: maneuverAlong - answer.endBeforeManeuver,
           offsetMeters: answer.laneOffsetMeters,
+          rejoinAlong: laneRejoinAlong(maneuverAlong, navMode),
         });
       })
       .catch(() => undefined);
@@ -140,7 +142,7 @@ export function LaneHighlight({
       setDrawn(null);
       setHighlightSpan(null);
     };
-  }, [eligible, route, client, streetTemplate, wayId, lanes, upcoming, setHighlightSpan]);
+  }, [eligible, route, client, streetTemplate, wayId, lanes, upcoming, setHighlightSpan, navMode]);
 
   const group = useMemo<MapLayerGroup | null>(
     () =>

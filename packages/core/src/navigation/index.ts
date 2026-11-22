@@ -145,6 +145,7 @@ export {
   landmarkManeuverAt,
   selectLandmark,
 } from "./landmarks";
+export { LANE_ENTRY_M, type LanePath, laneOffsetAt, offsetLngLat } from "./lanePath";
 export {
   guidanceApproachMeters,
   guidanceLanesForStep,
@@ -165,7 +166,8 @@ export {
 } from "./laneTags";
 export { isLiveNavigationStatus } from "./liveStatus";
 export {
-  type ArrowLaneShift,
+  ARROW_HEAD_M,
+  laneRejoinAlong,
   laneShiftedArrowLine,
   type ManeuverArrowSpans,
   maneuverArrowLine,

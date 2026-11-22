@@ -1314,6 +1314,25 @@ describe("useNavCamera look-ahead and junction framing", () => {
     },
   );
 
+  it("draws the puck in the highlighted lane, the route position unchanged", async () => {
+    const harness = await mountNavCamera();
+    act(() =>
+      useNavigationSceneStore.getState().setHighlightSpan({
+        fromAlong: 400,
+        toAlong: 650,
+        rejoinAlong: 700,
+        offsetMeters: 3,
+      }),
+    );
+    applyApproachFix(START_ALONG, SPEED_MPS, 100);
+    harness.frames.flush(240, FRAME_MS);
+    // Eastbound on the first segment: 3 m to the right is 3 m south of the line.
+    const [, lat] = harness.marker().lngLat;
+    expect(-lat * 111_195).toBeCloseTo(3, 0);
+    expect(useNavigationStore.getState().progress?.snapped[1]).toBe(0);
+    act(() => useNavigationSceneStore.getState().setHighlightSpan(null));
+  });
+
   it.each(["walking", "cycling"] as const)("%s keeps the local bearing", async (mode) => {
     const harness = await mountNavCamera({ startNavigation: false });
     act(() => {

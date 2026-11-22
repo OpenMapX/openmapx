@@ -21,7 +21,7 @@ import {
   type MapLayerGroup,
   type SlottedLayer,
 } from "@/integration-api/map/mapLayerGroup";
-import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
+import { highlightLanePath, useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 const SOURCE = "nav-maneuver-arrow-source";
@@ -77,18 +77,14 @@ export function NavManeuverArrowLayer() {
     const alongMeters = maneuverStartMeters(route, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
     const routeLine = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
-    // With a lane highlight, the arrow runs in the highlighted lane, so the two
-    // never point at different lanes. That lane is on the turning side, so the
-    // arrow cuts the corner through the junction and rejoins the route line
-    // just before its head.
-    const laneOffset = highlightSpan?.offsetMeters;
+    // With a lane highlight, the arrow runs in the highlighted lane where the
+    // car is drawn, so they never point at different lanes. That lane is on
+    // the turning side, so the arrow cuts the corner through the junction and
+    // rejoins the route line just before its head.
+    const lanePath = highlightLanePath(highlightSpan);
     const line =
-      routeLine && laneOffset
-        ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), {
-            untilAlong: highlightSpan.toAlong,
-            rejoinAlong: alongMeters + Math.max(0, spans.after - RAISED_HEAD_M),
-            offsetMeters: laneOffset,
-          })
+      routeLine && lanePath
+        ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), lanePath)
         : routeLine;
     const tip = line?.at(-1);
     if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;

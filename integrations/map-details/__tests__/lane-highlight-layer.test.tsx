@@ -158,7 +158,10 @@ describe("LaneHighlight", () => {
         laneOffsetMeters: 4.8,
       }),
     );
-    expect(useNavigationSceneStore.getState().highlightSpan?.offsetMeters).toBe(4.8);
+    const span = useNavigationSceneStore.getState().highlightSpan;
+    expect(span?.offsetMeters).toBe(4.8);
+    // The car and the arrow rejoin the route line 35 m past the turn at 200 m.
+    expect(span?.rejoinAlong).toBeCloseTo(235, 0);
   });
 
   it.each([

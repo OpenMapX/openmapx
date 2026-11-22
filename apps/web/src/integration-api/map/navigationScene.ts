@@ -1,5 +1,6 @@
 "use client";
 
+import type { LanePath } from "@openmapx/core";
 import { create } from "zustand";
 
 /**
@@ -11,7 +12,21 @@ import { create } from "zustand";
 export interface HighlightSpan {
   fromAlong: number;
   toAlong: number;
+  /** The recommended lane's offset from the route line, positive right. */
   offsetMeters?: number;
+  /** Where the car and the arrow are back on the route line, past the turn. */
+  rejoinAlong?: number;
+}
+
+/** The display-only lane path a highlight defines, when it has a lane offset. */
+export function highlightLanePath(span: HighlightSpan | null): LanePath | null {
+  if (!span?.offsetMeters || span.rejoinAlong === undefined) return null;
+  return {
+    fromAlong: span.fromAlong,
+    toAlong: span.toAlong,
+    rejoinAlong: span.rejoinAlong,
+    offsetMeters: span.offsetMeters,
+  };
 }
 
 export interface NavigationSceneState {
