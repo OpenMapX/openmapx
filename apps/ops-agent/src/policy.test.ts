@@ -1,4 +1,5 @@
 import { authorizeOpsResources, type OpsOperation } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { describe, expect, it } from "vitest";
 import {
   createProductionRegistryResourceClaimer,
@@ -440,9 +441,9 @@ describe("operation-specific authority policy", () => {
     ).resolves.not.toBeNull();
   });
 
-  it("excludes the agent, edge proxy, and self-replaced API from generic lifecycle", async () => {
+  it("excludes every control-plane service from generic lifecycle", async () => {
     const policy = createRegistryResourcePolicy({
-      serviceIds: ["worker", "ops-agent", "traefik", "api"],
+      serviceIds: ["worker", ...services.CONTROL_PLANE_SERVICE_IDS],
       integrationIds: [],
       trustedData: denyAllTrustedOpsData,
     });
@@ -456,9 +457,18 @@ describe("operation-specific authority policy", () => {
         policy,
       ),
     ).resolves.toBe(true);
-    for (const serviceId of ["ops-agent", "traefik", "api"]) {
+    for (const serviceId of services.CONTROL_PLANE_SERVICE_IDS) {
+      for (const kind of ["service.restart", "service.stop"] as const)
+        await expect(authorizeOpsResources({ kind, serviceId }, policy)).resolves.toBe(false);
       await expect(
-        authorizeOpsResources({ kind: "service.restart", serviceId }, policy),
+        authorizeOpsResources(
+          {
+            expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+            kind: "service.start",
+            serviceId,
+          },
+          policy,
+        ),
       ).resolves.toBe(false);
     }
   });

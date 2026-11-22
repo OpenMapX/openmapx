@@ -1,7 +1,10 @@
 import { SERVICE_ACTIONS, serviceActionDecisionSchema } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { describe, expect, it } from "vitest";
 import type { OwnedServiceSnapshot } from "./owned-services";
 import { decideServiceAction, type ServiceAuthority } from "./service-action-policy";
+
+const { CONTROL_PLANE_SERVICE_IDS, CORE_RESTART_SERVICE_IDS } = services;
 
 const authority: ServiceAuthority = {
   revisionId: "test",
@@ -20,7 +23,29 @@ const snapshot: OwnedServiceSnapshot = {
   },
 };
 describe("shared service action decisions", () => {
-  it.each(["api", "traefik"])(
+  it.each(CONTROL_PLANE_SERVICE_IDS)(
+    "manages control-plane %s only through its dedicated workflows",
+    (serviceId) => {
+      const current = { ...snapshot, serviceId };
+      const selected = {
+        ...authority,
+        services: [{ serviceId, isBuiltIn: true, buildable: true }],
+        enabledServiceIds: new Set([serviceId]),
+      };
+      for (const action of ["start", "stop", "apply", "update", "build"] as const)
+        expect(decideServiceAction(selected, current, action)).toMatchObject({
+          available: false,
+          reason: "control_plane",
+        });
+      expect(decideServiceAction(selected, current, "pull").workflow).toBe("image-stage");
+      expect(decideServiceAction(selected, current, "restart")).toMatchObject(
+        (CORE_RESTART_SERVICE_IDS as readonly string[]).includes(serviceId)
+          ? { available: true, workflow: "core-restart" }
+          : { available: false, reason: "control_plane" },
+      );
+    },
+  );
+  it.each(CORE_RESTART_SERVICE_IDS)(
     "offers only the dedicated restart workflow for owned enabled %s",
     (serviceId) => {
       const current = { ...snapshot, serviceId };

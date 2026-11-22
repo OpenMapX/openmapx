@@ -1,4 +1,5 @@
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
@@ -545,27 +546,30 @@ describe("GET /admin/services/:id/logs", () => {
 });
 
 describe("POST /admin/services/:id/action", () => {
-  it.each(["api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
-    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
-    mockExecuteAndWait.mockResolvedValueOnce({
-      services: [
-        { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
-      ],
-    });
-    const response = await app.inject({
-      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
-      method: "POST",
-      url: `/admin/services/${id}/action`,
-      payload: { action: "restart" },
-    });
-    expect(response.statusCode).toBe(200);
-    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.core-restart",
-      { service: id },
-      fakeSession.user.id,
-      expect.any(String),
-    );
-  });
+  it.each(coreServices.CORE_RESTART_SERVICE_IDS)(
+    "queues the dedicated %s restart workflow",
+    async (id) => {
+      mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
+      mockExecuteAndWait.mockResolvedValueOnce({
+        services: [
+          { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
+        ],
+      });
+      const response = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+        method: "POST",
+        url: `/admin/services/${id}/action`,
+        payload: { action: "restart" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+        "service.core-restart",
+        { service: id },
+        fakeSession.user.id,
+        expect.any(String),
+      );
+    },
+  );
 
   it("does not queue an unavailable core restart", async () => {
     mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "api" });

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import type { BuiltInServiceManifestSource } from "../built-in-service-source";
+import { CONTROL_PLANE_SERVICE_IDS } from "../core-service-ids";
 import { embeddedBuiltInServiceManifests } from "../embedded-built-in-services";
 import { embeddedBuiltInServiceManifests as bundledBuiltInServiceManifests } from "../embedded-built-in-services.bundle";
 import { ServiceRegistry } from "../registry";
@@ -147,12 +148,15 @@ describe("fixed release service authority", () => {
     );
   });
 
-  it("refuses a manifest set without a service the agent never manages", async () => {
-    const ids = RELEASE_BUILT_IN_SERVICE_IDS.filter((id) => id !== "ops-agent");
-    await expect(
-      captureReleaseServiceAuthority(fixture(ids), { source: releaseSource(ids) }),
-    ).rejects.toThrow("Release service authority is unavailable");
-  });
+  it.each(CONTROL_PLANE_SERVICE_IDS)(
+    "refuses a manifest set without control-plane %s, which the agent never manages",
+    async (missing) => {
+      const ids = RELEASE_BUILT_IN_SERVICE_IDS.filter((id) => id !== missing);
+      await expect(
+        captureReleaseServiceAuthority(fixture(ids), { source: releaseSource(ids) }),
+      ).rejects.toThrow("Release service authority is unavailable");
+    },
+  );
 
   it("returns immutable manifests that cannot be replaced after validation", async () => {
     const root = fixture();

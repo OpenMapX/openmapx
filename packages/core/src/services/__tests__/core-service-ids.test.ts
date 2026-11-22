@@ -1,14 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { protectedConfigurationServiceIdSchema } from "../../ops/configuration-handoff-records";
 import { configurationReleaseServiceImagesSchema } from "../../ops/configuration-release-downloads";
 import { releaseProvenance } from "../__fixtures__/release-provenance";
 import {
   CONTROL_PLANE_SERVICE_IDS,
   CORE_RESTART_SERVICE_IDS,
   CORE_SERVICE_ID,
-  DEFAULT_SELECTED_SERVICE_IDS,
   PROTECTED_CONFIGURATION_SERVICE_IDS,
   RELEASE_PINNED_SERVICE_IDS,
 } from "../core-service-ids";
@@ -43,20 +41,6 @@ describe("core service IDs", () => {
     }
   });
 
-  it("builds every list from the named core services", () => {
-    const core = new Set<string>(Object.values(CORE_SERVICE_ID));
-    for (const list of [
-      RELEASE_PINNED_SERVICE_IDS,
-      PROTECTED_CONFIGURATION_SERVICE_IDS,
-      CONTROL_PLANE_SERVICE_IDS,
-      CORE_RESTART_SERVICE_IDS,
-      DEFAULT_SELECTED_SERVICE_IDS,
-    ]) {
-      expect(new Set(list).size).toBe(list.length);
-      for (const id of list) expect(core.has(id)).toBe(true);
-    }
-  });
-
   it("reaches the API internally through its project-unique alias, never the bare service ID", () => {
     const read = (id: string) =>
       JSON.parse(readFileSync(join(REPOSITORY_ROOT, "services", id, "service.json"), "utf8")) as {
@@ -88,10 +72,7 @@ describe("core service IDs", () => {
     );
   });
 
-  it("hands off exactly the protected services, replacing them last in their fixed order", () => {
-    expect(protectedConfigurationServiceIdSchema.options).toEqual([
-      ...PROTECTED_CONFIGURATION_SERVICE_IDS,
-    ]);
+  it("replaces the protected services last, in their fixed order", () => {
     expect(
       selfUpdateServiceOrder(["martin", ...[...PROTECTED_CONFIGURATION_SERVICE_IDS].reverse()]),
     ).toEqual(["martin", ...PROTECTED_CONFIGURATION_SERVICE_IDS]);

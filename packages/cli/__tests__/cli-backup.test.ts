@@ -1960,6 +1960,26 @@ describe("restore data-protection preflight", () => {
       ),
     ).toEqual([]);
   });
+
+  it("stops every built-in service whose manifest connects it to the platform database", () => {
+    const clients = coreServices
+      .findServiceManifestDirs(join(import.meta.dirname, "..", "..", "..", "services"))
+      .flatMap((directory) => {
+        const manifest = JSON.parse(readFileSync(join(directory, "service.json"), "utf8")) as {
+          id: string;
+          container: { environment?: Record<string, string> };
+        };
+        const url = manifest.container.environment?.DATABASE_URL ?? "";
+        return /^postgres(?:ql)?:\/\/.+\/openmapx$/.test(url) ? [manifest.id] : [];
+      });
+    expect(clients).toContain(coreServices.CORE_SERVICE_ID.api);
+    expect(
+      requiredDependentStops(
+        protectedManifest("2026-08-02T00:00:00.000Z"),
+        new Set(clients),
+      ).sort(),
+    ).toEqual([...clients].sort());
+  });
 });
 
 describe("restore erasure replay", () => {
