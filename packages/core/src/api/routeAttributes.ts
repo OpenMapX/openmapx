@@ -22,7 +22,25 @@ export interface RouteMatchWindow {
   speedLimitsByPoint: (number | null)[];
   /** ISO country code per matched trace point, aligned like `speedLimitsByPoint`. */
   countriesByPoint: (string | null)[];
+  /** Matched edges that name their OSM way, with their end index into `geometry`. */
+  edges: { wayId: number; endShapeIndex: number }[];
+  /** The matched shape the edges index into. */
+  geometry: LngLat[];
+  /**
+   * The window could not be matched (no map-matcher, network failure, …). Its
+   * span then carries no road attributes: callers must not read the absence of
+   * signals there as "no signals".
+   */
+  failed: boolean;
 }
+
+const EMPTY_WINDOW = {
+  signals: [],
+  speedLimitsByPoint: [],
+  countriesByPoint: [],
+  edges: [],
+  geometry: [],
+} satisfies Omit<RouteMatchWindow, "failed">;
 
 const RETRY_DELAYS_MS = [1000, 3000] as const;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -95,7 +113,7 @@ export async function fetchRouteMatchWindow(
   mode: TravelMode,
   options: Pick<ApiRequestOptions, "signal"> = {},
 ): Promise<RouteMatchWindow> {
-  if (trace.length < 2) return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
+  if (trace.length < 2) return { ...EMPTY_WINDOW, failed: false };
   try {
     const res = await matchWindow(trace, mode, options.signal);
     // The caller offsets speedLimitsByPoint into a route-geometry-indexed array
@@ -109,8 +127,15 @@ export async function fetchRouteMatchWindow(
       signals: extractTrafficSignals(res),
       speedLimitsByPoint: aligned ? matchSpeedLimitsByPoint(res) : [],
       countriesByPoint: aligned ? matchCountriesByPoint(res) : [],
+      edges: (res.edges ?? []).flatMap((edge) =>
+        typeof edge.wayId === "number"
+          ? [{ wayId: edge.wayId, endShapeIndex: edge.endShapeIndex }]
+          : [],
+      ),
+      geometry: res.geometry ?? [],
+      failed: false,
     };
   } catch {
-    return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
+    return { ...EMPTY_WINDOW, failed: true };
   }
 }

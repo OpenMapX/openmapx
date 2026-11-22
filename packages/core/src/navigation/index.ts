@@ -21,6 +21,7 @@ export {
   selectActiveAlert,
   shouldWarnCamera,
 } from "./alerts";
+export { approachWayIdsFromWindow } from "./approachWays";
 export {
   angularDifference,
   bearingBetween,

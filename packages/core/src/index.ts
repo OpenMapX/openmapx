@@ -60,6 +60,7 @@ export {
   angularDifference,
   appendCountrySpans,
   approachTargetZoom,
+  approachWayIdsFromWindow,
   type BuildGroundPackageInput,
   type BuildGroundPackageResult,
   bearingBetween,

@@ -236,6 +236,12 @@ interface NavigationState {
    */
   liveSpeedLimits: (number | null)[] | null;
   /**
+   * The OSM way the car arrives on at each maneuver (step index → way id), from
+   * the same windowed map-match; the lane highlight matches it to the street
+   * detail tiles. Reset with the route like `liveSpeedLimits`.
+   */
+  approachWayIds: Record<number, number> | null;
+  /**
    * The countries the route passes through, as spans along it, from the same
    * windowed map-match; the sign palette follows them across borders. Null
    * until the first window lands, and reset with the route.
@@ -322,6 +328,7 @@ interface NavigationState {
   applyGroundFix: (update: GroundFixStoreUpdate) => void;
   setSpeedLimit: (v: number | null) => void;
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
+  setApproachWayIds: (v: Record<number, number> | null) => void;
   setRouteCountries: (v: RouteCountrySpan[] | null) => void;
   setOffRoute: (v: boolean) => void;
   setWeakGps: (v: boolean) => void;
@@ -443,6 +450,7 @@ const ROUTE_IDENTITY_RESET = {
   progress: null as NavProgress | null,
   offRoute: false,
   liveSpeedLimits: null as (number | null)[] | null,
+  approachWayIds: null as Record<number, number> | null,
   routeCountries: null as RouteCountrySpan[] | null,
   currentSpeedLimit: null as number | null,
   /**
@@ -478,6 +486,7 @@ const INITIAL = {
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
   liveSpeedLimits: null as (number | null)[] | null,
+  approachWayIds: null as Record<number, number> | null,
   routeCountries: null as RouteCountrySpan[] | null,
   itinerary: null as TripItinerary | null,
   transitRequestId: null as string | null,
@@ -761,6 +770,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     })),
   setSpeedLimit: (currentSpeedLimit) => set({ currentSpeedLimit }),
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
+  setApproachWayIds: (approachWayIds) => set({ approachWayIds }),
   setRouteCountries: (routeCountries) => set({ routeCountries }),
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
