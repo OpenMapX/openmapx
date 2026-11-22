@@ -24,9 +24,10 @@ download it. Data-manager no longer sets `OPENMAPX_TRANSITOUS_TOOLS_IMAGE`, and
 its image no longer contains Python, `gtfsclean`, `age`, `wget`, `rsync` or the
 SSH client; the Transitous runner runs the catalog scripts.
 
-`data export motis` needs a MOTIS build record, which transit sync does not
-write yet, so a candidate that transit sync promoted cannot be exported. Build
-MOTIS on the host that serves it; exporting a managed candidate is planned.
+MOTIS export is not available in this release. `data export motis` needs a
+MOTIS build record, which transit sync does not write yet, so a candidate that
+transit sync promoted cannot be exported. Build MOTIS on the host that serves
+it; exporting a managed candidate is planned.
 
 ## Who is affected
 

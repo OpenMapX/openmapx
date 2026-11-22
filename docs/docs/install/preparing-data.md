@@ -325,10 +325,11 @@ invocation directory.
 | `pelias`     | `pelias/`, including Elasticsearch     | `openstreetmap/` input                              |
 | `motis`      | Portable compiled candidate and recipe | Credentials and generated proxy/configuration files |
 
-MOTIS is built in place for now: run the transit sync on the serving host.
-Exporting a candidate that transit sync promoted is planned; until then,
-`data export motis` works only for MOTIS data that was itself imported from a
-bundle, because transit sync writes no build record. A MOTIS bundle carries a
+MOTIS cannot be exported in this release. It is built in place: run the transit
+sync on the serving host. Exporting a candidate that transit sync promoted is
+planned. Until then `data export motis` refuses, because transit sync writes no
+build record; only MOTIS data that was itself imported from a bundle has one. A
+MOTIS bundle carries a
 portable recipe and compiled candidate tied to the runtime image. The destination
 needs the same approved paired catalog pins and required managed credentials.
 Import materializes private configuration offline from destination secrets,

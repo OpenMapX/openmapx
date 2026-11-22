@@ -339,7 +339,7 @@ pnpm openmapx services logs valhalla --follow          # stream
 
 A few engines can't boot from raw OSM data; they need a prepared graph or tile
 set built first. Those services declare a build hook in their manifest; today
-that's `osrm`, `otp`, `motis`, `pelias`, and `tileserver`. The build runs inside
+that's `osrm`, `otp`, `pelias`, and `tileserver`. The build runs inside
 a Dockerized helper, so you don't install `osmium` or friends on the host.
 
 ```bash
@@ -670,9 +670,11 @@ reconcile that generation before starting them. Partial or unknown outcomes stay
 visible in Activity and retain their original ownership; retrying observation does
 not repeat publication.
 
-MOTIS export requires a retained portable recipe, a compiled candidate and a
-build record. Transit sync does not write that record yet, so only MOTIS data
-that was itself imported from a bundle can be exported for now. Source
+MOTIS cannot be exported in this release: a candidate that transit sync
+promoted cannot be exported yet, and exporting one is planned. Export requires a
+retained portable recipe, a compiled candidate and a build record, and transit
+sync does not write that record; only MOTIS data that was itself imported from a
+bundle has one, and this release cannot produce such a bundle. Source
 credentials and generated proxy configuration are excluded from the bundle. The
 destination must have the same approved catalog pins and all required managed feed
 credentials; the preview lists credential identifiers without their values. Host

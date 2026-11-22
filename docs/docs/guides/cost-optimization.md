@@ -115,11 +115,13 @@ Stagger initial imports so peaks do not overlap. Reserve room for simultaneous
 active and staging MOTIS slots and for complete replacement artifacts. Hardlinks
 save repeated inputs; they do not eliminate index or temporary build storage.
 
-For OSRM, OTP, Pelias, MOTIS, and TileServer GL, supported artifact bundles can
-move preparation to a larger machine. Use the same OpenMapX revision and matching
+For OSRM, OTP, Pelias, and TileServer GL, supported artifact bundles can move
+preparation to a larger machine. Use the same OpenMapX revision and matching
 runtime image pins, stop consumers, and import a checksummed bundle. See
 [Building on another host](../install/preparing-data.md#building-on-another-host).
-Valhalla, Nominatim, and Overpass have no supported bundle path here.
+MOTIS is built in place by the transit sync for now, so size the server for its
+import; exporting a managed MOTIS candidate is planned. Valhalla, Nominatim, and
+Overpass have no supported bundle path here.
 
 Do not budget swap as additional usable container memory. Runtime limits and
 Docker memory/swap configuration can still kill a build; heavy swapping can also
