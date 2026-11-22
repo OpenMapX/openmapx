@@ -282,6 +282,8 @@ describe("feed redirect handling", () => {
     "https://0x7f.1/x",
     "https://[::1]/x",
     "https://rt.openmapx.local/x",
+    "https://openmapx-redis/x",
+    "https://openmapx-ops-agent:4300/x",
     "https://api.internal/x",
     "https://box.lan/x",
     "https://nas.home.arpa/x",
