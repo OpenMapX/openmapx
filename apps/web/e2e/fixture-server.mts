@@ -149,27 +149,95 @@ const FIXTURE_PLACE = {
   contributors: [],
 };
 
-/** A route straight through the requested waypoints, always 4.2 km and 14 minutes. */
+function haversineMeters(a: [number, number], b: [number, number]): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6_378_137 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * A route straight through the requested waypoints. Two-point requests keep the
+ * historical 4.2 km / 14 min shape; multi-stop requests split into one leg per
+ * pair with geometry-derived distances and an intermediate arrive step.
+ */
 function directions(url: URL) {
   const waypoints = (url.searchParams.get("waypoints") ?? "")
     .split(";")
     .map((pair) => pair.split(",").map(Number) as [number, number]);
-  const step = (instruction: string, at: [number, number], type: string) => ({
+  const step = (
+    instruction: string,
+    at: [number, number],
+    type: string,
+    coordinates: [number, number][] = [at],
+  ) => ({
     contributors: [],
     instruction,
     distance: 0,
     duration: 0,
-    coordinates: [at],
+    coordinates,
     maneuver: { type },
   });
   const [start] = waypoints;
   const end = waypoints.at(-1);
   if (!start || !end) throw new Error("A fixture route needs a start and an end");
-  const steps = [
-    { ...step("Head east", start, "depart"), distance: 4200, duration: 840 },
-    step("You have arrived", end, "arrive"),
-  ];
-  const leg = { contributors: [], distance: 4200, duration: 840, geometry: waypoints, steps };
+  const mode = url.searchParams.get("mode") ?? "driving";
+
+  if (waypoints.length <= 2) {
+    const steps = [
+      { ...step("Head east", start, "depart"), distance: 4200, duration: 840 },
+      step("You have arrived", end, "arrive"),
+    ];
+    const leg = { contributors: [], distance: 4200, duration: 840, geometry: waypoints, steps };
+    return {
+      waypoints,
+      activeRouteIndex: 0,
+      provider: "fixture",
+      routes: [
+        {
+          contributors: [],
+          distance: 4200,
+          duration: 840,
+          geometry: waypoints,
+          legs: [leg],
+          steps,
+          mode,
+        },
+      ],
+    };
+  }
+
+  const legs = waypoints.slice(0, -1).map((from, index) => {
+    const to = waypoints[index + 1];
+    if (!to) throw new Error("Missing next waypoint");
+    const distance = Math.max(1, Math.round(haversineMeters(from, to)));
+    const duration = Math.max(1, Math.round(distance / 10));
+    const departInstruction = index === 0 ? "Head east" : `Continue after stop ${index}`;
+    const arriveInstruction =
+      index < waypoints.length - 2 ? `Arrive at stop ${index + 1}` : "You have arrived";
+    const legSteps = [
+      {
+        ...step(departInstruction, from, "depart", [from, to]),
+        distance,
+        duration,
+      },
+      step(arriveInstruction, to, "arrive", [to]),
+    ];
+    return {
+      contributors: [],
+      distance,
+      duration,
+      geometry: [from, to] as [number, number][],
+      steps: legSteps,
+    };
+  });
+  const geometry = legs.flatMap((leg) => leg.geometry);
+  const steps = legs.flatMap((leg) => leg.steps);
+  const distance = legs.reduce((sum, leg) => sum + leg.distance, 0);
+  const duration = legs.reduce((sum, leg) => sum + leg.duration, 0);
   return {
     waypoints,
     activeRouteIndex: 0,
@@ -177,12 +245,12 @@ function directions(url: URL) {
     routes: [
       {
         contributors: [],
-        distance: 4200,
-        duration: 840,
-        geometry: waypoints,
-        legs: [leg],
+        distance,
+        duration,
+        geometry,
+        legs,
         steps,
-        mode: url.searchParams.get("mode") ?? "driving",
+        mode,
       },
     ],
   };
@@ -190,7 +258,12 @@ function directions(url: URL) {
 
 const routes: Record<string, Route> = {
   "/api/integrations/routing/directions": (url) => json(directions(url)),
+  "/api/integrations/routing/match": () =>
+    json({ geometry: [], edges: [], points: [], mode: "driving" }),
+  "/api/integrations/routing/navigation/alerts": () => json({ alerts: [] }),
   "/api/integrations/transit/planning-capabilities": () => json({ providers: [] }),
+  "/api/integrations/road-conditions/events": () =>
+    json({ type: "FeatureCollection", features: [] }),
   "/api/integrations/road-conditions/flow-along-route": () => json({ routes: [] }),
   "/api/integrations/geocoding/geocode/country": () => json({ countryCode: "de" }),
   "/api/integrations/geocoding/autocomplete": (url) =>
@@ -223,6 +296,7 @@ const routes: Record<string, Route> = {
       current: { temperature: 12, weatherCode: 1, isDay: true, time: "2026-06-01T12:00:00Z" },
       source: "fixture",
     }),
+  "/api/integrations/poi-search/search": () => json({ results: [], partial: false }),
   "/api/integrations/poi-search/preset-suggest": () => json({ matches: [] }),
   "/api/integrations/poi-search/brand-suggest": () => json({ matches: [] }),
   "/api/integrations/search-suggestions/search": () =>

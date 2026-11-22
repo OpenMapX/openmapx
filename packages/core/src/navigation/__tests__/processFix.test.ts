@@ -656,3 +656,111 @@ describe("processFix arrival after the final manoeuvre", () => {
     ).toEqual([false, false, false]);
   });
 });
+
+describe("multi-stop route progression", () => {
+  it("announces and passes an intermediate stop without triggering final arrival", () => {
+    // Straight eastbound two-leg trip: A (0 m) → Stop 1 (300 m) → Destination (600 m).
+    // Mirrors Valhalla/OSRM multi-leg output: zero-length intermediate arrive step
+    // followed by the next leg's depart step and final arrive step.
+    const a: [number, number] = [0, 0];
+    const stop1: [number, number] = [0.0027, 0];
+    const dest: [number, number] = [0.0054, 0];
+    const route = {
+      distance: 600,
+      duration: 60,
+      geometry: [a, stop1, stop1, dest],
+      legs: [
+        { distance: 300, duration: 30, geometry: [a, stop1], steps: [] },
+        { distance: 300, duration: 30, geometry: [stop1, dest], steps: [] },
+      ],
+      mode: "driving",
+      steps: [
+        {
+          instruction: "Head east",
+          distance: 300,
+          duration: 30,
+          coordinates: [a, stop1],
+          maneuver: { type: "depart" },
+        },
+        {
+          instruction: "Arrive at intermediate stop",
+          distance: 0,
+          duration: 0,
+          coordinates: [stop1],
+          maneuver: { type: "arrive" },
+        },
+        {
+          instruction: "Continue east",
+          distance: 300,
+          duration: 30,
+          coordinates: [stop1, dest],
+          maneuver: { type: "depart" },
+        },
+        {
+          instruction: "You have arrived at your destination",
+          distance: 0,
+          duration: 0,
+          coordinates: [dest],
+          maneuver: { type: "arrive" },
+        },
+      ],
+    } as unknown as Route;
+
+    const opts = navOptionsForMode("driving");
+    let state: NavTickState = {
+      offRouteScore: 0,
+      lastRerouteAtMs: null,
+      rerouteBackoffMs: 0,
+      spokenCues: [],
+    };
+    const spokenSteps: { stepIndex: number; instruction: string }[] = [];
+    const results: { lng: number; stepIndex: number; arrived: boolean }[] = [];
+
+    // Walk along the route every ~25 m (0.000225 deg ≈ 25 m at equator) at 14 m/s.
+    for (let i = 0; i <= 24; i += 1) {
+      const lng = Math.min(0.0054, i * 0.000225);
+      const r = processFix(
+        route,
+        {
+          coords: [lng, 0],
+          accuracy: 5,
+          timestampMs: 1_000 + i * 2_000,
+          heading: 90,
+          speed: 14,
+        },
+        state,
+        opts,
+      );
+      state = r.nextState;
+      if (r.voiceCue) {
+        spokenSteps.push({
+          stepIndex: r.voiceCue.stepIndex,
+          instruction: r.voiceCue.step.instruction,
+        });
+      }
+      results.push({
+        lng,
+        stepIndex: r.progress?.currentStepIndex ?? -1,
+        arrived: r.arrived,
+      });
+    }
+
+    // Intermediate stop (step 1) was announced on approach.
+    expect(spokenSteps.some((c) => c.stepIndex === 1)).toBe(true);
+    expect(spokenSteps.find((c) => c.stepIndex === 1)?.instruction).toBe(
+      "Arrive at intermediate stop",
+    );
+
+    // At and just past stop 1, final arrival did NOT fire, and the step gate
+    // skipped the zero-length arrive step straight onto leg 2 (step 2).
+    const atStop1 = results.find((r) => Math.abs(r.lng - 0.0027) < 1e-6);
+    expect(atStop1?.arrived).toBe(false);
+    const pastStop1 = results.find((r) => r.lng > 0.003 && r.lng < 0.004);
+    expect(pastStop1?.arrived).toBe(false);
+    expect(pastStop1?.stepIndex).toBe(2);
+
+    // Final destination (step 3) was announced and triggered arrival at the end.
+    expect(spokenSteps.some((c) => c.stepIndex === 3)).toBe(true);
+    expect(results.at(-1)?.arrived).toBe(true);
+  });
+});

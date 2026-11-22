@@ -106,7 +106,7 @@ main, nightly and on pull requests that touch the CLI, service rendering,
 `services/`, `infra/docker`, the operations agent or a Dockerfile.
 
 Changes to map layers, the map style lifecycle, search, directions or the app
-shell should also pass the browser journeys. They run four user journeys in
+shell should also pass the browser journeys. They run five user journeys in
 headless Google Chrome against the production web build, with every API, tile
 and glyph request answered by a local fixture server, and fail on any page or
 console error, including a map layer missing after a style change:

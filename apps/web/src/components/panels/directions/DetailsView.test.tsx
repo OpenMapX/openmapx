@@ -223,3 +223,66 @@ describe("route totals in the preferred unit system", () => {
     expect(render(long)).toContain("45 sec");
   });
 });
+
+describe("DetailsView start action", () => {
+  it("omits Start when no onStart handler is supplied (e.g. in-navigation dialog)", () => {
+    const view = renderDom(
+      <DetailsView
+        route={route}
+        originLabel="Origin"
+        destinationLabel="Destination"
+        units="metric"
+        onBack={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "start" })).toBeNull();
+    view.unmount();
+  });
+
+  it("renders Start, respects startDisabled, and surfaces startError alerts", () => {
+    const onStart = vi.fn();
+    const view = renderDom(
+      <DetailsView
+        route={route}
+        originLabel="Origin"
+        destinationLabel="Destination"
+        units="metric"
+        onBack={() => {}}
+        onStart={onStart}
+      />,
+    );
+    const startButton = screen.getByRole("button", { name: "start" });
+    expect(startButton).not.toBeDisabled();
+    fireEvent.click(startButton);
+    expect(onStart).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <DetailsView
+        route={route}
+        originLabel="Origin"
+        destinationLabel="Destination"
+        units="metric"
+        onBack={() => {}}
+        onStart={onStart}
+        startDisabled
+        startError="incompatible"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "start" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("startUpdateRequired");
+
+    view.rerender(
+      <DetailsView
+        route={route}
+        originLabel="Origin"
+        destinationLabel="Destination"
+        units="metric"
+        onBack={() => {}}
+        onStart={onStart}
+        startError="rejected"
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("startFailed");
+    view.unmount();
+  });
+});

@@ -18,6 +18,7 @@ import { MultiStopRouteSummary } from "./MultiStopRouteSummary";
 import { type RouteRecoveryActions, RouteResultStates } from "./RouteResultStates";
 import type { DirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
 import type { GroundDirectionsPlan } from "./useGroundDirectionsPlan";
+import { canStartGroundNavigation, useGroundRouteStart } from "./useGroundRouteStart";
 
 interface GroundRouteResultsProps {
   ground: GroundDirectionsPlan;
@@ -121,12 +122,14 @@ export function GroundRouteResults({ ground, recovery, details }: GroundRouteRes
   return (
     <RouteResultStates state={ground.directions} recovery={recovery}>
       {data?.routes[0] &&
-        (waypoints.length > 2 ? (
+        (ground.multiStop ? (
           <>
             <MultiStopRouteSummary
               route={data.routes[0]}
               waypoints={waypoints}
               units={units}
+              provider={data.provider}
+              roadConditionImpact={data.roadConditionImpact}
               onDetails={() => details.openRoute(0)}
             />
             {stopSearch}
@@ -170,25 +173,91 @@ export function GroundRouteResults({ ground, recovery, details }: GroundRouteRes
 type DisplayedRoutes = NonNullable<GroundDirectionsPlan["displayed"]>;
 
 interface GroundRouteDetailsProps {
-  route: DisplayedRoutes["routes"][number];
-  provider: DisplayedRoutes["provider"] | undefined;
+  displayed: DisplayedRoutes;
+  routeIndex: number;
+  allowAlternatives?: boolean;
   onBack: () => void;
 }
 
 /** The turn-by-turn view of one planned road route. */
-export function GroundRouteDetails({ route, provider, onBack }: GroundRouteDetailsProps) {
+export function GroundRouteDetails({
+  displayed,
+  routeIndex,
+  allowAlternatives = false,
+  onBack,
+}: GroundRouteDetailsProps) {
   const registry = useIntegrationRegistry();
   const units = useSettingsStore((s) => s.units);
-  const waypoints = useDirectionsStore((s) => s.waypoints);
+  const { waypoints, mode } = useDirectionsStore(
+    useShallow((s) => ({ waypoints: s.waypoints, mode: s.mode })),
+  );
+  const route = displayed.routes[routeIndex];
+  if (!route) return null;
+
+  return (
+    <GroundRouteDetailsBody
+      route={route}
+      routeIndex={routeIndex}
+      alternatives={
+        allowAlternatives ? displayed.routes.filter((_, idx) => idx !== routeIndex) : []
+      }
+      provider={displayed.provider}
+      roadConditionImpact={displayed.roadConditionImpact}
+      waypoints={waypoints}
+      mode={mode}
+      units={units}
+      attributions={routeAttributions(registry, displayed.provider, route)}
+      onBack={onBack}
+    />
+  );
+}
+
+function GroundRouteDetailsBody({
+  route,
+  routeIndex,
+  alternatives,
+  provider,
+  roadConditionImpact,
+  waypoints,
+  mode,
+  units,
+  attributions,
+  onBack,
+}: {
+  route: DisplayedRoutes["routes"][number];
+  routeIndex: number;
+  alternatives: DisplayedRoutes["routes"];
+  provider: DisplayedRoutes["provider"] | undefined;
+  roadConditionImpact: DisplayedRoutes["roadConditionImpact"] | undefined;
+  waypoints: ReturnType<typeof useDirectionsStore.getState>["waypoints"];
+  mode: ReturnType<typeof useDirectionsStore.getState>["mode"];
+  units: "metric" | "imperial";
+  attributions: ReturnType<typeof routeAttributions>;
+  onBack: () => void;
+}) {
+  const { canStart, start, starting, startError } = useGroundRouteStart({
+    route,
+    waypoints,
+    index: routeIndex,
+    alternatives,
+    provider,
+    roadConditionImpact,
+    units,
+  });
+
   return (
     <DetailsView
       route={route}
-      attributions={routeAttributions(registry, provider, route)}
+      attributions={attributions}
       originLabel={waypoints[0]?.label ?? ""}
       destinationLabel={waypoints.at(-1)?.label ?? ""}
       waypointLabels={waypoints.map((wp) => wp.label)}
       units={units}
       onBack={onBack}
+      // Ride mode plans a driving route; gate on the store mode as well as route.mode.
+      onStart={canStart && canStartGroundNavigation(mode) ? () => void start() : undefined}
+      startDisabled={starting}
+      startError={startError}
     />
   );
 }

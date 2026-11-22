@@ -164,6 +164,7 @@ import {
   formatDuration,
   useDirectionsStore,
   useMapStore,
+  useNavigationStore,
   useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -2196,6 +2197,148 @@ describe("directions input behaviour", () => {
       fireEvent.click(reverseButton as HTMLButtonElement);
 
       expect(inputValues()).toEqual(["Munich", "Leipzig", "Berlin"]);
+    });
+
+    it("starts a three-stop driving trip from the summary and from its Details view", async () => {
+      seedThreeStops();
+      const roadConditionImpact = {
+        availability: "limited" as const,
+        evaluatedAt: "2026-09-12T12:00:00Z",
+        validUntil: null,
+        reasons: ["planned_closure_on_route"],
+      };
+      const multiRoute = {
+        mode: "driving" as const,
+        duration: 1800,
+        distance: 12000,
+        geometry: [
+          [13.3, 52.5],
+          [12.37, 51.34],
+          [11.5, 48.1],
+        ] as [number, number][],
+        steps: [],
+        legs: [
+          {
+            duration: 900,
+            distance: 6000,
+            geometry: [
+              [13.3, 52.5],
+              [12.37, 51.34],
+            ] as [number, number][],
+            steps: [],
+          },
+          {
+            duration: 900,
+            distance: 6000,
+            geometry: [
+              [12.37, 51.34],
+              [11.5, 48.1],
+            ] as [number, number][],
+            steps: [],
+          },
+        ],
+      };
+      useDirectionsMock.mockReturnValue({
+        data: {
+          provider: "routing-valhalla",
+          roadConditionImpact,
+          routes: [multiRoute],
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      const view = renderPanel();
+      try {
+        fireEvent.click(screen.getByRole("button", { name: "navigation.start" }));
+        await waitFor(() =>
+          expect(useNavigationStore.getState()).toMatchObject({
+            status: "navigating",
+            kind: "ground",
+            mode: "driving",
+            routeProvider: "routing-valhalla",
+            roadConditionImpact,
+            destinationWaypoints: [
+              [13.3, 52.5],
+              [12.37, 51.34],
+              [11.5, 48.1],
+            ],
+          }),
+        );
+
+        act(() => useNavigationStore.getState().stopNavigation());
+        fireEvent.click(screen.getByRole("button", { name: "common.details" }));
+        fireEvent.click(await screen.findByRole("button", { name: "navigation.start" }));
+        await waitFor(() =>
+          expect(useNavigationStore.getState()).toMatchObject({
+            status: "navigating",
+            kind: "ground",
+            mode: "driving",
+            routeProvider: "routing-valhalla",
+            roadConditionImpact,
+            destinationWaypoints: [
+              [13.3, 52.5],
+              [12.37, 51.34],
+              [11.5, 48.1],
+            ],
+          }),
+        );
+      } finally {
+        act(() => useNavigationStore.getState().stopNavigation());
+        view.unmount();
+      }
+    });
+
+    it("starts an alternative route from Details preserving alternatives and userSelected intent", async () => {
+      seedOriginDestination();
+      const route0 = {
+        mode: "driving" as const,
+        duration: 1800,
+        distance: 10000,
+        summary: "via A9",
+        geometry: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ] as [number, number][],
+        steps: [],
+        legs: [],
+      };
+      const route1 = {
+        ...route0,
+        duration: 2100,
+        summary: "via B2",
+      };
+      useDirectionsMock.mockReturnValue({
+        data: {
+          provider: "routing-valhalla",
+          routes: [route0, route1],
+        },
+        isLoading: false,
+        isError: false,
+      });
+      act(() => useDirectionsStore.getState().setActiveRouteIndex(1));
+
+      const view = renderPanel();
+      try {
+        fireEvent.click(screen.getByRole("button", { name: "common.details" }));
+        fireEvent.click(await screen.findByRole("button", { name: "navigation.start" }));
+        await waitFor(() =>
+          expect(useNavigationStore.getState()).toMatchObject({
+            status: "navigating",
+            route: route1,
+            routes: [route1, route0],
+            routeSelectionIntent: "userSelected",
+            routeProvider: "routing-valhalla",
+            destinationWaypoints: [
+              [13.3, 52.5],
+              [11.5, 48.1],
+            ],
+          }),
+        );
+      } finally {
+        act(() => useNavigationStore.getState().stopNavigation());
+        view.unmount();
+      }
     });
   });
 });
