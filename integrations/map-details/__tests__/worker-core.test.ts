@@ -228,6 +228,22 @@ describe("worker core lane highlight", () => {
     expect(fetchMock).toHaveBeenCalledWith(STREET_URL);
   });
 
+  it("also reads a tile a sparse approach crosses between two vertices", async () => {
+    const n = 2 ** 16;
+    const lngOf = (x: number) => ((x + 0.5) / n) * 360 - 180;
+    const fetchMock = fakeFetch();
+    const core = coreWith(fetchMock);
+    // One vertex in the tile west of (X, Y), one in the tile east of it.
+    await core.handle({
+      ...request(1),
+      approach: [
+        [lngOf(X - 1), centre()[1]],
+        [lngOf(X + 1), centre()[1]],
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(STREET_URL);
+  });
+
   it("answers no-ids without street tiles", async () => {
     const core = coreWith(
       fakeFetch({ [STREET_URL]: async () => new Response(null, { status: 404 }) }),

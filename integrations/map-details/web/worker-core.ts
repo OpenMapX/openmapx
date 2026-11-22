@@ -82,6 +82,34 @@ function z16Cell(lng: number, lat: number): { x: number; y: number } {
   };
 }
 
+/** Sample spacing along the approach when collecting tiles, metres. */
+const APPROACH_SAMPLE_M = 2;
+
+/** The approach's vertices plus points every 2 m along each segment. */
+function approachSamples(approach: readonly [number, number][]): [number, number][] {
+  const samples: [number, number][] = [];
+  approach.forEach((point, i) => {
+    const previous = approach[i - 1];
+    if (previous) {
+      const cos = Math.cos((point[1] * Math.PI) / 180);
+      const metres = Math.hypot(
+        (point[0] - previous[0]) * 111_320 * cos,
+        (point[1] - previous[1]) * 111_320,
+      );
+      const steps = Math.floor(metres / APPROACH_SAMPLE_M);
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        samples.push([
+          previous[0] + (point[0] - previous[0]) * t,
+          previous[1] + (point[1] - previous[1]) * t,
+        ]);
+      }
+    }
+    samples.push(point);
+  });
+  return samples;
+}
+
 function tileCentre(z: number, x: number, y: number): [number, number] {
   const n = 2 ** z;
   const lng = ((x + 0.5) / n) * 360 - 180;
@@ -322,9 +350,11 @@ export function createWorkerCore(fetchImpl: typeof fetch): WorkerCore {
           return { response: { id, kind: "paint", bytes }, transfer: [bytes] };
         }
         if (request.kind === "lane-highlight") {
-          // The z16 street tiles the approach passes through; the way is joined across them.
+          // The z16 street tiles the approach passes through; the way is joined
+          // across them. Sampled along each segment, not only at its vertices,
+          // so a sparse approach still loads a tile it crosses in between.
           const keys = new Map<string, { x: number; y: number }>();
-          for (const [lng, lat] of request.approach) {
+          for (const [lng, lat] of approachSamples(request.approach)) {
             const cell = z16Cell(lng, lat);
             keys.set(`${cell.x}/${cell.y}`, cell);
           }
