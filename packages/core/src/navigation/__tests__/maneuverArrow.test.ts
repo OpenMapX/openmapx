@@ -2,7 +2,7 @@ import { assert, describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
 import { cumulativeDistances, distanceAtVertex, positionAt } from "../deadReckon";
-import { maneuverArrowLine, maneuverArrowTipBearing } from "../maneuverArrow";
+import { maneuverArrowLine, maneuverArrowTipBearing, raisedArrowPolygon } from "../maneuverArrow";
 
 // ~1.1 km straight east, so every distance check is against a known geometry.
 const geometry: LngLat[] = [
@@ -66,5 +66,42 @@ describe("maneuverArrowLine", () => {
     expect(maneuverArrowLine(tiny, cumulativeDistances(tiny), 3, { before: 60, after: 40 })).toBe(
       null,
     );
+  });
+});
+
+describe("raisedArrowPolygon", () => {
+  // 60 m straight east at the equator, where 1 m of longitude is 1/111_195°.
+  const M = 1 / 111_195;
+  const line: LngLat[] = [
+    [0, 0],
+    [30 * M, 0],
+    [60 * M, 0],
+  ];
+  const widthAt = (ring: LngLat[], eastMetres: number) => {
+    const ys = ring.filter(([x]) => Math.abs(x / M - eastMetres) < 0.01).map(([, y]) => y / M);
+    return Math.max(...ys) - Math.min(...ys);
+  };
+
+  it("raisedArrowPolygon is closed and as wide as asked", () => {
+    const ring = raisedArrowPolygon(line, 2.4, 5);
+    expect(ring[0]).toEqual(ring.at(-1));
+    // The shaft keeps its width along the line, and the head is twice as wide.
+    expect(widthAt(ring, 30)).toBeCloseTo(2.4, 2);
+    expect(widthAt(ring, 55)).toBeCloseTo(4.8, 2);
+    // The tip is the line's end.
+    expect(ring.some(([x, y]) => Math.abs(x / M - 60) < 1e-6 && Math.abs(y) < 1e-9)).toBe(true);
+  });
+
+  it("returns nothing for a line too short to carry a head", () => {
+    expect(
+      raisedArrowPolygon(
+        [
+          [0, 0],
+          [3 * M, 0],
+        ],
+        2.4,
+        5,
+      ),
+    ).toEqual([]);
   });
 });

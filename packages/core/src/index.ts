@@ -176,6 +176,7 @@ export {
   type RouteSearchChunk,
   type RouteSearchChunks,
   type RouteWidthExpression,
+  raisedArrowPolygon,
   readRouteMatcherCounters,
   refKind,
   remainingWaypoints,

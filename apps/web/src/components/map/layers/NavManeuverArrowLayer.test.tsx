@@ -1,6 +1,8 @@
 import { cumulativeDistances, haversineDistance, numberAt, positionAt } from "@openmapx/core";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { createFakeMap, nth } from "@/test";
 
 const fake = createFakeMap({
@@ -75,6 +77,56 @@ afterEach(() => {
   };
 });
 
+describe("NavManeuverArrowLayer in 3D", () => {
+  const RAISED = "nav-maneuver-arrow-raised";
+  const visibility = (id: string) => fake.map.getLayoutProperty(id, "visibility") ?? "visible";
+  const setZoom = (zoom: number) =>
+    act(() => {
+      fake.state.zoom = zoom;
+      fake.emit("zoom");
+    });
+  afterEach(() => {
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    fake.state.zoom = 10;
+  });
+
+  it("the raised arrow replaces the 2D arrow in 3D from z16.5", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(fake.state.layers.get(RAISED)).toMatchObject({ type: "fill-extrusion" });
+    expect(layerRegistrations().find((r) => r.id === RAISED)).toMatchObject({
+      slot: "scene-3d",
+      order: 14,
+    });
+    expect(fake.state.paint.get(RAISED)).toMatchObject({
+      "fill-extrusion-base": 0.8,
+      "fill-extrusion-height": 1.1,
+      "fill-extrusion-color": "#ffffff",
+    });
+    expect(visibility(RAISED)).toBe("visible");
+    for (const id of ["nav-maneuver-arrow-casing", "nav-maneuver-arrow", "nav-maneuver-arrow-head"])
+      expect(visibility(id)).toBe("none");
+  });
+
+  it("below z16.5 the 2D arrow stays", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(16);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(visibility("nav-maneuver-arrow")).toBe("visible");
+    expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+  });
+
+  it("3D off restores the 2D arrow", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(visibility("nav-maneuver-arrow")).toBe("visible");
+    expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+  });
+});
+
 describe("NavManeuverArrowLayer", () => {
   it("centres the map arrow on the same physical maneuver as the countdown", () => {
     navState.route = {
@@ -99,7 +151,7 @@ describe("NavManeuverArrowLayer", () => {
       expect(ids).toContain(id);
       expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf("place-labels"));
     }
-    const feats = features();
+    const feats = features().filter((f) => f.geometry.type !== "Polygon");
     expect(feats).toHaveLength(2);
     const point = feats.find((f) => f.geometry.type === "Point");
     expect(point).toBeTruthy();
@@ -129,7 +181,7 @@ describe("NavManeuverArrowLayer", () => {
       alongMeters: 980,
     };
     render(<NavManeuverArrowLayer />);
-    const feats = features();
+    const feats = features().filter((f) => f.geometry.type !== "Polygon");
     expect(feats).toHaveLength(2);
     const line = feats.find(
       (f) => f.geometry.type === "LineString",

@@ -161,6 +161,7 @@ export {
   maneuverArrowLine,
   maneuverArrowSpans,
   maneuverArrowTipBearing,
+  raisedArrowPolygon,
 } from "./maneuverArrow";
 export {
   type ManeuverPositions,

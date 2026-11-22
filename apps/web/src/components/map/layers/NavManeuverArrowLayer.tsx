@@ -8,16 +8,19 @@ import {
   maneuverArrowSpans,
   maneuverArrowTipBearing,
   maneuverStartMeters,
+  raisedArrowPolygon,
   upcomingManeuverIndex,
   useNavigationStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   EMPTY_FEATURE_COLLECTION,
   type MapLayerGroup,
   type SlottedLayer,
 } from "@/integration-api/map/mapLayerGroup";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 const SOURCE = "nav-maneuver-arrow-source";
@@ -26,8 +29,15 @@ const BODY = "nav-maneuver-arrow";
 const HEAD = "nav-maneuver-arrow-head";
 export const MANEUVER_ARROW_HEAD_IMAGE_ID = "nav-maneuver-arrow-head-icon";
 
+const RAISED = "nav-maneuver-arrow-raised";
+
 const CASING_COLOR = "#1b1b1b";
 const BODY_COLOR = "#ffffff";
+const RAISED_WIDTH_M = 2.4;
+const RAISED_HEAD_M = 5;
+const RAISED_BASE_M = 0.8;
+const RAISED_TOP_M = 1.1;
+const RAISED_MIN_ZOOM = 16.5;
 
 /** Maneuver types that are never worth marking with an arrow. */
 const NON_JUNCTION_TYPES = new Set(["depart", "arrive"]);
@@ -68,6 +78,7 @@ export function NavManeuverArrowLayer() {
     const tip = line?.at(-1);
     if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
+    const outline = raisedArrowPolygon(line, RAISED_WIDTH_M, RAISED_HEAD_M);
     return {
       type: "FeatureCollection" as const,
       features: [
@@ -81,9 +92,36 @@ export function NavManeuverArrowLayer() {
           properties: { bearing },
           geometry: { type: "Point" as const, coordinates: tip },
         },
+        ...(outline.length > 0
+          ? [
+              {
+                type: "Feature" as const,
+                properties: {},
+                geometry: { type: "Polygon" as const, coordinates: [outline] },
+              },
+            ]
+          : []),
       ],
     };
   }, [status, route, upcomingIndex, approaching, mode]);
+
+  // In 3D navigation, from z16.5 (where 2.4 m is wide enough to read), the
+  // arrow stands in the scene instead of being painted over it.
+  const sceneActive = useNavigationSceneStore((s) => s.active);
+  const { mapRef, mapReady } = useMap();
+  const [closeEnough, setCloseEnough] = useState(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const sync = () => setCloseEnough(map.getZoom() >= RAISED_MIN_ZOOM);
+    sync();
+    map.on("zoom", sync);
+    return () => {
+      map.off("zoom", sync);
+    };
+  }, [mapRef, mapReady]);
+  const raised = sceneActive && closeEnough;
+  const flat = raised ? "none" : "visible";
 
   const group = useMemo<MapLayerGroup>(
     () => ({
@@ -94,7 +132,8 @@ export function NavManeuverArrowLayer() {
           id: CASING,
           type: "line",
           source: SOURCE,
-          layout: { "line-cap": "round", "line-join": "round" },
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { visibility: flat, "line-cap": "round", "line-join": "round" },
           paint: { "line-color": CASING_COLOR, "line-width": 9 },
           slot: "route-markers",
           order: 1,
@@ -103,10 +142,28 @@ export function NavManeuverArrowLayer() {
           id: BODY,
           type: "line",
           source: SOURCE,
-          layout: { "line-cap": "round", "line-join": "round" },
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { visibility: flat, "line-cap": "round", "line-join": "round" },
           paint: { "line-color": BODY_COLOR, "line-width": 5 },
           slot: "route-markers",
           order: 2,
+        },
+        {
+          id: RAISED,
+          type: "fill-extrusion",
+          source: SOURCE,
+          filter: ["==", ["geometry-type"], "Polygon"],
+          layout: { visibility: raised ? "visible" : "none" },
+          paint: {
+            "fill-extrusion-color": BODY_COLOR,
+            "fill-extrusion-base": RAISED_BASE_M,
+            "fill-extrusion-height": RAISED_TOP_M,
+            // Darker sides, so the white top reads as a raised slab.
+            "fill-extrusion-vertical-gradient": true,
+          },
+          // With the other 3D layers, so buildings in front of it hide it.
+          slot: "scene-3d",
+          order: 14,
         },
         {
           id: HEAD,
@@ -114,6 +171,7 @@ export function NavManeuverArrowLayer() {
           source: SOURCE,
           filter: ["==", ["geometry-type"], "Point"],
           layout: {
+            visibility: flat,
             "icon-image": MANEUVER_ARROW_HEAD_IMAGE_ID,
             "icon-size": 1,
             "icon-allow-overlap": true,
@@ -125,7 +183,7 @@ export function NavManeuverArrowLayer() {
         },
       ] satisfies SlottedLayer[],
     }),
-    [data],
+    [data, flat, raised],
   );
   useMapLayerGroup(group);
 

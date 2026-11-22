@@ -77,3 +77,68 @@ export function maneuverArrowTipBearing(line: LngLat[]): number {
   if (!from || !to) return 0;
   return bearingBetween(from, to);
 }
+
+const EARTH_RADIUS_M = 6371008.8;
+
+/**
+ * The arrow line as one closed outline on the ground, for the raised 3D arrow
+ * (immersive navigation spec §9.3): a shaft `widthMeters` wide and, at the
+ * tip, a head twice as wide and `headMeters` long. Empty when the line is too
+ * short to carry a head.
+ */
+export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters = 5): LngLat[] {
+  const tip = line.at(-1);
+  if (!tip || line.length < 2) return [];
+  const cos = Math.cos((tip[1] * Math.PI) / 180);
+  const k = (Math.PI / 180) * EARTH_RADIUS_M;
+  const toLocal = ([lng, lat]: LngLat): LngLat => [(lng - tip[0]) * k * cos, (lat - tip[1]) * k];
+  const toLngLat = ([x, y]: LngLat): LngLat => [tip[0] + x / (k * cos), tip[1] + y / k];
+  const local = line.map(toLocal);
+  const cum = [0];
+  for (let i = 1; i < local.length; i++) {
+    const a = local[i - 1] as LngLat;
+    const b = local[i] as LngLat;
+    cum.push((cum[i - 1] as number) + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const total = cum[cum.length - 1] as number;
+  if (total <= headMeters + 0.5) return [];
+
+  // The shaft runs up to the base of the head.
+  const baseAlong = total - headMeters;
+  const shaft: LngLat[] = [];
+  for (let i = 0; i < local.length; i++) {
+    if ((cum[i] as number) < baseAlong) shaft.push(local[i] as LngLat);
+    else {
+      const a = local[i - 1] as LngLat;
+      const b = local[i] as LngLat;
+      const span = (cum[i] as number) - (cum[i - 1] as number);
+      const t = span > 0 ? (baseAlong - (cum[i - 1] as number)) / span : 0;
+      shaft.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      break;
+    }
+  }
+  // Facing (dx, dy) with y north, the right-hand normal is (dy, −dx).
+  const normalAt = (i: number): LngLat => {
+    const a = shaft[Math.max(0, i - 1)] as LngLat;
+    const b = shaft[Math.min(shaft.length - 1, i + 1)] as LngLat;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const length = Math.hypot(dx, dy) || 1;
+    return [dy / length, -dx / length];
+  };
+  const side = (offset: number) =>
+    shaft.map((p, i): LngLat => {
+      const n = normalAt(i);
+      return [p[0] + n[0] * offset, p[1] + n[1] * offset];
+    });
+  const half = widthMeters / 2;
+  const left = side(-half);
+  const right = side(half);
+  const base = shaft[shaft.length - 1] as LngLat;
+  const n = normalAt(shaft.length - 1);
+  const headLeft: LngLat = [base[0] - n[0] * widthMeters, base[1] - n[1] * widthMeters];
+  const headRight: LngLat = [base[0] + n[0] * widthMeters, base[1] + n[1] * widthMeters];
+  const ring = [...left, headLeft, [0, 0] as LngLat, headRight, ...right.reverse()];
+  ring.push(ring[0] as LngLat);
+  return ring.map(toLngLat);
+}
