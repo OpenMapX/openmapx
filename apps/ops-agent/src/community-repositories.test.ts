@@ -168,6 +168,30 @@ describe("community repository store", () => {
     expect(readdirSync(community)).toEqual([]);
   });
 
+  it("refuses a service ID another community repository already installed", async () => {
+    const { store, community } = fixture({
+      [FIRST]: firstSnapshot,
+      clash: {
+        commit: SECOND,
+        files: { "service.json": manifest("community-live", "9.0.0") },
+      },
+    });
+    await publish(store, FIRST);
+    const other = "https://github.com/example/other-services";
+
+    const inspected = await store.inspect(
+      { kind: "serviceRepository.inspect", url: other, ref: "clash" },
+      signal(),
+    );
+    expect(inspected.valid).toBe(false);
+    expect(inspected.problems).toEqual([
+      'Service id "community-live" is already used by another service',
+    ]);
+    expect(readdirSync(community).filter((entry) => !entry.startsWith("."))).not.toContain(
+      communityRepositoryId(other),
+    );
+  });
+
   it("refuses manifests too large for the installed-services report", async () => {
     const large = {
       commit: FIRST,
