@@ -137,7 +137,13 @@ export {
   sameJunction,
 } from "./junctionDetect";
 export { junctionLookupPoints } from "./junctionLookup";
-export type { LandmarkCandidate, LandmarkCandidateCategory } from "./landmarks";
+export {
+  eligibleLandmarkManeuvers,
+  type LandmarkCandidate,
+  type LandmarkCandidateCategory,
+  type LandmarkManeuver,
+  selectLandmark,
+} from "./landmarks";
 export {
   guidanceApproachMeters,
   guidanceLanesForStep,

@@ -79,14 +79,15 @@ const TURN_MODIFIERS = new Set([
 const NON_TURN_TYPES = new Set(["uturn", "arrive", "depart"]);
 
 /** A real turn at a junction: the manoeuvres a visible reference helps with. */
-function isTurnManeuver(step: RouteStep | undefined): boolean {
+export function isTurnManeuver(step: RouteStep | undefined): boolean {
   const maneuver = step?.maneuver;
   if (!maneuver?.modifier) return false;
   if (NON_TURN_TYPES.has(maneuver.type.toLowerCase())) return false;
   return TURN_MODIFIERS.has(maneuver.modifier.toLowerCase().replace(/[-_]/g, " "));
 }
 
-function isMotorwayStep(steps: RouteStep[], index: number): boolean {
+/** Whether the manoeuvre at `index` leaves or continues a motorway step. */
+export function isMotorwayStep(steps: RouteStep[], index: number): boolean {
   return steps[index - 1]?.motorway === true || steps[index]?.motorway === true;
 }
 

@@ -19,6 +19,10 @@ export {
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
 export { fetchGeocode, type GeocodeParams } from "../api/geocoding";
 export {
+  fetchNavigationLandmarks,
+  type NavigationLandmarkResult,
+} from "../api/navigationLandmarks";
+export {
   fetchReferencedTransitPlan,
   fetchTransitPlan,
   fetchTransitStopArea,
