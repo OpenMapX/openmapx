@@ -3,7 +3,9 @@ import { join, resolve } from "node:path";
 import type postgres from "postgres";
 import { assertDataPublication, publishDataChange } from "../execution/worker-scope.js";
 import { assertValidOvertureSchema } from "./schema.js";
-import { assertValidOvertureRelease } from "./stac.js";
+import { assertValidOvertureRelease, compareOvertureReleases } from "./stac.js";
+
+export { compareOvertureReleases };
 
 export interface PruneOvertureReleasesOptions {
   dataDir: string;
@@ -19,15 +21,6 @@ export interface PruneOvertureReleasesResult {
 }
 
 const RELEASE_DIRECTORY = /^\d{4}-\d{2}-\d{2}\.\d+$/;
-
-/** Numeric YYYY-MM-DD.N ordering; positive means `left` is newer. */
-export function compareOvertureReleases(left: string, right: string): number {
-  assertValidOvertureRelease(left);
-  assertValidOvertureRelease(right);
-  const [leftDate = "", leftRevision = "0"] = left.split(".");
-  const [rightDate = "", rightRevision = "0"] = right.split(".");
-  return leftDate.localeCompare(rightDate) || Number(leftRevision) - Number(rightRevision);
-}
 
 export function overtureReleaseRetentionFromEnv(value: string | undefined): number {
   if (!value) return 2;
@@ -59,10 +52,10 @@ export async function pruneOvertureReleases(
     .map((entry) => entry.name)
     .sort((left, right) => compareOvertureReleases(right, left));
 
-  // A manually pinned older active release must never delete a newer pulled
-  // snapshot whose ingest may merely be awaiting operator attention. Retention
-  // applies to the active release and its predecessors; newer directories stay
-  // protected until one of them becomes active.
+  // If the active release is older than a newer pulled snapshot awaiting
+  // operator attention, never delete that newer directory. Retention applies to
+  // the active release and its predecessors; newer directories stay protected
+  // until one of them becomes active.
   const newer = releases.filter(
     (release) => compareOvertureReleases(release, opts.activeRelease) > 0,
   );

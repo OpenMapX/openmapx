@@ -6,6 +6,7 @@ import { captureOvertureCatalogue } from "../../src/jobs/overture/attribution-ca
 import {
   buildOverturePullContract,
   OvertureCatalogueRefusedError,
+  OvertureReleaseUnavailableError,
   pullContractPath,
   readOverturePullContract,
   resolveOvertureStacContract,
@@ -138,14 +139,124 @@ describe("Overture STAC release contract", () => {
     expect(contract.selectedAssetRows).toBe(250);
   });
 
-  it("fails closed when an archived release has no STAC catalog", async () => {
+  it("refuses unlisted expired or future releases without fetching them, listing available releases newest-first", async () => {
+    const requestedUrls: string[] = [];
+    const baseFetch = stacFetch({
+      [rootUrl]: {
+        id: "Overture Releases",
+        latest: release,
+        links: [
+          { rel: "child", href: "./latest/catalog.json" },
+          { rel: "child", href: "./2026-06-17.2/catalog.json" },
+          { rel: "child", href: "./2026-06-17.10/catalog.json" },
+          { rel: "child", href: "./2026-06-17.0/catalog.json" },
+          { rel: "child", href: `./${release}/catalog.json` },
+        ],
+      },
+    });
+    const fetchSpy: typeof fetch = async (input, init) => {
+      requestedUrls.push(String(input));
+      return baseFetch(input, init);
+    };
+
+    const expired = resolveOvertureStacContract(
+      "2026-05-20.0",
+      [{ west: 6, south: 50, east: 7, north: 51 }],
+      fetchSpy,
+    );
+    await expect(expired).rejects.toThrow(OvertureReleaseUnavailableError);
+    await expect(expired).rejects.toThrow(
+      `Overture release 2026-05-20.0 is not published (Overture retains public releases for about 60 days); available: ${release}, 2026-06-17.10, 2026-06-17.2, 2026-06-17.0 (latest: ${release})`,
+    );
+    expect(requestedUrls).toEqual([rootUrl]);
+
+    const future = resolveOvertureStacContract(
+      "2026-08-19.0",
+      [{ west: 6, south: 50, east: 7, north: 51 }],
+      fetchSpy,
+    );
+    await expect(future).rejects.toThrow(
+      `Overture release 2026-08-19.0 is not published yet (latest: ${release}); available: ${release}, 2026-06-17.10, 2026-06-17.2, 2026-06-17.0`,
+    );
+  });
+
+  it("translates 410/404 on a still-listed release catalog into OvertureReleaseUnavailableError while propagating 5xx errors", async () => {
+    const expiringRelease = "2026-06-17.0";
+    const expiringUrl = `https://stac.overturemaps.org/${expiringRelease}/catalog.json`;
+    const rootWithExpiring = {
+      id: "Overture Releases",
+      latest: release,
+      links: [
+        { rel: "child", href: `./${expiringRelease}/catalog.json` },
+        { rel: "child", href: `./${release}/catalog.json` },
+      ],
+    };
+
+    for (const status of [410, 404] as const) {
+      const base = stacFetch({ [rootUrl]: rootWithExpiring });
+      const fetchImpl: typeof fetch = async (input, init) => {
+        if (String(input) === expiringUrl) return new Response("", { status });
+        return base(input, init);
+      };
+      const rejection = resolveOvertureStacContract(
+        expiringRelease,
+        [{ west: 6, south: 50, east: 7, north: 51 }],
+        fetchImpl,
+      );
+      await expect(rejection).rejects.toThrow(OvertureReleaseUnavailableError);
+      await expect(rejection).rejects.toMatchObject({
+        release: expiringRelease,
+        latestRelease: release,
+        availableReleases: [release, expiringRelease],
+      });
+    }
+
+    const base503 = stacFetch({ [rootUrl]: rootWithExpiring });
+    const fetch503: typeof fetch = async (input, init) => {
+      if (String(input) === expiringUrl) return new Response("unavailable", { status: 503 });
+      return base503(input, init);
+    };
+    await expect(
+      resolveOvertureStacContract(
+        expiringRelease,
+        [{ west: 6, south: 50, east: 7, north: 51 }],
+        fetch503,
+      ),
+    ).rejects.toThrow(/HTTP 503/);
+  });
+
+  it("rejects duplicate release children and catalogs missing the current latest child", async () => {
     await expect(
       resolveOvertureStacContract(
         "2026-06-17.0",
         [{ west: 6, south: 50, east: 7, north: 51 }],
-        stacFetch(),
+        stacFetch({
+          [rootUrl]: {
+            id: "Overture Releases",
+            latest: release,
+            links: [
+              { rel: "child", href: "./2026-06-17.0/catalog.json" },
+              { rel: "child", href: "https://stac.overturemaps.org/2026-06-17.0/catalog.json" },
+              { rel: "child", href: `./${release}/catalog.json` },
+            ],
+          },
+        }),
       ),
-    ).rejects.toThrow(/HTTP 404/);
+    ).rejects.toThrow(/exactly one child for release 2026-06-17\.0/);
+
+    await expect(
+      resolveOvertureStacContract(
+        "2026-06-17.0",
+        [{ west: 6, south: 50, east: 7, north: 51 }],
+        stacFetch({
+          [rootUrl]: {
+            id: "Overture Releases",
+            latest: release,
+            links: [{ rel: "child", href: "./2026-06-17.0/catalog.json" }],
+          },
+        }),
+      ),
+    ).rejects.toThrow(`exactly one child for current release ${release}`);
   });
 
   it("rejects assets outside the pinned provider/release/type path", async () => {
