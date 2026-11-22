@@ -139,7 +139,7 @@
       "directions": "Directions",
       "showTraffic": "Show traffic",
       "showSatellite": "Show satellite",
-      "showRaisedBuildings": "3D view",
+      "threeDView": "3D view",
       "settings": "Settings"
     },
     "rerouteFailed": "Couldn't find a new route. Retrying…",

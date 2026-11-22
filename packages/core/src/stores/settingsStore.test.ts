@@ -100,6 +100,25 @@ describe("useSettingsStore", () => {
     expect(useSettingsStore.getState().touchZoomButtons).toBe(true);
   });
 
+  it("navigation3d defaults to false and persists under openmapx:nav:3d", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().navigation3d).toBe(false);
+    useSettingsStore.getState().setNavigation3d(true);
+    expect(useSettingsStore.getState().navigation3d).toBe(true);
+    expect(storage.getString("openmapx:nav:3d")).toBe("true");
+  });
+
+  it("re-reading persisted preferences restores navigation3d", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    storage.setString("openmapx:nav:3d", "true");
+    useSettingsStore.setState({ navigation3d: false });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().navigation3d).toBe(true);
+  });
+
   it("showLocalScript defaults on and persists false across hydrate", () => {
     const storage = makeMemoryStorage();
     configureStorage(storage);

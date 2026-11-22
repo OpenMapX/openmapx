@@ -139,7 +139,7 @@
       "directions": "Wegbeschreibung",
       "showTraffic": "Verkehr anzeigen",
       "showSatellite": "Satellit anzeigen",
-      "showRaisedBuildings": "3D-Ansicht",
+      "threeDView": "3D-Ansicht",
       "settings": "Einstellungen"
     },
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
