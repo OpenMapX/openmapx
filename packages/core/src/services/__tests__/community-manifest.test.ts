@@ -98,6 +98,19 @@ describe("communityServiceManifestProblems", () => {
       /^reserved_network_name: network alias "openmapx-postgis"/,
     ],
     [
+      "a container name with the reserved network-name prefix",
+      {
+        container: {
+          image: "registry.example.test/x",
+          tag: "1",
+          digest: `sha256:${"a".repeat(64)}`,
+          memory: "256m",
+          containerName: "openmapx-redis",
+        },
+      },
+      /^reserved_network_name: container name "openmapx-redis"/,
+    ],
+    [
       "a built-in service reached by its bare ID",
       {
         container: {

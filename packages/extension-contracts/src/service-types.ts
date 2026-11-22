@@ -184,12 +184,11 @@ export interface ServiceContainer {
   containerName?: string;
   expose?: number[];
   /**
-   * Additional DNS aliases on the project's `openmapx` Docker network. Compose
-   * sees these as `networks.openmapx.aliases:` and other containers on the same
-   * network can reach the service via any alias. Used by `motis-feed-proxy` to
-   * expose itself as `rt.openmapx.local` so the MOTIS config can reference a
-   * stable hostname independent of the service id. Ignored when `network_mode`
-   * is `host`.
+   * Additional DNS aliases on the service's home network (`openmapx` for a
+   * built-in, its isolated network for a community service), next to the
+   * `openmapx-<service-id>` name every service gets there. Other containers on
+   * that network can reach the service via any alias. An alias may not start
+   * with `openmapx-`. Ignored when `network_mode` is `host`.
    */
   networkAliases?: string[];
   command?: string[] | string;
