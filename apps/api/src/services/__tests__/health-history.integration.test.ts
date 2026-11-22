@@ -91,7 +91,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       pg = await startPostgis();
       holder.db = drizzle(pg.sql, { schema: { healthHistory } });
       holder.sql = pg.sql;
-      await pg.sql.unsafe(`CREATE TABLE health_history (id serial PRIMARY KEY, service_id text NOT NULL, status text NOT NULL, response_time integer, error text, checked_at timestamp NOT NULL DEFAULT now());
+      await pg.sql.unsafe(`CREATE TABLE health_history (id serial PRIMARY KEY, service_id text NOT NULL, status text NOT NULL, response_time integer, error text, checked_at timestamptz NOT NULL DEFAULT now());
       CREATE INDEX "healthHistory_serviceId_checkedAt_idx" ON health_history(service_id, checked_at)`);
       console.info("OWNED_HEALTH_FIXTURE", pg.container.getId());
       console.info("health fixture version", await pg.sql.unsafe("SELECT version() AS version"));
