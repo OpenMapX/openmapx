@@ -46,6 +46,14 @@ simultaneous obligations, `OR` for a verified choice on the same subject and
 does not establish that relationship. Split independent subjects into bindings.
 Do not infer data rights from an engine's licence or from public availability.
 
+An SPDX licence's name links one page wherever it is credited: leave out its
+`url`, or give the page `licenceLink` from `@openmapx/mobility-core/licensing`
+returns (the licence steward's current address, the deed for Creative Commons).
+Credits that differ only in where their licence links cannot be shown as one,
+so the same data credited by two sources would appear twice. A source's own
+licensing page, such as a portal's dataset page, belongs in `declarations`,
+where full credits link it as the source's terms.
+
 Custom terms require a self-contained definition:
 
 ```json

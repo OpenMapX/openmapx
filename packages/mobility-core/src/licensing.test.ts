@@ -3,6 +3,7 @@ import {
   canonicalLicenseExpression,
   dataLicenseExpression,
   formatLicensing,
+  licenceLink,
   licensingFromDeclaration,
   licensingLinks,
   parseLicensing,
@@ -194,6 +195,21 @@ describe("shared licence presentation", () => {
     expect(shown.url).toBeUndefined();
     expect(shown.licenses?.map((l) => l.label)).toEqual(["CC-BY-4.0", "NLOD-2.0"]);
     expect(shown.licenses?.every((l) => l.url && /^https?:\/\//.test(l.url))).toBe(true);
+  });
+
+  it("links a standard licence to one canonical page, whatever else names it", () => {
+    // Two credits for the same data collapse into one only when their licence
+    // links agree, so an unlinked grant takes the same page a source would give.
+    expect(licenceLink("ODbL-1.0")).toBe("https://opendatacommons.org/licenses/odbl/1-0/");
+    expect(licenceLink("CC-BY-4.0")).toBe("https://creativecommons.org/licenses/by/4.0/");
+    expect(licenceLink("CC0-1.0")).toBe("https://creativecommons.org/publicdomain/zero/1.0/");
+    expect(licenceLink("MIT")).toBe("https://opensource.org/license/mit/");
+    expect(licenceLink("Not-A-Licence")).toBeUndefined();
+    const captured = parseLicensing(routeLicensing);
+    assert.isDefined(captured);
+    expect(licensingLinks(captured, { scopes: ["data"] })[0]?.url).toBe(
+      "https://opendatacommons.org/licenses/odbl/1-0/",
+    );
   });
 
   it("preserves an explicit supplied licence link and custom title", () => {

@@ -45,10 +45,11 @@ const WIKIDATA_ATTRIBUTION: Attribution = {
         license: {
           kind: "spdx",
           expression: "CC0-1.0",
-          url: "https://www.wikidata.org/wiki/Wikidata:Licensing",
+          url: "https://creativecommons.org/publicdomain/zero/1.0/",
         },
       },
     ],
+    declarations: [{ text: "CC0-1.0", url: "https://www.wikidata.org/wiki/Wikidata:Licensing" }],
   } as const,
   attributionText: "Wikidata",
 };

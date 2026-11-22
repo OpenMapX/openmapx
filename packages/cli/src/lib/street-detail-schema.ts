@@ -26,7 +26,7 @@ export const STREET_DETAIL_LAYERS = [
 
 export const STREET_DETAIL_SCHEMA = `schema_name: OpenMapX street detail
 schema_description: Street paint and street object source data for the OpenMapX 3D view
-attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
 args:
   minzoom: 16
   maxzoom: 16

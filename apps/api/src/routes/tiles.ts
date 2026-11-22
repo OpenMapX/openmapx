@@ -36,7 +36,7 @@ const OSM_ATTRIBUTION: Attribution = {
         license: {
           kind: "spdx",
           expression: "ODbL-1.0",
-          url: "https://opendatacommons.org/licenses/odbl/",
+          url: "https://opendatacommons.org/licenses/odbl/1-0/",
         },
       },
     ],
