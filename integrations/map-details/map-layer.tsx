@@ -14,6 +14,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useMapDetailsActive } from "./activation";
+import { LaneHighlight } from "./lane-highlight";
 import { useMapDetailsObjects } from "./objects";
 import { applyBasemapAdjustments, type BasemapRestore } from "./web/basemap-adjustments";
 import { ensurePaintProtocol, PAINT_SOURCE_ID, PAINT_TEMPLATE } from "./web/paint-protocol";
@@ -40,7 +41,7 @@ const DATA_SOURCE_ID = "osm-street-detail";
  * worker and the street detail source are set up on first activation; the
  * paint source then stays and is only hidden while inactive.
  */
-export function MapDetailsLayer(): null {
+export function MapDetailsLayer() {
   const { mapRef, mapReady } = useMap();
   const map = mapReady ? mapRef.current : null;
   const { streetDetailTilesUrl } = useEnv();
@@ -213,7 +214,16 @@ export function MapDetailsLayer(): null {
     contributors,
   });
 
-  return null;
+  return (
+    <LaneHighlight
+      client={client}
+      streetTemplate={hasSource ? template : null}
+      zoom={zoom}
+      satellite={satellite}
+      mode={mode}
+      contributors={contributors}
+    />
+  );
 }
 
 export default MapDetailsLayer;
