@@ -38,7 +38,11 @@ export const installedExtension = pgTable(
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [
-    index("installedExtension_sourceTrust_idx").on(table.sourceTrust),
+    index("installed_extension_installed_by_idx").on(table.installedBy),
+    check(
+      "installed_extension_source_trust_check",
+      sql`${table.sourceTrust} in ('built-in','verified','community')`,
+    ),
     check(
       "installed_extension_installation_kind_check",
       sql`${table.installationKind} in ('catalog','standalone')`,
@@ -64,7 +68,10 @@ export const installedExtensionComponent = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.extensionId, table.kind, table.componentId] }),
-    index("installedExtensionComponent_componentId_idx").on(table.componentId),
+    check(
+      "installed_extension_component_kind_check",
+      sql`${table.kind} in ('integration','service')`,
+    ),
     // One installed component belongs to exactly one extension. Without this a
     // second extension could claim a component another extension installed and
     // then remove or reconfigure it.

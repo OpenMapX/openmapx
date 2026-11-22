@@ -25,7 +25,7 @@ export const serviceSecret = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [
-    index("serviceSecret_serviceId_idx").on(table.serviceId),
     unique("serviceSecret_serviceId_key_unq").on(table.serviceId, table.key),
+    index("service_secret_updated_by_idx").on(table.updatedBy),
   ],
 );

@@ -42,6 +42,10 @@ export const accountActionReceipt = pgTable(
   (t) => [
     index("account_action_actor_time_idx").on(t.actorId, t.createdAt),
     index("account_action_target_time_idx").on(t.targetId, t.createdAt),
+    check(
+      "account_action_receipt_action_check",
+      sql`${t.action} in ('create','invitation','verification-email','reset-password','verify','password','role')`,
+    ),
   ],
 );
 export const accountMailOutbox = pgTable(
@@ -70,6 +74,7 @@ export const accountMailOutbox = pgTable(
   (t) => [
     uniqueIndex("account_mail_action_kind_uq").on(t.requestKey, t.kind),
     index("account_mail_pending_idx").on(t.state, t.createdAt),
+    index("account_mail_outbox_user_id_idx").on(t.userId),
     check(
       "account_mail_state_check",
       sql`${t.state} in ('queued','sending','sent','failed','unknown')`,

@@ -34,10 +34,7 @@ export const savedList = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
-    index("savedList_userId_idx").on(table.userId),
-    unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name),
-  ],
+  (table) => [unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name)],
 );
 
 export const savedPlace = pgTable(
@@ -76,10 +73,7 @@ export const labeledPlace = pgTable(
     placeId: text("place_id"),
     fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
   },
-  (table) => [
-    index("labeledPlace_userId_idx").on(table.userId),
-    unique("labeledPlace_userId_label_unq").on(table.userId, table.label),
-  ],
+  (table) => [unique("labeledPlace_userId_label_unq").on(table.userId, table.label)],
 );
 
 export const savedListRelations = relations(savedList, ({ one, many }) => ({

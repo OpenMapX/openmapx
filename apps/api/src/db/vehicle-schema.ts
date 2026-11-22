@@ -2,6 +2,7 @@ import type { EvVehicleSpec, ParkedSource, VehicleKind, VehiclePowertrain } from
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   doublePrecision,
   index,
   jsonb,
@@ -42,8 +43,12 @@ export const personalVehicle = pgTable(
       .notNull(),
   },
   (table) => [
-    index("personalVehicle_userId_idx").on(table.userId),
     unique(PERSONAL_VEHICLE_NAME_UNIQUE).on(table.userId, table.name),
+    check("personal_vehicle_kind_check", sql`${table.kind} in ('car','motorcycle','bicycle')`),
+    check(
+      "personal_vehicle_powertrain_check",
+      sql`${table.powertrain} in ('electric','plugin_hybrid','hybrid','petrol','diesel','other')`,
+    ),
   ],
 );
 
@@ -79,10 +84,11 @@ export const parkedLocation = pgTable(
       .notNull(),
   },
   (table) => [
-    index("parkedLocation_userId_idx").on(table.userId),
     unique("parkedLocation_userId_vehicleId_unq")
       .on(table.userId, table.vehicleId)
       .nullsNotDistinct(),
+    index("parked_location_vehicle_id_idx").on(table.vehicleId),
+    check("parked_location_source_check", sql`${table.source} in ('device','manual','arrival')`),
   ],
 );
 

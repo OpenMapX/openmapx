@@ -28,5 +28,7 @@ export const adminAuditLog = pgTable(
     index("audit_action_idx").on(table.action),
     index("audit_createdAt_idx").on(table.createdAt),
     index("admin_audit_log_target_user_id_idx").on(table.targetUserId),
+    // The audit filter and the erasure trigger select by target.
+    index("admin_audit_log_target_type_target_id_idx").on(table.targetType, table.targetId),
   ],
 );

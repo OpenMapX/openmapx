@@ -18,7 +18,7 @@ export const integrationSecret = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [
-    index("integrationSecret_integrationId_idx").on(table.integrationId),
     unique("integrationSecret_integrationId_key_unq").on(table.integrationId, table.key),
+    index("integration_secret_updated_by_idx").on(table.updatedBy),
   ],
 );

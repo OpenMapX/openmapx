@@ -24,7 +24,8 @@ CREATE TABLE "account_action_receipt" (
 	"intent_digest" text NOT NULL,
 	"result" jsonb,
 	"mail_requested" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "account_action_receipt_action_check" CHECK ("account_action_receipt"."action" in ('create','invitation','verification-email','reset-password','verify','password','role'))
 );
 --> statement-breakpoint
 CREATE TABLE "account_admin_guard" (
@@ -70,7 +71,8 @@ CREATE TABLE "admin_action_reauthentication" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "admin_reauth_state_check" CHECK ("admin_action_reauthentication"."state" in ('pending','completed','consumed','superseded','expired')),
-	CONSTRAINT "admin_reauth_purpose_check" CHECK ("admin_action_reauthentication"."purpose" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export'))
+	CONSTRAINT "admin_reauth_purpose_check" CHECK ("admin_action_reauthentication"."purpose" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')),
+	CONSTRAINT "admin_action_reauthentication_completed_method_check" CHECK ("admin_action_reauthentication"."completed_method" in ('password','password_totp','password_recovery','passkey','federated'))
 );
 --> statement-breakpoint
 CREATE TABLE "admin_audit_log" (
@@ -98,7 +100,8 @@ CREATE TABLE "admin_job" (
 	"created_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"started_at" timestamp with time zone,
-	"finished_at" timestamp with time zone
+	"finished_at" timestamp with time zone,
+	CONSTRAINT "admin_job_status_check" CHECK ("admin_job"."status" in ('queued','running','cancel_pending','success','failed','canceled'))
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
@@ -107,7 +110,8 @@ CREATE TABLE "admin_job_log" (
 	"seq" integer NOT NULL,
 	"stream" text DEFAULT 'stdout' NOT NULL,
 	"line" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "admin_job_log_stream_check" CHECK ("admin_job_log"."stream" in ('stdout','stderr'))
 );
 --> statement-breakpoint
 CREATE TABLE "app_logs" (
@@ -363,7 +367,8 @@ CREATE TABLE "data_subject_request_preservation" (
 	"captured_at" timestamp with time zone,
 	"released_at" timestamp with time zone,
 	"status" text DEFAULT 'held' NOT NULL,
-	"outcome_code" text
+	"outcome_code" text,
+	CONSTRAINT "data_subject_request_preservation_status_check" CHECK ("data_subject_request_preservation"."status" in ('held', 'source_capture_pending', 'action_required', 'captured', 'released'))
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request_task" (
@@ -386,7 +391,8 @@ CREATE TABLE "health_history" (
 	"status" text NOT NULL,
 	"response_time" integer,
 	"error" text,
-	"checked_at" timestamp with time zone DEFAULT now() NOT NULL
+	"checked_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "health_history_status_check" CHECK ("health_history"."status" in ('healthy','degraded','unhealthy','error'))
 );
 --> statement-breakpoint
 CREATE TABLE "installed_extension" (
@@ -402,6 +408,7 @@ CREATE TABLE "installed_extension" (
 	"installed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by" text,
+	CONSTRAINT "installed_extension_source_trust_check" CHECK ("installed_extension"."source_trust" in ('built-in','verified','community')),
 	CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone')),
 	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
 );
@@ -410,7 +417,8 @@ CREATE TABLE "installed_extension_component" (
 	"extension_id" text NOT NULL,
 	"kind" text NOT NULL,
 	"component_id" text NOT NULL,
-	CONSTRAINT "installed_extension_component_extension_id_kind_component_id_pk" PRIMARY KEY("extension_id","kind","component_id")
+	CONSTRAINT "installed_extension_component_extension_id_kind_component_id_pk" PRIMARY KEY("extension_id","kind","component_id"),
+	CONSTRAINT "installed_extension_component_kind_check" CHECK ("installed_extension_component"."kind" in ('integration','service'))
 );
 --> statement-breakpoint
 CREATE TABLE "installed_integration" (
@@ -422,7 +430,8 @@ CREATE TABLE "installed_integration" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by" text,
 	"managed_by_extension" text,
-	"last_transaction_id" text
+	"last_transaction_id" text,
+	CONSTRAINT "installed_integration_source_type_check" CHECK ("installed_integration"."source_type" in ('registry','artifact','source','uploaded-artifact','legacy_unknown'))
 );
 --> statement-breakpoint
 CREATE TABLE "integration_config" (
@@ -486,7 +495,8 @@ CREATE TABLE "mangrove_keypair_wrap" (
 	"wrap_type" text NOT NULL,
 	"label" text NOT NULL,
 	"identity_string" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "mangrove_keypair_wrap_wrap_type_check" CHECK ("mangrove_keypair_wrap"."wrap_type" in ('passphrase','webauthn'))
 );
 --> statement-breakpoint
 CREATE TABLE "mobile_auth_handoff" (
@@ -503,7 +513,8 @@ CREATE TABLE "mobile_auth_handoff" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
 	"consumed_at" timestamp with time zone,
-	CONSTRAINT "mobile_auth_handoff_callback_code_hash_unique" UNIQUE("callback_code_hash")
+	CONSTRAINT "mobile_auth_handoff_callback_code_hash_unique" UNIQUE("callback_code_hash"),
+	CONSTRAINT "mobile_auth_handoff_purpose_check" CHECK ("mobile_auth_handoff"."purpose" in ('sign-in','link-provider','add-passkey'))
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_access_token" (
@@ -644,7 +655,8 @@ CREATE TABLE "parked_location" (
 	"accuracy_meters" double precision,
 	"saved_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "parkedLocation_userId_vehicleId_unq" UNIQUE NULLS NOT DISTINCT("user_id","vehicle_id")
+	CONSTRAINT "parkedLocation_userId_vehicleId_unq" UNIQUE NULLS NOT DISTINCT("user_id","vehicle_id"),
+	CONSTRAINT "parked_location_source_check" CHECK ("parked_location"."source" in ('device','manual','arrival'))
 );
 --> statement-breakpoint
 CREATE TABLE "passkey" (
@@ -680,7 +692,9 @@ CREATE TABLE "personal_timeline_connection" (
 	"last_read_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "personalTimelineConnection_userId_unq" UNIQUE("user_id")
+	CONSTRAINT "personalTimelineConnection_userId_unq" UNIQUE("user_id"),
+	CONSTRAINT "personal_timeline_connection_mode_check" CHECK ("personal_timeline_connection"."mode" in ('external','managed')),
+	CONSTRAINT "personal_timeline_connection_status_check" CHECK ("personal_timeline_connection"."status" in ('connected','degraded','invalid'))
 );
 --> statement-breakpoint
 CREATE TABLE "personal_vehicle" (
@@ -695,7 +709,9 @@ CREATE TABLE "personal_vehicle" (
 	"fuel_consumption_l_per_100km" double precision,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "personalVehicle_userId_name_unq" UNIQUE("user_id","name")
+	CONSTRAINT "personalVehicle_userId_name_unq" UNIQUE("user_id","name"),
+	CONSTRAINT "personal_vehicle_kind_check" CHECK ("personal_vehicle"."kind" in ('car','motorcycle','bicycle')),
+	CONSTRAINT "personal_vehicle_powertrain_check" CHECK ("personal_vehicle"."powertrain" in ('electric','plugin_hybrid','hybrid','petrol','diesel','other'))
 );
 --> statement-breakpoint
 CREATE TABLE "platform_configuration_preview" (
@@ -810,7 +826,11 @@ CREATE TABLE "share_link" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"expires_at" timestamp with time zone,
-	CONSTRAINT "share_link_token_hash_unique" UNIQUE("token_hash")
+	CONSTRAINT "share_link_token_hash_unique" UNIQUE("token_hash"),
+	CONSTRAINT "share_link_target_type_check" CHECK ("share_link"."target_type" in ('list','route')),
+	CONSTRAINT "share_link_mode_check" CHECK ("share_link"."mode" in ('live','snapshot')),
+	CONSTRAINT "share_link_route_target_check" CHECK ("share_link"."target_type" <> 'route' or "share_link"."target_id" is null),
+	CONSTRAINT "share_link_snapshot_check" CHECK ("share_link"."mode" <> 'snapshot' or "share_link"."snapshot" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "system_settings" (
@@ -963,24 +983,28 @@ CREATE INDEX "account_action_actor_time_idx" ON "account_action_receipt" USING b
 CREATE INDEX "account_action_target_time_idx" ON "account_action_receipt" USING btree ("target_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "account_mail_action_kind_uq" ON "account_mail_outbox" USING btree ("request_key","kind");--> statement-breakpoint
 CREATE INDEX "account_mail_pending_idx" ON "account_mail_outbox" USING btree ("state","created_at");--> statement-breakpoint
+CREATE INDEX "account_mail_outbox_user_id_idx" ON "account_mail_outbox" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "admin_reauth_actor_expiry_idx" ON "admin_action_reauthentication" USING btree ("actor_id","expires_at");--> statement-breakpoint
+CREATE INDEX "admin_action_reauthentication_expires_at_idx" ON "admin_action_reauthentication" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "admin_reauth_request_uq" ON "admin_action_reauthentication" USING btree ("actor_id","request_key");--> statement-breakpoint
 CREATE INDEX "audit_actorId_idx" ON "admin_audit_log" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "audit_action_idx" ON "admin_audit_log" USING btree ("action");--> statement-breakpoint
 CREATE INDEX "audit_createdAt_idx" ON "admin_audit_log" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "admin_audit_log_target_user_id_idx" ON "admin_audit_log" USING btree ("target_user_id");--> statement-breakpoint
-CREATE INDEX "adminJob_status_idx" ON "admin_job" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "adminJob_type_idx" ON "admin_job" USING btree ("type");--> statement-breakpoint
+CREATE INDEX "admin_audit_log_target_type_target_id_idx" ON "admin_audit_log" USING btree ("target_type","target_id");--> statement-breakpoint
+CREATE INDEX "admin_job_type_idx" ON "admin_job" USING btree ("type") WHERE "admin_job"."status" IN ('queued', 'running', 'cancel_pending');--> statement-breakpoint
+CREATE INDEX "admin_job_created_by_idx" ON "admin_job" USING btree ("created_by");--> statement-breakpoint
 CREATE INDEX "adminJob_createdAt_idx" ON "admin_job" USING btree ("created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "adminJob_one_active_system_maintenance_uq" ON "admin_job" USING btree ((true)) WHERE "admin_job"."type" IN ('system.update', 'system.diagnostics') AND "admin_job"."status" IN ('queued', 'running', 'cancel_pending');--> statement-breakpoint
 CREATE INDEX "adminJobLog_jobId_idx" ON "admin_job_log" USING btree ("job_id");--> statement-breakpoint
-CREATE INDEX "app_logs_level_source_idx" ON "app_logs" USING btree ("level","source","created_at");--> statement-breakpoint
 CREATE INDEX "app_logs_created_at_idx" ON "app_logs" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_capability_binding_service" ON "capability_binding" USING btree ("service_id");--> statement-breakpoint
+CREATE INDEX "auth_policy_application_actor_id_idx" ON "auth_policy_application" USING btree ("actor_id");--> statement-breakpoint
+CREATE INDEX "auth_policy_state_activated_by_idx" ON "auth_policy_state" USING btree ("activated_by");--> statement-breakpoint
 CREATE INDEX "configuration_migration_preview_actor_kind_idx" ON "configuration_migration_preview" USING btree ("actor_id","kind");--> statement-breakpoint
 CREATE INDEX "configuration_migration_preview_expiry_idx" ON "configuration_migration_preview" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "data_disclosure_event_user_occurred_idx" ON "data_disclosure_event" USING btree ("user_id","occurred_at");--> statement-breakpoint
 CREATE INDEX "data_disclosure_event_recipient_idx" ON "data_disclosure_event" USING btree ("recipient_id","occurred_at");--> statement-breakpoint
+CREATE INDEX "data_disclosure_event_occurred_at_idx" ON "data_disclosure_event" USING btree ("occurred_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_disclosure_event_idempotency_idx" ON "data_disclosure_event" USING btree ("idempotency_key") WHERE "data_disclosure_event"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "configuration_fence_one_prepared_uq" ON "data_manager"."configuration_fence" USING btree ("state") WHERE "data_manager"."configuration_fence"."state" = 'prepared';--> statement-breakpoint
 CREATE INDEX "job_stages_job_id_idx" ON "data_manager"."job_stages" USING btree ("job_id");--> statement-breakpoint
@@ -993,6 +1017,8 @@ CREATE INDEX "offline_package_jobs_status_created_idx" ON "data_manager"."offlin
 CREATE INDEX "offline_package_jobs_package_id_idx" ON "data_manager"."offline_package_jobs" USING btree ("package_id");--> statement-breakpoint
 CREATE INDEX "data_subject_request_user_state_idx" ON "data_subject_request" USING btree ("user_id","state");--> statement-breakpoint
 CREATE INDEX "data_subject_request_due_idx" ON "data_subject_request" USING btree ("state","due_at");--> statement-breakpoint
+CREATE INDEX "data_subject_request_actor_user_id_idx" ON "data_subject_request" USING btree ("actor_user_id");--> statement-breakpoint
+CREATE INDEX "data_subject_request_actor_session_id_idx" ON "data_subject_request" USING btree ("actor_session_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_active_user_kind_idx" ON "data_subject_request" USING btree ("user_id","kind") WHERE "data_subject_request"."user_id" is not null and "data_subject_request"."state" in ('open', 'in_progress', 'waiting_on_requester');--> statement-breakpoint
 CREATE INDEX "data_subject_request_event_request_idx" ON "data_subject_request_event" USING btree ("request_id","created_at");--> statement-breakpoint
 CREATE INDEX "data_subject_request_event_actor_user_id_idx" ON "data_subject_request_event" USING btree ("actor_user_id");--> statement-breakpoint
@@ -1005,13 +1031,13 @@ CREATE INDEX "data_subject_request_preservation_registration_status_idx" ON "dat
 CREATE UNIQUE INDEX "data_subject_request_task_request_registration_idx" ON "data_subject_request_task" USING btree ("request_id","registration_id");--> statement-breakpoint
 CREATE INDEX "data_subject_request_task_status_idx" ON "data_subject_request_task" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "healthHistory_serviceId_checkedAt_idx" ON "health_history" USING btree ("service_id","checked_at");--> statement-breakpoint
-CREATE INDEX "installedExtension_sourceTrust_idx" ON "installed_extension" USING btree ("source_trust");--> statement-breakpoint
-CREATE INDEX "installedExtensionComponent_componentId_idx" ON "installed_extension_component" USING btree ("component_id");--> statement-breakpoint
+CREATE INDEX "health_history_checked_at_idx" ON "health_history" USING btree ("checked_at");--> statement-breakpoint
+CREATE INDEX "installed_extension_installed_by_idx" ON "installed_extension" USING btree ("installed_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "installedExtensionComponent_kind_componentId_key" ON "installed_extension_component" USING btree ("kind","component_id");--> statement-breakpoint
-CREATE INDEX "installedIntegration_sourceType_idx" ON "installed_integration" USING btree ("source_type");--> statement-breakpoint
-CREATE INDEX "integrationConfig_integrationId_idx" ON "integration_config" USING btree ("integration_id");--> statement-breakpoint
-CREATE INDEX "integrationSecret_integrationId_idx" ON "integration_secret" USING btree ("integration_id");--> statement-breakpoint
-CREATE INDEX "labeledPlace_userId_idx" ON "labeled_place" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "installed_integration_installed_by_idx" ON "installed_integration" USING btree ("installed_by");--> statement-breakpoint
+CREATE INDEX "integration_secret_updated_by_idx" ON "integration_secret" USING btree ("updated_by");--> statement-breakpoint
+CREATE INDEX "mangrove_keypair_wrap_user_id_idx" ON "mangrove_keypair_wrap" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "mangrove_keypair_wrap_passphrase_key" ON "mangrove_keypair_wrap" USING btree ("user_id") WHERE "mangrove_keypair_wrap"."wrap_type" = 'passphrase';--> statement-breakpoint
 CREATE INDEX "mobile_auth_handoff_user_expires_idx" ON "mobile_auth_handoff" USING btree ("user_id","expires_at");--> statement-breakpoint
 CREATE INDEX "oauth_access_token_expires_at_idx" ON "oauth_access_token" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_clientId_idx" ON "oauth_access_token" USING btree ("client_id");--> statement-breakpoint
@@ -1030,19 +1056,15 @@ CREATE INDEX "oauthRefreshToken_clientId_idx" ON "oauth_refresh_token" USING btr
 CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauth_refresh_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
-CREATE INDEX "parkedLocation_userId_idx" ON "parked_location" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "parked_location_vehicle_id_idx" ON "parked_location" USING btree ("vehicle_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "passkey_credential_id_key" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "passkey_userId_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_credentialID_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
-CREATE INDEX "personalTimelineConnection_userId_idx" ON "personal_timeline_connection" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "personalVehicle_userId_idx" ON "personal_vehicle" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "platform_preview_actor_key_uq" ON "platform_configuration_preview" USING btree ("actor_id","operation_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "platform_preview_fingerprint_uq" ON "platform_configuration_preview" USING btree ("preview_fingerprint");--> statement-breakpoint
 CREATE INDEX "platform_preview_expiry_idx" ON "platform_configuration_preview" USING btree ("expires_at");--> statement-breakpoint
-CREATE INDEX "savedList_userId_idx" ON "saved_list" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "savedPlace_listId_idx" ON "saved_place" USING btree ("list_id");--> statement-breakpoint
-CREATE INDEX "serviceConfig_serviceId_idx" ON "service_config" USING btree ("service_id");--> statement-breakpoint
-CREATE INDEX "serviceSecret_serviceId_idx" ON "service_secret" USING btree ("service_id");--> statement-breakpoint
+CREATE INDEX "service_secret_updated_by_idx" ON "service_secret" USING btree ("updated_by");--> statement-breakpoint
 CREATE INDEX "session_expires_at_idx" ON "session" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_auth_assurance_user_idx" ON "session_auth_assurance" USING btree ("user_id","authenticated_at");--> statement-breakpoint

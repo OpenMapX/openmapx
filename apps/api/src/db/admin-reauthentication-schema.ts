@@ -37,7 +37,12 @@ export const adminActionReauthentication = pgTable(
       "admin_reauth_purpose_check",
       sql`${t.purpose} in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')`,
     ),
+    check(
+      "admin_action_reauthentication_completed_method_check",
+      sql`${t.completedMethod} in ('password','password_totp','password_recovery','passkey','federated')`,
+    ),
     index("admin_reauth_actor_expiry_idx").on(t.actorId, t.expiresAt),
+    index("admin_action_reauthentication_expires_at_idx").on(t.expiresAt),
     uniqueIndex("admin_reauth_request_uq").on(t.actorId, t.requestKey),
   ],
 );

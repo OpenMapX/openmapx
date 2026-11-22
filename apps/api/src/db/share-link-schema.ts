@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -39,7 +39,19 @@ export const shareLink = pgTable(
       .notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
-  (table) => [index("shareLink_userId_idx").on(table.userId)],
+  (table) => [
+    index("shareLink_userId_idx").on(table.userId),
+    check("share_link_target_type_check", sql`${table.targetType} in ('list','route')`),
+    check("share_link_mode_check", sql`${table.mode} in ('live','snapshot')`),
+    check(
+      "share_link_route_target_check",
+      sql`${table.targetType} <> 'route' or ${table.targetId} is null`,
+    ),
+    check(
+      "share_link_snapshot_check",
+      sql`${table.mode} <> 'snapshot' or ${table.snapshot} is not null`,
+    ),
+  ],
 );
 
 export const shareLinkRelations = relations(shareLink, ({ one }) => ({

@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 /**
  * Per-service operator config. Mirrors the integration_config pattern: one row
@@ -17,10 +17,7 @@ export const serviceConfig = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
-    index("serviceConfig_serviceId_idx").on(table.serviceId),
-    unique("serviceConfig_serviceId_unq").on(table.serviceId),
-  ],
+  (table) => [unique("serviceConfig_serviceId_unq").on(table.serviceId)],
 );
 
 export type ServiceConfigRow = typeof serviceConfig.$inferSelect;

@@ -28,6 +28,7 @@ export const dataDisclosureEvent = pgTable(
   (table) => [
     index("data_disclosure_event_user_occurred_idx").on(table.userId, table.occurredAt),
     index("data_disclosure_event_recipient_idx").on(table.recipientId, table.occurredAt),
+    index("data_disclosure_event_occurred_at_idx").on(table.occurredAt),
     uniqueIndex("data_disclosure_event_idempotency_idx")
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),

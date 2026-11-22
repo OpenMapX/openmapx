@@ -118,6 +118,8 @@ export const dataSubjectRequest = pgTable(
     ),
     index("data_subject_request_user_state_idx").on(table.userId, table.state),
     index("data_subject_request_due_idx").on(table.state, table.dueAt),
+    index("data_subject_request_actor_user_id_idx").on(table.actorUserId),
+    index("data_subject_request_actor_session_id_idx").on(table.actorSessionId),
     uniqueIndex("data_subject_request_active_user_kind_idx")
       .on(table.userId, table.kind)
       .where(
@@ -211,6 +213,10 @@ export const dataSubjectRequestPreservation = pgTable(
       table.registrationId,
       table.status,
     ),
+    check(
+      "data_subject_request_preservation_status_check",
+      sql`${table.status} in ('held', 'source_capture_pending', 'action_required', 'captured', 'released')`,
+    ),
   ],
 );
 
@@ -242,6 +248,9 @@ export const dataSubjectRequestNotification = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // Nulls stay distinct: deleting several alerted administrators nulls each
+    // of their recipient ids, and those alerts must not collide. Every insert
+    // names a live recipient, so a null never needs deduplicating.
     uniqueIndex("data_subject_request_notification_event_idx").on(
       table.requestId,
       table.template,

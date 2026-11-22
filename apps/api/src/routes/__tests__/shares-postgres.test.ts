@@ -61,6 +61,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           targetType: "route",
           mode: "snapshot",
           label: "Existing",
+          snapshot: {},
         })),
       );
       // Hold both unprotected inserts long enough for both handlers to count 99.
@@ -227,6 +228,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           targetType: "route",
           mode: "snapshot",
           label: "Foreign",
+          snapshot: {},
         });
         expect(
           (await sdk.rotateShareToken("0193e4a0-0000-7000-8000-000000000f09", { client })).status,

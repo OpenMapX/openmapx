@@ -43,6 +43,14 @@ case; a longer address that merely contains it, such as
 restore remain until their 30-day retention ends; a deletion in the app removes
 them at once.
 
+The database checks the fixed value sets of OpenMapX's own tables, such as job
+and health statuses, share-link targets and modes, extension trust and source
+kinds, vehicle kinds and powertrains, parking sources, timeline connection
+states and account actions. It refuses a share link whose target or snapshot
+contradicts its kind and a second passphrase unlock for the same review key.
+Every foreign key column is indexed, as are the paths retention prunes by age;
+indexes that duplicate a unique constraint or that no query uses are gone.
+
 ## Who is affected
 
 Every database created by an earlier development build, including local

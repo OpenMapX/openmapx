@@ -1,4 +1,5 @@
-import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -55,5 +56,9 @@ export const mobileAuthHandoff = pgTable(
     // Expiry scrubbing walks this, and it also bounds how many outstanding
     // attempts one account can accumulate.
     index("mobile_auth_handoff_user_expires_idx").on(table.userId, table.expiresAt),
+    check(
+      "mobile_auth_handoff_purpose_check",
+      sql`${table.purpose} in ('sign-in','link-provider','add-passkey')`,
+    ),
   ],
 );

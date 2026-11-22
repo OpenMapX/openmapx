@@ -1,6 +1,6 @@
 {
-  "id": "ec3a2d21-7de4-4deb-a933-7e5b777b23cd",
-  "prevId": "f52960d2-921f-411c-b56b-63f82882942c",
+  "id": "1aa6e6c7-8566-4090-89dd-023dc8bdab41",
+  "prevId": "bdc94a93-b7a7-400f-b303-bb4378490b57",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -277,7 +277,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "account_action_receipt_action_check": {
+          "name": "account_action_receipt_action_check",
+          "value": "\"account_action_receipt\".\"action\" in ('create','invitation','verification-email','reset-password','verify','password','role')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.account_admin_guard": {
@@ -427,6 +432,21 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "account_mail_outbox_user_id_idx": {
+          "name": "account_mail_outbox_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -614,6 +634,21 @@
           "method": "btree",
           "concurrently": false
         },
+        "admin_action_reauthentication_expires_at_idx": {
+          "name": "admin_action_reauthentication_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "admin_reauth_request_uq": {
           "name": "admin_reauth_request_uq",
           "columns": [
@@ -662,6 +697,10 @@
         "admin_reauth_purpose_check": {
           "name": "admin_reauth_purpose_check",
           "value": "\"admin_action_reauthentication\".\"purpose\" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')"
+        },
+        "admin_action_reauthentication_completed_method_check": {
+          "name": "admin_action_reauthentication_completed_method_check",
+          "value": "\"admin_action_reauthentication\".\"completed_method\" in ('password','password_totp','password_recovery','passkey','federated')"
         }
       },
       "isRLSEnabled": false
@@ -793,6 +832,27 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "admin_audit_log_target_type_target_id_idx": {
+          "name": "admin_audit_log_target_type_target_id_idx",
+          "columns": [
+            {
+              "expression": "target_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -911,11 +971,11 @@
         }
       },
       "indexes": {
-        "adminJob_status_idx": {
-          "name": "adminJob_status_idx",
+        "admin_job_type_idx": {
+          "name": "admin_job_type_idx",
           "columns": [
             {
-              "expression": "status",
+              "expression": "type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -924,13 +984,14 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
+          "where": "\"admin_job\".\"status\" IN ('queued', 'running', 'cancel_pending')",
           "concurrently": false
         },
-        "adminJob_type_idx": {
-          "name": "adminJob_type_idx",
+        "admin_job_created_by_idx": {
+          "name": "admin_job_created_by_idx",
           "columns": [
             {
-              "expression": "type",
+              "expression": "created_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -991,7 +1052,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "admin_job_status_check": {
+          "name": "admin_job_status_check",
+          "value": "\"admin_job\".\"status\" in ('queued','running','cancel_pending','success','failed','canceled')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.admin_job_log": {
@@ -1072,7 +1138,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "admin_job_log_stream_check": {
+          "name": "admin_job_log_stream_check",
+          "value": "\"admin_job_log\".\"stream\" in ('stdout','stderr')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.app_logs": {
@@ -1129,33 +1200,6 @@
         }
       },
       "indexes": {
-        "app_logs_level_source_idx": {
-          "name": "app_logs_level_source_idx",
-          "columns": [
-            {
-              "expression": "level",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        },
         "app_logs_created_at_idx": {
           "name": "app_logs_created_at_idx",
           "columns": [
@@ -1215,7 +1259,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "auth_policy_application_actor_id_idx": {
+          "name": "auth_policy_application_actor_id_idx",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "auth_policy_application_actor_id_user_id_fk": {
           "name": "auth_policy_application_actor_id_user_id_fk",
@@ -1279,7 +1339,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "auth_policy_state_activated_by_idx": {
+          "name": "auth_policy_state_activated_by_idx",
+          "columns": [
+            {
+              "expression": "activated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "auth_policy_state_activated_by_user_id_fk": {
           "name": "auth_policy_state_activated_by_user_id_fk",
@@ -1343,23 +1419,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "idx_capability_binding_service": {
-          "name": "idx_capability_binding_service",
-          "columns": [
-            {
-              "expression": "service_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "capability_binding_integration_id_capability_pk": {
@@ -1646,6 +1706,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "data_disclosure_event_occurred_at_idx": {
+          "name": "data_disclosure_event_occurred_at_idx",
+          "columns": [
             {
               "expression": "occurred_at",
               "isExpression": false,
@@ -2688,6 +2763,36 @@
           "method": "btree",
           "concurrently": false
         },
+        "data_subject_request_actor_user_id_idx": {
+          "name": "data_subject_request_actor_user_id_idx",
+          "columns": [
+            {
+              "expression": "actor_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "data_subject_request_actor_session_id_idx": {
+          "name": "data_subject_request_actor_session_id_idx",
+          "columns": [
+            {
+              "expression": "actor_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
         "data_subject_request_active_user_kind_idx": {
           "name": "data_subject_request_active_user_kind_idx",
           "columns": [
@@ -3311,7 +3416,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "data_subject_request_preservation_status_check": {
+          "name": "data_subject_request_preservation_status_check",
+          "value": "\"data_subject_request_preservation\".\"status\" in ('held', 'source_capture_pending', 'action_required', 'captured', 'released')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.data_subject_request_task": {
@@ -3521,13 +3631,33 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "health_history_checked_at_idx": {
+          "name": "health_history_checked_at_idx",
+          "columns": [
+            {
+              "expression": "checked_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "health_history_status_check": {
+          "name": "health_history_status_check",
+          "value": "\"health_history\".\"status\" in ('healthy','degraded','unhealthy','error')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.installed_extension": {
@@ -3612,11 +3742,11 @@
         }
       },
       "indexes": {
-        "installedExtension_sourceTrust_idx": {
-          "name": "installedExtension_sourceTrust_idx",
+        "installed_extension_installed_by_idx": {
+          "name": "installed_extension_installed_by_idx",
           "columns": [
             {
-              "expression": "source_trust",
+              "expression": "installed_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3647,6 +3777,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "installed_extension_source_trust_check": {
+          "name": "installed_extension_source_trust_check",
+          "value": "\"installed_extension\".\"source_trust\" in ('built-in','verified','community')"
+        },
         "installed_extension_installation_kind_check": {
           "name": "installed_extension_installation_kind_check",
           "value": "\"installed_extension\".\"installation_kind\" in ('catalog','standalone')"
@@ -3682,21 +3816,6 @@
         }
       },
       "indexes": {
-        "installedExtensionComponent_componentId_idx": {
-          "name": "installedExtensionComponent_componentId_idx",
-          "columns": [
-            {
-              "expression": "component_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        },
         "installedExtensionComponent_kind_componentId_key": {
           "name": "installedExtensionComponent_kind_componentId_key",
           "columns": [
@@ -3746,7 +3865,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "installed_extension_component_kind_check": {
+          "name": "installed_extension_component_kind_check",
+          "value": "\"installed_extension_component\".\"kind\" in ('integration','service')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.installed_integration": {
@@ -3812,11 +3936,11 @@
         }
       },
       "indexes": {
-        "installedIntegration_sourceType_idx": {
-          "name": "installedIntegration_sourceType_idx",
+        "installed_integration_installed_by_idx": {
+          "name": "installed_integration_installed_by_idx",
           "columns": [
             {
-              "expression": "source_type",
+              "expression": "installed_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3846,7 +3970,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "installed_integration_source_type_check": {
+          "name": "installed_integration_source_type_check",
+          "value": "\"installed_integration\".\"source_type\" in ('registry','artifact','source','uploaded-artifact','legacy_unknown')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.integration_config": {
@@ -3886,23 +4015,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "integrationConfig_integrationId_idx": {
-          "name": "integrationConfig_integrationId_idx",
-          "columns": [
-            {
-              "expression": "integration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -3980,11 +4093,11 @@
         }
       },
       "indexes": {
-        "integrationSecret_integrationId_idx": {
-          "name": "integrationSecret_integrationId_idx",
+        "integration_secret_updated_by_idx": {
+          "name": "integration_secret_updated_by_idx",
           "columns": [
             {
-              "expression": "integration_id",
+              "expression": "updated_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4147,23 +4260,7 @@
           "notNull": false
         }
       },
-      "indexes": {
-        "labeledPlace_userId_idx": {
-          "name": "labeledPlace_userId_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "labeled_place_user_id_user_id_fk": {
           "name": "labeled_place_user_id_user_id_fk",
@@ -4301,7 +4398,39 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "mangrove_keypair_wrap_user_id_idx": {
+          "name": "mangrove_keypair_wrap_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "mangrove_keypair_wrap_passphrase_key": {
+          "name": "mangrove_keypair_wrap_passphrase_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "where": "\"mangrove_keypair_wrap\".\"wrap_type\" = 'passphrase'",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "mangrove_keypair_wrap_user_id_mangrove_keypair_user_id_fk": {
           "name": "mangrove_keypair_wrap_user_id_mangrove_keypair_user_id_fk",
@@ -4320,7 +4449,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "mangrove_keypair_wrap_wrap_type_check": {
+          "name": "mangrove_keypair_wrap_wrap_type_check",
+          "value": "\"mangrove_keypair_wrap\".\"wrap_type\" in ('passphrase','webauthn')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.mobile_auth_handoff": {
@@ -4456,7 +4590,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "mobile_auth_handoff_purpose_check": {
+          "name": "mobile_auth_handoff_purpose_check",
+          "value": "\"mobile_auth_handoff\".\"purpose\" in ('sign-in','link-provider','add-passkey')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.oauth_access_token": {
@@ -5696,11 +5835,11 @@
         }
       },
       "indexes": {
-        "parkedLocation_userId_idx": {
-          "name": "parkedLocation_userId_idx",
+        "parked_location_vehicle_id_idx": {
+          "name": "parked_location_vehicle_id_idx",
           "columns": [
             {
-              "expression": "user_id",
+              "expression": "vehicle_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5752,7 +5891,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "parked_location_source_check": {
+          "name": "parked_location_source_check",
+          "value": "\"parked_location\".\"source\" in ('device','manual','arrival')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.passkey": {
@@ -6012,23 +6156,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "personalTimelineConnection_userId_idx": {
-          "name": "personalTimelineConnection_userId_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "personal_timeline_connection_user_id_user_id_fk": {
           "name": "personal_timeline_connection_user_id_user_id_fk",
@@ -6055,7 +6183,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "personal_timeline_connection_mode_check": {
+          "name": "personal_timeline_connection_mode_check",
+          "value": "\"personal_timeline_connection\".\"mode\" in ('external','managed')"
+        },
+        "personal_timeline_connection_status_check": {
+          "name": "personal_timeline_connection_status_check",
+          "value": "\"personal_timeline_connection\".\"status\" in ('connected','degraded','invalid')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.personal_vehicle": {
@@ -6133,23 +6270,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "personalVehicle_userId_idx": {
-          "name": "personalVehicle_userId_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "personal_vehicle_user_id_user_id_fk": {
           "name": "personal_vehicle_user_id_user_id_fk",
@@ -6177,7 +6298,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "personal_vehicle_kind_check": {
+          "name": "personal_vehicle_kind_check",
+          "value": "\"personal_vehicle\".\"kind\" in ('car','motorcycle','bicycle')"
+        },
+        "personal_vehicle_powertrain_check": {
+          "name": "personal_vehicle_powertrain_check",
+          "value": "\"personal_vehicle\".\"powertrain\" in ('electric','plugin_hybrid','hybrid','petrol','diesel','other')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.platform_configuration_preview": {
@@ -6408,23 +6538,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "savedList_userId_idx": {
-          "name": "savedList_userId_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "saved_list_user_id_user_id_fk": {
           "name": "saved_list_user_id_user_id_fk",
@@ -6604,23 +6718,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "serviceConfig_serviceId_idx": {
-          "name": "serviceConfig_serviceId_idx",
-          "columns": [
-            {
-              "expression": "service_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -6762,11 +6860,11 @@
         }
       },
       "indexes": {
-        "serviceSecret_serviceId_idx": {
-          "name": "serviceSecret_serviceId_idx",
+        "service_secret_updated_by_idx": {
+          "name": "service_secret_updated_by_idx",
           "columns": [
             {
-              "expression": "service_id",
+              "expression": "updated_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7151,7 +7249,24 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "share_link_target_type_check": {
+          "name": "share_link_target_type_check",
+          "value": "\"share_link\".\"target_type\" in ('list','route')"
+        },
+        "share_link_mode_check": {
+          "name": "share_link_mode_check",
+          "value": "\"share_link\".\"mode\" in ('live','snapshot')"
+        },
+        "share_link_route_target_check": {
+          "name": "share_link_route_target_check",
+          "value": "\"share_link\".\"target_type\" <> 'route' or \"share_link\".\"target_id\" is null"
+        },
+        "share_link_snapshot_check": {
+          "name": "share_link_snapshot_check",
+          "value": "\"share_link\".\"mode\" <> 'snapshot' or \"share_link\".\"snapshot\" is not null"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.system_settings": {

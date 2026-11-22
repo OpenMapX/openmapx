@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -19,7 +20,7 @@ export const adminJob = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     type: text("type").notNull(),
-    status: text("status").notNull().default("queued"), // queued|running|success|failed|canceled
+    status: text("status").notNull().default("queued"),
     payload: jsonb("payload"),
     result: jsonb("result"),
     /** The runner's own state: claim, observation lease, cancel request and agent operations. */
@@ -32,8 +33,15 @@ export const adminJob = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (table) => [
-    index("adminJob_status_idx").on(table.status),
-    index("adminJob_type_idx").on(table.type),
+    check(
+      "admin_job_status_check",
+      sql`${table.status} in ('queued','running','cancel_pending','success','failed','canceled')`,
+    ),
+    // The runner looks up active jobs by type; finished jobs are listed by time.
+    index("admin_job_type_idx")
+      .on(table.type)
+      .where(sql`${table.status} IN ('queued', 'running', 'cancel_pending')`),
+    index("admin_job_created_by_idx").on(table.createdBy),
     index("adminJob_createdAt_idx").on(table.createdAt),
     // The update-check, update-apply and diagnostics requests share one host
     // writer slot. The constant key makes the whole active set a single entry.
@@ -53,9 +61,12 @@ export const adminJobLog = pgTable(
       .notNull()
       .references(() => adminJob.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
-    stream: text("stream").notNull().default("stdout"), // stdout|stderr
+    stream: text("stream").notNull().default("stdout"),
     line: text("line").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("adminJobLog_jobId_idx").on(table.jobId)],
+  (table) => [
+    check("admin_job_log_stream_check", sql`${table.stream} in ('stdout','stderr')`),
+    index("adminJobLog_jobId_idx").on(table.jobId),
+  ],
 );

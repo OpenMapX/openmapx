@@ -1,6 +1,6 @@
 import type { TimelineConnectionMode, TimelineConnectionStatus } from "@openmapx/core";
 import { sql } from "drizzle-orm";
-import { index, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const personalTimelineConnection = pgTable(
@@ -31,8 +31,12 @@ export const personalTimelineConnection = pgTable(
       .notNull(),
   },
   (table) => [
-    index("personalTimelineConnection_userId_idx").on(table.userId),
     unique("personalTimelineConnection_userId_unq").on(table.userId),
+    check("personal_timeline_connection_mode_check", sql`${table.mode} in ('external','managed')`),
+    check(
+      "personal_timeline_connection_status_check",
+      sql`${table.status} in ('connected','degraded','invalid')`,
+    ),
   ],
 );
 

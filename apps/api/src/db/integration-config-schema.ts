@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const integrationConfig = pgTable(
   "integration_config",
@@ -12,8 +12,5 @@ export const integrationConfig = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
-    index("integrationConfig_integrationId_idx").on(table.integrationId),
-    unique("integrationConfig_integrationId_unq").on(table.integrationId),
-  ],
+  (table) => [unique("integrationConfig_integrationId_unq").on(table.integrationId)],
 );

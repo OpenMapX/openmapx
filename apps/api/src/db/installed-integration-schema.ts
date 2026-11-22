@@ -1,4 +1,5 @@
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const installedIntegration = pgTable(
@@ -7,7 +8,8 @@ export const installedIntegration = pgTable(
     id: text("id").primaryKey(),
     repository: text("repository"),
     installedVersion: text("installed_version").notNull(),
-    sourceType: text("source_type").notNull().default("registry"), // registry | artifact
+    // `registry` for catalog installs; a standalone install records its provenance kind.
+    sourceType: text("source_type").notNull().default("registry"),
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
@@ -20,5 +22,11 @@ export const installedIntegration = pgTable(
     // integrations.
     lastTransactionId: text("last_transaction_id"),
   },
-  (table) => [index("installedIntegration_sourceType_idx").on(table.sourceType)],
+  (table) => [
+    index("installed_integration_installed_by_idx").on(table.installedBy),
+    check(
+      "installed_integration_source_type_check",
+      sql`${table.sourceType} in ('registry','artifact','source','uploaded-artifact','legacy_unknown')`,
+    ),
+  ],
 );
