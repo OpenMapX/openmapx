@@ -982,7 +982,6 @@ export async function* streamOpenMapxRegistrationRecords(
       yield* emit(
         database
           .select({
-            id: integrationSecret.id,
             integrationId: integrationSecret.integrationId,
             key: integrationSecret.key,
             createdAt: integrationSecret.createdAt,
@@ -996,13 +995,12 @@ export async function* streamOpenMapxRegistrationRecords(
               lte(integrationSecret.createdAt, cutoff),
             ),
           )
-          .orderBy(asc(integrationSecret.id)),
+          .orderBy(asc(integrationSecret.integrationId), asc(integrationSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
       );
       yield* emit(
         database
           .select({
-            id: serviceSecret.id,
             serviceId: serviceSecret.serviceId,
             key: serviceSecret.key,
             createdAt: serviceSecret.createdAt,
@@ -1013,7 +1011,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .where(
             and(eq(serviceSecret.updatedBy, context.userId), lte(serviceSecret.createdAt, cutoff)),
           )
-          .orderBy(asc(serviceSecret.id)),
+          .orderBy(asc(serviceSecret.serviceId), asc(serviceSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
       );
       yield* emit(

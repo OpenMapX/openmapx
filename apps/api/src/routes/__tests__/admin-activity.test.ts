@@ -41,7 +41,6 @@ function activityDetail(source = "application") {
     cancelable: source === "application",
     logs: [
       {
-        id: "log",
         jobId: "0193e4a0-0000-7000-8001-000000000001",
         seq: 1,
         stream: "stderr",

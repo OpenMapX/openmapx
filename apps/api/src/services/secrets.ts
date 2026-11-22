@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { integrationSecret } from "../db/schema";
@@ -62,7 +62,6 @@ export async function setSecret(
   await db
     .insert(integrationSecret)
     .values({
-      id: randomUUID(),
       integrationId,
       key,
       ciphertext,

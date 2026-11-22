@@ -1438,7 +1438,6 @@ async function mergeOverlay(
       let row = rows.serviceRows.find((row) => row.serviceId === change.serviceId);
       if (!row) {
         row = {
-          id: randomUUID(),
           serviceId: change.serviceId,
           config: {},
           createdAt: now,
@@ -1452,7 +1451,6 @@ async function mergeOverlay(
       let row = rows.integrationRows.find((row) => row.integrationId === change.integrationId);
       if (!row) {
         row = {
-          id: randomUUID(),
           integrationId: change.integrationId,
           config: {},
           createdAt: now,
@@ -1463,18 +1461,11 @@ async function mergeOverlay(
       row.config = { ...row.config, ...change.set };
       for (const key of change.unset) delete row.config[key];
     } else if (change.kind === "service-secret") {
-      const managedPrior =
-        change.serviceId === "data-manager" && change.key === "TRANSITOUS_API_KEYS"
-          ? rows.serviceSecretRows.find(
-              (row) => row.serviceId === change.serviceId && row.key === change.key,
-            )
-          : undefined;
       rows.serviceSecretRows = rows.serviceSecretRows.filter(
         (row) => row.serviceId !== change.serviceId || row.key !== change.key,
       );
       if (change.action === "set")
         rows.serviceSecretRows.push({
-          id: managedPrior?.id ?? randomUUID(),
           serviceId: change.serviceId,
           key: change.key,
           ...encrypt(change.value),
@@ -1488,7 +1479,6 @@ async function mergeOverlay(
       );
       if (change.action === "set")
         rows.integrationSecretRows.push({
-          id: randomUUID(),
           integrationId: change.integrationId,
           key: change.key,
           ...encrypt(change.value),
@@ -2059,7 +2049,6 @@ function savedRowIntents(state: CandidateState) {
       {
         kind: "platform" as const,
         ownerId: "platform",
-        rowId: "platformConfiguration",
         previousRowVersion: state.record.privatePlatformIntent.expectedDesiredRowVersion,
         state: "present" as const,
       },
@@ -2081,7 +2070,6 @@ function savedRowIntents(state: CandidateState) {
       values.map((row) => ({
         kind,
         ownerId: "serviceId" in row ? row.serviceId : row.integrationId,
-        rowId: row.id,
         previousRowVersion: rowVersion(row),
         key: undefined as string | undefined,
         state: "present" as const,
@@ -2094,7 +2082,6 @@ function savedRowIntents(state: CandidateState) {
         kind,
         ownerId: "serviceId" in row ? row.serviceId : row.integrationId,
         key: row.key,
-        rowId: row.id,
         previousRowVersion: rowVersion(row),
         state: "present" as const,
       }));
@@ -2118,7 +2105,6 @@ function savedRowIntents(state: CandidateState) {
       | "integration-secret";
     ownerId: string;
     key?: string;
-    rowId: string;
     previousRowVersion: string | null;
     state: "present" | "absent";
   }> = state.overlay.changes.flatMap((change) => {
@@ -2158,13 +2144,10 @@ function savedRowIntents(state: CandidateState) {
                 (row) => row.integrationId === ownerId && row.key === secretKey,
               );
     if (!source && !desired) return [];
-    const rowId = source?.id ?? guaranteed(desired, "row").id,
-      previousRowVersion = source ? (source as { _rowVersion?: unknown })._rowVersion : null;
+    const previousRowVersion = source ? (source as { _rowVersion?: unknown })._rowVersion : null;
     if (
-      typeof rowId !== "string" ||
-      rowId.length > 128 ||
-      (previousRowVersion !== null &&
-        (typeof previousRowVersion !== "string" || !/^\d{1,10}$/.test(previousRowVersion)))
+      previousRowVersion !== null &&
+      (typeof previousRowVersion !== "string" || !/^\d{1,10}$/.test(previousRowVersion))
     )
       throw Error("Configuration row version unavailable");
     return [
@@ -2172,7 +2155,6 @@ function savedRowIntents(state: CandidateState) {
         kind: change.kind,
         ownerId,
         ...(secretKey ? { key: secretKey } : {}),
-        rowId,
         previousRowVersion: previousRowVersion as string | null,
         state: desired ? ("present" as const) : ("absent" as const),
       },
@@ -2182,7 +2164,6 @@ function savedRowIntents(state: CandidateState) {
     ordinaryIntents.push({
       kind: "platform",
       ownerId: "platform",
-      rowId: "platformConfiguration",
       previousRowVersion: state.record.privatePlatformIntent.expectedDesiredRowVersion,
       state: "present",
     } as (typeof ordinaryIntents)[number]);
@@ -2198,23 +2179,21 @@ async function readSavedRowVersions(
 ): Promise<ConfigurationSavedRow[]> {
   // Same transaction/physical connection as the writes. No values or secret
   // hashes enter the checkpoint; versions belong to this actual SQL outcome.
+  // Each row is identified by its natural key: the owner, and for a secret its key.
   const serviceRows = await tx
     .select({
-      id: schema.serviceConfig.id,
       ownerId: schema.serviceConfig.serviceId,
       rowVersion: sql<string>`xmin::text`,
     })
     .from(schema.serviceConfig);
   const integrationRows = await tx
     .select({
-      id: schema.integrationConfig.id,
       ownerId: schema.integrationConfig.integrationId,
       rowVersion: sql<string>`xmin::text`,
     })
     .from(schema.integrationConfig);
   const serviceSecrets = await tx
     .select({
-      id: schema.serviceSecret.id,
       ownerId: schema.serviceSecret.serviceId,
       key: schema.serviceSecret.key,
       rowVersion: sql<string>`xmin::text`,
@@ -2222,7 +2201,6 @@ async function readSavedRowVersions(
     .from(schema.serviceSecret);
   const integrationSecrets = await tx
     .select({
-      id: schema.integrationSecret.id,
       ownerId: schema.integrationSecret.integrationId,
       key: schema.integrationSecret.key,
       rowVersion: sql<string>`xmin::text`,
@@ -2232,7 +2210,6 @@ async function readSavedRowVersions(
   const platformRows = intents.some((row) => row.kind === "platform")
     ? await tx
         .select({
-          id: schema.systemSettings.key,
           ownerId: sql<string>`'platform'`,
           rowVersion: sql<string>`xmin::text`,
         })
@@ -2259,12 +2236,7 @@ async function readSavedRowVersions(
       return { ...intent, rowVersion: null };
     }
     const [match] = matches;
-    if (
-      matches.length !== 1 ||
-      !match ||
-      match.id !== intent.rowId ||
-      !/^\d{1,10}$/.test(match.rowVersion)
-    )
+    if (matches.length !== 1 || !match || !/^\d{1,10}$/.test(match.rowVersion))
       throw Error("Configuration saved row receipt conflict");
     return { ...intent, rowVersion: match.rowVersion };
   });
@@ -2278,7 +2250,7 @@ async function persistOverlay(
   candidate: ValidatedConfigurationCandidate,
 ) {
   if (!state.rows || !state.sourceRows) throw Error("Original prospective desired state required");
-  const version = (row: { id: string } | undefined) => {
+  const version = (row: object | undefined) => {
     const value = (row as { _rowVersion?: unknown } | undefined)?._rowVersion;
     if (row && (typeof value !== "string" || !/^\d+$/.test(value)))
       throw Error("Configuration row version unavailable");
@@ -2302,16 +2274,21 @@ async function persistOverlay(
           await tx
             .update(schema.serviceConfig)
             .set({ config: row.config, updatedAt: new Date() })
-            .where(and(eq(schema.serviceConfig.id, prior.id), sql`xmin::text = ${version(prior)}`))
-            .returning({ id: schema.serviceConfig.id }),
+            .where(
+              and(
+                eq(schema.serviceConfig.serviceId, prior.serviceId),
+                sql`xmin::text = ${version(prior)}`,
+              ),
+            )
+            .returning({ serviceId: schema.serviceConfig.serviceId }),
         );
       else
         one(
           await tx
             .insert(schema.serviceConfig)
-            .values({ id: row.id, serviceId: row.serviceId, config: row.config })
+            .values({ serviceId: row.serviceId, config: row.config })
             .onConflictDoNothing()
-            .returning({ id: schema.serviceConfig.id }),
+            .returning({ serviceId: schema.serviceConfig.serviceId }),
         );
     } else if (change.kind === "integration-config") {
       const row = guaranteed(
@@ -2329,17 +2306,20 @@ async function persistOverlay(
             .update(schema.integrationConfig)
             .set({ config: row.config, updatedAt: new Date() })
             .where(
-              and(eq(schema.integrationConfig.id, prior.id), sql`xmin::text = ${version(prior)}`),
+              and(
+                eq(schema.integrationConfig.integrationId, prior.integrationId),
+                sql`xmin::text = ${version(prior)}`,
+              ),
             )
-            .returning({ id: schema.integrationConfig.id }),
+            .returning({ integrationId: schema.integrationConfig.integrationId }),
         );
       else
         one(
           await tx
             .insert(schema.integrationConfig)
-            .values({ id: row.id, integrationId: row.integrationId, config: row.config })
+            .values({ integrationId: row.integrationId, config: row.config })
             .onConflictDoNothing()
-            .returning({ id: schema.integrationConfig.id }),
+            .returning({ integrationId: schema.integrationConfig.integrationId }),
         );
     } else if (change.kind === "service-secret") {
       const owner = administrativeConfigurationState(state.writer);
@@ -2362,15 +2342,15 @@ async function persistOverlay(
         (row) => row.serviceId === change.serviceId && row.key === change.key,
       );
       const where =
-        prior && and(eq(schema.serviceSecret.id, prior.id), sql`xmin::text = ${version(prior)}`);
+        prior &&
+        and(
+          eq(schema.serviceSecret.serviceId, prior.serviceId),
+          eq(schema.serviceSecret.key, prior.key),
+          sql`xmin::text = ${version(prior)}`,
+        );
+      const returned = { key: schema.serviceSecret.key };
       if (change.action === "delete") {
-        if (prior)
-          one(
-            await tx
-              .delete(schema.serviceSecret)
-              .where(where)
-              .returning({ id: schema.serviceSecret.id }),
-          );
+        if (prior) one(await tx.delete(schema.serviceSecret).where(where).returning(returned));
       } else {
         const row = guaranteed(
           state.rows.serviceSecretRows.find(
@@ -2384,7 +2364,7 @@ async function persistOverlay(
               .update(schema.serviceSecret)
               .set({ ciphertext: row.ciphertext, iv: row.iv, tag: row.tag, updatedAt: new Date() })
               .where(where)
-              .returning({ id: schema.serviceSecret.id }),
+              .returning(returned),
           );
         else
           one(
@@ -2392,7 +2372,7 @@ async function persistOverlay(
               .insert(schema.serviceSecret)
               .values(row)
               .onConflictDoNothing()
-              .returning({ id: schema.serviceSecret.id }),
+              .returning(returned),
           );
       }
     } else if (change.kind === "integration-secret") {
@@ -2401,15 +2381,14 @@ async function persistOverlay(
       );
       const where =
         prior &&
-        and(eq(schema.integrationSecret.id, prior.id), sql`xmin::text = ${version(prior)}`);
+        and(
+          eq(schema.integrationSecret.integrationId, prior.integrationId),
+          eq(schema.integrationSecret.key, prior.key),
+          sql`xmin::text = ${version(prior)}`,
+        );
+      const returned = { key: schema.integrationSecret.key };
       if (change.action === "delete") {
-        if (prior)
-          one(
-            await tx
-              .delete(schema.integrationSecret)
-              .where(where)
-              .returning({ id: schema.integrationSecret.id }),
-          );
+        if (prior) one(await tx.delete(schema.integrationSecret).where(where).returning(returned));
       } else {
         const row = guaranteed(
           state.rows.integrationSecretRows.find(
@@ -2423,7 +2402,7 @@ async function persistOverlay(
               .update(schema.integrationSecret)
               .set({ ciphertext: row.ciphertext, iv: row.iv, tag: row.tag, updatedAt: new Date() })
               .where(where)
-              .returning({ id: schema.integrationSecret.id }),
+              .returning(returned),
           );
         else
           one(
@@ -2431,7 +2410,7 @@ async function persistOverlay(
               .insert(schema.integrationSecret)
               .values(row)
               .onConflictDoNothing()
-              .returning({ id: schema.integrationSecret.id }),
+              .returning(returned),
           );
       }
     }

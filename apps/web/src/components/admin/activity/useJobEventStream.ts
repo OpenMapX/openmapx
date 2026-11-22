@@ -33,7 +33,7 @@ export function reduceJobEvent(
     }
     case "log": {
       const parsed = adminJobStreamEventSchemas.log.safeParse(data);
-      if (!parsed.success || !state || state.logs.some((log) => log.id === parsed.data.id))
+      if (!parsed.success || !state || state.logs.some((log) => log.seq === parsed.data.seq))
         return state;
       const { type: _, ...log } = parsed.data;
       return {

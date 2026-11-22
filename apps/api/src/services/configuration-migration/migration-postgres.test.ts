@@ -330,8 +330,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         operationKey: createDurableOpsKey("migration.test.stale", randomUUID()),
         document: document("stale-write"),
       });
-      await state.fixture.sql`INSERT INTO integration_config(id,integration_id,config)
-             VALUES (${randomUUID()},'beta','{"VALUE":"external-race"}'::jsonb)
+      await state.fixture.sql`INSERT INTO integration_config(integration_id,config)
+             VALUES ('beta','{"VALUE":"external-race"}'::jsonb)
              ON CONFLICT (integration_id) DO UPDATE SET config=excluded.config`;
       const beforeApply = await state.fixture.db
         .select()
@@ -443,7 +443,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         return proof.challengeId;
       };
       await state.fixture.db.insert(schema.integrationSecret).values({
-        id: randomUUID(),
         integrationId: "alpha",
         key: "TOKEN",
         ...(await import("../secrets")).encrypt("synthetic-http-vault-value"),

@@ -219,8 +219,8 @@ describe.skipIf(
   it("publishes a source event once when its atomic insert is deduplicated", async () => {
     const job = await seed("test.duplicate-log");
     jobRunner.register(job.type, async (ctx) => {
-      await ctx.log("once", "stdout", `${job.id}:event`, 1);
-      await ctx.log("once", "stdout", `${job.id}:event`, 1);
+      await ctx.log("once", "stdout", `${job.id}:event`);
+      await ctx.log("once", "stdout", `${job.id}:event`);
       return {};
     });
     const logs: unknown[] = [];
@@ -233,6 +233,33 @@ describe.skipIf(
       await state.db.select().from(adminJobLog).where(eq(adminJobLog.jobId, job.id)),
     ).toHaveLength(1);
     expect(logs).toHaveLength(1);
+  });
+
+  it("keeps the lines of agent operations whose cursors coincide, in the order written", async () => {
+    const job = await seed("test.coinciding-cursors-log");
+    jobRunner.register(job.type, async (ctx) => {
+      await ctx.log("first operation", "stdout", "ops:job1_first:1");
+      await ctx.log("local");
+      await ctx.log("second operation", "stderr", "ops:job1_second:1");
+      return {};
+    });
+    const published: unknown[] = [];
+    const stop = jobEventBus.subscribe(job.id, ({ event }) => {
+      if (event.type === "log") published.push({ seq: event.seq, line: event.line });
+    });
+    await run(job);
+    stop();
+    const lines = await state.db
+      .select({ seq: adminJobLog.seq, line: adminJobLog.line })
+      .from(adminJobLog)
+      .where(eq(adminJobLog.jobId, job.id))
+      .orderBy(adminJobLog.seq);
+    expect(lines).toEqual([
+      { seq: 0, line: "first operation" },
+      { seq: 1, line: "local" },
+      { seq: 2, line: "second operation" },
+    ]);
+    expect(published).toEqual(lines);
   });
 
   it("rechecks ownership after waiting behind a concurrent replacement's row lock", async () => {
@@ -796,54 +823,103 @@ describe.skipIf(
     });
     await holders.finish();
   });
-  it("renewal: current-row log capacity admits one last event and stale checkpoints cannot reset its charge", async () => {
+  it("renewal: current-row log capacity admits one last event and a checkpoint keeps its charge", async () => {
     const job = await seedCapacity(0),
       execution = required(readJobExecution(job.protocol));
-    const stale = { ...job.result, _opsLogEvents: 1999, _opsLogBytes: 0 };
-    const { insertOwnedJobLog, jobCheckpoint, splitJobCheckpoint } = await import(
-      "../admin-job-state"
-    );
     await state.db
       .update(adminJob)
-      .set({
-        protocol: {
-          ...(job.protocol as Record<string, unknown>),
-          handler: splitJobCheckpoint(stale).handler,
-        },
-      })
+      .set({ logEvents: 1999, logBytes: 0 })
       .where(eq(adminJob.id, job.id));
+    const { insertOwnedJobLog, jobCheckpoint } = await import("../admin-job-state");
     const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
-    const entries = [0, 1].map((seq) => ({
-      id: `${job.id}:last:${seq}`,
+    const entries = [0, 1].map((n) => ({
       jobId: job.id,
-      seq,
-      stream: "stdout",
+      sourceEventId: `${job.id}:last:${n}`,
+      stream: "stdout" as const,
       line: "last",
       createdAt: new Date(),
     }));
     const accepted = await Promise.all(entries.map((entry) => insertOwnedJobLog(execution, entry)));
-    expect(accepted.filter(Boolean)).toHaveLength(1);
-    const winner = required(entries[accepted.indexOf(true)]);
-    expect(await insertOwnedJobLog(execution, winner)).toBe(false);
+    expect(accepted.filter((inserted) => inserted !== null)).toEqual([{ seq: 1999 }]);
+    const winner = required(entries[accepted.findIndex((inserted) => inserted !== null)]);
+    expect(await insertOwnedJobLog(execution, winner)).toBeNull();
+    const result = job.result as Record<string, unknown>;
     await checkpointOwnedAdminJob(
       job.id,
       execution,
-      { ...stale, retainedPatch: true },
-      readProjection(job.protocol, stale),
+      { ...result, retainedPatch: true },
+      readProjection(job.protocol, result),
       undefined,
       undefined,
       undefined,
-      stale,
+      result,
     );
     const charged = await row(job.id);
-    expect(jobCheckpoint(charged.result, charged.protocol)).toMatchObject({
-      _opsLogEvents: 2000,
-      _opsLogBytes: 4,
-      retainedPatch: true,
+    expect(jobCheckpoint(charged.result, charged.protocol)).toMatchObject({ retainedPatch: true });
+    expect({ events: charged.logEvents, bytes: charged.logBytes }).toEqual({
+      events: 2000,
+      bytes: 4,
     });
     expect(
-      await state.db.select().from(adminJobLog).where(eq(adminJobLog.jobId, job.id)),
-    ).toHaveLength(1);
+      await state.db
+        .select({ seq: adminJobLog.seq, sourceEventId: adminJobLog.sourceEventId })
+        .from(adminJobLog)
+        .where(eq(adminJobLog.jobId, job.id)),
+    ).toEqual([{ seq: 1999, sourceEventId: winner.sourceEventId }]);
+  });
+  it("counts 2000 log lines in the job's counters without rewriting its protocol", async () => {
+    const job = await seedCapacity(0),
+      execution = required(readJobExecution(job.protocol)),
+      before = await row(job.id);
+    const { insertOwnedJobLog } = await import("../admin-job-state");
+    let bytes = 0;
+    for (let n = 0; n < 2000; n++) {
+      const line = `line ${n}`;
+      bytes += Buffer.byteLength(line);
+      expect(
+        await insertOwnedJobLog(execution, {
+          jobId: job.id,
+          stream: "stdout",
+          line,
+          createdAt: new Date(),
+        }),
+      ).toEqual({ seq: n });
+    }
+    expect(
+      await insertOwnedJobLog(execution, {
+        jobId: job.id,
+        stream: "stdout",
+        line: "over capacity",
+        createdAt: new Date(),
+      }),
+    ).toBeNull();
+    const after = await row(job.id);
+    expect(after.protocol).toEqual(before.protocol);
+    expect(after.result).toEqual(before.result);
+    expect({ events: after.logEvents, bytes: after.logBytes }).toEqual({ events: 2000, bytes });
+    const lines = await state.db
+      .select({ seq: adminJobLog.seq })
+      .from(adminJobLog)
+      .where(eq(adminJobLog.jobId, job.id))
+      .orderBy(adminJobLog.seq);
+    expect(lines.map((line) => line.seq)).toEqual(Array.from({ length: 2000 }, (_, n) => n));
+  }, 120_000);
+  it("keeps logging a job without agent operations past the operations log capacity", async () => {
+    const job = await seed("test.uncapped-log"),
+      execution = required(readJobExecution(job.protocol));
+    await state.db
+      .update(adminJob)
+      .set({ logEvents: 2000, logBytes: 1024 * 1024 })
+      .where(eq(adminJob.id, job.id));
+    const { insertOwnedJobLog } = await import("../admin-job-state");
+    expect(
+      await insertOwnedJobLog(execution, {
+        jobId: job.id,
+        stream: "stderr",
+        line: "still kept",
+        createdAt: new Date(),
+      }),
+    ).toEqual({ seq: 2000 });
   });
   it("renewal: ambiguous committed allocation sends no POST and recovery remains lookup-only", async () => {
     const job = await seed("test.renewal.ambiguous"),

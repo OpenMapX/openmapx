@@ -1,5 +1,5 @@
 {
-  "id": "bdc94a93-b7a7-400f-b303-bb4378490b57",
+  "id": "0c4c02a2-4b2e-4df4-916c-d971245aa3e4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -944,6 +944,20 @@
           "primaryKey": false,
           "notNull": false
         },
+        "log_events": {
+          "name": "log_events",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "log_bytes": {
+          "name": "log_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -1064,12 +1078,6 @@
       "name": "admin_job_log",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "job_id": {
           "name": "job_id",
           "type": "uuid",
@@ -1095,6 +1103,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1104,17 +1118,24 @@
         }
       },
       "indexes": {
-        "adminJobLog_jobId_idx": {
-          "name": "adminJobLog_jobId_idx",
+        "admin_job_log_job_id_source_event_id_key": {
+          "name": "admin_job_log_job_id_source_event_id_key",
           "columns": [
             {
               "expression": "job_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
+          "where": "\"admin_job_log\".\"source_event_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1135,7 +1156,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "admin_job_log_pkey": {
+          "name": "admin_job_log_pkey",
+          "columns": [
+            "job_id",
+            "seq"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
@@ -3982,16 +4011,10 @@
       "name": "integration_config",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "integration_id": {
           "name": "integration_id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true
         },
         "config": {
@@ -4018,15 +4041,7 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "integrationConfig_integrationId_unq": {
-          "name": "integrationConfig_integrationId_unq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "integration_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -4035,12 +4050,6 @@
       "name": "integration_secret",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "integration_id": {
           "name": "integration_id",
           "type": "text",
@@ -4124,17 +4133,16 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "integrationSecret_integrationId_key_unq": {
-          "name": "integrationSecret_integrationId_key_unq",
-          "nullsNotDistinct": false,
+      "compositePrimaryKeys": {
+        "integration_secret_pkey": {
+          "name": "integration_secret_pkey",
           "columns": [
             "integration_id",
             "key"
           ]
         }
       },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -6685,16 +6693,10 @@
       "name": "service_config",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "service_id": {
           "name": "service_id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true
         },
         "config": {
@@ -6721,15 +6723,7 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "serviceConfig_serviceId_unq": {
-          "name": "serviceConfig_serviceId_unq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "service_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -6802,12 +6796,6 @@
       "name": "service_secret",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "service_id": {
           "name": "service_id",
           "type": "text",
@@ -6891,17 +6879,16 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "serviceSecret_serviceId_key_unq": {
-          "name": "serviceSecret_serviceId_key_unq",
-          "nullsNotDistinct": false,
+      "compositePrimaryKeys": {
+        "service_secret_pkey": {
+          "name": "service_secret_pkey",
           "columns": [
             "service_id",
             "key"
           ]
         }
       },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -7258,13 +7245,17 @@
           "name": "share_link_mode_check",
           "value": "\"share_link\".\"mode\" in ('live','snapshot')"
         },
-        "share_link_route_target_check": {
-          "name": "share_link_route_target_check",
-          "value": "\"share_link\".\"target_type\" <> 'route' or \"share_link\".\"target_id\" is null"
+        "share_link_route_shape_check": {
+          "name": "share_link_route_shape_check",
+          "value": "\"share_link\".\"target_type\" <> 'route' or (\"share_link\".\"target_id\" is null and \"share_link\".\"mode\" = 'snapshot')"
+        },
+        "share_link_list_target_check": {
+          "name": "share_link_list_target_check",
+          "value": "\"share_link\".\"target_type\" <> 'list' or \"share_link\".\"target_id\" is not null"
         },
         "share_link_snapshot_check": {
           "name": "share_link_snapshot_check",
-          "value": "\"share_link\".\"mode\" <> 'snapshot' or \"share_link\".\"snapshot\" is not null"
+          "value": "(\"share_link\".\"mode\" = 'snapshot') = (\"share_link\".\"snapshot\" is not null)"
         }
       },
       "isRLSEnabled": false

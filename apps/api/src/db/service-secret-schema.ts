@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -11,7 +11,6 @@ import { user } from "./auth-schema";
 export const serviceSecret = pgTable(
   "service_secret",
   {
-    id: text("id").primaryKey(),
     serviceId: text("service_id").notNull(),
     key: text("key").notNull(),
     ciphertext: text("ciphertext").notNull(),
@@ -25,7 +24,7 @@ export const serviceSecret = pgTable(
     updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [
-    unique("serviceSecret_serviceId_key_unq").on(table.serviceId, table.key),
+    primaryKey({ name: "service_secret_pkey", columns: [table.serviceId, table.key] }),
     index("service_secret_updated_by_idx").on(table.updatedBy),
   ],
 );

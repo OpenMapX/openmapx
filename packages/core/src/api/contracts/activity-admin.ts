@@ -75,8 +75,8 @@ export const adminActivityJobSchema = z.discriminatedUnion("source", [
   application.extend({ actor: adminActorSummarySchema.nullable() }),
   dataManager.extend({ actor: adminActorSummarySchema.nullable() }),
 ]);
+/** One line of a job's log; `seq` is its position, unique within the job. */
 export const adminActivityJobLogSchema = z.strictObject({
-  id: z.string(),
   jobId: z.string(),
   seq: adminCountSchema,
   stream: z.enum(["stdout", "stderr"]),

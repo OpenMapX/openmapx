@@ -13,19 +13,16 @@ export const configurationSavedRowSchema = z
       "integration-secret",
       "platform",
     ]),
+    /** With `key` for a secret, the row's natural key. */
     ownerId: id,
     key: z.string().min(1).max(128).optional(),
-    rowId: z.string().min(1).max(128),
     rowVersion: version.nullable(),
     previousRowVersion: version.nullable(),
     state: z.enum(["present", "absent"]),
   })
   .refine(
     (row) =>
-      (row.kind !== "platform" ||
-        (row.ownerId === "platform" &&
-          row.rowId === "platformConfiguration" &&
-          row.state === "present")) &&
+      (row.kind !== "platform" || (row.ownerId === "platform" && row.state === "present")) &&
       row.kind.endsWith("secret") === (row.key !== undefined) &&
       (row.state === "present" ? row.rowVersion !== null : row.rowVersion === null),
   );

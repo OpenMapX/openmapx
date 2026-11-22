@@ -338,7 +338,6 @@ describe.skipIf(!enabled)(
       assert.exists(pins, "no catalog pin set is installed");
       const catalog = pins.generationId;
       const prior = {
-        id: randomUUID(),
         serviceId: "data-manager",
         key: "TRANSITOUS_API_KEYS",
         ...encrypt('{"orphan":" untouched "}'),
@@ -416,7 +415,6 @@ describe.skipIf(!enabled)(
           .set(encrypt(importedMap))
           .where(eq(schema.serviceSecret.key, "TRANSITOUS_API_KEYS"));
         await state.fixture.db.insert(schema.serviceSecret).values({
-          id: randomUUID(),
           serviceId: "data-manager",
           key: "ORDINARY_TOKEN",
           ...encrypt("synthetic ordinary credential"),
@@ -435,7 +433,6 @@ describe.skipIf(!enabled)(
         await state.fixture.db.delete(schema.serviceSecret);
         vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
         await state.fixture.db.insert(schema.serviceSecret).values({
-          id: randomUUID(),
           serviceId: "data-manager",
           key: "TRANSITOUS_API_KEYS",
           ...encrypt(

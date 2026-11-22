@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { canonicalFeedCredentialMap } from "@openmapx/core/ops";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
@@ -25,7 +24,7 @@ export async function setServiceSecret(
   const { ciphertext, iv, tag } = encrypt(value);
   await db
     .insert(serviceSecret)
-    .values({ id: randomUUID(), serviceId, key, ciphertext, iv, tag, updatedBy: updatedBy ?? null })
+    .values({ serviceId, key, ciphertext, iv, tag, updatedBy: updatedBy ?? null })
     .onConflictDoUpdate({
       target: [serviceSecret.serviceId, serviceSecret.key],
       set: { ciphertext, iv, tag, updatedAt: new Date(), updatedBy: updatedBy ?? null },

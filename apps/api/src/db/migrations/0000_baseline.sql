@@ -97,6 +97,8 @@ CREATE TABLE "admin_job" (
 	"protocol" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"error" text,
 	"progress" integer,
+	"log_events" integer DEFAULT 0 NOT NULL,
+	"log_bytes" integer DEFAULT 0 NOT NULL,
 	"created_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"started_at" timestamp with time zone,
@@ -105,12 +107,13 @@ CREATE TABLE "admin_job" (
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
-	"id" text PRIMARY KEY NOT NULL,
 	"job_id" uuid NOT NULL,
 	"seq" integer NOT NULL,
 	"stream" text DEFAULT 'stdout' NOT NULL,
 	"line" text NOT NULL,
+	"source_event_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "admin_job_log_pkey" PRIMARY KEY("job_id","seq"),
 	CONSTRAINT "admin_job_log_stream_check" CHECK ("admin_job_log"."stream" in ('stdout','stderr'))
 );
 --> statement-breakpoint
@@ -435,16 +438,13 @@ CREATE TABLE "installed_integration" (
 );
 --> statement-breakpoint
 CREATE TABLE "integration_config" (
-	"id" text PRIMARY KEY NOT NULL,
-	"integration_id" text NOT NULL,
+	"integration_id" text PRIMARY KEY NOT NULL,
 	"config" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "integrationConfig_integrationId_unq" UNIQUE("integration_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "integration_secret" (
-	"id" text PRIMARY KEY NOT NULL,
 	"integration_id" text NOT NULL,
 	"key" text NOT NULL,
 	"ciphertext" text NOT NULL,
@@ -453,7 +453,7 @@ CREATE TABLE "integration_secret" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
-	CONSTRAINT "integrationSecret_integrationId_key_unq" UNIQUE("integration_id","key")
+	CONSTRAINT "integration_secret_pkey" PRIMARY KEY("integration_id","key")
 );
 --> statement-breakpoint
 CREATE TABLE "jwks" (
@@ -759,12 +759,10 @@ CREATE TABLE "saved_place" (
 );
 --> statement-breakpoint
 CREATE TABLE "service_config" (
-	"id" text PRIMARY KEY NOT NULL,
-	"service_id" text NOT NULL,
+	"service_id" text PRIMARY KEY NOT NULL,
 	"config" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "serviceConfig_serviceId_unq" UNIQUE("service_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "service_repository" (
@@ -779,7 +777,6 @@ CREATE TABLE "service_repository" (
 );
 --> statement-breakpoint
 CREATE TABLE "service_secret" (
-	"id" text PRIMARY KEY NOT NULL,
 	"service_id" text NOT NULL,
 	"key" text NOT NULL,
 	"ciphertext" text NOT NULL,
@@ -788,7 +785,7 @@ CREATE TABLE "service_secret" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
-	CONSTRAINT "serviceSecret_serviceId_key_unq" UNIQUE("service_id","key")
+	CONSTRAINT "service_secret_pkey" PRIMARY KEY("service_id","key")
 );
 --> statement-breakpoint
 CREATE TABLE "session" (
@@ -829,8 +826,9 @@ CREATE TABLE "share_link" (
 	CONSTRAINT "share_link_token_hash_unique" UNIQUE("token_hash"),
 	CONSTRAINT "share_link_target_type_check" CHECK ("share_link"."target_type" in ('list','route')),
 	CONSTRAINT "share_link_mode_check" CHECK ("share_link"."mode" in ('live','snapshot')),
-	CONSTRAINT "share_link_route_target_check" CHECK ("share_link"."target_type" <> 'route' or "share_link"."target_id" is null),
-	CONSTRAINT "share_link_snapshot_check" CHECK ("share_link"."mode" <> 'snapshot' or "share_link"."snapshot" is not null)
+	CONSTRAINT "share_link_route_shape_check" CHECK ("share_link"."target_type" <> 'route' or ("share_link"."target_id" is null and "share_link"."mode" = 'snapshot')),
+	CONSTRAINT "share_link_list_target_check" CHECK ("share_link"."target_type" <> 'list' or "share_link"."target_id" is not null),
+	CONSTRAINT "share_link_snapshot_check" CHECK (("share_link"."mode" = 'snapshot') = ("share_link"."snapshot" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE "system_settings" (
@@ -996,7 +994,7 @@ CREATE INDEX "admin_job_type_idx" ON "admin_job" USING btree ("type") WHERE "adm
 CREATE INDEX "admin_job_created_by_idx" ON "admin_job" USING btree ("created_by");--> statement-breakpoint
 CREATE INDEX "adminJob_createdAt_idx" ON "admin_job" USING btree ("created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "adminJob_one_active_system_maintenance_uq" ON "admin_job" USING btree ((true)) WHERE "admin_job"."type" IN ('system.update', 'system.diagnostics') AND "admin_job"."status" IN ('queued', 'running', 'cancel_pending');--> statement-breakpoint
-CREATE INDEX "adminJobLog_jobId_idx" ON "admin_job_log" USING btree ("job_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "admin_job_log_job_id_source_event_id_key" ON "admin_job_log" USING btree ("job_id","source_event_id") WHERE "admin_job_log"."source_event_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "app_logs_created_at_idx" ON "app_logs" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "auth_policy_application_actor_id_idx" ON "auth_policy_application" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "auth_policy_state_activated_by_idx" ON "auth_policy_state" USING btree ("activated_by");--> statement-breakpoint

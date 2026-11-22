@@ -46,10 +46,22 @@ them at once.
 The database checks the fixed value sets of OpenMapX's own tables, such as job
 and health statuses, share-link targets and modes, extension trust and source
 kinds, vehicle kinds and powertrains, parking sources, timeline connection
-states and account actions. It refuses a share link whose target or snapshot
-contradicts its kind and a second passphrase unlock for the same review key.
+states and account actions. It refuses a share link whose shape the app never
+writes (a route share that is live or names a target, a list share without its
+list, a snapshot without its payload or a live share with one) and a second
+passphrase unlock for the same review key.
 Every foreign key column is indexed, as are the paths retention prunes by age;
 indexes that duplicate a unique constraint or that no query uses are gone.
+
+Integration and service configuration and their encrypted secrets are keyed by
+what they configure (the integration or service id, plus the secret's key)
+instead of a separate random id. Each line of an administrative job's log is
+keyed by its job and its position in that log, which the database assigns, so
+the lines of several operations in one job never collide; a line relayed from
+the operations agent is still written once when the agent repeats it. The
+job's log line and byte counts are plain columns instead of values rewritten in
+the job's runner state on every line. In the admin Activity API a job's log
+lines no longer carry an `id`; `seq` identifies a line within its job.
 
 ## Who is affected
 

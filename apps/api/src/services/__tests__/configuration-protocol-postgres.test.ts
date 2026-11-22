@@ -5,7 +5,7 @@ import { closeControlInstallation, openControlInstallation } from "@openmapx/cor
 import { itemAt } from "@openmapx/core/item-at";
 import { maintenanceRecordSchema } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { heldTargets } from "../../../../../packages/core/src/build-artifacts/__fixtures__/held-targets";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
@@ -374,6 +374,28 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
           ).toEqual(record);
           expect(phase(ctx)).toBe("generation_applied");
+          // The saved row is recorded by its natural key and the version it was written at.
+          const [savedRow] = await fixture.db
+            .select({ rowVersion: sql<string>`xmin::text` })
+            .from(schema.serviceSecret)
+            .where(
+              and(
+                eq(schema.serviceSecret.serviceId, "data-manager"),
+                eq(schema.serviceSecret.key, "TOKEN"),
+              ),
+            );
+          expect(
+            (ctx.protocol as { candidate?: { rowVersions?: unknown } }).candidate?.rowVersions,
+          ).toEqual([
+            {
+              kind: "service-secret",
+              ownerId: "data-manager",
+              key: "TOKEN",
+              previousRowVersion: null,
+              rowVersion: savedRow?.rowVersion,
+              state: "present",
+            },
+          ]);
           expect(await runningDataManager().fenceStates()).toEqual(["settled"]);
           if (loseSettleResponseOnce)
             expect(runningDataManager().settlementResponseStatuses).toEqual([200, 200]);

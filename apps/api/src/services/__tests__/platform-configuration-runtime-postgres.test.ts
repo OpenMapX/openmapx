@@ -356,7 +356,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             role: "admin",
           });
           await state.fixture.db.insert(schema.serviceConfig).values({
-            id: randomUUID(),
             serviceId: "ops-agent",
             config: { OPENMAPX_MEMORY_MIB: 256, OPENMAPX_CPU_LIMIT: 0.5 },
           });

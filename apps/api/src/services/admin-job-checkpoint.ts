@@ -180,8 +180,6 @@ export async function checkpointOwnedAdminJob(
     const merged = {
       ...current,
       ...changed,
-      _opsLogEvents: current._opsLogEvents ?? old.eventTotal,
-      _opsLogBytes: current._opsLogBytes ?? old.byteTotal,
       ...(admissionKey
         ? { _parentExecution: current._parentExecution ?? candidate._parentExecution }
         : {}),

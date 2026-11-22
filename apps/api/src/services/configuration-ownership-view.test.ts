@@ -72,7 +72,6 @@ describe("effective configuration ownership metadata", () => {
       serviceSecretRows: [],
       integrationRows: [
         {
-          id: "row",
           integrationId: "fixture",
           config: { REGION: "saved" },
           createdAt: now,
@@ -81,7 +80,6 @@ describe("effective configuration ownership metadata", () => {
       ],
       integrationSecretRows: [
         {
-          id: "secret",
           integrationId: "fixture",
           key: "TOKEN",
           ...encrypt("vault-private"),

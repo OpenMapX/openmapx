@@ -59,7 +59,6 @@ function jobRow(overrides: Record<string, unknown> = {}) {
 function logEvent(seq: number) {
   return {
     type: "log" as const,
-    id: `log-${seq}`,
     seq,
     stream: "stdout",
     line: `line ${seq}`,

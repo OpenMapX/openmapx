@@ -43,13 +43,19 @@ export const shareLink = pgTable(
     index("shareLink_userId_idx").on(table.userId),
     check("share_link_target_type_check", sql`${table.targetType} in ('list','route')`),
     check("share_link_mode_check", sql`${table.mode} in ('live','snapshot')`),
+    // A route share is always a frozen snapshot with no target; a list share
+    // always names its list; only a snapshot share carries a payload.
     check(
-      "share_link_route_target_check",
-      sql`${table.targetType} <> 'route' or ${table.targetId} is null`,
+      "share_link_route_shape_check",
+      sql`${table.targetType} <> 'route' or (${table.targetId} is null and ${table.mode} = 'snapshot')`,
+    ),
+    check(
+      "share_link_list_target_check",
+      sql`${table.targetType} <> 'list' or ${table.targetId} is not null`,
     ),
     check(
       "share_link_snapshot_check",
-      sql`${table.mode} <> 'snapshot' or ${table.snapshot} is not null`,
+      sql`(${table.mode} = 'snapshot') = (${table.snapshot} is not null)`,
     ),
   ],
 );

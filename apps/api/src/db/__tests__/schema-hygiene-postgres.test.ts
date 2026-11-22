@@ -1,7 +1,8 @@
-import { getTableName, is } from "drizzle-orm";
+import { and, asc, eq, getTableName, inArray, is, type SQL } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+import { ACTIVE_ADMIN_JOB_STATUSES, adminJob, adminJobStatusIn } from "../admin-job-schema";
 import * as authSchema from "../auth-schema";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
@@ -211,6 +212,139 @@ integration("schema hygiene", () => {
     });
   });
 
+  it("keys configuration rows and job log lines by their natural keys", async () => {
+    const tables = [
+      "admin_job_log",
+      "integration_config",
+      "integration_secret",
+      "service_config",
+      "service_secret",
+    ];
+    const keys = await fixture.sql<{ table: string; constraint: string; columns: string[] }[]>`
+      SELECT r.relname AS table, c.conname AS constraint,
+        array(
+          SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, position)
+          JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+          ORDER BY k.position
+        ) AS columns
+      FROM pg_constraint c
+      JOIN pg_class r ON r.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = r.relnamespace
+      WHERE c.contype = 'p' AND n.nspname = 'public' AND r.relname IN ${fixture.sql(tables)}
+      ORDER BY 1`;
+    expect(keys).toEqual([
+      { table: "admin_job_log", constraint: "admin_job_log_pkey", columns: ["job_id", "seq"] },
+      {
+        table: "integration_config",
+        constraint: "integration_config_pkey",
+        columns: ["integration_id"],
+      },
+      {
+        table: "integration_secret",
+        constraint: "integration_secret_pkey",
+        columns: ["integration_id", "key"],
+      },
+      { table: "service_config", constraint: "service_config_pkey", columns: ["service_id"] },
+      {
+        table: "service_secret",
+        constraint: "service_secret_pkey",
+        columns: ["service_id", "key"],
+      },
+    ]);
+    const surrogates = await fixture.sql<{ table: string }[]>`
+      SELECT table_name AS table FROM information_schema.columns
+      WHERE table_schema = 'public' AND column_name = 'id' AND table_name IN ${fixture.sql(tables)}`;
+    expect(surrogates).toEqual([]);
+    const indexes = await fixture.sql<{ name: string }[]>`
+      SELECT indexname AS name FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename IN ${fixture.sql(tables)} ORDER BY 1`;
+    expect(indexes.map((row) => row.name)).toEqual([
+      "admin_job_log_job_id_source_event_id_key",
+      "admin_job_log_pkey",
+      "integration_config_pkey",
+      "integration_secret_pkey",
+      "integration_secret_updated_by_idx",
+      "service_config_pkey",
+      "service_secret_pkey",
+      "service_secret_updated_by_idx",
+    ]);
+  });
+
+  it("refuses a second configuration row or job log line under the same key", async () => {
+    await fixture.sql`INSERT INTO integration_config (integration_id, config)
+      VALUES ('natural-key', '{}'::jsonb)`;
+    await expect(
+      fixture.sql`INSERT INTO integration_config (integration_id, config)
+        VALUES ('natural-key', '{}'::jsonb)`,
+    ).rejects.toMatchObject({ constraint_name: "integration_config_pkey" });
+    await fixture.sql`INSERT INTO service_config (service_id, config)
+      VALUES ('natural-key', '{}'::jsonb)`;
+    await expect(
+      fixture.sql`INSERT INTO service_config (service_id, config)
+        VALUES ('natural-key', '{}'::jsonb)`,
+    ).rejects.toMatchObject({ constraint_name: "service_config_pkey" });
+    for (const [table, owner] of [
+      ["integration_secret", "integration_id"],
+      ["service_secret", "service_id"],
+    ] as const) {
+      const insert = (key: string) =>
+        fixture.sql`INSERT INTO ${fixture.sql(table)} (${fixture.sql(owner)}, key, ciphertext, iv, tag)
+          VALUES ('natural-key', ${key}, 'c', 'i', 't')`;
+      await insert("TOKEN");
+      await insert("OTHER");
+      await expect(insert("TOKEN")).rejects.toMatchObject({ constraint_name: `${table}_pkey` });
+    }
+    const [job] = await fixture.sql<{ id: string }[]>`
+      INSERT INTO admin_job (type) VALUES ('test.natural-key') RETURNING id`;
+    const line = (seq: number, sourceEventId: string | null = null) =>
+      fixture.sql`INSERT INTO admin_job_log (job_id, seq, line, source_event_id)
+        VALUES (${job?.id ?? null}, ${seq}, 'line', ${sourceEventId})`;
+    await line(0);
+    await line(1, "ops:a:1");
+    await line(2);
+    await expect(line(1)).rejects.toMatchObject({ constraint_name: "admin_job_log_pkey" });
+    await expect(line(3, "ops:a:1")).rejects.toMatchObject({
+      constraint_name: "admin_job_log_job_id_source_event_id_key",
+    });
+  });
+
+  it("serves active-job lookups from the partial index under a generic plan", async () => {
+    await fixture.sql`INSERT INTO admin_job (type, status)
+      SELECT 'test.generic-plan', 'success' FROM generate_series(1, 2000)`;
+    await fixture.sql`ANALYZE admin_job`;
+    const lookup = (status: SQL) =>
+      fixture.db
+        .select({ id: adminJob.id })
+        .from(adminJob)
+        .where(and(eq(adminJob.type, "test.generic-plan"), status))
+        .orderBy(asc(adminJob.createdAt))
+        .limit(1)
+        .toSQL();
+    const genericPlan = (query: { sql: string; params: unknown[] }) =>
+      fixture.sql.begin(async (tx) => {
+        await tx`SET LOCAL plan_cache_mode = force_generic_plan`;
+        await tx.unsafe(`PREPARE active_lookup AS ${query.sql}`);
+        const literals = query.params.map((value) =>
+          typeof value === "number" ? String(value) : `'${String(value)}'`,
+        );
+        const rows = await tx.unsafe<{ "QUERY PLAN": string }[]>(
+          `EXPLAIN EXECUTE active_lookup(${literals.join(", ")})`,
+        );
+        await tx`DEALLOCATE active_lookup`;
+        return rows.map((row) => row["QUERY PLAN"]).join("\n");
+      });
+    expect(
+      await genericPlan(lookup(adminJobStatusIn(adminJob.status, ACTIVE_ADMIN_JOB_STATUSES))),
+    ).toContain("admin_job_type_idx");
+    expect(
+      await genericPlan(lookup(adminJobStatusIn(adminJob.status, ["running", "cancel_pending"]))),
+    ).toContain("admin_job_type_idx");
+    // Bound statuses cannot prove the index predicate once the plan is generic.
+    expect(
+      await genericPlan(lookup(inArray(adminJob.status, [...ACTIVE_ADMIN_JOB_STATUSES]))),
+    ).not.toContain("admin_job_type_idx");
+  });
+
   it("drops indexes no query uses", async () => {
     const unused = await fixture.sql<{ name: string }[]>`
       SELECT indexname AS name FROM pg_indexes
@@ -284,7 +418,25 @@ integration("schema hygiene", () => {
         mode: "snapshot",
         snapshot: "{}",
       }),
-    ).rejects.toMatchObject({ constraint_name: "share_link_route_target_check" });
+    ).rejects.toMatchObject({ constraint_name: "share_link_route_shape_check" });
+    await expect(
+      insert({
+        token: "live-route",
+        targetType: "route",
+        targetId: null,
+        mode: "live",
+        snapshot: null,
+      }),
+    ).rejects.toMatchObject({ constraint_name: "share_link_route_shape_check" });
+    await expect(
+      insert({
+        token: "list-without-target",
+        targetType: "list",
+        targetId: null,
+        mode: "live",
+        snapshot: null,
+      }),
+    ).rejects.toMatchObject({ constraint_name: "share_link_list_target_check" });
     await expect(
       insert({
         token: "empty-snapshot",
@@ -292,6 +444,15 @@ integration("schema hygiene", () => {
         targetId: null,
         mode: "snapshot",
         snapshot: null,
+      }),
+    ).rejects.toMatchObject({ constraint_name: "share_link_snapshot_check" });
+    await expect(
+      insert({
+        token: "live-with-snapshot",
+        targetType: "list",
+        targetId: listId,
+        mode: "live",
+        snapshot: "{}",
       }),
     ).rejects.toMatchObject({ constraint_name: "share_link_snapshot_check" });
     await expect(

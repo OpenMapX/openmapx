@@ -225,7 +225,6 @@ export async function commitPlatformConfigurationIntent(
   const result = {
     kind: "platform" as const,
     ownerId: "platform",
-    rowId: PLATFORM_CONFIGURATION_SETTING,
     previousRowVersion: prior?.version ?? null,
     rowVersion: itemAt(written, 0).rowVersion,
     state: "present" as const,

@@ -61,7 +61,7 @@ describe("activity administration wire contracts", () => {
       source: "application",
       cancelable: true,
       result: [1, { untouched: [false, null] }],
-      logs: [{ id: "log", jobId: base.id, seq: 1, stream: "stderr", line: "line", createdAt: at }],
+      logs: [{ jobId: base.id, seq: 1, stream: "stderr", line: "line", createdAt: at }],
       stages: [],
     };
     expect(adminActivityJobDetailSchema.parse(app)).toEqual(app);

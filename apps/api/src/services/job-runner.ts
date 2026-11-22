@@ -7,6 +7,7 @@ import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
+import { ACTIVE_ADMIN_JOB_STATUSES, adminJobStatusIn } from "../db/admin-job-schema";
 import { adminJob } from "../db/schema";
 import { processLogger } from "../process-logger";
 import { actorUserIdOrNull } from "../utils/actor";
@@ -77,12 +78,8 @@ export interface JobContext {
   observationOnly?: boolean;
   payload: Record<string, unknown>;
   signal: AbortSignal;
-  log(
-    line: string,
-    stream?: "stdout" | "stderr",
-    sourceEventId?: string,
-    sourceSeq?: number,
-  ): Promise<void>;
+  /** `sourceEventId` names the agent event a relayed line came from; it is written once. */
+  log(line: string, stream?: "stdout" | "stderr", sourceEventId?: string): Promise<void>;
   setProgress(progress: number): Promise<void>;
   /** Persist restart-safe state before an operation intentionally replaces the API. */
   checkpoint(
@@ -258,7 +255,6 @@ const PUMP_RETRY_MAX_MS = 30_000;
 class AdminJobRunner {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly active = new Map<string, AbortController>();
-  private readonly logSeq = new Map<string, number>();
   readonly maxConcurrent = 2;
 
   register(type: string, handler: JobHandler): void {
@@ -511,7 +507,6 @@ class AdminJobRunner {
     } finally {
       clearInterval(heartbeat);
       this.active.delete(job.id);
-      this.logSeq.delete(job.id);
     }
   }
 
@@ -979,10 +974,7 @@ class AdminJobRunner {
       .select({ id: adminJob.id, status: adminJob.status })
       .from(adminJob)
       .where(
-        and(
-          eq(adminJob.type, type),
-          inArray(adminJob.status, ["queued", "running", "cancel_pending"]),
-        ),
+        and(eq(adminJob.type, type), adminJobStatusIn(adminJob.status, ACTIVE_ADMIN_JOB_STATUSES)),
       )
       .orderBy(asc(adminJob.createdAt))
       .limit(1);
@@ -1010,7 +1002,9 @@ class AdminJobRunner {
         status: adminJob.status,
       })
       .from(adminJob)
-      .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
+      .where(
+        and(adminJobStatusIn(adminJob.status, ["running"]), eq(adminJob.type, "system.update")),
+      );
     const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
       const checkpoint = apiRestartCheckpoint(job.result);
       return checkpoint ? [{ ...job, checkpoint }] : [];
@@ -1067,7 +1061,7 @@ class AdminJobRunner {
       })
       .where(
         and(
-          inArray(adminJob.status, ["running", "cancel_pending"]),
+          adminJobStatusIn(adminJob.status, ["running", "cancel_pending"]),
           inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
         ),
       );
@@ -1081,7 +1075,7 @@ class AdminJobRunner {
       })
       .where(
         and(
-          inArray(adminJob.status, ["running", "cancel_pending"]),
+          adminJobStatusIn(adminJob.status, ["running", "cancel_pending"]),
           sql`${adminJob.result}->'observation' IS NULL`,
         ),
       );
@@ -1135,7 +1129,7 @@ class AdminJobRunner {
           const [candidate] = await db
             .select()
             .from(adminJob)
-            .where(eq(adminJob.status, "queued"))
+            .where(adminJobStatusIn(adminJob.status, ["queued"]))
             .orderBy(asc(adminJob.createdAt))
             .limit(1);
           if (!candidate) break;
@@ -1176,7 +1170,6 @@ class AdminJobRunner {
           hasRetainedStandalone(job) ||
           hasRetainedExtensionWorkflow(job));
     this.active.set(job.id, controller);
-    this.logSeq.set(job.id, 0);
 
     let closed = false;
     let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -1216,7 +1209,6 @@ class AdminJobRunner {
         closed = true;
         clearTimeout(heartbeat);
         this.active.delete(job.id);
-        this.logSeq.delete(job.id);
         this.schedulePump();
       })
       .catch((err) => {
@@ -1304,23 +1296,18 @@ class AdminJobRunner {
       signal,
       checkpointResult: checkpointResult === null ? null : durableRecord(checkpointResult),
       protocol: readAdminJobProtocol(protocol),
-      log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
-        const localSeq = this.logSeq.get(jobId) ?? 0;
-        const seq = sourceSeq ?? localSeq;
-        this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
-        const id = sourceEventId ?? randomUUID();
+      log: async (line, stream = "stdout", sourceEventId) => {
         const createdAt = new Date();
         const durableLogLine = durableLine(line);
         signal.throwIfAborted();
-        let inserted: boolean;
+        let inserted: { seq: number } | null;
         try {
           inserted = await insertOwnedJobLog(execution, {
-            id,
             jobId,
-            seq,
             stream,
             line: durableLogLine,
             createdAt,
+            ...(sourceEventId === undefined ? {} : { sourceEventId }),
           });
         } catch (error) {
           if (error instanceof JobOwnershipLost) lost();
@@ -1330,8 +1317,7 @@ class AdminJobRunner {
         if (!inserted) return;
         jobEventBus.publish(jobId, {
           type: "log",
-          id,
-          seq,
+          seq: inserted.seq,
           stream,
           line: durableLogLine,
           createdAt: createdAt.toISOString(),
@@ -1472,14 +1458,7 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status,
-            ...mergeJobCheckpoint(
-              Object.fromEntries(
-                Object.entries(safeMerged).filter(
-                  ([key]) => !["_opsLogEvents", "_opsLogBytes"].includes(key),
-                ),
-              ),
-              { dropObservation: true },
-            ),
+            ...mergeJobCheckpoint(safeMerged, { dropObservation: true }),
             error: error ?? null,
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
@@ -1652,7 +1631,7 @@ class AdminJobRunner {
       .from(adminJob)
       .where(
         and(
-          inArray(adminJob.status, ["running", "cancel_pending"]),
+          adminJobStatusIn(adminJob.status, ["running", "cancel_pending"]),
           inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
           adminJobObservationDue(),
         ),

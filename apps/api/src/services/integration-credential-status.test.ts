@@ -36,7 +36,6 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
         serviceSecretRows: [],
         integrationRows: [
           {
-            id: "row",
             integrationId: "fixture",
             config: { apiKey: "synthetic-db" },
             createdAt: date,
@@ -45,7 +44,6 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
         ],
         integrationSecretRows: [
           {
-            id: "secret",
             integrationId: "fixture",
             key: "apiKey",
             ...encrypt("synthetic-vault"),

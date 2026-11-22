@@ -242,10 +242,16 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
   if (source === "application") {
     const [row] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
     if (!row) return null;
-    // The runner's protocol state never leaves the API.
-    const { protocol: _protocol, ...job } = row;
+    // The runner's protocol state and log accounting never leave the API.
+    const { protocol: _protocol, logEvents: _events, logBytes: _bytes, ...job } = row;
     const logs = await db
-      .select()
+      .select({
+        jobId: adminJobLog.jobId,
+        seq: adminJobLog.seq,
+        stream: adminJobLog.stream,
+        line: adminJobLog.line,
+        createdAt: adminJobLog.createdAt,
+      })
       .from(adminJobLog)
       .where(eq(adminJobLog.jobId, id))
       .orderBy(adminJobLog.seq);

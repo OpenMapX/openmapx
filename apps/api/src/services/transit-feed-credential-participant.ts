@@ -497,16 +497,17 @@ export async function persistPreparedFeedCredentialRow(input: {
         })
         .where(
           and(
-            eq(serviceSecret.id, before.id),
+            eq(serviceSecret.serviceId, SERVICE),
+            eq(serviceSecret.key, KEY),
             sql`xmin::text = ${(before as typeof before & { _rowVersion?: string })._rowVersion}`,
           ),
         )
-        .returning({ id: serviceSecret.id })
+        .returning({ key: serviceSecret.key })
     : await tx
         .insert(serviceSecret)
         .values({ ...next, updatedBy: input.writer.actorId })
         .onConflictDoNothing()
-        .returning({ id: serviceSecret.id });
+        .returning({ key: serviceSecret.key });
   if (changed.length !== 1) throw new TransitCredentialConflict();
   const { preview } = state;
   if (!preview) throw new TransitCredentialConflict();

@@ -25,7 +25,6 @@ export type GetAdminActivityJob200 =
       /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
       result: AdminGetAdminActivityJob200Schema0 | null;
       logs: {
-        id: string;
         jobId: string;
         /**
          * @minimum 0
@@ -81,7 +80,6 @@ export type GetAdminActivityJob200 =
       /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
       result: AdminGetAdminActivityJob200Schema0 | null;
       logs: {
-        id: string;
         jobId: string;
         /**
          * @minimum 0
