@@ -3,7 +3,6 @@ export const OPENMAPX_REGION_ENV = "OPENMAPX_REGION";
 export const TRANSITOUS_COUNTRIES_ENV = "TRANSITOUS_COUNTRIES";
 
 const SERVICE_REGION_ENVS: Record<string, string> = {
-  motis: "MOTIS_REGION",
   osrm: "OSRM_REGION",
   otp: "OTP_REGION",
   overpass: "OVERPASS_REGION",
