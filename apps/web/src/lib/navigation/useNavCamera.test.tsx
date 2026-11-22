@@ -86,6 +86,7 @@ vi.mock("maplibre-gl", () => {
 
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   type CameraViewport,
   getCameraFrameTarget,
@@ -408,7 +409,12 @@ interface Harness {
  * asynchronous Marker import settle so the first flushed frame has everything
  * it needs.
  */
-async function mountNavCamera(options: { startNavigation?: boolean } = {}): Promise<Harness> {
+async function mountNavCamera(
+  options: {
+    startNavigation?: boolean;
+    surface?: { padding: ResolvedPadding; maxPitch: number };
+  } = {},
+): Promise<Harness> {
   const frames = createFrameHarness(CLOCK_START);
   vi.stubGlobal("requestAnimationFrame", frames.request);
   vi.stubGlobal("cancelAnimationFrame", frames.cancel);
@@ -419,7 +425,8 @@ async function mountNavCamera(options: { startNavigation?: boolean } = {}): Prom
   mapContextTest.mapReady = true;
   if (options.startNavigation !== false) startRoute();
 
-  const view = renderHook(() => useNavCamera());
+  const surface = options.surface;
+  const view = renderHook(() => useNavCamera(surface));
   await act(async () => {
     await Promise.resolve();
   });
@@ -1326,5 +1333,84 @@ describe("useNavCamera look-ahead and junction framing", () => {
     harness.frames.flush(900, FRAME_MS);
     const zoom = jumps(harness.fake).at(-1)?.options.zoom as number;
     expect(zoom).toBeGreaterThan(speedZoom(30, "2d") + 0.3);
+  });
+});
+
+describe("useNavCamera 3D profile", () => {
+  const lastJump = (fake: FakeMap) =>
+    fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").at(-1)?.options;
+
+  afterEach(() => {
+    useNavigationSceneStore.getState().setActive(false);
+  });
+
+  it("3D scene drives at 62° and approaches at 68°", async () => {
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 13.9, 3000);
+    harness.frames.flush(600, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeCloseTo(62, 0);
+    applyApproachFix(START_ALONG + 5, 13.9, 150);
+    harness.frames.flush(600, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeCloseTo(68, 0);
+  });
+
+  it("3D speed zoom reaches 16.6 at 50 km/h", async () => {
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 13.9, 3000);
+    harness.frames.flush(900, FRAME_MS);
+    expect(lastJump(harness.fake)?.zoom).toBeCloseTo(16.62, 1);
+  });
+
+  it("3D approach cap is 18", async () => {
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 0, 100);
+    harness.frames.flush(900, FRAME_MS);
+    const zoom = lastJump(harness.fake)?.zoom as number;
+    expect(zoom).toBeGreaterThan(17.5);
+    expect(zoom).toBeLessThanOrEqual(18);
+  });
+
+  it("a car surface stays 2D while the scene is active", async () => {
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera({
+      surface: { padding: { top: 0, bottom: 0, left: 0, right: 0 }, maxPitch: 25 },
+    });
+    applyApproachFix(START_ALONG, 13.9, 3000);
+    harness.frames.flush(900, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeLessThanOrEqual(25);
+    expect(lastJump(harness.fake)?.zoom).toBeCloseTo(speedZoom(13.9, "2d"), 1);
+  });
+
+  it("switching 3D off eases back to 55°", async () => {
+    // An earlier test in this file leaves a reduced-motion matchMedia behind.
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 13.9, 3000);
+    harness.frames.flush(600, FRAME_MS);
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    harness.frames.flush(30, FRAME_MS);
+    const midway = lastJump(harness.fake)?.pitch as number;
+    expect(midway).toBeGreaterThan(55.5);
+    expect(midway).toBeLessThan(62);
+    harness.frames.flush(600, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeCloseTo(55, 0);
+  });
+
+  it("motorcycle uses the driving values in 3D", async () => {
+    useNavigationSceneStore.getState().setActive(true);
+    const harness = await mountNavCamera({ startNavigation: false });
+    act(() => {
+      useNavigationStore.getState().startGroundNavigation(route, "motorcycle", [
+        [0, 0],
+        [0.02, 0.003],
+      ]);
+      useNavigationStore.getState().applyProgress(makeProgress(START_ALONG, 13.9, 3000));
+    });
+    harness.frames.flush(600, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeCloseTo(62, 0);
   });
 });

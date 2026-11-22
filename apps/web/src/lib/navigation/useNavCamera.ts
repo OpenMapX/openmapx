@@ -10,6 +10,7 @@ import {
   maneuverArrowSpans,
   maneuverStartMeters,
   NAV_CAMERA_PROFILE,
+  type NavCameraProfileName,
   positionAt,
   speedZoom,
   stepDeadReckon,
@@ -19,6 +20,7 @@ import {
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   type CameraViewport,
   getCameraFrameTarget,
@@ -73,8 +75,8 @@ const USER_CAM_SUSPEND_MS = 350;
 // both fit on screen, so the maneuver reads as a place. Restored to the mode
 // pitch once the maneuver is passed. 60° is MapLibre's default `maxPitch`;
 // anything steeper is clamped by the map.
-const APPROACH_PITCH = NAV_CAMERA_PROFILE["2d"].approachPitch;
-const APPROACH_ZOOM_CAP = NAV_CAMERA_PROFILE["2d"].approachZoomCap;
+// 3D navigation (spec §6.3) swaps in a steeper, closer profile: 62°/68° pitch,
+// a closer speed zoom and an approach cap of z18. A car surface stays 2D.
 const PITCH_TAU = 1.0;
 
 type CameraActivityEvent = maplibregl.MapMovementEvent | maplibregl.MapWheelEvent;
@@ -143,6 +145,16 @@ function looksAhead(mode: string): boolean {
   return mode === "driving" || mode === "motorcycle";
 }
 
+/** The 3D profile while 3D navigation is active on this (non-car) map, else today's 2D one. */
+function cameraProfile(mode: string, hasSurface: boolean): NavCameraProfileName {
+  return !hasSurface && looksAhead(mode) && useNavigationSceneStore.getState().active ? "3d" : "2d";
+}
+
+/** The follow pitch for a mode: the 3D driving pitch, or today's per-mode 2D pitch. */
+function modePitch(mode: string, profile: NavCameraProfileName): number {
+  return profile === "3d" ? NAV_CAMERA_PROFILE["3d"].drivingPitch : (PITCH[mode] ?? 0);
+}
+
 interface ApproachLegs {
   route: Route;
   maneuverIndex: number;
@@ -190,10 +202,11 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
     if (surfacePadding) return { padding: surfacePadding, viewport: measureCameraViewport(map) };
     return getCameraFrameTarget(map);
   }, []);
-  const cameraPitch = useCallback(
-    (pitch: number) => Math.min(pitch, surfaceRef.current?.maxPitch ?? 60),
-    [],
-  );
+  const cameraPitch = useCallback((pitch: number) => {
+    const surface = surfaceRef.current;
+    const profile = cameraProfile(useNavigationStore.getState().mode, Boolean(surface));
+    return Math.min(pitch, surface?.maxPitch ?? NAV_CAMERA_PROFILE[profile].maxPitch);
+  }, []);
   const ctx = useMapOptional();
   const mapRef = ctx?.mapRef ?? null;
   const mapReady = ctx?.mapReady ?? false;
@@ -396,7 +409,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       map.easeTo(
         {
           zoom: enterZoom,
-          pitch: cameraPitch(PITCH[mode] ?? 0),
+          pitch: cameraPitch(modePitch(mode, cameraProfile(mode, Boolean(surfaceRef.current)))),
           padding: enterPadding,
           duration: prefersReducedMotion() ? 0 : ENTER_EASE_MS,
         },
@@ -405,7 +418,9 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
       // Seed the eased follow-zoom and padding so the per-frame loop continues
       // from here.
       displayedZoomRef.current = enterZoom;
-      displayedPitchRef.current = cameraPitch(PITCH[mode] ?? 0);
+      displayedPitchRef.current = cameraPitch(
+        modePitch(mode, cameraProfile(mode, Boolean(surfaceRef.current))),
+      );
       displayedPaddingRef.current = enterPadding;
       paddingTargetRef.current = enterPadding;
       settleUntilRef.current = performance.now() + SETTLE_MS;
@@ -457,6 +472,10 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
   useEffect(() => {
     requestFrame();
   }, [requestFrame, cameraMode, coasting, mapReady, mapNorthUp, styleVersion]);
+
+  // 3D navigation starting or ending changes the camera profile the next frame
+  // eases toward.
+  useEffect(() => useNavigationSceneStore.subscribe(() => requestFrame()), [requestFrame]);
 
   // Coming back from a hidden tab: frames were throttled or stopped entirely
   // while the pose kept ageing.
@@ -570,6 +589,8 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           const approach = approachRef.current;
           const approaching = approach !== null;
           const speed = navState.progress?.speedMps ?? 0;
+          const profileName = cameraProfile(navState.mode, Boolean(surfaceRef.current));
+          const profile = NAV_CAMERA_PROFILE[profileName];
           // North-up keeps the map oriented north (the puck still rotates to the
           // travel bearing); the default course-up rotates the map to it.
           const cameraBearing = useSettingsStore.getState().mapNorthUp
@@ -579,7 +600,7 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           if (commandZoom) {
             const base = displayedZoomRef.current ?? zoom;
             const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / ZOOM_TAU);
-            const plain = speedZoom(speed, "2d");
+            const plain = speedZoom(speed, profileName);
             let target = plain;
             if (approach) {
               let cached = approachLegsRef.current;
@@ -609,13 +630,13 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
                       legs: cached.legs,
                       center: point,
                       bearing: cameraBearing,
-                      pitch: displayedPitchRef.current ?? cameraPitch(APPROACH_PITCH),
+                      pitch: displayedPitchRef.current ?? cameraPitch(profile.approachPitch),
                       viewport: frame.viewport,
                       padding: displayedPaddingRef.current ?? frame.padding,
-                      maxZoom: APPROACH_ZOOM_CAP,
+                      maxZoom: profile.approachZoomCap,
                     })
                   : plain;
-              target = approachTargetZoom(plain, fit, APPROACH_ZOOM_CAP);
+              target = approachTargetZoom(plain, fit, profile.approachZoomCap);
             }
             displayedZoomRef.current = settleScalar(
               base + (target - base) * zAlpha,
@@ -630,7 +651,9 @@ export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: num
           // in one step instead of easing. Mode is read imperatively, like the
           // other store values the frame consumes.
           const travelMode = useNavigationStore.getState().mode;
-          const pitchTarget = cameraPitch(approaching ? APPROACH_PITCH : (PITCH[travelMode] ?? 0));
+          const pitchTarget = cameraPitch(
+            approaching ? profile.approachPitch : modePitch(travelMode, profileName),
+          );
           const tAlpha = prefersReducedMotion() ? 1 : 1 - Math.exp(-Math.max(dt, 0) / PITCH_TAU);
           const pitchBase = displayedPitchRef.current ?? pitchTarget;
           displayedPitchRef.current = settleScalar(
