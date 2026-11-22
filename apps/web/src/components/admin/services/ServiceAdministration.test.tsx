@@ -903,6 +903,100 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
   const button = screen.getByRole("button", { name: "Restart Selected" });
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute("title", expect.stringMatching(/\bapi\b/));
+  expect(button).toHaveAttribute("title", expect.stringMatching(/core Restart/));
+});
+
+function catalogWith(services: { id: string; actions: Record<string, unknown> }[]) {
+  return setup((url, init) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          services: services.map(({ id, actions }) => ({
+            id,
+            name: id,
+            version: "1",
+            quality: "built-in",
+            provides: [],
+            consumes: [],
+            enabled: true,
+            isBuiltIn: true,
+            status: "running",
+            actions,
+          })),
+          summary: { running: services.length, stopped: 0, unknown: 0, total: services.length },
+        })
+      : url.pathname.endsWith("/bulk-action") && init.method === "POST"
+        ? Response.json({ ok: true, jobId: "job-1" })
+        : undefined,
+  );
+}
+const notBuildable = {
+  ...availableActions,
+  build: { available: false, execution: "direct", reason: "not_buildable", workflow: null },
+};
+
+it("builds the buildable selection and points MOTIS at transit sync", async () => {
+  const requests = catalogWith([
+    { id: "motis", actions: notBuildable },
+    { id: "pelias", actions: availableActions },
+  ]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "pelias" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByRole("link", { name: "transit sync" })).toHaveAttribute(
+    "href",
+    "/admin/data/transit?tab=sources",
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("Targets: pelias.");
+  const button = screen.getByRole("button", { name: "Build Selected" });
+  expect(button).not.toBeDisabled();
+  fireEvent.click(button);
+  await waitFor(() =>
+    expect(requests.some((request) => request.url.pathname.endsWith("/bulk-action"))).toBe(true),
+  );
+  const request = requests.find((entry) => entry.url.pathname.endsWith("/bulk-action"));
+  expect(JSON.parse(String(request?.init.body))).toEqual({
+    action: "build",
+    serviceIds: ["pelias"],
+    continueOnError: true,
+  });
+});
+
+it("keeps Build disabled when only MOTIS is selected", async () => {
+  catalogWith([{ id: "motis", actions: notBuildable }]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "motis" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByRole("button", { name: "Build Selected" })).toBeDisabled();
+  expect(screen.getByRole("link", { name: "transit sync" })).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "None of the selected services has anything to build.",
+  );
+});
+
+it("names other services with nothing to build and blocks a refused build without core Restart", async () => {
+  catalogWith([
+    { id: "redis", actions: notBuildable },
+    {
+      id: "api",
+      actions: {
+        ...availableActions,
+        build: { available: false, execution: "direct", reason: "control_plane", workflow: null },
+      },
+    },
+  ]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "redis" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByText("Skipped, nothing to build: redis.")).toBeVisible();
+  expect(screen.queryByRole("link", { name: "transit sync" })).toBeNull();
+  const button = screen.getByRole("button", { name: "Build Selected" });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("title", "Unavailable for: api.");
 });
 
 it("selects server-defined preset roots for actions without persisting selection", async () => {
