@@ -122,7 +122,10 @@ describe("street detail schema", () => {
   it("roads layer has no tile_post_process merge", () => {
     // The lane highlight reads each road's OSM way id from Planetiler's feature
     // id (osmId × 10 + 2); merging lines would drop it.
-    const roads = schema.layers.find((entry) => entry.id === "roads") as Record<string, unknown>;
+    const roads = schema.layers.find((entry) => entry.id === "roads") as unknown as Record<
+      string,
+      unknown
+    >;
     expect(roads.tile_post_process).toBeUndefined();
     expect(STREET_DETAIL_SCHEMA).not.toContain("tile_post_process");
   });
