@@ -26,14 +26,9 @@ const allowedKinds: { kind: string; pattern: RegExp }[] = [
   },
 ];
 
-/** Removes comment lines and replaces dollar-quoted bodies, keeping the statement shape. */
+/** Masks dollar-quoted bodies, keeping the statement shape. */
 function shape(statement: string): string {
-  return statement
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("--"))
-    .join("\n")
-    .replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, "$$body$$")
-    .trim();
+  return statement.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, "BODY");
 }
 
 function customStatements(): string[] {
