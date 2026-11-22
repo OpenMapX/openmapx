@@ -385,6 +385,13 @@ describe("reference starters", () => {
     expect(startsWithReferenceStarter("Rechts abbiegen.", "de")).toBe(true);
     expect(startsWithReferenceStarter("Turn right.", "de")).toBe(false);
     expect(startsWithReferenceStarter("", "en")).toBe(false);
+    expect(startsWithReferenceStarter("Turn!?!", "en")).toBe(true);
+  });
+
+  it("reads a first word of many punctuation marks in linear time", () => {
+    const started = performance.now();
+    expect(startsWithReferenceStarter(`${"!".repeat(50_000)}x`, "en")).toBe(false);
+    expect(performance.now() - started).toBeLessThan(200);
   });
 
   it.each([

@@ -69,10 +69,16 @@ export const REFERENCE_STARTER_EXCLUSIONS: Readonly<
   },
 };
 
+const TRAILING_PUNCTUATION = new Set([".", ",", ":", ";", "!", "?"]);
+
 /** The instruction's first word, lowercased, without trailing punctuation. */
 function firstWord(instruction: string, locale: Locale): string {
   const word = instruction.trim().split(/\s+/, 1)[0] ?? "";
-  return word.replace(/[.,:;!?]+$/u, "").toLocaleLowerCase(locale);
+  // A loop, not a `[…]+$` pattern: that backtracks quadratically on a long run
+  // of punctuation that does not end the word.
+  let end = word.length;
+  while (end > 0 && TRAILING_PUNCTUATION.has(word[end - 1] as string)) end--;
+  return word.slice(0, end).toLocaleLowerCase(locale);
 }
 
 /** Whether a reference may be fronted onto this instruction. */
