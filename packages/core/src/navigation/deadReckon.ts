@@ -112,6 +112,11 @@ export interface DeadReckonOptions {
  * gently catches down to the next (shorter-than-predicted) fix rather than
  * jumping backward.
  */
+/** Moving at least this fast, a small backward correction is held, not shown. */
+const HOLD_MIN_SPEED_MPS = 2;
+/** Behind by at most this, the projection catches up within about a second. */
+const HOLD_MAX_BEHIND_M = 12;
+
 export function stepDeadReckon(
   displayedMeters: number,
   target: DeadReckonTarget,
@@ -120,6 +125,13 @@ export function stepDeadReckon(
 ): number {
   const lead = Math.min(Math.max(target.ageSeconds, 0), opts.maxLeadSeconds);
   const projected = target.fixAlongMeters + Math.max(target.speedMps, 0) * lead;
+  // While moving, a fix a few metres behind the displayed position (a late or
+  // noisy fix) is caught up within a moment: hold rather than step back, or
+  // the puck bounces back and forth. A stop or a large gap still corrects.
+  const behind = displayedMeters - projected;
+  if (target.speedMps >= HOLD_MIN_SPEED_MPS && behind > 0 && behind <= HOLD_MAX_BEHIND_M) {
+    return Math.min(Math.max(displayedMeters, 0), opts.routeLengthMeters);
+  }
   const tau = Math.max(opts.tauSeconds, 1e-3);
   const alpha = 1 - Math.exp(-Math.max(dtSeconds, 0) / tau);
   const next = displayedMeters + (projected - displayedMeters) * alpha;
