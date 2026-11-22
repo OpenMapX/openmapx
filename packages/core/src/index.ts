@@ -122,6 +122,7 @@ export {
   type LandmarkManeuver,
   type LandmarkReference,
   type LaneStep,
+  landmarkManeuverAt,
   laneArrowStemShift,
   laneDestinationsAt,
   laneIndicationIconName,

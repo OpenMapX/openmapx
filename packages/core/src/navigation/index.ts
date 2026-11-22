@@ -142,6 +142,7 @@ export {
   type LandmarkCandidate,
   type LandmarkCandidateCategory,
   type LandmarkManeuver,
+  landmarkManeuverAt,
   selectLandmark,
 } from "./landmarks";
 export {

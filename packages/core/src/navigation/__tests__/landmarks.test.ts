@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import type { Route, RouteStep } from "../../types/routing";
-import { eligibleLandmarkManeuvers, type LandmarkCandidate, selectLandmark } from "../landmarks";
+import {
+  eligibleLandmarkManeuvers,
+  type LandmarkCandidate,
+  landmarkManeuverAt,
+  selectLandmark,
+} from "../landmarks";
 
 const ORIGIN: LngLat = [13.4, 52.5];
 const M_PER_DEG_LAT = 111_320;
@@ -185,5 +190,45 @@ describe("eligibleLandmarkManeuvers", () => {
 
   it("gives none for a route without geometry", () => {
     expect(eligibleLandmarkManeuvers({ ...route([]), geometry: [] } as Route)).toEqual([]);
+  });
+});
+
+describe("landmarkManeuverAt", () => {
+  const routeOf = (steps: RouteStep[]) =>
+    ({ geometry: [], steps, distance: 0, duration: 0 }) as unknown as Route;
+
+  it("uses the engine's bearings when it sends them", () => {
+    const steps = [
+      step([at(0, 0), at(0, 400)], { maneuver: { type: "depart" } }),
+      step([at(0, 400), at(300, 400)], { bearingBefore: 2, bearingAfter: 88 }),
+    ];
+    expect(landmarkManeuverAt(routeOf(steps), 1)).toEqual({
+      stepIndex: 1,
+      point: at(0, 400),
+      bearingIn: 2,
+      bearingOut: 88,
+      modifier: "right",
+    });
+  });
+
+  it("derives bearings from the step geometry otherwise", () => {
+    const steps = [
+      step([at(0, 0), at(0, 400)], { maneuver: { type: "depart" } }),
+      step([at(0, 400), at(300, 400)]),
+    ];
+    const maneuver = landmarkManeuverAt(routeOf(steps), 1);
+    expect(maneuver?.bearingIn).toBeCloseTo(0, 0);
+    expect(maneuver?.bearingOut).toBeCloseTo(90, 0);
+  });
+
+  it("gives none without a modifier or geometry", () => {
+    const steps = [
+      step([at(0, 0)], { maneuver: { type: "depart" } }),
+      step([at(0, 400)], { maneuver: { type: "turn" } }),
+      step([at(0, 800)]),
+    ];
+    expect(landmarkManeuverAt(routeOf(steps), 1)).toBeNull();
+    expect(landmarkManeuverAt(routeOf(steps), 2)).toBeNull();
+    expect(landmarkManeuverAt(routeOf(steps), 9)).toBeNull();
   });
 });

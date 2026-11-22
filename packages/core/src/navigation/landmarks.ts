@@ -1,6 +1,7 @@
 import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
+import { bearingBetween } from "./bearing";
 import {
   isMotorwayStep,
   isTurnManeuver,
@@ -185,6 +186,26 @@ export function selectLandmark(
     category: chosen.category,
     ...(chosen.brand !== undefined && { brand: chosen.brand }),
   };
+}
+
+/**
+ * The manoeuvre at `stepIndex` as landmark selection needs it: its point, and
+ * the bearings in and out, from the engine or else the step geometry. Null
+ * without a modifier, a point or a way to tell the bearings.
+ */
+export function landmarkManeuverAt(route: Route, stepIndex: number): LandmarkManeuver | null {
+  const step = route.steps[stepIndex];
+  const point = step?.coordinates[0];
+  const modifier = step?.maneuver?.modifier;
+  if (!step || !point || !modifier) return null;
+  const before = route.steps[stepIndex - 1]?.coordinates;
+  const previousPoint = before && before.length >= 2 ? before.at(-2) : undefined;
+  const nextPoint = step.coordinates[1];
+  const bearingIn =
+    step.bearingBefore ?? (previousPoint ? bearingBetween(previousPoint, point) : null);
+  const bearingOut = step.bearingAfter ?? (nextPoint ? bearingBetween(point, nextPoint) : null);
+  if (bearingIn === null || bearingOut === null) return null;
+  return { stepIndex, point, bearingIn, bearingOut, modifier };
 }
 
 /** Manoeuvres this close to the trip's origin or destination are not looked up. */

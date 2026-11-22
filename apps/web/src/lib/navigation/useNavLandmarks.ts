@@ -1,9 +1,8 @@
 import {
-  bearingBetween,
   eligibleLandmarkManeuvers,
   fetchNavigationLandmarks,
-  type LandmarkManeuver,
   type LandmarkReference,
+  landmarkManeuverAt,
   type NavigationLandmarkResult,
   type Route,
   selectLandmark,
@@ -113,7 +112,7 @@ function applyResults(route: Route, stepIndices: number[], results: NavigationLa
   const found: Record<number, LandmarkReference> = {};
   stepIndices.forEach((stepIndex, i) => {
     const result = results[i];
-    const maneuver = maneuverAt(route, stepIndex);
+    const maneuver = landmarkManeuverAt(route, stepIndex);
     if (!result || result.unavailable || !maneuver) return;
     const reference = selectLandmark(maneuver, result.candidates);
     if (reference) found[stepIndex] = reference;
@@ -121,20 +120,4 @@ function applyResults(route: Route, stepIndices: number[], results: NavigationLa
   if (Object.keys(found).length === 0) return;
   const previous = store.landmarkReferences?.route === route ? store.landmarkReferences.byStep : {};
   store.setLandmarkReferences({ route, byStep: { ...previous, ...found } });
-}
-
-/** The manoeuvre's point and bearings, from the engine or the step geometry. */
-function maneuverAt(route: Route, stepIndex: number): LandmarkManeuver | null {
-  const step = route.steps[stepIndex];
-  const point = step?.coordinates[0];
-  const modifier = step?.maneuver?.modifier;
-  if (!step || !point || !modifier) return null;
-  const before = route.steps[stepIndex - 1]?.coordinates;
-  const previousPoint = before && before.length >= 2 ? before.at(-2) : undefined;
-  const nextPoint = step.coordinates[1];
-  const bearingIn =
-    step.bearingBefore ?? (previousPoint ? bearingBetween(previousPoint, point) : null);
-  const bearingOut = step.bearingAfter ?? (nextPoint ? bearingBetween(point, nextPoint) : null);
-  if (bearingIn === null || bearingOut === null) return null;
-  return { stepIndex, point, bearingIn, bearingOut, modifier };
 }

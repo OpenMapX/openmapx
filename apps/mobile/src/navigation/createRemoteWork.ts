@@ -1,5 +1,7 @@
+import { routeFingerprint } from "@openmapx/core/navigation";
 import type { SessionRepository } from "../storage/SessionRepository";
 import type { RemoteWorkPort } from "./effects";
+import type { ReferenceOutcome } from "./ground/GroundReferenceService";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
 import type { RefreshOutcome, TransitRefreshService } from "./transit/TransitRefreshService";
 
@@ -23,12 +25,23 @@ export interface RerouteClient {
   abortAll(): void;
 }
 
+export interface ReferenceClient {
+  request(request: {
+    requestId: string;
+    session: Parameters<RerouteClient["request"]>[0]["session"];
+  }): Promise<ReferenceOutcome>;
+  abortAll(): void;
+}
+
 export interface RemoteWorkDeps {
   repository: Pick<SessionRepository, "loadActive">;
   reroute: RerouteClient;
   applyReroute(outcome: RerouteOutcome): Promise<void>;
   transitRefresh?: Pick<TransitRefreshService, "request">;
   applyTransitRefresh?(outcome: RefreshOutcome): Promise<void>;
+  /** Voice references (traffic lights, landmarks) for the followed route. */
+  references?: ReferenceClient;
+  applyReferences?(outcome: ReferenceOutcome): Promise<void>;
   now(): number;
   diagnostics: { record(type: string, fields: Record<string, unknown>): void };
   /**
@@ -62,6 +75,25 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
   };
 
   const port: RemoteWorkPort = {
+    // The request id is the fingerprint of the route the references are for, so
+    // an effect left over from a replaced route asks for nothing.
+    references: async (requestId) => {
+      const { references, applyReferences } = deps;
+      if (!references || !applyReferences) return;
+      const session = await deps.repository.loadActive(deps.now());
+      if (session?.kind !== "ground" || session.status !== "active") return;
+      if (routeFingerprint(session.payload.startPackage.route.geometry) !== requestId) return;
+      // Only the latest route's references matter.
+      references.abortAll();
+      track(
+        references
+          .request({ requestId, session })
+          .then((outcome) => applyReferences(outcome))
+          .catch(() => {
+            deps.diagnostics.record("typed.error", { scope: "reference-request" });
+          }),
+      );
+    },
     reroute: async (requestId) => {
       const session = await deps.repository.loadActive(deps.now());
       if (session?.kind !== "ground" || session.status !== "active") return;
@@ -110,6 +142,7 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
     },
     abortReroutes: () => {
       deps.reroute.abortAll();
+      deps.references?.abortAll();
     },
   };
 }
