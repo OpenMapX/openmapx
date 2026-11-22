@@ -36,6 +36,7 @@ const BROWSER = [
   "./map-config",
   "./navigation",
   "./navigation/api",
+  "./navigation/laneMatch",
   "./ops/control-root-key",
   "./place-ids",
   "./privacy",
