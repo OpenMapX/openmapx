@@ -24,7 +24,7 @@ holds transit lifecycle metadata. Managed Dawarich has its own database.
 | Database / user   | `openmapx` / `postgres`                                |
 | Memory limit      | `POSTGIS_MEMORY`, default `2g`                         |
 | Named volume      | `openmapx-pgdata` at `/var/lib/postgresql`             |
-| Internal endpoint | `postgis:5432`                                         |
+| Internal endpoint | `openmapx-postgis:5432`                                |
 | Host endpoint     | `127.0.0.1:5432`, relocatable with `POSTGIS_HOST_PORT` |
 
 ### Image provenance and release gate
@@ -114,7 +114,7 @@ Redis-compatible service ID and protocol.
 | ----------------- | ------------------------------------------------- |
 | Memory ceiling    | `512m`                                            |
 | Named volume      | `openmapx-redisdata` at `/data`, backed up as tar |
-| Internal endpoint | `redis:6379`                                      |
+| Internal endpoint | `openmapx-redis:6379`                             |
 | Host endpoint     | `127.0.0.1:6379`                                  |
 | Authentication    | Renderer-generated password and hashed ACL files  |
 
