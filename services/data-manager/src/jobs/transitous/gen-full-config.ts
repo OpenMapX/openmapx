@@ -148,8 +148,10 @@ export const run: StageFn = async (ctx) => {
       countries: ctx.countries,
     });
     const configPath = join(catalogDir, "out", "config.yml");
-    if (!existsSync(configPath)) {
-      throw new Error(`generate-motis-config.py did not produce ${configPath}`);
+    try {
+      readFileSync(configPath, "utf-8");
+    } catch (error) {
+      throw new Error(`generate-motis-config.py did not produce ${configPath}`, { cause: error });
     }
     // Apply the SAME post-processors as gen-motis-config so the runtime config
     // the live MOTIS serves agrees with the import-only config staging built
@@ -173,28 +175,24 @@ export const run: StageFn = async (ctx) => {
     // operator hasn't set it, and "" must fall through to the default.
     const feedProxyUrl =
       ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || FEED_PROXY_ORIGIN;
-    let rtRewritten = 0;
-    let gbfsProxyRewritten = 0;
-    if (existsSync(configPath)) {
-      const result = rewriteHostedFeedProxy(
-        readFileSync(configPath, "utf-8"),
-        feedProxyUrl,
-        new Set(feedProxy.feedIds),
+    const result = rewriteHostedFeedProxy(
+      readFileSync(configPath, "utf-8"),
+      feedProxyUrl,
+      new Set(feedProxy.feedIds),
+    );
+    const rtRewritten = result.counts.realtimeUrls;
+    const gbfsProxyRewritten = result.counts.gbfsProxy;
+    const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
+    if (missingGbfsFeedIds.length > 0) {
+      throw new Error(
+        `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
       );
-      rtRewritten = result.counts.realtimeUrls;
-      gbfsProxyRewritten = result.counts.gbfsProxy;
-      const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
-      if (missingGbfsFeedIds.length > 0) {
-        throw new Error(
-          `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
-        );
-      }
-      if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
-        writeFileSync(configPath, result.text, "utf-8");
-      }
-      if (ctx.operationsPolicy.profile === "regional-sovereign") {
-        assertSovereignRuntimeConfig(result.text);
-      }
+    }
+    if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
+      writeFileSync(configPath, result.text, "utf-8");
+    }
+    if (ctx.operationsPolicy.profile === "regional-sovereign") {
+      assertSovereignRuntimeConfig(result.text);
     }
 
     return {
