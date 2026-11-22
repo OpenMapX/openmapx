@@ -200,6 +200,24 @@ describe("stop and give-way signs", () => {
     expect(signs[0]?.bearing).toBeCloseTo(90, 3);
   });
 
+  it("a tile-clipped end counts as at least as far as it looks", () => {
+    // The way leaves the tile 20 m west of its edge: its real west end lies
+    // somewhere beyond. The east end (100 m) is certainly nearer than that.
+    const clipped = line({ class: "primary", lanes: 2 }, [-20, 200], [200, 200], [300, 200]);
+    const signs = objects({ roads: [clipped], furniture: [point({ kind: "stop" }, [200, 200])] });
+    expect(signs).toHaveLength(1);
+    // Eastbound traffic, south kerb, seen from the west.
+    expect(signs[0]?.y).toBeCloseTo(200 - 3.25, 3);
+    expect(signs[0]?.bearing).toBeCloseTo(270, 3);
+  });
+
+  it("draws no undirected sign when a clipped end leaves its facing uncertain", () => {
+    // 120 m to the clipped west end (really farther), 200 m to the east end.
+    const clipped = line({ class: "primary", lanes: 2 }, [-20, 200], [100, 200], [300, 200]);
+    const signs = objects({ roads: [clipped], furniture: [point({ kind: "stop" }, [100, 200])] });
+    expect(signs).toHaveLength(0);
+  });
+
   it("stop=all draws both directions", () => {
     const signs = objects({
       roads: [ROAD],

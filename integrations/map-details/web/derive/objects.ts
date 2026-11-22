@@ -193,6 +193,11 @@ export function streetObjects(
    * explicit one, or, when undirected, towards the nearer end of the way (the
    * junction it guards). A sign on a junction node is not drawn.
    */
+  /** A tile-unit point outside the tile square, where the tile build clipped a line. */
+  function outsideTile([x, y]: Pt): boolean {
+    return x < 0 || y < 0 || x > extent || y > extent;
+  }
+
   function placeSign(
     kind: "stop" | "give_way",
     raw: Pt,
@@ -200,7 +205,14 @@ export function streetObjects(
     h: number,
     which: "forward" | "backward" | "both" | null,
   ) {
-    let chosen: { road: SceneRoad; travel: Pt; toStart: number; toEnd: number } | null = null;
+    let chosen: {
+      road: SceneRoad;
+      travel: Pt;
+      toStart: number;
+      toEnd: number;
+      startClipped: boolean;
+      endClipped: boolean;
+    } | null = null;
     for (const road of roads) {
       if (!road.motor || chosen) continue;
       road.tileLines.forEach((line, lineIndex) => {
@@ -220,27 +232,31 @@ export function streetObjects(
           travel: [(b[0] - a[0]) / length, (b[1] - a[1]) / length],
           toStart: polylineLength(scene.slice(0, k + 1)),
           toEnd: polylineLength(scene.slice(k)),
+          startClipped: outsideTile(line[0] as Pt),
+          endClipped: outsideTile(line[line.length - 1] as Pt),
         };
       });
     }
     if (!chosen) return;
-    const { road, travel, toStart, toEnd } = chosen as {
+    const { road, travel, toStart, toEnd, startClipped, endClipped } = chosen as {
       road: SceneRoad;
       travel: Pt;
       toStart: number;
       toEnd: number;
+      startClipped: boolean;
+      endClipped: boolean;
     };
+    // The nearer-end rule for undirected signs. A line end outside the tile
+    // is where the tile clipped it: the way's real end lies at least that far.
+    // Decide only when the nearer end is certain; otherwise draw nothing.
+    let nearerEnd: "forward" | "backward" | null = null;
+    if (!endClipped && toEnd < toStart) nearerEnd = "forward";
+    else if (!startClipped && toStart <= toEnd) nearerEnd = "backward";
+    if (which === null && nearerEnd === null) return;
     // The lines already run with traffic on `oneway=-1` roads, so an explicit
     // OSM direction flips there; the nearer-end rule reads the lines directly.
     const flip = { forward: "backward", backward: "forward", both: "both" } as const;
-    const direction =
-      which === null
-        ? toEnd < toStart
-          ? "forward"
-          : "backward"
-        : road.reversed
-          ? flip[which]
-          : which;
+    const direction = which === null ? nearerEnd : road.reversed ? flip[which] : which;
     const right: Pt = [travel[1], -travel[0]];
     const forwardSide: Pt = leftHand ? [-right[0], -right[1]] : right;
     const half = road.width / 2;
