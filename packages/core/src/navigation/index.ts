@@ -389,6 +389,7 @@ export { spokenInstructionFor } from "./spokenInstruction";
 export {
   extractTrafficSignals,
   type GeometryWindow,
+  signalAlongDistances,
   signalCoordKey,
   windowGeometry,
 } from "./trafficSignals";

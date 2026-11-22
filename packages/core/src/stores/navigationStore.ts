@@ -248,6 +248,14 @@ interface NavigationState {
    */
   landmarkReferences: { route: Route; byStep: Record<number, LandmarkReference> } | null;
   /**
+   * Along-route distances of the traffic signals the windowed map-match found,
+   * sorted, and the spans whose windows were matched successfully. Voice
+   * prompts count traffic lights only across matched spans. Null until the
+   * first window lands; reset with the route.
+   */
+  signalsAlong: number[] | null;
+  signalSpans: { from: number; to: number }[];
+  /**
    * The countries the route passes through, as spans along it, from the same
    * windowed map-match; the sign palette follows them across borders. Null
    * until the first window lands, and reset with the route.
@@ -335,6 +343,10 @@ interface NavigationState {
   setSpeedLimit: (v: number | null) => void;
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
   setApproachWayIds: (v: Record<number, number> | null) => void;
+  setSignalEvidence: (v: {
+    signalsAlong: number[] | null;
+    signalSpans: { from: number; to: number }[];
+  }) => void;
   setLandmarkReferences: (
     v: { route: Route; byStep: Record<number, LandmarkReference> } | null,
   ) => void;
@@ -464,6 +476,8 @@ const ROUTE_IDENTITY_RESET = {
     route: Route;
     byStep: Record<number, LandmarkReference>;
   } | null,
+  signalsAlong: null as number[] | null,
+  signalSpans: [] as { from: number; to: number }[],
   routeCountries: null as RouteCountrySpan[] | null,
   currentSpeedLimit: null as number | null,
   /**
@@ -504,6 +518,8 @@ const INITIAL = {
     route: Route;
     byStep: Record<number, LandmarkReference>;
   } | null,
+  signalsAlong: null as number[] | null,
+  signalSpans: [] as { from: number; to: number }[],
   routeCountries: null as RouteCountrySpan[] | null,
   itinerary: null as TripItinerary | null,
   transitRequestId: null as string | null,
@@ -789,6 +805,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
   setApproachWayIds: (approachWayIds) => set({ approachWayIds }),
   setLandmarkReferences: (landmarkReferences) => set({ landmarkReferences }),
+  setSignalEvidence: ({ signalsAlong, signalSpans }) => set({ signalsAlong, signalSpans }),
   setRouteCountries: (routeCountries) => set({ routeCountries }),
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),

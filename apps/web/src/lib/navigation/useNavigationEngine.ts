@@ -1,8 +1,11 @@
 import {
+  type CueReference,
+  chooseReference,
   cumulativeDistances,
   type FixInput,
   fetchDirections,
   type LngLat,
+  maneuverStartMeters,
   type NavigationRouteOptions,
   type NavTickState,
   navOptionsForMode,
@@ -59,6 +62,32 @@ const freshTick = (): NavTickState => ({
   rerouteBackoffMs: 0,
   spokenCues: [],
 });
+
+const REFERENCE_MODES: ReadonlySet<TravelMode> = new Set(["driving", "motorcycle"]);
+
+/**
+ * Something visible to name instead of the distance ("At the second traffic
+ * light, …"), from the route's matched signals and looked-up landmarks.
+ * Driving and motorcycle only; the formatter uses it only on the near cue.
+ */
+function cueReference(cue: VoiceCue): CueReference | null {
+  const { route, mode, signalsAlong, signalSpans, landmarkReferences } =
+    useNavigationStore.getState();
+  if (!route || !REFERENCE_MODES.has(mode) || cue.tier !== "near") return null;
+  const maneuverAlong = maneuverStartMeters(route, cue.stepIndex);
+  return chooseReference({
+    steps: route.steps,
+    stepIndex: cue.stepIndex,
+    maneuverAlong,
+    puckAlong: maneuverAlong - cue.distance,
+    signalsAlong,
+    fetchedSpans: signalSpans,
+    landmark:
+      landmarkReferences?.route === route
+        ? (landmarkReferences.byStep[cue.stepIndex] ?? null)
+        : null,
+  });
+}
 
 // When to reroute, which route to follow, how cues are timed, which speed limit
 // shows and how the position coasts through a gap in fixes are the shared
@@ -240,10 +269,17 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
     (cue: VoiceCue) => {
       const instruction = spokenInstructionFor(cue);
       if (!instruction) return;
+      const reference = cueReference(cue);
       let text: string;
       try {
         text = formatNavigationCue(
-          { kind: "ground-maneuver", tier: cue.tier, instruction, distanceMeters: cue.distance },
+          {
+            kind: "ground-maneuver",
+            tier: cue.tier,
+            instruction,
+            distanceMeters: cue.distance,
+            ...(reference && { reference }),
+          },
           resolveLocale(locale),
           { units: useSettingsStore.getState().units },
         );

@@ -210,6 +210,7 @@ export {
   shouldReroute,
   shouldRerouteForClosure,
   shouldWarnCamera,
+  signalAlongDistances,
   signalCoordKey,
   signHeadline,
   simulatePositions,

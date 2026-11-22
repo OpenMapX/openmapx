@@ -91,3 +91,34 @@ describe("useNavTrafficSignals approach ways", () => {
     expect(useNavigationStore.getState().approachWayIds ?? {}).toEqual({});
   });
 });
+
+describe("useNavTrafficSignals signal evidence", () => {
+  it("publishes the window's signals along the route and its matched span", async () => {
+    match.answer = () =>
+      window({
+        signals: [
+          [13.4, 52.5 + 195 * M],
+          [13.4, 52.5 + 60 * M],
+        ],
+      });
+    start();
+    renderHook(() => useNavTrafficSignals());
+    await waitFor(() => expect(useNavigationStore.getState().signalsAlong).not.toBeNull());
+    const { signalsAlong, signalSpans } = useNavigationStore.getState();
+    expect(signalsAlong).toHaveLength(2);
+    expect(signalsAlong?.[0]).toBeCloseTo(60, 0);
+    expect(signalsAlong?.[1]).toBeCloseTo(195, 0);
+    expect(signalSpans).toHaveLength(1);
+    expect(signalSpans[0]?.from).toBe(0);
+    expect(signalSpans[0]?.to).toBeCloseTo(300, 0);
+  });
+
+  it("a failed window adds no span", async () => {
+    match.answer = () => window({ failed: true, geometry: [] });
+    start();
+    renderHook(() => useNavTrafficSignals());
+    await waitFor(() => expect(useNavigationStore.getState().liveDataUnavailable).toBe(false));
+    expect(useNavigationStore.getState().signalSpans).toEqual([]);
+    expect(useNavigationStore.getState().signalsAlong).toBeNull();
+  });
+});

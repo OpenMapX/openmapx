@@ -34,6 +34,53 @@ export function extractTrafficSignals(match: MatchResult): LngLat[] {
   return out;
 }
 
+/** A signal further than this from the route is on another road. */
+const SIGNAL_ON_ROUTE_M = 15;
+
+/**
+ * Along-route distances of the signals one match window found, for voice
+ * references ("At the second traffic light"). Each signal is projected onto the
+ * nearest route segment between vertices `fromIndex` and `toIndex` and dropped
+ * when more than 15 m off. Sorted in route order.
+ */
+export function signalAlongDistances(
+  signals: LngLat[],
+  geometry: LngLat[],
+  cum: number[],
+  fromIndex: number,
+  toIndex: number,
+): number[] {
+  const last = Math.min(toIndex, geometry.length - 1);
+  const along: number[] = [];
+  for (const signal of signals) {
+    const metresPerDegLat = 111_320;
+    const metresPerDegLon = metresPerDegLat * Math.cos((signal[1] * Math.PI) / 180);
+    // Local metres relative to the signal, so the signal sits at the origin.
+    const xy = (point: LngLat): [number, number] => [
+      (point[0] - signal[0]) * metresPerDegLon,
+      (point[1] - signal[1]) * metresPerDegLat,
+    ];
+    let best: { distance: number; along: number } | null = null;
+    for (let i = Math.max(0, fromIndex); i < last; i++) {
+      const a = geometry[i];
+      const b = geometry[i + 1];
+      if (!a || !b) continue;
+      const [ax, ay] = xy(a);
+      const [bx, by] = xy(b);
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lengthSq = dx * dx + dy * dy;
+      const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSq));
+      const distance = Math.hypot(ax + t * dx, ay + t * dy);
+      if (best && distance >= best.distance) continue;
+      const start = distanceAtVertex(cum, i);
+      best = { distance, along: start + t * (distanceAtVertex(cum, i + 1) - start) };
+    }
+    if (best && best.distance <= SIGNAL_ON_ROUTE_M) along.push(best.along);
+  }
+  return along.sort((x, y) => x - y);
+}
+
 export interface GeometryWindow {
   /** The slice to map-match (≤ maxPoints points, bounded by distance when supplied). */
   trace: LngLat[];
