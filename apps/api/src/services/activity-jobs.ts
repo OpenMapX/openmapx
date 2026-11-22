@@ -158,7 +158,7 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
   return db
     .select({
       source: sql<ActivityJobSource>`'data-manager'::text`.as("source"),
-      id: sql<string>`${dataManagerJobs.id}::text`.as("id"),
+      id: dataManagerJobs.id,
       type: dataManagerJobs.kind,
       status: sql<string>`case
         when ${dataManagerJobs.status} = 'ok' then 'success'
