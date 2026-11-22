@@ -46,23 +46,29 @@ export function useSimulatedPosition(active: boolean, onFix: (fix: FixInput) => 
 
   useEffect(() => {
     if (!fixes) return;
-    const id = setInterval(
-      () => {
-        const fix = fixes[idxRef.current];
-        if (!fix) {
-          clearInterval(id);
-          return;
-        }
-        // Stamp at delivery rather than reusing the generated clock, which is
-        // zero-based and would make every epoch derived from a fix — the ETA,
-        // and so the faster-route check that compares it against `Date.now()` —
-        // read as decades in the past. Delivery time is also what a real
-        // receiver reports, so it stays honest at any playback rate.
-        idxRef.current += 1;
-        onFixRef.current({ ...fix, timestampMs: Date.now() });
-      },
-      Math.max(50, SIM_INTERVAL_MS / playbackRate),
-    );
+    const tickMs = Math.max(50, SIM_INTERVAL_MS / playbackRate);
+    let lastTickAt: number | null = null;
+    const id = setInterval(() => {
+      // A busy main thread delivers ticks late. Advance by the ticks that
+      // actually elapsed, so a fix's position matches its delivery stamp; a
+      // one-step fix stamped late reads as the car falling back.
+      const now = Date.now();
+      const steps = lastTickAt === null ? 1 : Math.max(1, Math.round((now - lastTickAt) / tickMs));
+      lastTickAt = now;
+      const index = idxRef.current + steps - 1;
+      const fix = fixes[index];
+      if (!fix) {
+        clearInterval(id);
+        return;
+      }
+      // Stamp at delivery rather than reusing the generated clock, which is
+      // zero-based and would make every epoch derived from a fix — the ETA,
+      // and so the faster-route check that compares it against `Date.now()` —
+      // read as decades in the past. Delivery time is also what a real
+      // receiver reports, so it stays honest at any playback rate.
+      idxRef.current = index + 1;
+      onFixRef.current({ ...fix, timestampMs: now });
+    }, tickMs);
     return () => clearInterval(id);
   }, [fixes, playbackRate]);
 }

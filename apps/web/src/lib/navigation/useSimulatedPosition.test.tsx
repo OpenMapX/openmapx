@@ -1,5 +1,5 @@
 import type { FixInput } from "@openmapx/core";
-import { useNavigationStore } from "@openmapx/core";
+import { haversineDistance, useNavigationStore } from "@openmapx/core";
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";
@@ -60,6 +60,20 @@ describe("useSimulatedPosition", () => {
     const later = fixes.at(-1)?.timestampMs ?? 0;
 
     expect(later - first).toBeGreaterThanOrEqual(4000);
+  });
+
+  it("a late tick delivers the position for the time that actually passed", () => {
+    const fixes: FixInput[] = [];
+    renderHook(() => useSimulatedPosition(true, (fix) => fixes.push(fix)));
+    vi.advanceTimersByTime(1000);
+    const before = nth(fixes, -1);
+    // A busy main thread holds the interval back for a second.
+    vi.setSystemTime(Date.now() + 1000);
+    vi.advanceTimersByTime(1000);
+    const after = nth(fixes, -1);
+    // Two seconds at 14 m/s: a one-step fix stamped two seconds later would
+    // read as the car falling back, and the puck would bounce.
+    expect(haversineDistance(before.coords, after.coords)).toBeCloseTo(28, 0);
   });
 
   it("keeps the synthetic position, heading and speed", () => {
