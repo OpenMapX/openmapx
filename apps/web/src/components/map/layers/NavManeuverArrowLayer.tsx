@@ -77,14 +77,16 @@ export function NavManeuverArrowLayer() {
     const alongMeters = maneuverStartMeters(route, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
     const routeLine = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
-    // With a lane highlight, the arrow runs in the highlighted lane and rejoins
-    // the route line at the turn, so the two never point at different lanes.
+    // With a lane highlight, the arrow runs in the highlighted lane, so the two
+    // never point at different lanes. That lane is on the turning side, so the
+    // arrow cuts the corner through the junction and rejoins the route line
+    // just before its head.
     const laneOffset = highlightSpan?.offsetMeters;
     const line =
       routeLine && laneOffset
         ? laneShiftedArrowLine(routeLine, Math.max(0, alongMeters - spans.before), {
             untilAlong: highlightSpan.toAlong,
-            maneuverAlong: alongMeters,
+            rejoinAlong: alongMeters + Math.max(0, spans.after - RAISED_HEAD_M),
             offsetMeters: laneOffset,
           })
         : routeLine;

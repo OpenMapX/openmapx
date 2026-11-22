@@ -150,15 +150,15 @@ const MARK_EPSILON_M = 0.01;
 export interface ArrowLaneShift {
   /** Along-route metres up to which the arrow runs fully in the lane. */
   untilAlong: number;
-  /** Along-route metres of the manoeuvre, where it is back on the route line. */
-  maneuverAlong: number;
+  /** Along-route metres where it is back on the route line: past the turn, before the head. */
+  rejoinAlong: number;
   /** Sideways distance to the lane centre, positive to the right of travel. */
   offsetMeters: number;
 }
 
 /**
  * The arrow line moved sideways into the recommended lane before the junction,
- * tapering back to the route line between `untilAlong` and the manoeuvre and
+ * tapering back to the route line between `untilAlong` and `rejoinAlong` and
  * following it from there, so the arrow points into the same lane as the lane
  * highlight. `lineStartAlong` is the along-route distance of `line[0]`.
  */
@@ -184,7 +184,7 @@ export function laneShiftedArrowLine(
       const prev = points[points.length - 1] as { p: LngLat; along: number };
       const length = Math.hypot(p[0] - prev.p[0], p[1] - prev.p[1]);
       const next = along + length;
-      for (const mark of [shift.untilAlong, shift.maneuverAlong]) {
+      for (const mark of [shift.untilAlong, shift.rejoinAlong]) {
         if (mark > along + MARK_EPSILON_M && mark < next - MARK_EPSILON_M) {
           const t = (mark - along) / length;
           points.push({
@@ -199,11 +199,11 @@ export function laneShiftedArrowLine(
   });
   points.sort((a, b) => a.along - b.along);
 
-  const span = Math.max(shift.maneuverAlong - shift.untilAlong, 1e-6);
+  const span = Math.max(shift.rejoinAlong - shift.untilAlong, 1e-6);
   const offsetAt = (a: number): number => {
     if (a <= shift.untilAlong) return shift.offsetMeters;
-    if (a >= shift.maneuverAlong) return 0;
-    return (shift.offsetMeters * (shift.maneuverAlong - a)) / span;
+    if (a >= shift.rejoinAlong) return 0;
+    return (shift.offsetMeters * (shift.rejoinAlong - a)) / span;
   };
   return points.map(({ p, along: a, original }, i) => {
     const offset = offsetAt(a);

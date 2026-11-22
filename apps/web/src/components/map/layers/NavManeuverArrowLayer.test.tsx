@@ -139,7 +139,7 @@ describe("NavManeuverArrowLayer in 3D", () => {
     expect(useNavigationSceneStore.getState().arrowSpan).toBeNull();
   });
 
-  it("runs the arrow in the highlighted lane, back on the route line at the turn", () => {
+  it("runs the arrow in the highlighted lane, back on the route line at its head", () => {
     render(<NavManeuverArrowLayer />);
     setZoom(17);
     act(() => useNavigationSceneStore.getState().setActive(true));
@@ -156,6 +156,12 @@ describe("NavManeuverArrowLayer in 3D", () => {
     // The first vertex moved 3 m sideways; the tip did not.
     expect(haversineDistance(nth(shifted, 0), nth(plain, 0))).toBeCloseTo(3, 0);
     expect(nth(shifted, -1)).toEqual(nth(plain, -1));
+    // It stays off the route line through the junction, cutting the corner
+    // from the lane, and rejoins it only at the arrow head.
+    const geometry = (route as unknown as Route).geometry;
+    const turnPoint = positionAt(geometry, cumulativeDistances(geometry), along).point;
+    const nearest = Math.min(...shifted.map((p) => haversineDistance(p, turnPoint)));
+    expect(nearest).toBeGreaterThan(0.5);
   });
 
   it("3D off restores the 2D arrow", () => {

@@ -117,7 +117,7 @@ describe("laneShiftedArrowLine", () => {
   const east = (m: number): LngLat => [m / M_PER_DEG, 0];
   const line = [0, 10, 20, 30, 40, 50, 60].map(east);
   const southOf = (p: LngLat) => -p[1] * M_PER_DEG;
-  const shift = { untilAlong: 30, maneuverAlong: 40, offsetMeters: 3 };
+  const shift = { untilAlong: 30, rejoinAlong: 40, offsetMeters: 3 };
 
   it("runs in the lane before the junction, positive offsets to the right", () => {
     const shifted = laneShiftedArrowLine(line, 0, shift);
@@ -125,7 +125,7 @@ describe("laneShiftedArrowLine", () => {
     expect(southOf(shifted[2] as LngLat)).toBeCloseTo(3, 1);
   });
 
-  it("tapers back to the route line at the manoeuvre and follows it after", () => {
+  it("tapers back to the route line by the rejoin point and follows it after", () => {
     const shifted = laneShiftedArrowLine(line, 0, { ...shift, untilAlong: 20 });
     expect(southOf(shifted[3] as LngLat)).toBeCloseTo(1.5, 1);
     expect(southOf(shifted[4] as LngLat)).toBeCloseTo(0, 3);
@@ -135,7 +135,7 @@ describe("laneShiftedArrowLine", () => {
   it("adds vertices where the taper starts and ends", () => {
     const shifted = laneShiftedArrowLine(line, 5, {
       untilAlong: 27,
-      maneuverAlong: 33,
+      rejoinAlong: 33,
       offsetMeters: -2,
     });
     expect(shifted.length).toBe(line.length + 2);
