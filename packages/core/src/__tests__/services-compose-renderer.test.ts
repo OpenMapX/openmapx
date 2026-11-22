@@ -742,6 +742,40 @@ describe("renderServiceSnippet", () => {
       "traefik.http.routers.openmapx-api-r1.middlewares": "internal-only@file",
     });
   });
+
+  it("points a route at the service's own middleware under its namespaced name", () => {
+    const martin = JSON.parse(
+      readFileSync(join(process.cwd(), "services/martin/service.json"), "utf-8"),
+    ) as LoadedService["manifest"];
+    const labels = renderServiceSnippet(
+      svc("martin", {
+        container: { image: "t/martin", tag: "latest", expose: [3000] },
+        exposure: martin.exposure,
+      }),
+      { domain: "example.com", externalProxyNetwork: "proxy" },
+    ).labels as Record<string, string>;
+
+    expect(labels).toEqual({
+      "traefik.enable": "true",
+      "traefik.docker.network": "proxy",
+      "traefik.http.routers.openmapx-martin.rule": "Host(`example.com`) && PathPrefix(`/martin`)",
+      "traefik.http.routers.openmapx-martin.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-martin.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-martin.middlewares": "openmapx-martin-strip,tiles-cache@file",
+      "traefik.http.middlewares.openmapx-martin-strip.stripprefix.prefixes": "/martin",
+      "traefik.http.services.openmapx-martin.loadbalancer.server.port": "3000",
+      "traefik.http.routers.openmapx-martin-r1.rule":
+        "Host(`example.com`) && PathPrefix(`/martin/segment_flow`)",
+      "traefik.http.routers.openmapx-martin-r1.entrypoints":
+        "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-martin-r1.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-martin-r1.service": "openmapx-martin",
+      "traefik.http.routers.openmapx-martin-r1.middlewares":
+        "openmapx-martin-strip,tiles-cache-live@file",
+    });
+  });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
 
   it("joins routed first-party services to an operator-run proxy network", () => {

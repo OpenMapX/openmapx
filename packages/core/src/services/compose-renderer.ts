@@ -1023,13 +1023,18 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
   const proxyNetwork = externalProxyNetwork(ctx);
   if (proxyNetwork) labels["traefik.docker.network"] = proxyNetwork;
 
+  // A manifest names its own middlewares as the file provider does (`martin-strip`);
+  // the labels declare them under the prefixed name, so references follow it.
+  const ownMiddlewares = new Map<string, string>();
   const middlewares: string[] = [];
   if (proxy.stripPrefix) {
     if (!pathPrefix) throw new Error(`stripPrefix requires a pathPrefix for service "${id}"`);
     labels[`traefik.http.middlewares.${name}-strip.stripprefix.prefixes`] = pathPrefix;
+    ownMiddlewares.set(`${id}-strip`, `${name}-strip`);
     middlewares.push(`${name}-strip`);
   }
-  for (const mw of proxy.middleware ?? []) middlewares.push(mw);
+  const middlewareReference = (mw: string) => ownMiddlewares.get(mw) ?? mw;
+  for (const mw of proxy.middleware ?? []) middlewares.push(middlewareReference(mw));
   if (middlewares.length) {
     labels[`traefik.http.routers.${name}.middlewares`] = middlewares.join(",");
   }
@@ -1052,7 +1057,9 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
     labels[`traefik.http.routers.${routerName}.tls.certresolver`] = PROXY_CERT_RESOLVER_LABEL_VALUE;
     labels[`traefik.http.routers.${routerName}.service`] = name;
     if (route.middleware?.length) {
-      labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware.join(",");
+      labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware
+        .map(middlewareReference)
+        .join(",");
     }
   }
 

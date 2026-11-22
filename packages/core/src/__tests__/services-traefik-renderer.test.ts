@@ -63,21 +63,29 @@ function routingFromLabels(labels: Record<string, string>) {
   const routers: Record<string, Record<string, string>> = {};
   const services: Record<string, string> = {};
   const middlewares: Record<string, string> = {};
+  const declaredMiddlewares = new Set(
+    Object.keys(labels).flatMap((key) => {
+      const match = /^traefik\.http\.middlewares\.([^.]+)\./.exec(key);
+      return match ? [itemAt(match, 1)] : [];
+    }),
+  );
+  // A reference without a provider suffix resolves among the Docker labels, so it
+  // must name a middleware these labels declare, under its prefixed name.
+  const middlewareReference = (entry: string) => {
+    if (entry.includes("@")) return entry;
+    expect(declaredMiddlewares.has(entry), `labels declare middleware ${entry}`).toBe(true);
+    return fileName(entry);
+  };
   for (const [key, value] of Object.entries(labels)) {
     let match = /^traefik\.http\.routers\.([^.]+)\.(.+)$/.exec(key);
     if (match) {
       const name = fileName(itemAt(match, 1));
       const property = itemAt(match, 2);
-      // References to this service's own backend and middlewares carry the
-      // prefix too; the manifest's file-provider middlewares do not.
       const reference =
         property === "service"
           ? fileName(value)
           : property === "middlewares"
-            ? value
-                .split(",")
-                .map((entry) => (entry.startsWith(LABEL_NAME_PREFIX) ? fileName(entry) : entry))
-                .join(",")
+            ? value.split(",").map(middlewareReference).join(",")
             : value;
       routers[name] = { ...routers[name], [property]: reference };
       continue;
