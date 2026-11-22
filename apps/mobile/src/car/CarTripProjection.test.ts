@@ -33,6 +33,43 @@ it("projects upcoming maneuver and active rerouting with ETA", () => {
   expect(projected?.maneuverDistance).toEqual({ value: 50, unit: "m", decimals: 0 });
   expect(projected?.remainingDistanceDisplay).toEqual({ value: 500, unit: "m", decimals: 0 });
 });
+it("the car card shows the narrowed lanes", () => {
+  const closeTurns = {
+    ...snapshot,
+    route: {
+      steps: [
+        { instruction: "Drive on", maneuver: { type: "depart" }, distance: 800 },
+        {
+          instruction: "Continue",
+          maneuver: { type: "continue" },
+          distance: 120,
+          lanes: [
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+          ],
+        },
+        {
+          instruction: "Turn right",
+          maneuver: { type: "turn", modifier: "right" },
+          distance: 300,
+          lanes: [
+            { indications: ["through"], valid: false },
+            { indications: ["through"], valid: false },
+            { indications: ["right"], valid: true, preferred: true, active: "right" },
+          ],
+        },
+      ],
+    },
+  } as unknown as GroundFullSnapshot;
+  const lanes = buildCarTripProjection(closeTurns, 1000)?.lanes;
+  expect(lanes?.map((cell) => cell.valid)).toEqual([true, true, true]);
+  expect(lanes?.map((cell) => cell.arrows.some((arrow) => arrow.active))).toEqual([
+    false,
+    false,
+    true,
+  ]);
+});
 it("clears terminal state and refuses invalid progress", () => {
   expect(buildCarTripProjection({ ...snapshot, status: "stopped" }, 0)).toBeNull();
   expect(

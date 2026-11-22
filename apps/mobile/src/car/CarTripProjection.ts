@@ -3,6 +3,7 @@ import type { GroundFullSnapshot } from "@openmapx/core/navigation";
 import {
   type GuidanceIconName,
   guidanceApproachMeters,
+  guidanceLanesForStep,
   maneuverIconName,
   measurementDistanceParts,
   presentGuidanceLanes,
@@ -75,6 +76,7 @@ const stepSchema = z.object({
     .max(12)
     .optional(),
   roundaboutExitCount: z.number().optional(),
+  motorway: z.boolean().optional(),
   sign: z.unknown().optional(),
   maneuver: z
     .object({ type: z.string(), modifier: z.string().optional(), exit: z.number().optional() })
@@ -138,6 +140,31 @@ export function buildCarTripProjection(
   const roundabout = m?.type === "roundabout" || m?.type === "rotary";
   const reroute = rerouteSchema.safeParse(snapshot.reroute);
   const currentStep = current.step;
+  const showLanes =
+    !!step?.lanes &&
+    !!m &&
+    p.distanceToNextManeuver <=
+      guidanceApproachMeters("driving", "speedMps" in p ? (p.speedMps ?? 0) : 0);
+  // Narrowed for a close second maneuver like the phone's banner; the step
+  // after the upcoming one is read only while lanes are shown.
+  const following = showLanes ? readStep(steps, upcomingIndex + 1) : null;
+  const laneSteps = [
+    currentIndex === upcomingIndex - 1 ? currentStep : undefined,
+    step,
+    following?.step,
+  ].map((laneStep) => ({
+    distance: laneStep?.distance ?? Number.POSITIVE_INFINITY,
+    ...(laneStep?.maneuver ? { maneuver: laneStep.maneuver } : {}),
+    ...(laneStep?.motorway !== undefined ? { motorway: laneStep.motorway } : {}),
+  }));
+  const shownLanes = showLanes
+    ? guidanceLanesForStep(
+        laneSteps,
+        1,
+        step?.lanes as ManeuverLane[] | undefined,
+        following?.step?.lanes as ManeuverLane[] | undefined,
+      )
+    : undefined;
   const secondsToManeuver =
     currentStep?.distance && currentStep.duration
       ? Math.max(0, Math.min(1, p.distanceToNextManeuver / currentStep.distance)) *
@@ -153,12 +180,9 @@ export function buildCarTripProjection(
     maneuverIcon: maneuverIconName(m) satisfies GuidanceIconName,
     // Like the phone's banner: lanes appear once the maneuver is close enough to act on.
     lanes:
-      step?.lanes &&
-      m &&
-      p.distanceToNextManeuver <=
-        guidanceApproachMeters("driving", "speedMps" in p ? (p.speedMps ?? 0) : 0)
-        ? presentGuidanceLanes(step.lanes as ManeuverLane[], m, {
-            sign: step.sign as ManeuverSign | undefined,
+      shownLanes && m
+        ? presentGuidanceLanes(shownLanes, m, {
+            sign: step?.sign as ManeuverSign | undefined,
           }).map((cell) => ({
             valid: cell.valid,
             arrows: cell.arrows.map(({ icon, active, stemShift }) => ({ icon, active, stemShift })),

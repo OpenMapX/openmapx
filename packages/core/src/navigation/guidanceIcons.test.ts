@@ -27,6 +27,32 @@ describe("guidance glyphs", () => {
   });
 });
 
+describe("presentGuidanceLanes narrowing", () => {
+  it("a demoted lane keeps its highlight but loses its bright arrow", () => {
+    const cells = presentGuidanceLanes(
+      [
+        { indications: ["through"], valid: true, preferred: false },
+        { indications: ["through"], valid: true, preferred: true },
+      ],
+      { type: "continue" },
+    );
+    expect(cells[0]?.valid).toBe(true);
+    expect(cells[0]?.arrows.map((a) => a.active)).toEqual([false]);
+    expect(cells[1]?.arrows.map((a) => a.active)).toEqual([true]);
+  });
+
+  it("Valhalla valid-but-not-active lanes render unchanged", () => {
+    const cells = presentGuidanceLanes(
+      [
+        { indications: ["through"], valid: true, preferred: false, active: "through" },
+        { indications: ["through", "right"], valid: true, preferred: true, active: "right" },
+      ],
+      { type: "turn", modifier: "right" },
+    );
+    expect(cells[0]?.arrows.map((a) => a.active)).toEqual([true]);
+  });
+});
+
 describe("presentGuidanceLanes", () => {
   it("lights the engine's lanes and their active arrow", () => {
     const cells = presentGuidanceLanes(

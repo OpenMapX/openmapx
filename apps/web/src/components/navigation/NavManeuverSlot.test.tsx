@@ -79,6 +79,48 @@ describe("NavManeuverSlot", () => {
     useNavLaneGuidanceStore.getState().reset();
   });
 
+  it("the banner shows the narrowed lanes before a close second turn", () => {
+    const closeTurns = {
+      ...route,
+      steps: [
+        { instruction: "Drive on", distance: 1000, duration: 60, coordinates: [] },
+        {
+          instruction: "Continue",
+          distance: 120,
+          duration: 10,
+          coordinates: [],
+          maneuver: { type: "continue" },
+          lanes: [
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+            { indications: ["through"], valid: true },
+          ],
+        },
+        {
+          instruction: "Turn right",
+          distance: 300,
+          duration: 30,
+          coordinates: [],
+          maneuver: { type: "turn", modifier: "right" },
+          lanes: [
+            { indications: ["through"], valid: false },
+            { indications: ["through"], valid: false },
+            { indications: ["right"], valid: true, preferred: true, active: "right" },
+          ],
+        },
+        { instruction: "Arrive", distance: 100, duration: 20, coordinates: [] },
+      ],
+    } as unknown as Route;
+    useNavigationStore.setState({ route: closeTurns });
+    const view = mount();
+    const active = [...view.container.querySelectorAll("[data-valid]")].map((cell) =>
+      cell.querySelector('[data-active="true"]') ? "bright" : "dim",
+    );
+    // All three lanes stay usable; only the right one keeps its bright arrow.
+    expect(view.container.querySelectorAll('[data-valid="true"]')).toHaveLength(3);
+    expect(active).toEqual(["dim", "dim", "bright"]);
+  });
+
   it("passes the upcoming step's sign to the banner", () => {
     const view = mount();
     expect(view.getByTestId("exit-sign-strip")).toBeTruthy();

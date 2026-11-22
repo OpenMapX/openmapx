@@ -138,6 +138,9 @@ export {
 export { junctionLookupPoints } from "./junctionLookup";
 export {
   guidanceApproachMeters,
+  guidanceLanesForStep,
+  type LaneStep,
+  narrowForNextManeuver,
   type ResolvedLaneGuidance,
   resolveGuidanceLanes,
   resolveLaneGuidance,

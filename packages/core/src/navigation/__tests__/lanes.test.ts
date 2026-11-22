@@ -2,6 +2,8 @@ import { assert, describe, expect, it } from "vitest";
 import type { ManeuverLane } from "../../types/routing";
 import {
   guidanceApproachMeters,
+  guidanceLanesForStep,
+  narrowForNextManeuver,
   resolveGuidanceLanes,
   resolveLaneGuidance,
   resolveRecommendedLanes,
@@ -235,5 +237,99 @@ describe("signed destinations and explicit engine evidence", () => {
         },
       ),
     ).toEqual(lanes);
+  });
+});
+
+describe("narrowForNextManeuver", () => {
+  const L = (
+    indications: string[],
+    valid: boolean,
+    preferred?: boolean,
+    active?: string,
+  ): ManeuverLane => ({
+    indications,
+    valid,
+    ...(preferred === undefined ? {} : { preferred }),
+    ...(active ? { active } : {}),
+  });
+  // Three through lanes, all usable; the next junction turns right from the right lane.
+  const current = [L(["through"], true), L(["through"], true), L(["through"], true)];
+  const nextRight = [
+    L(["through"], false),
+    L(["through"], false),
+    L(["right"], true, true, "right"),
+  ];
+
+  it("narrows to the right lanes before a close right turn", () => {
+    const narrowed = narrowForNextManeuver(current, nextRight, 120, false, "right");
+    expect(narrowed.map((l) => l.preferred)).toEqual([false, false, true]);
+    expect(narrowed.every((l) => l.valid)).toBe(true);
+  });
+
+  it("keeps everything when the next turn is 250 m away in town", () => {
+    expect(narrowForNextManeuver(current, nextRight, 250, false, "right")).toBe(current);
+  });
+
+  it("uses 400 m on motorway steps", () => {
+    expect(narrowForNextManeuver(current, nextRight, 350, true, "right")).not.toBe(current);
+    expect(narrowForNextManeuver(current, nextRight, 450, true, "right")).toBe(current);
+  });
+
+  it("does nothing when the next lanes straddle the middle", () => {
+    const middle = [L(["left"], false), L(["through"], true, true, "through"), L(["right"], false)];
+    expect(narrowForNextManeuver(current, middle, 100, false, "right")).toBe(current);
+  });
+
+  it("does nothing when side and modifier disagree", () => {
+    expect(narrowForNextManeuver(current, nextRight, 100, false, "left")).toBe(current);
+    expect(narrowForNextManeuver(current, nextRight, 100, false, "straight")).toBe(current);
+  });
+
+  it("never marks an invalid lane preferred", () => {
+    const withInvalid = [L(["left"], true), L(["through"], true), L(["right"], false)];
+    const narrowed = narrowForNextManeuver(withInvalid, nextRight, 100, false, "right");
+    expect(narrowed[2]).toEqual(withInvalid[2]);
+    expect(narrowed.map((l) => l.preferred)).toEqual([false, true, undefined]);
+  });
+
+  it("k is at least one", () => {
+    const nextUsableOnly = [L(["through"], false), L(["through"], false), L(["right"], true)];
+    const narrowed = narrowForNextManeuver(current, nextUsableOnly, 100, false, "right");
+    expect(narrowed.filter((l) => l.preferred === true)).toHaveLength(1);
+  });
+
+  it("no lanes gives no change", () => {
+    expect(narrowForNextManeuver([], nextRight, 100, false, "right")).toEqual([]);
+    expect(narrowForNextManeuver(current, [], 100, false, "right")).toBe(current);
+  });
+
+  it("drops the active arrow of a narrowed-away lane", () => {
+    const withActive = current.map((l) => ({ ...l, preferred: true, active: "through" }));
+    const narrowed = narrowForNextManeuver(withActive, nextRight, 100, false, "right");
+    expect(narrowed[0]).toEqual({ indications: ["through"], valid: true, preferred: false });
+    expect(narrowed[2]?.active).toBe("through");
+  });
+});
+
+describe("guidanceLanesForStep", () => {
+  it("narrows the upcoming lanes by the step after it", () => {
+    const current: ManeuverLane[] = [
+      { indications: ["through"], valid: true },
+      { indications: ["through"], valid: true },
+    ];
+    const next: ManeuverLane[] = [
+      { indications: ["through"], valid: false },
+      { indications: ["right"], valid: true, preferred: true, active: "right" },
+    ];
+    const steps = [
+      { distance: 500 },
+      { distance: 150, lanes: current },
+      { distance: 300, maneuver: { type: "turn", modifier: "right" }, lanes: next },
+    ];
+    expect(guidanceLanesForStep(steps, 1, current, next)?.map((l) => l.preferred)).toEqual([
+      false,
+      true,
+    ]);
+    expect(guidanceLanesForStep(steps, 1, undefined, next)).toBeUndefined();
   });
 });

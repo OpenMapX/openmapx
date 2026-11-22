@@ -3,6 +3,7 @@
 import {
   countryAtMeters,
   guidanceApproachMeters,
+  guidanceLanesForStep,
   maneuverStartMeters,
   shouldPreviewNextStep,
   upcomingManeuverIndex,
@@ -50,8 +51,18 @@ export function NavManeuverSlot() {
   // time before the maneuver that stretches on the motorway) — so on a long
   // stretch neither the lanes nor the "Then …" preview clutter the banner.
   const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
-  const resolvedLanes =
-    (guidanceRoute === route ? guidanceByStep.get(upcomingIndex)?.lanes : undefined) ?? step?.lanes;
+  const lanesFor = (index: number) =>
+    (guidanceRoute === route ? guidanceByStep.get(index)?.lanes : undefined) ??
+    route?.steps[index]?.lanes;
+  // Narrowed for a close second maneuver, exactly as the car card does.
+  const resolvedLanes = route
+    ? guidanceLanesForStep(
+        route.steps,
+        upcomingIndex,
+        lanesFor(upcomingIndex),
+        lanesFor(upcomingIndex + 1),
+      )
+    : step?.lanes;
   const showLanes = !!resolvedLanes?.length && approaching;
   // Preview the maneuver after this one only when it's both relevant (approaching)
   // and follows closely (a short gap), so back-to-back turns chain but far-apart
