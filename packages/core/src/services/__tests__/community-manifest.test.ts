@@ -43,6 +43,65 @@ describe("communityServiceManifestProblems", () => {
     expect(communityServiceManifestProblems(manifest({ container }))).toEqual([]);
   });
 
+  it("does not read user names, package scopes or path segments as hosts", () => {
+    const container = {
+      image: "registry.example.test/x",
+      tag: "1",
+      digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
+      command: ["npx", "@web/dev-server", "--contact", "mailto:ops@web"],
+      environment: {
+        DATABASE_URL: "postgresql://api:secret@openmapx-postgis:5432/openmapx",
+        TILES_URL: "https://martin:token@tiles.example.org/",
+        UPSTREAM: "https://example.com//api/v1",
+        DB_HOST: "openmapx-postgis",
+        API_HOST: "api.example.org",
+        REDIS_ADDR: "openmapx-redis:6379",
+      },
+    };
+    expect(communityServiceManifestProblems(manifest({ container }))).toEqual([]);
+  });
+
+  it.each([
+    ["a host variable", { environment: { DB_HOST: "postgis" } }, "postgis"],
+    ["a host variable with a port", { environment: { REDIS_ADDR: "redis:6379" } }, "redis"],
+    ["a bare host and port", { environment: { BROKER: "redis:6379" } }, "redis"],
+    ["a fully qualified bare host", { environment: { URL: "http://overpass./api" } }, "overpass"],
+    ["a command assignment", { command: ["sh", "-c", "DB_HOST=postgis ./run"] }, "postgis"],
+    ["a command option", { command: ["serve", "--db-host=postgis"] }, "postgis"],
+    [
+      "a healthcheck",
+      { healthcheck: { type: "exec", command: ["curl", "-f", "http://api:3001/health"] } },
+      "api",
+    ],
+  ])("rejects a built-in service reached by its bare ID in %s", (_label, fields, host) => {
+    const container = {
+      image: "registry.example.test/x",
+      tag: "1",
+      digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
+      ...fields,
+    };
+    expect(communityServiceManifestProblems(manifest({ container }))).toEqual([
+      `Service "maps-tiles" reaches built-in service "${host}" by its bare ID; use "openmapx-${host}"`,
+    ]);
+  });
+
+  it("rejects a bare host in a nested configuration default", () => {
+    const configSchema = {
+      type: "object",
+      properties: {
+        database: {
+          type: "object",
+          properties: { DB_HOST: { type: "string", default: "postgis" } },
+        },
+      },
+    };
+    expect(communityServiceManifestProblems(manifest({ configSchema }))).toEqual(
+      expect.arrayContaining([expect.stringMatching(/reaches built-in service "postgis"/)]),
+    );
+  });
+
   it.each([
     ["a built-in quality tier", { quality: "built-in" }, /built-in/],
     [
