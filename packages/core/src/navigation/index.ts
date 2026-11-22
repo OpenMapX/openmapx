@@ -299,6 +299,14 @@ export {
   type TimelineEventType,
 } from "./recording";
 export {
+  type ChooseReferenceInput,
+  type CueReference,
+  chooseReference,
+  type LandmarkReference,
+  type SpokenLandmarkCategory,
+  trafficLightReference,
+} from "./references";
+export {
   remainingWaypoints,
   shouldReroute,
   shouldRerouteForClosure,
