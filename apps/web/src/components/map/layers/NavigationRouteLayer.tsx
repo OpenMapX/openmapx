@@ -87,6 +87,7 @@ export function NavigationRouteLayer() {
   const progress = useNavigationStore((s) => s.progress);
   const sceneActive = useNavigationSceneStore((s) => s.active);
   const highlightSpan = useNavigationSceneStore((s) => s.highlightSpan);
+  const arrowSpan = useNavigationSceneStore((s) => s.arrowSpan);
   const widthLatitude = useNavRouteWidthLatitude();
   const widths = useMemo(() => navRouteWidths(widthLatitude), [widthLatitude]);
   // Cache the turf line + total length per route so the per-fix update below
@@ -169,15 +170,29 @@ export function NavigationRouteLayer() {
         "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.casing, span),
       };
       if (sceneActive) {
-        // No transparent span: the ghost keeps covering the whole span, so the
-        // attribution group's alpha union stays complete.
+        // The ghost keeps covering the lane highlight's span, so the attribution
+        // group's alpha union stays complete there. It leaves only the raised
+        // arrow's few metres open: drawn above the scene, its tint would turn
+        // the white arrow blue, and the arrow itself marks the route there.
+        const ghostSpan =
+          arrowSpan && navLine
+            ? {
+                from: toLocal(feature, navRouteProgressFraction(navLine, arrowSpan.fromAlong)),
+                to: toLocal(feature, navRouteProgressFraction(navLine, arrowSpan.toAlong)),
+              }
+            : null;
         paint[routeSegmentLayerId(REMAINING_GHOST, index)] = {
-          "line-gradient": progressGradient(TRANSPARENT, localProgress, ROUTE_COLORS.active, null),
+          "line-gradient": progressGradient(
+            TRANSPARENT,
+            localProgress,
+            ROUTE_COLORS.active,
+            ghostSpan,
+          ),
         };
       }
     });
     return { paint };
-  }, [activeFeatures, navLine, progressFraction, highlightSpan, sceneActive]);
+  }, [activeFeatures, navLine, progressFraction, highlightSpan, arrowSpan, sceneActive]);
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FEATURE_COLLECTION;

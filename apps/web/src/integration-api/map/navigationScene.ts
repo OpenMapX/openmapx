@@ -12,20 +12,32 @@ export interface NavigationSceneState {
   active: boolean;
   /** Along-route metres the lane highlight covers; the route is transparent there. */
   highlightSpan: { fromAlong: number; toAlong: number } | null;
+  /**
+   * Along-route metres the raised manoeuvre arrow covers; the route ghost is
+   * transparent there, or its 35% tint would turn the white arrow blue.
+   */
+  arrowSpan: { fromAlong: number; toAlong: number } | null;
   /** Map details draw traffic signals in the scene, so the flat signal icons step aside. */
   streetObjectsDrawn: boolean;
   setActive(active: boolean): void;
   setHighlightSpan(span: { fromAlong: number; toAlong: number } | null): void;
+  setArrowSpan(span: { fromAlong: number; toAlong: number } | null): void;
   setStreetObjectsDrawn(drawn: boolean): void;
 }
 
 export const useNavigationSceneStore = create<NavigationSceneState>((set) => ({
   active: false,
   highlightSpan: null,
+  arrowSpan: null,
   streetObjectsDrawn: false,
   setActive: (active) =>
-    set(active ? { active } : { active, highlightSpan: null, streetObjectsDrawn: false }),
+    set(
+      active
+        ? { active }
+        : { active, highlightSpan: null, arrowSpan: null, streetObjectsDrawn: false },
+    ),
   setHighlightSpan: (highlightSpan) => set({ highlightSpan }),
+  setArrowSpan: (arrowSpan) => set({ arrowSpan }),
   setStreetObjectsDrawn: (streetObjectsDrawn) => set({ streetObjectsDrawn }),
 }));
 

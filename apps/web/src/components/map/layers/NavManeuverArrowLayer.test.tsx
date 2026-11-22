@@ -1,4 +1,12 @@
-import { cumulativeDistances, haversineDistance, numberAt, positionAt } from "@openmapx/core";
+import {
+  cumulativeDistances,
+  haversineDistance,
+  maneuverArrowSpans,
+  maneuverStartMeters,
+  numberAt,
+  positionAt,
+  type Route,
+} from "@openmapx/core";
 import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
@@ -115,6 +123,20 @@ describe("NavManeuverArrowLayer in 3D", () => {
     act(() => useNavigationSceneStore.getState().setActive(true));
     expect(visibility("nav-maneuver-arrow")).toBe("visible");
     expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+  });
+
+  it("publishes the raised arrow's span so the route ghost can leave it white", () => {
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    const along = maneuverStartMeters(route as unknown as Route, 1);
+    const spans = maneuverArrowSpans("driving");
+    expect(useNavigationSceneStore.getState().arrowSpan).toEqual({
+      fromAlong: along - spans.before,
+      toAlong: along + spans.after,
+    });
+    setZoom(16);
+    expect(useNavigationSceneStore.getState().arrowSpan).toBeNull();
   });
 
   it("3D off restores the 2D arrow", () => {

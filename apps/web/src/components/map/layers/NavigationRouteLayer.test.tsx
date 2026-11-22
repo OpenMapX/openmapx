@@ -521,6 +521,22 @@ describe("NavigationRouteLayer in 3D navigation", () => {
     expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
   });
 
+  it("the ghost leaves the raised arrow's span transparent, so the arrow stays white", () => {
+    const { rerender } = render(<NavigationRouteLayer />);
+    navState.progress = { alongMeters: 300 };
+    rerender(<NavigationRouteLayer />);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(true);
+      useNavigationSceneStore.getState().setArrowSpan({ fromAlong: 950, toAlong: 1050 });
+    });
+    const ghost = fake.state.paint.get(GHOST)?.["line-gradient"] as unknown[];
+    const from = navRouteProgressFraction(preparedRoute, 950);
+    const to = navRouteProgressFraction(preparedRoute, 1050);
+    expect(ghost.slice(5)).toEqual([from, "rgba(0,0,0,0)", to, ROUTE_COLORS.active]);
+    // The opaque route under the arrow is untouched.
+    expect(fake.state.paint.get(REMAINING)?.["line-gradient"]).toHaveLength(5);
+  });
+
   it("toggling the ghost does not call setData on nav-route-source", () => {
     render(<NavigationRouteLayer />);
     fake.state.counts.setData.delete(SOURCE);

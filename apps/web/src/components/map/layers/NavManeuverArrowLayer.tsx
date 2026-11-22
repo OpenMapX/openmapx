@@ -121,6 +121,20 @@ export function NavManeuverArrowLayer() {
     };
   }, [mapRef, mapReady]);
   const raised = sceneActive && closeEnough;
+  // The route ghost is drawn above the scene; it leaves the raised arrow's
+  // span alone so the arrow stays white.
+  const setArrowSpan = useNavigationSceneStore((s) => s.setArrowSpan);
+  const arrowAlong =
+    data.features.length > 0 && route ? maneuverStartMeters(route, upcomingIndex) : null;
+  useEffect(() => {
+    if (!raised || arrowAlong === null) {
+      setArrowSpan(null);
+      return;
+    }
+    const spans = maneuverArrowSpans(mode);
+    setArrowSpan({ fromAlong: arrowAlong - spans.before, toAlong: arrowAlong + spans.after });
+    return () => setArrowSpan(null);
+  }, [raised, arrowAlong, mode, setArrowSpan]);
   const flat = raised ? "none" : "visible";
 
   const group = useMemo<MapLayerGroup>(
