@@ -213,8 +213,8 @@ export function registerIntegrationsCommands(program: Command): void {
           if (!source) throw new Error("A source is required");
           if (await agentContainerRunning()) {
             await installThroughAgentContainer({ source, ...options });
-            log.dim("Restart app-api so the integration host picks up the new manifest:");
-            log.dim("  pnpm openmapx services restart app-api");
+            log.dim("Restart the API so the integration host picks up the new manifest:");
+            log.dim("  pnpm openmapx services restart api");
             return;
           }
           const result = await installIntegration({
@@ -252,13 +252,13 @@ export function registerIntegrationsCommands(program: Command): void {
         }
         if (await agentContainerRunning()) {
           await removeThroughAgentContainer(id);
-          log.dim("(restart app-api to deactivate)");
+          log.dim("(restart the api service to deactivate)");
           return;
         }
         const result = removeIntegration({ rootDir: paths.root, id });
         log.ok(`Removed ${kleur.bold(id)}`);
         log.dim(result.directory);
-        log.dim("(restart app-api to deactivate)");
+        log.dim("(restart the api service to deactivate)");
       } catch (err) {
         log.err((err as Error).message);
         process.exit(1);

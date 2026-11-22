@@ -14,7 +14,7 @@ if (
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = (input, init) => {
   const source = new URL(input instanceof Request ? input.url : input);
-  if (source.origin !== "http://data-manager:4000") return nativeFetch(input, init);
+  if (source.origin !== "http://openmapx-data-manager:4000") return nativeFetch(input, init);
   const destination = new URL(target);
   destination.pathname = source.pathname;
   destination.search = source.search;

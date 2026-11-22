@@ -2963,9 +2963,6 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../integration-framework
-      '@openmapx/motis-feed-proxy-config':
-        specifier: workspace:^
-        version: link:../motis-feed-proxy-config
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../transitous-core

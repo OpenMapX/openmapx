@@ -17,7 +17,7 @@ import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "
 
 export function configurationDataManagerTransport() {
   return createDataManagerTransport({
-    baseUrl: process.env.DATA_MANAGER_URL?.trim() || "http://data-manager:4000",
+    baseUrl: process.env.DATA_MANAGER_URL?.trim() || "http://openmapx-data-manager:4000",
     authToken: readDataManagerToken(),
     requestTimeoutMs: 15000,
     maxJsonBytes: 65536,

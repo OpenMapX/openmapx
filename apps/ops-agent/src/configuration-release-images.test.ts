@@ -9,7 +9,7 @@ function downloads(): ConfigurationReleaseDownloads {
   return {
     version: 1,
     platform: "linux/amd64",
-    declaredBytes: 6,
+    declaredBytes: 5,
     images: CONFIGURATION_RELEASE_IMAGE_NAMES.map((image) => ({
       image,
       reference: `ghcr.io/openmapx/${image}@sha256:${"a".repeat(64)}`,
@@ -49,7 +49,7 @@ it("observes each exact immutable reference and retains the actual Docker ID sep
       imageId: `sha256:${"d".repeat(64)}`,
     })),
   );
-  expect(execFile).toHaveBeenCalledTimes(6);
+  expect(execFile).toHaveBeenCalledTimes(5);
   expect(execFile.mock.calls.map(([, args]) => args[4])).toEqual(
     snapshot.images.map((v) => v.reference),
   );
@@ -78,7 +78,7 @@ it("accepts the exact selected platform digest for a multi-platform repository p
       execFile,
       signal: new AbortController().signal,
     }),
-  ).toHaveLength(6);
+  ).toHaveLength(5);
 });
 it.each([
   { RepoDigests: [] },

@@ -59,12 +59,12 @@ chmod 644 "$secrets/redis-password"
 
 docker network create --internal "$network" >/dev/null
 
-docker run --detach --name "$postgis" --network "$network" --network-alias postgis \
+docker run --detach --name "$postgis" --network "$network" --network-alias openmapx-postgis \
   --env POSTGRES_PASSWORD="$postgres_password" \
   --env POSTGRES_DB=openmapx \
   "$(pinned_image postgis)" >/dev/null
 
-docker run --detach --name "$valkey" --network "$network" --network-alias redis \
+docker run --detach --name "$valkey" --network "$network" --network-alias openmapx-redis \
   "$(pinned_image redis)" --requirepass "$redis_password" >/dev/null
 
 # Probe over TCP: during first-run initialization the image's temporary server
@@ -76,8 +76,8 @@ until docker exec "$postgis" pg_isready --host 127.0.0.1 --username postgres --d
 done
 
 settings=(
-  "DATABASE_URL=postgresql://postgres:$postgres_password@postgis:5432/openmapx"
-  "REDIS_URL=redis://redis:6379"
+  "DATABASE_URL=postgresql://postgres:$postgres_password@openmapx-postgis:5432/openmapx"
+  "REDIS_URL=redis://openmapx-redis:6379"
   "REDIS_PASSWORD_FILE=/run/secrets/redis-password"
   "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
   "BETTER_AUTH_URL=https://localhost"

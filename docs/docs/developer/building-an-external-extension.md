@@ -42,7 +42,7 @@ An **external extension** is one or both of:
 
 The two dependency directions to keep in mind:
 
-1. **OpenMapX → your integration**: app-api discovers its manifest and serves its
+1. **OpenMapX → your integration**: the API discovers its manifest and serves its
    approved presentation assets; it does not execute community server code.
 2. **You → OpenMapX tooling**: use `@openmapx/extension-cli` to scaffold,
    validate, package, and assemble the component manifest. Runtime code
@@ -59,7 +59,7 @@ not establish publication or compatibility with a deployed host.
 
 An installable integration artifact needs no runtime SDK. It contains a
 manifest, localized strings, and optional safe static assets such as an SVG
-preview. App-api does not import community server modules, and the web app does
+preview. The API does not import community server modules, and the web app does
 not execute community scripts. Put all executable behavior in the companion
 service described below.
 
@@ -355,16 +355,16 @@ fingerprint with `--host-port-confirmation <fingerprint>`. See the
 [operator confirmation workflow](../administration/community-extensions.md) for
 snapshot changes, request limits and queued-job handling.
 
-### Reload `app-api`
+### Reload the API
 
 Community artifacts are declarative-only. Backend
-JavaScript is rejected because app-api is a privileged control plane process,
+JavaScript is rejected because the API is a privileged control plane process,
 not a sandbox; backend behavior must live in the companion
 service described below. After a manual CLI install, restart the API so the new
 manifest is discovered (the Extensions store performs a transactional reload):
 
 ```sh
-pnpm openmapx services restart app-api
+pnpm openmapx services restart api
 ```
 
 ## Test in a local development host
@@ -435,7 +435,7 @@ pnpm openmapx integrations install /absolute/path/conditions.tar.gz --artifact -
 pnpm openmapx integrations list
 ```
 
-Restart the host-run API process manually; the Docker `services restart app-api` command does not restart a process launched by `pnpm dev`. Reload the browser and check the integration's metadata, configuration, disclosures and declared static assets under **Admin → Integrations**. Update the authoring source, package again, reinstall the new artifact and repeat the restart. This is a copy/install loop, not a live symlink to the source directory.
+Restart the host-run API process manually; the Docker `services restart api` command does not restart a process launched by `pnpm dev`. Reload the browser and check the integration's metadata, configuration, disclosures and declared static assets under **Admin → Integrations**. Update the authoring source, package again, reinstall the new artifact and repeat the restart. This is a copy/install loop, not a live symlink to the source directory.
 
 Keep a previous artifact and digest to test rollback by reinstalling those exact bytes. To remove the test integration, run `pnpm openmapx integrations remove <integration-id>` from the host checkout, then restart the host-run API again. Stop the disposable infrastructure with `pnpm openmapx services stop --preset dev` when finished; that command retains its data.
 
@@ -562,6 +562,15 @@ platform Postgres by default. Provision an explicit reviewed database connection
 and a restricted role before using this SQL. The OpenConditions network bridge
 is a specific built-in exception, not a capability every extension receives.
 
+Where a bridge exists, reach a built-in service by its project-unique name
+`openmapx-<service-id>`, for example
+`postgresql://<role>:<password>@openmapx-postgis:5432/openmapx`, never by its
+bare ID: installation refuses a community service whose environment, command,
+healthcheck or configuration defaults name a built-in service such as `postgis`
+as a host.
+Service IDs and network aliases may not start with `openmapx-`; see
+[Network names](./service-manifest.md#network-names).
+
 ### How the service gets installed
 
 A service ships in an extension bundle (next section). When the operator installs
@@ -579,7 +588,7 @@ registration is needed.
 The companion service owns, migrates, and serves its data. Use the
 `extension.json` `readiness.requires` list to make installation readiness depend
 on that service. A community integration artifact cannot bridge the service into
-app-api with `setup(ctx)`; exposing a new host-facing route or provider requires
+the API with `setup(ctx)`; exposing a new host-facing route or provider requires
 either an existing versioned host protocol or a reviewed built-in adapter.
 Version and document that boundary alongside the bundle.
 
@@ -657,7 +666,7 @@ those commands obtain another fresh preview and exit on 429 without retrying.
 **Runtime isolation.** Integration artifacts are declarative-only and require a
 SHA-256 pin. Executable behavior runs in a separate service container subject to
 the [community service restrictions](./service-manifest.md#quality-tiers).
-App-api, data-manager and the same-origin web page do not execute community
+The API, data-manager and the same-origin web page do not execute community
 integration modules. Network isolation still permits outbound internet traffic
 and any explicitly reviewed built-in bridge connections.
 
@@ -668,7 +677,7 @@ artifact.
 
 **Bundle persistence.** Installed integration bundles live in
 `infra/docker/state/ops-agent/custom-integrations/<id>/` on the host, which
-app-api bind-mounts read-only; they survive container restarts; removing the integration with
+the API bind-mounts read-only; they survive container restarts; removing the integration with
 `pnpm openmapx integrations remove <id>` deletes the integration artifact. For a
 bundle managed by the Extensions store, use `pnpm openmapx ext remove <id>` so
 component ownership and installed-extension bookkeeping are updated together.

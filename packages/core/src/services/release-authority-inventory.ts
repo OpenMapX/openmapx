@@ -5,14 +5,14 @@ import {
   checkoutBuiltInServiceManifests,
   readRegularFileBytes,
 } from "./built-in-service-source";
+import { CONTROL_PLANE_SERVICE_IDS } from "./core-service-ids";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { validateServiceManifest } from "./manifest-schema";
 import { type ReleaseServiceFiles, readEmbeddedReleaseServiceFiles } from "./release-service-files";
 import type { LoadedService, ServiceManifest } from "./types";
 
 export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
-  "app-api",
-  "app-web",
+  "api",
   "brouter",
   "data-manager",
   "dawarich-app",
@@ -40,13 +40,8 @@ export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
   "traefik",
   "transitous-runner",
   "valhalla",
+  "web",
   "well-known",
-] as const);
-
-export const RELEASE_NEVER_MANAGE_SERVICE_IDS = Object.freeze([
-  "app-api",
-  "ops-agent",
-  "traefik",
 ] as const);
 
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -86,7 +81,7 @@ function sourceIds(source: BuiltInServiceManifestSource): string[] {
   if (
     ids.some((id) => !SERVICE_ID.test(id)) ||
     new Set(ids).size !== ids.length ||
-    RELEASE_NEVER_MANAGE_SERVICE_IDS.some((id) => !ids.includes(id))
+    CONTROL_PLANE_SERVICE_IDS.some((id) => !ids.includes(id))
   ) {
     throw new Error("invalid");
   }

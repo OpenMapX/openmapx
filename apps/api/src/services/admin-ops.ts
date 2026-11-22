@@ -12,7 +12,7 @@ import { applyTrustedConfiguration } from "./trusted-config-operations";
 export type { HardlinkApplySummary } from "@openmapx/core/ops";
 
 // Path resolution for an API running on the host (`pnpm dev`), which can read
-// the deployment directly. The app-api container has no host checkout: its
+// the deployment directly. The API container has no host checkout: its
 // `/app/infra/docker` holds no configuration, and the deployment reaches it
 // through baked environment and typed ops-agent operations instead.
 //

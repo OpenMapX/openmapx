@@ -5,7 +5,7 @@
 # a populated data dir, the password baked into pg_authid is authoritative
 # and any change to POSTGRES_PASSWORD in `.env` silently does nothing. That's
 # a sharp footgun — operators rotate the secret, restart the stack, and
-# app-api auth fails with no obvious cause.
+# API auth fails with no obvious cause.
 #
 # This wrapper runs the upstream postgres entrypoint in the background, waits
 # for it to accept connections via the local Unix-socket trust rule, and
@@ -17,7 +17,7 @@ set -euo pipefail
 PG_USER="${POSTGRES_USER:-postgres}"
 # Sentinel file the healthcheck looks for. Postgres starts accepting TCP
 # connections a moment before the ALTER USER below runs, so without this
-# gate dependent containers (app-api) can race in, hit the still-stale
+# gate dependent containers (the API) can race in, hit the still-stale
 # password, and crash-loop until they retry past the window. The sentinel
 # is recreated on every container start so a stale one from a previous
 # instance doesn't fool the healthcheck.

@@ -164,7 +164,6 @@ updates:
       - "/apps/web"
       - "/docs"
       - "/services/data-manager"
-      - "/services/motis/tools/transitous"
     schedule:
       interval: weekly
       day: monday

@@ -329,7 +329,7 @@ export function createDataExecutionDispatcher(deps: {
             region: input.region,
             release: installed.release,
             force: input.restart === true,
-            ollamaUrl: process.env.OLLAMA_URL ?? "http://local-ai:11434",
+            ollamaUrl: process.env.OLLAMA_URL ?? "http://openmapx-local-ai:11434",
             useEmbeddings: false,
           });
           if (result.status === "completed" || result.status === "already_completed")

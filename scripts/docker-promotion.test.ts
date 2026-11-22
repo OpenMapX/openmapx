@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { assert, describe, expect, it } from "vitest";
 
-const apps = ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"];
+const apps = ["api", "web", "data-manager", "ops-agent", "transitous-runner"];
 const prefix = "example.invalid/openmapx";
 const sha = "f".repeat(40);
 const releaseId = `${sha}-1-2`;

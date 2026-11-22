@@ -465,7 +465,7 @@ describe("fuel-stations-openconditions", () => {
     assert(typeof limit === "number", "the page carries no response size limit");
     const size = Buffer.byteLength(JSON.stringify(page));
     // Beyond the host's 8 MB default, within the page's own limit, which stays
-    // small enough that a few dense searches at once do not crowd app-api's heap.
+    // small enough that a few dense searches at once do not crowd the API's heap.
     expect(http.calls[0]?.options?.params).toMatchObject({ limit: 400 });
     expect(size).toBeGreaterThan(8 * 1024 * 1024);
     expect(size).toBeLessThan(limit);

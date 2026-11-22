@@ -5,6 +5,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
+  FEED_PROXY_ORIGIN,
   type FeedProxyVars,
   normalizeFeedProxyVars,
   renderFeedProxyNginxConfig,
@@ -138,6 +139,9 @@ function publicDocument(raw: unknown, depth = 0, seen = new Set<object>()): void
     seen.delete(raw);
   } else if (raw !== null && typeof raw !== "boolean" && typeof raw !== "number") throw invalid();
 }
+const PROXY_FEED_URL = new RegExp(
+  `^${FEED_PROXY_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/feed/([a-zA-Z0-9_.%-]+)$`,
+);
 function configRoutes(config: Record<string, unknown>, vars?: FeedProxyVars): Set<string> {
   const used = new Set<string>();
   const rewrite = (raw: unknown) => {
@@ -146,14 +150,14 @@ function configRoutes(config: Record<string, unknown>, vars?: FeedProxyVars): Se
     let key: string | undefined;
     if (vars) key = Object.entries(vars).find(([, value]) => value.url === feed.url)?.[0];
     if (!key) {
-      const encoded = /^http:\/\/motis-feed-proxy\/feed\/([a-zA-Z0-9_.%-]+)$/.exec(feed.url)?.[1];
+      const encoded = PROXY_FEED_URL.exec(feed.url)?.[1];
       if (encoded === undefined) throw invalid();
       key = decodeURIComponent(encoded);
     }
     token.parse(key);
     if (!vars && feed.headers !== undefined) throw invalid();
     delete feed.headers;
-    feed.url = `http://motis-feed-proxy/feed/${encodeURIComponent(key)}`;
+    feed.url = `${FEED_PROXY_ORIGIN}/feed/${encodeURIComponent(key)}`;
     used.add(key);
   };
   const timetable = object(config.timetable),
@@ -185,9 +189,8 @@ function configRoutes(config: Record<string, unknown>, vars?: FeedProxyVars): Se
   }
   if (config.gbfs !== undefined && config.gbfs !== false) {
     const gbfs = object(config.gbfs);
-    if (!vars && gbfs.proxy !== undefined && gbfs.proxy !== "http://motis-feed-proxy")
-      throw invalid();
-    if (gbfs.proxy !== undefined) gbfs.proxy = "http://motis-feed-proxy";
+    if (!vars && gbfs.proxy !== undefined && gbfs.proxy !== FEED_PROXY_ORIGIN) throw invalid();
+    if (gbfs.proxy !== undefined) gbfs.proxy = FEED_PROXY_ORIGIN;
     for (const feed of Object.values(object(gbfs.feeds))) rewrite(feed);
   }
   if (
@@ -200,8 +203,8 @@ function configRoutes(config: Record<string, unknown>, vars?: FeedProxyVars): Se
     if (
       typeof raw === "string" &&
       /https?:\/\//.test(raw) &&
-      raw !== "http://motis-feed-proxy" &&
-      !/^http:\/\/motis-feed-proxy\/feed\/[a-zA-Z0-9_.%-]+$/.test(raw)
+      raw !== FEED_PROXY_ORIGIN &&
+      !PROXY_FEED_URL.test(raw)
     )
       throw invalid();
     if (raw && typeof raw === "object")

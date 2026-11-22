@@ -33,7 +33,6 @@ const manifestJson = JSON.stringify({
     "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
     "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
-    "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
   },
   ...releaseProvenance(),
 });
@@ -99,7 +98,7 @@ async function pinnedInfra(release: services.ReleaseManifest | null) {
 
 describe("touchesReleasePinnedServices", () => {
   it("detects every release-pinned runtime service", () => {
-    expect(touchesReleasePinnedServices(["motis", "app-api"])).toBe(true);
+    expect(touchesReleasePinnedServices(["motis", "api"])).toBe(true);
     expect(touchesReleasePinnedServices(["ops-agent"])).toBe(true);
     expect(touchesReleasePinnedServices(["transitous-runner"])).toBe(true);
     expect(touchesReleasePinnedServices(["motis", "valhalla"])).toBe(false);

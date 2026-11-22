@@ -4,7 +4,7 @@ impacts: [operator-action]
 
 ## What changes
 
-The stack's own containers (`app-api`, `ops-agent`, `data-manager`, MOTIS,
+The stack's own containers (`api`, `ops-agent`, `data-manager`, MOTIS,
 Transitous and Elasticsearch) run as the deployment's user, `UID:GID` from
 `infra/docker/.env`, with no fallback uid, so the admin panel's configuration
 changes and the deployment's secrets work whatever the operator's uid.

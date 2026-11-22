@@ -11,7 +11,7 @@ describe("ops-agent deployment manifest", () => {
     await registry.load();
     const selected = registry
       .list()
-      .filter((service) => ["ops-agent", "app-api", "data-manager"].includes(service.manifest.id));
+      .filter((service) => ["ops-agent", "api", "data-manager"].includes(service.manifest.id));
     const loadedOps = selected.find((service) => service.manifest.id === "ops-agent");
     expect(loadedOps).toBeDefined();
     if (!loadedOps) throw new Error("ops-agent manifest was not loaded");
@@ -21,7 +21,7 @@ describe("ops-agent deployment manifest", () => {
       composeOutDir: join(root, "infra", "docker"),
     });
     expect(ops.expose).toEqual(["4300"]);
-    expect(ops.networks).toEqual(["openmapx"]);
+    expect(ops.networks).toEqual({ openmapx: { aliases: ["openmapx-ops-agent"] } });
     expect(ops.group_add).toEqual([expect.stringContaining("DOCKER_GID:?DOCKER_GID must be set")]);
     expect(ops).not.toHaveProperty("ports");
     expect(ops).not.toHaveProperty("labels");
@@ -34,7 +34,7 @@ describe("ops-agent deployment manifest", () => {
         bindMounts?: Array<{ source: string; target: string; readOnly?: boolean }>;
         exposure?: unknown;
       };
-    const api = load("app-api");
+    const api = load("api");
     const dataManager = load("data-manager");
     const ops = load("ops-agent");
     expect(api.container.environment?.OPS_AGENT_TOKEN_FILE).toBe(
@@ -92,7 +92,7 @@ describe("ops-agent deployment manifest", () => {
 
     // Every caller now requests host effects as typed agent operations, so the
     // operations agent is the only component that holds Docker authority.
-    for (const id of ["traefik", "data-manager", "app-api"]) {
+    for (const id of ["traefik", "data-manager", "api"]) {
       expect(socketFor(id), `${id} must not hold a Docker socket`).toBe(false);
     }
     expect(socketFor("ops-agent")).toBe(true);

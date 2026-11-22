@@ -16,7 +16,7 @@ import { renderConfiguration } from "../packages/core/src/services/configuration
 import { findServiceManifestDirs } from "../packages/core/src/services/manifest-discovery";
 import { serviceManifestSchema } from "../packages/core/src/services/manifest-schema";
 import type { LoadedService, ServiceManifest } from "../packages/core/src/services/types";
-import { findAuthorityViolations } from "./check-ops-authority";
+import { findAuthorityViolations, findUnknownNamedServices } from "./check-ops-authority";
 
 /**
  * Gate C — host authority.
@@ -151,7 +151,7 @@ describe("Gate C — host authority", () => {
         .map((source) => `${id} ${source}`),
     );
     expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
-      "app-api ./state/ops-agent/custom-integrations",
+      "api ./state/ops-agent/custom-integrations",
       "traefik ./state/ops-agent/configuration/current/traefik/traefik.yml",
       "traefik ./state/ops-agent/traefik/dynamic",
     ]);
@@ -159,8 +159,8 @@ describe("Gate C — host authority", () => {
     for (const volume of services.traefik?.volumes ?? []) {
       if (volume.startsWith("./state/")) expect(volume).toMatch(/:ro$/);
     }
-    // app-api reads the integrations the agent installed; it never writes them.
-    const store = (services["app-api"]?.volumes ?? []).filter((volume) =>
+    // The API reads the integrations the agent installed; it never writes them.
+    const store = (services.api?.volumes ?? []).filter((volume) =>
       volume.startsWith("./state/ops-agent/custom-integrations:"),
     );
     expect(store).toHaveLength(1);
@@ -235,10 +235,10 @@ describe("Gate C — host authority", () => {
       const staticFile = "@infra:state/ops-agent/configuration/current/traefik/traefik.yml";
       const generation = "@infra:state/ops-agent/configuration/current";
       manifest("traefik", [{ source: dynamic }, { source: staticFile }, { source: generation }]);
-      manifest("app-web", [{ source: dynamic }]);
+      manifest("web", [{ source: dynamic }]);
       expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
-        `service "app-web" mounts the operations agent's state (${dynamic})`,
         `service "traefik" mounts the operations agent's state (${generation})`,
+        `service "web" mounts the operations agent's state (${dynamic})`,
       ]);
       manifest("traefik", [{ source: dynamic, readOnly: false }]);
       expect(findAuthorityViolations(root).map((violation) => violation.detail)).toContain(
@@ -249,7 +249,7 @@ describe("Gate C — host authority", () => {
     }
   });
 
-  it("lets app-api mount the agent's integration store read-only, and no one else", () => {
+  it("lets the API mount the agent's integration store read-only, and no one else", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
     try {
       const manifest = (id: string, mounts: Array<{ source: string; readOnly?: boolean }>) => {
@@ -263,16 +263,16 @@ describe("Gate C — host authority", () => {
         );
       };
       const store = "@infra:state/ops-agent/custom-integrations";
-      manifest("app-api", [{ source: store, readOnly: true }, { source: store }]);
-      manifest("app-web", [{ source: store, readOnly: true }]);
+      manifest("api", [{ source: store, readOnly: true }, { source: store }]);
+      manifest("web", [{ source: store, readOnly: true }]);
       manifest("data-manager", [{ source: store, readOnly: false }]);
       expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
-        `service "app-web" mounts the operations agent's state (${store})`,
         `service "data-manager" mounts the operations agent's state (${store})`,
+        `service "web" mounts the operations agent's state (${store})`,
       ]);
-      manifest("app-api", [{ source: store, readOnly: false }]);
+      manifest("api", [{ source: store, readOnly: false }]);
       expect(findAuthorityViolations(root).map((violation) => violation.detail)).toContain(
-        `service "app-api" mounts the operations agent's state (${store})`,
+        `service "api" mounts the operations agent's state (${store})`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -313,15 +313,15 @@ describe("Gate C — host authority", () => {
           }),
         );
       };
-      manifest("app-api", [
+      manifest("api", [
         "@infra:state/ops-agent/configuration-candidates",
         "@infra:state/ops-agent",
       ]);
       manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
       manifest("ops-agent", ["@infra:state/ops-agent/configuration-candidates"]);
       expect(stateDetails(findAuthorityViolations(root))).toEqual([
-        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent/configuration-candidates)`,
-        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
+        `service "api" mounts the operations agent's state (@infra:state/ops-agent/configuration-candidates)`,
+        `service "api" mounts the operations agent's state (@infra:state/ops-agent)`,
         `service "data-manager" mounts the operations agent's state (@infra:state)`,
         `service "data-manager" mounts the operations agent's state (@infra:.)`,
       ]);
@@ -344,9 +344,7 @@ describe("Gate C — host authority", () => {
           }),
         );
       };
-      manifest("app-api", [
-        "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations",
-      ]);
+      manifest("api", ["${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations"]);
       manifest("data-manager", [
         "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
         "$OPENMAPX_HOST_DIR/infra/docker/state",
@@ -405,13 +403,13 @@ describe("Gate C — host authority", () => {
             { source: "@infra:state/data-manager/control", target: "/var/lib/openmapx/control" },
           ],
         },
-        "app-api": {
+        api: {
           bindMounts: [{ source: "@infra:state/data-manager/control", target: "/mnt/records" }],
         },
       },
       (details) =>
         expect(details).toEqual([
-          'service "app-api" mounts the operations agent\'s state (@infra:state/data-manager/control)',
+          'service "api" mounts the operations agent\'s state (@infra:state/data-manager/control)',
         ]),
     );
   });
@@ -431,7 +429,7 @@ describe("Gate C — host authority", () => {
             secret("postgres-data-manager-password"),
           ],
         },
-        "app-api": {
+        api: {
           bindMounts: [
             secret("data-manager-api-token"),
             secret("data-manager-ops-agent-token"),
@@ -448,7 +446,7 @@ describe("Gate C — host authority", () => {
         postgis: {
           bindMounts: [secret("postgres-api-password"), secret("postgres-data-manager-password")],
         },
-        "app-web": {
+        web: {
           bindMounts: [
             secret("data-manager-host-cli-token"),
             secret("data-manager-unknown-token"),
@@ -460,10 +458,10 @@ describe("Gate C — host authority", () => {
       (details) =>
         expect(details.filter((detail) => !/ control /.test(detail)).sort()).toEqual(
           [
-            'service "app-api" mounts data-manager-ops-agent-token (@infra:secrets/data-manager-ops-agent-token)',
-            'service "app-web" mounts data-manager-host-cli-token (@infra:secrets/data-manager-host-cli-token)',
-            'service "app-web" mounts an unknown data-manager token (@infra:secrets/data-manager-unknown-token)',
-            'service "app-web" mounts postgres-api-password (@infra:secrets/postgres-api-password)',
+            'service "api" mounts data-manager-ops-agent-token (@infra:secrets/data-manager-ops-agent-token)',
+            'service "web" mounts data-manager-host-cli-token (@infra:secrets/data-manager-host-cli-token)',
+            'service "web" mounts an unknown data-manager token (@infra:secrets/data-manager-unknown-token)',
+            'service "web" mounts postgres-api-password (@infra:secrets/postgres-api-password)',
             ...[
               "data-manager-api-token",
               "data-manager-ops-agent-token",
@@ -491,7 +489,7 @@ describe("Gate C — host authority", () => {
     withManifests(
       {
         postgis: { container: { environment: { POSTGRES_USER: "postgres" } } },
-        "app-api": own(
+        api: own(
           "openmapx_api",
           "postgres-api-password",
           "postgresql://openmapx_data_manager@postgis:5432/openmapx",
@@ -503,7 +501,7 @@ describe("Gate C — host authority", () => {
       (details) =>
         expect([...details].sort()).toEqual(
           [
-            'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+            'service "api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
             'service "data-manager" must connect to PostgreSQL as openmapx_data_manager, without a password in the URL',
             'service "data-manager" must read its database password from its own mounted postgres-data-manager-password',
             'service "openconditions" connects to PostgreSQL as the superuser',
@@ -511,15 +509,15 @@ describe("Gate C — host authority", () => {
         ),
     );
     // A container without DATABASE_URL would fall back to the superuser default.
-    withManifests({ "app-api": { container: { environment: {} } } }, (details) =>
+    withManifests({ api: { container: { environment: {} } } }, (details) =>
       expect(details).toEqual([
-        'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
-        'service "app-api" must read its database password from its own mounted postgres-api-password',
+        'service "api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+        'service "api" must read its database password from its own mounted postgres-api-password',
       ]),
     );
     withManifests(
       {
-        "app-api": own("openmapx_api", "postgres-api-password"),
+        api: own("openmapx_api", "postgres-api-password"),
         "data-manager": own("openmapx_data_manager", "postgres-data-manager-password"),
       },
       (details) => expect(details).toEqual([]),
@@ -536,7 +534,7 @@ describe("Gate C — host authority", () => {
         nominatim: environment({ NOMINATIM_PASSWORD: "${POSTGRES_PASSWORD:?must be set}" }),
         photon: environment({ SCRIPT: "echo $POSTGRES_PASSWORD" }),
         // Blanking the variable, and another database's own key, are not references.
-        "app-api": {
+        api: {
           container: {
             environment: {
               DATABASE_URL: "postgresql://openmapx_api@postgis:5432/openmapx",
@@ -578,7 +576,21 @@ describe("Gate C — host authority", () => {
   });
 
   it("passes the standalone policy gate with no violations", () => {
+    expect(findUnknownNamedServices(ROOT)).toEqual([]);
     expect(findAuthorityViolations(ROOT)).toEqual([]);
+  });
+
+  it("fails closed when a rule names a service no manifest declares", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      mkdirSync(join(root, "services", "postgis"), { recursive: true });
+      writeFileSync(join(root, "services", "postgis", "service.json"), '{"id":"postgis"}');
+      expect(
+        findUnknownNamedServices(root, ["postgis", "renamed-api"]).map((v) => v.detail),
+      ).toEqual(['names service "renamed-api", which has no services/renamed-api/service.json']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("ships no Docker CLI in the API image", () => {

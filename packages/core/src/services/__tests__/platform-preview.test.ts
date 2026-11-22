@@ -6,8 +6,8 @@ import { buildPlatformConfigurationPreview } from "../platform-preview";
 import type { LoadedService } from "../types";
 
 const services: LoadedService[] = [
-  "app-api",
-  "app-web",
+  "api",
+  "web",
   "traefik",
   "tileserver",
   "ops-agent",
@@ -92,7 +92,7 @@ describe("platform configuration preview", () => {
     const request = { ...base, release };
     const preview = buildPlatformConfigurationPreview(request);
     expect(preview).toHaveProperty("release", release);
-    expect(preview.affectedServiceIds).toEqual(["app-api", "app-web", "data-manager", "ops-agent"]);
+    expect(preview.affectedServiceIds).toEqual(["api", "data-manager", "ops-agent", "web"]);
     expect(preview.requiredConfirmation.domain).toBe(false);
     expect(preview.previewFingerprint).not.toBe(
       buildPlatformConfigurationPreview(base).previewFingerprint,
@@ -131,7 +131,7 @@ describe("platform configuration preview", () => {
         tilesPublicUrl: "https://new.example.test/tiles/",
       },
     });
-    expect(preview.affectedServiceIds).toEqual(["app-api", "app-web", "tileserver", "traefik"]);
+    expect(preview.affectedServiceIds).toEqual(["api", "tileserver", "traefik", "web"]);
     expect(source.env.DOMAIN).toBe("old.example.test");
   });
   it("binds preview identity, actor, policy, source and exact intent without including secrets", () => {
@@ -189,7 +189,7 @@ describe("platform configuration preview", () => {
     });
     expect(preview.values.backupRetentionDays).toBe(60);
     expect(preview.requiredConfirmation.domain).toBe(false);
-    expect(preview.affectedServiceIds).toEqual(["app-api", "ops-agent"]);
+    expect(preview.affectedServiceIds).toEqual(["api", "ops-agent"]);
   });
   it("can explicitly return a field to host ownership without changing the host", () => {
     const preview = buildPlatformConfigurationPreview({
@@ -219,14 +219,14 @@ it("materializes the adopted origin in every actual built-in origin consumer", (
     assert.isDefined(service, id);
     return renderServiceSnippet(service, context);
   };
-  expect(byId("app-api").environment).toMatchObject({
+  expect(byId("api").environment).toMatchObject({
     DOMAIN: "new.example.test",
     CORS_ORIGIN: "https://new.example.test",
     BETTER_AUTH_URL: "https://new.example.test",
     PASSKEY_RP_ID: "new.example.test",
     PASSKEY_ORIGIN: "https://new.example.test,openmapx://",
   });
-  expect(byId("app-web").environment?.NEXT_PUBLIC_API_URL).toBe("https://new.example.test");
+  expect(byId("web").environment?.NEXT_PUBLIC_API_URL).toBe("https://new.example.test");
   expect(byId("tileserver").command).toEqual([
     "--public_url",
     "https://new.example.test/tiles/",

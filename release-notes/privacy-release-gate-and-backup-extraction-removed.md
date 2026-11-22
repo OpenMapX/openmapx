@@ -6,7 +6,7 @@ impacts: [breaking]
 
 Self-service privacy exports no longer depend on release approvals or a build
 fingerprint; they run as soon as a case's own source tasks allow it. Release
-manifests list six application images and carry no privacy validation evidence.
+manifests list five application images and carry no privacy validation evidence.
 The `privacy-backup` collector image, automated per-person backup extraction,
 backup and omission reviews, and receipt snapshots are gone, along with the
 privacy admin readiness, approval and backup review endpoints. Retained backups

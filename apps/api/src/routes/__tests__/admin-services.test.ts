@@ -1,4 +1,5 @@
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
@@ -545,35 +546,38 @@ describe("GET /admin/services/:id/logs", () => {
 });
 
 describe("POST /admin/services/:id/action", () => {
-  it.each(["app-api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
-    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
-    mockExecuteAndWait.mockResolvedValueOnce({
-      services: [
-        { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
-      ],
-    });
-    const response = await app.inject({
-      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
-      method: "POST",
-      url: `/admin/services/${id}/action`,
-      payload: { action: "restart" },
-    });
-    expect(response.statusCode).toBe(200);
-    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.core-restart",
-      { service: id },
-      fakeSession.user.id,
-      expect.any(String),
-    );
-  });
+  it.each(coreServices.CORE_RESTART_SERVICE_IDS)(
+    "queues the dedicated %s restart workflow",
+    async (id) => {
+      mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
+      mockExecuteAndWait.mockResolvedValueOnce({
+        services: [
+          { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
+        ],
+      });
+      const response = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+        method: "POST",
+        url: `/admin/services/${id}/action`,
+        payload: { action: "restart" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+        "service.core-restart",
+        { service: id },
+        fakeSession.user.id,
+        expect.any(String),
+      );
+    },
+  );
 
   it("does not queue an unavailable core restart", async () => {
-    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "app-api" });
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "api" });
     mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
     const response = await app.inject({
       headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
-      url: "/admin/services/app-api/action",
+      url: "/admin/services/api/action",
       payload: { action: "restart" },
     });
     expect(response.statusCode).toBe(503);
@@ -1247,7 +1251,7 @@ describe("service presets and option boundaries", () => {
     expect(result.statusCode).toBe(400);
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
-  it("rejects MOTIS import without a MOTIS build before enqueue", async () => {
+  it("rejects the retired MOTIS import option before enqueue", async () => {
     mockRegistryGet.mockReturnValue(MOCK_SERVICE_STOPPED);
     const result = await app.inject({
       headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },

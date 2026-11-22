@@ -301,7 +301,7 @@ The ingestion group runs the Transitous Python worker directly. In a Python
 environment, install its production dependencies first:
 
 ```bash
-python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
+python3 -m pip install --require-hashes -r apps/transitous-runner/requirements.txt
 ```
 
 Run the export group with:
@@ -498,7 +498,7 @@ The historical mixed queue has been cleared without consuming its bumps. Private
 3. Push your branch and open a PR. Fill out the PR template.
 4. PR CI checks code, tests, production builds, and affected Docker targets
    without publishing them. After merge, application release automation requires
-   successful CI and publishes a coherent set of six application images plus
+   successful CI and publishes a coherent set of five application images plus
    its release manifest. Use a run-qualified tag or digest for rollback; SHA
    aliases can move after a security rebuild. See
    [Product releases](docs/docs/developer/product-releases.md) for publication,

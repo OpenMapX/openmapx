@@ -14,7 +14,7 @@ const host = {
   imagesPresent: false,
   maintenance: false,
   runningRelease: "old",
-  running: ["app-api", "data-manager", "ops-agent"],
+  running: ["api", "data-manager", "ops-agent"],
   kinds: [] as string[],
 };
 function resetHost() {
@@ -22,7 +22,7 @@ function resetHost() {
   host.imagesPresent = false;
   host.maintenance = false;
   host.runningRelease = "old";
-  host.running = ["app-api", "data-manager", "ops-agent"];
+  host.running = ["api", "data-manager", "ops-agent"];
   host.kinds = [];
 }
 
@@ -47,7 +47,7 @@ const applyIntent = vi.fn(async () => {
   host.running = [];
   if (!host.imagesPresent) throw new Error("registry unavailable");
   host.runningRelease = releaseId;
-  host.running = ["app-api", "data-manager", "ops-agent"];
+  host.running = ["api", "data-manager", "ops-agent"];
   host.maintenance = false;
   return { application: { outcome: "applied" } };
 });
@@ -190,6 +190,6 @@ describe("guarded release image acquisition", () => {
 
     expect(host.maintenance).toBe(false);
     expect(host.runningRelease).toBe("old");
-    expect(host.running).toEqual(["app-api", "data-manager", "ops-agent"]);
+    expect(host.running).toEqual(["api", "data-manager", "ops-agent"]);
   });
 });

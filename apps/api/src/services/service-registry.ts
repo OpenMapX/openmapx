@@ -18,7 +18,7 @@ const warnings: string[] = [];
 
 /**
  * The services the applied generation enabled. Its render bakes them into
- * app-api; an API running on the host (development) reads the deployment
+ * the API container; an API running on the host (development) reads the deployment
  * itself, and before any render, the operator's selection.
  */
 function appliedServiceIds(
@@ -65,7 +65,7 @@ function scheduleCommunityRetry(): void {
 
 /**
  * Community services from the operations agent, which owns its community
- * store; the app-api container has no host checkout. While the
+ * store; the API container has no host checkout. While the
  * agent is unreachable the last reported list stays in use and a retry is
  * scheduled, unless `strict` asks for the failure instead. An API run on the
  * host without an agent configured (development) returns null and scans the
@@ -171,7 +171,7 @@ export function getServiceRegistryWarnings(): string[] {
 /**
  * Resolve a reachable URL for a service by its id, using internal Docker networking.
  * Services only expose `expose:` ports (no host binding by default), reachable by
- * service hostname within the `openmapx` network.
+ * their project-unique name (`openmapx-<id>`) on the stack's internal networks.
  */
 export function serviceUrl(serviceId: string): string | null {
   if (!registry) return null;
@@ -179,7 +179,7 @@ export function serviceUrl(serviceId: string): string | null {
   if (!svc?.enabled) return null;
   const port = svc.manifest.container.expose?.[0];
   if (!port) return null;
-  return `http://${serviceId}:${port}`;
+  return `http://${services.serviceNetworkAlias(serviceId)}:${port}`;
 }
 
 export interface ResolvedRequiredService {

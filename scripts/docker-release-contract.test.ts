@@ -309,26 +309,12 @@ describe("Docker release trust gate", () => {
     try {
       const bin = join(temp, "bin");
       mkdirSync(bin);
-      for (const app of [
-        "api",
-        "web",
-        "data-manager",
-        "ops-agent",
-        "transitous-runner",
-        "transitous-tools",
-      ]) {
+      for (const app of ["api", "web", "data-manager", "ops-agent", "transitous-runner"]) {
         const digestDir = join(temp, "digests", `docker-digest-${app}-1`);
         mkdirSync(digestDir, { recursive: true });
         writeFileSync(join(digestDir, "a".repeat(64)), "");
       }
-      const apps = [
-        "api",
-        "web",
-        "data-manager",
-        "ops-agent",
-        "transitous-runner",
-        "transitous-tools",
-      ];
+      const apps = ["api", "web", "data-manager", "ops-agent", "transitous-runner"];
       const buildMetadata = {
         version: 1,
         images: Object.fromEntries(
@@ -416,7 +402,6 @@ describe("Docker release trust gate", () => {
           "data-manager": `example.invalid/openmapx/data-manager@sha256:${"a".repeat(64)}`,
           "ops-agent": `example.invalid/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
           "transitous-runner": `example.invalid/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,
-          "transitous-tools": `example.invalid/openmapx/transitous-tools@sha256:${"a".repeat(64)}`,
         },
       });
     } finally {
@@ -482,32 +467,21 @@ describe("Docker release trust gate", () => {
     ]) {
       expect(read(dockerfile)).toContain("--from=runtime-packages /runtime/node_modules");
     }
-    for (const dockerfile of [
-      "apps/transitous-runner/Dockerfile",
-      "services/data-manager/Dockerfile",
-      "services/motis/tools/transitous/Dockerfile",
-    ]) {
-      expect(read(dockerfile)).toContain("build-gtfsclean.sh");
-    }
-    expect(read("services/motis/tools/transitous/build-gtfsclean.sh")).toContain(
+    expect(read("apps/transitous-runner/Dockerfile")).toContain("build-gtfsclean.sh");
+    // Upstream Python and gtfsclean run only in the runner.
+    expect(read("services/data-manager/Dockerfile")).not.toMatch(
+      /build-gtfsclean|bin\/gtfsclean|python3|pip3/,
+    );
+    expect(read("apps/transitous-runner/build-gtfsclean.sh")).toContain(
       "golang.org/x/text@v0.43.0",
     );
   });
 
-  it("builds and promotes only the six application images without privacy evidence", () => {
+  it("builds and promotes only the five application images without privacy evidence", () => {
     const matrixApps = [...release.matchAll(/^ {10}- app: (\S+)$/gm)].map((match) => match[1]);
-    expect(matrixApps).toEqual([
-      "api",
-      "web",
-      "data-manager",
-      "ops-agent",
-      "transitous-runner",
-      "transitous-tools",
-    ]);
+    expect(matrixApps).toEqual(["api", "web", "data-manager", "ops-agent", "transitous-runner"]);
     expect(release).not.toMatch(/validate-privacy|privacyReleaseValidation/);
-    expect(release).toContain(
-      "for app in api web data-manager ops-agent transitous-runner transitous-tools; do",
-    );
+    expect(release).toContain("for app in api web data-manager ops-agent transitous-runner; do");
     expect(release).toContain(
       "RELEASE_ID: $" + "{{ github.sha }}-$" + "{{ github.run_id }}-$" + "{{ github.run_attempt }}",
     );

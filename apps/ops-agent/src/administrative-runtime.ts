@@ -65,14 +65,7 @@ const MAX_CLI_DURATION_MS = 30 * 60_000;
 // data-manager on the stack's private network. The CLI's default, its
 // published loopback port, is the host's; inside this container it reaches
 // nothing.
-const FIXED_CLI_DATA_MANAGER_URL = "http://data-manager:4000";
-const INSPECT_RELEASE_SERVICE_IDS = [
-  "app-api",
-  "app-web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-] as const;
+const FIXED_CLI_DATA_MANAGER_URL = "http://openmapx-data-manager:4000";
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -711,7 +704,7 @@ export function createDefaultReleaseEffects(
       }
       const serviceImages = manifest ? coreServices.releaseServiceImages(manifest) : undefined;
       const services: OpsResultFor<"system.inspect">["services"] = [];
-      for (const serviceId of INSPECT_RELEASE_SERVICE_IDS) {
+      for (const serviceId of coreServices.RELEASE_PINNED_SERVICE_IDS) {
         const pinnedImage = serviceImages?.[serviceId];
         let containerId: string | undefined;
         // A thrown or unparseable `ps -q` is an absent observation, not an
@@ -868,12 +861,11 @@ export function createAdministrativeRuntime(
   const runFixedCli = options.runFixedCli ?? createDefaultFixedCli(options.rootDir);
   const releaseEffects = options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
-  const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
+  const buildArgs = (serviceId: string, regionId?: string): string[] => [
     "services",
     "build",
     serviceId,
     ...(regionId ? ["--region", regionId] : []),
-    ...(motisImport && serviceId === "motis" ? ["--import"] : []),
   ];
   const loadBuildable = async (): Promise<BuildAuthorityService[]> => {
     const authority = [...(await loadBuildAuthority())];
@@ -896,26 +888,18 @@ export function createAdministrativeRuntime(
       .sort((left, right) => compareServiceBuildOrder(left.serviceId, right.serviceId));
   };
   runtime["service.build"] = async (operation, context) => {
-    if (operation.motisImport && operation.serviceId !== "motis")
-      throw Error("MOTIS import requires a MOTIS build");
     const buildable = await loadBuildable();
     if (!buildable.some((service) => service.serviceId === operation.serviceId)) {
       throw new Error("Build authority rejected");
     }
     await runFixedCli(
-      buildArgs(
-        operation.serviceId,
-        operation.regionId ?? resolveDataDefaultRegion(runtime),
-        operation.motisImport,
-      ),
+      buildArgs(operation.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
       context,
     );
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
     const plan = await loadBuildable();
-    if (operation.motisImport && !plan.some((service) => service.serviceId === "motis"))
-      throw Error("MOTIS import requires enabled MOTIS");
     const serviceIds = plan.map((service) => service.serviceId);
     const completedServiceIds: string[] = [];
     const failedServiceIds: string[] = [];
@@ -929,11 +913,7 @@ export function createAdministrativeRuntime(
         context.signal.throwIfAborted();
         attempted = true;
         await runFixedCli(
-          buildArgs(
-            service.serviceId,
-            operation.regionId ?? resolveDataDefaultRegion(runtime),
-            operation.motisImport,
-          ),
+          buildArgs(service.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
           context,
         );
         completedServiceIds.push(service.serviceId);

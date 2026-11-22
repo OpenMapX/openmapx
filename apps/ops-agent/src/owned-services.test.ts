@@ -59,7 +59,7 @@ describe("owned service cleanup", () => {
   it.each([
     ["unknown registry ID", "com.docker.compose.service", "unknown"],
     ["same name in another project", "com.docker.compose.project", "other"],
-    ["forged service label", "com.docker.compose.service", "app-api"],
+    ["forged service label", "com.docker.compose.service", "api"],
     ["foreign working directory", "com.docker.compose.project.working_dir", "/tmp"],
     ["foreign configuration file", "com.docker.compose.project.config_files", "/etc/passwd"],
   ])("denies %s", async (_name, label, value) => {

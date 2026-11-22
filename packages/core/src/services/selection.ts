@@ -1,20 +1,11 @@
 import { PLATFORM_ENDPOINTS } from "../utils/platform-endpoints";
+import { serviceNetworkAlias } from "./core-service-ids";
 import { readExternalProxyNetwork } from "./external-proxy";
 import { buildProducerIndex, selectProducer } from "./producer-index";
 import type { LoadedService } from "./types";
 
 export const SERVICE_SELECTION_ENV = "OPENMAPX_ENABLED_SERVICES";
-const APP_API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
-
-export const DEFAULT_SELECTED_SERVICE_IDS = [
-  "traefik",
-  "well-known",
-  "app-api",
-  "app-web",
-  "postgis",
-  "redis",
-  "data-manager",
-] as const;
+const API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
 
 export interface ExpandedServiceSelection {
   /** Operator-requested root service ids before dependency expansion. */
@@ -86,18 +77,18 @@ const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPo
 ];
 
 /**
- * The services a generation enabled, baked into app-api: the API has no view
+ * The services a generation enabled, baked into the API's environment: it has no view
  * of the deployment files, and `OPENMAPX_ENABLED_SERVICES` stays the
  * operator's override.
  */
 export const APPLIED_SERVICES_ENV = "OPENMAPX_APPLIED_SERVICES";
 
 /**
- * app-api's generated environment. It never holds a host env value: env
+ * The API's generated environment. It never holds a host env value: env
  * settings are Compose references, resolved from `infra/docker/.env` when the
  * stack starts, so the same render serves the CLI and the ops-agent.
  */
-export function buildAppApiServiceEnv(
+export function buildApiServiceEnv(
   enabledServices: LoadedService[],
   existingEnv: Record<string, unknown> = {},
   passthroughKeys: Iterable<string> = [],
@@ -115,14 +106,14 @@ export function buildAppApiServiceEnv(
   const enabledIds = new Set(enabledServices.map((s) => s.manifest.id));
   for (const { serviceId, envVar, internalPort } of SERVICE_ENV_URL_MAP) {
     if (enabledIds.has(serviceId)) {
-      next[envVar] = `\${${envVar}:-http://${serviceId}:${internalPort}}`;
+      next[envVar] = `\${${envVar}:-http://${serviceNetworkAlias(serviceId)}:${internalPort}}`;
     }
   }
 
   // The schema-backed integration and service settings, as references: the
   // values stay in the operator's `.env` and never reach the rendered YAML.
   for (const key of passthroughKeys) {
-    if (!APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    if (!API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
     next[key] = `\${${key}:-}`;
   }
 

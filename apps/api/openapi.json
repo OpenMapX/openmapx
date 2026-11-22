@@ -32030,8 +32030,8 @@
                             "enum": [
                               "postgis",
                               "redis",
-                              "app-web",
-                              "app-api",
+                              "web",
+                              "api",
                               "traefik",
                               "ops-agent"
                             ]
@@ -70279,8 +70279,8 @@
                       "enum": [
                         "postgis",
                         "redis",
-                        "app-web",
-                        "app-api",
+                        "web",
+                        "api",
                         "traefik",
                         "ops-agent"
                       ]
@@ -70689,8 +70689,8 @@
                             "enum": [
                               "postgis",
                               "redis",
-                              "app-web",
-                              "app-api",
+                              "web",
+                              "api",
                               "traefik",
                               "ops-agent"
                             ]
@@ -78620,9 +78620,6 @@
                         "type": "string"
                       },
                       "continueOnError": {
-                        "type": "boolean"
-                      },
-                      "motisImport": {
                         "type": "boolean"
                       }
                     },

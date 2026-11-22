@@ -77,7 +77,7 @@ The overlay/viewer and photos on place panels are separate integrations. They
 can use the same token, but it must be configured for each. The enabled flag
 opts the overlay/viewer in; setting its token alone does not enable it. After
 editing `.env`, recreate the API container with `pnpm openmapx services start
-app-api` so it receives the new environment.
+api` so it receives the new environment.
 
 When enabled with no token configured, the imagery routes return a "not
 configured" response and coverage stays empty. A disabled integration does not

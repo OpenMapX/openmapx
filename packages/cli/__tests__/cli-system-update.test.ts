@@ -149,13 +149,7 @@ async function fixture(mode = "success") {
       preview = {
         ...preview,
         release: checked,
-        affectedServiceIds: [
-          "app-api",
-          "app-web",
-          "data-manager",
-          "ops-agent",
-          "transitous-runner",
-        ],
+        affectedServiceIds: ["api", "data-manager", "ops-agent", "transitous-runner", "web"],
         oldOrigin: origin,
         newOrigin: origin,
       };
@@ -183,13 +177,7 @@ async function fixture(mode = "success") {
         configuration: {
           outcome: "committed",
           revisionId: `cfg1_${"a".repeat(43)}`,
-          enabledServiceIds: [
-            "app-api",
-            "app-web",
-            "data-manager",
-            "ops-agent",
-            "transitous-runner",
-          ],
+          enabledServiceIds: ["api", "data-manager", "ops-agent", "transitous-runner", "web"],
           followUp: "complete",
           cleanupFailed: false,
           registryUpdateFailed: mode === "incomplete",

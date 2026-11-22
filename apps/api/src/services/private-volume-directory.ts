@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 
 /**
- * The named volumes the API keeps its own data in (see services/app-api), as
+ * The named volumes the API keeps its own data in (see services/api), as
  * Compose names them in the stack's project.
  */
 export const API_VOLUMES = {
@@ -39,6 +39,6 @@ export function privateVolumeDirectory(mount: string, volume: string): string {
   if (stats.uid === 0 && (stats.mode & 0o1777) === 0o1777) return join(mount, `uid-${uid}`);
   const gid = process.getegid?.() ?? uid;
   throw new Error(
-    `${mount} (volume ${volume}) belongs to uid ${stats.uid} (mode ${(stats.mode & 0o7777).toString(8)}), not to uid ${uid}, which the API runs as. Keep its data and change its owner in place: stop app-api (pnpm openmapx services stop app-api), run \`docker run --rm -v ${volume}:/v alpine chown -R ${uid}:${gid} /v\`, and start app-api again`,
+    `${mount} (volume ${volume}) belongs to uid ${stats.uid} (mode ${(stats.mode & 0o7777).toString(8)}), not to uid ${uid}, which the API runs as. Keep its data and change its owner in place: stop the API (pnpm openmapx services stop api), run \`docker run --rm -v ${volume}:/v alpine chown -R ${uid}:${gid} /v\`, and start the API again`,
   );
 }

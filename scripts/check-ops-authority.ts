@@ -13,7 +13,7 @@
  * `check:policy` so CI fails on a reintroduction even when tests are skipped.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, posix, relative } from "node:path";
+import { basename, dirname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,7 +24,9 @@ const AUTHORITY_SERVICE = "ops-agent";
 /** The agent's state, relative to the checkout. */
 const AGENT_STATE = "infra/docker/state";
 
-/** The part of the agent's state app-api may mount, read-only: the integrations the agent installed. */
+/** The API service, the one service that may mount the agent's integration store. */
+const API_SERVICE = "api";
+/** The part of the agent's state the API may mount, read-only: the integrations the agent installed. */
 const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
 /** Data-manager's own private control records, which only it mounts. */
 const DATA_MANAGER_PRIVATE_STATE = `${AGENT_STATE}/data-manager/control`;
@@ -41,10 +43,10 @@ const AGENT_TRAEFIK_FILES = new Set([
  * Docker socket, which reaches every file anyway.
  */
 const SECRET_HOLDERS: Readonly<Record<string, readonly string[]>> = {
-  "infra/docker/secrets/data-manager-api-token": ["data-manager", "app-api"],
+  "infra/docker/secrets/data-manager-api-token": ["data-manager", API_SERVICE],
   "infra/docker/secrets/data-manager-ops-agent-token": ["data-manager", "ops-agent"],
   "infra/docker/secrets/data-manager-host-cli-token": ["data-manager"],
-  "infra/docker/secrets/postgres-api-password": ["postgis", "app-api"],
+  "infra/docker/secrets/postgres-api-password": ["postgis", API_SERVICE],
   "infra/docker/secrets/postgres-data-manager-password": ["postgis", "data-manager"],
 };
 /** Any data-manager caller token, including one of a caller that does not exist. */
@@ -52,7 +54,7 @@ const DATA_MANAGER_TOKEN = /^infra\/docker\/secrets\/data-manager-.+-token$/;
 
 /** The role each service connects to the platform database as, and that role's password file. */
 const DATABASE_ROLE_OF_SERVICE: Readonly<Record<string, { role: string; password: string }>> = {
-  "app-api": { role: "openmapx_api", password: "infra/docker/secrets/postgres-api-password" },
+  [API_SERVICE]: { role: "openmapx_api", password: "infra/docker/secrets/postgres-api-password" },
   "data-manager": {
     role: "openmapx_data_manager",
     password: "infra/docker/secrets/postgres-data-manager-password",
@@ -188,6 +190,37 @@ function serviceManifests(root: string): string[] {
     });
 }
 
+/**
+ * Every service ID this gate names in its rules and exceptions. A rule keyed
+ * by an ID no manifest has silently never applies, so a renamed or removed
+ * service must fail the gate instead.
+ */
+const NAMED_SERVICE_IDS = [
+  ...new Set([
+    AUTHORITY_SERVICE,
+    API_SERVICE,
+    "data-manager",
+    "postgis",
+    "traefik",
+    ...Object.values(SECRET_HOLDERS).flat(),
+    ...Object.keys(DATABASE_ROLE_OF_SERVICE),
+  ]),
+].sort();
+
+/** The service IDs this gate names that have no `services/<id>/service.json` under `root`. */
+export function findUnknownNamedServices(
+  root: string = ROOT,
+  serviceIds: readonly string[] = NAMED_SERVICE_IDS,
+): AuthorityViolation[] {
+  const known = new Set(serviceManifests(root).map((path) => basename(dirname(path))));
+  return serviceIds
+    .filter((serviceId) => !known.has(serviceId))
+    .map((serviceId) => ({
+      file: "scripts/check-ops-authority.ts",
+      detail: `names service "${serviceId}", which has no services/${serviceId}/service.json`,
+    }));
+}
+
 export function findAuthorityViolations(root: string = ROOT): AuthorityViolation[] {
   const violations: AuthorityViolation[] = [];
 
@@ -306,7 +339,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
         });
       }
       // The agent's own state (job journal, configuration candidates, privacy
-      // scratch, stores). app-api reads the integration store and nothing else;
+      // scratch, stores). The API reads the integration store and nothing else;
       // every other service, data-manager above all, must not be able to reach
       // it, by whichever form of source. A source this gate cannot resolve is
       // refused rather than assumed to be safe.
@@ -319,7 +352,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           });
         } else if (
           reachesAgentState(path) &&
-          !(serviceId === "app-api" && path === AGENT_INTEGRATION_STORE && readOnly) &&
+          !(serviceId === API_SERVICE && path === AGENT_INTEGRATION_STORE && readOnly) &&
           !(serviceId === "traefik" && AGENT_TRAEFIK_FILES.has(path) && readOnly) &&
           !(serviceId === "data-manager" && path === DATA_MANAGER_PRIVATE_STATE)
         ) {
@@ -379,7 +412,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*[/\\]/, ""))) {
-  const violations = findAuthorityViolations();
+  const violations = [...findUnknownNamedServices(), ...findAuthorityViolations()];
   if (violations.length > 0) {
     console.error("Host-authority policy violations:");
     for (const violation of violations) {

@@ -21,9 +21,10 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { safeHref } from "@openmapx/core";
 import { getProvidedCapabilityNames } from "@openmapx/core/api-admin-sdk";
-import type {
-  AdminServiceAction,
-  AdminServiceDetail as ServiceDetailData,
+import {
+  type AdminServiceAction,
+  CONTROL_PLANE_SERVICE_IDS,
+  type AdminServiceDetail as ServiceDetailData,
 } from "@openmapx/core/api-contracts";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -686,7 +687,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           </Button>
         </CompactAlert>
       )}
-      {["app-api", "traefik", "ops-agent"].includes(manifest.id) && (
+      {(CONTROL_PLANE_SERVICE_IDS as readonly string[]).includes(manifest.id) && (
         <Button component={Link} href="/admin/system/updates" size="small">
           {t("updates")}
         </Button>

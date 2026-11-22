@@ -19,7 +19,7 @@ const operationKey = "opk1_0123456789abcdef";
 function payload(): TrustedConfigurationPayload {
   return {
     domain: "maps.example.test",
-    selectedRoots: ["app-web", "redis"],
+    selectedRoots: ["web", "redis"],
     serviceConfigs: [{ serviceId: "redis", values: { MEMORY_LIMIT: "256m" } }],
     integrationConfigs: [{ integrationId: "routing", values: { enabled: true } }],
     serviceSecrets: [

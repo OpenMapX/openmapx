@@ -35,7 +35,8 @@ const selectionIdentity = (infraDir: string) =>
   createHash("sha256")
     .update(JSON.stringify(services.readAppliedReleaseSelection(infraDir)))
     .digest("hex");
-const targets = ["app-api", "app-web", "data-manager", "ops-agent", "transitous-runner"];
+/** A release update replaces exactly the pinned services; compared sorted, like the preview's IDs. */
+const targets = [...services.RELEASE_PINNED_SERVICE_IDS].sort();
 export interface SystemUpdateOptions {
   infraDir: string;
   apiOrigin?: string;

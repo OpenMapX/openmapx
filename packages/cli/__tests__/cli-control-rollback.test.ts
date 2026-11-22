@@ -27,7 +27,7 @@ vi.mock("../src/lib/hardlinks", async (original) => ({
   applyGeneratedHardlinksBeforeStart: vi.fn(async () => undefined),
 }));
 
-const ids = ["alpha", "app-api", "data-manager", "ops-agent", "postgis"];
+const ids = ["alpha", "api", "data-manager", "ops-agent", "postgis"];
 let root: string;
 let infraDir: string;
 let printed: string[];
@@ -117,9 +117,9 @@ describe("rollback plan", () => {
     expect(() => planRollback(infraDir)).toThrow(/No configuration/);
     const first = await render(["alpha"], manifest("release-1", "1", 100));
     expect(() => planRollback(infraDir)).toThrow(/No retained configuration pins another release/);
-    const second = await render(["alpha", "app-api"], manifest("release-2", "2", 200));
+    const second = await render(["alpha", "api"], manifest("release-2", "2", 200));
     // A later render keeps release-2, so the target stays the first generation.
-    const third = await render(["alpha", "app-api"], manifest("release-2", "2", 200));
+    const third = await render(["alpha", "api"], manifest("release-2", "2", 200));
     const plan = planRollback(infraDir);
     expect(plan).toMatchObject({ currentRevisionId: third, targetRevisionId: first });
     expect(second).not.toBe(third);
@@ -129,7 +129,7 @@ describe("rollback plan", () => {
 
   it("refuses when every retained configuration pins the applied release", async () => {
     await render(["alpha"], manifest("release-1", "1", 100));
-    await render(["alpha", "app-api"], manifest("release-1", "1", 100));
+    await render(["alpha", "api"], manifest("release-1", "1", 100));
     expect(() => planRollback(infraDir)).toThrow(/none is retained/);
   });
 
@@ -185,7 +185,7 @@ describe("the database check", () => {
 describe("openmapx control rollback", () => {
   it("prints the plan and the configuration it reverts, and changes nothing without --yes", async () => {
     await render(["alpha"], manifest("release-1", "1", 100));
-    const current = await render(["alpha", "app-api"], manifest("release-2", "2", 200));
+    const current = await render(["alpha", "api"], manifest("release-2", "2", 200));
     newestAppliedMigration(100);
     await expect(rollback()).rejects.toThrow("exit:0");
     const output = printed.join("\n");
@@ -218,7 +218,7 @@ describe("openmapx control rollback", () => {
   it("renders the previous configuration and release again and recreates in self-update order", async () => {
     const previous = await render(["alpha", "data-manager"], manifest("release-1", "1", 100));
     const current = await render(
-      ["alpha", "app-api", "data-manager", "ops-agent", "postgis"],
+      ["alpha", "api", "data-manager", "ops-agent", "postgis"],
       manifest("release-2", "2", 200),
     );
     newestAppliedMigration(90);

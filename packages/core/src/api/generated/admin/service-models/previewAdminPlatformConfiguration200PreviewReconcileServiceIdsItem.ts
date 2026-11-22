@@ -7,8 +7,8 @@ export type PreviewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem =
 export const PreviewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem = {
   postgis: "postgis",
   redis: "redis",
-  "app-web": "app-web",
-  "app-api": "app-api",
+  web: "web",
+  api: "api",
   traefik: "traefik",
   "ops-agent": "ops-agent",
 } as const;

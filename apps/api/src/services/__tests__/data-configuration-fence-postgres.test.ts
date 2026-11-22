@@ -92,7 +92,7 @@ describe.skipIf(
   it("prepares a full application closure with the production Data Manager target registration", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     try {
-      expect(f.input.serviceIds).toContain("app-api");
+      expect(f.input.serviceIds).toContain("api");
       expect(f.input.serviceIds).toContain("ops-agent");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
@@ -422,7 +422,7 @@ async function ownedFenceFixture(
     configurationReleaseMetadata: options.guardedRecovery,
     configurationHelperVersion: options.guardedRecovery ? "1" : undefined,
     selectedRoots: options.productionRegistration
-      ? ["app-api", "data-manager", "motis", "ops-agent", ...community]
+      ? ["api", "data-manager", "motis", "ops-agent", ...community]
       : ["data-manager", "motis"],
     extraServiceIds: options.productionRegistration ? community : ["foreign-consumer"],
     schemas: {
@@ -441,7 +441,7 @@ async function ownedFenceFixture(
       Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
     },
     ...(options.productionRegistration
-      ? ["app-api", "ops-agent"].map((id, index) => ({
+      ? ["api", "ops-agent"].map((id, index) => ({
           ...host.row,
           Id: (index === 0 ? "d" : "e").repeat(64),
           ConfigImage: `example/${id}:1`,

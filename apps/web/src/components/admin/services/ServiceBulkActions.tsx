@@ -5,17 +5,19 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/core/api-contracts";
+import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAdminTranslations } from "@/lib/admin/adminTranslator";
-import { serviceActionReason } from "@/lib/admin/serviceAdmin";
+import { isPreparedByTransitSync, serviceActionReason } from "@/lib/admin/serviceAdmin";
 
 type Action = AdminServicesBulkAction["action"] | "stage";
 export function ServiceBulkActions({
@@ -46,39 +48,46 @@ export function ServiceBulkActions({
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
   const [noDeps, setNoDeps] = useState(false);
-  const [motisImport, setMotisImport] = useState(false);
   const ids = [...selectedIds];
-  const denied = ids.filter((id) => {
-    const decision = services.find((service) => service.id === id)?.actions?.[
-      action === "stage" ? "pull" : action
-    ];
+  const decisionFor = (id: string) =>
+    services.find((service) => service.id === id)?.actions?.[action === "stage" ? "pull" : action];
+  // A build leaves out the services with nothing to build instead of refusing
+  // the whole selection; every other refusal still blocks the action.
+  const skipped =
+    action === "build" ? ids.filter((id) => decisionFor(id)?.reason === "not_buildable") : [];
+  const targets = ids.filter((id) => !skipped.includes(id));
+  const denied = targets.filter((id) => {
+    const decision = decisionFor(id);
     return Boolean(serviceActionReason(decision, ta)) || decision?.workflow === "core-restart";
   });
   const reason = denied.length
-    ? ta("unavailableForDeniedUseIndividual", { denied: denied.join(", ") })
-    : action === "build" && motisImport && !selectedIds.has("motis")
-      ? ta("motisImportNeedsMotis")
+    ? denied.some((id) => decisionFor(id)?.workflow === "core-restart")
+      ? ta("unavailableForDeniedUseIndividual", { denied: denied.join(", ") })
+      : ta("unavailableForDenied", { denied: denied.join(", ") })
+    : skipped.length && !targets.length
+      ? ta("nothingSelectedToBuild")
       : action === "stage" && ids.length > 64
         ? ta("stageAtMost64Services")
         : undefined;
+  const skippedByTransitSync = skipped.filter(isPreparedByTransitSync);
+  const skippedOther = skipped.filter((id) => !isPreparedByTransitSync(id));
   function submit() {
-    if (reason || !ids.length || busy) return;
+    if (reason || !targets.length || busy) return;
     if (action === "stage") {
-      onStage([...ids]);
+      onStage([...targets]);
       return;
     }
     onQueue(
       action === "build"
         ? {
             action,
-            serviceIds: [...ids],
+            serviceIds: [...targets],
             region: region.trim() || undefined,
             continueOnError,
-            ...(motisImport ? { motisImport: true } : {}),
           }
         : action === "update"
-          ? { action, serviceIds: [...ids], noDeps }
-          : { action, serviceIds: [...ids] },
+          ? { action, serviceIds: [...targets], noDeps }
+          : { action, serviceIds: [...targets] },
     );
   }
   return (
@@ -107,7 +116,7 @@ export function ServiceBulkActions({
             variant="contained"
             size="small"
             title={reason}
-            disabled={busy || !!reason}
+            disabled={busy || !!reason || !targets.length}
             onClick={submit}
           >
             {labels[action]}
@@ -122,8 +131,6 @@ export function ServiceBulkActions({
             setRegion={setRegion}
             continueOnError={continueOnError}
             setContinueOnError={setContinueOnError}
-            motisImport={motisImport}
-            setMotisImport={setMotisImport}
             disabled={busy}
           />
         )}
@@ -139,12 +146,28 @@ export function ServiceBulkActions({
             label={ta("updateWithoutDependencyRecreation")}
           />
         )}
+        {skippedByTransitSync.length > 0 && (
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            {ta.rich("motisPreparedByTransitSync", {
+              link: (chunks) => (
+                <Link component={NextLink} href="/admin/data/transit?tab=sources">
+                  {chunks}
+                </Link>
+              ),
+            })}
+          </Typography>
+        )}
+        {skippedOther.length > 0 && (
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            {ta("skippedNotBuildable", { ids: skippedOther.join(", ") })}
+          </Typography>
+        )}
         <Typography
           variant="caption"
           sx={{ color: reason ? "warning.main" : "text.secondary" }}
           role="status"
         >
-          {reason ?? ta("targetsIdsTheseAreAction", { ids: ids.join(", ") })}
+          {reason ?? ta("targetsIdsTheseAreAction", { ids: targets.join(", ") })}
         </Typography>
       </Stack>
     </Paper>
@@ -155,16 +178,12 @@ function BuildOptions({
   setRegion,
   continueOnError,
   setContinueOnError,
-  motisImport,
-  setMotisImport,
   disabled,
 }: {
   region: string;
   setRegion: (value: string) => void;
   continueOnError: boolean;
   setContinueOnError: (value: boolean) => void;
-  motisImport: boolean;
-  setMotisImport: (value: boolean) => void;
   disabled: boolean;
 }) {
   const ta = useAdminTranslations("adminServices");
@@ -189,16 +208,6 @@ function BuildOptions({
         }
         label={ta("continueOnBuildErrors")}
       />
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={motisImport}
-            disabled={disabled}
-            onChange={(event) => setMotisImport(event.target.checked)}
-          />
-        }
-        label={ta("importMotisAfterBuild")}
-      />
     </Stack>
   );
 }
@@ -217,7 +226,6 @@ export function ServiceBuildAllDialog({
   const t = useTranslations("adminNavigation.buildAll");
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
-  const [motisImport, setMotisImport] = useState(false);
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t("title")}</DialogTitle>
@@ -229,8 +237,6 @@ export function ServiceBuildAllDialog({
             setRegion={setRegion}
             continueOnError={continueOnError}
             setContinueOnError={setContinueOnError}
-            motisImport={motisImport}
-            setMotisImport={setMotisImport}
             disabled={busy}
           />
         </Stack>
@@ -241,14 +247,13 @@ export function ServiceBuildAllDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !ids.length || (motisImport && !ids.includes("motis"))}
+          disabled={busy || !ids.length}
           onClick={() =>
             void onQueue({
               action: "build",
               serviceIds: [...ids],
               region: region.trim() || undefined,
               continueOnError,
-              ...(motisImport ? { motisImport: true } : {}),
             }).then((accepted) => {
               if (accepted) onClose();
             })

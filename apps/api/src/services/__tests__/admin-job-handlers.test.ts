@@ -42,7 +42,7 @@ vi.mock("../service-registry", () => ({
       { manifest: { id: "valhalla" } },
       { manifest: { id: "osrm" } },
       { manifest: { id: "motis" } },
-      { manifest: { id: "app-api" } },
+      { manifest: { id: "api" } },
     ],
   }),
 }));
@@ -472,7 +472,7 @@ describe("admin job handlers", () => {
           jobId: "batch",
           payload: {
             action: "build",
-            serviceIds: ["valhalla", "osrm", "app-api"],
+            serviceIds: ["valhalla", "osrm", "api"],
             ...(mode === "fail-fast" ? {} : { continueOnError: true }),
           },
           signal: controller.signal,
@@ -491,23 +491,15 @@ describe("admin job handlers", () => {
         const batch = {
           outcome: mode === "all-failed" ? "failed" : "partial",
           completedServiceIds:
-            mode === "all-failed"
-              ? []
-              : mode === "continue"
-                ? ["valhalla", "app-api"]
-                : ["valhalla"],
+            mode === "all-failed" ? [] : mode === "continue" ? ["valhalla", "api"] : ["valhalla"],
           failedServiceIds:
             mode === "all-failed"
-              ? ["valhalla", "osrm", "app-api"]
+              ? ["valhalla", "osrm", "api"]
               : mode === "unknown" || mode === "cancel"
                 ? []
                 : ["osrm"],
           skippedServiceIds:
-            mode === "unknown" || mode === "cancel"
-              ? ["app-api"]
-              : mode === "fail-fast"
-                ? ["app-api"]
-                : [],
+            mode === "unknown" || mode === "cancel" ? ["api"] : mode === "fail-fast" ? ["api"] : [],
         };
         expect(checkpoints[0]).toMatchObject({
           retained: true,
@@ -518,7 +510,7 @@ describe("admin job handlers", () => {
           expect(failure.result.serviceBatch).toEqual(batch);
         expect(runAdminOperationMock.mock.calls.map((call) => call[1].serviceId)).toEqual(
           mode === "continue" || mode === "all-failed"
-            ? ["valhalla", "osrm", "app-api"]
+            ? ["valhalla", "osrm", "api"]
             : ["valhalla", "osrm"],
         );
       },
@@ -548,25 +540,6 @@ describe("admin job handlers", () => {
         ],
       ]);
       expect(runCliMock).not.toHaveBeenCalled();
-    });
-
-    it("carries MOTIS import only into the fixed MOTIS child", async () => {
-      runAdminOperationMock.mockReset().mockResolvedValue({ completed: true });
-      const ctx = {
-        jobId: "job",
-        payload: { action: "build", serviceIds: ["motis"], motisImport: true },
-        signal: new AbortController().signal,
-        log: vi.fn(),
-        setProgress: vi.fn(),
-        checkpoint: vi.fn(),
-      };
-      await handleServiceBulkJob(ctx);
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "service.build", serviceId: "motis", motisImport: true },
-        "admin-job.service.build",
-        { durableIdentity: "motis" },
-      );
     });
 
     it("uses the bounded build-all variant and typed region options", async () => {

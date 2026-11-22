@@ -39,7 +39,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const installation = control.openControlInstallation({
     infraDir: infra,
     role: "ops-agent",
-    serviceIds: ["app-api"],
+    serviceIds: ["api"],
   });
   cleanup.push(() => control.closeControlInstallation(installation));
   const store = new ArtifactTransferStore({
@@ -119,7 +119,7 @@ it("validates real uploaded bytes only under the exact retained integration exec
       operation,
       admittedAt,
       requestedDeadlineAt: admittedAt + 600000,
-      serviceIds: ["app-api"],
+      serviceIds: ["api"],
     });
     return {
       execution,

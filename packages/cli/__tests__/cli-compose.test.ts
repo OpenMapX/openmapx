@@ -332,9 +332,9 @@ describe("renderComposeForRepo", () => {
   });
 
   it("defaults to the small core service selection", async () => {
-    writeManifest("app-api", {
+    writeManifest("api", {
       ...baseManifest,
-      id: "app-api",
+      id: "api",
       container: {
         ...baseManifest.container,
         expose: [3001],
@@ -352,25 +352,25 @@ describe("renderComposeForRepo", () => {
 
     const result = await renderComposeForRepo({ rootDir: tmp, domain: "example.com" });
 
-    expect(result.enabledServiceIds).toEqual(["app-api", "postgis", "redis", "traefik"]);
+    expect(result.enabledServiceIds).toEqual(["api", "postgis", "redis", "traefik"]);
     const yaml = readFileSync(generatedCompose(), "utf-8");
-    expect(yaml).toContain("app-api:");
+    expect(yaml).toMatch(/^ {2}api:$/m);
     expect(yaml).toContain("postgis:");
     expect(yaml).toContain("redis:");
     expect(yaml).toContain("traefik:");
     expect(yaml).not.toContain("valhalla:");
-    expect(yaml).toContain("OPENMAPX_APPLIED_SERVICES: app-api,postgis,redis,traefik");
+    expect(yaml).toContain("OPENMAPX_APPLIED_SERVICES: api,postgis,redis,traefik");
   });
 
-  it("renders the real app-api OSM contribution controls with both flags off", async () => {
+  it("renders the real API's OSM contribution controls with both flags off", async () => {
     // Rendered from the checked-in manifest, not a fixture: this is the guard
     // that a shipped deployment defaults to contributions disabled.
     const manifest = JSON.parse(
-      readFileSync(join(REPO_ROOT, "services", "app-api", "service.json"), "utf-8"),
+      readFileSync(join(REPO_ROOT, "services", "api", "service.json"), "utf-8"),
     ) as { container: { environment: Record<string, string> } };
-    writeManifest("app-api", manifest as unknown as Record<string, unknown>);
+    writeManifest("api", manifest as unknown as Record<string, unknown>);
 
-    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["app-api"] });
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["api"] });
     const yaml = readFileSync(generatedCompose(), "utf-8");
 
     expect(yaml).toContain(composeDefault("OSM_CONTRIBUTIONS_ENABLED", "false"));
@@ -412,7 +412,7 @@ describe("renderComposeForRepo", () => {
   it("bootstraps stable Redis auth files while keeping the raw password out of Compose", async () => {
     const secretDir = join(tmp, "infra", "docker", "secrets");
 
-    for (const id of ["redis", "app-api"]) {
+    for (const id of ["redis", "api"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown> & { bindMounts?: Array<{ source: string }> };
@@ -425,7 +425,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["redis,app-api"],
+      services: ["redis,api"],
     });
     const composePath = generatedCompose();
     const firstYaml = readFileSync(composePath, "utf8");
@@ -450,14 +450,14 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["redis,app-api"],
+      services: ["redis,api"],
     });
     expect(readFileSync(passwordPath, "utf8")).toBe(firstPassword);
     expect(readFileSync(composePath, "utf8")).not.toContain(firstPassword);
   });
 
   it("bootstraps stable distinct ops-agent caller tokens without rendering their bytes", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -467,7 +467,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager,ops-agent"],
+      services: ["api,data-manager,ops-agent"],
     });
     const secretDir = join(tmp, "infra", "docker", "secrets");
     const composePath = generatedCompose();
@@ -480,7 +480,7 @@ describe("renderComposeForRepo", () => {
     expect(apiToken).not.toBe(dataManagerToken);
     expect(firstYaml).not.toContain(apiToken);
     expect(firstYaml).not.toContain(dataManagerToken);
-    expect(firstYaml).not.toContain("traefik.http.routers.ops-agent");
+    expect(firstYaml).not.toContain("traefik.http.routers.openmapx-ops-agent");
     expect(firstYaml).not.toContain("ops-agent.example.com");
     expect(firstYaml.split("ops-agent-api-token:/run/secrets/ops-agent-api-token:ro")).toHaveLength(
       3,
@@ -492,7 +492,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager,ops-agent"],
+      services: ["api,data-manager,ops-agent"],
     });
     expect(readFileSync(join(secretDir, "ops-agent-api-token"), "utf8")).toBe(apiToken);
     expect(readFileSync(join(secretDir, "ops-agent-data-manager-token"), "utf8")).toBe(
@@ -500,8 +500,8 @@ describe("renderComposeForRepo", () => {
     );
   });
 
-  it("bootstraps the offline principal key into app-api only without rendering its bytes", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+  it("bootstraps the offline principal key into the API only without rendering its bytes", async () => {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -511,7 +511,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager"],
+      services: ["api,data-manager"],
     });
     const secretPath = join(tmp, "infra", "docker", "secrets", "offline-package-principal-key");
     const key = readFileSync(secretPath, "utf8");
@@ -522,12 +522,12 @@ describe("renderComposeForRepo", () => {
     expect(
       yaml.match(/offline-package-principal-key:\/run\/secrets\/offline-package-principal-key:ro/g),
     ).toHaveLength(1);
-    const appApi = renderedService(yaml, "app-api");
-    expect(appApi.environment?.OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE).toBe(
+    const api = renderedService(yaml, "api");
+    expect(api.environment?.OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE).toBe(
       "/run/secrets/offline-package-principal-key",
     );
     expect(
-      appApi.volumes?.some((mount) =>
+      api.volumes?.some((mount) =>
         mount.endsWith(
           "offline-package-principal-key:/run/secrets/offline-package-principal-key:ro",
         ),
@@ -540,13 +540,13 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager"],
+      services: ["api,data-manager"],
     });
     expect(readFileSync(secretPath, "utf8")).toBe(key);
   });
 
-  it("creates the agent's stores before mounting its integration store read-only into app-api", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+  it("creates the agent's stores before mounting its integration store read-only into the API", async () => {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -555,7 +555,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager"],
+      services: ["api,data-manager"],
     });
 
     const state = join(tmp, "infra", "docker", "state", "ops-agent");
@@ -564,16 +564,16 @@ describe("renderComposeForRepo", () => {
     }
     expect(readdirSync(join(state, "custom-integrations"))).toEqual([]);
     const yaml = readFileSync(generatedCompose(), "utf8");
-    const appApi = renderedService(yaml, "app-api");
+    const api = renderedService(yaml, "api");
     // Relative to the generation, inside infra/docker/state/ops-agent.
-    expect(appApi.volumes).toContain(
+    expect(api.volumes).toContain(
       "../../custom-integrations:${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}:ro",
     );
     expect(yaml).not.toContain("/custom_integrations:${");
   });
 
   it("mounts only the Transitous API keys directory into data-manager, where it reads them", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -582,7 +582,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["app-api,data-manager"],
+      services: ["api,data-manager"],
     });
 
     const keysDirectory = join(tmp, "infra", "docker", "secrets", "transitous-api-keys");
@@ -731,7 +731,7 @@ describe("renderComposeForRepo", () => {
   });
 
   it("bootstraps distinct database role passwords that only their own services mount", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -741,7 +741,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["postgis,app-api,data-manager,ops-agent"],
+      services: ["postgis,api,data-manager,ops-agent"],
     });
     const secretDir = join(tmp, "infra", "docker", "secrets");
     const api = readFileSync(join(secretDir, "postgres-api-password"), "utf8");
@@ -759,21 +759,21 @@ describe("renderComposeForRepo", () => {
     expect(yaml).not.toContain(dataManager);
     expect(mounts("postgis")).toContain("postgres-api-password:/run/secrets/postgres-api-password");
     expect(mounts("postgis")).toContain("postgres-data-manager-password");
-    expect(mounts("app-api")).toContain("postgres-api-password");
-    expect(mounts("app-api")).not.toContain("postgres-data-manager-password");
+    expect(mounts("api")).toContain("postgres-api-password");
+    expect(mounts("api")).not.toContain("postgres-data-manager-password");
     expect(mounts("data-manager")).toContain("postgres-data-manager-password");
     expect(mounts("data-manager")).not.toContain("postgres-api-password");
-    expect(rendered.services["app-api"]?.environment?.DATABASE_URL).toBe(
-      "postgresql://openmapx_api@postgis:5432/openmapx",
+    expect(rendered.services.api?.environment?.DATABASE_URL).toBe(
+      "postgresql://openmapx_api@openmapx-postgis:5432/openmapx",
     );
     expect(rendered.services["data-manager"]?.environment?.DATABASE_URL).toBe(
-      "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+      "postgresql://openmapx_data_manager@openmapx-postgis:5432/openmapx",
     );
 
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["postgis,app-api,data-manager,ops-agent"],
+      services: ["postgis,api,data-manager,ops-agent"],
     });
     expect(readFileSync(join(secretDir, "postgres-api-password"), "utf8")).toBe(api);
     expect(readFileSync(join(secretDir, "postgres-data-manager-password"), "utf8")).toBe(
@@ -782,7 +782,7 @@ describe("renderComposeForRepo", () => {
   });
 
   it("bootstraps one data-manager token per caller and mounts each only where it belongs", async () => {
-    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
       ) as Record<string, unknown>;
@@ -792,7 +792,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["postgis,app-api,data-manager,ops-agent"],
+      services: ["postgis,api,data-manager,ops-agent"],
     });
     const secretDir = join(tmp, "infra", "docker", "secrets");
     const callers = ["api", "ops-agent", "host-cli"] as const;
@@ -812,11 +812,11 @@ describe("renderComposeForRepo", () => {
     expect(new Set(tokens).size).toBe(3);
     for (const caller of callers)
       expect(mounts("data-manager")).toContain(`data-manager-${caller}-token`);
-    expect(mounts("app-api")).toContain("data-manager-api-token");
-    expect(mounts("app-api")).not.toMatch(/data-manager-(ops-agent|host-cli)-token/);
+    expect(mounts("api")).toContain("data-manager-api-token");
+    expect(mounts("api")).not.toMatch(/data-manager-(ops-agent|host-cli)-token/);
     expect(mounts("ops-agent")).toContain("data-manager-ops-agent-token");
     expect(mounts("ops-agent")).not.toMatch(/data-manager-(api|host-cli)-token/);
-    expect(rendered.services["app-api"]?.environment?.DATA_MANAGER_TOKEN_FILE).toBe(
+    expect(rendered.services.api?.environment?.DATA_MANAGER_TOKEN_FILE).toBe(
       "/run/secrets/data-manager-api-token",
     );
     expect(rendered.services["ops-agent"]?.environment?.DATA_MANAGER_TOKEN_FILE).toBe(
@@ -827,7 +827,7 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
-      services: ["postgis,app-api,data-manager,ops-agent"],
+      services: ["postgis,api,data-manager,ops-agent"],
     });
     expect(
       callers.map((caller) =>

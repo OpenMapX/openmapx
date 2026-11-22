@@ -109,6 +109,15 @@ describe("community repository records", () => {
     expect(() => verifyRecordedRepository(checkout, previous)).toThrow();
   });
 
+  it("names a recorded service whose ID a built-in service now uses", () => {
+    const { root, checkout, digest, record, write } = fixture();
+    writeFileSync(join(checkout, "svc", "service.json"), manifest("martin"));
+    write(record({ manifests: [{ path: "svc", sha256: digest("svc") }] }));
+    expect(() => loadRecordedCommunityServices(root)).toThrow(
+      `Community repository ${REPOSITORY} provides service "martin", but a built-in service now uses that ID.`,
+    );
+  });
+
   it("refuses records the agent did not write", () => {
     const { community, record, write } = fixture();
     write(record());

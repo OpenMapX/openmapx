@@ -10,7 +10,7 @@ import {
 import { decodeGraphId, type WayEdge } from "./ways-to-edges.js";
 
 export interface SpanEdgesDeps {
-  /** Base URL of the routing container, e.g. `http://valhalla:8002`. */
+  /** Base URL of the routing container, e.g. `http://openmapx-valhalla:8002`. */
   valhallaUrl: string;
   waysToEdges: Map<number, WayEdge[]>;
   /** Test seam; production callers use the global `fetch`. */

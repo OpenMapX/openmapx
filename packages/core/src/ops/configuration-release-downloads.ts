@@ -1,5 +1,9 @@
 /** Bounded public registry metadata. These records never supply host authority. */
 import { z } from "zod";
+import {
+  RELEASE_PINNED_SERVICE_IDS,
+  type ReleasePinnedServiceId,
+} from "../services/core-service-ids";
 import { configurationHandoffModeSchema } from "./configuration-handoff-records";
 export const CONFIGURATION_RELEASE_IMAGE_NAMES = [
   "api",
@@ -7,7 +11,6 @@ export const CONFIGURATION_RELEASE_IMAGE_NAMES = [
   "data-manager",
   "ops-agent",
   "transitous-runner",
-  "transitous-tools",
 ] as const;
 export const CONFIGURATION_RELEASE_IMAGE_BYTES = 8 * 1024 ** 3;
 export const CONFIGURATION_RELEASE_TOTAL_BYTES = 32 * 1024 ** 3;
@@ -44,13 +47,15 @@ export type ConfigurationReleaseDownloads = z.infer<typeof configurationReleaseD
 export const configurationReleaseSelectionSchema = configurationHandoffModeSchema.options[1].omit({
   kind: true,
 });
-export const configurationReleaseServiceImagesSchema = z.strictObject({
-  "app-api": configurationReleaseDownloadSchema.shape.reference,
-  "app-web": configurationReleaseDownloadSchema.shape.reference,
-  "data-manager": configurationReleaseDownloadSchema.shape.reference,
-  "ops-agent": configurationReleaseDownloadSchema.shape.reference,
-  "transitous-runner": configurationReleaseDownloadSchema.shape.reference,
-});
+/** The image each pinned service runs, keyed by service ID. */
+export const configurationReleaseServiceImagesSchema = z.strictObject(
+  Object.fromEntries(
+    RELEASE_PINNED_SERVICE_IDS.map((id) => [
+      id,
+      configurationReleaseDownloadSchema.shape.reference,
+    ]),
+  ) as Record<ReleasePinnedServiceId, typeof configurationReleaseDownloadSchema.shape.reference>,
+);
 export const configurationReleaseForwardSchema = configurationReleaseSelectionSchema.extend({
   version: z.literal(1),
   serviceImages: configurationReleaseServiceImagesSchema,

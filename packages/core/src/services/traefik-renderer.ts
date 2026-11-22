@@ -1,4 +1,5 @@
 import { dump as yamlDump } from "js-yaml";
+import { serviceNetworkAlias } from "./core-service-ids";
 import type { ServiceManifest } from "./types";
 
 // Generated Traefik dynamic (file-provider) configuration.
@@ -45,10 +46,11 @@ export interface TraefikRenderContext {
 
 /**
  * Render the dynamic configuration for one manifest, or null when it declares
- * no proxy. The router names, rules, entrypoints, priorities, middlewares, and
- * backend ports intentionally mirror `renderTraefikLabels` one-for-one — the
- * golden parity test asserts that equivalence for every built-in proxied
- * service, so switching providers cannot silently change routing.
+ * no proxy. The router names (without the labels' `openmapx-` prefix), rules,
+ * entrypoints, priorities, middlewares, and backend ports intentionally mirror
+ * `renderTraefikLabels` one-for-one. The golden parity test asserts that
+ * equivalence for every built-in proxied service, so switching providers
+ * cannot silently change routing.
  */
 export function renderTraefikServiceConfiguration(
   manifest: ServiceManifest,
@@ -106,12 +108,12 @@ export function renderTraefikServiceConfiguration(
   return {
     http: {
       routers,
-      // The container name is the Docker-network hostname the socket provider
-      // used to discover; naming it explicitly is what removes the need for it.
+      // Naming the backend's project-unique hostname explicitly is what removes
+      // the need for the socket provider's discovery.
       services: {
         [id]: {
           loadBalancer: {
-            servers: [{ url: `http://${manifest.container.containerName ?? id}:${targetPort}` }],
+            servers: [{ url: `http://${serviceNetworkAlias(id)}:${targetPort}` }],
           },
         },
       },

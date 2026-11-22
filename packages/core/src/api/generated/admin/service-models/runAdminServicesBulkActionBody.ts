@@ -40,5 +40,4 @@ export type RunAdminServicesBulkActionBody =
       all?: boolean;
       region?: string;
       continueOnError?: boolean;
-      motisImport?: boolean;
     };

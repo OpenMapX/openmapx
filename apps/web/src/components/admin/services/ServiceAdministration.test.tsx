@@ -880,7 +880,7 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
               actions: availableActions,
             },
             {
-              id: "app-api",
+              id: "api",
               name: "API",
               version: "1",
               quality: "built-in",
@@ -902,7 +902,101 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
   await chooseAction("Restart Selected");
   const button = screen.getByRole("button", { name: "Restart Selected" });
   expect(button).toBeDisabled();
-  expect(button).toHaveAttribute("title", expect.stringContaining("app-api"));
+  expect(button).toHaveAttribute("title", expect.stringMatching(/\bapi\b/));
+  expect(button).toHaveAttribute("title", expect.stringMatching(/core Restart/));
+});
+
+function catalogWith(services: { id: string; actions: Record<string, unknown> }[]) {
+  return setup((url, init) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          services: services.map(({ id, actions }) => ({
+            id,
+            name: id,
+            version: "1",
+            quality: "built-in",
+            provides: [],
+            consumes: [],
+            enabled: true,
+            isBuiltIn: true,
+            status: "running",
+            actions,
+          })),
+          summary: { running: services.length, stopped: 0, unknown: 0, total: services.length },
+        })
+      : url.pathname.endsWith("/bulk-action") && init.method === "POST"
+        ? Response.json({ ok: true, jobId: "job-1" })
+        : undefined,
+  );
+}
+const notBuildable = {
+  ...availableActions,
+  build: { available: false, execution: "direct", reason: "not_buildable", workflow: null },
+};
+
+it("builds the buildable selection and points MOTIS at transit sync", async () => {
+  const requests = catalogWith([
+    { id: "motis", actions: notBuildable },
+    { id: "pelias", actions: availableActions },
+  ]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "pelias" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByRole("link", { name: "transit sync" })).toHaveAttribute(
+    "href",
+    "/admin/data/transit?tab=sources",
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("Targets: pelias.");
+  const button = screen.getByRole("button", { name: "Build Selected" });
+  expect(button).not.toBeDisabled();
+  fireEvent.click(button);
+  await waitFor(() =>
+    expect(requests.some((request) => request.url.pathname.endsWith("/bulk-action"))).toBe(true),
+  );
+  const request = requests.find((entry) => entry.url.pathname.endsWith("/bulk-action"));
+  expect(JSON.parse(String(request?.init.body))).toEqual({
+    action: "build",
+    serviceIds: ["pelias"],
+    continueOnError: true,
+  });
+});
+
+it("keeps Build disabled when only MOTIS is selected", async () => {
+  catalogWith([{ id: "motis", actions: notBuildable }]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "motis" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByRole("button", { name: "Build Selected" })).toBeDisabled();
+  expect(screen.getByRole("link", { name: "transit sync" })).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "None of the selected services has anything to build.",
+  );
+});
+
+it("names other services with nothing to build and blocks a refused build without core Restart", async () => {
+  catalogWith([
+    { id: "redis", actions: notBuildable },
+    {
+      id: "api",
+      actions: {
+        ...availableActions,
+        build: { available: false, execution: "direct", reason: "control_plane", workflow: null },
+      },
+    },
+  ]);
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "redis" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Build Selected");
+  expect(screen.getByText("Skipped, nothing to build: redis.")).toBeVisible();
+  expect(screen.queryByRole("link", { name: "transit sync" })).toBeNull();
+  const button = screen.getByRole("button", { name: "Build Selected" });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("title", "Unavailable for: api.");
 });
 
 it("selects server-defined preset roots for actions without persisting selection", async () => {
@@ -1001,7 +1095,7 @@ it("removes only an explicit root through the existing selection producer", asyn
   await waitFor(() => expect(toast).toHaveBeenCalledWith("Service selection saved"));
 });
 
-it("sends update dependency options and MOTIS import only on their corresponding action", async () => {
+it("sends update dependency options and build options only on their corresponding action", async () => {
   const requests = setup((url, init) =>
     url.pathname === "/api/admin/services"
       ? Response.json({
@@ -1009,8 +1103,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
           capabilityInventory: { recognized: [], unrecognized: [] },
           services: [
             {
-              id: "motis",
-              name: "MOTIS",
+              id: "osrm",
+              name: "OSRM",
               version: "1",
               quality: "built-in",
               provides: [],
@@ -1028,8 +1122,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
         : undefined,
   );
   mount(<ServiceCatalog />);
-  await screen.findByRole("link", { name: "MOTIS" });
-  fireEvent.click(screen.getByRole("checkbox", { name: "Select motis" }));
+  await screen.findByRole("link", { name: "OSRM" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select osrm" }));
   await chooseAction("Update selected");
   fireEvent.click(screen.getByRole("checkbox", { name: "Update without dependency recreation" }));
   fireEvent.click(screen.getByRole("button", { name: "Update selected" }));
@@ -1039,7 +1133,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
     ).toHaveLength(1),
   );
   await chooseAction("Build Selected");
-  fireEvent.click(screen.getByRole("checkbox", { name: "Import MOTIS after build" }));
+  expect(screen.queryByRole("checkbox", { name: /MOTIS/ })).toBeNull();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Continue on build errors" }));
   fireEvent.click(screen.getByRole("button", { name: "Build Selected" }));
   await waitFor(() =>
     expect(
@@ -1051,8 +1146,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
       .filter((request) => request.url.pathname.endsWith("/bulk-action"))
       .map((request) => JSON.parse(String(request.init.body))),
   ).toEqual([
-    { action: "update", serviceIds: ["motis"], noDeps: true },
-    { action: "build", serviceIds: ["motis"], continueOnError: true, motisImport: true },
+    { action: "update", serviceIds: ["osrm"], noDeps: true },
+    { action: "build", serviceIds: ["osrm"], continueOnError: false },
   ]);
 });
 
@@ -1194,7 +1289,7 @@ it("starts a new apply intent after another successful configuration save", asyn
 });
 
 it("reviews and submits captured Build All targets in the established build order", async () => {
-  const ids = ["tileserver", "motis", "osrm"];
+  const ids = ["tileserver", "otp", "osrm"];
   const requests = setup((url) =>
     url.pathname === "/api/admin/services"
       ? Response.json({
@@ -1226,5 +1321,5 @@ it("reviews and submits captured Build All targets in the established build orde
   expect(
     JSON.parse(String(requests.find((r) => r.url.pathname.endsWith("/bulk-action"))?.init.body))
       .serviceIds,
-  ).toEqual(["osrm", "motis", "tileserver"]);
+  ).toEqual(["osrm", "otp", "tileserver"]);
 });

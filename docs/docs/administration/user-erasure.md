@@ -60,7 +60,7 @@ also verifies the journal/key binding, refuses a backup older than journal
 coverage, and replays every retained erasure request after loading the OpenMapX
 database. Journal compaction advances the coverage floor when old requests
 are discarded; increasing backup retention later cannot make those older
-backups safe to restore again. When `app-api`
+backups safe to restore again. When `api`
 is running, restore requires `--stop-running`; it keeps the API offline until
 that replay succeeds and leaves it stopped if replay fails.
 

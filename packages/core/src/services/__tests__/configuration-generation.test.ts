@@ -41,7 +41,6 @@ import {
   RELEASE_IMAGE_NAMES,
   type ReleaseManifest,
   releaseManifestDigest,
-  TRANSITOUS_TOOLS_IMAGE_ENV,
 } from "../release-manifest";
 import type { LoadedService } from "../types";
 
@@ -461,7 +460,7 @@ it("reads only frozen generated service IDs", async () => {
 });
 
 describe("release pins in the generation", () => {
-  const pinned = [service("app-api"), service("data-manager"), service("alpha")];
+  const pinned = [service("api"), service("data-manager"), service("alpha")];
   const manifest = (release: string, digit: string): ReleaseManifest => ({
     schemaVersion: 1,
     release,
@@ -482,7 +481,7 @@ describe("release pins in the generation", () => {
     commitConfigurationGeneration({
       infraDir,
       services: pinned,
-      input: input({ selectedRoots: ["app-api", "data-manager", "alpha"] }),
+      input: input({ selectedRoots: ["api", "data-manager", "alpha"] }),
       ...(release !== undefined ? { release } : {}),
     });
 
@@ -491,11 +490,14 @@ describe("release pins in the generation", () => {
     const first = manifest("release-1", "1");
     await commit(infraDir, first);
     const rendered = compose(infraDir);
-    expect(rendered.services["app-api"]?.image).toBe(first.images.api);
+    expect(rendered.services.api?.image).toBe(first.images.api);
     expect(rendered.services["data-manager"]?.image).toBe(first.images["data-manager"]);
-    expect(rendered.services["data-manager"]?.environment?.[TRANSITOUS_TOOLS_IMAGE_ENV]).toBe(
-      first.images["transitous-tools"],
-    );
+    // Release images reach services only as their own image, never as environment.
+    expect(
+      Object.values(rendered.services["data-manager"]?.environment ?? {}).filter((value) =>
+        Object.values(first.images).includes(value),
+      ),
+    ).toEqual([]);
     // A service the release does not cover keeps its manifest's image.
     expect(rendered.services.alpha?.image).toBe("example/alpha:1");
     expect(readAppliedRelease(infraDir)).toEqual({
@@ -513,10 +515,10 @@ describe("release pins in the generation", () => {
     await commit(infraDir, first);
     await commit(infraDir);
     expect(readAppliedRelease(infraDir)?.manifest.release).toBe("release-1");
-    expect(compose(infraDir).services["app-api"]?.image).toBe(first.images.api);
+    expect(compose(infraDir).services.api?.image).toBe(first.images.api);
     await commit(infraDir, null);
     expect(readAppliedRelease(infraDir)).toBeNull();
-    expect(compose(infraDir).services["app-api"]?.image).toBe("example/app-api:1");
+    expect(compose(infraDir).services.api?.image).toBe("example/api:1");
     expect(compose(infraDir).services["data-manager"]?.environment).toBeUndefined();
   });
 
@@ -531,7 +533,7 @@ describe("release pins in the generation", () => {
     expect(readPreviousReleaseGeneration(infraDir, rendered.revisionId)).toBe(first.revisionId);
     expect(readGenerationConfiguration(infraDir, first.revisionId)).toMatchObject({
       domain: "maps.example.test",
-      selectedRoots: ["app-api", "data-manager", "alpha"],
+      selectedRoots: ["api", "data-manager", "alpha"],
       release: manifest("release-1", "1"),
     });
     expect(readGenerationRelease(infraDir, first.revisionId)?.manifest.release).toBe("release-1");

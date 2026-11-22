@@ -6,11 +6,16 @@ export const FEED_PROXY_CONFIG_FILENAME = "default.conf";
 export const FEED_PROXY_VARS_FILENAME = "feed-proxy-vars.json";
 
 /**
+ * Where MOTIS reaches the feed proxy: the `motis-feed-proxy` service's
+ * project-unique name on the stack's internal network.
+ */
+export const FEED_PROXY_ORIGIN = "http://openmapx-motis-feed-proxy";
+
+/**
  * Pure-data render of the Transitous-style feed-proxy nginx config.
  *
- * Both the operator-facing CLI (`packages/cli/src/lib/motis-feed-proxy.ts`)
- * and the data-manager pipeline's `gen-full-config` stage call into the
- * helpers here so the two callers stay in lockstep. The render produces:
+ * The data-manager pipeline's `gen-full-config` stage and the MOTIS bundle
+ * import call into the helpers here so they stay in lockstep. The render produces:
  *
  * 1. A primary `server { ... }` block exposing each feed at
  *    `/feed/<key>` with per-entry cache/auth wiring.

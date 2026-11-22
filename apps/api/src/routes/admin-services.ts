@@ -163,7 +163,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: "Invalid action — must be start | stop | restart | apply" };
       }
       const adminSession = getAdminSession(req),
-        coreRestart = action === "restart" && (id === "app-api" || id === "traefik"),
+        coreRestart =
+          action === "restart" &&
+          (coreServices.CORE_RESTART_SERVICE_IDS as readonly string[]).includes(id),
         type = coreRestart ? "service.core-restart" : (`service.${action}` as const),
         payload = { service: id },
         key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
@@ -298,15 +300,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
     const allowedKeys =
       action === "build"
-        ? new Set([
-            "action",
-            "serviceIds",
-            "all",
-            "region",
-            "continueOnError",
-            "presetIds",
-            "motisImport",
-          ])
+        ? new Set(["action", "serviceIds", "all", "region", "continueOnError", "presetIds"])
         : action === "update"
           ? new Set(["action", "serviceIds", "continueOnError", "noDeps", "presetIds"])
           : new Set(["action", "serviceIds", "continueOnError", "presetIds"]);
@@ -328,18 +322,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return reply
           .code(400)
           .send({ error: "Selected preset or service contains an uninstalled service" });
-      if (action === "build" && "motisImport" in req.body && req.body.motisImport) {
-        const motis = registry.get("motis");
-        if (
-          !motis?.enabled ||
-          !motis.isBuiltIn ||
-          !motis.manifest.buildCommand ||
-          !(serviceIds.includes("motis") || ("all" in req.body && req.body.all === true))
-        )
-          return reply
-            .code(400)
-            .send({ error: "MOTIS import requires a build including enabled built-in MOTIS" });
-      }
     } catch (error) {
       if (error instanceof coreServices.UnknownPresetError)
         return reply.code(400).send({ error: "Unknown service preset" });
@@ -368,7 +350,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         region,
         continueOnError: req.body?.continueOnError,
         ...("noDeps" in req.body ? { noDeps: req.body.noDeps } : {}),
-        ...("motisImport" in req.body ? { motisImport: req.body.motisImport } : {}),
       },
       adminSession.user.id,
       key,
@@ -806,7 +787,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       hostControlConfigured: hostControlConfigured(),
       hostDir: hostDir ?? null,
       // True once a configuration generation is applied: its render bakes the
-      // applied services into app-api; a host-run API sees the generation.
+      // applied services into the API container; a host-run API sees the generation.
       composeRendered:
         coreServices.parseServiceIdList(process.env[coreServices.APPLIED_SERVICES_ENV]) !== null ||
         existsSync(

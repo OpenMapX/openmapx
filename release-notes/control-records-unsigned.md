@@ -25,7 +25,7 @@ the API's request is authenticated by its token as before.
 
 A configuration apply now carries its payload in the API's authenticated request
 to the agent, named in the operation by its digest; the agent's journal keeps
-only the digest. app-api no longer mounts `infra/docker/state/ops-agent/trusted-config`
+only the digest. The API no longer mounts `infra/docker/state/ops-agent/trusted-config`
 or receives `OPS_TRUSTED_CONFIG_DIR`, `OPS_TRUSTED_CONFIG_UID` and
 `OPS_TRUSTED_CONFIG_GID`. The prepared candidate the API keeps for recovery lives
 in `infra/docker/state/ops-agent/configuration-candidates`, which only the agent

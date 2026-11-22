@@ -176,7 +176,7 @@ export function registrable(host: string): string {
 /** Is this an own-infra / test / non-routable host we should ignore? */
 export function isInternalHost(host: string): boolean {
   const h = host.toLowerCase();
-  if (!h.includes(".")) return true; // single-label docker service name (app-api, nominatim, …)
+  if (!h.includes(".")) return true; // single-label docker service name (data-manager, nominatim, …)
   if (h === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return true;
   return /\.(test|example|invalid|local|internal|localhost)$/.test(h) || h === "example.com";
 }

@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
-const buildScript = resolve(root, "services/motis/tools/transitous/build-gtfsclean.sh");
+const buildScript = resolve(root, "apps/transitous-runner/build-gtfsclean.sh");
 const temporaryDirectories: string[] = [];
 
 function fakeToolchain() {

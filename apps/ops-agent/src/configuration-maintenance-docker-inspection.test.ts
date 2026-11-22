@@ -58,7 +58,7 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
     })),
   };
   const compose = {
-    services: { "app-api": spec },
+    services: { api: spec },
     secrets: Object.fromEntries(spec.secrets.map((s) => [s.source, { file }])),
     configs: Object.fromEntries(spec.configs.map((s) => [s.source, { file }])),
   };
@@ -94,7 +94,7 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
     ],
   };
   const container = {
-    serviceId: "app-api",
+    serviceId: "api",
     containerId: id,
     state: "running" as const,
     provenance: {
@@ -111,7 +111,7 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
     plan: {
       operation: { revisionId: revision, expectedCurrentRevisionId: revision },
       steps: [],
-      handoff: { serviceIds: ["app-api"] },
+      handoff: { serviceIds: ["api"] },
     },
   } as unknown as MaintenanceFile;
   let content = "fixture-content";
@@ -129,7 +129,7 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
         if (args[0] === "compose" && args.includes("--format"))
           return { stdout: JSON.stringify(compose), stderr: "" };
         if (args[0] === "compose" && args.includes("--hash"))
-          return { stdout: `app-api ${configHash}`, stderr: "" };
+          return { stdout: `api ${configHash}`, stderr: "" };
         if (args[0] === "container" && args[1] === "inspect")
           return { stdout: JSON.stringify(observed), stderr: "" };
         if (args[0] === "container" && args[1] === "exec" && args[3] === "base64") {
@@ -219,7 +219,7 @@ it.each(["source", "access", "duplicate", "contents"])(
 it("refuses an applied container whose healthcheck has not passed, naming its service", async () => {
   const { inspect, observed } = fixture(1, 0, 0);
   Object.assign(observed.State, { Health: { Status: "starting" } });
-  await expect(inspect()).rejects.toThrow("Original applied container not ready: app-api");
+  await expect(inspect()).rejects.toThrow("Original applied container not ready: api");
 });
 
 it("waits for a recreated container's healthcheck before it is checked", async () => {

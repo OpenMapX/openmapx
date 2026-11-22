@@ -9,10 +9,12 @@ import { getServiceRegistry, serviceUrl } from "../service-registry.js";
 import { getServiceSecretStrict } from "../service-secrets.js";
 import {
   DAWARICH_APP_SERVICE_ID,
+  DAWARICH_DATABASE_HOST,
   DAWARICH_OIDC_RECOVERY_REQUIRED_KEY,
   DAWARICH_POSTGIS_SERVICE_ID,
   DAWARICH_PROVISIONING_GENERATION_KEY,
   DAWARICH_REDIS_SERVICE_ID,
+  DAWARICH_REDIS_URL,
   DAWARICH_SOFTWARE_ID,
   DAWARICH_WORKER_SERVICE_ID,
   type ManagedOAuthClient,
@@ -141,8 +143,8 @@ function configsReady(
     APPLICATION_URL: publicOrigin,
     DOMAIN: hostname,
     APPLICATION_PROTOCOL: "https",
-    REDIS_URL: "redis://dawarich-redis:6379",
-    DATABASE_HOST: DAWARICH_POSTGIS_SERVICE_ID,
+    REDIS_URL: DAWARICH_REDIS_URL,
+    DATABASE_HOST: DAWARICH_DATABASE_HOST,
     DATABASE_PORT: "5432",
     DATABASE_USERNAME: "postgres",
     DATABASE_NAME: "dawarich_production",

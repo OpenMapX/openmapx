@@ -65,7 +65,7 @@ pnpm openmapx services capabilities --unrecognised      # flag non-standard capa
 ## Enabling and disabling services
 
 The set of services that participate in your deployment is the **selection**.
-The default roots are `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
+The default roots are `traefik`, `well-known`, `api`, `web`, `postgis`,
 `redis`, and `data-manager`. Dependencies add `ops-agent` and `transitous-runner`.
 Routing, geocoding, transit, OSM queries, and tiles are opt-in. Custom selections
 replace the defaults; the core is not unconditionally added to every selection.
@@ -83,8 +83,8 @@ deployment file. For example, a selection retaining the default app roots is:
   "selected": [
     "traefik",
     "well-known",
-    "app-api",
-    "app-web",
+    "api",
+    "web",
     "postgis",
     "redis",
     "data-manager",
@@ -136,7 +136,7 @@ routing stack" instead of listing every id. Presets work on `services start`,
 
 | Preset      | Services                                                      |
 | ----------- | ------------------------------------------------------------- |
-| `app`       | `app-api`, `app-web`, `well-known`                            |
+| `app`       | `api`, `web`, `well-known`                                    |
 | `proxy`     | `traefik`                                                     |
 | `dev`       | `postgis`, `redis`                                            |
 | `routing`   | `osrm`, `valhalla`                                            |
@@ -198,7 +198,7 @@ override the selection or domain for a single render without touching the
 persisted selection:
 
 ```bash
-pnpm openmapx compose render --services app-api,app-web,well-known,data-manager,valhalla,photon
+pnpm openmapx compose render --services api,web,well-known,data-manager,valhalla,photon
 # --preset routing alone renders only that preset and its dependencies.
 pnpm openmapx compose render --domain maps.example.com
 ```
@@ -247,7 +247,7 @@ expect a rendered compose file to already exist:
 
 ```bash
 pnpm openmapx services stop motis otp                  # docker compose stop
-pnpm openmapx services restart app-api                 # in-place reboot (does NOT re-render)
+pnpm openmapx services restart api                     # in-place reboot (does NOT re-render)
 pnpm openmapx services update valhalla                 # pull images + replace container
 pnpm openmapx services status                          # container table (all services)
 pnpm openmapx services status valhalla                 # one service
@@ -275,7 +275,7 @@ describes how to resolve one whose outcome is unknown.
   Use `--no-deps` to replace only the named containers when dependencies are already
   healthy.
 - **`compose rotate-redis-password`** rotates Redis credentials after clients
-  (`app-api`, `data-manager`, and any extension clients) are stopped. Follow the
+  (`api`, `data-manager`, and any extension clients) are stopped. Follow the
   [Redis rotation procedure](../guides/supporting-infrastructure.md#valkey--the-cache)
   for application and partial-failure recovery.
 
@@ -339,7 +339,7 @@ pnpm openmapx services logs valhalla --follow          # stream
 
 A few engines can't boot from raw OSM data; they need a prepared graph or tile
 set built first. Those services declare a build hook in their manifest; today
-that's `osrm`, `otp`, `motis`, `pelias`, and `tileserver`. The build runs inside
+that's `osrm`, `otp`, `pelias`, and `tileserver`. The build runs inside
 a Dockerized helper, so you don't install `osmium` or friends on the host.
 
 ```bash
@@ -352,11 +352,11 @@ stack. Use `--continue-on-error` (on `build`) or `--fail-fast` (on `build-all`)
 to control behavior when one service's build fails.
 
 `services build-all` builds every installed service declaring a build command,
-including engines outside your selection. It currently plans OSRM, OTP, MOTIS,
+including engines outside your selection. It currently plans OSRM, OTP,
 Pelias, and TileServer GL in that order. Prefer explicit IDs for a small deployment.
 Builds refuse running consumers; [Preparing data](./preparing-data.md#building-prepared-artifacts)
-lists the consumers to stop. MOTIS operating-dataset updates use transactional
-sync instead of the low-level build.
+lists the consumers to stop. MOTIS has no build: the transactional transit sync
+builds, probes and promotes its data.
 
 The source data those builds consume (OSM
 extracts, GTFS feeds, map glyphs) is downloaded and refreshed separately. See
@@ -404,7 +404,7 @@ not yet applied are therefore unavailable to a fresh CLI render.
 Apply newly saved admin settings before using the CLI to recreate their services.
 After that apply, CLI renders preserve them. The API receives schema-backed
 `SERVICE_*` overrides as environment references; after editing `.env`, use a host
-CLI render/start to apply them and recreate `app-api` when its environment needs
+CLI render/start to apply them and recreate `api` when its environment needs
 updating. A container restart does not reload changed environment variables.
 
 For example:
@@ -412,7 +412,7 @@ For example:
 ```bash
 pnpm openmapx services start valhalla
 # When API or data-manager environment changed:
-pnpm openmapx services start app-api data-manager
+pnpm openmapx services start api data-manager
 ```
 
 :::note[Data-manager credentials are separate]
@@ -518,8 +518,9 @@ checkout's.
 ## Exposure: what's reachable from outside
 
 By default every service is reachable **only** on the private `openmapx` Docker
-network; other containers reach it by service id (`http://valhalla:8002`,
-`http://nominatim:8080`). Nothing is exposed to the host or the internet unless
+network; other containers reach it by its project-unique name
+(`http://openmapx-valhalla:8002`, `http://openmapx-nominatim:8080`). Nothing is
+exposed to the host or the internet unless
 its manifest opts in, in one of two ways:
 
 - **Proxy routing** (`exposure.proxy`) generates file-provider routes for
@@ -555,9 +556,21 @@ OPENMAPX_PROXY_CERT_RESOLVER=myresolver
 ```
 
 The bundled `traefik` service is then never selected. Every routed service
-(`app-web`, `app-api`, `well-known`, `tileserver`, …) joins the external
-network, and its labels carry the entrypoint, resolver and network. Re-render
-and start the stack as usual.
+(`web`, `api`, `well-known`, `tileserver`, …) joins the external
+network, and its labels carry the entrypoint, resolver and network. The label
+router, service and middleware names start with `openmapx-` (`openmapx-api`,
+`openmapx-web`, …), so they do not clash with other projects on the same
+Traefik.
+
+Internal traffic uses project-unique names, so the shared proxy network cannot
+capture it. Every service answers to `openmapx-<service-id>` (`openmapx-api`,
+`openmapx-postgis`, `openmapx-redis`, `openmapx-data-manager`, …) on the
+stack's own networks only, and every internal URL OpenMapX renders uses those
+names. Docker also knows each service by its bare ID, such as `redis`, but on
+the shared network that name could resolve to another project's container, and
+OpenMapX never uses it. If you set an internal URL in `infra/docker/.env` or in
+a community service's settings, use the `openmapx-<service-id>` name as well.
+Re-render and start the stack as usual.
 
 Copy `services/traefik/config/dynamic/middlewares.yml` into the external
 Traefik's file-provider directory. The routes reference its middlewares with
@@ -657,7 +670,11 @@ reconcile that generation before starting them. Partial or unknown outcomes stay
 visible in Activity and retain their original ownership; retrying observation does
 not repeat publication.
 
-MOTIS export requires a retained portable recipe and compiled candidate. Source
+MOTIS cannot be exported in this release: a candidate that transit sync
+promoted cannot be exported yet, and exporting one is planned. Export requires a
+retained portable recipe, a compiled candidate and a build record, and transit
+sync does not write that record; only MOTIS data that was itself imported from a
+bundle has one, and this release cannot produce such a bundle. Source
 credentials and generated proxy configuration are excluded from the bundle. The
 destination must have the same approved catalog pins and all required managed feed
 credentials; the preview lists credential identifiers without their values. Host

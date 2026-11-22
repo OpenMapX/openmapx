@@ -1,6 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { isSafeFeedSourceName, type TransitousFeedFile } from "./feed-source.js";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import type { TransitousLogger } from "./runner.js";
 
 /**
@@ -34,51 +33,6 @@ const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
 /** Default max concurrent archive downloads for the transactional acquisition stage. */
 const DEFAULT_MIRROR_CONCURRENCY = 5;
-
-// Source `spec` values that are not schedule data (no `.gtfs/.netex.zip`
-// archive to mirror) — skip them so we don't 404-probe e.g. bikeshare feeds.
-const NON_SCHEDULE_SPECS = new Set(["gbfs"]);
-
-/** The country code of a region key — the part before the first `-` (`us-pa` → `us`). */
-function countryOf(region: string): string {
-  const dash = region.indexOf("-");
-  return (dash === -1 ? region : region.slice(0, dash)).toLowerCase();
-}
-
-/**
- * List the schedule-feed archives to mirror by parsing the catalog's
- * `feeds/<region>.json` files. When `countries` is non-empty, only regions
- * whose country code matches are included. (A best-effort view for the CLI
- * seed; the daemon pipeline derives the same set through its richer filter.)
- */
-export function listMirrorArchives(
-  catalogDir: string,
-  countries: readonly string[] = [],
-): MirrorArchive[] {
-  const feedsDir = join(catalogDir, "feeds");
-  if (!existsSync(feedsDir)) return [];
-  const wanted = countries.map((c) => c.toLowerCase());
-  const archives: MirrorArchive[] = [];
-  for (const file of readdirSync(feedsDir)) {
-    if (!file.endsWith(".json")) continue;
-    const region = file.slice(0, -".json".length);
-    if (!isSafeFeedSourceName(region)) continue;
-    if (wanted.length > 0 && !wanted.includes(countryOf(region))) continue;
-    let parsed: TransitousFeedFile;
-    try {
-      parsed = JSON.parse(readFileSync(join(feedsDir, file), "utf-8")) as TransitousFeedFile;
-    } catch {
-      continue;
-    }
-    for (const source of parsed.sources ?? []) {
-      if (!source.name || source.skip) continue;
-      if (!isSafeFeedSourceName(source.name)) continue;
-      if (source.spec && NON_SCHEDULE_SPECS.has(source.spec.toLowerCase())) continue;
-      archives.push({ region, name: source.name });
-    }
-  }
-  return archives;
-}
 
 /**
  * Download each archive directly from `baseUrl`, probing gtfs then netex, in

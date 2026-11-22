@@ -184,7 +184,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
       estimateOvertureIngestBytes(pullContract.rowCount, activeSchemaBytes),
   });
 
-  const databaseUrl = resolveDatabaseUrl("postgresql://postgres:postgres@postgis:5432/openmapx");
+  const databaseUrl = resolveDatabaseUrl(
+    "postgresql://postgres:postgres@openmapx-postgis:5432/openmapx",
+  );
 
   opts.onProgress?.("Creating staging schema...");
   await sql.unsafe(buildSchemaDDL(stagingSchema, { deferPlacesIndexes: true }));

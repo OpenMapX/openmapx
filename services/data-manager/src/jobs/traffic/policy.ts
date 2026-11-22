@@ -15,8 +15,8 @@ export async function fetchTrafficPolicy(
   options: { baseUrl?: string; token?: string; fetch?: typeof fetch } = {},
 ): Promise<TrafficPolicy> {
   const base = services.validateDataManagerBaseUrl(
-    options.baseUrl ?? process.env.APP_API_BASE_URL ?? "http://app-api:3001",
-    { allowPlaintextHosts: ["app-api"] },
+    options.baseUrl ?? process.env.INTERNAL_API_URL ?? "http://openmapx-api:3001",
+    { allowPlaintextHosts: ["openmapx-api"] },
   );
   // The API accepts the token it presents here, so the two share one secret.
   const apiTokenFile = process.env.DATA_MANAGER_API_TOKEN_FILE?.trim();

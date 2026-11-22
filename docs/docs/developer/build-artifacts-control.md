@@ -57,7 +57,7 @@ as a known failure.
 
 ## Glossary
 
-- **Target.** A service ID, such as `motis` or `app-api`, whose containers a writer
+- **Target.** A service ID, such as `motis` or `api`, whose containers a writer
   may change. Writers claim targets before any Docker effect.
 - **Lease.** A durable claim on a set of targets by one execution. While it is
   held, no other writer may begin an effect on those targets. Leases are rows in
@@ -646,9 +646,9 @@ is checked again with a back-off from 5 to 60 seconds.
 
 ## Release pins and rollback
 
-A generation renders the image of every release service (`app-api`, `app-web`,
-`data-manager`, `ops-agent`, `transitous-runner`) and data-manager's Transitous
-tools image from one release manifest, and keeps that canonical manifest as
+A generation renders the image of every release service (`api`, `web`,
+`data-manager`, `ops-agent`, `transitous-runner`) from one release manifest, and
+keeps that canonical manifest as
 `release-manifest.json`; its SHA-256 is the release's identity. A render that names
 no release keeps the applied generation's pins. A release update's maintenance
 commits the generation with the release it froze, then the helper verifies the

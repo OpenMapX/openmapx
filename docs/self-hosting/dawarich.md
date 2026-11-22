@@ -103,7 +103,7 @@ and seeds, then starts Puma. Worker startup follows the healthy app. Health
 probes alone do not establish a successful OIDC flow, working API key, import,
 or backup restore.
 
-OpenMapX connects to the managed API only at `http://dawarich-app:3000`; user links
+OpenMapX connects to the managed API only at `http://openmapx-dawarich-app:3000`; user links
 use the public HTTPS origin. Managed availability requires installed, selected,
 provisioned configuration and reachable app health. Only non-user health is
 cached in memory, for at most 15 seconds. Disabling does not erase connections.
@@ -239,7 +239,7 @@ records the `dawarich-1.15.3` contract, and the backup subject export refuses it
 
 The same update moves the four Dawarich containers off the `openmapx` network
 (see [Network isolation](#network-isolation-and-user-supplied-urls)). Compose
-recreates them and adds Traefik and app-api to the ingress network; volumes
+recreates them and adds Traefik and the API to the ingress network; volumes
 are untouched. If you added your own service that calls `dawarich-app` or the
 Dawarich database by name over `openmapx`, it can no longer reach them.
 
@@ -258,7 +258,7 @@ They use two private networks:
 | Network                             | Members                                           | Why                                          |
 | ----------------------------------- | ------------------------------------------------- | -------------------------------------------- |
 | `openmapx-private-dawarich`         | app, worker, `dawarich-postgis`, `dawarich-redis` | The bundle's own traffic and internet access |
-| `openmapx-private-dawarich-ingress` | app, `traefik`, `app-api`                         | Public routing and OpenMapX's timeline reads |
+| `openmapx-private-dawarich-ingress` | app, `traefik`, `api`                             | Public routing and OpenMapX's timeline reads |
 
 So a Dawarich user cannot point a webhook or photo URL at OpenMapX's database,
 Redis, data manager, ops agent or other platform services. Those names don't
@@ -270,8 +270,8 @@ Two kinds of reach remain:
 - **Inside the bundle.** A webhook can target the bundle's own Postgres, Redis
   or web app. Postgres requires the bundle's password. Redis drops connections
   that look like HTTP, and the web app checks each request's credentials.
-- **From the web app to Traefik and app-api.** Traefik serves only its public
-  entrypoints. On app-api, the thumbnail proxy could fetch an unauthenticated
+- **From the web app to Traefik and the API.** Traefik serves only its public
+  entrypoints. On the API, the thumbnail proxy could fetch an unauthenticated
   route and show its body to the user. Besides the public API, that means the
   `/api/internal/metrics` counters, which contain no personal data.
 

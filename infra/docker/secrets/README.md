@@ -32,16 +32,16 @@ never trimmed or silently rotated. The same protected-directory, owner,
 single-link, and exact `0444` file rules described for the generated Redis
 credential apply.
 
-Only `app-api` receives the read-only bind mount and its file-path/expected-owner
+Only `api` receives the read-only bind mount and its file-path/expected-owner
 configuration. Data-manager never receives the key or a raw account/session
 identifier; it sees only a lowercase 64-hex HMAC principal over the existing
 authenticated service connection. The key value must never enter Compose
 environment values, URLs, request bodies, responses, labels, commands, images,
 or logs.
 
-Rotating the key intentionally changes every derived principal. Stop app-api,
+Rotating the key intentionally changes every derived principal. Stop `api`,
 drain or let current package preparations finish, atomically replace the file
-with another canonical generated value, then recreate app-api. Existing
+with another canonical generated value, then recreate `api`. Existing
 content-addressed artifact URLs remain usable, but old job-status ownership and
 retention-accounting identities cannot be resumed through the new principal;
 users prepare again to acquire new ownership records. Ordinary compose render
@@ -57,7 +57,7 @@ render fails closed if the two files contain the same value. Their protected
 directory, ownership, single-link, and `0444` file requirements are the same as
 for the generated Redis credential below.
 
-The API credential is mounted only into `app-api` and `ops-agent`; the
+The API credential is mounted only into `api` and `ops-agent`; the
 data-manager credential is mounted only into `data-manager` and `ops-agent`.
 Callers receive only a token **file path** in their environment. Raw bearer
 values must not be copied into Compose environment entries, URLs, labels,
@@ -65,7 +65,7 @@ commands, logs, or images.
 
 There is not yet a live or single-caller rotation protocol. Rotation must stop
 all three credential holders, replace both files as one coordinated maintenance
-event, and recreate `ops-agent`, `app-api`, and `data-manager` before any caller
+event, and recreate `ops-agent`, `api`, and `data-manager` before any caller
 resumes. Ordinary compose rendering does not perform that rotation. Until the
 coordinated rotation command lands, do not delete, edit, or move either token
 while any of those containers is running.
@@ -79,13 +79,13 @@ file rules as the ops-agent tokens above, and a render fails closed if any two
 hold the same value.
 
 `data-manager` mounts all three, admits the API's token only to the routes the
-API uses, and admits the other two everywhere. `app-api` mounts only the API token and `ops-agent` only the agent token,
+API uses, and admits the other two everywhere. `api` mounts only the API token and `ops-agent` only the agent token,
 each receiving the path as `DATA_MANAGER_TOKEN_FILE`; data-manager also presents
 the API token when it calls back into the API. The host CLI reads its token
 from this directory. No raw token belongs in Compose environment values, URLs,
 labels, commands or logs.
 
-To rotate them, stop `app-api`, `ops-agent` and `data-manager`, delete the
+To rotate them, stop `api`, `ops-agent` and `data-manager`, delete the
 files, run `pnpm openmapx compose render`, then start the three services.
 
 ### `postgres-api-password` and `postgres-data-manager-password` (generated)
@@ -95,15 +95,15 @@ data-manager's own PostgreSQL roles, `openmapx_api` and
 `openmapx_data_manager`, when they are absent. They follow the same format,
 reuse and file rules as the ops-agent tokens above, and a render fails closed if
 the two files hold the same value. PostGIS mounts both and creates or updates
-the roles from them on every start, before it reports healthy; `app-api` and
+the roles from them on every start, before it reports healthy; `api` and
 `data-manager` each mount only their own file and receive its path as
 `DATABASE_PASSWORD_FILE`. The PostgreSQL superuser keeps `POSTGRES_PASSWORD`
 from `.env` and is used only by PostGIS administration and the CLI's backups
 and restores. Nominatim's bundled database has its own `NOMINATIM_DB_PASSWORD`
 in `.env`.
 
-To change a password, stop `app-api` and `data-manager`, delete the file, run
-`pnpm openmapx compose render`, then restart `postgis` followed by `app-api`
+To change a password, stop `api` and `data-manager`, delete the file, run
+`pnpm openmapx compose render`, then restart `postgis` followed by `api`
 and `data-manager`.
 
 ### `transitous-runner-capability` (generated)
@@ -136,7 +136,7 @@ than trimmed. The same render atomically replaces `redis-acl.conf`, which
 contains only Valkey ACL directives and the SHA-256 hash of the password. It
 then rereads both authoritative files and retries a bounded number of times if a
 concurrent render or rotation changed either generation. The raw value is
-mounted only into Valkey, app-api, and data-manager. It is not written into
+mounted only into Valkey, `api`, and data-manager. It is not written into
 Compose environment values, URLs, labels, commands, or health-check command
 text.
 
@@ -159,12 +159,12 @@ successful render and rotation performs bounded reconciliation against the
 authoritative password, so overlapping successful operations converge on a
 matching ACL. Run this exact order from the repository root:
 
-1. `pnpm openmapx services stop app-api data-manager`
+1. `pnpm openmapx services stop api data-manager`
 2. `pnpm openmapx compose rotate-redis-password --confirm-clients-stopped`
 3. `pnpm openmapx services update redis` (renders the matching ACL and force-recreates Valkey)
 4. Wait until `redis` is healthy; its health check authenticates from the same
    password file.
-5. `pnpm openmapx services start app-api data-manager`
+5. `pnpm openmapx services start api data-manager`
 
 The command never prints or returns the password or its hash. Predictable ACL
 candidate failures happen before the password commit and leave both old files

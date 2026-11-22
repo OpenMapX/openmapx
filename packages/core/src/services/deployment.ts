@@ -13,12 +13,8 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { atomicWrite } from "../release-files";
-import {
-  DEFAULT_SELECTED_SERVICE_IDS,
-  normalizeServiceIds,
-  parseServiceIdList,
-  SERVICE_SELECTION_ENV,
-} from "./selection";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "./core-service-ids";
+import { normalizeServiceIds, parseServiceIdList, SERVICE_SELECTION_ENV } from "./selection";
 
 /**
  * The deployment has two pieces of state, shared by the CLI and the admin
@@ -286,7 +282,7 @@ export function readDesiredSelection(
 /**
  * The config schema of every integration in the checkout, by id: the same
  * set the ops-agent reads, so both renders pass the same integration settings
- * through to app-api.
+ * through to the API.
  */
 export function loadIntegrationSchemas(rootDir: string): Map<string, Record<string, unknown>> {
   const found = new Map<string, Record<string, unknown>>();

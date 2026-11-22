@@ -47,7 +47,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       const installation = control.openControlInstallation({
         infraDir: infra,
         role: "ops-agent",
-        serviceIds: ["app-api"],
+        serviceIds: ["api"],
       });
       cleanup.push(() => control.closeControlInstallation(installation));
       let store = new ArtifactTransferStore({
@@ -130,7 +130,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           operation,
           admittedAt,
           requestedDeadlineAt: admittedAt + 600000,
-          serviceIds: ["app-api"],
+          serviceIds: ["api"],
         });
         const context = {
           execution,

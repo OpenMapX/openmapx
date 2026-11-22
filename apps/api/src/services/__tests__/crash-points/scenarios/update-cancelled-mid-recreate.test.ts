@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 import { crashScenario } from "../scenario";
 
-// The update is cancelled while the helper's recreate of app-api is in flight.
+// The update is cancelled while the helper's recreate of the API is in flight.
 crashScenario({
   title: "an update cancelled during a recreate",
   name: "finishes the recreate in flight, starts no further effect and never succeeds",
@@ -12,7 +12,7 @@ crashScenario({
     const apiRecreate = host.blockDocker({
       command: "compose up",
       caller: "helper",
-      service: "app-api",
+      service: "api",
     });
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
@@ -27,7 +27,7 @@ crashScenario({
     const recreated = host
       .dockerEffects({ command: "compose up", caller: "helper", since: start })
       .map((call) => call.args.at(-1));
-    expect(recreated.filter((service) => service === "app-api")).toHaveLength(1);
+    expect(recreated.filter((service) => service === "api")).toHaveLength(1);
     expect(
       host
         .dockerEffects({ command: "compose up", since: releasedAt })

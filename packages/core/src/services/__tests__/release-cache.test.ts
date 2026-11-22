@@ -53,7 +53,7 @@ it("caches a checked manifest under its digest and reads it back by that digest"
   expect(cacheReleaseManifest(root, first)).toEqual(cached);
   expect(readCheckedConfigurationRelease(root, cached, channel)).toMatchObject({
     releaseId: "release-1",
-    serviceImages: { "app-api": first.images.api },
+    serviceImages: { api: first.images.api },
   });
 });
 

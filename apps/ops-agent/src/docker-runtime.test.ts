@@ -1058,7 +1058,7 @@ describe("fixed Docker runtime adapters", () => {
         runtime,
         {
           kind: "service.update",
-          serviceId: "app-api",
+          serviceId: "api",
           expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
         },
         context(),

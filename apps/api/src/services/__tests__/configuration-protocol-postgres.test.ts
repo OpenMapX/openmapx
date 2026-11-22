@@ -63,18 +63,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       fixture = await createConfigurationPostgresFixture();
       state.fixture = fixture;
       const schemas = Object.fromEntries(
-        ["motis", "ops-agent", "app-api", "traefik", "postgis", "redis", "data-manager"].map(
-          (id) => [
-            id,
-            {
-              type: "object",
-              properties: {
-                WORKERS: { type: "integer", default: 2 },
-                TOKEN: { type: "string", "x-openmapx-secret": true },
-              },
+        ["motis", "ops-agent", "api", "traefik", "postgis", "redis", "data-manager"].map((id) => [
+          id,
+          {
+            type: "object",
+            properties: {
+              WORKERS: { type: "integer", default: 2 },
+              TOKEN: { type: "string", "x-openmapx-secret": true },
             },
-          ],
-        ),
+          },
+        ]),
       );
       // A coordinator and one hardlink, so a maintenance has a generation, a
       // hardlinks and a recreate step.

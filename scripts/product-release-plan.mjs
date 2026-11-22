@@ -5,14 +5,7 @@ import {
   productVersionPattern,
   readProductReleaseConfig,
 } from "./product-release-config.mjs";
-export const productImageNames = [
-  "api",
-  "web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-  "transitous-tools",
-];
+export const productImageNames = ["api", "web", "data-manager", "ops-agent", "transitous-runner"];
 export const digestPattern = /^sha256:[a-f0-9]{64}$/;
 export function validInstant(value) {
   if (
@@ -79,7 +72,7 @@ export function validateProducerManifest(manifest, repository, run) {
     Object.keys(manifest.images ?? {})
       .sort()
       .join() === [...productImageNames].sort().join(),
-    "Incomplete six-image manifest",
+    "Incomplete product image manifest",
   );
   for (const name of productImageNames) {
     const prefix = `${namespace}/${name}@`;

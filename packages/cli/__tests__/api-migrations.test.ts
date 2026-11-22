@@ -30,7 +30,7 @@ const composeCalls = () => vi.mocked(dockerComposeStream).mock.calls.map(([args]
 const dockerCalls = () => vi.mocked(execa).mock.calls.map(([, args]) => args);
 
 const PROJECT_LABEL = "com.docker.compose.project=openmapx";
-const MARKER = "org.openmapx.migration=app-api";
+const MARKER = "org.openmapx.migration=api";
 const FILTERS = ["--filter", `label=${PROJECT_LABEL}`, "--filter", `label=${MARKER}`];
 
 beforeEach(() => {
@@ -48,16 +48,16 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("migrateBeforeApiUpdate", () => {
-  it("stops app-api and migrates with the new image in a labelled one-off container", async () => {
+  it("stops the API and migrates with the new image in a labelled one-off container", async () => {
     expect(await migrateBeforeApiUpdate({ deps: false })).toBe(0);
 
     const [stop, run] = composeCalls();
-    expect(stop).toEqual(["stop", "app-api"]);
+    expect(stop).toEqual(["stop", "api"]);
     assert.isDefined(run);
     expect(run.slice(0, 4)).toEqual(["run", "--rm", "-T", "--no-deps"]);
     expect(run[run.indexOf("--label") + 1]).toBe(MARKER);
-    expect(run.slice(run.indexOf("app-api"))).toEqual([
-      "app-api",
+    expect(run.slice(run.indexOf("api"))).toEqual([
+      "api",
       "sh",
       "-c",
       "if [ -f dist/migrate.js ]; then exec node --import tsx/esm dist/migrate.js; fi; exit 78",
@@ -67,7 +67,7 @@ describe("migrateBeforeApiUpdate", () => {
     expect(composeCalls()).toHaveLength(2);
   });
 
-  it("lets the one-off container start app-api's dependencies when the update does", async () => {
+  it("lets the one-off container start the API's dependencies when the update does", async () => {
     await migrateBeforeApiUpdate({ deps: true });
     expect(composeCalls()[1]).not.toContain("--no-deps");
   });
@@ -79,17 +79,17 @@ describe("migrateBeforeApiUpdate", () => {
       ["stop", "-t", "60", "abc123", "def456"],
       ["rm", "-f", "abc123", "def456"],
     ]);
-    expect(composeCalls()[0]).toEqual(["stop", "app-api"]);
+    expect(composeCalls()[0]).toEqual(["stop", "api"]);
   });
 
-  it("starts the previous app-api again and reports the failure when the migration fails", async () => {
+  it("starts the previous API again and reports the failure when the migration fails", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "run" ? 1 : 0));
     expect(await migrateBeforeApiUpdate({ deps: false })).toBe(1);
     expect(composeCalls().map((args) => args[0])).toEqual(["stop", "run", "start"]);
-    expect(composeCalls()[2]).toEqual(["start", "app-api"]);
+    expect(composeCalls()[2]).toEqual(["start", "api"]);
   });
 
-  it("leaves migrating to app-api's startup when its image has no migration entry point", async () => {
+  it("leaves migrating to the API's startup when its image has no migration entry point", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "run" ? 78 : 0));
     expect(await migrateBeforeApiUpdate({ deps: false })).toBe(0);
     expect(composeCalls().map((args) => args[0])).toEqual(["stop", "run"]);
@@ -103,10 +103,10 @@ describe("migrateBeforeApiUpdate", () => {
     expect(dockerComposeStream).not.toHaveBeenCalled();
   });
 
-  it("migrates nothing when app-api cannot be stopped", async () => {
+  it("migrates nothing when the API cannot be stopped", async () => {
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(5);
     expect(await migrateBeforeApiUpdate({ deps: false })).toBe(5);
-    expect(composeCalls()).toEqual([["stop", "app-api"]]);
+    expect(composeCalls()).toEqual([["stop", "api"]]);
   });
 
   it("leaves managed migration signal recovery under its original owner", async () => {
@@ -139,7 +139,7 @@ describe("migrateBeforeApiUpdate", () => {
 });
 
 describe("stopMigrationArgs", () => {
-  it("stops the labelled migration and then starts app-api through Compose", async () => {
+  it("stops the labelled migration and then starts the API through Compose", async () => {
     const { execFileSync } =
       await vi.importActual<typeof import("node:child_process")>("node:child_process");
     // Run the script with a stub `docker` that records each invocation.
@@ -163,7 +163,7 @@ describe("stopMigrationArgs", () => {
     expect(readFileSync(record, "utf8").trim().split("\n")).toEqual([
       `ps|-q|--filter|label=${PROJECT_LABEL}|--filter|label=${MARKER}|`,
       "stop|-t|60|abc123|",
-      "compose|-f|/srv/open mapx/docker-compose.yml|start|app-api|",
+      "compose|-f|/srv/open mapx/docker-compose.yml|start|api|",
     ]);
   });
 });

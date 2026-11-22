@@ -23,11 +23,6 @@ export const targets = [
   { app: "data-manager", context: ".", dockerfile: "services/data-manager/Dockerfile" },
   { app: "ops-agent", context: ".", dockerfile: "apps/ops-agent/Dockerfile" },
   { app: "transitous-runner", context: ".", dockerfile: "apps/transitous-runner/Dockerfile" },
-  {
-    app: "transitous-tools",
-    context: "services/motis/tools/transitous",
-    dockerfile: "services/motis/tools/transitous/Dockerfile",
-  },
 ];
 export const pullRequestTargets = [
   ...targets,

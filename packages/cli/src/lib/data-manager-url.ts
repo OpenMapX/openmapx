@@ -4,8 +4,8 @@
  *
  * Read on each call, never at module load: `infra/docker/.env` is loaded after
  * the command modules are imported. Prefer `DATA_MANAGER_HOST_PORT` in `.env`
- * to move the port — `DATA_MANAGER_URL` there also reaches `app-api`, which
- * must keep using the in-network `http://data-manager:4000`.
+ * to move the port — `DATA_MANAGER_URL` there also reaches the `api` service, which
+ * must keep using the in-network `http://openmapx-data-manager:4000`.
  */
 export function dataManagerUrl(env: NodeJS.ProcessEnv = process.env): string {
   const explicit = env.DATA_MANAGER_URL?.trim();

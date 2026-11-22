@@ -48,10 +48,10 @@ describe("planServiceBuilds", () => {
       id: "tileserver",
       buildCommand: "openmapx services build tileserver",
     });
-    writeManifest("motis", {
+    writeManifest("otp", {
       ...baseManifest,
-      id: "motis",
-      buildCommand: "openmapx services build motis",
+      id: "otp",
+      buildCommand: "openmapx services build otp",
     });
     writeManifest("osrm", {
       ...baseManifest,
@@ -61,7 +61,7 @@ describe("planServiceBuilds", () => {
 
     const plan = await planServiceBuilds({ rootDir: tmp, mode: "all" });
 
-    expect(plan.map((item) => item.id)).toEqual(["osrm", "motis", "tileserver"]);
+    expect(plan.map((item) => item.id)).toEqual(["osrm", "otp", "tileserver"]);
   });
 
   it("preserves explicit build order while deduplicating repeated ids", async () => {
@@ -249,7 +249,7 @@ describe("buildServices", () => {
 });
 
 describe("build records", () => {
-  it("records provenance for handlers that report an artifact and passes motisImport through", async () => {
+  it("records provenance for handlers that report an artifact", async () => {
     const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
     mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
     writeFileSync(pbf, "PBF");
@@ -259,16 +259,13 @@ describe("build records", () => {
       buildCommand: "openmapx services build osrm",
     });
 
-    let sawImport: boolean | undefined;
     await buildServices({
       rootDir: tmp,
       mode: "explicit",
       serviceIds: ["osrm"],
       region: "europe/germany",
-      motisImport: true,
       handlers: {
-        async osrm({ motisImport }) {
-          sawImport = motisImport;
+        async osrm() {
           return {
             summary: "Built osrm",
             artifact: {
@@ -281,7 +278,6 @@ describe("build records", () => {
       },
     });
 
-    expect(sawImport).toBe(true);
     expect(readBuildRecord("osrm", tmp)).toMatchObject({
       schemaVersion: 1,
       service: "osrm",

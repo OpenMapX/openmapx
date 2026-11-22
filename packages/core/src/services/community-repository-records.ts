@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { agentStatePaths } from "./agent-state";
 import { readRegularFileBytes } from "./built-in-service-source";
 import { communityServiceManifestProblems } from "./community-manifest";
+import { RELEASE_BUILT_IN_SERVICE_IDS } from "./release-authority-inventory";
 import type { LoadedService, ServiceManifest } from "./types";
 
 /**
@@ -53,6 +54,13 @@ export class CommunityServiceRecordsError extends Error {
   constructor(message: string = FAILED) {
     super(message);
     this.name = "CommunityServiceRecordsError";
+  }
+}
+
+/** A recorded manifest is unchanged, but a built-in service now uses its ID. */
+class BuiltInServiceIdTaken extends Error {
+  constructor(readonly serviceId: string) {
+    super(FAILED);
   }
 }
 
@@ -338,6 +346,9 @@ function verifyCheckout(
     } catch {
       return null;
     }
+    const id = (raw as { id?: unknown } | null)?.id;
+    if (typeof id === "string" && (RELEASE_BUILT_IN_SERVICE_IDS as readonly string[]).includes(id))
+      throw new BuiltInServiceIdTaken(id);
     if (communityServiceManifestProblems(raw).length > 0) return null;
     verified.push({
       service: {
@@ -365,16 +376,22 @@ export function verifyRecordedRepository(
   const candidates: Array<readonly RecordedManifest[] | null> = [record.manifests];
   if (record.pending) candidates.push(record.pending.next.manifests, null);
   const present = isRealDirectory(checkout);
+  let taken: BuiltInServiceIdTaken | undefined;
   for (const candidate of candidates) {
     if (candidate === null) {
       if (!present) return [];
       continue;
     }
     if (!present) continue;
-    const verified = verifyCheckout(checkout, candidate);
-    if (verified) return verified;
+    try {
+      const verified = verifyCheckout(checkout, candidate);
+      if (verified) return verified;
+    } catch (error) {
+      if (!(error instanceof BuiltInServiceIdTaken)) throw error;
+      taken ??= error;
+    }
   }
-  throw new Error(FAILED);
+  throw taken ?? new Error(FAILED);
 }
 
 export interface LoadRecordedCommunityServicesOptions {
@@ -423,7 +440,11 @@ export function loadRecordedCommunityServices(
       let verified: VerifiedCommunityService[];
       try {
         verified = verifyRecordedRepository(join(community, repository), record);
-      } catch {
+      } catch (error) {
+        if (error instanceof BuiltInServiceIdTaken)
+          throw new CommunityServiceRecordsError(
+            `Community repository ${repository} provides service "${error.serviceId}", but a built-in service now uses that ID. ${recovery(repository)}`,
+          );
         throw new CommunityServiceRecordsError(
           `Community repository ${repository} no longer matches the service manifests the operations agent recorded when it installed it. ${recovery(repository)}`,
         );

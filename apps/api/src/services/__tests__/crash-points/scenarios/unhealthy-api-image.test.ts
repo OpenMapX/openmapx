@@ -9,7 +9,7 @@ crashScenario({
   timeout: 600_000,
   run: async (host) => {
     const start = host.mark();
-    host.unhealthyAfterRecreate("app-api");
+    host.unhealthyAfterRecreate("api");
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
     const job = await host.settledJob(submitted.jobId as string, 180_000);
@@ -20,7 +20,7 @@ crashScenario({
     // The agent is recreated last; it is not replaced after a failed service.
     expect(recreated).not.toContain("ops-agent");
     // No automatic rollback: the API was recreated once.
-    expect(recreated.filter((service) => service === "app-api")).toHaveLength(1);
+    expect(recreated.filter((service) => service === "api")).toHaveLength(1);
     expect(host.runningImages()["ops-agent"]).toBe(host.releaseImageId("current", "ops-agent"));
     // Held and visible until the operator resolves it.
     expect((await host.submitUpdate()).status).toBe(409);

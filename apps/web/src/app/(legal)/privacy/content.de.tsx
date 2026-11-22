@@ -37,7 +37,7 @@ export default function PrivacyContentDe({
     serverLogRetentionDays: serverLogRetentionDaysEnv,
   } = legalConfig;
   // Hosting-Anbieter/Standorte, Aufsichtsbehörde und Log-Aufbewahrung werden in
-  // app-api als env > Admin-Datenbank > Default aufgelöst und kommen über
+  // der API als env > Admin-Datenbank > Default aufgelöst und kommen über
   // `legal`. Fallback auf die Web-Prozess-Env (legalConfig) nur, wenn die API
   // beim SSR nicht erreichbar ist.
   const name = legal ? legal.name : nameEnv;
@@ -53,7 +53,7 @@ export default function PrivacyContentDe({
     ? legal.supervisoryAuthorityUrl
     : supervisoryAuthorityUrlEnv;
   const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
-  // Backup retention is a platform setting only app-api reports.
+  // Backup retention is a platform setting only the API reports.
   const backupRetentionDays = legal ? legal.backupRetentionDays : null;
   const T = privacyTitles("de");
 
@@ -69,7 +69,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 13. November 2026
+        Zuletzt aktualisiert: 22. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>

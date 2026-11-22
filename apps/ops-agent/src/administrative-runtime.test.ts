@@ -420,7 +420,7 @@ describe("the fixed CLI", () => {
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(lines).toEqual(["stdout: data link http://data-manager:4000/ inherited"]);
+    expect(lines).toEqual(["stdout: data link http://openmapx-data-manager:4000/ inherited"]);
   });
 });
 
@@ -596,33 +596,35 @@ describe("administrative build runtime", () => {
     expect(calls).toEqual([["services", "build", "valhalla", "--region", "europe/germany"]]);
   });
 
-  it("passes MOTIS import only to the actual MOTIS build and refuses unsupported selections before effects", async () => {
+  it("refuses a service without a build command, such as transit-synced MOTIS, before effects", async () => {
     const calls: string[][] = [],
       runtime = createUnavailableRuntime();
     createAdministrativeRuntime(runtime, {
       rootDir: temporaryRoot(),
       loadBuildAuthority: async () => [
         ...buildAuthority,
-        { serviceId: "motis", enabled: true, isBuiltIn: true, buildCommand: "motis" },
+        { serviceId: "motis", enabled: true, isBuiltIn: true },
       ],
       runFixedCli: async (args) => {
         calls.push([...args]);
       },
     });
-    await dispatchOpsOperation(
-      runtime,
-      { kind: "service.build", serviceId: "motis", motisImport: true },
-      context("service.build"),
-    );
-    expect(calls).toEqual([["services", "build", "motis", "--import"]]);
     await expect(
       dispatchOpsOperation(
         runtime,
-        { kind: "service.build", serviceId: "valhalla", motisImport: true },
+        { kind: "service.build", serviceId: "motis" },
         context("service.build"),
       ),
-    ).rejects.toThrow(/MOTIS/);
-    expect(calls).toHaveLength(1);
+    ).rejects.toThrow("Build authority rejected");
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "services.buildAll", regionId: "europe/germany" },
+      context("services.buildAll"),
+    );
+    expect(calls).toEqual([
+      ["services", "build", "nominatim", "--region", "europe/germany"],
+      ["services", "build", "valhalla", "--region", "europe/germany"],
+    ]);
   });
 
   it("derives build-all IDs inside the agent and preserves continue semantics", async () => {
@@ -958,12 +960,10 @@ describe("administrative release runtime", () => {
       schemaVersion: 1,
       release: releaseId,
       images: Object.fromEntries(
-        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-          (name, index) => [
-            name,
-            `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-          ],
-        ),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner"].map((name, index) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+        ]),
       ),
       ...releaseProvenance(),
     };
@@ -978,8 +978,8 @@ describe("administrative release runtime", () => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) return "";
-        if (joined.includes("ps -q app-api")) return "a".repeat(64);
-        if (joined.includes("ps -q app-web")) return "b".repeat(64);
+        if (joined.endsWith("ps -q api")) return "a".repeat(64);
+        if (joined.endsWith("ps -q web")) return "b".repeat(64);
         if (joined.includes("ps -q data-manager")) return "";
         if (joined.includes(`container inspect`) && joined.endsWith("a".repeat(64))) {
           return `sha256:${"9".repeat(64)}`;
@@ -1006,8 +1006,8 @@ describe("administrative release runtime", () => {
     ).resolves.toMatchObject({
       dockerReachable: true,
       services: [
-        { serviceId: "app-api", state: "update_available", releaseMember: true },
-        { serviceId: "app-web", state: "current", releaseMember: true },
+        { serviceId: "api", state: "update_available", releaseMember: true },
+        { serviceId: "web", state: "current", releaseMember: true },
         { serviceId: "data-manager", state: "not_running", releaseMember: true },
         { serviceId: "ops-agent", state: "unknown", releaseMember: true },
         { serviceId: "transitous-runner", state: "unknown", releaseMember: true },
@@ -1040,17 +1040,12 @@ describe("administrative release runtime", () => {
             schemaVersion: 1,
             release: releaseId,
             images: Object.fromEntries(
-              [
-                "api",
-                "web",
-                "data-manager",
-                "ops-agent",
-                "transitous-runner",
-                "transitous-tools",
-              ].map((name, index) => [
-                name,
-                `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-              ]),
+              ["api", "web", "data-manager", "ops-agent", "transitous-runner"].map(
+                (name, index) => [
+                  name,
+                  `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+                ],
+              ),
             ),
             ...releaseProvenance(),
           }),
@@ -1070,16 +1065,16 @@ describe("administrative release runtime", () => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) return "";
-        if (joined.includes("ps -q app-api")) throw new Error("compose ps failed");
+        if (joined.endsWith("ps -q api")) throw new Error("compose ps failed");
         if (joined.includes("ps -q")) return "";
         throw new Error("missing image");
       });
 
       const result = await effects.inspectSystem(context());
-      const api = result.services.find((service) => service.serviceId === "app-api");
+      const api = result.services.find((service) => service.serviceId === "api");
       expect(api).toMatchObject({ state: "unknown", containerState: "unknown" });
       // A service that was actually observed as absent stays distinguishable.
-      expect(result.services.find((service) => service.serviceId === "app-web")).toMatchObject({
+      expect(result.services.find((service) => service.serviceId === "web")).toMatchObject({
         state: "not_running",
         containerState: "stopped",
       });
@@ -1097,8 +1092,8 @@ describe("administrative release runtime", () => {
         [`sha256:${"f".repeat(64)}`]: "[]",
       };
       const containers: Record<string, string> = {
-        "app-api": "a",
-        "app-web": "b",
+        api: "a",
+        web: "b",
         "data-manager": "c",
         "ops-agent": "d",
         "transitous-runner": "f",
@@ -1126,8 +1121,8 @@ describe("administrative release runtime", () => {
 
       const result = await effects.inspectSystem(context());
       expect(result.services).toEqual([
-        expect.objectContaining({ serviceId: "app-api", state: "current" }),
-        expect.objectContaining({ serviceId: "app-web", state: "update_available" }),
+        expect.objectContaining({ serviceId: "api", state: "current" }),
+        expect.objectContaining({ serviceId: "web", state: "update_available" }),
         expect.objectContaining({ serviceId: "data-manager", state: "unknown" }),
         expect.objectContaining({ serviceId: "ops-agent", state: "current" }),
         expect.objectContaining({ serviceId: "transitous-runner", state: "update_available" }),
@@ -1190,7 +1185,7 @@ describe("administrative release runtime", () => {
           release: { currentReleaseId: "release-old", availableReleaseId: "release-123" },
           services: [
             {
-              serviceId: "app-api",
+              serviceId: "api",
               containerState: "running",
               pinnedImage: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
               runningImageId: `sha256:${"b".repeat(64)}`,
@@ -1216,7 +1211,7 @@ describe("administrative release runtime", () => {
       dispatchOpsOperation(runtime, { kind: "system.inspect" }, context("system.inspect")),
     ).resolves.toMatchObject({
       dockerReachable: true,
-      services: [{ serviceId: "app-api", state: "update_available" }],
+      services: [{ serviceId: "api", state: "update_available" }],
     });
     expect(calls).toEqual(["resolve"]);
     expect(cli).toEqual([]);

@@ -14,7 +14,7 @@ crashScenario({
     const job = await host.waitForJob(submitted.jobId as string);
     expect(job.status).toBe("success");
     const images = host.runningImages();
-    expect(images["app-api"]).toBe(host.releaseImageId("next", "api"));
+    expect(images.api).toBe(host.releaseImageId("next", "api"));
     expect(images["data-manager"]).toBe(host.releaseImageId("next", "data-manager"));
     expect(images["ops-agent"]).toBe(host.releaseImageId("next", "ops-agent"));
     const recreated = host

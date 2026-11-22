@@ -20,7 +20,6 @@
     "@openmapx/core": "workspace:*",
     "@openmapx/hardlinks": "workspace:*",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/motis-feed-proxy-config": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
     "commander": "^15.0.0",
     "execa": "^10.2.1",

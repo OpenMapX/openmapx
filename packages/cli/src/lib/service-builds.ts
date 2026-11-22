@@ -24,7 +24,6 @@ import { assertCliControlForward } from "./control-context";
 import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
 import { assertCliExecutionAvailable, cliAcquisitionOptions } from "./execution-deadline";
-import { buildMotisData, importMotisData } from "./motis-data";
 import { resolveOsmPbf } from "./osm-pbf";
 import { buildOsrmGraph } from "./osrm-graph";
 import { buildOtpGraph } from "./otp-graph";
@@ -62,8 +61,6 @@ export interface ServiceBuildContext {
   region?: string;
   registry: coreServices.ServiceRegistry;
   service: LoadedService;
-  /** MOTIS only: also run `motis import` so the output is ready to serve. */
-  motisImport?: boolean;
 }
 
 export interface ServiceBuildArtifact {
@@ -123,7 +120,6 @@ export interface PlanServiceBuildsOptions {
 export interface BuildServicesOptions extends PlanServiceBuildsOptions {
   region?: string;
   continueOnError?: boolean;
-  motisImport?: boolean;
 }
 
 function serviceImage(service: LoadedService): string {
@@ -137,28 +133,6 @@ function requireService(registry: coreServices.ServiceRegistry, id: string): Loa
 }
 
 const BUILT_IN_SERVICE_BUILD_HANDLERS: Record<string, ServiceBuildHandler> = {
-  async motis({ rootDir, region, service, motisImport }): Promise<ServiceBuildHandlerResult> {
-    log.info("Building MOTIS prepared data with Transitous tools");
-    const result = await buildMotisData({ rootDir, region });
-    const toolImages = { "transitous-tools": result.image };
-    if (!motisImport) {
-      return {
-        summary: `Built MOTIS prepared data → ${result.motisDir}`,
-        warnings:
-          result.gtfsFeeds.length === 0
-            ? ["No GTFS feeds found; staged MOTIS data with OSM only"]
-            : [],
-        artifact: { sourcePbf: result.sourcePbf, runtimeImages: {}, toolImages },
-      };
-    }
-    const image = serviceImage(service);
-    log.info(`Importing MOTIS data with ${image}`);
-    await importMotisData({ motisDir: result.motisDir, image });
-    return {
-      summary: `Built and imported MOTIS data → ${result.motisDir}`,
-      artifact: { sourcePbf: result.sourcePbf, runtimeImages: { motis: image }, toolImages },
-    };
-  },
   async osrm({ rootDir, region, service }) {
     const image = serviceImage(service);
     log.info(`Building OSRM graph with ${image}`);
@@ -473,7 +447,6 @@ export async function buildServices(
         region: resolvedRegion.value,
         registry,
         service: item.service,
-        motisImport: opts.motisImport,
       });
       for (const warning of built.warnings ?? []) {
         log.warn(`${item.id}: ${warning}`);

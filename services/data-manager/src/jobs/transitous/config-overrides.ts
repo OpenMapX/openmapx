@@ -1,6 +1,25 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { osmPbfName } from "../download-osm.js";
 import type { JobLogger } from "./types.js";
+
+/**
+ * The config text, or null when there is no config to change. A missing file is
+ * silent (the generator has not written one); any other read failure is logged.
+ * Reading directly instead of checking first leaves no window between the check
+ * and the read.
+ */
+function readConfig(configPath: string, logger: JobLogger, purpose: string): string | null {
+  try {
+    return readFileSync(configPath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      logger.warn(
+        `motis-config: could not read ${configPath} to ${purpose}: ${(error as Error).message}`,
+      );
+    }
+    return null;
+  }
+}
 
 /**
  * Post-processors applied to a generated MOTIS `config.yml`.
@@ -41,16 +60,8 @@ function flipYamlBoolFromEnv(
     logger.warn(`motis-config: ignoring ${envVar}=${raw} (expected true/false)`);
     return false;
   }
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch (error) {
-    logger.warn(
-      `motis-config: could not read ${configPath} to apply ${yamlKey} override: ${(error as Error).message}`,
-    );
-    return false;
-  }
+  const text = readConfig(configPath, logger, `apply ${yamlKey} override`);
+  if (text === null) return false;
   const desired = truthy ? "true" : "false";
   const re = new RegExp(`^(\\s*${yamlKey}:\\s*)(true|false)\\s*$`, "m");
   const match = text.match(re);
@@ -109,16 +120,8 @@ export function applyIncrementalRtOverride(configPath: string, logger: JobLogger
 export function applyElevatorsOverride(configPath: string, logger: JobLogger): boolean {
   const url = process.env.MOTIS_ELEVATORS_URL?.trim();
   if (!url) return false;
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch (error) {
-    logger.warn(
-      `motis-config: could not read ${configPath} to apply elevators override: ${(error as Error).message}`,
-    );
-    return false;
-  }
+  const text = readConfig(configPath, logger, "apply elevators override");
+  if (text === null) return false;
   const auth = process.env.MOTIS_ELEVATORS_AUTH?.trim();
   const block = [
     "elevators:",
@@ -210,16 +213,8 @@ export function applyRouteShapesOverride(configPath: string, logger: JobLogger):
     );
     return false;
   }
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch (error) {
-    logger.warn(
-      `motis-config: could not read ${configPath} to apply route_shapes override: ${(error as Error).message}`,
-    );
-    return false;
-  }
+  const text = readConfig(configPath, logger, "apply route_shapes override");
+  if (text === null) return false;
   if (/^\s*route_shapes:/m.test(text)) return false; // already present — idempotent
   // Anchor on `with_shapes: true`: route_shapes must nest beside it inside
   // `timetable:`, and the feature is inert unless shapes are enabled.
@@ -263,8 +258,7 @@ export function applyRouteShapesOverride(configPath: string, logger: JobLogger):
  * Point the generated config's `osm:` line at the OSM extract for the
  * deployment's build region, so MOTIS imports the same area as the rest of the
  * stack (osrm/otp/overpass/...). The region resolves from `MOTIS_REGION` then
- * `OPENMAPX_REGION` — the same precedence the CLI's `resolveBuildRegion("motis")`
- * uses — and maps to a filename via {@link osmPbfName} (e.g. `europe/germany` →
+ * `OPENMAPX_REGION`, and maps to a filename via {@link osmPbfName} (e.g. `europe/germany` →
  * `europe-germany.osm.pbf`). Upstream Transitous templates `planet-latest.osm.pbf`
  * because it builds a global instance; a regional deployment overrides it here.
  *
@@ -276,16 +270,8 @@ export function applyRouteShapesOverride(configPath: string, logger: JobLogger):
 export function applyOsmRegionOverride(configPath: string, logger: JobLogger): boolean {
   const region = process.env.MOTIS_REGION?.trim() || process.env.OPENMAPX_REGION?.trim();
   if (!region) return false;
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch (error) {
-    logger.warn(
-      `motis-config: could not read ${configPath} to apply osm region override: ${(error as Error).message}`,
-    );
-    return false;
-  }
+  const text = readConfig(configPath, logger, "apply osm region override");
+  if (text === null) return false;
   const re = /^(\s*osm:\s*)(\S+)\s*$/m;
   const match = text.match(re);
   if (!match) return false; // no osm key (transit-only config) — nothing to point
@@ -325,16 +311,8 @@ export function applyOsmRegionOverride(configPath: string, logger: JobLogger): b
 export function applyTilesDisable(configPath: string, logger: JobLogger): boolean {
   const raw = process.env.MOTIS_TILES?.trim().toLowerCase();
   if (raw && ["1", "true", "yes", "on"].includes(raw)) return false; // operator keeps tiles
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch (error) {
-    logger.warn(
-      `motis-config: could not read ${configPath} to strip tiles: ${(error as Error).message}`,
-    );
-    return false;
-  }
+  const text = readConfig(configPath, logger, "strip tiles");
+  if (text === null) return false;
   // Matches the top-level `tiles:` key plus its indented children, through the
   // last child's newline (stops at the next non-indented key). Same shape as the
   // elevators block matcher.

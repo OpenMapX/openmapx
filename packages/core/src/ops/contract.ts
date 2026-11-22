@@ -10,6 +10,7 @@ import {
 } from "../catalog-pins/proposal-schemas";
 import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
+import { CORE_RESTART_SERVICE_IDS, RELEASE_PINNED_SERVICE_IDS } from "../services/core-service-ids";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
   artifactTransferOperationSchemas,
@@ -533,7 +534,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   serviceOperation("service.restart"),
   z.strictObject({
     kind: z.literal("coreService.restart"),
-    serviceId: z.enum(["app-api", "traefik"]),
+    serviceId: z.enum(CORE_RESTART_SERVICE_IDS),
     expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
   }),
   serviceRecreateOperationSchema,
@@ -555,12 +556,10 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("service.build"),
     serviceId: serviceIdSchema,
     regionId: regionIdSchema.optional(),
-    motisImport: z.boolean().optional(),
   }),
   z.strictObject({
     kind: z.literal("services.buildAll"),
     regionId: regionIdSchema.optional(),
-    motisImport: z.boolean().optional(),
     failFast: z.boolean().optional(),
   }),
   z.strictObject({
@@ -640,7 +639,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   // Installs the archive as `<integration store>/<integrationId>`. The previous
   // copy is kept until the transaction is settled. Without `extensionId` the
   // operator installs it (the host CLI). The owner is bookkeeping, not a
-  // boundary: app-api and the fixed CLI share the `api` principal.
+  // boundary: the API and the fixed CLI share the `api` principal.
   z.strictObject({
     kind: z.literal("catalogIntegration.publish"),
     integrationId: serviceIdSchema,
@@ -1057,13 +1056,7 @@ const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
 });
-const systemCoreServiceId = z.enum([
-  "app-api",
-  "app-web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-]);
+const systemCoreServiceId = z.enum(RELEASE_PINNED_SERVICE_IDS);
 const dockerImageId = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const pinnedImageReference = z
   .string()
@@ -1158,7 +1151,7 @@ export const OPS_RESULT_SCHEMAS = {
   "service.restart": changed,
   "coreService.restart": z.strictObject({
     changed: z.literal(true),
-    serviceId: z.enum(["app-api", "traefik"]),
+    serviceId: z.enum(CORE_RESTART_SERVICE_IDS),
   }),
   "service.recreate": changed,
   "service.recreateIsolated": changed,
@@ -1277,7 +1270,7 @@ export const OPS_RESULT_SCHEMAS = {
           state: z.enum(["current", "update_available", "not_running", "unknown"]),
         }),
       )
-      .max(5)
+      .max(RELEASE_PINNED_SERVICE_IDS.length)
       .refine(
         (services) =>
           new Set(services.map((service) => service.serviceId)).size === services.length,

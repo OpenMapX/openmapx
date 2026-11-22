@@ -78,7 +78,7 @@ type Mode =
   | "system-release"
   | "system-release-pull-failure";
 
-const IDS = ["motis", "ops-agent", "app-api", "traefik", "postgis", "redis", "data-manager"];
+const IDS = ["motis", "ops-agent", "api", "traefik", "postgis", "redis", "data-manager"];
 const RELEASE_IMAGE = `sha256:${"e".repeat(64)}`;
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
@@ -119,7 +119,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           selectedRoots: IDS,
           environment: {
             "ops-agent": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
-            "app-api": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
+            api: { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
           },
           configurationHelperVersion: "1",
           configurationHelperLaunchResponseLoss: mode === "launch-reply-lost",
@@ -188,8 +188,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           });
         }
         const protectedTargets = release
-          ? ["data-manager", "app-api", "ops-agent"]
-          : ["app-api", "ops-agent"];
+          ? ["data-manager", "api", "ops-agent"]
+          : ["api", "ops-agent"];
         const inspections: Parameters<typeof host.setRuntimeInspections>[0] = {};
         if (release) {
           for (const old of rows)
@@ -225,7 +225,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             compose = services.configurationGenerationComposeFile(host.infraDir, revision),
             row = {
               ...old,
-              Id: (id === "app-api" ? "a" : id === "data-manager" ? "c" : "b").repeat(64),
+              Id: (id === "api" ? "a" : id === "data-manager" ? "c" : "b").repeat(64),
               ...(release ? { Image: RELEASE_IMAGE, ConfigImage: config.services[id].image } : {}),
               Labels: {
                 ...old.Labels,
@@ -248,7 +248,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               // The API container no longer matches the release's Compose
               // definition in the wrong-configuration case.
               Env: Object.entries(spec.environment ?? {}).map(([key, value]) =>
-                mode === "release-wrong-config" && id === "app-api"
+                mode === "release-wrong-config" && id === "api"
                   ? `${key}=${value}-changed`
                   : `${key}=${value}`,
               ),
@@ -554,7 +554,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               host.calls
                 .filter((args) => args[0] === "compose" && args.includes("up"))
                 .map((args) => args.at(-1)),
-            ).toEqual(["data-manager", "app-api"]);
+            ).toEqual(["data-manager", "api"]);
             // A cancel cannot finish it either; it only stops this process's handler.
             expect(await jobRunner.cancel(accepted.jobId)).toBe(false);
             return;

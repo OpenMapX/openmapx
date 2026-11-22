@@ -275,7 +275,7 @@ function hasBlockedCommunityBackend(directory: string, manifest: IntegrationMani
 
 // Cache-bust the dynamic import by the entry file's mtime+size so a reload
 // (`reloadIntegrations` — fired by extension install/update and credential
-// set/delete) picks up CHANGED backend code WITHOUT restarting app-api. ESM
+// set/delete) picks up CHANGED backend code WITHOUT restarting the API. ESM
 // `import()` is keyed by URL and process-lifetime cached, so re-importing the
 // same file URL returns the stale module — which is why a store update of an
 // integration whose bundle path is unchanged otherwise silently keeps running

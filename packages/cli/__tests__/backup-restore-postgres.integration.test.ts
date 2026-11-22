@@ -111,7 +111,7 @@ services:
       interval: 1s
       timeout: 3s
       retries: 60
-  app-api:
+  api:
     image: ${POSTGIS_IMAGE}
     entrypoint: ["sh", "/fixture-api-sentinel.sh"]
     volumes:
@@ -425,7 +425,7 @@ async function waitForSentinelEvent(): Promise<string[]> {
     }
     await new Promise((resolveWaiter) => setTimeout(resolveWaiter, 125));
   }
-  throw new Error("app-api sentinel did not observe its restored database state");
+  throw new Error("API sentinel did not observe its restored database state");
 }
 
 async function seedRestoreScenario(): Promise<void> {
@@ -500,7 +500,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
 
     await restoreBackup({ rootDir: fixture.root, name: "erasure-replay", stopRunning: true });
 
-    expect(await isServiceRunning("app-api")).toBe(true);
+    expect(await isServiceRunning("api")).toBe(true);
     expect(await psql(`SELECT count(*) FROM "user" WHERE id = '${DELETED_USER_ID}';`)).toBe("0");
     expect(await psql(`SELECT count(*) FROM account WHERE user_id = '${DELETED_USER_ID}';`)).toBe(
       "0",
@@ -630,7 +630,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       restoreBackup({ rootDir: fixture.root, name: "wrong-key", stopRunning: true }),
     ).rejects.toThrow(/journal key|key.*journal|binding/i);
     expect(await psql("SELECT value FROM restore_marker;")).toBe("live");
-    expect(await isServiceRunning("app-api")).toBe(true);
+    expect(await isServiceRunning("api")).toBe(true);
   }, 120_000);
 
   it("replays a subject whose identifiers contain COPY and SQL metacharacters", async () => {
@@ -666,7 +666,7 @@ VALUES (
 
     expect(await psql('SELECT count(*) FROM "user";')).toBe("0");
     expect(await psql("SELECT count(*) FROM verification;")).toBe("0");
-    expect(await isServiceRunning("app-api")).toBe(true);
+    expect(await isServiceRunning("api")).toBe(true);
   }, 120_000);
 
   it("replays erasure after a same-service database and tar restore", async () => {
@@ -712,7 +712,7 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
     const events = await waitForSentinelEvent();
     expect(events).toContain("safe");
     expect(events).not.toContain("exposed");
-    expect(await isServiceRunning("app-api")).toBe(true);
+    expect(await isServiceRunning("api")).toBe(true);
   }, 120_000);
 
   it("fails every job that was in progress when the backup was taken", async () => {
@@ -876,7 +876,7 @@ VALUES
         "\n",
       ),
     );
-    expect(await isServiceRunning("app-api")).toBe(true);
+    expect(await isServiceRunning("api")).toBe(true);
   }, 120_000);
 
   it("rejects a restored schema missing required privacy tables and keeps the API stopped", async () => {
@@ -911,8 +911,8 @@ VALUES ('warn', 'unsupported-schema-fixture', 'event for ${DELETED_EMAIL}', json
     expect(
       await psql("SELECT count(*) FROM app_logs WHERE source = 'unsupported-schema-fixture';"),
     ).toBe("1");
-    expect(await isServiceRunning("app-api")).toBe(false);
-    await compose(["start", "app-api"]);
+    expect(await isServiceRunning("api")).toBe(false);
+    await compose(["start", "api"]);
   }, 120_000);
 
   it("keeps the API stopped when PostgreSQL rejects erasure replay", async () => {
@@ -928,12 +928,12 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
 `);
     await createDatabaseBackup("replay-failure");
     await resetJournal(GOOD_KEY, DELETED_USER_ID);
-    await compose(["start", "app-api"]);
+    await compose(["start", "api"]);
 
     await expect(
       restoreBackup({ rootDir: fixture.root, name: "replay-failure", stopRunning: true }),
     ).rejects.toThrow(/replay|erasure|fixture rejects user deletion/i);
-    expect(await isServiceRunning("app-api")).toBe(false);
-    await compose(["start", "app-api"]);
+    expect(await isServiceRunning("api")).toBe(false);
+    await compose(["start", "api"]);
   }, 120_000);
 });

@@ -179,6 +179,13 @@ export async function invalidateServiceAdministration(
   await queryClient.invalidateQueries(filters);
 }
 
+const TRANSIT_SYNC_PREPARED = new Set(["motis", "motis-staging"]);
+
+/** Services whose data the transit sync prepares, so Build has nothing to do for them. */
+export function isPreparedByTransitSync(serviceId: string): boolean {
+  return TRANSIT_SYNC_PREPARED.has(serviceId);
+}
+
 /** Display the same decision used by the server, without inferring permission from status. */
 export function serviceActionReason(
   decision: import("@openmapx/core/ops").ServiceActionDecision | undefined,

@@ -68,21 +68,14 @@ const SHIM = fileURLToPath(new URL("./support/docker-shim.mjs", import.meta.url)
 const TSX = createRequire(import.meta.url).resolve("tsx/esm");
 const REGISTRY = "registry.crash.test/openmapx";
 const MANIFEST_REPOSITORY = `${REGISTRY}/release-manifest`;
-const RELEASE_IMAGES = [
-  "api",
-  "web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-  "transitous-tools",
-] as const;
+const RELEASE_IMAGES = ["api", "web", "data-manager", "ops-agent", "transitous-runner"] as const;
 const SERVICE_OF_ROLE: Record<Role, string> = {
-  api: "app-api",
+  api: "api",
   agent: "ops-agent",
   dm: "data-manager",
 };
 const ROLE_OF_SERVICE: Record<string, Role> = {
-  "app-api": "api",
+  api: "api",
   "ops-agent": "agent",
   "data-manager": "dm",
 };
@@ -765,7 +758,7 @@ export class CrashHost {
       env.DATA_MANAGER_URL = this.proxies["api->dm"].url;
     } else if (role === "dm") {
       env.OPS_AGENT_URL = this.proxies["dm->agent"].url;
-      env.APP_API_BASE_URL = `http://127.0.0.1:${this.ports.api}`;
+      env.INTERNAL_API_URL = `http://127.0.0.1:${this.ports.api}`;
     } else {
       env.DATA_MANAGER_URL = this.proxies["agent->dm"].url;
     }

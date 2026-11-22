@@ -36,7 +36,7 @@ describe("generated complete internal data-manager SDK", () => {
   });
   it("uses generated closure identity even when an untyped caller forges protocol metadata", async () => {
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: vi.fn().mockResolvedValue(Response.json({ ok: true })),
     });
     await expect(
@@ -62,14 +62,14 @@ describe("generated complete internal data-manager SDK", () => {
         new Response("pbf", { headers: { "content-type": "application/x-protobuf" } }),
       );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: acquire,
     });
     const result = await sdk.getOfflineGlyph("v1", "Noto Sans,街?", "0-255", { transport });
     expect(unwrapDataManagerResponse(result)).toBe(raw);
     expect(raw.bodyUsed).toBe(false);
     expect(acquire.mock.calls[0]?.[0]).toBe(
-      "http://data-manager/offline/packages/glyphs/v1/Noto%20Sans%2C%E8%A1%97%3F/0-255.pbf",
+      "http://openmapx-data-manager/offline/packages/glyphs/v1/Noto%20Sans%2C%E8%A1%97%3F/0-255.pbf",
     );
     await raw.body?.cancel();
     await expect(sdk.getOfflineGlyph("v1", "Noto", "0-255", { transport })).rejects.toThrow(
@@ -88,7 +88,7 @@ describe("generated complete internal data-manager SDK", () => {
       }),
     );
     const transport = createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       requestTimeoutMs: 5,
       signal: observer.signal,
       fetch: acquire,

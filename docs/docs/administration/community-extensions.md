@@ -223,7 +223,7 @@ unchanged. The normal sequence is:
 
 The operations agent owns its community store,
 `infra/docker/state/ops-agent/community/`, the way it owns
-Docker and the generated configuration. `app-api` never writes there: it asks
+Docker and the generated configuration. `api` never writes there: it asks
 the agent to inspect, install, settle or remove a repository, and reads the
 installed community services back from it. Until a change is settled the agent
 keeps the previous checkout for rollback and attempts recovery of interrupted
@@ -245,14 +245,14 @@ directory on the host, which is gitignored, so installs survive container restar
 
 The agent owns its integration store,
 `infra/docker/state/ops-agent/custom-integrations/`, the same way. It installs,
-updates, rolls back and removes integrations; `app-api` mounts the store
+updates, rolls back and removes integrations; `api` mounts the store
 read-only at `/app/custom_integrations` and
 `pnpm openmapx integrations install` and `remove` ask the agent too. For each
 integration the agent records the SHA-256 of every file it installed, in its
 own state directory (`infra/docker/state/ops-agent/integrations/`), which no
 other service mounts. The agent, and the CLI it runs, load an installed
 integration's configuration schema only while its `manifest.json` has exactly
-the recorded bytes; `app-api` serves only the files whose bytes match. File
+the recorded bytes; `api` serves only the files whose bytes match. File
 owners and modes in the store decide nothing. An integration the
 agent did not install, or whose files changed, is left out and reported (in the
 agent's startup log and in **Run diagnostics**) without affecting the others.
@@ -262,8 +262,8 @@ Each record also names its owner: the extension that installed it, or the
 operator for an install made with the CLI. Only that owner changes or removes
 it, so an extension and a manual install don't replace each other by accident.
 
-This is bookkeeping, not a security boundary: `app-api` and the CLI reach the
-agent with the same credentials, and `app-api` can install any artifact as an
+This is bookkeeping, not a security boundary: `api` and the CLI reach the
+agent with the same credentials, and `api` can install any artifact as an
 admin anyway. What the agent guarantees is that every installed file is one it
 verified and recorded.
 
@@ -497,7 +497,7 @@ installation does not prove that their database and feed credentials are valid.
    gain superuser rights over the whole server, including running commands in
    the database container. Create a dedicated role for each service with only
    what it needs, as shown below, and use
-   `postgresql://<role>:<password>@postgis:5432/openmapx` with a correctly
+   `postgresql://<role>:<password>@openmapx-postgis:5432/openmapx` with a correctly
    URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
    separate values with `openssl rand -hex 32`.
@@ -539,8 +539,8 @@ installation does not prove that their database and feed credentials are valid.
 5. Set the OpenMapX consumers' endpoints in `infra/docker/.env`:
 
    ```bash
-   OPENCONDITIONS_URL=http://openconditions-ingest:4100
-   OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
+   OPENCONDITIONS_URL=http://openmapx-openconditions-ingest:4100
+   OPENCONDITIONS_CONTRIBUTIONS_URL=http://openmapx-openconditions-contributions-api:4200
    OPENCONDITIONS_OPERATOR_TOKEN=
    ```
 
@@ -550,7 +550,7 @@ The blank token above does not enable restricted feeds. Configure it deliberatel
 on both sides when your source terms permit operator-scope access.
 
 Each community service has its own network. Built-in manifests explicitly bridge
-`postgis` and `app-api` to both OpenConditions services; Data Manager and Overpass
+`postgis` and `api` to both OpenConditions services; Data Manager and Overpass
 join the ingest network. These bridges are bidirectional: an ingest container can
 reach the bridged API, database and Data Manager, including internal endpoints.
 They are granted by service ID, so another extension claiming those IDs receives
@@ -597,7 +597,7 @@ consumer token in the host `.env`, recreate the API and Data Manager from the
 repository checkout:
 
 ```bash
-pnpm openmapx services start app-api data-manager
+pnpm openmapx services start api data-manager
 ```
 
 Host renders preserve settings and service secrets from the last published
@@ -612,9 +612,14 @@ OpenMapX's own `OVERPASS_URL` does not configure that service. Set its base URL
 settings:
 
 ```bash
-SERVICE_OPENCONDITIONS_INGEST_OVERPASS_URL=http://overpass:80
-SERVICE_OPENCONDITIONS_INGEST_OPENCONDITIONS_EGRESS_ALLOWED_HOSTS=overpass
+SERVICE_OPENCONDITIONS_INGEST_OVERPASS_URL=http://openmapx-overpass:80
+SERVICE_OPENCONDITIONS_INGEST_OPENCONDITIONS_EGRESS_ALLOWED_HOSTS=openmapx-overpass
 ```
+
+Address built-in services by their `openmapx-<service-id>` names, as here.
+OpenMapX refuses to install a community service whose environment, command or
+configuration defaults reach a built-in service by its bare ID, such as
+`postgis` or `overpass`.
 
 Then run `pnpm openmapx services start openconditions-ingest` or apply the
 corresponding settings in the admin form. Verify the resolved source and the

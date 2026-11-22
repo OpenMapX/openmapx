@@ -42,6 +42,15 @@ Adding a built-in service means adding its directory, its ID to
 until all three agree. Built-in integration manifests (`integrations/<id>/manifest.json`)
 are embedded the same way, for their configuration schemas.
 
+A first-party service is named after the component it runs: its ID equals its
+directory, its image name (`ghcr.io/openmapx/<id>`) and, for a service the
+release pins, its key in the release manifest. The API is `api`, the web app
+`web`. Code that names one of the platform's own services, or decides
+something because of which one it is, uses `CORE_SERVICE_ID` and the lists in
+`packages/core/src/services/core-service-ids.ts` rather than a string literal.
+A community service may not use the ID of a built-in service: the community
+manifest rules refuse it when a repository is inspected, installed or read.
+
 Community services are trusted by digest: the agent records the SHA-256 of
 every manifest it validated when it installed a repository, and the agent and
 its fixed CLI load only recorded manifests whose bytes still match
@@ -158,7 +167,7 @@ service keys; the renderer copies them through.
 | `digest`          | string                 | OCI manifest pin, `sha256:` followed by 64 lowercase hex digits. Optional in the portable schema; mandatory for installed community services. When present, the renderer uses `image:tag@digest`; `tag` remains required metadata.                                                                                                                                                                 |
 | `containerName`   | string                 | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when the operations agent addresses the container by bare name over the Docker CLI (for example `postgis` and `motis-feed-proxy`); data-manager reaches those effects only through typed operations-agent operations. It blocks scaling, so use it sparingly.         |
 | `expose`          | number[]               | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`.                                                                                                                                                                                                                                                                                 |
-| `networkAliases`  | string[]               | Extra DNS aliases on the service's attached network (`openmapx` for built-ins, its isolated network for community services). Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless.                                                                                                                                       |
+| `networkAliases`  | string[]               | Extra DNS aliases on the service's home network (`openmapx` for built-ins, its isolated network for community services), next to the `openmapx-<service-id>` name every service gets (see [Network names](#network-names)). Each must be a valid DNS label, may not start with `openmapx-` and may not collide with another service id or alias. Aliasing the service's own id is harmless.        |
 | `command`         | string \| string[]     | Container command. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                    |
 | `entrypoint`      | string \| string[]     | Container entrypoint. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                 |
 | `environment`     | object (string→string) | Environment variables. First-party services support `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation passed to Docker Compose for deployment-time resolution. Community services render `$` literally and should use `configSchema` for operator-supplied settings.                                                                                                          |
@@ -179,13 +188,34 @@ service keys; the renderer copies them through.
 | `logging`         | object                 | Compose logging: `{ "driver": "...", "options": { ... } }`. **Forbidden for third-party services.**                                                                                                                                                                                                                                                                                                |
 | `healthcheck`     | object                 | See below.                                                                                                                                                                                                                                                                                                                                                                                         |
 
+### Network names
+
+Every service answers to `openmapx-<service-id>` on each network of the stack
+it joins: `openmapx-postgis`, `openmapx-data-manager`, `openmapx-api`, and a
+community service `weather-feed` as `openmapx-weather-feed`. Internal URLs,
+host settings and host allow-lists use only these names, for example
+`postgresql://openmapx_api@openmapx-postgis:5432/openmapx` or
+`http://openmapx-valhalla:8002`. Docker Compose also registers the bare service
+ID on every network, but nothing in OpenMapX relies on it: behind an
+operator-run reverse proxy (`OPENMAPX_PROXY_NETWORK`), a routed service also
+joins the proxy's shared network, and Docker can resolve a bare ID such as
+`redis` there to another project's container. The `openmapx-` name is never
+attached to that shared network.
+
+The prefix is reserved: validation refuses a service ID, a declared
+`networkAliases` entry or a `containerName` that starts with `openmapx-`. An
+installed community service is refused when its environment, command,
+healthcheck or configuration defaults reach a built-in service by its bare ID:
+in a URL (`http://overpass:80`), a host setting (`DB_HOST=postgis`) or a
+`host:port` value (`redis:6379`). Write `http://openmapx-overpass:80`.
+
 ### Network isolation
 
-Bridge-mode built-ins join the shared `openmapx` network and keep service-id
-discovery there. Each community service instead receives exactly one dedicated
+Bridge-mode built-ins join the shared `openmapx` network and reach each other
+there by their `openmapx-<service-id>` names. Each community service instead receives exactly one dedicated
 network named `openmapx-community-<normalized-service-id>` and never joins
 `openmapx`. Different community services therefore cannot connect directly to
-each other or to Redis, Postgres, app-api, data-manager, or other platform
+each other or to Redis, Postgres, the API, data-manager, or other platform
 peers. They retain ordinary outbound internet access through their own bridge.
 
 An audited built-in may declare top-level `communityNetworkAccess` with exact
@@ -196,11 +226,14 @@ is skipped silently, so a bridge may name a community service before it is
 installed. The capability is authorized from registry provenance
 (`isBuiltIn` / `firstParty`), never from the manifest's self-declared
 `quality`; a hand-built community `LoadedService` is rejected again at the
-render boundary.
+render boundary. On the community network the bridge answers to its
+`openmapx-<service-id>` name and the community service to its own, so the
+community service reaches a bridge as, for example, `openmapx-postgis:5432`, and
+the bridge reaches it as `openmapx-<community-service-id>`.
 
 Four shipped built-ins opt in, all for OpenConditions, whose services own the
 shared database's `conditions` schema: `postgis` (both OpenConditions services
-connect to the database), `app-api` (its `openconditions` integration reads the
+connect to the database), `api` (its `openconditions` integration reads the
 ingest service, and its crowd-reports relay forwards to the contributions API),
 `data-manager` (its traffic cycle reads the ingest service) and `overpass` (the
 ingest service queries a self-hosted Overpass). Two properties of this audited
@@ -212,7 +245,7 @@ exception are accepted, not accidental:
   to these built-ins. Postgres still needs credentials the operator only gives
   OpenConditions, so the reach is to the port, not the data.
 - The bridge is bidirectional. A network carries traffic both ways, so the
-  OpenConditions containers can also open connections to `app-api` and
+  OpenConditions containers can also open connections to `api` and
   `data-manager`, including their unauthenticated internal endpoints
   (`/internal/metrics`, the data-manager's `/live` and `/status`), which the
   proxy denies publicly.
@@ -233,7 +266,7 @@ access through those bridges. Each private network is dual-stack like
 `fd4d:5058::/48`.
 
 A built-in that stays on `openmapx` and lists the same private network is a
-bridge: Traefik routes to a bundle's web container this way, and app-api calls
+bridge: Traefik routes to a bundle's web container this way, and the API calls
 it. A bridge joins the network only while an enabled member that left
 `openmapx` declares it. A default install without the bundle therefore renders
 no extra network. As with community bridges, the network carries traffic both
@@ -246,13 +279,13 @@ The managed Dawarich bundle is the shipped example:
 | Network                             | Members                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------ |
 | `openmapx-private-dawarich`         | `dawarich-app`, `dawarich-sidekiq`, `dawarich-postgis`, `dawarich-redis` |
-| `openmapx-private-dawarich-ingress` | `dawarich-app`, plus the bridges `traefik` and `app-api`                 |
+| `openmapx-private-dawarich-ingress` | `dawarich-app`, plus the bridges `traefik` and `api`                     |
 
 The worker, which delivers geofencing webhooks and runs photo imports, can
 reach only its own database, Redis, the web app and the internet. The web app,
 whose photo-thumbnail proxy fetches a user-configured URL and returns the
-response body, can additionally reach Traefik's entrypoints and app-api. On
-app-api that includes the unauthenticated `/api/internal/metrics` counters,
+response body, can additionally reach Traefik's entrypoints and the API. On
+the API that includes the unauthenticated `/api/internal/metrics` counters,
 which Traefik otherwise denies publicly.
 
 ### `container.healthcheck`
@@ -471,8 +504,9 @@ application services use typed operations-agent requests. Run
 ## `exposure`
 
 By default a built-in service is reachable only on the private `openmapx`
-network, by service id (`http://valhalla:8002`). A community service is reachable
-only on its own isolated community network. Nothing is published to the host or
+network, by its project-unique name (`http://openmapx-valhalla:8002`; see
+[Network names](#network-names)). A community service is reachable only on its
+own isolated community network. Nothing is published to the host or
 the internet unless the manifest opts in, in one of two ways.
 
 ```json
@@ -558,11 +592,11 @@ Redis authentication is a platform-owned special case rather than a manifest
 author capability. Compose rendering bootstraps a canonical 32-byte random
 password under the host-only `0700` `infra/docker/secrets/` boundary, keeps the
 source file readable for non-root containers, and mounts it only into Redis,
-app-api, and data-manager. Those clients must read the exact bytes from
+`api`, and data-manager. Those clients must read the exact bytes from
 `REDIS_PASSWORD_FILE`; whitespace, malformed base64url, symlinks, non-regular
 files, empty files, and oversized files fail closed. Rotation is performed only
 through `pnpm openmapx compose rotate-redis-password --confirm-clients-stopped`,
-after stopping app-api and data-manager. Password and derived ACL candidates are
+after stopping `api` and data-manager. Password and derived ACL candidates are
 both durable before the password commit, but their individual atomic renames are
 sequential rather than a two-file transaction. Successful render/rotation paths
 reread and reconcile the pair after concurrent changes. If a crash or target

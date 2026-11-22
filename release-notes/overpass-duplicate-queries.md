@@ -11,12 +11,12 @@ default, `no`, made its dispatcher answer such a repeat with a
 healthcheck and `pnpm openmapx check`'s probe from time to time, since both
 send the same query each time, and it failed a user's query repeated within
 that window. Both dispatchers, the main one and the areas one, take the
-setting. The instance is private: only app-api and the OpenConditions ingest
-reach it, and app-api bounds its requests. Set
+setting. The instance is private: only the API and the OpenConditions ingest
+reach it, and the API bounds its requests. Set
 `OVERPASS_ALLOW_DUPLICATE_QUERIES=no` in `infra/docker/.env` to keep the old
 behaviour.
 
-Separately, app-api no longer turns such an error page, which Overpass sends
+Separately, the API no longer turns such an error page, which Overpass sends
 with HTTP 200, into a JSON syntax error. A `duplicate_query` or other
 dispatcher error is reported as Overpass being unavailable, a timeout as a
 timeout and a rate limit as a rate limit, as when Overpass answers with

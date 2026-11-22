@@ -45,6 +45,7 @@ import {
 } from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import type { ContainerBindMounts } from "./container-mounts";
+import { CORE_SERVICE_ID } from "./core-service-ids";
 import {
   CONFIGURATION_DIRECTORY,
   CONFIGURATION_GENERATION_BASE_PREFIX,
@@ -74,7 +75,7 @@ import {
   releaseServiceFiles,
   ServiceFileError,
 } from "./release-service-files";
-import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
+import { buildApiServiceEnv, expandServiceSelection } from "./selection";
 import { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 import {
   appliedServiceFilePath,
@@ -468,8 +469,7 @@ function resolveInput(
       validateConfig(entry.integrationId, entry.values, schema, ["enabled"]);
     }
   }
-  const appApi = enabled.find((service) => service.manifest.id === "app-api");
-  if (appApi) {
+  if (enabled.some((service) => service.manifest.id === CORE_SERVICE_ID.api)) {
     const passthroughKeys: string[] = [];
     for (const service of allServices) {
       const prefix = serviceConfigEnvPrefix(service.manifest.id);
@@ -484,8 +484,8 @@ function resolveInput(
       }
     }
     serviceConfigs.set(
-      "app-api",
-      buildAppApiServiceEnv(enabled, serviceConfigs.get("app-api") ?? {}, passthroughKeys),
+      CORE_SERVICE_ID.api,
+      buildApiServiceEnv(enabled, serviceConfigs.get(CORE_SERVICE_ID.api) ?? {}, passthroughKeys),
     );
   }
   const serviceSecrets = new Map<string, Record<string, string>>();
@@ -1459,10 +1459,7 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   const context: RenderContext = {
     ...(release
       ? {
-          releasePins: {
-            images: releaseServiceImages(release),
-            transitousTools: release.images["transitous-tools"],
-          },
+          releasePins: { images: releaseServiceImages(release) },
         }
       : {}),
     domain: input.domain,
@@ -1653,7 +1650,9 @@ async function commitOwnedConfigurationFiles(
     // Traefik's static configuration, read once at its start, belongs to the
     // generation; its dynamic directory, which it watches, stays put.
     if (
-      resolved.enabled.some((service) => service.isBuiltIn && service.manifest.id === "traefik")
+      resolved.enabled.some(
+        (service) => service.isBuiltIn && service.manifest.id === CORE_SERVICE_ID.traefik,
+      )
     ) {
       const staticConfiguration = serviceFiles.traefik.staticConfiguration;
       if (!staticConfiguration) {

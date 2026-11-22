@@ -197,7 +197,7 @@ If an ambiguous result, a preservation bug, a content leak, an unexpected OSM
 community complaint or repeated upstream write failures appear, set
 `OSM_DIRECT_EDITING_ENABLED=false` immediately. Disable the master flag as well
 if account gating or notes are implicated. These are environment settings cached at process startup/first use. Apply the
-changed values and recreate/restart `app-api`; editing an environment file
+changed values and recreate/restart `api`; editing an environment file
 alone does not update a running process. Confirm the effective capability and
 mutation response after restart.
 

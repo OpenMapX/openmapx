@@ -104,7 +104,9 @@ def main(argv: list[str]) -> int:
         yaml_lines.append(f"    {ident}:")
         yaml_lines.append(f"      path: {name}")
     if gbfs_sources:
-        yaml_lines.extend(["gbfs:", "  proxy: http://motis-feed-proxy", "  feeds:"])
+        # Upstream names Transitous's hosted proxy; gen-full-config repoints it
+        # at the stack's own feed proxy, as it does for a real catalog.
+        yaml_lines.extend(["gbfs:", "  proxy: https://rt.triptix.tech", "  feeds:"])
         for name, url in gbfs_sources:
             yaml_lines.extend([f"    {dataset_identifier(name)}:", f"      url: {url}"])
     yaml_text = "\n".join(yaml_lines) + "\n"

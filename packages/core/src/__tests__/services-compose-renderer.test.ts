@@ -27,6 +27,16 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
   };
 }
 
+/** A service's rendered networks: on each, it answers to its project-unique name. */
+function onNetworks(id: string, networks: string[], declared: Record<string, string[]> = {}) {
+  return Object.fromEntries(
+    networks.map((network) => [
+      network,
+      { aliases: [`openmapx-${id}`, ...(declared[network] ?? [])] },
+    ]),
+  );
+}
+
 function communitySvc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
   const service = svc(id, { ...opts, quality: "community" });
   return {
@@ -318,10 +328,10 @@ describe("renderServiceSnippet", () => {
       ]),
     }).labels as Record<string, string>;
 
-    expect(labels["traefik.http.routers.timeline.rule"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-timeline.rule"]).toBe(
       "Host(`timeline.operator.example`) && PathPrefix(`/app`)",
     );
-    expect(labels["traefik.http.routers.timeline-r1.rule"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-timeline-r1.rule"]).toBe(
       "Host(`timeline.operator.example`) && Path(`/health`)",
     );
 
@@ -331,7 +341,9 @@ describe("renderServiceSnippet", () => {
       }),
       { domain: "example.com" },
     ).labels as Record<string, string>;
-    expect(hostOnly["traefik.http.routers.timeline.rule"]).toBe("Host(`timeline.example.com`)");
+    expect(hostOnly["traefik.http.routers.openmapx-timeline.rule"]).toBe(
+      "Host(`timeline.example.com`)",
+    );
   });
 
   it("rejects unsafe resolved custom host values before emitting Traefik labels", () => {
@@ -377,7 +389,7 @@ describe("renderServiceSnippet", () => {
     expect(resolveProxyHost(service.manifest, { domain: "example.com" })).toBeUndefined();
     expect(
       renderServiceSnippet(service, { domain: "example.com" }).labels?.[
-        "traefik.http.routers.alpha.rule"
+        "traefik.http.routers.openmapx-alpha.rule"
       ],
     ).toBe("Host(`example.com`) && PathPrefix(`/alpha`)");
   });
@@ -427,7 +439,7 @@ describe("renderServiceSnippet", () => {
     expect(snippet.image).toBe("t/alpha:1.2.3");
     expect(snippet.expose).toEqual(["80", "81"]);
     expect(snippet.restart).toBe("unless-stopped");
-    expect(snippet.networks).toEqual(["openmapx"]);
+    expect(snippet.networks).toEqual(onNetworks("alpha", ["openmapx"]));
     expect(snippet.deploy?.resources?.limits?.memory).toBe("512m");
   });
 
@@ -437,17 +449,21 @@ describe("renderServiceSnippet", () => {
       {},
     );
     const doc = parseYaml(composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: Record<string, unknown> }>;
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
-    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
-    expect(doc.services["bike-share"]?.networks).toEqual(["openmapx-community-bike-share"]);
+    expect(doc.services.redis?.networks).toEqual(onNetworks("redis", ["openmapx"]));
+    expect(doc.services["weather-feed"]?.networks).toEqual(
+      onNetworks("weather-feed", ["openmapx-community-weather-feed"]),
+    );
+    expect(doc.services["bike-share"]?.networks).toEqual(
+      onNetworks("bike-share", ["openmapx-community-bike-share"]),
+    );
     expect(doc.networks).toHaveProperty("openmapx-community-weather-feed");
     expect(doc.networks).toHaveProperty("openmapx-community-bike-share");
-    expect(doc.services["weather-feed"]?.networks).not.toContain("openmapx");
-    expect(doc.services["bike-share"]?.networks).not.toContain("openmapx");
+    expect(doc.services["weather-feed"]?.networks).not.toHaveProperty("openmapx");
+    expect(doc.services["bike-share"]?.networks).not.toHaveProperty("openmapx");
   });
 
   it("lets only an audited built-in explicitly join a named community network", () => {
@@ -457,14 +473,15 @@ describe("renderServiceSnippet", () => {
     } as never);
     const { composeYaml } = renderCompose([bridge, extension], {});
     const doc = parseYaml(composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
     };
 
-    expect(doc.services["audited-bridge"]?.networks).toEqual([
-      "openmapx",
-      "openmapx-community-weather-feed",
-    ]);
-    expect(doc.services["weather-feed"]?.networks).toEqual(["openmapx-community-weather-feed"]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx", "openmapx-community-weather-feed"]),
+    );
+    expect(doc.services["weather-feed"]?.networks).toEqual(
+      onNetworks("weather-feed", ["openmapx-community-weather-feed"]),
+    );
   });
 
   it("skips an audited bridge target that is disabled or not installed, silently", () => {
@@ -474,11 +491,13 @@ describe("renderServiceSnippet", () => {
     });
     const result = renderCompose([bridge, extension], {});
     const doc = parseYaml(result.composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services["audited-bridge"]?.networks).toEqual(["openmapx"]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx"]),
+    );
     expect(doc.networks).not.toHaveProperty("openmapx-community-weather-feed");
     expect(result.warnings).toBeUndefined();
   });
@@ -499,12 +518,11 @@ describe("renderServiceSnippet", () => {
     });
     const result = renderCompose([bridge, communitySvc("weather-feed")], {});
     const doc = parseYaml(result.composeYaml) as {
-      services: Record<string, { networks: string[] }>;
+      services: Record<string, { networks: unknown }>;
     };
-    expect(doc.services["audited-bridge"]?.networks).toEqual([
-      "openmapx",
-      "openmapx-community-weather-feed",
-    ]);
+    expect(doc.services["audited-bridge"]?.networks).toEqual(
+      onNetworks("audited-bridge", ["openmapx", "openmapx-community-weather-feed"]),
+    );
   });
 
   it("still rejects a built-in bridge target", () => {
@@ -535,16 +553,19 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, { enable_ipv6?: boolean; ipam?: { config: { subnet: string }[] } }>;
     };
 
-    expect(doc.services["bundle-web"]?.networks).toEqual([
-      "openmapx-private-bundle",
-      "openmapx-private-bundle-ingress",
-    ]);
-    expect(doc.services["bundle-worker"]?.networks).toEqual(["openmapx-private-bundle"]);
-    expect(doc.services["bundle-db"]?.networks).toEqual({
-      "openmapx-private-bundle": { aliases: ["db"] },
-    });
-    expect(doc.services.gateway?.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
-    expect(doc.services.redis?.networks).toEqual(["openmapx"]);
+    expect(doc.services["bundle-web"]?.networks).toEqual(
+      onNetworks("bundle-web", ["openmapx-private-bundle", "openmapx-private-bundle-ingress"]),
+    );
+    expect(doc.services["bundle-worker"]?.networks).toEqual(
+      onNetworks("bundle-worker", ["openmapx-private-bundle"]),
+    );
+    expect(doc.services["bundle-db"]?.networks).toEqual(
+      onNetworks("bundle-db", ["openmapx-private-bundle"], { "openmapx-private-bundle": ["db"] }),
+    );
+    expect(doc.services.gateway?.networks).toEqual(
+      onNetworks("gateway", ["openmapx", "openmapx-private-bundle-ingress"]),
+    );
+    expect(doc.services.redis?.networks).toEqual(onNetworks("redis", ["openmapx"]));
     const bundleNet = doc.networks["openmapx-private-bundle"];
     const ingressNet = doc.networks["openmapx-private-bundle-ingress"];
     expect(bundleNet?.enable_ipv6).toBe(true);
@@ -563,7 +584,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.gateway?.networks).toEqual(["openmapx"]);
+    expect(doc.services.gateway?.networks).toEqual(onNetworks("gateway", ["openmapx"]));
     expect(doc.networks).not.toHaveProperty("openmapx-private-bundle-ingress");
   });
 
@@ -691,16 +712,88 @@ describe("renderServiceSnippet", () => {
     );
     const labels = snippet.labels as Record<string, string>;
     expect(labels["traefik.enable"]).toBe("true");
-    expect(labels["traefik.http.routers.alpha.rule"]).toContain("PathPrefix(`/alpha`)");
-    expect(labels["traefik.http.routers.alpha.entrypoints"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-alpha.rule"]).toContain("PathPrefix(`/alpha`)");
+    expect(labels["traefik.http.routers.openmapx-alpha.entrypoints"]).toBe(
       "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
     );
-    expect(labels["traefik.http.routers.alpha.tls.certresolver"]).toBe(
+    expect(labels["traefik.http.routers.openmapx-alpha.tls.certresolver"]).toBe(
       "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
     );
-    expect(labels["traefik.http.middlewares.alpha-strip.stripprefix.prefixes"]).toBe("/alpha");
-    expect(labels["traefik.http.services.alpha.loadbalancer.server.port"]).toBe("3000");
+    expect(labels["traefik.http.middlewares.openmapx-alpha-strip.stripprefix.prefixes"]).toBe(
+      "/alpha",
+    );
+    expect(labels["traefik.http.services.openmapx-alpha.loadbalancer.server.port"]).toBe("3000");
     expect(labels["traefik.docker.network"]).toBeUndefined();
+  });
+
+  it("namespaces the label router, service and middleware names for a shared Traefik", () => {
+    const labels = renderServiceSnippet(
+      svc("api", {
+        container: { image: "t/api", tag: "latest", expose: [3001] },
+        exposure: {
+          proxy: {
+            enabled: true,
+            pathPrefix: "/api",
+            stripPrefix: true,
+            middleware: ["sw-no-cache@file"],
+            additionalRoutes: [{ path: "/health", middleware: ["internal-only@file"] }],
+          },
+        },
+      }),
+      { domain: "example.com", externalProxyNetwork: "proxy" },
+    ).labels as Record<string, string>;
+
+    expect(labels).toEqual({
+      "traefik.enable": "true",
+      "traefik.docker.network": "proxy",
+      "traefik.http.routers.openmapx-api.rule": "Host(`example.com`) && PathPrefix(`/api`)",
+      "traefik.http.routers.openmapx-api.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-api.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-api.middlewares": "openmapx-api-strip,sw-no-cache@file",
+      "traefik.http.middlewares.openmapx-api-strip.stripprefix.prefixes": "/api",
+      "traefik.http.services.openmapx-api.loadbalancer.server.port": "3001",
+      "traefik.http.routers.openmapx-api-r1.rule": "Host(`example.com`) && Path(`/health`)",
+      "traefik.http.routers.openmapx-api-r1.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-api-r1.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-api-r1.service": "openmapx-api",
+      "traefik.http.routers.openmapx-api-r1.middlewares": "internal-only@file",
+    });
+  });
+
+  it("points a route at the service's own middleware under its namespaced name", () => {
+    const martin = JSON.parse(
+      readFileSync(join(process.cwd(), "services/martin/service.json"), "utf-8"),
+    ) as LoadedService["manifest"];
+    const labels = renderServiceSnippet(
+      svc("martin", {
+        container: { image: "t/martin", tag: "latest", expose: [3000] },
+        exposure: martin.exposure,
+      }),
+      { domain: "example.com", externalProxyNetwork: "proxy" },
+    ).labels as Record<string, string>;
+
+    expect(labels).toEqual({
+      "traefik.enable": "true",
+      "traefik.docker.network": "proxy",
+      "traefik.http.routers.openmapx-martin.rule": "Host(`example.com`) && PathPrefix(`/martin`)",
+      "traefik.http.routers.openmapx-martin.entrypoints": "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-martin.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-martin.middlewares": "openmapx-martin-strip,tiles-cache@file",
+      "traefik.http.middlewares.openmapx-martin-strip.stripprefix.prefixes": "/martin",
+      "traefik.http.services.openmapx-martin.loadbalancer.server.port": "3000",
+      "traefik.http.routers.openmapx-martin-r1.rule":
+        "Host(`example.com`) && PathPrefix(`/martin/segment_flow`)",
+      "traefik.http.routers.openmapx-martin-r1.entrypoints":
+        "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+      "traefik.http.routers.openmapx-martin-r1.tls.certresolver":
+        "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+      "traefik.http.routers.openmapx-martin-r1.service": "openmapx-martin",
+      "traefik.http.routers.openmapx-martin-r1.middlewares":
+        "openmapx-martin-strip,tiles-cache-live@file",
+    });
   });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
 
@@ -720,12 +813,14 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
+    // The project-unique name and declared aliases stay off the shared network,
+    // where another project's containers resolve names too.
     expect(doc.services.alpha?.networks).toEqual({
-      openmapx: { aliases: ["a"] },
+      openmapx: { aliases: ["openmapx-alpha", "a"] },
       "openmapx-proxy": {},
     });
     expect(doc.services.alpha?.labels?.["traefik.docker.network"]).toBe("proxy");
-    expect(doc.services.beta?.networks).toEqual(["openmapx"]);
+    expect(doc.services.beta?.networks).toEqual(onNetworks("beta", ["openmapx"]));
     expect(doc.networks["openmapx-proxy"]).toEqual({ name: "proxy", external: true });
   });
 
@@ -738,7 +833,7 @@ describe("renderServiceSnippet", () => {
       networks: Record<string, unknown>;
     };
 
-    expect(doc.services.alpha?.networks).toEqual(["openmapx"]);
+    expect(doc.services.alpha?.networks).toEqual(onNetworks("alpha", ["openmapx"]));
     expect(doc.networks["openmapx-proxy"]).toBeUndefined();
   });
 
@@ -801,12 +896,12 @@ describe("renderServiceSnippet", () => {
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("passes through ${VAR}-prefixed bindMount sources verbatim for compose substitution", () => {
-    // app-api opts into a host-path-agreeing bind mount (docker-outside-of-
+    // A service opts into a host-path-agreeing bind mount (docker-outside-of-
     // docker admin control) by pointing both sides at the same operator-set
     // env var. The renderer must not try to resolve `${OPENMAPX_HOST_DIR}`
     // relative to the service directory.
     const snippet = renderServiceSnippet(
-      svc("app-api", {
+      svc("api", {
         bindMounts: [
           {
             source: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
@@ -893,8 +988,8 @@ describe("renderServiceSnippet", () => {
   });
 
   it("reads env files from the infra root, wherever the compose file lives", () => {
-    const service = svc("app-api", {
-      container: { image: "t/app-api", tag: "latest", expose: [80], envFile: [".env"] },
+    const service = svc("api", {
+      container: { image: "t/api", tag: "latest", expose: [80], envFile: [".env"] },
     });
     expect(
       renderServiceSnippet(service, {
@@ -1181,7 +1276,7 @@ describe("renderCompose", () => {
 
   it("emits one Traefik router per additionalRoutes entry, all bound to the same backend", () => {
     const list = [
-      svc("app-api", {
+      svc("api", {
         container: { image: "ghcr.io/x/api", tag: "latest", expose: [3001] },
         exposure: {
           proxy: {
@@ -1193,11 +1288,13 @@ describe("renderCompose", () => {
       }),
     ];
     const result = renderCompose(list, { domain: "example.com" });
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api.rule");
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.openmapx-api.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.openmapx-api-r1.rule");
     expect(result.composeYaml).toContain("Path(`/health`)");
     // Secondary router routes to the SAME backend service.
-    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.service: app-api");
+    expect(result.composeYaml).toContain(
+      "traefik.http.routers.openmapx-api-r1.service: openmapx-api",
+    );
   });
 
   it("resolves @service:<slug>:<path> bindMounts against the named service's directory", () => {

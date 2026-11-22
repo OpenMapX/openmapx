@@ -1,3 +1,5 @@
+import { CORE_SERVICE_ID } from "./core-service-ids";
+
 /**
  * Named groups of service ids for the `--preset` flag on services start/stop/
  * restart/update and compose render/up. Lets operators say "start the
@@ -10,8 +12,8 @@
  * data-manager, traefik, etc. follow automatically.
  */
 export const PRESETS: Record<string, readonly string[]> = {
-  app: ["app-api", "app-web", "well-known"],
-  proxy: ["traefik"],
+  app: [CORE_SERVICE_ID.api, CORE_SERVICE_ID.web, CORE_SERVICE_ID.wellKnown],
+  proxy: [CORE_SERVICE_ID.traefik],
   routing: ["osrm", "valhalla"],
   transit: ["motis", "motis-feed-proxy", "otp"],
   pelias: ["pelias", "pelias-pip", "pelias-placeholder", "elasticsearch"],
@@ -20,7 +22,7 @@ export const PRESETS: Record<string, readonly string[]> = {
   overpass: ["overpass"],
   tiles: ["tileserver"],
   martin: ["martin"],
-  dev: ["postgis", "redis"],
+  dev: [CORE_SERVICE_ID.postgis, CORE_SERVICE_ID.redis],
 };
 
 export type PresetName = keyof typeof PRESETS;

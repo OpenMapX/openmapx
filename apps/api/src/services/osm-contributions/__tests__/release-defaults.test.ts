@@ -73,7 +73,7 @@ describe("environment examples", () => {
 });
 
 describe("service manifest", () => {
-  const manifest = JSON.parse(read("services/app-api/service.json")) as {
+  const manifest = JSON.parse(read("services/api/service.json")) as {
     container: { environment: Record<string, string> };
   };
   const environment = manifest.container.environment;

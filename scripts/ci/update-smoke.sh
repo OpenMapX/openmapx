@@ -50,25 +50,8 @@ registry_certs=""
 update_timeout_seconds="${UPDATE_SMOKE_UPDATE_TIMEOUT_SECONDS:-1200}"
 admin_email="update-smoke@openmapx.org"
 admin_password=""
-release_images=(api web data-manager ops-agent transitous-runner transitous-tools)
+release_images=(api web data-manager ops-agent transitous-runner)
 cases="${UPDATE_SMOKE_CASES:-happy unhealthy}"
-
-service_of() {
-  case "$1" in
-    api) echo app-api ;;
-    web) echo app-web ;;
-    *) echo "$1" ;;
-  esac
-}
-
-# The image this checkout builds for a release image name, as the manifests name it.
-built_image() {
-  if [[ "$1" == transitous-tools ]]; then
-    echo "openmapx-update-smoke/transitous-tools:local"
-  else
-    manifest_image "$(service_of "$1")"
-  fi
-}
 
 registry_up() {
   curl --fail --silent --max-time 5 --cacert "$registry_certs/registry.crt" \
@@ -175,7 +158,8 @@ publish_release() {
   step "Publish release $release"
   for name in "${release_images[@]}"; do
     if ((release_counter == 1)); then
-      base="$(built_image "$name")"
+      # The image this checkout built for the pinned service of that name.
+      base="$(manifest_image "$name")"
     else
       base="$registry/$name:update-smoke-r$((release_counter - 1))"
     fi
@@ -234,12 +218,12 @@ install_release_one() {
   step "Install release N"
   logged release openmapx compose release || fail "compose release failed"
   logged render openmapx compose render || fail "compose render failed"
-  logged start openmapx services start postgis redis traefik app-api data-manager ||
+  logged start openmapx services start postgis redis traefik api data-manager ||
     fail "services start failed"
   logged up openmapx compose up || fail "compose up failed"
   assert_stack_healthy
-  [[ "$(image_id_of app-api)" == "$(expected_image_id api update-smoke-r1)" ]] ||
-    fail "app-api does not run release N"
+  [[ "$(image_id_of api)" == "$(expected_image_id api update-smoke-r1)" ]] ||
+    fail "the API does not run release N"
   create_admin_session
 }
 
@@ -330,8 +314,8 @@ case_happy() {
   assert_stack_healthy
   local name
   for name in api data-manager ops-agent web transitous-runner; do
-    [[ "$(image_id_of "$(service_of "$name")")" == "$(expected_image_id "$name" "$release")" ]] ||
-      fail "$(service_of "$name") does not run $release"
+    [[ "$(image_id_of "$name")" == "$(expected_image_id "$name" "$release")" ]] ||
+      fail "$name does not run $release"
   done
   [[ "$(recreate_order "$since" | tail -1)" == ops-agent ]] ||
     fail "the operations agent was not recreated last: $(recreate_order "$since" | tr '\n' ' ')"
@@ -349,7 +333,7 @@ case_unhealthy() {
   # An update that cannot finish is held for the operator; ten minutes cover
   # the helper's wait for the API's health.
   if update_timeout_seconds=600 system_update unhealthy "$release" "$digest"; then
-    fail "the update succeeded although app-api is unhealthy"
+    fail "the update succeeded although the API is unhealthy"
   fi
   # The agent is the only release service recreated after the API.
   [[ "$(image_id_of ops-agent)" == "$agent_before" ]] || fail "the agent was replaced"
@@ -422,7 +406,7 @@ dump_diagnostics() {
     docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
       --filter "label=com.docker.compose.service=ops-agent"
     docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
-      --filter "label=com.docker.compose.service=app-api"
+      --filter "label=com.docker.compose.service=api"
     docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
       --filter "label=com.docker.compose.service=data-manager"
     docker ps --all --quiet --filter "name=openmapx-configuration-handoff-"
@@ -454,8 +438,6 @@ update_main() {
   trap 'exit 143' TERM
 
   build_images
-  step "Build openmapx-update-smoke/transitous-tools:local"
-  docker build --quiet --tag "$(built_image transitous-tools)" services/motis/tools/transitous >/dev/null
   pull_third_party_images
   start_registry
   local name

@@ -131,7 +131,7 @@ source. `NEXT_PUBLIC_MAP_STYLE_URL` supplies `/fonts`; despite its historical
 name, it is not a style JSON endpoint. The sprites remain same-origin web-app
 assets. Offline package preparation, polling, archives, and glyph downloads use
 `NEXT_PUBLIC_API_URL` as well; this matters in local development where the web
-app and API normally use different origins. Apply changed container values with `pnpm openmapx services start app-web`,
+app and API normally use different origins. Apply changed container values with `pnpm openmapx services start web`,
 then reload the page. An in-place restart does not reload environment values.
 
 `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` selects MapTiler's complete hosted style
@@ -225,7 +225,7 @@ URL to skip that extra TileJSON request. Alternatively, set
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL` to the data provider's required credit.
 
 The web runtime reads `NEXT_PUBLIC_TERRAIN_DEM_TILE_URL_TEMPLATE` and
-`NEXT_PUBLIC_TERRAIN_DEM_ENCODING`, but the current `app-web` service manifest
+`NEXT_PUBLIC_TERRAIN_DEM_ENCODING`, but the current `web` service manifest
 does not forward those two variables. Setting them only in the managed `.env`
 therefore does not apply them to that container. Verify the effective web
 container environment before relying on a custom encoding/template; the

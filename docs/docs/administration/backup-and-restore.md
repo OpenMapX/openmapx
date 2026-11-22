@@ -338,7 +338,7 @@ pnpm openmapx backup restore weekly --stop-running
 ```
 
 With `--stop-running`, the CLI stops the required tar targets and, for an
-OpenMapX database restore, every client of that database (`app-api`,
+OpenMapX database restore, every client of that database (`api`,
 `data-manager` and `martin`), and restarts them after a successful restore. The
 database server stays running because restoring the dump needs it. The API
 restarts only after the erasure journal has been replayed. If replay fails after

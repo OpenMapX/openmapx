@@ -51,7 +51,7 @@ function service(id: string): services.LoadedService {
       container: {
         image: `example/${id}`,
         tag: "1",
-        ...(id === "app-api" ? { environment: { DOCKER_CONFIG: "/root/.docker" } } : {}),
+        ...(id === "api" ? { environment: { DOCKER_CONFIG: "/root/.docker" } } : {}),
       },
       configSchema: {
         type: "object",
@@ -335,11 +335,11 @@ describe("ops-agent trusted configuration runtime", () => {
     ).toEqual(["sentinel", "sentinel", "sentinel"]);
   });
 
-  it("rejects an app-api baseline control environment override from the snapshot", async () => {
+  it("rejects an API baseline control environment override from the snapshot", async () => {
     const paths = fixture();
     const runtime = createUnavailableRuntime();
     installTrustedConfigurationRuntime(runtime, {
-      services: [service("app-api")],
+      services: [service("api")],
       integrationSchemas: new Map(),
       infraDir: paths.infraDir,
     });
@@ -351,7 +351,7 @@ describe("ops-agent trusted configuration runtime", () => {
       revisionId,
       payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };
-    select(paths.infraDir, ["app-api"]);
+    select(paths.infraDir, ["api"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
         execution: testExecution(),
@@ -360,9 +360,7 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(
           operation,
           payload({
-            serviceConfigs: [
-              { serviceId: "app-api", values: { DOCKER_CONFIG: "/attacker/control" } },
-            ],
+            serviceConfigs: [{ serviceId: "api", values: { DOCKER_CONFIG: "/attacker/control" } }],
             integrationConfigs: [],
           }),
         ),
@@ -375,14 +373,14 @@ describe("ops-agent trusted configuration runtime", () => {
     const paths = fixture();
     const runtime = createUnavailableRuntime();
     installTrustedConfigurationRuntime(runtime, {
-      services: [service("app-api"), service("alpha")],
+      services: [service("api"), service("alpha")],
       integrationSchemas: new Map([
         ["routing-demo", { properties: { region: { type: "string" } } }],
       ]),
       infraDir: paths.infraDir,
     });
     const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
-    select(paths.infraDir, ["app-api", "alpha"]);
+    select(paths.infraDir, ["api", "alpha"]);
     const operation = {
       ...(await configurationSource(runtime, paths.infraDir)),
       expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
@@ -403,7 +401,7 @@ describe("ops-agent trusted configuration runtime", () => {
       ),
     });
     const compose = readFileSync(paths.compose, "utf8");
-    expect(compose).toContain("OPENMAPX_APPLIED_SERVICES: app-api,alpha");
+    expect(compose).toContain("OPENMAPX_APPLIED_SERVICES: api,alpha");
     expect(compose).toContain(`SERVICE_ALPHA_PUBLIC_SETTING: \${SERVICE_ALPHA_PUBLIC_SETTING:-}`);
     expect(compose).toContain(
       `INTEGRATION_ROUTING_DEMO_REGION: \${INTEGRATION_ROUTING_DEMO_REGION:-}`,

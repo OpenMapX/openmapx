@@ -57,14 +57,14 @@ import { ApiOpsError, OpsObservationPending } from "./ops-client";
 import { guardedSystemReleasePayloadSchema } from "./platform-configuration-job";
 import { retainedMaintenanceJob } from "./retained-maintenance-authorization";
 import { type RetainedMaintenanceJobType, retainMaintenanceJob } from "./retained-maintenance-job";
-import { appApiRestartCheckpoint } from "./system-update-state";
+import { apiRestartCheckpoint } from "./system-update-state";
 import {
   completeTrustedConfigurationApply,
   parseTrustedConfigurationApplyOutcome,
 } from "./trusted-config-outcome";
 
-type AppApiReplacementOutcome = "applied" | "rolled-back" | "failed";
-interface AppApiRuntimeInfo {
+type ApiReplacementOutcome = "applied" | "rolled-back" | "failed";
+interface ApiRuntimeInfo {
   containerId: string;
   imageId: string;
   updateJobId: string | null;
@@ -84,7 +84,7 @@ export interface JobContext {
     sourceSeq?: number,
   ): Promise<void>;
   setProgress(progress: number): Promise<void>;
-  /** Persist restart-safe state before an operation intentionally replaces app-api. */
+  /** Persist restart-safe state before an operation intentionally replaces the API. */
   checkpoint(
     result: Record<string, unknown>,
     progress?: number,
@@ -989,12 +989,12 @@ class AdminJobRunner {
   async initialize(
     options: {
       completeRestartedUpdates?: boolean;
-      currentAppApiRuntime?: AppApiRuntimeInfo | null;
-      resolveReplacementOutcome?: (outcomeFile: string) => Promise<AppApiReplacementOutcome | null>;
+      currentApiRuntime?: ApiRuntimeInfo | null;
+      resolveReplacementOutcome?: (outcomeFile: string) => Promise<ApiReplacementOutcome | null>;
       cleanupReplacementOutcome?: (outcomeFile: string) => Promise<void>;
     } = {},
   ): Promise<void> {
-    // An application update deliberately replaces app-api as its final step.
+    // An application update deliberately replaces the API as its final step.
     // The server calls this only after it is listening. Finalize only jobs that
     // wrote the explicit pre-restart checkpoint, passed the migration gate,
     // and are now running the exact image that the update pulled. Any other
@@ -1009,7 +1009,7 @@ class AdminJobRunner {
       .from(adminJob)
       .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
     const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
-      const checkpoint = appApiRestartCheckpoint(job.result);
+      const checkpoint = apiRestartCheckpoint(job.result);
       return checkpoint ? [{ ...job, checkpoint }] : [];
     });
     for (const candidate of checkpointedUpdates) {
@@ -1019,7 +1019,7 @@ class AdminJobRunner {
       const outcome = await (options.resolveReplacementOutcome ?? (async () => null))(
         candidate.checkpoint.outcomeFile,
       );
-      const runtime = options.currentAppApiRuntime;
+      const runtime = options.currentApiRuntime;
       const migrationsFailed = options.completeRestartedUpdates === false;
       if (!migrationsFailed && (outcome === null || (outcome === "applied" && !runtime))) continue;
       const complete =
@@ -1029,12 +1029,12 @@ class AdminJobRunner {
         runtime.containerId !== candidate.checkpoint.previousContainerId &&
         runtime.updateJobId === candidate.id;
       const error = migrationsFailed
-        ? "Update replaced app-api, but database migrations did not complete"
+        ? "Update replaced the API, but database migrations did not complete"
         : outcome === "rolled-back"
-          ? "Update failed; the previous app-api image was restored"
+          ? "Update failed; the previous API image was restored"
           : outcome === "failed"
-            ? "Update failed and app-api rollback did not complete"
-            : "Update restarted app-api with an unexpected container identity or image";
+            ? "Update failed and the API rollback did not complete"
+            : "Update restarted the API with an unexpected container identity or image";
       const rows = await db
         .update(adminJob)
         .set({

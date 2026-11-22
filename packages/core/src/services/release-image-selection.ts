@@ -2,11 +2,8 @@
 import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 import { JSON_SCHEMA, load } from "js-yaml";
 import { readAppliedRelease } from "./configuration-generation";
-import {
-  RELEASE_PINNED_SERVICE_IDS,
-  releaseChannel,
-  releaseServiceImages,
-} from "./release-manifest";
+import { RELEASE_PINNED_SERVICE_IDS, type ReleasePinnedServiceId } from "./core-service-ids";
+import { releaseChannel, releaseServiceImages } from "./release-manifest";
 
 export function configurationImageReference(composeYaml: string, serviceId: string) {
   const document = load(composeYaml, { schema: JSON_SCHEMA }) as {
@@ -31,9 +28,7 @@ export function readServiceReleaseImageSelection(infraDir: string, serviceId: st
     throw new Error("The applied generation pins no release; select one with compose release");
   }
   return {
-    imageReference: releaseServiceImages(release.manifest)[
-      serviceId as (typeof RELEASE_PINNED_SERVICE_IDS)[number]
-    ],
+    imageReference: releaseServiceImages(release.manifest)[serviceId as ReleasePinnedServiceId],
     releaseSelectionDigest: release.manifestDigest,
   };
 }

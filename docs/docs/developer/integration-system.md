@@ -34,7 +34,7 @@ The main implementation boundaries are:
 
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
-in the operations agent's integration store, which app-api mounts at
+in the operations agent's integration store, which the API mounts at
 `custom_integrations/`, and contain declarative metadata and
 safe static assets (see
 [Built-in versus community](#built-in-versus-community)). The directory can contain these entry files:
@@ -1565,7 +1565,7 @@ receipts and visible projection.
 ### Community presentation boundary
 
 Community integration artifacts are declarative-only. The installer rejects
-`map-layer.tsx`, `legend.tsx`, `panel.tsx`, and prebuilt frontend bundles; app-api
+`map-layer.tsx`, `legend.tsx`, `panel.tsx`, and prebuilt frontend bundles; the API
 does not serve a bundle route; and the web provider never appends community
 scripts. This is deliberate: a same-origin script has the signed-in user's full
 authority, and CSP cannot sandbox code the application intentionally executes.
@@ -1694,10 +1694,10 @@ The host treats the two install locations differently, and the
   `index.ts`; no separate integration build is needed. They carry `quality: "built-in"`.
 - **Community integrations** are installed by the operations agent in its
   integration store, `infra/docker/state/ops-agent/custom-integrations/`, which
-  records the SHA-256 of every file it installs; app-api mounts the store
+  records the SHA-256 of every file it installs; the API mounts the store
   read-only at `custom_integrations/` and serves only files that match. Their
   manifests and safe static assets are discovered, but backend and frontend
-  JavaScript is never imported by app-api: that process holds
+  JavaScript is never imported by the API: that process holds
   database credentials and application secrets and is not a sandbox. Host and
   Docker operations are separately owned by the operations agent. The installer rejects such entry points.
   Backend behavior belongs in a separately containerized service component;

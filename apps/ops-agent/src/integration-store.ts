@@ -27,7 +27,7 @@ import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
  * The operations agent's installed integrations.
  *
  * The agent is the only writer of its integration store,
- * `infra/docker/state/ops-agent/custom-integrations/`, which app-api mounts
+ * `infra/docker/state/ops-agent/custom-integrations/`, which the API mounts
  * read-only. It fetches each integration archive itself, checks its SHA-256,
  * validates and installs it as `<store>/<id>`, and records the SHA-256 of
  * every file it wrote in `infra/docker/state/ops-agent/integrations/<id>.json`.
@@ -333,8 +333,8 @@ export class IntegrationStore {
    * an extension; the operator, who installed it by hand, may replace it.
    *
    * This is bookkeeping, not a security boundary. It keeps one extension, or a
-   * manual install, from replacing another's integration by accident. app-api
-   * and the fixed CLI reach the agent as the same `api` principal, so app-api
+   * manual install, from replacing another's integration by accident. The API
+   * and the fixed CLI reach the agent as the same `api` principal, so the API
    * can act as the operator by leaving out `extensionId`; it is the admin and
    * may install any artifact anyway. What the agent enforces is that every
    * installed file is one it verified and recorded.

@@ -21,7 +21,7 @@ const systemStatus = {
   },
   images: [
     {
-      id: "app-api",
+      id: "api",
       name: "OpenMapX API",
       image: "ghcr.io/openmapx/api:latest",
       containerState: "running",

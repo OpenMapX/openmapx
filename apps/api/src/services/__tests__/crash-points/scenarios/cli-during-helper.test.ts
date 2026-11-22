@@ -11,14 +11,14 @@ crashScenario({
     const apiRecreate = host.blockDocker({
       command: "compose up",
       caller: "helper",
-      service: "app-api",
+      service: "api",
     });
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
     await apiRecreate.entered;
     for (const action of ["start", "restart"]) {
       const before = host.mark();
-      const cli = await host.cli(["services", action, "app-web"]);
+      const cli = await host.cli(["services", action, "web"]);
       expect(cli.code, `services ${action}: ${cli.stderr}`).not.toBe(0);
       expect(host.dockerEffects({ caller: "host-cli", since: before })).toEqual([]);
     }
@@ -26,7 +26,7 @@ crashScenario({
     const job = await host.waitForJob(submitted.jobId as string);
     expect(job.status).toBe("success");
     for (const action of ["start", "restart"]) {
-      const cli = await host.cli(["services", action, "app-web"]);
+      const cli = await host.cli(["services", action, "web"]);
       expect(cli.code, `services ${action}: ${cli.stderr}`).toBe(0);
     }
   },

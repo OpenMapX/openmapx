@@ -9,8 +9,8 @@ const operation = () => ({
   planDigest: "a".repeat(64),
   previewFingerprint: "b".repeat(64),
   expectedCurrentRevisionId: `cfg1_${"c".repeat(43)}`,
-  serviceIds: ["app-api"],
-  expectedImageIdentities: { "app-api": `sha256:${"1".repeat(64)}` },
+  serviceIds: ["api"],
+  expectedImageIdentities: { api: `sha256:${"1".repeat(64)}` },
   mode: { kind: "configuration" },
 });
 describe("handoff step body", () => {
@@ -18,8 +18,8 @@ describe("handoff step body", () => {
     for (const value of [
       { ...operation(), path: "/other" },
       { ...operation(), image: "arbitrary/image" },
-      { ...operation(), serviceIds: ["app-api", "app-api"] },
-      { ...operation(), serviceIds: ["ops-agent", "app-api"] },
+      { ...operation(), serviceIds: ["api", "api"] },
+      { ...operation(), serviceIds: ["ops-agent", "api"] },
       { ...operation(), expectedImageIdentities: { "ops-agent": `sha256:${"2".repeat(64)}` } },
       {
         ...operation(),
@@ -63,7 +63,7 @@ it("bounds private platform intent without admitting plaintext recovery credenti
       services: [],
     },
     configuration: { version: 1, domain: { source: "host" } },
-    affectedServiceIds: ["app-api"],
+    affectedServiceIds: ["api"],
     confirmations: {
       domain: false,
       dnsTls: false,

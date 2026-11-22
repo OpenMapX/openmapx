@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { assert, describe, expect, it } from "vitest";
 import { renderCompose, resolveProxyHost } from "../services/compose-renderer";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/core-service-ids";
 import { findServiceManifestDirs } from "../services/manifest-discovery";
 import { serviceManifestSchema } from "../services/manifest-schema";
-import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/selection";
 import {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,
@@ -47,28 +47,56 @@ function labelsByService(): Map<string, Record<string, string>> {
   return out;
 }
 
+/** The label names carry a project prefix for a shared Traefik; the file's names are bare. */
+const LABEL_NAME_PREFIX = "openmapx-";
+function fileName(labelName: string): string {
+  expect(labelName.startsWith(LABEL_NAME_PREFIX), labelName).toBe(true);
+  return labelName.slice(LABEL_NAME_PREFIX.length);
+}
+
 /**
  * Reconstruct the router/service/middleware view the Docker-label provider
- * produced, so the generated file configuration can be compared against it.
+ * produced, under the file provider's names, so the generated file
+ * configuration can be compared against it.
  */
 function routingFromLabels(labels: Record<string, string>) {
   const routers: Record<string, Record<string, string>> = {};
   const services: Record<string, string> = {};
   const middlewares: Record<string, string> = {};
+  const declaredMiddlewares = new Set(
+    Object.keys(labels).flatMap((key) => {
+      const match = /^traefik\.http\.middlewares\.([^.]+)\./.exec(key);
+      return match ? [itemAt(match, 1)] : [];
+    }),
+  );
+  // A reference without a provider suffix resolves among the Docker labels, so it
+  // must name a middleware these labels declare, under its prefixed name.
+  const middlewareReference = (entry: string) => {
+    if (entry.includes("@")) return entry;
+    expect(declaredMiddlewares.has(entry), `labels declare middleware ${entry}`).toBe(true);
+    return fileName(entry);
+  };
   for (const [key, value] of Object.entries(labels)) {
     let match = /^traefik\.http\.routers\.([^.]+)\.(.+)$/.exec(key);
     if (match) {
-      const name = itemAt(match, 1);
-      routers[name] = { ...routers[name], [itemAt(match, 2)]: value };
+      const name = fileName(itemAt(match, 1));
+      const property = itemAt(match, 2);
+      const reference =
+        property === "service"
+          ? fileName(value)
+          : property === "middlewares"
+            ? value.split(",").map(middlewareReference).join(",")
+            : value;
+      routers[name] = { ...routers[name], [property]: reference };
       continue;
     }
     match = /^traefik\.http\.services\.([^.]+)\.loadbalancer\.server\.port$/.exec(key);
     if (match) {
-      services[itemAt(match, 1)] = value;
+      services[fileName(itemAt(match, 1))] = value;
       continue;
     }
     match = /^traefik\.http\.middlewares\.([^.]+)\.stripprefix\.prefixes$/.exec(key);
-    if (match) middlewares[itemAt(match, 1)] = value;
+    if (match) middlewares[fileName(itemAt(match, 1))] = value;
   }
   return { routers, services, middlewares };
 }

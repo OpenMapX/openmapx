@@ -4,7 +4,7 @@ impacts: [security]
 
 ## What changes
 
-The Data Manager, Transitous runner and Transitous tools images explicitly upgrade
+The Data Manager and Transitous runner images explicitly upgrade
 `apt` and `libapt-pkg7.0` to at least Debian Trixie version 3.0.4. These
 upgrades fix
 [CVE-2026-109518](https://security-tracker.debian.org/tracker/CVE-2026-109518), as
@@ -16,8 +16,8 @@ changed runtime instructions invalidate cached layers containing older packages.
 
 ## Who is affected
 
-Operators using Data Manager, Transitous runner or Transitous tools images built
-from the pinned Debian bases before these package upgrades.
+Operators using Data Manager or Transitous runner images built from the pinned
+Debian bases before these package upgrades.
 
 ## Required action
 

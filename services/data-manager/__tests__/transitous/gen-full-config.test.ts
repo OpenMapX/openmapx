@@ -217,17 +217,17 @@ timetable:
     expect(result.artifacts).toMatchObject({ rtRewritten: 1 });
     const updated = readFileSync(fx.configPath, "utf-8");
     // de-bvg-0 is in our proxy set → repointed.
-    expect(updated).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+    expect(updated).toContain("http://openmapx-motis-feed-proxy/feed/de-bvg-0");
     // de-vbb-0 is NOT served by our proxy → left on the origin rather than broken.
     expect(updated).toContain("https://rt.triptix.tech/feed/de-vbb-0");
   });
 
   it("uses an explicit feed-proxy URL override when provided", async () => {
-    process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://rt.openmapx.local";
+    process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://feed-proxy.example";
     const fx = setupCatalog(TEMPLATE_WITH_RT);
     await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
     expect(readFileSync(fx.configPath, "utf-8")).toContain(
-      "http://rt.openmapx.local/feed/de-bvg-0",
+      "http://feed-proxy.example/feed/de-bvg-0",
     );
   });
 
@@ -238,7 +238,9 @@ timetable:
     process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "";
     const fx = setupCatalog(TEMPLATE_WITH_RT);
     await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
-    expect(readFileSync(fx.configPath, "utf-8")).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+    expect(readFileSync(fx.configPath, "utf-8")).toContain(
+      "http://openmapx-motis-feed-proxy/feed/de-bvg-0",
+    );
   });
 
   it("rewrites the GBFS scalar and persists normalized proxy vars beside the config", async () => {
@@ -251,7 +253,7 @@ timetable:
     expect(result.status).toBe("ok");
     expect(result.artifacts).toMatchObject({ rtRewritten: 3, gbfsProxyRewritten: 1 });
     const updated = readFileSync(fx.configPath, "utf-8");
-    expect(updated).toContain("  proxy: http://motis-feed-proxy");
+    expect(updated).toContain("  proxy: http://openmapx-motis-feed-proxy");
     expect(updated).not.toContain("https://rt.triptix.tech");
     expect(
       JSON.parse(

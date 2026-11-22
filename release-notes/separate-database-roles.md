@@ -4,7 +4,7 @@ impacts: [breaking, migration, operator-action]
 
 ## What changes
 
-`app-api` and `data-manager` no longer connect to PostgreSQL as the superuser.
+`api` and `data-manager` no longer connect to PostgreSQL as the superuser.
 `openmapx_api` owns the `public` schema and runs the migrations;
 `openmapx_data_manager` may change only its own tables and the search and place
 schemas it rebuilds, and can no longer read or change accounts, administrative

@@ -65,7 +65,7 @@ pnpm openmapx services logs valhalla --follow
 
 The scripted Valhalla image prepares routing tiles and, by default, elevation,
 administrative boundaries, and time zones. Its internal endpoint is
-`http://valhalla:8002`, published as `127.0.0.1:8002`. Initial preparation can take
+`http://openmapx-valhalla:8002`, published as `127.0.0.1:8002`. Initial preparation can take
 hours. Follow logs rather than treating a running container as a loaded graph.
 
 Existing tiles are reused on later starts. When refreshing OSM, download the new
@@ -108,7 +108,7 @@ The build runs extract, partition, and customize in Docker, then publishes
 result.
 
 The runtime uses `osrm-routed --algorithm mld` and listens internally at
-`http://osrm:5000`, published as `127.0.0.1:5000`.
+`http://openmapx-osrm:5000`, published as `127.0.0.1:5000`.
 
 :::caution[Stop OSRM before rebuilding]
 Preparation refuses a running OSRM consumer. New output is staged separately,
@@ -230,7 +230,7 @@ settings override admin values within config; they do **not** supersede the
 selected-service lookup in these adapters.
 
 To use an external endpoint, stop and remove the corresponding local service
-from the selection, configure the integration endpoint, and recreate `app-api`
+from the selection, configure the integration endpoint, and recreate `api`
 so its applied service selection is current. Valhalla's hosted Stadia fallback
 requires its provider API key; self-hosted Valhalla does not. The OSRM public demo
 is an external dependency with its own [usage policy](https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy),
@@ -274,7 +274,7 @@ pnpm openmapx services enable valhalla osrm
 pnpm openmapx data download osm europe/germany
 pnpm openmapx services build osrm --region europe/germany
 pnpm openmapx services start --preset routing
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 ```
 
 For an existing deployment, stop OSRM before rebuilding. Valhalla prepares its

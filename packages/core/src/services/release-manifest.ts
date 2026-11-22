@@ -26,26 +26,17 @@ export {
 
 import { createHash } from "node:crypto";
 import z from "zod/v4";
+import { CORE_SERVICE_ID, type ReleasePinnedServiceId } from "./core-service-ids";
 
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
-/** Runtime services whose images a generation pins as one release. */
-export const RELEASE_PINNED_SERVICE_IDS = [
-  "app-api",
-  "app-web",
-  "data-manager",
-  "ops-agent",
-  "transitous-runner",
-] as const;
-export const TRANSITOUS_TOOLS_IMAGE_ENV = "OPENMAPX_TRANSITOUS_TOOLS_IMAGE";
 
-/** The six application images; documentation publishes independently. */
+/** The five application images; documentation publishes independently. */
 export const RELEASE_IMAGE_NAMES = [
   "api",
   "web",
   "data-manager",
   "ops-agent",
   "transitous-runner",
-  "transitous-tools",
 ] as const;
 const DIGEST = "sha256:[a-f0-9]{64}";
 const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -301,7 +292,6 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
       "data-manager": manifest.images["data-manager"],
       "ops-agent": manifest.images["ops-agent"],
       "transitous-runner": manifest.images["transitous-runner"],
-      "transitous-tools": manifest.images["transitous-tools"],
     },
     producer: stableObject(manifest.producer),
     buildMetadata: stableObject(manifest.buildMetadata),
@@ -325,12 +315,12 @@ export function releaseManifestDigest(manifest: ReleaseManifest): string {
 /** The image each pinned service runs in `manifest`. */
 export function releaseServiceImages(
   manifest: ReleaseManifest,
-): Readonly<Record<(typeof RELEASE_PINNED_SERVICE_IDS)[number], string>> {
+): Readonly<Record<ReleasePinnedServiceId, string>> {
   return {
-    "app-api": manifest.images.api,
-    "app-web": manifest.images.web,
-    "data-manager": manifest.images["data-manager"],
-    "ops-agent": manifest.images["ops-agent"],
-    "transitous-runner": manifest.images["transitous-runner"],
+    [CORE_SERVICE_ID.api]: manifest.images.api,
+    [CORE_SERVICE_ID.web]: manifest.images.web,
+    [CORE_SERVICE_ID.dataManager]: manifest.images["data-manager"],
+    [CORE_SERVICE_ID.opsAgent]: manifest.images["ops-agent"],
+    [CORE_SERVICE_ID.transitousRunner]: manifest.images["transitous-runner"],
   };
 }

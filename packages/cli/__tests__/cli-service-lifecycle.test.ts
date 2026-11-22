@@ -225,19 +225,19 @@ describe("actual CLI service lifecycle preparation", () => {
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
   });
   it("does not hold the configuration writer across Update pull, migration and recreation", async () => {
-    const directory = join(root, "services/app-api");
+    const directory = join(root, "services/api");
     mkdirSync(directory, { recursive: true });
     writeFileSync(
       join(directory, "service.json"),
       JSON.stringify({
-        id: "app-api",
-        name: "app-api",
+        id: "api",
+        name: "api",
         version: "1.0.0",
         quality: "built-in",
-        container: { image: "fixture/app-api", tag: "1" },
+        container: { image: "fixture/api", tag: "1" },
       }),
     );
-    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "app-api", "beta"]);
+    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "api", "beta"]);
     await renderComposeForRepo({ rootDir: root, domain: "example.test" });
     const order: string[] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
@@ -252,7 +252,7 @@ describe("actual CLI service lifecycle preparation", () => {
       order.push("migrate");
       return 0;
     });
-    await expect(command("update", [], "app-api")).rejects.toThrow("exit:0");
+    await expect(command("update", [], "api")).rejects.toThrow("exit:0");
     expect(order).toEqual(["pull", "migrate", "up"]);
     expect(await retainedReceipt()).toMatchObject({ phase: "complete", followUp: "complete" });
   });
@@ -654,32 +654,32 @@ describe("actual CLI service lifecycle preparation", () => {
     await expect(command("start")).rejects.toThrow("exit:0");
   });
   it("refuses to replace services when the generation moves during the migration", async () => {
-    const directory = join(root, "services/app-api");
+    const directory = join(root, "services/api");
     mkdirSync(directory, { recursive: true });
     writeFileSync(
       join(directory, "service.json"),
       JSON.stringify({
-        id: "app-api",
-        name: "app-api",
+        id: "api",
+        name: "api",
         version: "1.0.0",
         quality: "built-in",
-        container: { image: "fixture/app-api", tag: "1" },
+        container: { image: "fixture/api", tag: "1" },
       }),
     );
-    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "app-api", "beta"]);
+    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "api", "beta"]);
     await renderComposeForRepo({ rootDir: root, domain: "example.test" });
     vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {
       await commitCompetingGeneration();
       return 0;
     });
-    await expect(command("update", [], "app-api")).rejects.toThrow("exit:1");
+    await expect(command("update", [], "api")).rejects.toThrow("exit:1");
     expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
-      ["pull", "app-api"],
+      ["pull", "api"],
     ]);
     expect(await retainedReceipt()).toMatchObject({
       phase: "failed",
       commit: "final_committed",
-      failure: { reason: "revision_conflict", failedServiceIds: ["app-api"] },
+      failure: { reason: "revision_conflict", failedServiceIds: ["api"] },
     });
     expect(targetLocks()).toEqual([]);
   });

@@ -38,9 +38,7 @@ const dockerfiles: Record<string, string> = Object.fromEntries(
     target.dockerfile,
     target.app === "docs"
       ? "FROM scratch\nCOPY . /docs\n"
-      : target.app === "transitous-tools"
-        ? "FROM scratch\nCOPY requirements.txt /app\n"
-        : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
+      : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
   ]),
 );
 const options = {
@@ -208,6 +206,28 @@ describe("selective release planning", () => {
       expect(plan).toEqual(createReleasePlan({ ...options, previous }));
     },
   );
+  it("plans against a previous release that still lists the retired transitous-tools image", () => {
+    const previous = baseline();
+    const apiBuild = previous.buildMetadata.images.api;
+    if (!apiBuild) throw new Error("No build metadata for api");
+    const retired = {
+      ...previous,
+      images: {
+        ...previous.images,
+        "transitous-tools": `ghcr.io/openmapx/transitous-tools@sha256:${"9".repeat(64)}`,
+      },
+      buildMetadata: {
+        ...previous.buildMetadata,
+        images: { ...previous.buildMetadata.images, "transitous-tools": apiBuild },
+      },
+    };
+    const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous: retired });
+    expect(Object.keys(plan.buildMetadata.images).sort()).toEqual(
+      targets.map((target) => target.app).sort(),
+    );
+    expect(plan.images.map((image) => image.app)).not.toContain("transitous-tools");
+    expect(plan.images.every((image) => !image.rebuild)).toBe(true);
+  });
   it("reuses all unchanged digests despite a new release revision", () => {
     const previous = baseline();
     const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous });
@@ -414,7 +434,7 @@ describe("selective release planning", () => {
     const sources = dockerInputs(actual.readDockerfile("apps/transitous-runner/Dockerfile"), ".");
     expect(sources).toContain("packages/core");
     expect(sources).not.toContain("packages");
-    expect(sources).toContain("services/motis/tools/transitous/requirements.txt");
+    expect(sources).toContain("apps/transitous-runner/requirements.txt");
   });
 });
 

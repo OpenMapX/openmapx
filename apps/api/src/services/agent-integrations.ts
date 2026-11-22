@@ -13,7 +13,7 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 /**
  * Installed integrations, as the operations agent holds them.
  *
- * The agent owns the integration store, which app-api mounts read-only at
+ * The agent owns the integration store, which the API mounts read-only at
  * `custom_integrations`: it fetches and validates integration
  * archives, swaps an integration's files in, keeps the previous copy until a
  * change is settled, records the SHA-256 of every file it installed, and

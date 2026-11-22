@@ -113,7 +113,7 @@ export function resolveServiceConfigFromEnv(
   for (const k of known) upperToKey.set(k.toUpperCase(), k);
 
   for (const [envKey, envVal] of Object.entries(env)) {
-    // Empty is unset: app-api receives every setting as a `${VAR:-}` reference,
+    // Empty is unset: the API receives every setting as a `${VAR:-}` reference,
     // which an unset variable resolves to "".
     if (envVal === undefined || envVal === "") continue;
     if (!envKey.startsWith(prefix)) continue;

@@ -50,7 +50,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const loaded: services.LoadedService[] = (options.configurationHelperReleaseInventory ? [...services.RELEASE_BUILT_IN_SERVICE_IDS] : [
     "motis",
     "ops-agent",
-    "app-api",
+    "api",
     "traefik",
     "postgis",
     "redis",

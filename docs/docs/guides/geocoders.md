@@ -54,7 +54,7 @@ integration config, then the built-in fallback (Komoot for Photon, the OSM
 instance for Nominatim, or development loopback for Pelias). Within integration
 config, `INTEGRATION_GEOCODING_<NAME>_ENDPOINT` wins over the admin value. It does
 not override a selected local service. To use an external instance, remove the
-matching local service from the selection and recreate `app-api`.
+matching local service from the selection and recreate `api`.
 
 Geocoding calls are proxied through the API server. The upstream receives the
 query and server address; review its request-data handling before using it.
@@ -234,7 +234,7 @@ re-runs the build against a newer extract.
 
 Enable `geocoding-pelias` and put `pelias` in the provider order.
 Leave `endpoint` unset for the selected local service. For an external Pelias,
-set the URL reachable from `app-api`; there is no public hosted Pelias fallback.
+set the URL reachable from `api`; there is no public hosted Pelias fallback.
 
 :::tip[Elasticsearch needs a kernel setting]
 Elasticsearch refuses to start unless the host's `vm.max_map_count` is at least

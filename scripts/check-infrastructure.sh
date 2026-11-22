@@ -17,7 +17,6 @@ docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$SHELLCHECK_IMAGE" \
   scripts/verify-full.sh \
   services/dawarich-app/scripts/openmapx-entrypoint.sh \
   services/dawarich-sidekiq/scripts/openmapx-entrypoint.sh \
-  services/motis/tools/transitous/run.sh \
   services/postgis/scripts/sync-password.sh
 
 docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$HADOLINT_IMAGE" /bin/hadolint \
@@ -26,5 +25,4 @@ docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$HADOLINT_IMAGE" /bin/hadolint \
   apps/transitous-runner/Dockerfile \
   apps/web/Dockerfile \
   docs/Dockerfile \
-  services/data-manager/Dockerfile \
-  services/motis/tools/transitous/Dockerfile
+  services/data-manager/Dockerfile

@@ -24,7 +24,7 @@ pattern non_copy() {
     // Licence identifiers.
     r"[\"'`](?:CC-BY-4\.0)[\"'`]",
     // Example input values shown as placeholders.
-    r"[\"'`](?:https://…/extension\.json|https://…/catalog\.json|https://example\.com/feed\.gtfs\.zip|timeline\.example\.com|int:geocoding:\*|europe/germany|de-be|valhalla, osrm, motis|app-api, valhalla, osrm)[\"'`]"
+    r"[\"'`](?:https://…/extension\.json|https://…/catalog\.json|https://example\.com/feed\.gtfs\.zip|timeline\.example\.com|int:geocoding:\*|europe/germany|de-be|valhalla, osrm, motis|api, valhalla, osrm)[\"'`]"
   }
 }
 

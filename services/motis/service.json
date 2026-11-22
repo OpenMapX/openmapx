@@ -49,7 +49,6 @@
       }
     }
   },
-  "buildCommand": "openmapx services build motis",
   "provides": ["transit-engine", "routing-engine"],
   "produces": [
     {

@@ -110,18 +110,16 @@ describe.skipIf(!enabled)(
         withConfigurationMigration: scenario.configurationMigration,
       });
       const schemas = Object.fromEntries(
-        ["motis", "ops-agent", "app-api", "traefik", "postgis", "redis", "data-manager"].map(
-          (id) => [
-            id,
-            {
-              type: "object",
-              properties: {
-                TRANSITOUS_API_KEYS: { type: "string", "x-openmapx-secret": true },
-                ORDINARY_TOKEN: { type: "string", "x-openmapx-secret": true },
-              },
+        ["motis", "ops-agent", "api", "traefik", "postgis", "redis", "data-manager"].map((id) => [
+          id,
+          {
+            type: "object",
+            properties: {
+              TRANSITOUS_API_KEYS: { type: "string", "x-openmapx-secret": true },
+              ORDINARY_TOKEN: { type: "string", "x-openmapx-secret": true },
             },
-          ],
-        ),
+          },
+        ]),
       );
       host = await ownedServiceHost({
         schemas,

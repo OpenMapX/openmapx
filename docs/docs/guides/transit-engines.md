@@ -53,7 +53,9 @@ MOTIS_SLOT_CPU=4
 TRANSITOUS_SYNC_CRON=disabled
 ```
 
-Keep the scheduler disabled during initial preparation. The two memory settings
+Use `MOTIS_TWO_SLOT=true` for new installations: the next candidate is imported
+into the inactive slot while the active one keeps serving, and promotion flips
+between them. Keep the scheduler disabled during initial preparation. The two memory settings
 serve different purposes: `MOTIS_SLOT_MEMORY` sets each runtime container limit;
 `MOTIS_SLOT_MEMORY_GB` reports capacity to preflight. Active and staging slots can
 run together, so budget for both and for retained data generations.
@@ -72,8 +74,8 @@ pnpm openmapx data download osm europe/germany
 
 This OSM extract supplies street access/egress data. Assisted regional operation
 can run without a matching extract, with reduced street routing; sovereign and
-planet profiles reject that omission. The low-level CLI build below requires an
-OSM input.
+planet profiles reject that omission. The admin panel downloads it from
+**Data → OSM**.
 
 For restricted catalog feeds, generate and fill the key template first:
 
@@ -85,48 +87,43 @@ pnpm openmapx data generate-api-keys
 Keep this file private. Data-manager mounts its directory read-only and reads
 `/config/transitous/api-keys.json` at every run, so edits apply at the next one.
 See the [secrets directory's README](https://github.com/OpenMapX/openmapx/blob/main/infra/docker/secrets/README.md)
-for its layout. A release must be pinned before a host-side MOTIS build, so its
-helper image matches the release.
+for its layout. The admin panel manages the same credentials under
+**Data → Transit → Transit feed credentials**.
 
-### 3. Build the prepared data
-
-For an initial deployment, with neither MOTIS consumer running, seed its config,
-feeds, license, and local feed-proxy configuration:
-
-```bash
-pnpm openmapx services build motis --region europe/germany
-```
-
-`MOTIS_REGION` and `OPENMAPX_REGION` provide build defaults, independently of the
-daemon's `MOTIS_OSM_REGION`. Keep them consistent with the selected dataset.
-
-This low-level build writes prepared inputs in place. It is intended for initial
-or off-host preparation, not routine updates to a serving dataset. Add `--import`
-to `services build motis` when preparing an export on a larger machine; see
-[Building on another host](../install/preparing-data.md#building-on-another-host).
-
-### 4. Render, link, and start
+### 3. Render, link, and start
 
 ```bash
 pnpm openmapx data link
 pnpm openmapx services start motis motis-staging
-pnpm openmapx services start app-api data-manager
-pnpm openmapx services logs motis --follow
+pnpm openmapx services start api data-manager
 ```
 
 The API and data-manager recreation applies their new service selection and
-workflow environment. MOTIS starts with `motis import` followed by `motis server`.
-The staging container can wait for its first generated config. A failed import
-can leave a container running in a holding loop; inspect logs and query endpoints.
+workflow environment. Both MOTIS containers wait for their first generated
+config, so they can start before any data exists.
 
-Now run the managed candidate workflow and monitor the returned job:
+### 4. Seed MOTIS with a transit sync
+
+The managed transit sync is the only way to build MOTIS data. It acquires the
+pinned catalog's feeds, imports a candidate in the staging container, probes it
+and promotes it to the primary. On a fresh installation the first promotion
+seeds the empty live directory or slot.
+
+In the admin panel, open **Data → Transit → Sources**, choose
+**Review transit sync**, check the preflight and confirm. From the host:
 
 ```bash
 pnpm openmapx data sync --countries de
 pnpm openmapx data source list
+pnpm openmapx services logs motis-staging --follow
 ```
 
-The primary endpoint is `http://motis:8080`, published on host loopback `8081`.
+MOTIS starts with `motis import` followed by `motis server`. A failed import can
+leave a container running in a holding loop; inspect logs and query endpoints.
+Build, Build All and Full Update's build phase do not build MOTIS; Full Update
+refreshes it through its transit sync step.
+
+The primary endpoint is `http://openmapx-motis:8080`, published on host loopback `8081`.
 Staging uses loopback `8083` and does not serve application traffic. Both run
 as the deployment's user, `UID:GID` from `infra/docker/.env`.
 
@@ -296,12 +293,12 @@ incomplete transit preparation even when street data is available.
 
 ```bash
 pnpm openmapx services start otp
-pnpm openmapx services start app-api
+pnpm openmapx services start api
 pnpm openmapx services logs otp --follow
 ```
 
 Start re-renders and links automatically. The container uses `--load --serve`
-and publishes `http://otp:8080` as host loopback `8090`. The release's build and
+and publishes `http://openmapx-otp:8080` as host loopback `8090`. The release's build and
 routing config files are `services/otp/config/`; change them with
 [overrides](../install/managing-services.md#service-file-overrides) of
 `otp/config/build-config.json` or `otp/config/router-config.json`. The graph

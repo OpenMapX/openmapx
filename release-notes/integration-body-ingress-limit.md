@@ -17,4 +17,4 @@ Installations that expose built-in or installed integration API routes.
 
 No immediate action is required. Installations with unusually high legitimate
 integration write traffic can tune `RATE_LIMIT_INTEGRATION_INGRESS_MAX` and
-`RATE_LIMIT_INTEGRATION_INGRESS_WINDOW_MS` before recreating `app-api`.
+`RATE_LIMIT_INTEGRATION_INGRESS_WINDOW_MS` before recreating `api`.

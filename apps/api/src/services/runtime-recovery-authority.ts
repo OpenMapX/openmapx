@@ -20,7 +20,7 @@ export async function openRuntimeRecoveryAuthority(
 ): Promise<RuntimeRecoveryJournal> {
   const forbiddenServiceIds = [
     ...services.RELEASE_BUILT_IN_SERVICE_IDS,
-    ...services.RELEASE_NEVER_MANAGE_SERVICE_IDS,
+    ...services.CONTROL_PLANE_SERVICE_IDS,
   ];
   await (dependencies.validateAuthority ?? services.validateReleaseServiceAuthority)(rootDir);
   return (dependencies.openJournal ?? openRuntimeRecoveryJournal)(

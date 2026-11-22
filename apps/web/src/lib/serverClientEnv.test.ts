@@ -8,7 +8,7 @@ afterEach(() => {
 });
 describe("server map bootstrap", () => {
   it("reads effective public configuration through the internal API without forwarding browser credentials", async () => {
-    process.env.INTERNAL_API_URL = "http://app-api:3001/";
+    process.env.INTERNAL_API_URL = "http://openmapx-api:3001/";
     process.env.NEXT_PUBLIC_TILES_URL = "";
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({
@@ -24,7 +24,7 @@ describe("server map bootstrap", () => {
     expect(env.basemapProvider).toBe("maptiler");
     expect(env.streetDetailTilesUrl).toBe("/tiles/data/street_detail.json");
     expect(fetcher).toHaveBeenCalledWith(
-      "http://app-api:3001/api/map-config",
+      "http://openmapx-api:3001/api/map-config",
       expect.objectContaining({ cache: "no-store" }),
     );
     expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");

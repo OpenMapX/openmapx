@@ -7,6 +7,7 @@ import {
   canonicalReleaseManifest,
   normalizeReleaseSelection,
   parseReleaseManifest,
+  releaseServiceImages,
 } from "../services/release-manifest";
 
 export const configurationReleaseSnapshotSchema = configurationReleaseForwardSchema
@@ -25,13 +26,7 @@ export const configurationReleaseSnapshotSchema = configurationReleaseForwardSch
         throw Error();
       const manifest = parseReleaseManifest(value.canonicalManifest, value.imagePrefix),
         canonical = canonicalReleaseManifest(manifest),
-        images = {
-          "app-api": manifest.images.api,
-          "app-web": manifest.images.web,
-          "data-manager": manifest.images["data-manager"],
-          "ops-agent": manifest.images["ops-agent"],
-          "transitous-runner": manifest.images["transitous-runner"],
-        };
+        images = releaseServiceImages(manifest);
       if (
         manifest.release !== value.releaseId ||
         canonical !== value.canonicalManifest ||

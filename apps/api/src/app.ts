@@ -369,9 +369,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   }
 
   // Integration framework
-  // Built-ins are loaded from the immutable app-api image. Installed integrations
+  // Built-ins are loaded from the immutable API image. Installed integrations
   // are loaded from the bind-mounted host directory the operations agent owns
-  // and app-api only reads. With an agent, only integrations it reports intact
+  // and the API only reads. With an agent, only integrations it reports intact
   // are loaded, and their files are checked against the digests it recorded.
   const runtimeRootDir = join(import.meta.dirname ?? ".", "..", "..", "..");
   const integrationsDir = join(runtimeRootDir, "integrations");

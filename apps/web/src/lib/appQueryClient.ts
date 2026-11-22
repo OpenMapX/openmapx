@@ -24,7 +24,7 @@ const QUERY_CLIENT_CONFIG: QueryClientConfig = {
  * The client of one server render, whose queries go with the request. A
  * finite `gcTime`, the default's or a hook's own, arms a timer per query that
  * holds the query, its client and the whole request until it fires; an hour
- * of page loads then outgrew app-web's heap. `Infinity` arms none.
+ * of page loads then outgrew the web server's heap. `Infinity` arms none.
  */
 class ServerRenderQueryClient extends QueryClient {
   override defaultQueryOptions<

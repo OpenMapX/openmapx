@@ -109,7 +109,7 @@ function plan(options: { handoff?: boolean; maintenanceId?: string } = {}) {
     candidateRecordDigest: "c".repeat(64),
     sourceAuthorityRevision: "registry-v1",
     previewDigest: "d".repeat(64),
-    serviceIds: ["app-api", "data-manager", "motis"],
+    serviceIds: ["api", "data-manager", "motis"],
     recreateServiceIds: options.handoff ? [] : ["motis"],
     hardlinkPlan: { prune: true, plan: [] },
     ...(options.handoff
@@ -117,8 +117,8 @@ function plan(options: { handoff?: boolean; maintenanceId?: string } = {}) {
           handoff: {
             handoffId,
             previewFingerprint: "7".repeat(64),
-            serviceIds: ["app-api"],
-            expectedImageIdentities: { "app-api": image },
+            serviceIds: ["api"],
+            expectedImageIdentities: { api: image },
             mode: { kind: "configuration" as const },
           },
         }
@@ -193,7 +193,7 @@ function progress(
     phase,
     targets: [
       {
-        serviceId: "app-api",
+        serviceId: "api",
         phase: target,
         oldContainerId: oldContainer,
         newContainerId: target === "verified" ? "3".repeat(64) : null,

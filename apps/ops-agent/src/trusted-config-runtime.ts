@@ -13,6 +13,7 @@ import {
   canonicalJson,
   type OpsOperation,
   opsOperationFingerprint,
+  protectedConfigurationServiceIdSchema,
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
@@ -217,7 +218,7 @@ async function commitGeneration(
         // This generation mounts the agent's state from its own directory;
         // an earlier release's directories move there first.
         coreServices.prepareAgentStateDirectories(options.infraDir);
-        // And its stores, which the generation mounts into app-api.
+        // And its stores, which the generation mounts into the API.
         coreServices.prepareAgentStores(options.infraDir);
         // A release update's maintenance pins its frozen release in the generation
         // it commits; a coordinator update commits the image it pulled.
@@ -423,8 +424,8 @@ export function installTrustedConfigurationRuntime(
       const originalContainers = await options.ownedServices.inspectOwnedServices(context.signal);
       if (
         candidate.record.privatePlatformIntent &&
-        candidate.record.affectedServiceIds.some((id) =>
-          ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"].includes(id),
+        candidate.record.affectedServiceIds.some(
+          (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
         )
       ) {
         const agent = originalContainers.find((value) => value.serviceId === "ops-agent");

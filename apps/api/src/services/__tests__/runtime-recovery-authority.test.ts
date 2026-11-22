@@ -1,5 +1,6 @@
 import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
+import { callArg } from "../../test/mock-calls";
 import { openRuntimeRecoveryAuthority } from "../runtime-recovery-authority";
 
 describe("runtime recovery startup authority", () => {
@@ -26,10 +27,20 @@ describe("runtime recovery startup authority", () => {
       }),
     ).resolves.toBe(journal);
     expect(openJournal).toHaveBeenCalledWith(expect.stringMatching(/runtime-recovery-v1\.json$/), {
-      forbiddenServiceIds: expect.arrayContaining([
-        ...services.RELEASE_BUILT_IN_SERVICE_IDS,
-        ...services.RELEASE_NEVER_MANAGE_SERVICE_IDS,
-      ]),
+      forbiddenServiceIds: expect.arrayContaining([...services.RELEASE_BUILT_IN_SERVICE_IDS]),
     });
   });
+
+  it.each(services.CONTROL_PLANE_SERVICE_IDS)(
+    "forbids recovering control-plane %s even if the release inventory omitted it",
+    async (serviceId) => {
+      const openJournal = vi.fn().mockResolvedValue({});
+      await openRuntimeRecoveryAuthority("/trusted/release", {
+        validateAuthority: vi.fn().mockResolvedValue(new Set()),
+        openJournal,
+      });
+      const options = callArg(openJournal, 0, 1) as { forbiddenServiceIds: string[] };
+      expect(options.forbiddenServiceIds).toContain(serviceId);
+    },
+  );
 });

@@ -193,7 +193,6 @@ export const adminServicesBulkActionSchema = z.union([
       all: z.boolean().optional(),
       region: z.string().trim().optional(),
       continueOnError: z.boolean().optional(),
-      motisImport: z.boolean().optional(),
     })
     .refine(
       (value) => value.all === true || hasSelection(value),

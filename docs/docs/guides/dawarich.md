@@ -158,7 +158,7 @@ credentials, and unsupported origins are rejected. Operators can allow specific
 private DNS hostnames through `OPENMAPX_DAWARICH_PRIVATE_HOSTS`; this is a narrow
 network exception and does not remove the other origin checks.
 
-The managed connection uses `http://dawarich-app:3000` internally; browser links
+The managed connection uses `http://openmapx-dawarich-app:3000` internally; browser links
 use the public HTTPS origin. An unavailable or unprovisioned bundle cannot be
 selected as a working managed source.
 

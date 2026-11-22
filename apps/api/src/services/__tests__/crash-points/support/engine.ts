@@ -129,7 +129,7 @@ export interface EngineHooks {
   ): { exited: Promise<{ code: number; stdout: string; stderr: string }> };
 }
 
-export const ROLE_SERVICES = new Set(["app-api", "data-manager", "ops-agent"]);
+export const ROLE_SERVICES = new Set(["api", "data-manager", "ops-agent"]);
 const PROJECT = "openmapx";
 
 function hex(seed: string, length = 64): string {

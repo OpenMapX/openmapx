@@ -106,7 +106,7 @@ describe("check-data-flows", () => {
         host: "api.provider.co.uk",
       },
       { id: "allowlisted", source: {}, host: "tiles.openstreetmap.org" },
-      { id: "internal", source: {}, host: "app-api" },
+      { id: "internal", source: {}, host: "openmapx-api" },
     ];
     for (const fixture of fixtures) {
       writeManifest(fixture.id, { dataSources: [fixture.source] });

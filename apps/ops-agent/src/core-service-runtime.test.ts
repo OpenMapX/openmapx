@@ -25,9 +25,9 @@ const waitFor = async (condition: () => boolean) => {
 
 describe("production core restart workflow", () => {
   it.each([
-    ["app-api", false],
+    ["api", false],
     ["traefik", false],
-    ["app-api", true],
+    ["api", true],
   ] as const)(
     "keeps %s restart independent of the API observer (failure=%s)",
     async (serviceId, fail) => {
@@ -39,7 +39,7 @@ describe("production core restart workflow", () => {
         join(host.root, "services/traefik/config"),
         { recursive: true },
       );
-      expect(await host.select(["app-api", "traefik"])).toMatchObject({ outcome: "committed" });
+      expect(await host.select(["api", "traefik"])).toMatchObject({ outcome: "committed" });
       const compose = realpathSync(host.stack.composePath);
       const service = host.loaded.find((s) => s.manifest.id === serviceId);
       assert.isDefined(service);

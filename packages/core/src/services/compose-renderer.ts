@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
 import { resolveConsumesDependencies } from "./consumes-dependencies";
+import { serviceNetworkAlias } from "./core-service-ids";
 import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
@@ -17,7 +18,6 @@ import {
   type ProducerIndex,
   selectProducer,
 } from "./producer-index";
-import { TRANSITOUS_TOOLS_IMAGE_ENV } from "./release-manifest";
 import { detectConsumesCycle } from "./resolver";
 import {
   isRuntimeResourceKey,
@@ -143,13 +143,9 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 }
 
 export interface RenderContext {
-  /**
-   * The release a generation pins: the image of each pinned built-in service,
-   * and the Transitous tools image data-manager runs its jobs with.
-   */
+  /** The release a generation pins: the image of each pinned built-in service. */
   releasePins?: {
     images: Readonly<Record<string, string>>;
-    transitousTools: string;
   };
   platform?: import("./platform-configuration").PlatformConfiguration;
   platformValues?: import("./platform-configuration").PlatformValues;
@@ -332,7 +328,7 @@ function resolveBindSource(
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
-  // how app-api opts into a "host path = container path" bind mount for
+  // how the API opts into a "host path = container path" bind mount for
   // Docker-outside-of-Docker admin control without having to bake the
   // operator's host path into the manifest.
   if (bm.source.startsWith("$")) {
@@ -558,7 +554,7 @@ export function serviceSecretName(serviceId: string, key: string): string {
 
 /**
  * Compose `file:` source for a service secret, relative to the compose-file
- * directory. The app-api render step writes the decrypted value to this exact
+ * directory. The API's render step writes the decrypted value to this exact
  * path so the rendered `secrets:` block and the on-disk files never drift.
  */
 export function serviceSecretFilePath(serviceId: string, key: string): string {
@@ -719,11 +715,6 @@ export function renderServiceSnippet(
       );
     snippet.environment = env;
   }
-  if (service.isBuiltIn && m.id === "data-manager" && ctx.releasePins)
-    snippet.environment = {
-      ...snippet.environment,
-      [TRANSITOUS_TOOLS_IMAGE_ENV]: ctx.releasePins.transitousTools,
-    };
   // Vault secrets (the container track): mount each as a Docker secret at
   // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
   // the environment (which is exposed via `docker inspect`/`/proc/environ`);
@@ -747,6 +738,14 @@ export function renderServiceSnippet(
   if (c.devices?.length) snippet.devices = c.devices;
   if (c.privileged) snippet.privileged = true;
 
+  // Every service answers to its project-unique name on each of the stack's own
+  // networks, and internal callers use only that name. Compose also registers
+  // the bare service ID, but a service that joins an operator's shared proxy
+  // network could resolve a bare ID there to another project's container.
+  const uniqueAlias = serviceNetworkAlias(m.id);
+  const aliasesWith = (declared: readonly string[]) => ({
+    aliases: [...new Set([uniqueAlias, ...declared])],
+  });
   const communityNetworkAccess = m.communityNetworkAccess;
   if (c.networkMode === "host") {
     if (communityNetworkAccess?.length) {
@@ -756,10 +755,7 @@ export function renderServiceSnippet(
     }
     snippet.network_mode = "host";
   } else if (!service.isBuiltIn) {
-    const network = communityNetworkName(m.id);
-    snippet.networks = c.networkAliases?.length
-      ? { [network]: { aliases: [...c.networkAliases] } }
-      : [network];
+    snippet.networks = { [communityNetworkName(m.id)]: aliasesWith(c.networkAliases ?? []) };
   } else {
     const allServices = ctx.allServices ?? [service];
     const networks = [
@@ -781,19 +777,17 @@ export function renderServiceSnippet(
       networks.push(communityNetworkName(targetId));
     }
     // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
-    // Aliases go on the service's home network: `openmapx`, or its private
-    // networks when it stays off the shared one.
+    // Declared aliases go on the service's home network: `openmapx`, or its
+    // private networks when it stays off the shared one.
     const aliasNetworks = networks.includes("openmapx")
       ? ["openmapx"]
       : networks.filter((network) => network.startsWith(PRIVATE_NETWORK_PREFIX));
-    snippet.networks = c.networkAliases?.length
-      ? Object.fromEntries(
-          networks.map((network) => [
-            network,
-            aliasNetworks.includes(network) ? { aliases: [...(c.networkAliases ?? [])] } : {},
-          ]),
-        )
-      : networks;
+    snippet.networks = Object.fromEntries(
+      networks.map((network) => [
+        network,
+        aliasesWith(aliasNetworks.includes(network) ? (c.networkAliases ?? []) : []),
+      ]),
+    );
   }
 
   // Behind an operator-run proxy, a routed first-party service also joins that
@@ -1002,11 +996,20 @@ export function resolveProxyHost(m: ServiceManifest, ctx: RenderContext): string
   return resolved;
 }
 
+/**
+ * Prefix of the router, service and middleware names the Docker labels
+ * declare. Only an operator-run Traefik reads the labels, and it may route
+ * other projects too: an unprefixed `api` or `web` router there would clash
+ * with theirs. The bundled Traefik reads its own file, whose names stay bare.
+ */
+const PROXY_LABEL_NAME_PREFIX = "openmapx-";
+
 function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<string, string> {
   const proxy = m.exposure?.proxy;
   if (!proxy?.enabled) return {};
 
   const id = m.id;
+  const name = `${PROXY_LABEL_NAME_PREFIX}${id}`;
   const customHost = resolveProxyHost(m, ctx);
   const domain = customHost ?? ctx.domain ?? "localhost";
   const pathPrefix = proxy.pathPrefix ?? (customHost ? undefined : `/${id}`);
@@ -1014,46 +1017,53 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 
   const labels: Record<string, string> = {
     "traefik.enable": "true",
-    [`traefik.http.routers.${id}.rule`]: pathPrefix
+    [`traefik.http.routers.${name}.rule`]: pathPrefix
       ? `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`
       : `Host(\`${domain}\`)`,
-    [`traefik.http.routers.${id}.entrypoints`]: PROXY_ENTRYPOINT_LABEL_VALUE,
-    [`traefik.http.routers.${id}.tls.certresolver`]: PROXY_CERT_RESOLVER_LABEL_VALUE,
-    [`traefik.http.services.${id}.loadbalancer.server.port`]: String(targetPort),
+    [`traefik.http.routers.${name}.entrypoints`]: PROXY_ENTRYPOINT_LABEL_VALUE,
+    [`traefik.http.routers.${name}.tls.certresolver`]: PROXY_CERT_RESOLVER_LABEL_VALUE,
+    [`traefik.http.services.${name}.loadbalancer.server.port`]: String(targetPort),
   };
   const proxyNetwork = externalProxyNetwork(ctx);
   if (proxyNetwork) labels["traefik.docker.network"] = proxyNetwork;
 
+  // A manifest names its own middlewares as the file provider does (`martin-strip`);
+  // the labels declare them under the prefixed name, so references follow it.
+  const ownMiddlewares = new Map<string, string>();
   const middlewares: string[] = [];
   if (proxy.stripPrefix) {
     if (!pathPrefix) throw new Error(`stripPrefix requires a pathPrefix for service "${id}"`);
-    labels[`traefik.http.middlewares.${id}-strip.stripprefix.prefixes`] = pathPrefix;
-    middlewares.push(`${id}-strip`);
+    labels[`traefik.http.middlewares.${name}-strip.stripprefix.prefixes`] = pathPrefix;
+    ownMiddlewares.set(`${id}-strip`, `${name}-strip`);
+    middlewares.push(`${name}-strip`);
   }
-  for (const mw of proxy.middleware ?? []) middlewares.push(mw);
+  const middlewareReference = (mw: string) => ownMiddlewares.get(mw) ?? mw;
+  for (const mw of proxy.middleware ?? []) middlewares.push(middlewareReference(mw));
   if (middlewares.length) {
-    labels[`traefik.http.routers.${id}.middlewares`] = middlewares.join(",");
+    labels[`traefik.http.routers.${name}.middlewares`] = middlewares.join(",");
   }
 
   if (typeof proxy.priority === "number") {
-    labels[`traefik.http.routers.${id}.priority`] = String(proxy.priority);
+    labels[`traefik.http.routers.${name}.priority`] = String(proxy.priority);
   }
 
   // Additional routes — each emits a separate Traefik router but reuses the
-  // same `traefik.http.services.${id}` backend so all routes hit the same
+  // same `traefik.http.services.${name}` backend so all routes hit the same
   // container port. Useful for a single API exposing both `/api/*` and `/health`.
   const additionalRoutes = proxy.additionalRoutes ?? [];
   for (let i = 0; i < additionalRoutes.length; i++) {
     const route = additionalRoutes[i];
     if (!route) continue;
-    const routerName = `${id}-r${i + 1}`;
+    const routerName = `${name}-r${i + 1}`;
     const matcher = route.path ? `Path(\`${route.path}\`)` : `PathPrefix(\`${route.pathPrefix}\`)`;
     labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${domain}\`) && ${matcher}`;
     labels[`traefik.http.routers.${routerName}.entrypoints`] = PROXY_ENTRYPOINT_LABEL_VALUE;
     labels[`traefik.http.routers.${routerName}.tls.certresolver`] = PROXY_CERT_RESOLVER_LABEL_VALUE;
-    labels[`traefik.http.routers.${routerName}.service`] = id;
+    labels[`traefik.http.routers.${routerName}.service`] = name;
     if (route.middleware?.length) {
-      labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware.join(",");
+      labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware
+        .map(middlewareReference)
+        .join(",");
     }
   }
 
@@ -1181,7 +1191,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   }
 
   // Top-level `secrets:` block: one entry per (service, vault key) in the
-  // caller-supplied map, each a file source the app-api render step
+  // caller-supplied map, each a file source the API's render step
   // materialises. Deliberately NOT limited to the services rendered in this
   // pass: the DB-free CLI's only durable record of vault key names is this
   // block, so a narrowed render (`--services`/`--preset`) must keep carrying
@@ -1189,7 +1199,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // the next full CLI render silently strip those credentials (real prod
   // incident: every keyed road-conditions feed ran uncredentialed). Top-level
   // secrets unreferenced by any rendered service are inert to docker compose.
-  // The app-api render path only ever passes keys for enabled services, so its
+  // The API's render path only ever passes keys for enabled services, so its
   // output is unchanged.
   const composeSecrets: Record<string, { file: string }> = {};
   for (const [serviceId, keys] of ctx.serviceSecretKeys ?? []) {

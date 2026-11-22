@@ -53,8 +53,8 @@ it("loads only the exact checked canonical manifest and derives the finite pinne
     releaseId,
     manifestDigest,
     serviceImages: {
-      "app-api": `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
-      "app-web": `ghcr.io/openmapx/web@sha256:${"a".repeat(64)}`,
+      api: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
+      web: `ghcr.io/openmapx/web@sha256:${"a".repeat(64)}`,
       "ops-agent": `ghcr.io/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
       "data-manager": `ghcr.io/openmapx/data-manager@sha256:${"a".repeat(64)}`,
       "transitous-runner": `ghcr.io/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,
@@ -144,8 +144,8 @@ it.each(["single", "indexed"])(
       execFile,
       signal: new AbortController().signal,
     });
-    expect(result).toMatchObject({ version: 1, platform: "linux/amd64", declaredBytes: 6 * 1280 });
-    expect(result.images).toHaveLength(6);
+    expect(result).toMatchObject({ version: 1, platform: "linux/amd64", declaredBytes: 5 * 1280 });
+    expect(result.images).toHaveLength(5);
     expect(result.images[0]).toMatchObject({
       image: "api",
       reference: release.manifest.images.api,
@@ -221,7 +221,7 @@ function heldMetadata() {
   };
 }
 
-it("inspects all six images concurrently and retains release order under reversed completion", async () => {
+it("inspects all five images concurrently and retains release order under reversed completion", async () => {
   const release = readCheckedConfigurationRelease(root, { releaseId, manifestDigest });
   const held = heldMetadata();
   const controller = new AbortController();
@@ -233,29 +233,28 @@ it("inspects all six images concurrently and retains release order under reverse
   // Install the rejection handler before an assertion can fail and start cleanup.
   const settled = result.catch(() => undefined);
   try {
-    await vi.waitFor(() => expect(held.calls).toHaveLength(6), { timeout: 2000, interval: 5 });
+    await vi.waitFor(() => expect(held.calls).toHaveLength(5), { timeout: 2000, interval: 5 });
     expect(held.calls.map((call) => call.reference)).toEqual(
       Object.values(release.manifest.images),
     );
     for (const call of [...held.calls].reverse()) call.resolve(platformIndex());
-    await vi.waitFor(() => expect(held.calls).toHaveLength(12), { timeout: 2000, interval: 5 });
-    for (const call of held.calls.slice(6).reverse()) call.resolve(platformManifest);
+    await vi.waitFor(() => expect(held.calls).toHaveLength(10), { timeout: 2000, interval: 5 });
+    for (const call of held.calls.slice(5).reverse()) call.resolve(platformManifest);
     expect(await result).toMatchObject({
       platform: "linux/amd64",
-      declaredBytes: 7680,
+      declaredBytes: 6400,
       images: [
         { image: "api" },
         { image: "web" },
         { image: "data-manager" },
         { image: "ops-agent" },
         { image: "transitous-runner" },
-        { image: "transitous-tools" },
       ],
     });
-    expect(held.peak()).toBe(6);
+    expect(held.peak()).toBe(5);
     expect(
       held.calls
-        .slice(6)
+        .slice(5)
         .map((call) => call.reference)
         .sort(),
     ).toEqual(
@@ -295,14 +294,14 @@ it.each(["sibling failure", "caller abort"])(
       },
     );
     try {
-      await vi.waitFor(() => expect(held.calls).toHaveLength(6), { timeout: 2000, interval: 5 });
+      await vi.waitFor(() => expect(held.calls).toHaveLength(5), { timeout: 2000, interval: 5 });
       if (failure === "sibling failure") {
         const [first] = held.calls;
         assert.isDefined(first);
         first.resolve(platformIndex("arm64"));
       } else {
         for (const call of [...held.calls]) call.resolve(platformIndex());
-        await vi.waitFor(() => expect(held.calls).toHaveLength(12), { timeout: 2000, interval: 5 });
+        await vi.waitFor(() => expect(held.calls).toHaveLength(10), { timeout: 2000, interval: 5 });
         controller.abort(Error("Caller canceled metadata"));
       }
       await vi.waitFor(() => expect(held.calls.every((call) => call.signal.aborted)).toBe(true), {
@@ -320,7 +319,7 @@ it.each(["sibling failure", "caller abort"])(
             : "Caller canceled metadata",
         ),
       );
-      expect(held.calls).toHaveLength(failure === "sibling failure" ? 6 : 12);
+      expect(held.calls).toHaveLength(failure === "sibling failure" ? 5 : 10);
     } finally {
       controller.abort();
       held.drain();
@@ -355,7 +354,7 @@ it.each([
             kind === "oversized-image"
               ? 8 * 1024 ** 3 + 1
               : kind === "oversized-total"
-                ? 6 * 1024 ** 3
+                ? 7 * 1024 ** 3
                 : 1024,
           digest: `sha256:${"d".repeat(64)}`,
         },
@@ -411,7 +410,7 @@ it("freezes the cached manifest with its registry metadata", async () => {
     manifestDigest,
     canonicalManifest: raw,
     imagePrefix: "ghcr.io/openmapx",
-    downloads: { declaredBytes: 6 * 96 },
+    downloads: { declaredBytes: 5 * 96 },
   });
   expect(
     execFile.mock.calls.every(([, args]) => args[0] === "info" || args[0] === "manifest"),

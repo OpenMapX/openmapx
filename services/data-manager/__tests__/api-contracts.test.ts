@@ -99,7 +99,7 @@ describe("data-manager producer contracts", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ datasets: [dataset] });
     const transport = sdk.createDataManagerTransport({
-      baseUrl: "http://data-manager",
+      baseUrl: "http://openmapx-data-manager",
       fetch: async (input, init) => {
         const url = new URL(String(input));
         const actual = await app.inject({

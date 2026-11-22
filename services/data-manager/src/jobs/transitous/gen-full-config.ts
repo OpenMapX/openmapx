@@ -4,6 +4,7 @@ import {
   buildFeedProxyConfig,
   FEED_PROXY_CONFIG_FILENAME,
   FEED_PROXY_CONFIG_SUBDIR,
+  FEED_PROXY_ORIGIN,
   FEED_PROXY_VARS_FILENAME,
   writeFeedProxyVarsFile,
 } from "@openmapx/motis-feed-proxy-config";
@@ -12,7 +13,6 @@ import { CANDIDATE_PROXY_DIRNAME } from "./candidate.js";
 import { applyConfigOverrides } from "./config-overrides.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
-const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
 const HOSTED_TRANSIT_RUNTIME_DOMAINS = ["transitous.org", "triptix.tech"] as const;
 
 function assertSovereignRuntimeConfig(config: string): void {
@@ -148,8 +148,10 @@ export const run: StageFn = async (ctx) => {
       countries: ctx.countries,
     });
     const configPath = join(catalogDir, "out", "config.yml");
-    if (!existsSync(configPath)) {
-      throw new Error(`generate-motis-config.py did not produce ${configPath}`);
+    try {
+      readFileSync(configPath, "utf-8");
+    } catch (error) {
+      throw new Error(`generate-motis-config.py did not produce ${configPath}`, { cause: error });
     }
     // Apply the SAME post-processors as gen-motis-config so the runtime config
     // the live MOTIS serves agrees with the import-only config staging built
@@ -172,29 +174,25 @@ export const run: StageFn = async (ctx) => {
     // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
     // operator hasn't set it, and "" must fall through to the default.
     const feedProxyUrl =
-      ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || DEFAULT_FEED_PROXY_URL;
-    let rtRewritten = 0;
-    let gbfsProxyRewritten = 0;
-    if (existsSync(configPath)) {
-      const result = rewriteHostedFeedProxy(
-        readFileSync(configPath, "utf-8"),
-        feedProxyUrl,
-        new Set(feedProxy.feedIds),
+      ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || FEED_PROXY_ORIGIN;
+    const result = rewriteHostedFeedProxy(
+      readFileSync(configPath, "utf-8"),
+      feedProxyUrl,
+      new Set(feedProxy.feedIds),
+    );
+    const rtRewritten = result.counts.realtimeUrls;
+    const gbfsProxyRewritten = result.counts.gbfsProxy;
+    const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
+    if (missingGbfsFeedIds.length > 0) {
+      throw new Error(
+        `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
       );
-      rtRewritten = result.counts.realtimeUrls;
-      gbfsProxyRewritten = result.counts.gbfsProxy;
-      const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
-      if (missingGbfsFeedIds.length > 0) {
-        throw new Error(
-          `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
-        );
-      }
-      if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
-        writeFileSync(configPath, result.text, "utf-8");
-      }
-      if (ctx.operationsPolicy.profile === "regional-sovereign") {
-        assertSovereignRuntimeConfig(result.text);
-      }
+    }
+    if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
+      writeFileSync(configPath, result.text, "utf-8");
+    }
+    if (ctx.operationsPolicy.profile === "regional-sovereign") {
+      assertSovereignRuntimeConfig(result.text);
     }
 
     return {

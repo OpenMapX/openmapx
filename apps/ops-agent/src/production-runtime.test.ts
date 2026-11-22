@@ -560,7 +560,7 @@ describe("assembled production service authority", () => {
     const agent = result.services.find((s) => s.serviceId === "ops-agent");
     expect(agent?.actions.logs.available).toBe(true);
     expect(agent?.actions.stop).toMatchObject({ available: false, reason: "control_plane" });
-    for (const id of ["app-api", "traefik"])
+    for (const id of ["api", "traefik"])
       expect(result.services.find((s) => s.serviceId === id)?.actions.restart).toMatchObject({
         available: false,
         execution: "workflow",

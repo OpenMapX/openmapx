@@ -1,3 +1,4 @@
+import { services } from "@openmapx/core/server";
 import { afterAll, expect, it, vi } from "vitest";
 
 const env = vi.hoisted(() => {
@@ -37,7 +38,7 @@ function context(service: string) {
   };
   return ctx;
 }
-it.each(["app-api", "traefik"])(
+it.each(services.CORE_RESTART_SERVICE_IDS)(
   "retains the exact %s restart condition before dispatch",
   async (service) => {
     execute.mockReset().mockResolvedValue({ changed: true, serviceId: service });

@@ -6,7 +6,7 @@ import { extractIntegrationArtifactStream } from "./artifact-stream";
 // they share one source of truth.
 //
 // Community install/package entry points enforce declarative-only artifacts;
-// app-api never builds or executes community bundles at runtime.
+// the API never builds or executes community bundles at runtime.
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {

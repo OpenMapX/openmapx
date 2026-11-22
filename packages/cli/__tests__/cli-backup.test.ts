@@ -1262,7 +1262,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n{"Service":"timeline"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n{"Service":"timeline"}\n',
           stderr: "",
         });
       }
@@ -1273,11 +1273,11 @@ describe("backup volume modes", () => {
 
     const calls = mockedCommandCalls();
     const planned = calls.findIndex(([, args]) => args.includes("rolcanlogin"));
-    const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
+    const stopApi = calls.findIndex(([, args]) => / stop api(?: |$)/.test(args));
     const restore = calls.findIndex(([, args]) => args.includes(" createdb "));
     const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
     const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/target"));
-    const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
+    const startApi = calls.findIndex(([, args]) => / start api(?: |$)/.test(args));
 
     // Every database restore is planned before anything is stopped.
     expect(planned).toBeGreaterThanOrEqual(0);
@@ -1374,7 +1374,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n',
           stderr: "",
         });
       }
@@ -1415,7 +1415,7 @@ describe("backup volume modes", () => {
     expect(calls.some((args) => args.endsWith(" openmapx") && args.includes(" dropdb "))).toBe(
       false,
     );
-    expect(calls.findIndex((args) => args.includes(" start app-api"))).toBeGreaterThan(failed);
+    expect(calls.findIndex((args) => / start api(?: |$)/.test(args))).toBeGreaterThan(failed);
   });
 
   it("refuses a plain backup of the platform database written before its roles", async () => {
@@ -1444,7 +1444,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n',
           stderr: "",
         });
       }
@@ -1499,7 +1499,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n',
           stderr: "",
         });
       }
@@ -1570,7 +1570,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n',
           stderr: "",
         });
       }
@@ -1667,7 +1667,7 @@ describe("backup volume modes", () => {
         );
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stdout: '{"Service":"api"}\n{"Service":"postgis"}\n',
           stderr: "",
         });
       }
@@ -1944,21 +1944,41 @@ describe("restore data-protection preflight", () => {
     expect(
       requiredDependentStops(
         protectedManifest("2026-08-02T00:00:00.000Z"),
-        new Set(["app-api", "data-manager", "martin", "postgis"]),
+        new Set(["api", "data-manager", "martin", "postgis"]),
       ),
-    ).toEqual(["app-api", "data-manager", "martin"]);
+    ).toEqual(["api", "data-manager", "martin"]);
     expect(
       requiredDependentStops(
         protectedManifest("2026-08-02T00:00:00.000Z"),
-        new Set(["app-api", "postgis"]),
+        new Set(["api", "postgis"]),
       ),
-    ).toEqual(["app-api"]);
+    ).toEqual(["api"]);
     expect(
       requiredDependentStops(
         { ...protectedManifest("2026-08-02T00:00:00.000Z"), services: [] },
-        new Set(["app-api"]),
+        new Set(["api"]),
       ),
     ).toEqual([]);
+  });
+
+  it("stops every built-in service whose manifest connects it to the platform database", () => {
+    const clients = coreServices
+      .findServiceManifestDirs(join(import.meta.dirname, "..", "..", "..", "services"))
+      .flatMap((directory) => {
+        const manifest = JSON.parse(readFileSync(join(directory, "service.json"), "utf8")) as {
+          id: string;
+          container: { environment?: Record<string, string> };
+        };
+        const url = manifest.container.environment?.DATABASE_URL ?? "";
+        return /^postgres(?:ql)?:\/\/.+\/openmapx$/.test(url) ? [manifest.id] : [];
+      });
+    expect(clients).toContain(coreServices.CORE_SERVICE_ID.api);
+    expect(
+      requiredDependentStops(
+        protectedManifest("2026-08-02T00:00:00.000Z"),
+        new Set(clients),
+      ).sort(),
+    ).toEqual([...clients].sort());
   });
 });
 
