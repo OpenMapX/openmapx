@@ -1,5 +1,7 @@
 import { createOverlayStore, useLayerStore, useNavigationStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import {
   NEUTRAL_SCENE_LIGHT,
   NIGHT_SCENE_LIGHT,
@@ -188,6 +190,40 @@ describe("objects wiring", () => {
     act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
     await flush();
     expect(fake.state.counts.addLayer.get(OBJECTS)).toBe(before + 1);
+  });
+
+  describe("scene slot", () => {
+    const slotOf = () => layerRegistrations().find((r) => r.id === OBJECTS);
+    afterEach(() => {
+      act(() => useNavigationSceneStore.getState().setActive(false));
+    });
+
+    it("adds its layer in scene-3d while the navigation scene is active", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(slotOf()).toMatchObject({ slot: "scene-3d", order: 13 });
+    });
+
+    it("moves back to area-overlays when it ends", async () => {
+      render(<MapDetailsLayer />);
+      await activate();
+      expect(slotOf()?.slot).toBe("area-overlays");
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      expect(slotOf()?.slot).toBe("scene-3d");
+      act(() => useNavigationSceneStore.getState().setActive(false));
+      expect(slotOf()).toMatchObject({ slot: "area-overlays", order: 13 });
+    });
+
+    it("a style swap during 3D navigation re-adds it in scene-3d", async () => {
+      act(() => useNavigationSceneStore.getState().setActive(true));
+      render(<MapDetailsLayer />);
+      await activate();
+      act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
+      await flush();
+      expect(fake.state.layers.has(OBJECTS)).toBe(true);
+      expect(slotOf()?.slot).toBe("scene-3d");
+    });
   });
 
   it("releases the scene 30 s after deactivation", async () => {

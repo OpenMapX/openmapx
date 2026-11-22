@@ -12,12 +12,17 @@ import {
 import type { Attribution } from "@openmapx/integration-framework";
 import type { Map as MaplibreMap, MapMouseEvent, MapSourceDataEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, moveLayerToSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
   getMapClickOwner,
   registerCustomMapHitTester,
 } from "@/integration-api/map/mapClickOwnership";
+import {
+  sceneSlot,
+  useNavigationSceneStore,
+  useSceneSlot,
+} from "@/integration-api/map/navigationScene";
 import {
   type SceneLight,
   sunVector,
@@ -111,6 +116,7 @@ export function LandmarkModelsLayer(): null {
   const { apiUrl } = useEnv();
   const selected = useOverlayLayerVisible("3d-buildings");
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  const sceneSlotNow = useSceneSlot();
   const maskingAvailable = useBuildingReplacementStore((s) => s.maskingAvailable);
   const light = useSceneLight((l) => l);
   const [cameraReady, setCameraReady] = useState(false);
@@ -212,18 +218,29 @@ export function LandmarkModelsLayer(): null {
     return () => clearTimeout(timer);
   }, [active, scene, apiUrl]);
 
-  // Keep the custom layer on the map while active, across style swaps.
+  // Keep the custom layer on the map while active, across style swaps. During
+  // 3D navigation it sits above the route so models cover it where they stand
+  // in front of it.
   useEffect(() => {
     void styleVersion;
     if (!map || !mapReady || !scene || !active) return;
     const unsubscribe = subscribeStyleLoaded(map, () => {
-      if (!map.getLayer(LAYER_ID)) addLayerInSlot(map, scene.layer, "area-overlays", SLOT_ORDER);
+      if (!map.getLayer(LAYER_ID)) {
+        const slot = sceneSlot(useNavigationSceneStore.getState().active);
+        addLayerInSlot(map, scene.layer, slot, SLOT_ORDER);
+      }
     });
     return () => {
       unsubscribe();
       if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
     };
   }, [map, mapReady, styleVersion, scene, active]);
+
+  useEffect(() => {
+    void styleVersion;
+    if (!map || !mapReady) return;
+    moveLayerToSlot(map, LAYER_ID, sceneSlotNow, SLOT_ORDER);
+  }, [map, mapReady, styleVersion, sceneSlotNow]);
 
   // The shared scene light decides the light direction and colour, and night.
   useEffect(() => {

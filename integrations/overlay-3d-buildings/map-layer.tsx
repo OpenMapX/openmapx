@@ -10,8 +10,13 @@ import {
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, moveLayerToSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import {
+  sceneSlot,
+  useNavigationSceneStore,
+  useSceneSlot,
+} from "@/integration-api/map/navigationScene";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   buildingExtrusionColor,
@@ -86,7 +91,15 @@ function addExtrusionLayer(
       "fill-extrusion-vertical-gradient": true,
     },
   } as maplibregl.FillExtrusionLayerSpecification;
-  addLayerInSlot(map, layer, "area-overlays", 5);
+  addLayerInSlot(map, layer, currentSceneSlot(), EXTRUSION_ORDER);
+}
+
+const EXTRUSION_ORDER = 5;
+const CONTACT_ORDER = 4.5;
+
+/** Above the route during 3D navigation, with the other area overlays otherwise. */
+function currentSceneSlot() {
+  return sceneSlot(useNavigationSceneStore.getState().active);
 }
 
 /** The soft ground rim under the extrusions, always on the basemap's own buildings. */
@@ -101,7 +114,7 @@ function addContactLayer(map: maplibregl.Map, basemap: BuildingSourceReference):
     layout: { visibility: extrusionVisibility(map) },
     paint: contactShadowPaint(findBuildingRoofColor(map, basemap), MIN_ZOOM),
   };
-  addLayerInSlot(map, layer, "area-overlays", 4.5);
+  addLayerInSlot(map, layer, currentSceneSlot(), CONTACT_ORDER);
 }
 
 function extrusionVisibility(map: maplibregl.Map): "visible" | "none" {
@@ -121,6 +134,17 @@ export function BuildingExtrusionLayer() {
   const prevVisibleRef = useRef(false);
   const wasTiltedRef = useRef(false);
   const currentMap = mapRef.current;
+  const slot = useSceneSlot();
+
+  // 3D navigation lifts the buildings above the route, so they cover it where
+  // they stand in front of it; layers added later read the slot themselves.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    moveLayerToSlot(map, CONTACT_LAYER_ID, slot, CONTACT_ORDER);
+    moveLayerToSlot(map, LAYER_ID, slot, EXTRUSION_ORDER);
+  }, [slot, mapReady, styleVersion, mapRef]);
 
   useEffect(() => {
     const sync = () =>

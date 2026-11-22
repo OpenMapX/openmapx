@@ -6,6 +6,7 @@ import {
 } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/integration-api/map/layerStack";
+import { useNavigationSceneStore } from "@/integration-api/map/navigationScene";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import {
   CONTACT_LAYER_ID,
@@ -83,6 +84,49 @@ beforeEach(() => {
 afterEach(() => {
   useBuildingsStore.setState({ panelOpen: false, layerVisible: false, userRevision: 0 });
   vi.unstubAllGlobals();
+});
+
+describe("BuildingExtrusionLayer scene slot", () => {
+  const slotOf = (id: string) => layerRegistrations().find((r) => r.id === id);
+
+  beforeEach(() => {
+    useBuildingsStore.setState({ layerVisible: true });
+  });
+  afterEach(() => {
+    useNavigationSceneStore.getState().setActive(false);
+  });
+
+  it("adds its layer in scene-3d while the navigation scene is active", () => {
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    render(<BuildingExtrusionLayer />);
+    expect(slotOf(LAYER_ID)).toMatchObject({ slot: "scene-3d", order: 5 });
+    expect(slotOf(CONTACT_LAYER_ID)).toMatchObject({ slot: "scene-3d", order: 4.5 });
+  });
+
+  it("moves back to area-overlays when it ends", () => {
+    render(<BuildingExtrusionLayer />);
+    expect(slotOf(LAYER_ID)?.slot).toBe("area-overlays");
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(slotOf(LAYER_ID)?.slot).toBe("scene-3d");
+    expect(slotOf(CONTACT_LAYER_ID)?.slot).toBe("scene-3d");
+    act(() => useNavigationSceneStore.getState().setActive(false));
+    expect(slotOf(LAYER_ID)).toMatchObject({ slot: "area-overlays", order: 5 });
+    expect(slotOf(CONTACT_LAYER_ID)).toMatchObject({ slot: "area-overlays", order: 4.5 });
+  });
+
+  it("a style swap during 3D navigation re-adds it in scene-3d", () => {
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    render(<BuildingExtrusionLayer />);
+    fake.state.layers.delete(LAYER_ID);
+    fake.state.layers.delete(CONTACT_LAYER_ID);
+    act(() => {
+      fake.emit("styledataloading");
+      fake.emit("style.load");
+    });
+    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    expect(slotOf(LAYER_ID)?.slot).toBe("scene-3d");
+    expect(slotOf(CONTACT_LAYER_ID)?.slot).toBe("scene-3d");
+  });
 });
 
 describe("BuildingExtrusionLayer", () => {

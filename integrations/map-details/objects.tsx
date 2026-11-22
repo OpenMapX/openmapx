@@ -4,7 +4,12 @@ import { sampleTerrainGrid } from "@openmapx/core";
 import type { Attribution } from "@openmapx/integration-framework";
 import type { Map as MaplibreMap, MapSourceDataEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, moveLayerToSlot } from "@/integration-api/map/layerStack";
+import {
+  sceneSlot,
+  useNavigationSceneStore,
+  useSceneSlot,
+} from "@/integration-api/map/navigationScene";
 import {
   type SceneLight,
   sunVector,
@@ -93,6 +98,7 @@ export function useMapDetailsObjects({
   const [scene, setScene] = useState<{ layer: MapDetailsObjectsLayer } | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const light = useSceneLight((l) => l);
+  const slot = useSceneSlot();
   const objectsActive = active && !unsupported;
   const cells = useRef(new LRU<string, Instances[]>(CELL_CACHE_SIZE));
   const budget = useMemo(() => TIER_BUDGETS[deviceTier()], []);
@@ -126,18 +132,27 @@ export function useMapDetailsObjects({
 
   useEffect(() => () => scene?.layer.dispose(), [scene]);
 
-  // Keep the custom layer on the map while active, across style swaps.
+  // Keep the custom layer on the map while active, across style swaps. During
+  // 3D navigation it sits above the route, like the buildings.
   useEffect(() => {
     if (!map || !scene || !objectsActive) return;
     const { layer } = scene;
     const unsubscribe = subscribeStyleLoaded(map, () => {
-      if (!map.getLayer(layer.id)) addLayerInSlot(map, layer, "area-overlays", OBJECTS_SLOT_ORDER);
+      if (!map.getLayer(layer.id)) {
+        const current = sceneSlot(useNavigationSceneStore.getState().active);
+        addLayerInSlot(map, layer, current, OBJECTS_SLOT_ORDER);
+      }
     });
     return () => {
       unsubscribe();
       if (map.getLayer(layer.id)) map.removeLayer(layer.id);
     };
   }, [map, scene, objectsActive]);
+
+  useEffect(() => {
+    if (!map || !scene) return;
+    moveLayerToSlot(map, scene.layer.id, slot, OBJECTS_SLOT_ORDER);
+  }, [map, scene, slot]);
 
   useEffect(() => {
     scene?.layer.setLighting(lightingOf(light));
