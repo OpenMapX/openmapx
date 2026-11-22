@@ -1001,7 +1001,7 @@ it("removes only an explicit root through the existing selection producer", asyn
   await waitFor(() => expect(toast).toHaveBeenCalledWith("Service selection saved"));
 });
 
-it("sends update dependency options and MOTIS import only on their corresponding action", async () => {
+it("sends update dependency options and build options only on their corresponding action", async () => {
   const requests = setup((url, init) =>
     url.pathname === "/api/admin/services"
       ? Response.json({
@@ -1009,8 +1009,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
           capabilityInventory: { recognized: [], unrecognized: [] },
           services: [
             {
-              id: "motis",
-              name: "MOTIS",
+              id: "osrm",
+              name: "OSRM",
               version: "1",
               quality: "built-in",
               provides: [],
@@ -1028,8 +1028,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
         : undefined,
   );
   mount(<ServiceCatalog />);
-  await screen.findByRole("link", { name: "MOTIS" });
-  fireEvent.click(screen.getByRole("checkbox", { name: "Select motis" }));
+  await screen.findByRole("link", { name: "OSRM" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select osrm" }));
   await chooseAction("Update selected");
   fireEvent.click(screen.getByRole("checkbox", { name: "Update without dependency recreation" }));
   fireEvent.click(screen.getByRole("button", { name: "Update selected" }));
@@ -1039,7 +1039,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
     ).toHaveLength(1),
   );
   await chooseAction("Build Selected");
-  fireEvent.click(screen.getByRole("checkbox", { name: "Import MOTIS after build" }));
+  expect(screen.queryByRole("checkbox", { name: /MOTIS/ })).toBeNull();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Continue on build errors" }));
   fireEvent.click(screen.getByRole("button", { name: "Build Selected" }));
   await waitFor(() =>
     expect(
@@ -1051,8 +1052,8 @@ it("sends update dependency options and MOTIS import only on their corresponding
       .filter((request) => request.url.pathname.endsWith("/bulk-action"))
       .map((request) => JSON.parse(String(request.init.body))),
   ).toEqual([
-    { action: "update", serviceIds: ["motis"], noDeps: true },
-    { action: "build", serviceIds: ["motis"], continueOnError: true, motisImport: true },
+    { action: "update", serviceIds: ["osrm"], noDeps: true },
+    { action: "build", serviceIds: ["osrm"], continueOnError: false },
   ]);
 });
 
@@ -1194,7 +1195,7 @@ it("starts a new apply intent after another successful configuration save", asyn
 });
 
 it("reviews and submits captured Build All targets in the established build order", async () => {
-  const ids = ["tileserver", "motis", "osrm"];
+  const ids = ["tileserver", "otp", "osrm"];
   const requests = setup((url) =>
     url.pathname === "/api/admin/services"
       ? Response.json({
@@ -1226,5 +1227,5 @@ it("reviews and submits captured Build All targets in the established build orde
   expect(
     JSON.parse(String(requests.find((r) => r.url.pathname.endsWith("/bulk-action"))?.init.body))
       .serviceIds,
-  ).toEqual(["osrm", "motis", "tileserver"]);
+  ).toEqual(["osrm", "otp", "tileserver"]);
 });

@@ -78621,9 +78621,6 @@
                       },
                       "continueOnError": {
                         "type": "boolean"
-                      },
-                      "motisImport": {
-                        "type": "boolean"
                       }
                     },
                     "required": [

@@ -46,7 +46,6 @@ export function ServiceBulkActions({
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
   const [noDeps, setNoDeps] = useState(false);
-  const [motisImport, setMotisImport] = useState(false);
   const ids = [...selectedIds];
   const denied = ids.filter((id) => {
     const decision = services.find((service) => service.id === id)?.actions?.[
@@ -56,11 +55,9 @@ export function ServiceBulkActions({
   });
   const reason = denied.length
     ? ta("unavailableForDeniedUseIndividual", { denied: denied.join(", ") })
-    : action === "build" && motisImport && !selectedIds.has("motis")
-      ? ta("motisImportNeedsMotis")
-      : action === "stage" && ids.length > 64
-        ? ta("stageAtMost64Services")
-        : undefined;
+    : action === "stage" && ids.length > 64
+      ? ta("stageAtMost64Services")
+      : undefined;
   function submit() {
     if (reason || !ids.length || busy) return;
     if (action === "stage") {
@@ -74,7 +71,6 @@ export function ServiceBulkActions({
             serviceIds: [...ids],
             region: region.trim() || undefined,
             continueOnError,
-            ...(motisImport ? { motisImport: true } : {}),
           }
         : action === "update"
           ? { action, serviceIds: [...ids], noDeps }
@@ -122,8 +118,6 @@ export function ServiceBulkActions({
             setRegion={setRegion}
             continueOnError={continueOnError}
             setContinueOnError={setContinueOnError}
-            motisImport={motisImport}
-            setMotisImport={setMotisImport}
             disabled={busy}
           />
         )}
@@ -155,16 +149,12 @@ function BuildOptions({
   setRegion,
   continueOnError,
   setContinueOnError,
-  motisImport,
-  setMotisImport,
   disabled,
 }: {
   region: string;
   setRegion: (value: string) => void;
   continueOnError: boolean;
   setContinueOnError: (value: boolean) => void;
-  motisImport: boolean;
-  setMotisImport: (value: boolean) => void;
   disabled: boolean;
 }) {
   const ta = useAdminTranslations("adminServices");
@@ -189,16 +179,6 @@ function BuildOptions({
         }
         label={ta("continueOnBuildErrors")}
       />
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={motisImport}
-            disabled={disabled}
-            onChange={(event) => setMotisImport(event.target.checked)}
-          />
-        }
-        label={ta("importMotisAfterBuild")}
-      />
     </Stack>
   );
 }
@@ -217,7 +197,6 @@ export function ServiceBuildAllDialog({
   const t = useTranslations("adminNavigation.buildAll");
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
-  const [motisImport, setMotisImport] = useState(false);
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t("title")}</DialogTitle>
@@ -229,8 +208,6 @@ export function ServiceBuildAllDialog({
             setRegion={setRegion}
             continueOnError={continueOnError}
             setContinueOnError={setContinueOnError}
-            motisImport={motisImport}
-            setMotisImport={setMotisImport}
             disabled={busy}
           />
         </Stack>
@@ -241,14 +218,13 @@ export function ServiceBuildAllDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !ids.length || (motisImport && !ids.includes("motis"))}
+          disabled={busy || !ids.length}
           onClick={() =>
             void onQueue({
               action: "build",
               serviceIds: [...ids],
               region: region.trim() || undefined,
               continueOnError,
-              ...(motisImport ? { motisImport: true } : {}),
             }).then((accepted) => {
               if (accepted) onClose();
             })

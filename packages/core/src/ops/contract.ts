@@ -556,12 +556,10 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("service.build"),
     serviceId: serviceIdSchema,
     regionId: regionIdSchema.optional(),
-    motisImport: z.boolean().optional(),
   }),
   z.strictObject({
     kind: z.literal("services.buildAll"),
     regionId: regionIdSchema.optional(),
-    motisImport: z.boolean().optional(),
     failFast: z.boolean().optional(),
   }),
   z.strictObject({

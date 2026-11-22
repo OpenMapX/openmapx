@@ -479,7 +479,7 @@ describe("build bundles", () => {
     }
   });
 
-  it("refuses to export MOTIS import output that no --import build vouches for", async () => {
+  it("refuses to export MOTIS import output that the build record names no MOTIS image for", async () => {
     const data = dataDir(buildHost);
     mkdirSync(join(data, "motis", "live", "data"), { recursive: true });
     mkdirSync(join(data, "motis-feed-proxy"), { recursive: true });
@@ -492,7 +492,19 @@ describe("build bundles", () => {
         bundle: join(tmp, "m.tar"),
         rootDir: buildHost,
       }),
-    ).rejects.toThrow(/without --import/);
+    ).rejects.toThrow(/names no MOTIS image/);
+  });
+
+  it("explains that transit sync output has no MOTIS build record to export", async () => {
+    mkdirSync(join(dataDir(buildHost), "motis", "live", "data"), { recursive: true });
+    await expect(
+      exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "motis",
+        bundle: join(tmp, "m.tar"),
+        rootDir: buildHost,
+      }),
+    ).rejects.toThrow(/Transit sync does not record its MOTIS builds yet/);
   });
 
   it("requires a build record before exporting", async () => {

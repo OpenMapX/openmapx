@@ -133,7 +133,6 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
     region?: string;
     continueOnError?: boolean;
     noDeps?: boolean;
-    motisImport?: boolean;
   };
 
   const action = payload.action;
@@ -142,8 +141,6 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
   assertKnownServiceIds(serviceIds);
 
   if (action === "build") {
-    if (payload.motisImport && payload.all !== true && !serviceIds.includes("motis"))
-      throw Error("MOTIS import requires a MOTIS build");
     const region = nonEmptyString(payload.region);
     if (region) assertRegion(region);
     if (payload.all === true || serviceIds.length === 0) {
@@ -153,7 +150,6 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
           ctx,
           {
             kind: "services.buildAll",
-            ...(payload.motisImport ? { motisImport: true } : {}),
             ...(region ? { regionId: region } : {}),
             ...(payload.continueOnError === false ? { failFast: true } : {}),
           },
@@ -198,7 +194,6 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
             {
               kind: "service.build",
               serviceId,
-              ...(payload.motisImport && serviceId === "motis" ? { motisImport: true } : {}),
               ...(region ? { regionId: region } : {}),
             },
             "admin-job.service.build",

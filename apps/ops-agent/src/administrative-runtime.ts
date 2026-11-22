@@ -861,12 +861,11 @@ export function createAdministrativeRuntime(
   const runFixedCli = options.runFixedCli ?? createDefaultFixedCli(options.rootDir);
   const releaseEffects = options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
-  const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
+  const buildArgs = (serviceId: string, regionId?: string): string[] => [
     "services",
     "build",
     serviceId,
     ...(regionId ? ["--region", regionId] : []),
-    ...(motisImport && serviceId === "motis" ? ["--import"] : []),
   ];
   const loadBuildable = async (): Promise<BuildAuthorityService[]> => {
     const authority = [...(await loadBuildAuthority())];
@@ -889,26 +888,18 @@ export function createAdministrativeRuntime(
       .sort((left, right) => compareServiceBuildOrder(left.serviceId, right.serviceId));
   };
   runtime["service.build"] = async (operation, context) => {
-    if (operation.motisImport && operation.serviceId !== "motis")
-      throw Error("MOTIS import requires a MOTIS build");
     const buildable = await loadBuildable();
     if (!buildable.some((service) => service.serviceId === operation.serviceId)) {
       throw new Error("Build authority rejected");
     }
     await runFixedCli(
-      buildArgs(
-        operation.serviceId,
-        operation.regionId ?? resolveDataDefaultRegion(runtime),
-        operation.motisImport,
-      ),
+      buildArgs(operation.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
       context,
     );
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
     const plan = await loadBuildable();
-    if (operation.motisImport && !plan.some((service) => service.serviceId === "motis"))
-      throw Error("MOTIS import requires enabled MOTIS");
     const serviceIds = plan.map((service) => service.serviceId);
     const completedServiceIds: string[] = [];
     const failedServiceIds: string[] = [];
@@ -922,11 +913,7 @@ export function createAdministrativeRuntime(
         context.signal.throwIfAborted();
         attempted = true;
         await runFixedCli(
-          buildArgs(
-            service.serviceId,
-            operation.regionId ?? resolveDataDefaultRegion(runtime),
-            operation.motisImport,
-          ),
+          buildArgs(service.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
           context,
         );
         completedServiceIds.push(service.serviceId);

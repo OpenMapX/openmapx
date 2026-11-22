@@ -300,15 +300,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
     const allowedKeys =
       action === "build"
-        ? new Set([
-            "action",
-            "serviceIds",
-            "all",
-            "region",
-            "continueOnError",
-            "presetIds",
-            "motisImport",
-          ])
+        ? new Set(["action", "serviceIds", "all", "region", "continueOnError", "presetIds"])
         : action === "update"
           ? new Set(["action", "serviceIds", "continueOnError", "noDeps", "presetIds"])
           : new Set(["action", "serviceIds", "continueOnError", "presetIds"]);
@@ -330,18 +322,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return reply
           .code(400)
           .send({ error: "Selected preset or service contains an uninstalled service" });
-      if (action === "build" && "motisImport" in req.body && req.body.motisImport) {
-        const motis = registry.get("motis");
-        if (
-          !motis?.enabled ||
-          !motis.isBuiltIn ||
-          !motis.manifest.buildCommand ||
-          !(serviceIds.includes("motis") || ("all" in req.body && req.body.all === true))
-        )
-          return reply
-            .code(400)
-            .send({ error: "MOTIS import requires a build including enabled built-in MOTIS" });
-      }
     } catch (error) {
       if (error instanceof coreServices.UnknownPresetError)
         return reply.code(400).send({ error: "Unknown service preset" });
@@ -370,7 +350,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         region,
         continueOnError: req.body?.continueOnError,
         ...("noDeps" in req.body ? { noDeps: req.body.noDeps } : {}),
-        ...("motisImport" in req.body ? { motisImport: req.body.motisImport } : {}),
       },
       adminSession.user.id,
       key,

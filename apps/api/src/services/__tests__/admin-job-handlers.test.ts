@@ -542,25 +542,6 @@ describe("admin job handlers", () => {
       expect(runCliMock).not.toHaveBeenCalled();
     });
 
-    it("carries MOTIS import only into the fixed MOTIS child", async () => {
-      runAdminOperationMock.mockReset().mockResolvedValue({ completed: true });
-      const ctx = {
-        jobId: "job",
-        payload: { action: "build", serviceIds: ["motis"], motisImport: true },
-        signal: new AbortController().signal,
-        log: vi.fn(),
-        setProgress: vi.fn(),
-        checkpoint: vi.fn(),
-      };
-      await handleServiceBulkJob(ctx);
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "service.build", serviceId: "motis", motisImport: true },
-        "admin-job.service.build",
-        { durableIdentity: "motis" },
-      );
-    });
-
     it("uses the bounded build-all variant and typed region options", async () => {
       runAdminOperationMock.mockClear();
       runAdminOperationMock.mockResolvedValueOnce({

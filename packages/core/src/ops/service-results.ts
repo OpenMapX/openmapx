@@ -44,7 +44,7 @@ export const serviceBatchResultSchema = z
   });
 export type ServiceBatchResult = z.infer<typeof serviceBatchResultSchema>;
 
-export const SERVICE_BUILD_ORDER = ["osrm", "otp", "motis", "pelias", "tileserver"] as const;
+export const SERVICE_BUILD_ORDER = ["osrm", "otp", "pelias", "tileserver"] as const;
 export function compareServiceBuildOrder(a: string, b: string): number {
   const rank = (id: string) => {
     const index = SERVICE_BUILD_ORDER.indexOf(id as (typeof SERVICE_BUILD_ORDER)[number]);

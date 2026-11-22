@@ -1247,7 +1247,7 @@ describe("service presets and option boundaries", () => {
     expect(result.statusCode).toBe(400);
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
-  it("rejects MOTIS import without a MOTIS build before enqueue", async () => {
+  it("rejects the retired MOTIS import option before enqueue", async () => {
     mockRegistryGet.mockReturnValue(MOCK_SERVICE_STOPPED);
     const result = await app.inject({
       headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },

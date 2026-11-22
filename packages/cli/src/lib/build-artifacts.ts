@@ -144,16 +144,16 @@ export async function exportBuildBundle(opts: ExportBuildBundleOptions): Promise
   const record = readBuildRecord(opts.serviceId, opts.rootDir);
   if (!record)
     throw Error(
-      `No build record for "${opts.serviceId}". Run openmapx services build ${opts.serviceId} first.`,
+      opts.serviceId === "motis"
+        ? 'No build record for "motis". Transit sync does not record its MOTIS builds yet, so only MOTIS data imported from a bundle can be exported.'
+        : `No build record for "${opts.serviceId}". Run openmapx services build ${opts.serviceId} first.`,
     );
   if (
     opts.serviceId === "motis" &&
     !record.runtimeImages.motis &&
     existsSync(join(dataRoot, "motis/live/data"))
   )
-    throw Error(
-      "MOTIS build ran without --import; rebuild with openmapx services build motis --import",
-    );
+    throw Error("The MOTIS build record names no MOTIS image that imported this data");
   const runningServices =
     opts.runningServices ?? ((ids: string[]) => runningComposeServicesStrict(ids, opts.rootDir));
   const compatible = async () => {
