@@ -23,7 +23,6 @@ import {
   tzDiffMinutes,
   tzOffsetLabel,
   useDirectionsStore,
-  useSettingsStore,
   viewerTimeZone,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
@@ -36,17 +35,18 @@ import {
 import { BRAND, TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { formatCo2Emission } from "@/lib/formatCo2";
-import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
-import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
 import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
 import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
-import { RouteCardActions, routeCardFrameSx } from "./routeCardChrome";
-
-const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
+import {
+  isInteractiveCardTarget,
+  RouteCardActions,
+  RouteStartError,
+  routeCardFrameSx,
+} from "./routeCardChrome";
+import { useGroundRouteStart } from "./useGroundRouteStart";
 
 function RouteArrivalCaption({
   context,
@@ -131,27 +131,18 @@ export function RouteCard({
   arrivalContext,
 }: RouteCardProps) {
   const t = useTranslations("directions");
-  const _tc = useTranslations("common");
-  const tNav = useTranslations("navigation");
   const tTraffic = useTranslations("trafficStatus");
   const locale = useLocale();
-  const { startGround } = useStartNavigation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
-  const avoidHighways = useDirectionsStore((s) => s.avoidHighways);
-  const avoidTolls = useDirectionsStore((s) => s.avoidTolls);
-  const avoidFerries = useDirectionsStore((s) => s.avoidFerries);
-  const {
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
-  } = useDirectionsStore();
-  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
-  // Only meaningful under native authority, where Start is a round trip rather
-  // than a synchronous store write.
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
+  const { canStart, start, starting, startError } = useGroundRouteStart({
+    route,
+    waypoints,
+    index,
+    alternatives,
+    provider,
+    roadConditionImpact,
+    units,
+  });
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
   const arrivalCaptionId = useId();
   const trafficCaptionId = useId();
@@ -166,56 +157,6 @@ export function RouteCard({
       .filter(Boolean)
       .join(" ") || undefined;
   const roadConditionNotice = roadConditionRouteNotice(roadConditionImpact);
-
-  const handleStart = async () => {
-    const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
-    if (coords.length < 2) return;
-    // Unlock TTS inside the user gesture (iOS Safari requirement) before any
-    // await hands control back to the event loop.
-    primeSpeechSynthesis();
-    if (starting) return;
-    setStarting(true);
-    try {
-      const result = await startGround(
-        {
-          route,
-          alternatives,
-          mode: route.mode,
-          destinationWaypoints: coords,
-          routeProvider: provider,
-          routeSelectionIntent: index === 0 ? "automatic" : "userSelected",
-          routeOptions: {
-            avoidHighways: route.mode === "driving" && avoidHighways,
-            avoidTolls: route.mode === "driving" && avoidTolls,
-            avoidFerries,
-            ...(route.mode === "cycling"
-              ? {
-                  bikeProfile,
-                  bikeHillPreference,
-                  bikePreferQuietRoads,
-                  bikePreferSmoothSurfaces,
-                  bikeSpeedKmh,
-                }
-              : {}),
-            avoidClosures: avoidIncidents,
-          },
-          roadConditionImpact,
-          locale: locale === "de" ? "de" : "en",
-          units,
-        },
-        // Between prepare and start, so the OS prompt is spent on a trip the
-        // shell has already accepted.
-        {
-          onPrepared: async () => {
-            await requestHeadingPermission();
-          },
-        },
-      );
-      setStartError(result.ok ? null : result.code);
-    } finally {
-      setStarting(false);
-    }
-  };
 
   const dist = formatOverviewDistance(route.distance, units);
 
@@ -365,8 +306,7 @@ export function RouteCard({
     // biome-ignore lint/plugin/noClickableLayoutElement: pointer shortcut for the selection control
     <Box
       onClick={(event) => {
-        if (!(event.target as Element).closest("button, input, label, a, [role='button']"))
-          onSelect();
+        if (!isInteractiveCardTarget(event.target)) onSelect();
       }}
       sx={{ ...routeCardFrameSx(active), display: "flex", gap: 1.5 }}
     >
@@ -469,17 +409,13 @@ export function RouteCard({
         {active && (
           <RouteCardActions
             onDetails={onDetails}
-            onStart={GROUND_MODES.has(route.mode) ? () => void handleStart() : undefined}
+            onStart={canStart ? () => void start() : undefined}
             // A second tap while the shell is still preparing would start a
             // second session nobody is watching.
             startDisabled={starting}
           />
         )}
-        {startError && (
-          <Typography role="alert" sx={{ fontSize: 12, color: "error.main", mt: 0.5 }}>
-            {tNav(startError === "incompatible" ? "startUpdateRequired" : "startFailed")}
-          </Typography>
-        )}
+        <RouteStartError error={startError} />
       </Box>
       {impact && (
         // biome-ignore lint/plugin/noClickableLayoutElement: keeps dialog clicks from selecting the route

@@ -1,12 +1,17 @@
 import type { PersonalVehicle, RoadConditionRouteImpact, Route, RouteImpact } from "@openmapx/core";
 import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "@openmapx/core";
-import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { de, en } from "@openmapx/i18n";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "@/lib/mobile/MobileRuntimeProvider";
+import {
+  createNativeShellScope,
+  NATIVE_SHELL_HELLO_PAYLOAD,
+  nativeSessionMessageTypes,
+  waitForNativeShellNegotiated,
+} from "@/test/nativeShell";
 import { resolvedStyle } from "@/test/resolvedStyle";
 import { RouteCard } from "./RouteCard";
 
@@ -480,38 +485,7 @@ function renderInShell(
   reply: (type: string) => unknown | Promise<unknown>,
   onSelect: () => void = () => {},
 ) {
-  const sent: { type: string; payload: unknown }[] = [];
-  const handlers = new Map<string, (event: Event) => void>();
-  const NONCE = "nonce-abc";
-
-  const scope: Record<string, unknown> = {
-    __OPENMAPX_MOBILE_CHANNEL__: { nonce: NONCE },
-    addEventListener: (type: string, handler: (event: Event) => void) => {
-      handlers.set(type, handler);
-    },
-    removeEventListener: (type: string) => handlers.delete(type),
-    ReactNativeWebView: {
-      postMessage: (raw: string) => {
-        const message = JSON.parse(raw);
-        sent.push({ type: message.type, payload: message.payload });
-        void Promise.resolve(reply(message.type)).then((payload) => {
-          if (payload === undefined) return;
-          handlers.get("openmapx:native")?.({
-            detail: {
-              protocolVersion: MOBILE_PROTOCOL_MAX,
-              type: nativeReplyType(message.type),
-              // The envelope schema is strict, so a reply carrying a field it
-              // does not name is dropped rather than delivered.
-              messageId: `n-${sent.length}`,
-              channelNonce: NONCE,
-              sentAtMs: 1_700_000_000_000,
-              payload: { ...(payload as Record<string, unknown>), forMessageId: message.messageId },
-            },
-          } as unknown as Event);
-        });
-      },
-    },
-  };
+  const { scope, sent } = createNativeShellScope(reply);
 
   const view = render(
     <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
@@ -533,38 +507,6 @@ function renderInShell(
   return { sent, view, start };
 }
 
-function nativeReplyType(type: string): string {
-  switch (type) {
-    case "web.hello":
-      return "native.hello";
-    case "session.prepare":
-      return "session.prepared";
-    case "session.start":
-      return "session.started";
-    default:
-      return "snapshot.update";
-  }
-}
-
-const HELLO_PAYLOAD = {
-  shellVersion: "1.0.0",
-  shellBuild: "1",
-  selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
-  minProtocolVersion: MOBILE_PROTOCOL_MIN,
-  maxProtocolVersion: MOBILE_PROTOCOL_MAX,
-  platform: "ios",
-  capabilities: {
-    groundNavigation: true,
-    transitNavigation: true,
-    backgroundLocation: true,
-    localNotifications: true,
-    speech: true,
-  },
-  permission: "background",
-  locationDriver: "expo",
-  activeSession: null,
-};
-
 /** Start reads the planned waypoints, so a card with none never starts. */
 function seedWaypoints() {
   useDirectionsStore.setState({
@@ -575,21 +517,9 @@ function seedWaypoints() {
   });
 }
 
-/**
- * Waits until the shell's hello has been answered and applied.
- *
- * The reply arrives on a microtask after `postMessage`, so a click issued the
- * moment the hello was *sent* would land while the runtime is still negotiating.
- */
-async function negotiated(sent: { type: string }[]) {
-  await waitFor(() => expect(sent.some((message) => message.type === "web.hello")).toBe(true));
-  await act(async () => {
-    await Promise.resolve();
-  });
-}
-
-const startTypes = (sent: { type: string }[]) =>
-  sent.map((message) => message.type).filter((type) => type.startsWith("session."));
+const HELLO_PAYLOAD = NATIVE_SHELL_HELLO_PAYLOAD;
+const negotiated = waitForNativeShellNegotiated;
+const startTypes = nativeSessionMessageTypes;
 
 describe("RouteCard Start under native authority", () => {
   beforeEach(seedWaypoints);

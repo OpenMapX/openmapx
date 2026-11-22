@@ -384,6 +384,7 @@ export function useGroundDirectionsPlan() {
   return {
     routeWaypoints,
     allWaypointsFilled,
+    multiStop,
     groundRequest,
     scheduleRequest,
     evRequest,

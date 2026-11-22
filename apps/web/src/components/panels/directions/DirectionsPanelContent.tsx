@@ -96,13 +96,12 @@ export function DirectionsPanelContent() {
       <TransitItineraryDetails transit={transit} itinerary={transitDetails} details={details} />
     );
   }
-  const detailsRoute =
-    details.routeIndex !== null ? ground.displayed?.routes[details.routeIndex] : undefined;
-  if (detailsRoute) {
+  if (details.routeIndex !== null && ground.displayed?.routes[details.routeIndex]) {
     return (
       <GroundRouteDetails
-        route={detailsRoute}
-        provider={ground.displayed?.provider}
+        displayed={ground.displayed}
+        routeIndex={details.routeIndex}
+        allowAlternatives={!ground.scheduleRequest && !ground.multiStop}
         onBack={details.closeRoute}
       />
     );

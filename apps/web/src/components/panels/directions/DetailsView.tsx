@@ -26,6 +26,8 @@ import { DirectionsDetailHeader } from "@/components/panels/directions/Direction
 import { StepRow } from "@/components/panels/directions/StepRow";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
+import type { StartFailure } from "@/lib/mobile/useStartNavigation";
+import { RouteStartButton, RouteStartError } from "./routeCardChrome";
 
 /**
  * The sign-palette country for each step, where the step's maneuver sits
@@ -55,6 +57,9 @@ export function DetailsView({
   waypointLabels,
   units,
   onBack,
+  onStart,
+  startDisabled,
+  startError,
 }: {
   route: Route;
   attributions?: readonly Attribution[];
@@ -63,6 +68,10 @@ export function DetailsView({
   waypointLabels?: string[];
   units: "metric" | "imperial";
   onBack: () => void;
+  /** Omitted during active navigation and for modes without turn-by-turn guidance. */
+  onStart?: () => void;
+  startDisabled?: boolean;
+  startError?: StartFailure | null;
 }) {
   const t = useTranslations("directions");
   const locale = useLocale();
@@ -142,29 +151,46 @@ export function DetailsView({
       />
       <Divider />
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="h6" component="span" sx={{ fontSize: 22, fontWeight: 500 }}>
-          {formatDuration(route.duration, locale)}{" "}
-        </Typography>
-        <Typography
-          variant="body1"
-          component="span"
+        <Box
           sx={{
-            color: "text.secondary",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 1.5,
           }}
         >
-          ({dist})
-        </Typography>
-        {route.summary && (
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              display: "block",
-            }}
-          >
-            {route.summary}
-          </Typography>
-        )}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="h6" component="span" sx={{ fontSize: 22, fontWeight: 500 }}>
+              {formatDuration(route.duration, locale)}{" "}
+            </Typography>
+            <Typography
+              variant="body1"
+              component="span"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              ({dist})
+            </Typography>
+            {route.summary && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                }}
+              >
+                {route.summary}
+              </Typography>
+            )}
+          </Box>
+          {onStart && (
+            <Box sx={{ flexShrink: 0, pt: 0.25 }}>
+              <RouteStartButton disabled={startDisabled} onClick={onStart} />
+            </Box>
+          )}
+        </Box>
+        <RouteStartError error={startError} />
       </Box>
       <Divider />
       {hasLegs ? (
