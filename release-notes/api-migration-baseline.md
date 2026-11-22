@@ -6,7 +6,8 @@ impacts: [breaking, migration]
 
 The API's database migration history is replaced by a single baseline: one
 migration that drizzle-kit generates from the schema code, and one that adds the
-roles' grants, the account role check and the last-administrator guard. The
+roles' grants, the account role check, the last-administrator guard and the
+account erasure trigger. The
 resulting schema is the same as before, apart from the order of some columns and
 the changes below.
 
@@ -26,6 +27,18 @@ have native UUID ids that the database assigns with `uuidv7()`; log and health
 history rows have identity columns instead of serial sequences. The API refuses
 an id in a request path or body that is not a UUID with status 400 instead of
 looking it up. A version 7 UUID contains the time it was created.
+
+Deleting an account erases its traces in the database however it is deleted:
+in the app, by the restore replay or with plain SQL. Every column that holds
+an account's id either has a foreign key that clears it or is cleared by a
+trigger on the account table. Newly covered are the updater of a system
+setting, the actor of a privacy case event, the data jobs the account started,
+pending administrator confirmations of actions on the account, and the
+sessions an administrator was impersonating, which are deleted with that
+administrator. The restore replay now deletes erased accounts and leaves the
+rest to that trigger. Offline-package records of an account erased by a
+restore remain until their 30-day retention ends; a deletion in the app removes
+them at once.
 
 ## Who is affected
 

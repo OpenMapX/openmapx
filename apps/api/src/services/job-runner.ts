@@ -9,7 +9,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { processLogger } from "../process-logger";
-import { dbActorId } from "../utils/actor";
+import { actorUserIdOrNull } from "../utils/actor";
 import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
 import {
   ActiveMaintenanceConflict,
@@ -281,7 +281,7 @@ class AdminJobRunner {
           status: "queued",
           payload: durablePayload,
           // Synthetic (loopback) actors have no user row → store null, not a FK violation.
-          createdBy: dbActorId(createdBy),
+          createdBy: actorUserIdOrNull(createdBy),
         })
         .returning({ id: adminJob.id });
     } catch (error) {
@@ -350,7 +350,7 @@ class AdminJobRunner {
         .values({
           type,
           status: "queued",
-          createdBy: dbActorId(actorId),
+          createdBy: actorUserIdOrNull(actorId),
           payload: {
             ...payload,
             ownerId: actorId,
@@ -421,7 +421,7 @@ class AdminJobRunner {
               status: "running",
               startedAt: new Date(),
               payload: { operationKey: options.operationKey },
-              createdBy: dbActorId(options.actorId),
+              createdBy: actorUserIdOrNull(options.actorId),
               protocol: {
                 execution,
                 observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),

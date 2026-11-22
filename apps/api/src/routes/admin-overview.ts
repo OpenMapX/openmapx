@@ -11,6 +11,7 @@ import {
 } from "../services/integration-credential-status";
 import { getCachedHealthStatus } from "../services/integration-health";
 import { readServiceInventory } from "../services/service-inventory";
+import { adminAuditEntry } from "../utils/admin-audit-entry";
 import { registerIntegrationAdminRoute } from "./admin-integration-contract";
 
 export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
@@ -176,7 +177,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
           }
         : null,
       attention,
-      recentActivity: recentAudit,
+      recentActivity: recentAudit.map(adminAuditEntry),
       activeJobs: activityJobs.jobs,
     };
   });

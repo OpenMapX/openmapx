@@ -1,14 +1,22 @@
-import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
+import { existsSync } from "node:fs";
 import {
   appendErasureCompleted,
   appendErasureRequest,
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
-import { currentAuthDatabase } from "../account/auth-database";
-import { dataSubjectRequest } from "../db/schema";
+import { type AuthDatabase, currentAuthDatabase } from "../account/auth-database";
+import {
+  dataManagerOfflinePackageArtifactReferences,
+  dataManagerOfflinePackageJobOwners,
+} from "../db/schema";
+import {
+  deriveOfflinePackagePrincipal,
+  OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
+  readOfflinePackagePrincipalKeyFile,
+} from "./offline-package-principal";
 
 interface ErasureUser {
   id: string;
@@ -72,66 +80,57 @@ function journalPath(): string {
   return path;
 }
 
-export async function cleanupResidualUserData(user: ErasureUser): Promise<void> {
-  // Better Auth invokes this hook before deleting the user row. Privacy
-  // requests keep their case history but record that the account is gone.
-  const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(user);
-  const accountErasedAt = new Date();
-  await currentAuthDatabase().transaction(async (tx) => {
+/**
+ * The key that derives offline-package principals. A deployment that
+ * configures it must be able to read it, or the deletion fails; without one
+ * (the default path absent and nothing configured) the API never derived a
+ * principal, so no row can hold one.
+ */
+async function offlinePackagePrincipalKey(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Buffer | undefined> {
+  const configured = env.OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE?.trim();
+  if (!configured && !existsSync(OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT)) return undefined;
+  return readOfflinePackagePrincipalKeyFile(
+    configured || OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
+  );
+}
+
+/**
+ * Remove the account's offline-package ownership. The rows name the account
+ * by a keyed hash only the API can compute, so the database trigger that
+ * erases everything else on the account's deletion cannot find them.
+ */
+export async function removeOfflinePackageOwnership(
+  userId: string,
+  key: Buffer | undefined,
+  database: AuthDatabase = currentAuthDatabase(),
+): Promise<void> {
+  if (!key) return;
+  const principal = deriveOfflinePackagePrincipal(userId, key);
+  await database.transaction(async (tx) => {
     await tx
-      .update(dataSubjectRequest)
-      .set({
-        accountState: "deleted",
-        version: sql`${dataSubjectRequest.version} + 1`,
-        updatedAt: accountErasedAt,
-      })
-      .where(
-        and(
-          eq(dataSubjectRequest.userId, user.id),
-          sql`${dataSubjectRequest.accountState} <> 'deleted'`,
-        ),
-      );
-    await tx.execute(sql`
-      DELETE FROM verification
-      WHERE value = ${user.id}
-         OR lower(identifier) = lower(${emailIdentifier})
-         OR lower(identifier) = lower(${changeEmailIdentifier})
-    `);
-    await tx.execute(sql`
-      UPDATE system_settings SET updated_by = NULL WHERE updated_by = ${user.id}
-    `);
-    await tx.execute(sql`
-      UPDATE admin_audit_log
-      SET actor_id = NULL, ip_address = NULL, user_agent = NULL
-      WHERE actor_id = ${user.id}
-    `);
-    await tx.execute(sql`
-      UPDATE admin_audit_log
-      SET target_id = NULL
-      WHERE target_id = ${user.id}
-    `);
-    await tx.execute(sql`
-      UPDATE admin_audit_log
-      SET details = NULL
-      WHERE position(${user.id} in details::text) > 0
-         OR position(lower(${user.email}) in lower(details::text)) > 0
-    `);
-    await tx.execute(sql`
-      DELETE FROM app_logs
-      WHERE position(${user.id} in msg) > 0
-         OR position(lower(${user.email}) in lower(msg)) > 0
-         OR position(${user.id} in metadata::text) > 0
-         OR position(lower(${user.email}) in lower(metadata::text)) > 0
-    `);
+      .delete(dataManagerOfflinePackageJobOwners)
+      .where(eq(dataManagerOfflinePackageJobOwners.principal, principal));
+    await tx
+      .delete(dataManagerOfflinePackageArtifactReferences)
+      .where(eq(dataManagerOfflinePackageArtifactReferences.principal, principal));
   });
 }
 
+/**
+ * Better Auth's delete hooks. Deleting the "user" row runs the database's
+ * erasure trigger, which clears every other residue on every delete path;
+ * the hook adds what only the API can do: the last-administrator check, the
+ * erasure journal and the offline-package rows.
+ */
 export const userErasureHooks = createUserErasureHooks({
   request: async (userId) => {
     await assertAccountDeletionAllowed(userId);
     return appendErasureRequest(journalPath(), readJournalKey(), userId);
   },
-  cleanup: cleanupResidualUserData,
+  cleanup: async (user) =>
+    removeOfflinePackageOwnership(user.id, await offlinePackagePrincipalKey()),
   complete: async (receiptId) => {
     const complete = () => appendErasureCompleted(journalPath(), readJournalKey(), receiptId);
     const context = currentAccountMutation();

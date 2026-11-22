@@ -2,6 +2,9 @@ import { createHmac, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { type FileHandle, open } from "node:fs/promises";
 
+/** Where the API reads the principal key when no path is configured. */
+export const OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT =
+  "/run/secrets/offline-package-principal-key";
 const PRINCIPAL_KEY_ENCODED_BYTES = 43;
 const PREPARE_WINDOW_MS = 10 * 60 * 1_000;
 const PREPARE_MAX = 2;

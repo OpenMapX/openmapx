@@ -11,7 +11,7 @@ import {
   serviceRepository,
 } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
-import { dbActorId } from "../utils/actor";
+import { actorUserIdOrNull } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
 import { getServiceSelectionSummary } from "./admin-cli";
@@ -444,7 +444,7 @@ async function installExtensionNow(
   }
   const { manifest } = opts;
   // Synthetic (loopback) actors have no user row → attribute to null.
-  const installedBy = dbActorId(opts.actorId);
+  const installedBy = actorUserIdOrNull(opts.actorId);
 
   // Everything that can be decided without touching the deployment is decided
   // here, before the first mutation.

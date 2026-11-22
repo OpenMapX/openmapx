@@ -339,14 +339,14 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-audit-attribution",
-    version: 2,
+    version: 3,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
     locators: [
       { type: "actor_id", field: "admin_audit_log.actor_id" },
-      { type: "target_id", field: "admin_audit_log.target_id" },
+      { type: "target_id", field: "admin_audit_log.target_user_id" },
       { type: "actor_id", field: "auth_policy_application.actor_id" },
       { type: "actor_id", field: "integration_application_receipt.actor_id" },
       { type: "actor_id", field: "account_action_receipt.actor_id" },
@@ -487,7 +487,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "data-manager-trigger-attribution",
-    version: 1,
+    version: 2,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "operator_task",
@@ -495,10 +495,11 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["support-and-operations", "legal-accountability"],
     legalBases: ["legitimate-interest", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "operator-task" },
+    // Deleting the account clears the actor from its jobs.
     retention: {
       kind: "fixed-days",
       days: 3650,
-      daysAfterClosure: 3650,
+      daysAfterClosure: 0,
       reasonCode: "accountability",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
@@ -509,7 +510,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "offline-package-ownership",
-    version: 1,
+    version: 2,
     category: "offline-data",
     source: "openmapx-db",
     strategy: "collector",
@@ -520,14 +521,22 @@ const registrationDefinitions: SubjectDataRegistration[] = [
         field: "data_manager.offline_package_job_owners.principal",
         purposeCode: "offline-package",
       },
+      {
+        type: "hmac_principal",
+        field: "data_manager.offline_package_artifact_references.principal",
+        purposeCode: "offline-package",
+      },
     ],
     purposes: ["navigation", "service-provisioning"],
     legalBases: ["contract"],
     origin: { kind: "subject", descriptionCode: "subject-requested" },
+    // Deleting an account removes these rows at once. Only the API holds the
+    // key that derives the principal, so a restore that replays an erasure
+    // leaves the restored rows to this retention period.
     retention: {
       kind: "fixed-days",
       days: 30,
-      daysAfterClosure: 0,
+      daysAfterClosure: 30,
       reasonCode: "offline-job-retention",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],

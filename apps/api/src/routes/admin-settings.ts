@@ -9,6 +9,7 @@ import {
   parseEnvValue,
   resolveSettings,
   SETTING_DEFS,
+  saveSystemSettings,
 } from "../services/settings";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
@@ -70,25 +71,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       });
     }
 
-    await db.transaction(async (transaction) => {
-      for (const { key, value } of toWrite) {
-        await transaction
-          .insert(systemSettings)
-          .values({
-            key,
-            value: value as never,
-            updatedBy: adminSession.user.id,
-          })
-          .onConflictDoUpdate({
-            target: systemSettings.key,
-            set: {
-              value: value as never,
-              updatedAt: new Date(),
-              updatedBy: adminSession.user.id,
-            },
-          });
-      }
-    });
+    await saveSystemSettings(toWrite, adminSession.user.id);
 
     await writeAuditLog({
       actorId: adminSession.user.id,

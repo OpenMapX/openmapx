@@ -202,6 +202,7 @@ function createPolicyAuth(
             actorId: null,
             targetType: "user",
             targetId: user.id,
+            targetUserId: user.id,
             action: "user.password.reset",
             details: { channel: "email" },
           });

@@ -21,7 +21,7 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { reloadIntegrations } from "../../integration-host";
-import { dbActorId } from "../../utils/actor";
+import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
 import { readProjection } from "../admin-job-projection";
@@ -238,7 +238,7 @@ async function bookkeeping(
         lastOperationId: state.operationId,
         installedVersion: state.inspection.version,
         manifest: null,
-        installedBy: dbActorId(state.ownerId),
+        installedBy: actorUserIdOrNull(state.ownerId),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -260,7 +260,7 @@ async function bookkeeping(
         repository,
         sourceType: source.kind,
         installedVersion: state.inspection.version,
-        installedBy: dbActorId(state.ownerId),
+        installedBy: actorUserIdOrNull(state.ownerId),
         managedByExtension: state.parentId,
         updatedAt: now,
       })

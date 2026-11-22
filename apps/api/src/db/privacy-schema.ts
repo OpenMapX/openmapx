@@ -2,6 +2,7 @@ import { REQUEST_STATES, type RequestState } from "@openmapx/core/privacy";
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -134,7 +135,9 @@ export const dataSubjectRequestEvent = pgTable(
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(),
     actorKind: text("actor_kind").notNull(),
-    actorId: text("actor_id"),
+    /** The acting account; null for system and loopback actors and after the
+     * account is deleted. `actor_kind` still says who acted. */
+    actorUserId: text("actor_user_id"),
     payloadVersion: integer("payload_version").notNull().default(1),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
     /** Stable mutation key; null is allowed for informational events. */
@@ -142,8 +145,14 @@ export const dataSubjectRequestEvent = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "data_subject_request_event_actor_user_id_fkey",
+      columns: [table.actorUserId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
     check("data_subject_request_event_payload_version_check", sql`${table.payloadVersion} > 0`),
     index("data_subject_request_event_request_idx").on(table.requestId, table.createdAt),
+    index("data_subject_request_event_actor_user_id_idx").on(table.actorUserId),
     uniqueIndex("data_subject_request_event_idempotency_idx")
       .on(table.requestId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),

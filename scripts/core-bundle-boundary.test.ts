@@ -64,7 +64,6 @@ const SERVER = [
   "./data-manager-sdk",
   "./database-session",
   "./deployment-secret-policy",
-  "./erasure-cleanup",
   "./erasure-journal",
   "./feed-id",
   "./http/safe-download",

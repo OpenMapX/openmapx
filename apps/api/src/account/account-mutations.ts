@@ -147,6 +147,7 @@ async function roleChange<T>(input: RoleChange, tx: AuthDatabase, write: () => P
       actorId: input.actorId,
       targetId: input.userId,
       targetType: "user",
+      targetUserId: input.userId,
       action: "user.role.change",
       details: {
         previousRole,

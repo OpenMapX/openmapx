@@ -1,6 +1,7 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import { resolveSettingPrecedence, type SettingSource } from "../utils/settings-resolution";
 import { appLogger } from "./app-logger";
 
@@ -528,6 +529,27 @@ export function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
         (def.key === "legalPrivacySources" || !Array.isArray(value))
       );
   }
+}
+
+/** Store the given settings in one transaction, attributed to the acting
+ * administrator (none for the loopback actor, which has no account). */
+export async function saveSystemSettings(
+  entries: ReadonlyArray<{ key: string; value: unknown }>,
+  actorId: string,
+  database: typeof db = db,
+): Promise<void> {
+  const updatedBy = actorUserIdOrNull(actorId);
+  await database.transaction(async (transaction) => {
+    for (const { key, value } of entries) {
+      await transaction
+        .insert(systemSettings)
+        .values({ key, value: value as never, updatedBy })
+        .onConflictDoUpdate({
+          target: systemSettings.key,
+          set: { value: value as never, updatedAt: new Date(), updatedBy },
+        });
+    }
+  });
 }
 
 export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {

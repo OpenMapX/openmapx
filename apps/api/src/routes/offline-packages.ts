@@ -8,6 +8,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { redis } from "../redis.js";
 import {
   deriveOfflinePackagePrincipal,
+  OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
   OfflinePackagePrepareRateLimiter,
   readOfflinePackagePrincipalKeyFile,
 } from "../services/offline-package-principal.js";
@@ -28,7 +29,6 @@ const ARCHIVE_HEADERS = [
 ] as const;
 const ASSET_HEADERS = ["cache-control", "content-length", "content-type", "etag"] as const;
 const PRINCIPAL_HEADER = "x-offline-package-principal";
-const PRINCIPAL_KEY_FILE_DEFAULT = "/run/secrets/offline-package-principal-key";
 const DEFAULT_DELIVERY_MAX_BYTES = 4_000_000_000;
 const DEFAULT_DELIVERY_WINDOW_MS = 600_000;
 const DEFAULT_DELIVERY_MAX_CONCURRENT_PER_NETWORK = 4;
@@ -168,7 +168,10 @@ export function createOfflinePackagesRoute(
         const principalKey =
           options.principalKey ??
           (await readOfflinePackagePrincipalKeyFile(
-            envString("OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE", PRINCIPAL_KEY_FILE_DEFAULT),
+            envString(
+              "OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE",
+              OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
+            ),
           ));
         const prepareLimiter =
           options.prepareLimiter ??

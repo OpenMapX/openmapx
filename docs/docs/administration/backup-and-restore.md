@@ -394,8 +394,9 @@ by default).
 
 After the selected data has been restored and before restarting the API, the
 CLI revalidates the journal/key pair and HMAC-matches restored
-user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every
-match. The journal contains neither raw user IDs nor email addresses. The journal
+user IDs against `infra/docker/data/erasure/journal.jsonl` and deletes every
+match as `openmapx_api`; the database's erasure trigger clears the account's
+remaining traces, as for a deletion in the app. The journal contains neither raw user IDs nor email addresses. The journal
 and `infra/docker/secrets/erasure-journal-key` are deliberately outside the
 PostgreSQL backup. Disaster-recovery copies must include both. Do not rotate or
 discard the key while a backup that could contain an erased account exists;

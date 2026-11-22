@@ -491,12 +491,41 @@ INSERT INTO data_subject_request
 VALUES
   ('${ACTIVE_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'in_progress', now(), now() + interval '30 days', 'account_session', now()),
   ('${TERMINAL_REQUEST_ID}', 'access_and_portability', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'completed', now(), now() + interval '30 days', 'account_session', now());
-INSERT INTO admin_audit_log (actor_id, target_id, target_type, action, details, ip_address, user_agent)
-VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
+INSERT INTO data_subject_request_event (request_id, event_type, actor_kind, actor_user_id)
+VALUES ('${ACTIVE_REQUEST_ID}', 'received', 'subject', '${DELETED_USER_ID}');
+INSERT INTO admin_audit_log (actor_id, target_id, target_type, target_user_id, action, details, ip_address, user_agent)
+VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', '${DELETED_USER_ID}', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
 INSERT INTO app_logs (level, source, msg, metadata)
 VALUES ('warn', 'fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
+INSERT INTO system_settings (key, value, updated_by)
+VALUES ('restore-fixture-setting', '"value"', '${DELETED_USER_ID}');
+INSERT INTO session (id, expires_at, token, created_at, updated_at, user_id, impersonated_by)
+VALUES ('impersonated-session', now() + interval '1 day', 'impersonated-session-token', now(), now(), '${UNRELATED_USER_ID}', '${DELETED_USER_ID}');
+INSERT INTO admin_action_reauthentication (actor_id, starting_session_id, purpose, target_id, nonce_digest, expires_at)
+VALUES ('${UNRELATED_USER_ID}', 'unrelated-session', 'account.verify', '${DELETED_USER_ID}', 'restore-fixture-nonce', now() + interval '5 minutes');
+INSERT INTO data_manager.jobs (kind, status, triggered_by)
+VALUES ('restore-fixture', 'ok', 'api:user:${DELETED_USER_ID}');
 COMMIT;
 `);
+}
+
+/** A trigger that records which roles run the deletes on "user", created by
+ * the API role like the erasure trigger, so the backup carries it. */
+async function recordUserDeleteRoles(): Promise<void> {
+  await psql(
+    `CREATE TABLE public.restore_fixture_delete_roles (session_name text NOT NULL, current_name text NOT NULL);
+CREATE FUNCTION public.restore_fixture_delete_roles() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+  INSERT INTO restore_fixture_delete_roles VALUES (session_user, current_user);
+  RETURN OLD;
+END $$;
+CREATE TRIGGER restore_fixture_delete_roles BEFORE DELETE ON "user"
+FOR EACH ROW EXECUTE FUNCTION public.restore_fixture_delete_roles();
+`,
+    DATABASE,
+    "openmapx_api",
+  );
 }
 
 describe.skipIf(!runIntegration)("backup restore erasure replay with real PostgreSQL", () => {
@@ -533,6 +562,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
   it("erases the restored account without touching a suffix-email account", async () => {
     await resetMigratedDatabase();
     await seedRestoreScenario();
+    await recordUserDeleteRoles();
     await createDatabaseBackup("erasure-replay");
     await resetJournal(GOOD_KEY, DELETED_USER_ID);
 
@@ -578,6 +608,39 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       ),
     ).toBe("true:true:true:true:true");
     expect(await psql("SELECT count(*) FROM app_logs WHERE source = 'fixture';")).toBe("0");
+    // The replay logs in as the API role: no superuser session runs the
+    // API-owned trigger code, not even after a role switch.
+    expect(
+      await psql(
+        "SELECT string_agg(DISTINCT session_name || ':' || current_name, ',') FROM restore_fixture_delete_roles;",
+      ),
+    ).toBe("openmapx_api:openmapx_api");
+    expect(
+      await psql(
+        `SELECT (actor_user_id IS NULL)::text FROM data_subject_request_event WHERE request_id = '${ACTIVE_REQUEST_ID}';`,
+      ),
+    ).toBe("true");
+    expect(
+      await psql(
+        "SELECT (target_user_id IS NULL)::text FROM admin_audit_log WHERE action = 'fixture';",
+      ),
+    ).toBe("true");
+    expect(
+      await psql(
+        "SELECT (updated_by IS NULL)::text FROM system_settings WHERE key = 'restore-fixture-setting';",
+      ),
+    ).toBe("true");
+    expect(await psql("SELECT count(*) FROM session WHERE id = 'impersonated-session';")).toBe("0");
+    expect(
+      await psql(
+        "SELECT count(*) FROM admin_action_reauthentication WHERE nonce_digest = 'restore-fixture-nonce';",
+      ),
+    ).toBe("0");
+    expect(
+      await psql(
+        "SELECT coalesce(triggered_by, 'null') FROM data_manager.jobs WHERE kind = 'restore-fixture';",
+      ),
+    ).toBe("null");
   }, 120_000);
 
   it("keeps the API's and data-manager's owners and grants across the restore", async () => {

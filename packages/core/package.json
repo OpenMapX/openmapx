@@ -42,10 +42,6 @@
       "types": "./src/erasure-journal.ts",
       "default": "./src/erasure-journal.ts"
     },
-    "./erasure-cleanup": {
-      "types": "./src/erasure-cleanup.ts",
-      "default": "./src/erasure-cleanup.ts"
-    },
     "./map-config": {
       "types": "./src/api/map-config.ts",
       "default": "./src/api/map-config.ts"

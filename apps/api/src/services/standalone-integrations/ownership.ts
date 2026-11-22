@@ -9,7 +9,7 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { getIntegration, reloadIntegrations } from "../../integration-host";
-import { dbActorId } from "../../utils/actor";
+import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
 import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../admin-job-state";
@@ -143,7 +143,7 @@ async function persist(ctx: JobContext, state: OwnershipState, write: boolean): 
         lastOperationId: state.operationId,
         installedVersion: version,
         manifest: null,
-        installedBy: dbActorId(state.ownerId),
+        installedBy: actorUserIdOrNull(state.ownerId),
       });
       await tx
         .insert(installedIntegration)
@@ -153,7 +153,7 @@ async function persist(ctx: JobContext, state: OwnershipState, write: boolean): 
           sourceType: "legacy_unknown",
           installedVersion: version,
           managedByExtension: parentId,
-          installedBy: dbActorId(state.ownerId),
+          installedBy: actorUserIdOrNull(state.ownerId),
         })
         .onConflictDoUpdate({
           target: installedIntegration.id,

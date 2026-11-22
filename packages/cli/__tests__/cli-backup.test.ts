@@ -1530,7 +1530,7 @@ describe("backup volume modes", () => {
     expect(readyCall?.[2]?.timeout).toBe(5_000);
   });
 
-  it("sends erased identities through psql stdin and marks their privacy requests as deleted", async () => {
+  it("sends erased identities through psql stdin and deletes them as the API role", async () => {
     const dir = writeBackup("stdin-erasure-replay", {
       name: "stdin-erasure-replay",
       createdAt: new Date().toISOString(),
@@ -1577,7 +1577,7 @@ describe("backup volume modes", () => {
       if (command === "docker" && args.includes("-At")) {
         return Promise.resolve({
           exitCode: 0,
-          stdout: '{"id":"deleted-user","email":"Person@example.test"}\n',
+          stdout: '{"id":"deleted-user"}\n',
           stderr: "",
         });
       }
@@ -1590,7 +1590,7 @@ describe("backup volume modes", () => {
         return Promise.resolve({
           exitCode: 23,
           stdout: "",
-          stderr: "database rejected deleted-user Person@example.test",
+          stderr: "database rejected deleted-user",
         });
       }
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
@@ -1619,19 +1619,17 @@ describe("backup volume modes", () => {
     );
     expect(replayCall).toBeDefined();
     expect(replayCall?.[1]).not.toContain("deleted-user");
-    expect(replayCall?.[1]).not.toContain("Person@example.test");
+    // It logs in as the API role, so no superuser session runs the erasure trigger.
+    expect(replayCall?.[1].join(" ")).toContain("psql -U openmapx_api");
+    // The restored users are listed by id alone; their email is never read.
+    const listCall = replayCalls.find((call) => call[0] === "docker" && call[1].includes("-At"));
+    expect(listCall?.[1].join(" ")).not.toContain("email");
     const stdin = String(replayCall?.[2]?.input);
-    expect(stdin).toContain("deleted-user\tPerson@example.test");
-    expect(stdin).toContain("\n\\.\nUPDATE data_subject_request");
-    expect(stdin).not.toContain("to_regclass");
-    expect(stdin).not.toContain("information_schema");
-    expect(stdin).toContain("change-email:");
-    expect(stdin).not.toContain("right(lower(identifier)");
-    expect(stdin).toContain("account_state = 'deleted'");
-    expect(stdin).not.toContain("data_export_artifact");
-    expect(stdin).not.toContain("data_subject_request_attachment");
+    // The id travels as COPY data; deleting the row runs the database's erasure trigger.
+    expect(stdin).toContain('\ndeleted-user\n\\.\nDELETE FROM "user" restored_user');
+    expect(stdin).not.toContain("UPDATE ");
+    expect(stdin).not.toContain("verification");
     expect(loggedErrors.join("\n")).not.toContain("deleted-user");
-    expect(loggedErrors.join("\n")).not.toContain("Person@example.test");
   });
 
   it("revalidates the journal binding after stopping the API and before replacing the database", async () => {
@@ -1992,10 +1990,7 @@ describe("restore erasure replay", () => {
     const count = await replayErasureRequests({
       journalPath,
       key,
-      listUsers: async () => [
-        { id: "active-user", email: "active@example.test" },
-        { id: "deleted-user", email: "deleted@example.test" },
-      ],
+      listUsers: async () => [{ id: "active-user" }, { id: "deleted-user" }],
       eraseUser: async (user) => {
         erased.push(user.id);
       },

@@ -4,7 +4,7 @@ import { canonicalJson } from "@openmapx/core/ops";
 import { and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
-import { dbActorId } from "../utils/actor";
+import { actorUserIdOrNull } from "../utils/actor";
 // Service/backup additions share admission identity only. Their existing
 // operation observers and coordinator recovery remain unchanged; they are not
 // added to the finite retainedMaintenanceJob handler-replay routing list.
@@ -67,7 +67,7 @@ export async function retainMaintenanceJob(
       .values({
         type,
         status: "queued",
-        createdBy: dbActorId(actorId),
+        createdBy: actorUserIdOrNull(actorId),
         payload: {
           ...payload,
           _maintenanceRequest: { actorId, key, digest },

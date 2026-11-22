@@ -622,9 +622,10 @@ describe("GET /admin/audit", () => {
       userAgent: "test-agent",
       createdAt: new Date("2026-06-17T12:00:00.000Z"),
     };
-    // Entries, their count, then the actor lookup.
+    // Entries as the table returns them, their count, then the actor lookup.
+    // The target account column stays out of the strict response.
     mockDbSelect
-      .mockImplementationOnce(() => makeSelectChain([row]))
+      .mockImplementationOnce(() => makeSelectChain([{ ...row, targetUserId: "user-99" }]))
       .mockImplementationOnce(() => makeSelectChain([{ total: 7 }]))
       .mockImplementationOnce(() =>
         makeSelectChain([{ id: "user-1", name: "Ada", email: "ada@example.test" }]),

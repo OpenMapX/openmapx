@@ -125,8 +125,15 @@ plaintext user fields into ciphertext. Therefore a backup is at least as
 sensitive as the live database.
 
 Deleting an account removes related live rows where the schema uses cascading
-foreign keys and explicitly scrubs non-relational verification, settings, and
-audit identifiers. It does not retroactively rewrite existing archives. Local
+foreign keys, clears attribution columns through `ON DELETE SET NULL` keys, and
+runs the `BEFORE DELETE` trigger `openmapx_erase_user_residue()` on `user`. The
+trigger clears what no key reaches: verification challenges, audit IP
+addresses, user agents and details, log entries, data-job actors, pending
+account confirmations and impersonation sessions. Every delete path runs it,
+including the restore replay and plain SQL; `TRUNCATE` does not. The API's
+delete hook adds the offline-package rows, which name the account by a keyed
+hash the database cannot compute. Deletion does not retroactively rewrite
+existing archives. Local
 backups expire automatically (30 days by default), and a keyed pseudonymous
 erasure journal outside PostgreSQL is replayed on restore. A restore is refused
 when the archive is expired, predates journal coverage, or cannot validate the

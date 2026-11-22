@@ -22,6 +22,7 @@ import {
 } from "../db/schema.js";
 import { isUniqueViolation } from "../db/unique-violation.js";
 import { decrypt, encrypt } from "../services/secrets.js";
+import { actorUserIdOrNull } from "../utils/actor.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
@@ -233,7 +234,7 @@ export class PrivacyRequestService {
         if (parsed.idempotencyKey && createDigest) {
           const previous = await findIdempotentCreate(tx as unknown as typeof defaultDb, {
             idempotencyKey: parsed.idempotencyKey,
-            actorId: parsed.actorUserId ?? null,
+            actorUserId: actorUserIdOrNull(parsed.actorUserId),
             operationDigest: createDigest,
           });
           if (previous) {
@@ -247,7 +248,7 @@ export class PrivacyRequestService {
             kind: parsed.kind,
             channel: parsed.channel,
             userId: parsed.userId,
-            actorUserId: parsed.actorUserId ?? null,
+            actorUserId: actorUserIdOrNull(parsed.actorUserId),
             actorSessionId: parsed.actorSessionId ?? null,
             encryptedLocator,
             locatorType,
@@ -276,7 +277,7 @@ export class PrivacyRequestService {
           requestId: id,
           eventType: "received",
           actorKind: selfService ? "subject" : "admin",
-          actorId: parsed.actorUserId ?? null,
+          actorUserId: actorUserIdOrNull(parsed.actorUserId),
           payload: boundedEventPayload({
             kind: parsed.kind,
             channel: parsed.channel,
@@ -455,7 +456,7 @@ export class PrivacyRequestService {
       requestId: current.id,
       eventType: `state_${input.to}`,
       actorKind: input.actor.kind,
-      actorId: input.actor.id ? input.actor.id.slice(0, 256) : null,
+      actorUserId: actorUserIdOrNull(input.actor.id),
       payload: boundedEventPayload({
         from: current.state,
         ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
@@ -690,7 +691,7 @@ export class PrivacyRequestService {
           requestId: current.id,
           eventType: "task_resolved",
           actorKind: "admin",
-          actorId: input.actorId,
+          actorUserId: actorUserIdOrNull(input.actorId),
           payload: boundedEventPayload({ taskId: input.taskId, reasonCode, operationDigest }),
           payloadVersion: 1,
           idempotencyKey: input.idempotencyKey,
@@ -756,7 +757,7 @@ export class PrivacyRequestService {
           requestId: current.id,
           eventType: "extended",
           actorKind: "admin",
-          actorId: input.actorId,
+          actorUserId: actorUserIdOrNull(input.actorId),
           payload: boundedEventPayload({ reasonCode: input.reasonCode, operationDigest }),
           payloadVersion: 1,
           idempotencyKey: input.idempotencyKey,
@@ -816,7 +817,7 @@ export class PrivacyRequestService {
             requestId: current.id,
             eventType: "identity_verified",
             actorKind: "subject",
-            actorId: input.userId,
+            actorUserId: input.userId,
             payload: boundedEventPayload({ reasonCode: "account_session" }),
             payloadVersion: 1,
             createdAt: now,
@@ -897,7 +898,7 @@ export class PrivacyRequestService {
       requestId: request.id,
       eventType,
       actorKind: actor.kind,
-      actorId: actor.id ?? null,
+      actorUserId: actorUserIdOrNull(actor.id),
       payload: {},
       payloadVersion: 1,
       createdAt: now,
@@ -918,7 +919,7 @@ export class PrivacyRequestService {
       requestId,
       eventType: "export_failed",
       actorKind: "system",
-      actorId: "privacy-export",
+      actorUserId: null,
       payloadVersion: 1,
       payload: { reasonCode: REASON_CODE.test(reasonCode) ? reasonCode : "export-failed" },
       createdAt: this.now(),
