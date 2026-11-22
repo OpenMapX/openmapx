@@ -27,7 +27,7 @@ vi.mock("../../services/admin-job-ops", () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 it("keeps the real runner's durable pending outcome observable through Fastify and the generated SDK", async () => {
-  const at = "2026-10-19 10:00:00"; // PostgreSQL timestamp-without-time-zone driver value.
+  const at = "2026-10-19 10:00:00+00"; // PostgreSQL timestamptz driver value in a UTC session.
   const row = {
     id: "pending-job",
     type: "data.operation",

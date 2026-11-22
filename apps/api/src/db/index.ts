@@ -11,6 +11,13 @@ const connectionString = resolveDatabaseUrl(
 assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 
 /**
+ * Every session runs in UTC, whatever the database's default time zone.
+ * Better Auth's `timestamp` columns hold UTC wall time only because of this,
+ * and casts between text and time stay unambiguous.
+ */
+export const DATABASE_SESSION_TIME_ZONE = "UTC";
+
+/**
  * Sessions, admin, saved data and control work. No statement timeout: control
  * transactions and saved imports have no audited upper bound.
  */
@@ -18,7 +25,7 @@ export const sql = postgres(connectionString, {
   max: 10,
   connect_timeout: 10,
   idle_timeout: 60,
-  connection: { application_name: "openmapx-api" },
+  connection: { application_name: "openmapx-api", TimeZone: DATABASE_SESSION_TIME_ZONE },
 });
 
 /**
@@ -32,7 +39,11 @@ export const integrationSql = postgres(connectionString, {
   max: 4,
   connect_timeout: 10,
   idle_timeout: 60,
-  connection: { application_name: "openmapx-api-integrations", statement_timeout: 5000 },
+  connection: {
+    application_name: "openmapx-api-integrations",
+    statement_timeout: 5000,
+    TimeZone: DATABASE_SESSION_TIME_ZONE,
+  },
 });
 
 export const db = drizzle(sql, { schema });
@@ -45,6 +56,9 @@ export const db = drizzle(sql, { schema });
 export function openMigrationSession() {
   return postgres(connectionString, {
     max: 1,
-    connection: { application_name: "openmapx-api-migrations" },
+    connection: {
+      application_name: "openmapx-api-migrations",
+      TimeZone: DATABASE_SESSION_TIME_ZONE,
+    },
   });
 }

@@ -18,9 +18,9 @@ export const adminJob = pgTable(
     error: text("error"),
     progress: integer("progress"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    startedAt: timestamp("started_at"),
-    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (table) => [
     index("adminJob_status_idx").on(table.status),
@@ -46,7 +46,7 @@ export const adminJobLog = pgTable(
     seq: integer("seq").notNull(),
     stream: text("stream").notNull().default("stdout"), // stdout|stderr
     line: text("line").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index("adminJobLog_jobId_idx").on(table.jobId)],
 );

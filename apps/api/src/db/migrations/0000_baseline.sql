@@ -82,7 +82,7 @@ CREATE TABLE "admin_audit_log" (
 	"details" jsonb,
 	"ip_address" text,
 	"user_agent" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job" (
@@ -95,9 +95,9 @@ CREATE TABLE "admin_job" (
 	"error" text,
 	"progress" integer,
 	"created_by" text,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"started_at" timestamp,
-	"finished_at" timestamp
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
@@ -106,7 +106,7 @@ CREATE TABLE "admin_job_log" (
 	"seq" integer NOT NULL,
 	"stream" text DEFAULT 'stdout' NOT NULL,
 	"line" text NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "app_logs" (
@@ -115,7 +115,7 @@ CREATE TABLE "app_logs" (
 	"source" text NOT NULL,
 	"msg" text NOT NULL,
 	"metadata" jsonb,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "auth_policy_application" (
@@ -140,8 +140,8 @@ CREATE TABLE "capability_binding" (
 	"integration_id" text NOT NULL,
 	"capability" text NOT NULL,
 	"service_id" text NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "capability_binding_integration_id_capability_pk" PRIMARY KEY("integration_id","capability")
 );
 --> statement-breakpoint
@@ -385,7 +385,7 @@ CREATE TABLE "health_history" (
 	"status" text NOT NULL,
 	"response_time" integer,
 	"error" text,
-	"checked_at" timestamp DEFAULT now() NOT NULL
+	"checked_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "installed_extension" (
@@ -398,8 +398,8 @@ CREATE TABLE "installed_extension" (
 	"last_operation_id" text,
 	"installed_version" text NOT NULL,
 	"manifest" jsonb,
-	"installed_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"installed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by" text,
 	CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone')),
 	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
@@ -417,8 +417,8 @@ CREATE TABLE "installed_integration" (
 	"repository" text,
 	"installed_version" text NOT NULL,
 	"source_type" text DEFAULT 'registry' NOT NULL,
-	"installed_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"installed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by" text,
 	"managed_by_extension" text,
 	"last_transaction_id" text
@@ -428,8 +428,8 @@ CREATE TABLE "integration_config" (
 	"id" text PRIMARY KEY NOT NULL,
 	"integration_id" text NOT NULL,
 	"config" jsonb NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "integrationConfig_integrationId_unq" UNIQUE("integration_id")
 );
 --> statement-breakpoint
@@ -440,8 +440,8 @@ CREATE TABLE "integration_secret" (
 	"ciphertext" text NOT NULL,
 	"iv" text NOT NULL,
 	"tag" text NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
 	CONSTRAINT "integrationSecret_integrationId_key_unq" UNIQUE("integration_id","key")
 );
@@ -476,7 +476,7 @@ CREATE TABLE "mangrove_keypair" (
 	"public_jwk" jsonb NOT NULL,
 	"passphrase_ciphertext" text,
 	"recipients_ciphertext" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "mangrove_keypair_wrap" (
@@ -485,7 +485,7 @@ CREATE TABLE "mangrove_keypair_wrap" (
 	"wrap_type" text NOT NULL,
 	"label" text NOT NULL,
 	"identity_string" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "mobile_auth_handoff" (
@@ -499,9 +499,9 @@ CREATE TABLE "mobile_auth_handoff" (
 	"token_iv" text NOT NULL,
 	"token_tag" text NOT NULL,
 	"token_key_version" integer NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"expires_at" timestamp NOT NULL,
-	"consumed_at" timestamp,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"consumed_at" timestamp with time zone,
 	CONSTRAINT "mobile_auth_handoff_callback_code_hash_unique" UNIQUE("callback_code_hash")
 );
 --> statement-breakpoint
@@ -722,8 +722,8 @@ CREATE TABLE "saved_list" (
 	"icon" text,
 	"is_private" boolean DEFAULT true NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "savedList_userId_name_unq" UNIQUE("user_id","name")
 );
 --> statement-breakpoint
@@ -738,15 +738,15 @@ CREATE TABLE "saved_place" (
 	"field_contributors" jsonb,
 	"note" text,
 	"sort_order" integer DEFAULT 0 NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "service_config" (
 	"id" text PRIMARY KEY NOT NULL,
 	"service_id" text NOT NULL,
 	"config" jsonb NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "serviceConfig_serviceId_unq" UNIQUE("service_id")
 );
 --> statement-breakpoint
@@ -757,7 +757,7 @@ CREATE TABLE "service_repository" (
 	"pinned_ref" text,
 	"managed_by_extension" text NOT NULL,
 	"last_transaction_id" text NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "service_repository_url_unique" UNIQUE("url")
 );
 --> statement-breakpoint
@@ -768,8 +768,8 @@ CREATE TABLE "service_secret" (
 	"ciphertext" text NOT NULL,
 	"iv" text NOT NULL,
 	"tag" text NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" text,
 	CONSTRAINT "serviceSecret_serviceId_key_unq" UNIQUE("service_id","key")
 );
@@ -806,16 +806,16 @@ CREATE TABLE "share_link" (
 	"mode" text NOT NULL,
 	"label" text NOT NULL,
 	"snapshot" jsonb,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"expires_at" timestamp,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"expires_at" timestamp with time zone,
 	CONSTRAINT "share_link_token_hash_unique" UNIQUE("token_hash")
 );
 --> statement-breakpoint
 CREATE TABLE "system_settings" (
 	"key" text PRIMARY KEY NOT NULL,
 	"value" jsonb NOT NULL,
-	"updated_at" timestamp DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
 	"updated_by" text
 );
 --> statement-breakpoint

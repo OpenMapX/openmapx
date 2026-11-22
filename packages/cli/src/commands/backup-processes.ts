@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
 import { execa } from "execa";
+import { databaseClientExec } from "../lib/database-session";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 
 export interface BackupComposeContext {
@@ -74,9 +75,7 @@ export async function pgDumpToFile(
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "bash",
       "-c",
       PG_SUPERVISOR,

@@ -17,7 +17,8 @@ export async function recordHealthResult(
   });
 }
 
-/** Aggregate health history into hourly buckets with uptime percentage. */
+/** Aggregate health history into hourly buckets with uptime percentage. Each
+ * bucket's `hour` is its UTC wall time without an offset. */
 export async function getTimeline(
   serviceId: string,
   hours = 24,
@@ -34,7 +35,9 @@ export async function getTimeline(
 
   const rows = await db
     .select({
-      hour: sql<string>`date_trunc('hour', ${healthHistory.checkedAt})`.as("hour"),
+      hour: sql<string>`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`.as(
+        "hour",
+      ),
       total: sql<number>`count(*)::int`.as("total"),
       healthy: sql<number>`count(*) filter (where ${healthHistory.status} = 'healthy')::int`.as(
         "healthy",
@@ -45,8 +48,8 @@ export async function getTimeline(
     })
     .from(healthHistory)
     .where(and(eq(healthHistory.serviceId, serviceId), gt(healthHistory.checkedAt, since)))
-    .groupBy(sql`date_trunc('hour', ${healthHistory.checkedAt})`)
-    .orderBy(sql`date_trunc('hour', ${healthHistory.checkedAt})`);
+    .groupBy(sql`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`)
+    .orderBy(sql`date_trunc('hour', ${healthHistory.checkedAt} at time zone 'UTC')`);
 
   return rows.map((r) => ({
     hour: r.hour,

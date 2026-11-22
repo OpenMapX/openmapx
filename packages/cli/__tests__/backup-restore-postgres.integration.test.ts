@@ -25,6 +25,8 @@ import { services } from "@openmapx/core/server";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { restoreBackup } from "../src/commands/backup";
+import { execPsql } from "../src/commands/users";
+import { databaseClientExec } from "../src/lib/database-session";
 
 const runIntegration = process.env.OPENMAPX_RUN_RESTORE_DATABASE_TESTS === "1";
 const POSTGIS_IMAGE =
@@ -994,5 +996,41 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
     ).rejects.toThrow(/replay|erasure|fixture rejects user deletion/i);
     expect(await isServiceRunning("api")).toBe(false);
     await compose(["start", "api"]);
+  }, 120_000);
+
+  it("runs the CLI's database sessions in UTC whatever the database's default", async () => {
+    await resetMigratedDatabase();
+    await psql(`ALTER DATABASE ${DATABASE} SET timezone = 'Europe/Berlin';`, "postgres");
+    try {
+      expect(await psql("SHOW TimeZone;")).toBe("Europe/Berlin");
+      expect(
+        await execPsql(
+          { serviceId: "postgis", user: POSTGRES_USER, db: DATABASE },
+          "SHOW TimeZone",
+          fixture.root,
+        ),
+      ).toBe("UTC");
+      const restoreSession = await execa(
+        "docker",
+        [
+          "compose",
+          "-f",
+          fixture.composeFile,
+          ...databaseClientExec("postgis"),
+          "psql",
+          "-X",
+          "-U",
+          POSTGRES_USER,
+          "-d",
+          DATABASE,
+          "-Atc",
+          "SHOW TimeZone",
+        ],
+        { cwd: fixture.infra },
+      );
+      expect(restoreSession.stdout.trim()).toBe("UTC");
+    } finally {
+      await psql(`ALTER DATABASE ${DATABASE} RESET timezone;`, "postgres");
+    }
   }, 120_000);
 });

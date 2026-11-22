@@ -34,6 +34,7 @@ import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
 import { completeCliCommand } from "../lib/control-context";
+import { databaseClientExec } from "../lib/database-session";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 import { withHostTargets } from "../lib/host-effect";
 import { log, table } from "../lib/output";
@@ -1084,9 +1085,7 @@ async function listRestoredUsers(
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       user,
@@ -1179,9 +1178,7 @@ COMMIT;
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       postgresUser,
@@ -1207,9 +1204,7 @@ async function failRestoredJobs(
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       postgresUser,
@@ -1548,10 +1543,10 @@ function databaseContainer(
               "docker",
               [
                 ...ctx.composeArgs,
-                "exec",
-                "-T",
-                ...(catalogsOnly ? ["-e", `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : []),
-                serviceId,
+                ...databaseClientExec(
+                  serviceId,
+                  catalogsOnly ? [`PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : [],
+                ),
                 ...command,
               ],
               {
@@ -1620,7 +1615,16 @@ async function loadPlainDump(
   });
   const psql = execa(
     "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "psql", "-U", user, "-v", "ON_ERROR_STOP=1", db],
+    [
+      ...ctx.composeArgs,
+      ...databaseClientExec(serviceId),
+      "psql",
+      "-U",
+      user,
+      "-v",
+      "ON_ERROR_STOP=1",
+      db,
+    ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
   );
 
@@ -1641,7 +1645,7 @@ async function execWithArchive(
   archive: string,
   preamble: string,
 ): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
-  const sub = execa("docker", [...ctx.composeArgs, "exec", "-T", serviceId, ...command], {
+  const sub = execa("docker", [...ctx.composeArgs, ...databaseClientExec(serviceId), ...command], {
     ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,

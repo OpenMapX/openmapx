@@ -8,7 +8,7 @@ export const appLog = pgTable(
     source: text("source").notNull(),
     msg: text("msg").notNull(),
     metadata: jsonb("metadata"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("app_logs_level_source_idx").on(t.level, t.source, t.createdAt),

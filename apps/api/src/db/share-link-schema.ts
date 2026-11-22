@@ -32,12 +32,12 @@ export const shareLink = pgTable(
     label: text("label").notNull(),
     /** Frozen public payload for snapshot shares. */
     snapshot: jsonb("snapshot"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
-    expiresAt: timestamp("expires_at"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (table) => [index("shareLink_userId_idx").on(table.userId)],
 );

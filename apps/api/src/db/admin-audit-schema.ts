@@ -12,7 +12,7 @@ export const adminAuditLog = pgTable(
     details: jsonb("details"),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("audit_actorId_idx").on(table.actorId),

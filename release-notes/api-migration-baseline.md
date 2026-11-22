@@ -14,6 +14,12 @@ The database refuses a second account for the same sign-in provider identity and
 a second passkey with the same credential ID. Session and OAuth token expiry are
 indexed for pruning.
 
+Every timestamp in OpenMapX's own tables now stores its time zone. The API,
+data-manager and CLI run every database session in UTC, so timestamps, retention
+cutoffs and legal holds stay correct when the database's default time zone is
+not UTC, for example after `ALTER DATABASE … SET timezone` or on a managed
+PostgreSQL.
+
 ## Who is affected
 
 Every database created by an earlier development build, including local

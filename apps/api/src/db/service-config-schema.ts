@@ -11,8 +11,8 @@ export const serviceConfig = pgTable(
     id: text("id").primaryKey(),
     serviceId: text("service_id").notNull(),
     config: jsonb("config").notNull().$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),

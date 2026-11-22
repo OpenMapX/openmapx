@@ -1,4 +1,5 @@
 import { services } from "@openmapx/core/server";
+import { databaseClientExec } from "./database-session";
 import { dockerCompose } from "./docker";
 
 export interface RollbackPlan {
@@ -54,9 +55,7 @@ export function assertDatabaseAllowsRollback(
 /** `created_at` of the newest migration the database recorded, or null when it has none. */
 export async function readNewestAppliedMigration(): Promise<number | null> {
   const result = await dockerCompose([
-    "exec",
-    "-T",
-    "postgis",
+    ...databaseClientExec("postgis"),
     "psql",
     "-U",
     "postgres",

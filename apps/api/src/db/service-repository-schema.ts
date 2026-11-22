@@ -19,7 +19,7 @@ export const serviceRepository = pgTable("service_repository", {
   // authoritative; startup recovery commits a pending agent transaction only
   // when this matches it.
   lastTransactionId: text("last_transaction_id").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type ServiceRepositoryRow = typeof serviceRepository.$inferSelect;

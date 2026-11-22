@@ -33,8 +33,8 @@ export const installedExtension = pgTable(
     installedVersion: text("installed_version").notNull(),
     // Snapshot of the resolved extension.json we installed (what to remove/update).
     manifest: jsonb("manifest"),
-    installedAt: timestamp("installed_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [

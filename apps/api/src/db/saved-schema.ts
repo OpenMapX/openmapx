@@ -27,8 +27,8 @@ export const savedList = pgTable(
     icon: text("icon"),
     isPrivate: boolean("is_private").default(true).notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -54,7 +54,7 @@ export const savedPlace = pgTable(
     fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
     note: text("note"),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index("savedPlace_listId_idx").on(table.listId)],
 );

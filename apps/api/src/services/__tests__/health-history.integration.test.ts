@@ -126,12 +126,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("uses exactly the original strict DELETE predicate with native count and zero returned ID rows", async () => {
       await pg.sql.unsafe(
         `INSERT INTO health_history(service_id,status,checked_at)
-         SELECT 'expired','healthy',$1::timestamp - interval '1 second' FROM generate_series(1,2501)`,
+         SELECT 'expired','healthy',$1::timestamptz - interval '1 second' FROM generate_series(1,2501)`,
         [cutoff.toISOString()],
       );
       await pg.sql.unsafe(
         `INSERT INTO health_history(service_id,status,checked_at) VALUES
-         ('boundary','healthy',$1::timestamp), ('live','healthy',$1::timestamp + interval '1 second')`,
+         ('boundary','healthy',$1::timestamptz), ('live','healthy',$1::timestamptz + interval '1 second')`,
         [cutoff.toISOString()],
       );
       const statements = instrument(pg.sql);
@@ -163,16 +163,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       async (expired) => {
         await pg.sql.unsafe(
           `INSERT INTO health_history(service_id,status,checked_at)
-         SELECT 'expired-' || i, 'unhealthy', $1::timestamp - interval '1 second' FROM generate_series(1,$2::int) i`,
+         SELECT 'expired-' || i, 'unhealthy', $1::timestamptz - interval '1 second' FROM generate_series(1,$2::int) i`,
           [cutoff.toISOString(), expired],
         );
         await pg.sql.unsafe(
           `INSERT INTO health_history(service_id,status,checked_at)
-         SELECT 'live-' || i, 'healthy', $1::timestamp + interval '1 second' FROM generate_series(1,2000000) i`,
+         SELECT 'live-' || i, 'healthy', $1::timestamptz + interval '1 second' FROM generate_series(1,2000000) i`,
           [cutoff.toISOString()],
         );
         await pg.sql.unsafe(
-          `INSERT INTO health_history(service_id,status,checked_at) VALUES ('boundary','healthy',$1::timestamp)`,
+          `INSERT INTO health_history(service_id,status,checked_at) VALUES ('boundary','healthy',$1::timestamptz)`,
           [cutoff.toISOString()],
         );
         await pg.sql.unsafe(`INSERT INTO health_history(service_id,status,response_time,checked_at) VALUES
@@ -181,7 +181,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ('timeline','healthy',200,'2026-10-11 12:59:59.999')`);
         const [before] = await pg.sql.unsafe(
           `SELECT count(*)::int AS count,
-        count(*) FILTER(WHERE id BETWEEN 1 AND $2::int AND service_id='expired-' || id AND checked_at < $1::timestamp)::int AS exact_expired
+        count(*) FILTER(WHERE id BETWEEN 1 AND $2::int AND service_id='expired-' || id AND checked_at < $1::timestamptz)::int AS exact_expired
         FROM health_history`,
           [cutoff.toISOString(), expired],
         );
@@ -211,10 +211,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
         const [after] = await pg.sql.unsafe(
           `SELECT count(*)::int AS count,
-        count(*) FILTER(WHERE id BETWEEN 1 AND $2::int OR checked_at < $1::timestamp)::int AS retained_expired,
+        count(*) FILTER(WHERE id BETWEEN 1 AND $2::int OR checked_at < $1::timestamptz)::int AS retained_expired,
         count(*) FILTER(WHERE id BETWEEN $2::int+1 AND $2::int+2000000 AND service_id='live-' || (id-$2::int)
-          AND status='healthy' AND response_time IS NULL AND error IS NULL AND checked_at=$1::timestamp+interval '1 second')::int AS exact_live,
-        count(*) FILTER(WHERE id=$2::int+2000001 AND service_id='boundary' AND checked_at=$1::timestamp)::int AS exact_boundary
+          AND status='healthy' AND response_time IS NULL AND error IS NULL AND checked_at=$1::timestamptz+interval '1 second')::int AS exact_live,
+        count(*) FILTER(WHERE id=$2::int+2000001 AND service_id='boundary' AND checked_at=$1::timestamptz)::int AS exact_boundary
         FROM health_history`,
           [cutoff.toISOString(), expired],
         );
@@ -240,7 +240,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("keeps per-result samples, nullable fields and database insertion-time timestamps beyond 100 samples", async () => {
       const [start] = await pg.sql.unsafe<{ before: Date }[]>(
-        "SELECT clock_timestamp()::timestamp AS before",
+        "SELECT clock_timestamp()::timestamptz AS before",
       );
       assert.isDefined(start);
       const { before } = start;
@@ -254,7 +254,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         samples.map((s) => recordHealthResult(s.serviceId, s.status, s.responseTime, s.error)),
       );
       const [end] = await pg.sql.unsafe<{ after: Date }[]>(
-        "SELECT clock_timestamp()::timestamp AS after",
+        "SELECT clock_timestamp()::timestamptz AS after",
       );
       assert.isDefined(end);
       const { after } = end;
@@ -324,7 +324,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("preserves history through rejected deletes and counts concurrent whole-cutoff pruning exactly", async () => {
       await pg.sql.unsafe(
-        `INSERT INTO health_history(service_id,status,checked_at) SELECT 'old','healthy',$1::timestamp - interval '1 day' FROM generate_series(1,2500)`,
+        `INSERT INTO health_history(service_id,status,checked_at) SELECT 'old','healthy',$1::timestamptz - interval '1 day' FROM generate_series(1,2500)`,
         [cutoff.toISOString()],
       );
       await pg.sql.unsafe(
@@ -362,7 +362,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }> = [];
       await pg.sql.unsafe(
         `INSERT INTO health_history(service_id,status,checked_at)
-        SELECT 'live-' || (i % 100), 'healthy', $1::timestamp FROM generate_series(1,2000000) i`,
+        SELECT 'live-' || (i % 100), 'healthy', $1::timestamptz FROM generate_series(1,2000000) i`,
         [liveTimestamp],
       );
       let cumulativeArrivals = 0;
@@ -378,13 +378,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const dailyCutoff = new Date(firstCutoff.getTime() + (logicalDay - 1) * 86400000);
         await pg.sql.unsafe(
           `INSERT INTO health_history(service_id,status,checked_at)
-          SELECT 'expired-day-' || $2::text,'healthy',$1::timestamp - interval '1 second'
+          SELECT 'expired-day-' || $2::text,'healthy',$1::timestamptz - interval '1 second'
           FROM generate_series(1,350000)`,
           [dailyCutoff.toISOString(), logicalDay],
         );
         await pg.sql.unsafe("ANALYZE health_history");
         const [windowStart] = await pg.sql.unsafe<{ last_id: number; before: string }[]>(
-          "SELECT last_value::int AS last_id, clock_timestamp()::timestamp::text AS before FROM health_history_id_seq",
+          "SELECT last_value::int AS last_id, clock_timestamp()::timestamptz::text AS before FROM health_history_id_seq",
         );
         let settled = false;
         let arrivals = 0;
@@ -405,7 +405,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         if (arrivalOutcome.status === "rejected") throw arrivalOutcome.reason;
         const deleted = deletion.value;
         const [windowEnd] = await pg.sql.unsafe<{ after: string }[]>(
-          "SELECT clock_timestamp()::timestamp::text AS after",
+          "SELECT clock_timestamp()::timestamptz::text AS after",
         );
         if (!windowStart || !windowEnd)
           throw new Error("Missing server insertion-time window metadata");
@@ -423,10 +423,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const [state] = await pg.sql.unsafe(
           `SELECT count(*)::int AS total,
           count(*) FILTER(WHERE id BETWEEN 1 AND 2000000 AND service_id='live-' || (id % 100)
-            AND status='healthy' AND response_time IS NULL AND error IS NULL AND checked_at=$1::timestamp)::int AS exact_live,
+            AND status='healthy' AND response_time IS NULL AND error IS NULL AND checked_at=$1::timestamptz)::int AS exact_live,
           count(*) FILTER(WHERE service_id LIKE 'arrival-day-%' AND status='healthy' AND response_time=1
-            AND error IS NULL AND checked_at >= $2::timestamp)::int AS exact_arrivals,
-          count(*) FILTER(WHERE checked_at < $2::timestamp)::int AS still_expired
+            AND error IS NULL AND checked_at >= $2::timestamptz)::int AS exact_arrivals,
+          count(*) FILTER(WHERE checked_at < $2::timestamptz)::int AS still_expired
           FROM health_history`,
           [liveTimestamp, dailyCutoff.toISOString()],
         );
@@ -440,7 +440,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const [exact] = await pg.sql.unsafe(
             `SELECT count(*)::int AS total,
             count(*) FILTER(WHERE id BETWEEN $2::int AND $3::int AND status='healthy' AND response_time=1
-              AND error IS NULL AND checked_at >= $4::timestamp AND checked_at <= $5::timestamp)::int AS exact
+              AND error IS NULL AND checked_at >= $4::timestamptz AND checked_at <= $5::timestamptz)::int AS exact
             FROM health_history WHERE service_id=$1`,
             [
               `arrival-day-${window.logicalDay}`,

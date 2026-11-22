@@ -89,7 +89,7 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
           lt(adminJob.finishedAt, cutoff),
           noUnsettledManagedOperation(),
           sql`NOT EXISTS (SELECT 1 FROM ${platformConfigurationPreview} WHERE ${platformConfigurationPreview.consumedByJobId}::text = ${adminJob.id})`,
-          sql`(coalesce(${adminJob.protocol}->'operations'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamp)`,
+          sql`(coalesce(${adminJob.protocol}->'operations'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamptz)`,
           preservationAllowsDeletion({
             registrationId: "admin-jobs-attribution",
             candidateTimestamp: adminJob.createdAt,

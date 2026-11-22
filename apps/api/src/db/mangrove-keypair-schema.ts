@@ -32,7 +32,7 @@ export const mangroveKeypair = pgTable("mangrove_keypair", {
   passphraseCiphertext: text("passphrase_ciphertext"),
   /** age-encoded ciphertext with N WebAuthn PRF recipients. Null if user has no passkey wraps. */
   recipientsCiphertext: text("recipients_ciphertext"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 /**
@@ -64,5 +64,5 @@ export const mangroveKeypairWrap = pgTable("mangrove_keypair_wrap", {
    * attempt to unlock, so we only ever surface it to the authenticated user.
    */
   identityString: text("identity_string"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

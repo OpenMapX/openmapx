@@ -46,10 +46,10 @@ export const mobileAuthHandoff = pgTable(
     tokenIv: text("token_iv").notNull(),
     tokenTag: text("token_tag").notNull(),
     tokenKeyVersion: integer("token_key_version").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     /** Set the moment it is redeemed, so a replay finds a consumed row. */
-    consumedAt: timestamp("consumed_at"),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
   },
   (table) => [
     // Expiry scrubbing walks this, and it also bounds how many outstanding

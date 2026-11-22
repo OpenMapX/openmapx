@@ -409,3 +409,13 @@ change them:
 3. From the repository root, run
    `pnpm exec biome check --write apps/api/src/db/auth-schema.ts`.
 4. Regenerate the migrations as described above.
+
+Every timestamp column in the app's own tables is `timestamp with time zone`:
+declare it as `timestamp("…", { withTimezone: true })`. Better Auth's columns stay
+`timestamp` as its CLI generates them. They hold UTC because every session
+OpenMapX opens runs with `TimeZone=UTC`, whatever the database's default time
+zone. The API's and data-manager's pools set it as a connection parameter, and
+the CLI sets `PGTZ=UTC` for every `psql`, `pg_dump` and `pg_restore` it runs in
+the database container. A new connection or database client must do the same.
+`apps/api/src/db/__tests__/time-zone-postgres.test.ts` checks the column types
+and the API's sessions on a database whose default time zone is not UTC.

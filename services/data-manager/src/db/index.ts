@@ -19,9 +19,13 @@ assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 
 /** A separate pool whose connections carry `applicationName`. Each data
  * execution's worker gets its own, so cancelling the worker reaches exactly
- * its queries. */
+ * its queries. Sessions run in UTC whatever the database's default time zone,
+ * as the API's do. */
 export function connectDatabase(applicationName: string): postgres.Sql {
-  return postgres(connectionString, { max: 4, connection: { application_name: applicationName } });
+  return postgres(connectionString, {
+    max: 4,
+    connection: { application_name: applicationName, TimeZone: "UTC" },
+  });
 }
 
 // `postgres-js` is happy with a small connection pool here — the data-manager

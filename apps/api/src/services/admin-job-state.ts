@@ -235,7 +235,7 @@ export async function insertOwnedJobLog(
       SELECT ${adminJob.id}, ${adminJob.result}, ${adminJob.protocol} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
     ), inserted AS (
       INSERT INTO ${adminJobLog} (id, job_id, seq, stream, line, created_at)
-      SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamp
+      SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamptz
       FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '3' OR (
         coalesce((owner.protocol->'handler'->>'_opsLogEvents')::integer,0) < ${ADMIN_JOB_LOG_LIMITS.events}
         AND coalesce((owner.protocol->'handler'->>'_opsLogBytes')::integer,0) + ${Buffer.byteLength(entry.line, "utf8")} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
