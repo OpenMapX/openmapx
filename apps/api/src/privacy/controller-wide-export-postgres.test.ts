@@ -34,6 +34,8 @@ import { PrivacyRequestService } from "./request-service.js";
 
 const SUBJECT_ID = "controller-acceptance-subject";
 const FOREIGN_ID = "controller-acceptance-foreign";
+/** The administrator who decides on assisted cases; events reference the account. */
+const ADMIN_ID = "controller-acceptance-admin";
 const SESSION_ID = "controller-acceptance-session";
 const OPERATOR_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy === "operator_task").map(
   (r) => r.id,
@@ -135,6 +137,13 @@ async function seedSubject() {
       id: FOREIGN_ID,
       name: "FOREIGN-ADJACENT-RECORD",
       email: "foreign@example.test",
+      createdAt,
+      updatedAt: createdAt,
+    },
+    {
+      id: ADMIN_ID,
+      name: "Controller acceptance administrator",
+      email: "admin@example.test",
       createdAt,
       updatedAt: createdAt,
     },
@@ -328,6 +337,7 @@ beforeEach(async () => {
   await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
+  await db.delete(user).where(eq(user.id, ADMIN_ID));
   await seedSubject();
 });
 
@@ -336,6 +346,7 @@ afterEach(async () => {
   await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
+  await db.delete(user).where(eq(user.id, ADMIN_ID));
   vi.unstubAllEnvs();
   await rm(temporary, { recursive: true, force: true });
 });
@@ -572,7 +583,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         version: assisted.version,
         decision: "waiting_on_requester",
         reasonCode: "asked-for-identity",
-        actorId: "controller-acceptance-admin",
+        actorId: ADMIN_ID,
         idempotencyKey: `wait-${assisted.id}`,
       });
       expect(waiting.state).toBe("waiting_on_requester");
