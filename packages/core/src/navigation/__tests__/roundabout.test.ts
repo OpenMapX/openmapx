@@ -189,6 +189,22 @@ describe("roundaboutTurnAt", () => {
     expect(roundaboutTurnAt(circling(false, 180), 1)?.exitAngle).toBe(360);
   });
 
+  it.each([178, 179, 181, 182])(
+    "reads a U-turn whose road out runs at %d° as a U-turn, not the first exit",
+    (out) => {
+      // Divided carriageways in and out are rarely exactly parallel.
+      expect(roundaboutTurnAt(circling(false, out), 1)?.exitAngle).toBeGreaterThan(340);
+      expect(roundaboutTurnAt(circling(true, out), 1)?.exitAngle).toBeGreaterThan(340);
+    },
+  );
+
+  it("gives no turn when no step says where the roundabout is left", () => {
+    // OSRM's roundabout step runs on along the exit road to the next
+    // manoeuvre, so its far end says nothing about the exit.
+    const [before, roundabout] = circling(false, 90);
+    expect(roundaboutTurnAt([before, roundabout], 1)).toBeUndefined();
+  });
+
   it("describes only roundabouts", () => {
     expect(roundaboutTurnAt(strausberger, 0)).toBeUndefined();
     expect(roundaboutTurnAt(strausberger, 9)).toBeUndefined();

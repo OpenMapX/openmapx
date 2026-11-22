@@ -1,4 +1,4 @@
-import type { ManeuverLane, ManeuverSign } from "@openmapx/core";
+import type { LngLat, ManeuverLane, ManeuverSign } from "@openmapx/core";
 import type { GroundFullSnapshot } from "@openmapx/core/navigation";
 import {
   type GuidanceIconName,
@@ -106,10 +106,6 @@ const stepSchema = z.object({
   roundaboutExitCount: z.number().optional(),
   bearingBefore: z.number().finite().optional(),
   bearingAfter: z.number().finite().optional(),
-  coordinates: z
-    .array(z.tuple([z.number().finite(), z.number().finite()]))
-    .max(20_000)
-    .optional(),
   motorway: z.boolean().optional(),
   sign: z.unknown().optional(),
   maneuver: z
@@ -145,6 +141,19 @@ function readStep(steps: unknown[], index: number): { step: CarStep | undefined 
 const ROUNDABOUT_TYPES = new Set(["roundabout", "rotary", "exit roundabout", "exit rotary"]);
 
 /**
+ * A step's line, read only around a roundabout: a long one, such as a motorway
+ * stretch into it, or a malformed one only costs the exit angle.
+ */
+const coordinatesSchema = z.array(z.tuple([z.number().finite(), z.number().finite()])).max(20_000);
+
+function withCoordinates(steps: unknown[], index: number, step: CarStep | undefined) {
+  if (!step) return undefined;
+  const raw = (steps[index] as { coordinates?: unknown } | undefined)?.coordinates;
+  const parsed = coordinatesSchema.safeParse(raw);
+  return parsed.success ? { ...step, coordinates: parsed.data as LngLat[] } : step;
+}
+
+/**
  * The roundabout at the upcoming step, entered or left there: its exit number
  * and the turn read from the steps around it. Those neighbours are read only
  * for a roundabout, and a malformed one only costs the turn.
@@ -162,7 +171,9 @@ function upcomingRoundabout(
   if (!ROUNDABOUT_TYPES.has(step?.maneuver?.type ?? "")) return null;
   // The upcoming step sits at window[2], between the two steps before it (the
   // roundabout it may leave, and the road into that) and the one after it.
-  const window = [index - 2, index - 1, index, index + 1].map((i) => readStep(steps, i)?.step);
+  const window = [index - 2, index - 1, index, index + 1].map((i) =>
+    withCoordinates(steps, i, readStep(steps, i)?.step),
+  );
   const role = roundaboutRole(window, 2);
   if (!role) return null;
   const entry = role === "exit" ? window[1] : window[2];

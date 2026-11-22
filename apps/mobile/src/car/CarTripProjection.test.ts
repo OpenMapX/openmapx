@@ -136,6 +136,18 @@ it("projects the upcoming and current steps of a long route", () => {
   });
 });
 
+it("keeps guiding along a step with a very long line", () => {
+  // A long motorway stretch can carry tens of thousands of points.
+  const steps = longRoute();
+  steps[CURRENT] = {
+    instruction: "Continue on the motorway",
+    distance: 400_000,
+    duration: 14_000,
+    coordinates: Array.from({ length: 25_000 }, (_, i) => [8 + i * 1e-4, 50]),
+  };
+  expect(buildCarTripProjection(withSteps(steps), 1000)?.instruction).toBe("Step 2001");
+});
+
 it("ignores a malformed step that the projection does not read", () => {
   const clean = buildCarTripProjection(withSteps(longRoute()), 1000);
   const steps = longRoute();

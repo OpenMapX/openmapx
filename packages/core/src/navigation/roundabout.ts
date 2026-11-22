@@ -125,6 +125,8 @@ function pathLength(path: readonly LngLat[]): number {
 /** Where the road runs, measured this far from the roundabout: clear of its slip lanes. */
 const ROAD_NEAR_M = 25;
 const ROAD_FAR_M = 80;
+/** An exit this close past the entry is a U-turn whose roads are not quite parallel. */
+const U_TURN_SLACK_DEG = 20;
 /** A road shorter than this says nothing reliable about its direction. */
 const MIN_ROAD_M = 8;
 
@@ -158,17 +160,23 @@ function turnOf(
       : finite(step.bearingBefore)
         ? step.bearingBefore
         : segmentBearings(path)[0];
-  // The leaving step starts where the roundabout is left; without one (OSRM),
-  // the roundabout step runs on along the exit road.
-  const exit = nextLeaves
-    ? (roadHeading(next?.coordinates ?? []) ??
-      (finite(next?.bearingAfter) ? next.bearingAfter : undefined))
-    : segmentBearings(path).at(-1);
+  // The leaving step starts where the roundabout is left. Without one (OSRM),
+  // the roundabout step runs on along the exit road to the next manoeuvre,
+  // and nothing marks where the exit is.
+  if (!nextLeaves) return undefined;
+  const exit =
+    roadHeading(next?.coordinates ?? []) ??
+    (finite(next?.bearingAfter) ? next.bearingAfter : undefined);
   if (entry === undefined || exit === undefined) return undefined;
   const circulation = circulationOf(step);
   const turn = turnBetween(entry, exit);
   const angle = (((circulation === "ccw" ? 180 - turn : 180 + turn) % 360) + 360) % 360;
-  return { circulation, exitAngle: angle < 0.5 ? 360 : Math.round(angle * 10) / 10 };
+  // A U-turn's roads in and out are rarely exactly parallel, and a degree past
+  // parallel would otherwise read as leaving almost at once.
+  return {
+    circulation,
+    exitAngle: angle < U_TURN_SLACK_DEG ? 360 : Math.round(angle * 10) / 10,
+  };
 }
 
 /**
