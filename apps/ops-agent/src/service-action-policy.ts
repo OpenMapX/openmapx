@@ -2,7 +2,7 @@ import type { ServiceAction, ServiceActionDecision } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import type { OwnedServiceSnapshot } from "./owned-services";
 
-const { CONTROL_PLANE_SERVICE_IDS, CORE_SERVICE_ID } = coreServices;
+const { CONTROL_PLANE_SERVICE_IDS, CORE_RESTART_SERVICE_IDS, CORE_SERVICE_ID } = coreServices;
 
 export interface ServiceAuthority {
   revisionId: string;
@@ -16,6 +16,7 @@ export interface ServiceAuthority {
 }
 
 const controlPlane = new Set<string>(CONTROL_PLANE_SERVICE_IDS);
+const coreRestart = new Set<string>(CORE_RESTART_SERVICE_IDS);
 const dependencies = new Set<string>([CORE_SERVICE_ID.postgis, CORE_SERVICE_ID.redis]);
 
 /** With no container, callers scope services to the single target being decided. */
@@ -48,7 +49,7 @@ export function decideServiceAction(
       : { available: true, execution: "direct", reason: null, workflow: null };
   }
   if (controlPlane.has(service.serviceId)) {
-    if (action === "restart" && service.serviceId !== "ops-agent") {
+    if (action === "restart" && coreRestart.has(service.serviceId)) {
       if (!service.isBuiltIn || !authority.enabledServiceIds.has(service.serviceId))
         return denied("disabled", "workflow", "core-restart");
       if (!snapshot) return denied("not_owned", "workflow", "core-restart");
