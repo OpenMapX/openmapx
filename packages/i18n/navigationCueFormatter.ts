@@ -1,5 +1,6 @@
 import IntlMessageFormat from "intl-messageformat";
 import { defaultLocale, type Locale, locales } from "./locale";
+import { startsWithReferenceStarter } from "./navigationReferenceStarters";
 
 /**
  * Localised spoken and status text for navigation, usable from a headless
@@ -16,6 +17,38 @@ import { defaultLocale, type Locale, locales } from "./locale";
  * catalogue and have it spoken aloud.
  */
 
+/** Landmark kinds a voice prompt may name. */
+export type NavigationLandmarkCategory =
+  | "fuel"
+  | "church"
+  | "mosque"
+  | "synagogue"
+  | "pharmacy"
+  | "supermarket"
+  | "fast_food";
+
+const LANDMARK_CATEGORIES: ReadonlySet<string> = new Set<NavigationLandmarkCategory>([
+  "fuel",
+  "church",
+  "mosque",
+  "synagogue",
+  "pharmacy",
+  "supermarket",
+  "fast_food",
+]);
+
+/** Categories whose brand is spoken ("at the Aral petrol station"). */
+const BRANDED_CATEGORIES: ReadonlySet<NavigationLandmarkCategory> = new Set([
+  "fuel",
+  "supermarket",
+  "fast_food",
+]);
+
+/** Something the driver can see, named instead of the distance. */
+export type NavigationCueReference =
+  | { kind: "traffic-light"; ordinal: 1 | 2 | 3 }
+  | { kind: "landmark"; category: NavigationLandmarkCategory; brand?: string };
+
 /** The complete set of things navigation can say. */
 export type NavigationCueIntent =
   | {
@@ -23,6 +56,8 @@ export type NavigationCueIntent =
       tier: "far" | "near" | "now";
       instruction: string;
       distanceMeters?: number;
+      /** Used only by the near tier, and only before an allowlisted first word. */
+      reference?: NavigationCueReference;
     }
   | { kind: "walk"; action: string; street?: string; level?: number }
   | { kind: "board"; line: string; destination: string; platform?: string }
@@ -44,6 +79,7 @@ export class NavigationCueError extends Error {}
 /** Free-text bounds. Long enough for any real street or line name. */
 const MAX_FREE_TEXT = 120;
 const MAX_INSTRUCTION = 240;
+const MAX_BRAND = 40;
 
 /**
  * Every `navigation.*` message a cue can format. The browser's compact cue
@@ -55,6 +91,8 @@ export const NAVIGATION_CUE_KEYS = [
   "voiceDistanceMeters",
   "voiceDistanceKilometers",
   "voiceUpcoming",
+  "voiceReferenceTrafficLight",
+  "voiceReferenceLandmark",
   "walkToLevel",
   "walkOnStreet",
   "voiceBoardPlatform",
@@ -87,6 +125,53 @@ function assertText(value: unknown, field: string, max = MAX_FREE_TEXT): string 
   }
   if (value.length > max) throw new NavigationCueError(`${field} exceeds ${max} characters`);
   return value;
+}
+
+/** A reference the caller sent, validated into the message key and its values. */
+type ResolvedReference =
+  | { key: "voiceReferenceTrafficLight"; values: { ordinal: string } }
+  | { key: "voiceReferenceLandmark"; values: { category: string; brand: string } };
+
+/**
+ * Validates a reference and picks its message. Returns null for a well-formed
+ * reference that has nothing to say (fast food without a brand); throws for a
+ * malformed one, which callers turn into a dropped cue.
+ */
+function resolveReference(reference: unknown): ResolvedReference | null {
+  const value = reference as Partial<Record<string, unknown>> | null;
+  if (typeof value !== "object" || value === null) {
+    throw new NavigationCueError("reference must be an object");
+  }
+  if (value.kind === "traffic-light") {
+    if (value.ordinal !== 1 && value.ordinal !== 2 && value.ordinal !== 3) {
+      throw new NavigationCueError("traffic-light ordinal must be 1, 2 or 3");
+    }
+    return { key: "voiceReferenceTrafficLight", values: { ordinal: String(value.ordinal) } };
+  }
+  if (value.kind === "landmark") {
+    const category = value.category;
+    if (typeof category !== "string" || !LANDMARK_CATEGORIES.has(category)) {
+      throw new NavigationCueError("landmark category is not supported");
+    }
+    const brand =
+      value.brand === undefined ? undefined : assertText(value.brand, "brand", MAX_BRAND);
+    const branded = BRANDED_CATEGORIES.has(category as NavigationLandmarkCategory);
+    if (branded && brand !== undefined) {
+      return { key: "voiceReferenceLandmark", values: { category: `${category}_brand`, brand } };
+    }
+    // Fast food is named only by its brand: "at the fast-food restaurant"
+    // does not single out a corner.
+    if (category === "fast_food") return null;
+    return { key: "voiceReferenceLandmark", values: { category, brand: "" } };
+  }
+  throw new NavigationCueError("reference kind is not supported");
+}
+
+/** Lowercases the first letter, so the instruction continues the fronted reference. */
+function continueSentence(instruction: string, locale: Locale): string {
+  const text = instruction.trim();
+  const [first = ""] = text;
+  return first.toLocaleLowerCase(locale) + text.slice(first.length);
 }
 
 /** Builds the cue formatter over the given per-locale `navigation` messages. */
@@ -176,8 +261,25 @@ export function createNavigationCueFormatter(catalogs: NavigationCueCatalogs) {
     switch (intent.kind) {
       case "ground-maneuver": {
         const instruction = assertText(intent.instruction, "instruction", MAX_INSTRUCTION);
+        // Validate any reference on every tier, so a malformed one never slips
+        // through just because this cue would not have used it.
+        const reference =
+          intent.reference === undefined ? null : resolveReference(intent.reference);
         // The imminent cue drops the distance: by then the turn is right there.
-        if (intent.tier === "now" || intent.distanceMeters === undefined) return instruction;
+        if (intent.tier === "now") return instruction;
+        // Close in, something visible beats a number: "At the second traffic
+        // light, turn right". Only before a first word known to read correctly.
+        if (
+          intent.tier === "near" &&
+          reference !== null &&
+          startsWithReferenceStarter(instruction, locale)
+        ) {
+          return format(locale, reference.key, {
+            ...reference.values,
+            instruction: continueSentence(instruction, locale),
+          });
+        }
+        if (intent.distanceMeters === undefined) return instruction;
         return format(locale, "voiceUpcoming", {
           distance: formatCueDistance(intent.distanceMeters, locale, units),
           instruction,

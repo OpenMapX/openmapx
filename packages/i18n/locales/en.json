@@ -75,6 +75,8 @@
     "unmuteVoice": "Unmute voice guidance",
     "keepScreenOn": "Keep screen on",
     "voiceUpcoming": "In {distance}, {instruction}",
+    "voiceReferenceTrafficLight": "{ordinal, select, 1 {At the first traffic light} 2 {At the second traffic light} other {At the third traffic light}}, {instruction}",
+    "voiceReferenceLandmark": "{category, select, fuel_brand {At the {brand} petrol station} fuel {At the petrol station} supermarket_brand {At the {brand} supermarket} supermarket {At the supermarket} fast_food_brand {At {brand}} pharmacy {At the pharmacy} church {At the church} mosque {At the mosque} synagogue {At the synagogue} other {Here}}, {instruction}",
     "weakGps": "Weak GPS signal",
     "waitingForGps": "Waiting for GPS signal…",
     "estimatedPosition": "No GPS — estimated position",

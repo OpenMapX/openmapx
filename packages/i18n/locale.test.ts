@@ -38,10 +38,18 @@ describe("browser module import boundary", () => {
 
   it.each([
     ["locale.ts", []],
-    ["navigationCueFormatter.ts", ["./locale", "intl-messageformat"]],
+    [
+      "navigationCueFormatter.ts",
+      ["./locale", "./navigationReferenceStarters", "intl-messageformat"],
+    ],
+    ["navigationReferenceStarters.ts", ["./locale"]],
     [
       "navigationCuesCompact.ts",
-      ["./generated/navigation-cue-messages.json", "./navigationCueFormatter"],
+      [
+        "./generated/navigation-cue-messages.json",
+        "./navigationCueFormatter",
+        "./navigationReferenceStarters",
+      ],
     ],
   ])("%s imports only catalogue-free modules", (file, expected) => {
     expect(importSpecifiers(file), `${file} ${boundaryMessage}`).toEqual(expected);

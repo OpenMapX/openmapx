@@ -1,0 +1,56 @@
+{
+  "source": "Valhalla verbal alert and pre-transition instructions, OpenMapX production, driving",
+  "locale": "en-US",
+  "recorded": "2026-11-22",
+  "routes": 40,
+  "firstWords": {
+    "turn": {
+      "count": 486,
+      "example": "Turn right onto Alexanderstraße."
+    },
+    "keep": {
+      "count": 212,
+      "example": "Keep left to stay on A 100."
+    },
+    "bear": {
+      "count": 98,
+      "example": "Bear left toward B 96."
+    },
+    "take": {
+      "count": 94,
+      "example": "Take exit 20."
+    },
+    "your": {
+      "count": 46,
+      "example": "Your destination will be on the right."
+    },
+    "drive": {
+      "count": 37,
+      "example": "Drive northeast. Then Turn right onto Alexanderstraße."
+    },
+    "you": {
+      "count": 28,
+      "example": "You will arrive at your destination."
+    },
+    "enter": {
+      "count": 24,
+      "example": "Enter Kottbusser Tor and take the 3rd exit onto Adalbertstraße."
+    },
+    "make": {
+      "count": 14,
+      "example": "Make a sharp left onto Reeperbahn."
+    },
+    "exit": {
+      "count": 11,
+      "example": "Exit the roundabout onto Adalbertstraße. Then You will arrive at your destination."
+    },
+    "continue": {
+      "count": 6,
+      "example": "Continue on A 5."
+    },
+    "stay": {
+      "count": 2,
+      "example": "Stay straight to take the A 14 ramp."
+    }
+  }
+}

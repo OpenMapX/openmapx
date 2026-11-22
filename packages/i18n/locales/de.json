@@ -75,6 +75,8 @@
     "unmuteVoice": "Sprachansagen aktivieren",
     "keepScreenOn": "Bildschirm anlassen",
     "voiceUpcoming": "In {distance}, {instruction}",
+    "voiceReferenceTrafficLight": "{ordinal, select, 1 {An der ersten Ampel} 2 {An der zweiten Ampel} other {An der dritten Ampel}} {instruction}",
+    "voiceReferenceLandmark": "{category, select, fuel_brand {Bei der {brand}-Tankstelle} fuel {Bei der Tankstelle} supermarket_brand {Beim {brand}-Supermarkt} supermarket {Beim Supermarkt} fast_food_brand {Bei {brand}} pharmacy {Bei der Apotheke} church {An der Kirche} mosque {An der Moschee} synagogue {An der Synagoge} other {Hier}} {instruction}",
     "weakGps": "Schwaches GPS-Signal",
     "waitingForGps": "Warte auf GPS-Signal…",
     "estimatedPosition": "Kein GPS – geschätzte Position",
