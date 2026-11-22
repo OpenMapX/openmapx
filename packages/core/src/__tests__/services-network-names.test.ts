@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
+  buildApiServiceEnv,
   type LoadedService,
   renderCompose,
   renderTraefikDynamicConfiguration,
@@ -105,6 +106,9 @@ describe("project-unique service names", () => {
       for (const value of [service.command ?? [], service.healthcheck?.test ?? []].flat())
         values.push([`${id} command`, value]);
     }
+    // The API's generated environment: defaults for the backends it reads from env.
+    for (const [key, value] of Object.entries(buildApiServiceEnv(services)))
+      values.push([`api generated ${key}`, String(value)]);
     const traefik = renderTraefikDynamicYaml(
       renderTraefikDynamicConfiguration(
         services.filter((service) => service.isBuiltIn).map((service) => service.manifest),

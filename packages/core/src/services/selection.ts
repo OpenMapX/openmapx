@@ -1,4 +1,5 @@
 import { PLATFORM_ENDPOINTS } from "../utils/platform-endpoints";
+import { serviceNetworkAlias } from "./core-service-ids";
 import { readExternalProxyNetwork } from "./external-proxy";
 import { buildProducerIndex, selectProducer } from "./producer-index";
 import type { LoadedService } from "./types";
@@ -105,7 +106,7 @@ export function buildApiServiceEnv(
   const enabledIds = new Set(enabledServices.map((s) => s.manifest.id));
   for (const { serviceId, envVar, internalPort } of SERVICE_ENV_URL_MAP) {
     if (enabledIds.has(serviceId)) {
-      next[envVar] = `\${${envVar}:-http://${serviceId}:${internalPort}}`;
+      next[envVar] = `\${${envVar}:-http://${serviceNetworkAlias(serviceId)}:${internalPort}}`;
     }
   }
 

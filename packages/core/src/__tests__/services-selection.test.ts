@@ -91,8 +91,8 @@ describe("service selection helpers", () => {
       {},
     );
 
-    expect(env.OVERPASS_URL).toBe("${OVERPASS_URL:-http://overpass:80}");
-    expect(env.NOMINATIM_URL).toBe("${NOMINATIM_URL:-http://nominatim:8080}");
+    expect(env.OVERPASS_URL).toBe("${OVERPASS_URL:-http://openmapx-overpass:80}");
+    expect(env.NOMINATIM_URL).toBe("${NOMINATIM_URL:-http://openmapx-nominatim:8080}");
     expect(env.MOTIS_URL).toBeUndefined();
   });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
