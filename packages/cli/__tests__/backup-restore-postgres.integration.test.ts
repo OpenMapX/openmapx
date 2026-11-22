@@ -952,8 +952,8 @@ INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
 VALUES ('${DELETED_USER_ID}', 'Unsupported Schema User', '${DELETED_EMAIL}', true, now(), now());
 INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
 VALUES ('unsupported-schema-verification', '${DELETED_EMAIL}', '${DELETED_USER_ID}', now() + interval '1 day', now(), now());
-INSERT INTO admin_audit_log (id, actor_id, target_id, target_type, action, details, ip_address, user_agent)
-VALUES ('unsupported-schema-audit', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}'), '192.0.2.20', 'unsupported-schema-fixture-agent');
+INSERT INTO admin_audit_log (actor_id, target_id, target_type, action, details, ip_address, user_agent)
+VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}'), '192.0.2.20', 'unsupported-schema-fixture-agent');
 INSERT INTO app_logs (level, source, msg, metadata)
 VALUES ('warn', 'unsupported-schema-fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
 `);
@@ -970,7 +970,7 @@ VALUES ('warn', 'unsupported-schema-fixture', 'event for ${DELETED_EMAIL}', json
     ).toBe("1");
     expect(
       await psql(
-        "SELECT (actor_id IS NOT NULL)::text || ':' || (target_id IS NOT NULL)::text || ':' || (details IS NOT NULL)::text FROM admin_audit_log WHERE id = 'unsupported-schema-audit';",
+        "SELECT (actor_id IS NOT NULL)::text || ':' || (target_id IS NOT NULL)::text || ':' || (details IS NOT NULL)::text FROM admin_audit_log WHERE user_agent = 'unsupported-schema-fixture-agent';",
       ),
     ).toBe("true:true:true");
     expect(
