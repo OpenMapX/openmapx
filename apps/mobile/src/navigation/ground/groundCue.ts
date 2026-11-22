@@ -1,5 +1,9 @@
 import {
+  type CueReference,
+  chooseReference,
   type GroundMobileSession,
+  maneuverStartMeters,
+  type Route,
   spokenInstructionFor,
   type VoiceCue,
 } from "@openmapx/core/navigation";
@@ -54,12 +58,14 @@ export function groundCueEffect(
   // committed progress — is not, so the refusal becomes silence here.
   let text: string;
   try {
+    const reference = packageReference(session, cue);
     text = formatNavigationCue(
       {
         kind: "ground-maneuver",
         tier: cue.tier,
         instruction,
         ...(cue.tier === "now" ? {} : { distanceMeters: cue.distance }),
+        ...(reference && { reference }),
       },
       session.locale,
       { units: session.units },
@@ -71,6 +77,30 @@ export function groundCueEffect(
 
   const cueId = groundCueId(session.sessionId, routeFingerprint, cue.key);
   return { cueId, effect: { kind: "speak", cueId, text, locale: session.locale } };
+}
+
+const REFERENCE_MODES: ReadonlySet<string> = new Set(["driving", "motorcycle"]);
+
+/**
+ * The traffic light or landmark a near cue may name, from the evidence the
+ * start package carries for its route. Driving and motorcycle only; nothing
+ * when the package carries none, so the prompt keeps its distance.
+ */
+function packageReference(session: GroundMobileSession, cue: VoiceCue): CueReference | null {
+  const startPackage = session.payload.startPackage;
+  if (cue.tier !== "near" || !REFERENCE_MODES.has(startPackage.mode)) return null;
+  const route = startPackage.route as unknown as Route;
+  const maneuverAlong = maneuverStartMeters(route, cue.stepIndex);
+  return chooseReference({
+    steps: route.steps,
+    stepIndex: cue.stepIndex,
+    maneuverAlong,
+    puckAlong: maneuverAlong - cue.distance,
+    signalsAlong: startPackage.signalsAlong ?? null,
+    fetchedSpans: startPackage.signalSpans ?? [],
+    landmark:
+      startPackage.landmarkReferences?.find((entry) => entry.stepIndex === cue.stepIndex) ?? null,
+  });
 }
 
 /** One warning per off-route episode, not one per fix at 1 Hz. */

@@ -233,6 +233,28 @@ export const groundNavigationSettingsSchema = z
   })
   .strict();
 
+/** Voice-reference evidence a start package may carry; bounded so a page bug cannot bloat it. */
+const MAX_PACKAGE_SIGNALS = 2_000;
+const MAX_PACKAGE_SIGNAL_SPANS = 100;
+const MAX_PACKAGE_LANDMARKS = 400;
+const MAX_LANDMARK_BRAND = 40;
+
+const packageLandmarkReferenceSchema = z
+  .object({
+    stepIndex: z.number().int().nonnegative(),
+    category: z.enum([
+      "fuel",
+      "church",
+      "mosque",
+      "synagogue",
+      "pharmacy",
+      "supermarket",
+      "fast_food",
+    ]),
+    brand: z.string().min(1).max(MAX_LANDMARK_BRAND).optional(),
+  })
+  .strict();
+
 export const groundStartPackageSchema = z
   .object({
     kind: z.literal("ground"),
@@ -244,6 +266,18 @@ export const groundStartPackageSchema = z
     routeSelectionIntent: z.enum(["automatic", "userSelected"]),
     routeOptions: z.record(z.string(), z.unknown()).default({}),
     capturedLiveSpeedLimits: z.array(z.number().finite().nullable()).optional(),
+    /** Traffic-signal along-distances on `route`, for traffic-light prompts. */
+    signalsAlong: z.array(z.number().finite()).max(MAX_PACKAGE_SIGNALS).optional(),
+    /** Along-distance spans whose signals were matched. */
+    signalSpans: z
+      .array(z.object({ from: z.number().finite(), to: z.number().finite() }).strict())
+      .max(MAX_PACKAGE_SIGNAL_SPANS)
+      .optional(),
+    /** Landmarks voice prompts may name, per manoeuvre step of `route`. */
+    landmarkReferences: z
+      .array(packageLandmarkReferenceSchema)
+      .max(MAX_PACKAGE_LANDMARKS)
+      .optional(),
     locale: localeSchema,
     units: unitsSchema,
     settings: groundNavigationSettingsSchema,

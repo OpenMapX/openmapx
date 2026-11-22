@@ -76,6 +76,56 @@ describe("buildGroundNavigationPackage", () => {
     expect(sent.authorization).toBeUndefined();
   });
 
+  it("start package carries bounded signals and landmarks", () => {
+    const result = buildGroundNavigationPackage(
+      input({
+        signalsAlong: [120, 480],
+        signalSpans: [{ from: 0, to: 1_000 }],
+        landmarkReferences: [{ stepIndex: 2, category: "fuel", brand: "Aral" }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.startPackage.signalsAlong).toEqual([120, 480]);
+    expect(result.startPackage.signalSpans).toEqual([{ from: 0, to: 1_000 }]);
+    expect(result.startPackage.landmarkReferences).toEqual([
+      { stepIndex: 2, category: "fuel", brand: "Aral" },
+    ]);
+  });
+
+  it("leaves the references out when the page has none", () => {
+    const result = buildGroundNavigationPackage(input());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("signalsAlong" in result.startPackage).toBe(false);
+    expect("landmarkReferences" in result.startPackage).toBe(false);
+  });
+
+  it.each([
+    ["signals", { signalsAlong: Array.from({ length: 2_001 }, (_, i) => i) }],
+    ["a non-finite signal", { signalsAlong: [Number.POSITIVE_INFINITY] }],
+    ["spans", { signalSpans: Array.from({ length: 101 }, () => ({ from: 0, to: 1 })) }],
+    [
+      "landmarks",
+      {
+        landmarkReferences: Array.from({ length: 401 }, (_, stepIndex) => ({
+          stepIndex,
+          category: "pharmacy",
+        })),
+      },
+    ],
+    [
+      "a long brand",
+      { landmarkReferences: [{ stepIndex: 1, category: "fuel", brand: "x".repeat(41) }] },
+    ],
+    ["an unknown category", { landmarkReferences: [{ stepIndex: 1, category: "casino" }] }],
+  ])("oversized arrays are rejected: %s", (_label, references) => {
+    expect(buildGroundNavigationPackage(input(references))).toEqual({
+      ok: false,
+      code: "invalid-package",
+    });
+  });
+
   it("refuses a route with no line to follow", () => {
     expect(
       buildGroundNavigationPackage(input({ route: route({ geometry: [[8.68, 50.11]] }) })),

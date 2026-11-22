@@ -6,6 +6,7 @@ import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-cont
 import type { LngLat } from "../types/geometry";
 import type { Route, TravelMode } from "../types/routing";
 import { type GroundNavigationStartPackage, groundStartPackageSchema } from "./mobileProtocol";
+import type { LandmarkReference } from "./references";
 
 /**
  * Everything the shell needs to guide a ground trip, and nothing else.
@@ -45,6 +46,11 @@ export interface BuildGroundPackageInput {
   routeOptions?: Record<string, unknown>;
   /** Speed limits already resolved for this route, if any. */
   capturedLiveSpeedLimits?: readonly (number | null)[];
+  /** Traffic-signal along-distances already matched on this route, if any. */
+  signalsAlong?: readonly number[];
+  signalSpans?: readonly { from: number; to: number }[];
+  /** Landmarks already selected for this route's manoeuvres, if any. */
+  landmarkReferences?: readonly LandmarkReference[];
   locale: "en" | "de";
   units: "metric" | "imperial";
   settings: GroundNavigationSettings;
@@ -130,6 +136,13 @@ export function buildGroundNavigationPackage(
     routeOptions: input.routeOptions ?? {},
     ...(input.capturedLiveSpeedLimits
       ? { capturedLiveSpeedLimits: [...input.capturedLiveSpeedLimits] }
+      : {}),
+    ...(input.signalsAlong ? { signalsAlong: [...input.signalsAlong] } : {}),
+    ...(input.signalSpans
+      ? { signalSpans: input.signalSpans.map(({ from, to }) => ({ from, to })) }
+      : {}),
+    ...(input.landmarkReferences
+      ? { landmarkReferences: input.landmarkReferences.map((reference) => ({ ...reference })) }
       : {}),
     locale: input.locale,
     units: input.units,

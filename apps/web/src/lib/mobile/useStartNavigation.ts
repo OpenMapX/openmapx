@@ -3,6 +3,7 @@
 import {
   buildGroundNavigationPackage,
   type GroundNavigationSettings,
+  type LandmarkReference,
   type LngLat,
   type NavigationRouteOptions,
   type RoadConditionRouteImpact,
@@ -71,6 +72,42 @@ export interface StartNavigationOptions {
   onPrepared?: () => Promise<void> | void;
 }
 
+/** The start package's bounds for voice-reference evidence. */
+const MAX_PACKAGE_SIGNALS = 2_000;
+const MAX_PACKAGE_SIGNAL_SPANS = 100;
+const MAX_PACKAGE_LANDMARKS = 400;
+
+/**
+ * The traffic signals and landmarks this page already knows for `route`, for
+ * the native session's voice prompts. Usually nothing on a fresh start; the
+ * native session then fetches its own. Evidence beyond the package bounds is
+ * left out whole: half a signal list would make traffic-light counts wrong.
+ */
+function referencesFor(route: Route): {
+  signalsAlong?: number[];
+  signalSpans?: { from: number; to: number }[];
+  landmarkReferences?: LandmarkReference[];
+} {
+  const {
+    route: active,
+    signalsAlong,
+    signalSpans,
+    landmarkReferences,
+  } = useNavigationStore.getState();
+  if (active !== route) return {};
+  const signalsFit =
+    signalsAlong !== null &&
+    signalSpans.length > 0 &&
+    signalsAlong.length <= MAX_PACKAGE_SIGNALS &&
+    signalSpans.length <= MAX_PACKAGE_SIGNAL_SPANS;
+  const landmarks =
+    landmarkReferences?.route === route ? Object.values(landmarkReferences.byStep) : [];
+  return {
+    ...(signalsFit && { signalsAlong, signalSpans }),
+    ...(landmarks.length > 0 && { landmarkReferences: landmarks.slice(0, MAX_PACKAGE_LANDMARKS) }),
+  };
+}
+
 export function useStartNavigation() {
   const runtime = useMobileRuntimeContext();
 
@@ -120,6 +157,7 @@ export function useStartNavigation() {
         locale: input.locale,
         units: input.units,
         settings,
+        ...referencesFor(input.route),
       });
       if (!built.ok) {
         return {

@@ -124,6 +124,29 @@ describe("GroundRerouteService", () => {
     expect(calls[0]?.options).toMatchObject({ timeoutMs: 15_000, signal: expect.any(AbortSignal) });
   });
 
+  it("a native reroute never carries the old route's references", async () => {
+    const { client } = fakeClient(routeAnswer());
+    const withReferences = session();
+    withReferences.payload.startPackage = {
+      ...withReferences.payload.startPackage,
+      signalsAlong: [120, 480],
+      signalSpans: [{ from: 0, to: 3_000 }],
+      landmarkReferences: [{ stepIndex: 1, category: "fuel", brand: "Aral" }],
+    };
+
+    const outcome = await service(client).request({
+      requestId: "r1",
+      session: withReferences,
+      origin: ORIGIN,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.route).not.toHaveProperty("signalsAlong");
+    expect(outcome.route).not.toHaveProperty("signalSpans");
+    expect(outcome.route).not.toHaveProperty("landmarkReferences");
+  });
+
   it("follows the route the server marked active, as the browser does", async () => {
     const answer = routeAnswer();
     const marked = { ...answer.routes[0], distance: 4_200 };
