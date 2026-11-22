@@ -172,7 +172,12 @@ export function buildNavigationAlertsQuery({ south, west, north, east }: AlertBo
     "[out:json][timeout:25];",
     `(node["highway"="speed_camera"](${b});node["railway"="level_crossing"](${b});`,
     `node["highway"="stop"](${b});node["highway"="give_way"](${b});`,
-    `node["highway"="crossing"](${b});node["traffic_calming"](${b});)->.alerts;`,
+    // Only marked, unsignalised crossings: each crossing node also pulls in
+    // its footways and roads, and every crossing of a dense city would risk
+    // the timeout that drops all the other alerts. `alertType` stays the rule.
+    `node["highway"="crossing"]["crossing"~"^(zebra|marked|uncontrolled)$"](${b});`,
+    `node["highway"="crossing"]["crossing:markings"]["crossing:markings"!="no"]["crossing"!="traffic_signals"](${b});`,
+    `node["traffic_calming"](${b});)->.alerts;`,
     ".alerts out body;",
     'way(bn.alerts)["highway"]->.roads;',
     ".roads out body geom;",

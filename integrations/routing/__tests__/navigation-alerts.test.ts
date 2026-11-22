@@ -172,6 +172,19 @@ describe("mapAlertElements — stop signs", () => {
     expect(query).toContain('node["highway"="crossing"]');
   });
 
+  it("downloads only marked, unsignalised crossings, not every crossing and its ways", () => {
+    const query = buildNavigationAlertsQuery({ south: 0, west: 0, north: 1, east: 1 });
+    // Every crossing node pulls its footways and roads into the answer; in a
+    // dense city that risks the timeout that would drop every other alert.
+    expect(query).not.toContain('node["highway"="crossing"](0,0,1,1)');
+    expect(query).toContain(
+      'node["highway"="crossing"]["crossing"~"^(zebra|marked|uncontrolled)$"](0,0,1,1)',
+    );
+    expect(query).toContain(
+      'node["highway"="crossing"]["crossing:markings"]["crossing:markings"!="no"]["crossing"!="traffic_signals"](0,0,1,1)',
+    );
+  });
+
   it("applies a stop on a junction node only to the minor approach", () => {
     const alerts = mapAlertElements([node(10, 0, 0, { highway: "stop" }), mainRoad, sideStreet]);
     expect(flags(byId(alerts, "stop:10"))).toEqual([
