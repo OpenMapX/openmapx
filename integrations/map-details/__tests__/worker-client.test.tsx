@@ -37,6 +37,29 @@ describe("inline fallback", () => {
     client.dispose();
   });
 
+  it("answers lane-highlight requests inline and null after disposal", async () => {
+    vi.stubGlobal("Worker", undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+    const client = createMapDetailsWorker();
+    const query = {
+      streetTemplate: TEMPLATE,
+      wayId: 1,
+      approach: [
+        [13.4, 52.5],
+        [13.401, 52.5],
+      ] as [number, number][],
+      engineLanes: [{ indications: ["through"], valid: true }],
+      recommended: [0],
+      classes: ["urban" as const],
+    };
+    expect(await client.laneHighlight(query)).toEqual({ polygons: null, reason: "no-ids" });
+    client.dispose();
+    expect(await client.laneHighlight(query)).toBeNull();
+  });
+
   it("answers null for a request superseded before it finished", async () => {
     vi.stubGlobal("Worker", undefined);
     const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));

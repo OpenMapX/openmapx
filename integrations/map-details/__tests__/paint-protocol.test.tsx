@@ -21,6 +21,7 @@ function client(bytes: ArrayBuffer | null | Error): MapDetailsWorkerClient {
       return bytes;
     }),
     objects: vi.fn(async () => []),
+    laneHighlight: vi.fn(async () => null),
     dispose: vi.fn(),
   };
 }
