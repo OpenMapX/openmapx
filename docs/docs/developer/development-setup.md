@@ -226,7 +226,7 @@ source data. `services start <id>` does not enable an unselected service;
 [Preparing data](../install/preparing-data.md) before starting an engine.
 
 There is also a network boundary: the service registry resolves a bound engine
-to its Docker hostname, such as `http://valhalla:8002`. The host-run API above
+to its Docker hostname, such as `http://openmapx-valhalla:8002`. The host-run API above
 cannot resolve that name. An integration's endpoint override may have lower
 precedence than its service binding, so setting a loopback URL alone does not
 repair an active Docker binding.

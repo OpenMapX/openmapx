@@ -38,7 +38,7 @@ and data timestamp you imported and maintained.
 | Nautical overlay        | `overlay-nautical` |
 
 Selecting `overpass` lets the deployment route the applicable server-side calls
-to `http://overpass:80`. Explicit helper or integration endpoint settings can
+to `http://openmapx-overpass:80`. Explicit helper or integration endpoint settings can
 have their own resolution behavior. Recreate API after changing its environment
 or applied service selection, then test the actual feature.
 

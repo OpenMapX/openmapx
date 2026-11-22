@@ -403,8 +403,8 @@ which is outside the self-hosting flow.
 
 :::caution[Stricter `DATA_MANAGER_URL` validation]
 `api` now refuses a `DATA_MANAGER_URL` that is plain `http://` on any host
-other than `localhost`, `127.0.0.1`, `::1` or the Compose service name
-`data-manager`, and rejects URLs with credentials, a path prefix or a query
+other than `localhost`, `127.0.0.1`, `::1` or the data-manager's
+project-unique name `openmapx-data-manager`, and rejects URLs with credentials, a path prefix or a query
 string. If you reach the data-manager over HTTP on a LAN address or a custom
 service name, list that hostname in `DATA_MANAGER_PLAINTEXT_HOSTS` (see
 [Configuration](./configuration.md)); a path prefix must be moved to a

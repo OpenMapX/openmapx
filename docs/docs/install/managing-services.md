@@ -518,8 +518,9 @@ checkout's.
 ## Exposure: what's reachable from outside
 
 By default every service is reachable **only** on the private `openmapx` Docker
-network; other containers reach it by service id (`http://valhalla:8002`,
-`http://nominatim:8080`). Nothing is exposed to the host or the internet unless
+network; other containers reach it by its project-unique name
+(`http://openmapx-valhalla:8002`, `http://openmapx-nominatim:8080`). Nothing is
+exposed to the host or the internet unless
 its manifest opts in, in one of two ways:
 
 - **Proxy routing** (`exposure.proxy`) generates file-provider routes for
@@ -559,9 +560,17 @@ The bundled `traefik` service is then never selected. Every routed service
 network, and its labels carry the entrypoint, resolver and network. The label
 router, service and middleware names start with `openmapx-` (`openmapx-api`,
 `openmapx-web`, …), so they do not clash with other projects on the same
-Traefik. Internal callers reach the API by its alias `openmapx-api` on the
-stack's own network, never by the bare name `api` that another project on the
-shared network could also use. Re-render and start the stack as usual.
+Traefik.
+
+Internal traffic uses project-unique names, so the shared proxy network cannot
+capture it. Every service answers to `openmapx-<service-id>` (`openmapx-api`,
+`openmapx-postgis`, `openmapx-redis`, `openmapx-data-manager`, …) on the
+stack's own networks only, and every internal URL OpenMapX renders uses those
+names. Docker also knows each service by its bare ID, such as `redis`, but on
+the shared network that name could resolve to another project's container, and
+OpenMapX never uses it. If you set an internal URL in `infra/docker/.env` or in
+a community service's settings, use the `openmapx-<service-id>` name as well.
+Re-render and start the stack as usual.
 
 Copy `services/traefik/config/dynamic/middlewares.yml` into the external
 Traefik's file-provider directory. The routes reference its middlewares with

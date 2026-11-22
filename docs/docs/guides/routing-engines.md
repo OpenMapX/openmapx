@@ -65,7 +65,7 @@ pnpm openmapx services logs valhalla --follow
 
 The scripted Valhalla image prepares routing tiles and, by default, elevation,
 administrative boundaries, and time zones. Its internal endpoint is
-`http://valhalla:8002`, published as `127.0.0.1:8002`. Initial preparation can take
+`http://openmapx-valhalla:8002`, published as `127.0.0.1:8002`. Initial preparation can take
 hours. Follow logs rather than treating a running container as a loaded graph.
 
 Existing tiles are reused on later starts. When refreshing OSM, download the new
@@ -108,7 +108,7 @@ The build runs extract, partition, and customize in Docker, then publishes
 result.
 
 The runtime uses `osrm-routed --algorithm mld` and listens internally at
-`http://osrm:5000`, published as `127.0.0.1:5000`.
+`http://openmapx-osrm:5000`, published as `127.0.0.1:5000`.
 
 :::caution[Stop OSRM before rebuilding]
 Preparation refuses a running OSRM consumer. New output is staged separately,

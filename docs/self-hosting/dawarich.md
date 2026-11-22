@@ -103,7 +103,7 @@ and seeds, then starts Puma. Worker startup follows the healthy app. Health
 probes alone do not establish a successful OIDC flow, working API key, import,
 or backup restore.
 
-OpenMapX connects to the managed API only at `http://dawarich-app:3000`; user links
+OpenMapX connects to the managed API only at `http://openmapx-dawarich-app:3000`; user links
 use the public HTTPS origin. Managed availability requires installed, selected,
 provisioned configuration and reachable app health. Only non-user health is
 cached in memory, for at most 15 seconds. Disabling does not erase connections.

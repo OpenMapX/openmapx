@@ -562,6 +562,14 @@ platform Postgres by default. Provision an explicit reviewed database connection
 and a restricted role before using this SQL. The OpenConditions network bridge
 is a specific built-in exception, not a capability every extension receives.
 
+Where a bridge exists, reach a built-in service by its project-unique name
+`openmapx-<service-id>`, for example
+`postgresql://<role>:<password>@openmapx-postgis:5432/openmapx`, never by its
+bare ID: installation refuses a community service whose environment, command or
+configuration defaults name a built-in service such as `postgis` directly.
+Service IDs and network aliases may not start with `openmapx-`; see
+[Network names](./service-manifest.md#network-names).
+
 ### How the service gets installed
 
 A service ships in an extension bundle (next section). When the operator installs

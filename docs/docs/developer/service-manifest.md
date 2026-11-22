@@ -167,7 +167,7 @@ service keys; the renderer copies them through.
 | `digest`          | string                 | OCI manifest pin, `sha256:` followed by 64 lowercase hex digits. Optional in the portable schema; mandatory for installed community services. When present, the renderer uses `image:tag@digest`; `tag` remains required metadata.                                                                                                                                                                 |
 | `containerName`   | string                 | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when the operations agent addresses the container by bare name over the Docker CLI (for example `postgis` and `motis-feed-proxy`); data-manager reaches those effects only through typed operations-agent operations. It blocks scaling, so use it sparingly.         |
 | `expose`          | number[]               | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`.                                                                                                                                                                                                                                                                                 |
-| `networkAliases`  | string[]               | Extra DNS aliases on the service's attached network (`openmapx` for built-ins, its isolated network for community services). Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless.                                                                                                                                       |
+| `networkAliases`  | string[]               | Extra DNS aliases on the service's home network (`openmapx` for built-ins, its isolated network for community services), next to the `openmapx-<service-id>` name every service gets (see [Network names](#network-names)). Each must be a valid DNS label, may not start with `openmapx-` and may not collide with another service id or alias. Aliasing the service's own id is harmless.        |
 | `command`         | string \| string[]     | Container command. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                    |
 | `entrypoint`      | string \| string[]     | Container entrypoint. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                 |
 | `environment`     | object (string→string) | Environment variables. First-party services support `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation passed to Docker Compose for deployment-time resolution. Community services render `$` literally and should use `configSchema` for operator-supplied settings.                                                                                                          |
@@ -188,10 +188,30 @@ service keys; the renderer copies them through.
 | `logging`         | object                 | Compose logging: `{ "driver": "...", "options": { ... } }`. **Forbidden for third-party services.**                                                                                                                                                                                                                                                                                                |
 | `healthcheck`     | object                 | See below.                                                                                                                                                                                                                                                                                                                                                                                         |
 
+### Network names
+
+Every service answers to `openmapx-<service-id>` on each network of the stack
+it joins: `openmapx-postgis`, `openmapx-data-manager`, `openmapx-api`, and a
+community service `weather-feed` as `openmapx-weather-feed`. Internal URLs,
+host settings and host allow-lists use only these names, for example
+`postgresql://openmapx_api@openmapx-postgis:5432/openmapx` or
+`http://openmapx-valhalla:8002`. Docker Compose also registers the bare service
+ID on every network, but nothing in OpenMapX relies on it: behind an
+operator-run reverse proxy (`OPENMAPX_PROXY_NETWORK`), a routed service also
+joins the proxy's shared network, and Docker can resolve a bare ID such as
+`redis` there to another project's container. The `openmapx-` name is never
+attached to that shared network.
+
+The prefix is reserved: validation refuses a service ID, a declared
+`networkAliases` entry or a `containerName` that starts with `openmapx-`, and an
+installed community
+service whose environment, command or configuration defaults reach a built-in
+service by its bare ID (`http://overpass:80`). Write `http://openmapx-overpass:80`.
+
 ### Network isolation
 
-Bridge-mode built-ins join the shared `openmapx` network and keep service-id
-discovery there. Each community service instead receives exactly one dedicated
+Bridge-mode built-ins join the shared `openmapx` network and reach each other
+there by their `openmapx-<service-id>` names. Each community service instead receives exactly one dedicated
 network named `openmapx-community-<normalized-service-id>` and never joins
 `openmapx`. Different community services therefore cannot connect directly to
 each other or to Redis, Postgres, the API, data-manager, or other platform
@@ -205,7 +225,10 @@ is skipped silently, so a bridge may name a community service before it is
 installed. The capability is authorized from registry provenance
 (`isBuiltIn` / `firstParty`), never from the manifest's self-declared
 `quality`; a hand-built community `LoadedService` is rejected again at the
-render boundary.
+render boundary. On the community network the bridge answers to its
+`openmapx-<service-id>` name and the community service to its own, so the
+community service reaches a bridge as, for example, `openmapx-postgis:5432`, and
+the bridge reaches it as `openmapx-<community-service-id>`.
 
 Four shipped built-ins opt in, all for OpenConditions, whose services own the
 shared database's `conditions` schema: `postgis` (both OpenConditions services
@@ -480,8 +503,9 @@ application services use typed operations-agent requests. Run
 ## `exposure`
 
 By default a built-in service is reachable only on the private `openmapx`
-network, by service id (`http://valhalla:8002`). A community service is reachable
-only on its own isolated community network. Nothing is published to the host or
+network, by its project-unique name (`http://openmapx-valhalla:8002`; see
+[Network names](#network-names)). A community service is reachable only on its
+own isolated community network. Nothing is published to the host or
 the internet unless the manifest opts in, in one of two ways.
 
 ```json

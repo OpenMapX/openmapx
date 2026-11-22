@@ -175,7 +175,10 @@ graph TD
 
 Traefik terminates TLS for the bundled proxy deployment. An operator can
 configure an external proxy instead. Containers address bound services by
-service ID, for example `http://valhalla:8002`. A manifest can expose a proxy
+their project-unique name `openmapx-<service-id>`, for example
+`http://openmapx-valhalla:8002`, never by the bare service ID: behind an
+external proxy, routed services also join the proxy's shared network, where a
+bare ID could resolve to another project's container. A manifest can expose a proxy
 route through `exposure.proxy` or bind a host port through `exposure.hostPorts`
 (loopback by default). Inspect those declarations when reviewing network access.
 `web` claims `/` at the lowest proxy priority; more specific routes such as

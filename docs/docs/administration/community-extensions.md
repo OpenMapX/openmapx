@@ -497,7 +497,7 @@ installation does not prove that their database and feed credentials are valid.
    gain superuser rights over the whole server, including running commands in
    the database container. Create a dedicated role for each service with only
    what it needs, as shown below, and use
-   `postgresql://<role>:<password>@postgis:5432/openmapx` with a correctly
+   `postgresql://<role>:<password>@openmapx-postgis:5432/openmapx` with a correctly
    URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
    separate values with `openssl rand -hex 32`.
@@ -539,8 +539,8 @@ installation does not prove that their database and feed credentials are valid.
 5. Set the OpenMapX consumers' endpoints in `infra/docker/.env`:
 
    ```bash
-   OPENCONDITIONS_URL=http://openconditions-ingest:4100
-   OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
+   OPENCONDITIONS_URL=http://openmapx-openconditions-ingest:4100
+   OPENCONDITIONS_CONTRIBUTIONS_URL=http://openmapx-openconditions-contributions-api:4200
    OPENCONDITIONS_OPERATOR_TOKEN=
    ```
 
@@ -612,9 +612,14 @@ OpenMapX's own `OVERPASS_URL` does not configure that service. Set its base URL
 settings:
 
 ```bash
-SERVICE_OPENCONDITIONS_INGEST_OVERPASS_URL=http://overpass:80
-SERVICE_OPENCONDITIONS_INGEST_OPENCONDITIONS_EGRESS_ALLOWED_HOSTS=overpass
+SERVICE_OPENCONDITIONS_INGEST_OVERPASS_URL=http://openmapx-overpass:80
+SERVICE_OPENCONDITIONS_INGEST_OPENCONDITIONS_EGRESS_ALLOWED_HOSTS=openmapx-overpass
 ```
+
+Address built-in services by their `openmapx-<service-id>` names, as here.
+OpenMapX refuses to install a community service whose environment, command or
+configuration defaults reach a built-in service by its bare ID, such as
+`postgis` or `overpass`.
 
 Then run `pnpm openmapx services start openconditions-ingest` or apply the
 corresponding settings in the admin form. Verify the resolved source and the

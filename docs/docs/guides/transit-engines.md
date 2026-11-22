@@ -123,7 +123,7 @@ leave a container running in a holding loop; inspect logs and query endpoints.
 Build, Build All and Full Update's build phase do not build MOTIS; Full Update
 refreshes it through its transit sync step.
 
-The primary endpoint is `http://motis:8080`, published on host loopback `8081`.
+The primary endpoint is `http://openmapx-motis:8080`, published on host loopback `8081`.
 Staging uses loopback `8083` and does not serve application traffic. Both run
 as the deployment's user, `UID:GID` from `infra/docker/.env`.
 
@@ -298,7 +298,7 @@ pnpm openmapx services logs otp --follow
 ```
 
 Start re-renders and links automatically. The container uses `--load --serve`
-and publishes `http://otp:8080` as host loopback `8090`. The release's build and
+and publishes `http://openmapx-otp:8080` as host loopback `8090`. The release's build and
 routing config files are `services/otp/config/`; change them with
 [overrides](../install/managing-services.md#service-file-overrides) of
 `otp/config/build-config.json` or `otp/config/router-config.json`. The graph

@@ -43,7 +43,7 @@ OpenConditions contributions service. Install the OpenConditions extension (or
 another compatible service) and set its endpoint for `api`:
 
 ```bash
-OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
+OPENCONDITIONS_CONTRIBUTIONS_URL=http://openmapx-openconditions-contributions-api:4200
 ```
 
 This example uses the contributions service's container hostname. Ensure
