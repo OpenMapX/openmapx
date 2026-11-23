@@ -55,8 +55,8 @@ not use the superuser: the render generates their own database passwords in
 `infra/docker/secrets/` (see [Database roles](./configuration.md#database-roles)),
 together with each data-manager caller's token and the API's secrets key
 `secrets-key`, which encrypts the credentials and secret settings saved in the
-admin panel. Do not set `OPENMAPX_SECRETS_KEY`; its former 64-character hex
-format is not accepted.
+admin panel. In Compose only that file counts: `OPENMAPX_SECRETS_KEY` is not
+passed to the api container, so a value in `infra/docker/.env` is ignored.
 
 `UID` and `GID` name the deployment's user: the stack's own containers
 (`api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)

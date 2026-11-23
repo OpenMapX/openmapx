@@ -30,9 +30,9 @@ released installation exists.
 ## Required action
 
 Remove `OPENMAPX_SECRETS_KEY` from `infra/docker/.env` and run
-`pnpm openmapx compose render` before starting the API; while the variable is
-set beside the generated key file, the API uses neither and refuses to store or
-read secrets. Secrets encrypted with
+`pnpm openmapx compose render` before starting the API. The api container no
+longer receives that variable, so a value left there is ignored and only the
+generated key file counts. Secrets encrypted with
 an old hex key cannot be decrypted and must be entered again. For a host-run
 development API, set `OPENMAPX_SECRETS_KEY_FILE=../../infra/docker/secrets/secrets-key`
 in `apps/api/.env` instead of a hex key.

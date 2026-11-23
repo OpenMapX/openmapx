@@ -64,10 +64,13 @@ owner or link count is refused. The API encrypts with it everything it
 stores secret in the database: the credential vault (`integration_secret`,
 `service_secret`), personal timeline credentials, assisted privacy-request
 locators and secret settings such as the SMTP password (`system_secret`). This
-is the only key format the API accepts; a 64-character hex
-`OPENMAPX_SECRETS_KEY` from older instructions is refused, as is that variable
-beside the file. The value must never enter Compose environment values, URLs,
-labels, commands, images, or logs.
+is the only key format the API accepts; a 64-character hex key from older
+instructions is refused. In Compose only this file counts:
+`OPENMAPX_SECRETS_KEY` is not passed to the api container, so a value in
+`infra/docker/.env` is ignored. That variable is only for running the API
+outside Compose in development (`apps/api/.env`), where setting it beside
+`OPENMAPX_SECRETS_KEY_FILE` is refused. The value must never enter Compose
+environment values, URLs, labels, commands, images, or logs.
 
 Database backups contain only ciphertext, so the key is part of the
 disaster-recovery set: copy it alongside off-host database backups, like
