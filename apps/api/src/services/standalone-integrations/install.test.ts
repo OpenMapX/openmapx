@@ -563,6 +563,55 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(getIntegration(id)).toBeUndefined();
     }, 120000);
 
+    it("brings an unowned CLI directory under a standalone owner by installing a reviewed source over it", async () => {
+      const id = "cli-reinstalled",
+        directory = join(state.host.root, "custom_integrations", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "CLI placed",
+          version: "0.9.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const before = await inventoryEntry(id);
+      expect(before).toMatchObject({
+        ownership: "unmanaged",
+        extensionId: null,
+        provenance: null,
+        version: "0.9.0",
+      });
+      const { parentId, contentDigest } = await installUploaded(id);
+      expect(contentDigest).not.toBe(before.contentDigest);
+      expect(await inventoryEntry(id)).toMatchObject({
+        ownership: "standalone",
+        extensionId: parentId,
+        provenance: "uploaded-artifact",
+        version: "1.0.0",
+        removable: true,
+      });
+      expect(
+        await state.fixture.db
+          .select()
+          .from(schema.installedExtensionComponent)
+          .where(eq(schema.installedExtensionComponent.componentId, id)),
+      ).toEqual([{ extensionId: parentId, kind: "integration", componentId: id }]);
+      const [integration] = await state.fixture.db
+        .select()
+        .from(schema.installedIntegration)
+        .where(eq(schema.installedIntegration.id, id));
+      expect(integration).toMatchObject({
+        sourceType: "uploaded-artifact",
+        installedVersion: "1.0.0",
+      });
+      const { getIntegration } = await import("../../integration-host");
+      expect(getIntegration(id)?.manifest.version).toBe("1.0.0");
+    }, 120000);
+
     it("restores quarantined bytes and exact ownership when a real database delete rolls back", async () => {
       const id = "standalone-remove-rollback",
         { directory, contentDigest } = await installUploaded(id),

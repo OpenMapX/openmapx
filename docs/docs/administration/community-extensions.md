@@ -124,9 +124,9 @@ its existing job instead of installing twice.
 
 In **Local integrations**, the inventory includes CLI-installed directories,
 standalone owners, invalid legacy content and missing local files, independently
-of catalog availability. A directory without an owner record shows no source;
-to manage it from the admin panel, install it again with **Install integration**
-so its provenance is recorded.
+of catalog availability. A directory without an owner record shows its source as
+unknown; to manage it from the admin panel, install it again with **Install
+integration** so its provenance is recorded.
 
 **Remove** requires confirmation of the reviewed content digest. The agent keeps
 the original directory in quarantine until reload and ownership bookkeeping
