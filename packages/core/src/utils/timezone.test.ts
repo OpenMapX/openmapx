@@ -1,5 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { localDateInZone, zonedWallClockToInstant } from "./timezone";
+import { localDateInZone, timeZoneAt, tzOffsetMinutes, zonedWallClockToInstant } from "./timezone";
+
+describe("timeZoneAt", () => {
+  it.each([
+    ["Ciudad Juárez", 31.6904, -106.4245, "America/Ciudad_Juarez", "2026-11-21T12:00:00Z", -420],
+    ["Coyhaique", -45.5752, -72.0662, "America/Coyhaique", "2026-07-15T12:00:00Z", -180],
+  ] as const)(
+    "uses the current zone and offset for %s",
+    (_city, lat, lng, expected, at, offset) => {
+      const zone = timeZoneAt(lat, lng);
+      expect(zone).toBe(expected);
+      expect(tzOffsetMinutes(new Date(at), zone ?? "")).toBe(offset);
+    },
+  );
+
+  it("resolves ordinary coordinates in latitude, longitude order", () => {
+    expect(timeZoneAt(52, 13)).toBe("Europe/Berlin");
+    expect(timeZoneAt(49, -123)).toBe("America/Vancouver");
+  });
+
+  it("keeps Nuuk's renamed zone equivalent to its legacy alias", () => {
+    const zone = timeZoneAt(64.1835, -51.7216);
+    expect(zone).toBe("America/Nuuk");
+    const at = new Date("2026-01-15T12:00:00Z");
+    expect(tzOffsetMinutes(at, zone ?? "")).toBe(tzOffsetMinutes(at, "America/Godthab"));
+  });
+
+  it.each([
+    [Number.NaN, 13],
+    [52, Number.NaN],
+    [Number.POSITIVE_INFINITY, 13],
+    [52, Number.NEGATIVE_INFINITY],
+    [91, 13],
+    [-91, 13],
+    [52, 181],
+    [52, -181],
+  ])("returns null for invalid coordinates (%s, %s)", (lat, lng) => {
+    expect(timeZoneAt(lat, lng)).toBeNull();
+  });
+});
 
 describe("zonedWallClockToInstant", () => {
   it("resolves ordinary DST and non-DST wall clocks", () => {

@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { timeZoneAt, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
+import { timeZoneAt, tzOffsetLabel, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionStrip } from "@/integration-api/components/AttributionStrip";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
@@ -34,7 +34,7 @@ export function PlaceHeaderWeather({ lat, lng, clearCloseButton = false }: Props
     return () => clearInterval(id);
   }, []);
 
-  // tz-lookup is a point-in-polygon search; memoize so it isn't recomputed on
+  // Memoize the offline lookup so it isn't recomputed on
   // every render (notably the once-a-minute clock tick).
   const timeZone = useMemo(() => timeZoneAt(lat, lng), [lat, lng]);
 
@@ -42,7 +42,11 @@ export function PlaceHeaderWeather({ lat, lng, clearCloseButton = false }: Props
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
-  const localTime = fmt.time(now, { timeZone: timeZone ?? undefined });
+  // Older browsers may not recognize newly introduced IANA zone IDs.
+  const localTime =
+    timeZone && tzOffsetLabel(now, timeZone) === null
+      ? null
+      : fmt.time(now, { timeZone: timeZone ?? undefined });
 
   return (
     <>
@@ -62,9 +66,11 @@ export function PlaceHeaderWeather({ lat, lng, clearCloseButton = false }: Props
         <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
           {info.description} · {Math.round(current.temperature)}°C
         </Typography>
-        <Typography variant="body2" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
-          {localTime}
-        </Typography>
+        {localTime !== null && (
+          <Typography variant="body2" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
+            {localTime}
+          </Typography>
+        )}
       </Box>
       {/* Keep the complete source and branding adjacent, outside the reading column. */}
       <Box
