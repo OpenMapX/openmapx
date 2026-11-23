@@ -43,6 +43,7 @@ interface TestSetting {
   envVar?: string;
   envOverride: boolean;
   showWhen?: { key: string; equals: unknown };
+  unreadable?: true;
 }
 
 // The panel renders expanded only for the "general" group, so every fixture
@@ -125,6 +126,32 @@ describe("SystemSettings env-override handling", () => {
     const input = (await screen.findByLabelText("Password")) as HTMLInputElement;
     expect(input.disabled).toBe(true);
     expect(input.value).not.toBe("***");
+  });
+
+  it("says when a stored secret cannot be decrypted, until a replacement is typed", async () => {
+    mockGroup("Email", [
+      {
+        group: "email",
+        key: "smtpPassword",
+        label: "Password",
+        type: "string",
+        secret: true,
+        value: "***",
+        source: "database",
+        envVar: "SMTP_PASS",
+        envOverride: false,
+        unreadable: true,
+      },
+    ]);
+
+    render(<SystemSettings />, { wrapper: createQueryWrapper() });
+
+    const input = (await screen.findByLabelText("Password")) as HTMLInputElement;
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/current secrets key cannot decrypt it/)).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "replacement" } });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByText(/current secrets key cannot decrypt it/)).not.toBeInTheDocument();
   });
 });
 

@@ -48,6 +48,7 @@ export function PrivacySetupPage() {
       envOverrides: t("editor.envOverrides"),
       envOverrideHelp: (envVar) => t("editor.envOverrideHelp", { envVar }),
       envSecretValue: t("editor.envSecretValue"),
+      unreadableSecret: t("editor.unreadableSecret"),
       showSecret: t("editor.showSecret"),
       hideSecret: t("editor.hideSecret"),
       databaseSource: t("editor.databaseSource"),

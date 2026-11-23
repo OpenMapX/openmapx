@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { SETTING_DEFS } from "../../services/settings";
+import { SETTING_DEFS, SecretSettingUnreadableError } from "../../services/settings";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
 const {
@@ -368,6 +368,20 @@ describe("POST /admin/settings/test-email", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: "SMTP host is not configured" });
+    expect(mockSendViaSmtp).not.toHaveBeenCalled();
+  });
+
+  it("says which stored credential the secrets key cannot open, with 400", async () => {
+    const error = new SecretSettingUnreadableError(
+      "smtpPassword",
+      new Error("A stored secret cannot be decrypted with the configured secrets key"),
+    );
+    mockLoadEmailConfig.mockRejectedValueOnce(error);
+    const res = await app.inject({ method: "POST", url: "/admin/settings/test-email" });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: error.message });
+    expect(res.json().error).toMatch(/smtpPassword cannot be read: A stored secret cannot be/);
     expect(mockSendViaSmtp).not.toHaveBeenCalled();
   });
 

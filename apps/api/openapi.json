@@ -89331,6 +89331,12 @@
                                     "equals"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "unreadable": {
+                                  "type": "boolean",
+                                  "enum": [
+                                    true
+                                  ]
                                 }
                               },
                               "required": [
@@ -89853,6 +89859,12 @@
                                     "equals"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "unreadable": {
+                                  "type": "boolean",
+                                  "enum": [
+                                    true
+                                  ]
                                 }
                               },
                               "required": [

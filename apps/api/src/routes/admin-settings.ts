@@ -11,6 +11,7 @@ import {
   parseEnvValue,
   resolveSettings,
   SETTING_DEFS,
+  SecretSettingUnreadableError,
   saveSystemSettings,
 } from "../services/settings";
 import { writeAuditLog } from "../utils/audit-log";
@@ -117,7 +118,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     async (request, reply) => {
       const adminSession = getAdminSession(request);
 
-      const config = await loadEmailConfig();
+      let config: Awaited<ReturnType<typeof loadEmailConfig>>;
+      try {
+        config = await loadEmailConfig();
+      } catch (error) {
+        // A stored credential the current secrets key cannot open: say so.
+        if (error instanceof SecretSettingUnreadableError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        throw error;
+      }
 
       // Validate the active provider has the inputs it needs before
       // attempting to send. Errors here become 400s so the operator gets

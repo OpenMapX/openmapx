@@ -1,5 +1,4 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { integrationSecret } from "../db/schema";
@@ -8,9 +7,13 @@ import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
 } from "./administrative-configuration-context";
+import { readGeneratedKeyFile } from "./generated-key-file";
 
 const ALGORITHM = "aes-256-gcm" as const;
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
 const KEY_FILE_VARIABLE = "OPENMAPX_SECRETS_KEY_FILE";
+const KEY_UID_VARIABLE = "OPENMAPX_SECRETS_KEY_UID";
 const KEY_VARIABLE = "OPENMAPX_SECRETS_KEY";
 const KEY_FORMAT =
   "32 random bytes as 43 base64url characters, the format `pnpm openmapx compose render` " +
@@ -72,15 +75,14 @@ function getSecretsKey(): Buffer {
   if (cachedKey?.source === source) return cachedKey.key;
   let key: Buffer;
   if (path) {
-    let contents: string;
+    // The render's own rule: exact bytes, one link, mode 0444, the deployment's owner.
     try {
-      contents = readServiceSecretFile(path, "Secrets key");
+      key = readGeneratedKeyFile(path, "Secrets key file", process.env[KEY_UID_VARIABLE]);
     } catch (error) {
       throw new SecretsKeyError(
-        `${(error as Error).message} (${KEY_FILE_VARIABLE}); run \`pnpm openmapx compose render\` to generate it`,
+        `${(error as Error).message} (${KEY_FILE_VARIABLE}). It must hold ${KEY_FORMAT}, with no newline; restore it byte for byte or run \`pnpm openmapx compose render\` to generate it`,
       );
     }
-    key = decodeSecretsKey(contents, `The secrets key file (${KEY_FILE_VARIABLE})`);
   } else {
     key = decodeSecretsKey(inline, KEY_VARIABLE);
   }
@@ -104,8 +106,8 @@ export function assertSecretsConfigured(): void {
 
 export function encrypt(plaintext: string): { ciphertext: string; iv: string; tag: string } {
   const key = getSecretsKey();
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: TAG_BYTES });
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
@@ -117,9 +119,15 @@ export function encrypt(plaintext: string): { ciphertext: string; iv: string; ta
 
 export function decrypt(ciphertext: string, iv: string, tag: string): string {
   const key = getSecretsKey();
+  const ivBytes = Buffer.from(iv, "base64");
+  const tagBytes = Buffer.from(tag, "base64");
+  // A shortened tag would weaken authentication; only the lengths encrypt() writes open.
+  if (ivBytes.length !== IV_BYTES || tagBytes.length !== TAG_BYTES) {
+    throw new SecretDecryptionError();
+  }
   try {
-    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, "base64"));
-    decipher.setAuthTag(Buffer.from(tag, "base64"));
+    const decipher = createDecipheriv(ALGORITHM, key, ivBytes, { authTagLength: TAG_BYTES });
+    decipher.setAuthTag(tagBytes);
     const decrypted = Buffer.concat([
       decipher.update(Buffer.from(ciphertext, "base64")),
       decipher.final(),

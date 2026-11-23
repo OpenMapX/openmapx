@@ -1,5 +1,5 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { systemSecret, systemSettings } from "../db/schema";
 import { actorUserIdOrNull } from "../utils/actor";
@@ -488,6 +488,8 @@ interface ResolvedSetting {
   envVar?: string;
   envOverride: boolean;
   showWhen?: { key: string; equals: unknown | unknown[] };
+  /** A stored secret in effect that the current secrets key cannot decrypt. */
+  unreadable?: true;
 }
 
 interface SettingsGroup {
@@ -584,28 +586,66 @@ export async function saveSystemSettings(
   });
 }
 
+/** A stored secret setting cannot be decrypted: the secrets key is missing,
+ * unusable or not the key the value was saved with. */
+export class SecretSettingUnreadableError extends Error {
+  constructor(
+    readonly setting: string,
+    cause: unknown,
+  ) {
+    super(`The secret setting ${setting} cannot be read: ${(cause as Error).message}`, { cause });
+    this.name = "SecretSettingUnreadableError";
+  }
+}
+
+/** The secret settings that have a stored value. Nothing is decrypted. */
+export async function storedSecretSettingKeys(database: typeof db = db): Promise<Set<string>> {
+  const rows = await database.select({ key: systemSecret.key }).from(systemSecret);
+  return new Set(rows.map((row) => row.key).filter(isSecretSetting));
+}
+
 /**
- * The stored values of the secret settings, decrypted. Environment overrides
- * such as SMTP_PASS take precedence and are the caller's to apply. Throws,
- * naming the setting, when the secrets key is missing or is not the key a
- * value was saved with.
+ * The stored values of the given secret settings, decrypted; a setting without
+ * a stored value is absent. Only the listed settings are decrypted, so callers
+ * pass just those whose environment override (SMTP_PASS, MAPTILER_KEY, …) is
+ * unset, and an unreadable value never breaks a setting the environment
+ * supplies. Throws SecretSettingUnreadableError, naming the setting, when a
+ * listed value cannot be decrypted.
  */
 export async function loadSecretSettings(
+  keys: readonly string[],
   database: typeof db = db,
 ): Promise<Record<string, string>> {
-  const rows = await database.select().from(systemSecret);
+  const wanted = keys.filter(isSecretSetting);
+  if (wanted.length === 0) return {};
+  const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, wanted));
   const values: Record<string, string> = {};
   for (const row of rows) {
-    if (!isSecretSetting(row.key)) continue;
     try {
       values[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
     } catch (error) {
-      throw new Error(`The secret setting ${row.key} cannot be read: ${(error as Error).message}`, {
-        cause: error,
-      });
+      throw new SecretSettingUnreadableError(row.key, error);
     }
   }
   return values;
+}
+
+/** The stored secret settings among `keys` that cannot be decrypted, without throwing. */
+async function unreadableSecretSettings(
+  keys: readonly string[],
+  database: typeof db,
+): Promise<Set<string>> {
+  const unreadable = new Set<string>();
+  if (keys.length === 0) return unreadable;
+  const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, keys));
+  for (const row of rows) {
+    try {
+      decrypt(row.ciphertext, row.iv, row.tag);
+    } catch {
+      unreadable.add(row.key);
+    }
+  }
+  return unreadable;
 }
 
 export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {
@@ -613,10 +653,17 @@ export async function resolveSettings(database: typeof db = db): Promise<Setting
   const dbMap: Record<string, unknown> = Object.fromEntries(
     dbRows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value]),
   );
-  // A stored secret is shown only as configured; it is never decrypted here.
-  for (const { key } of await database.select({ key: systemSecret.key }).from(systemSecret)) {
-    if (isSecretSetting(key)) dbMap[key] = "***";
-  }
+  // A stored secret is shown only as configured, never with its value. One in
+  // effect (no environment override) is also checked against the current key,
+  // so the editor can say when a restore brought it back without its key.
+  const storedSecrets = await storedSecretSettingKeys(database);
+  for (const key of storedSecrets) dbMap[key] = "***";
+  const unreadable = await unreadableSecretSettings(
+    SETTING_DEFS.filter(
+      (def) => def.secret && storedSecrets.has(def.key) && !(def.env && process.env[def.env]),
+    ).map((def) => def.key),
+    database,
+  );
 
   const grouped: Record<string, ResolvedSetting[]> = {};
 
@@ -666,6 +713,7 @@ export async function resolveSettings(database: typeof db = db): Promise<Setting
       envVar: def.env,
       envOverride: source === "env",
       showWhen: def.showWhen,
+      ...(source === "database" && unreadable.has(def.key) ? { unreadable: true } : {}),
     });
   }
 

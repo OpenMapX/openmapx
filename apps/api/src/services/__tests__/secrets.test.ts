@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -113,6 +113,18 @@ describe("crypto layer", () => {
     expect(() => decrypt(ciphertext, iv, tag)).toThrow();
   });
 
+  it("refuses a truncated tag or an IV of another length before decrypting", () => {
+    const { ciphertext, iv, tag } = encrypt("secret-value");
+    const truncated = Buffer.from(tag, "base64").subarray(0, 4).toString("base64");
+    expect(() => decrypt(ciphertext, iv, truncated)).toThrow(
+      /cannot be decrypted with the configured secrets key/,
+    );
+    const longIv = Buffer.concat([Buffer.from(iv, "base64"), Buffer.alloc(4)]).toString("base64");
+    expect(() => decrypt(ciphertext, longIv, tag)).toThrow(
+      /cannot be decrypted with the configured secrets key/,
+    );
+  });
+
   it("names the key mismatch when decryption fails", () => {
     const { ciphertext, iv, tag } = encrypt("secret-value");
     vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_B);
@@ -157,6 +169,17 @@ describe("crypto layer", () => {
         expect(decrypt(sealed.ciphertext, sealed.iv, sealed.tag)).toBe("from-file");
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", path);
         expect(isSecretsConfigured()).toBe(false);
+
+        // The render's rule exactly: no trailing newline, mode 0444, no symlink.
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
+        const newline = join(directory, "newline-key");
+        writeFileSync(newline, `${KEY_B}\n`, { mode: 0o444 });
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", newline);
+        expect(() => encrypt("x")).toThrow(/invalid size/);
+        const link = join(directory, "link-key");
+        symlinkSync(path, link);
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", link);
+        expect(() => encrypt("x")).toThrow(/must be a regular file/);
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }

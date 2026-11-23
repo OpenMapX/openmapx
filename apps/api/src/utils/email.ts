@@ -6,7 +6,11 @@ import { systemSettings } from "../db/schema";
 import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
 import { redis } from "../redis";
 import { appLogger } from "../services/app-logger.js";
-import { isSecretSetting, loadSecretSettings } from "../services/settings.js";
+import {
+  isSecretSetting,
+  loadSecretSettings,
+  storedSecretSettingKeys,
+} from "../services/settings.js";
 import { MailDeliveryRefusedError } from "./mail-outcome";
 import { createMailRecipientLimit } from "./mail-recipient-limit";
 
@@ -60,18 +64,68 @@ function pickString(env: string | undefined, db: unknown, fallback = ""): string
   return fallback;
 }
 
+/** Each secret email setting and the environment variable that overrides it. */
+const SECRET_EMAIL_ENV = {
+  emailLabsAppKey: "EMAILLABS_APP_KEY",
+  emailLabsSecretKey: "EMAILLABS_SECRET_KEY",
+  lettermintApiToken: "LETTERMINT_API_TOKEN",
+  smtpPassword: "SMTP_PASS",
+} as const;
+type SecretEmailSetting = keyof typeof SECRET_EMAIL_ENV;
+
+const PROVIDER_SECRETS: Record<Provider, readonly SecretEmailSetting[]> = {
+  emaillabs: ["emailLabsAppKey", "emailLabsSecretKey"],
+  lettermint: ["lettermintApiToken"],
+  smtp: ["smtpPassword"],
+};
+
+function hasEnv(name: string): boolean {
+  const value = process.env[name];
+  return value != null && value.length > 0;
+}
+
+/**
+ * The active provider, by priority EmailLabs (3 fields) > Lettermint (1 field)
+ * > SMTP. A secret counts as configured when its environment variable is set
+ * or a value is stored; nothing is decrypted to decide.
+ */
+function activeProvider(dbMap: Record<string, unknown>, storedSecrets: Set<string>): Provider {
+  const secret = (key: SecretEmailSetting) =>
+    hasEnv(SECRET_EMAIL_ENV[key]) || storedSecrets.has(key);
+  const smtpAccount = pickString(process.env.EMAILLABS_SMTP_ACCOUNT, dbMap.emailLabsSmtpAccount);
+  if (secret("emailLabsAppKey") && secret("emailLabsSecretKey") && smtpAccount) return "emaillabs";
+  if (secret("lettermintApiToken")) return "lettermint";
+  return "smtp";
+}
+
+async function emailSettingsAndProvider() {
+  const rows = await db.select().from(systemSettings);
+  const dbMap: Record<string, unknown> = Object.fromEntries(
+    rows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value]),
+  );
+  const storedSecrets = await storedSecretSettingKeys();
+  return { dbMap, storedSecrets, provider: activeProvider(dbMap, storedSecrets) };
+}
+
 /**
  * Load the active email configuration by merging environment variables over
  * `system_settings` rows and the encrypted `system_secret` values. Env always
  * wins so deployments that pin secrets via .env keep working unchanged;
- * admin-panel values take effect when env is unset. Re-evaluated on every
- * send so admin edits apply without a server restart.
+ * admin-panel values take effect when env is unset. Only the active provider's
+ * stored secrets that no environment variable overrides are decrypted, so an
+ * unreadable stored value never breaks a credential the environment supplies.
+ * Throws SecretSettingUnreadableError when a needed value cannot be decrypted.
+ * Re-evaluated on every send so admin edits apply without a server restart.
  */
 async function loadEmailConfig(): Promise<EmailConfig> {
-  const rows = await db.select().from(systemSettings);
+  const settings = await emailSettingsAndProvider();
   const dbMap: Record<string, unknown> = {
-    ...Object.fromEntries(rows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value])),
-    ...(await loadSecretSettings()),
+    ...settings.dbMap,
+    ...(await loadSecretSettings(
+      PROVIDER_SECRETS[settings.provider].filter(
+        (key) => settings.storedSecrets.has(key) && !hasEnv(SECRET_EMAIL_ENV[key]),
+      ),
+    )),
   };
 
   const from = pickString(
@@ -87,7 +141,7 @@ async function loadEmailConfig(): Promise<EmailConfig> {
       : Boolean(dbMap.smtpTls);
 
   const config: EmailConfig = {
-    provider: "smtp",
+    provider: settings.provider,
     from,
     smtp: {
       host: pickString(process.env.SMTP_HOST, dbMap.smtpHost, "localhost"),
@@ -105,15 +159,6 @@ async function loadEmailConfig(): Promise<EmailConfig> {
       apiToken: pickString(process.env.LETTERMINT_API_TOKEN, dbMap.lettermintApiToken),
     },
   };
-
-  // Priority chain: EmailLabs (3 fields) > Lettermint (1 field) > SMTP.
-  if (config.emaillabs.appKey && config.emaillabs.secretKey && config.emaillabs.smtpAccount) {
-    config.provider = "emaillabs";
-  } else if (config.lettermint.apiToken) {
-    config.provider = "lettermint";
-  } else {
-    config.provider = "smtp";
-  }
 
   return config;
 }
@@ -302,7 +347,8 @@ export async function getEmailDisclosure(): Promise<EmailDisclosure> {
   if (disclosureCache && now - disclosureCache.at < DISCLOSURE_TTL_MS) {
     return disclosureCache.value;
   }
-  const { provider } = await loadEmailConfig();
+  // Which provider is configured is all the disclosure needs; nothing is decrypted.
+  const { provider } = await emailSettingsAndProvider();
   const value = buildEmailDisclosure(provider);
   disclosureCache = { value, at: now };
   return value;

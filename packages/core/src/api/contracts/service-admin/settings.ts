@@ -24,6 +24,9 @@ export const adminSettingSchema = z.strictObject({
   envVar: z.string().optional(),
   envOverride: z.boolean(),
   showWhen: z.strictObject({ key: z.string(), equals: adminJsonValueSchema }).optional(),
+  /** Present when a stored secret in effect cannot be decrypted with the
+   * current secrets key, for example after a restore without its key file. */
+  unreadable: z.literal(true).optional(),
 });
 export const adminSettingsGroupSchema = z.strictObject({
   id: z.string(),

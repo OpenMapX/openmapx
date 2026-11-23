@@ -56,8 +56,11 @@ never trimmed or silently rotated. The same protected-directory, owner,
 single-link, and exact `0444` file rules described for the generated Redis
 credential apply.
 
-Only `api` receives the read-only bind mount, at `/run/secrets/secrets-key`, and
-its path as `OPENMAPX_SECRETS_KEY_FILE`. The API encrypts with it everything it
+Only `api` receives the read-only bind mount, at `/run/secrets/secrets-key`, its
+path as `OPENMAPX_SECRETS_KEY_FILE` and the expected owner as
+`OPENMAPX_SECRETS_KEY_UID`. The API applies the render's rule exactly, as it
+does for `offline-package-principal-key`: a file with a newline, another mode,
+owner or link count is refused. The API encrypts with it everything it
 stores secret in the database: the credential vault (`integration_secret`,
 `service_secret`), personal timeline credentials, assisted privacy-request
 locators and secret settings such as the SMTP password (`system_secret`). This

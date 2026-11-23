@@ -13,6 +13,7 @@ interface MapSettings {
 let cached: { values: Record<string, unknown>; expires: number } | undefined;
 let pending: Promise<Record<string, unknown>> | undefined;
 let generation = 0;
+let warnedUnreadableKey = false;
 
 export function invalidateMapSettings(): void {
   generation++;
@@ -35,12 +36,22 @@ async function databaseSettings(): Promise<Record<string, unknown>> {
       // Environment/default configuration remains usable during database outages.
       return {};
     }
-    try {
-      const secrets = await loadSecretSettings();
-      if (secrets.maptilerApiKey !== undefined) values.maptilerApiKey = secrets.maptilerApiKey;
-    } catch (err) {
-      // The map keeps working without the stored key; the reason is logged.
-      processLogger.warn({ component: "map-settings", err }, "The stored MapTiler key is unusable");
+    // The stored key is decrypted only when MAPTILER_KEY does not override it.
+    if (!process.env.MAPTILER_KEY?.trim()) {
+      try {
+        const secrets = await loadSecretSettings(["maptilerApiKey"]);
+        if (secrets.maptilerApiKey !== undefined) values.maptilerApiKey = secrets.maptilerApiKey;
+      } catch (err) {
+        // The map keeps working without the stored key. The reason is logged
+        // once per process, not on every cache refill.
+        if (!warnedUnreadableKey) {
+          warnedUnreadableKey = true;
+          processLogger.warn(
+            { component: "map-settings", err },
+            "The stored MapTiler key is unusable",
+          );
+        }
+      }
     }
     if (version === generation) cached = { values, expires: Date.now() + 10_000 };
     return values;

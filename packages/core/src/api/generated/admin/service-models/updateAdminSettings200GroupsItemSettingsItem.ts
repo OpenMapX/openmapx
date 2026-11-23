@@ -20,4 +20,5 @@ export type UpdateAdminSettings200GroupsItemSettingsItem = {
   envVar?: string;
   envOverride: boolean;
   showWhen?: UpdateAdminSettings200GroupsItemSettingsItemShowWhen;
+  unreadable?: true;
 };
