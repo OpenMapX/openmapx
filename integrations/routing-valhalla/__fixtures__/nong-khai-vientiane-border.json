@@ -1,0 +1,286 @@
+{
+ "_comment": "Valhalla (valhalla1.openstreetmap.de) on 2026-11-23: Nong Khai, Thailand, over the Friendship Bridge to Vientiane, Laos, requested with admin_crossings. Maneuvers trimmed to the fields the provider reads.",
+ "trip": {
+  "summary": {
+   "has_time_restrictions": false,
+   "has_toll": false,
+   "has_highway": false,
+   "has_ferry": false,
+   "min_lat": 17.857335,
+   "min_lon": 102.619425,
+   "max_lat": 17.930381,
+   "max_lon": 102.723543,
+   "time": 3334.197,
+   "length": 23.078,
+   "cost": 3621.801
+  },
+  "legs": [
+   {
+    "maneuvers": [
+     {
+      "type": 1,
+      "instruction": "Drive northeast.",
+      "bearing_after": 50,
+      "time": 100.76,
+      "length": 0.419,
+      "begin_shape_index": 0,
+      "end_shape_index": 7
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 56,
+      "bearing_after": 150,
+      "time": 49.331,
+      "length": 0.29,
+      "begin_shape_index": 7,
+      "end_shape_index": 11
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left.",
+      "bearing_before": 144,
+      "bearing_after": 74,
+      "time": 113.754,
+      "length": 0.753,
+      "begin_shape_index": 11,
+      "end_shape_index": 37
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left.",
+      "bearing_before": 174,
+      "bearing_after": 87,
+      "time": 240.718,
+      "length": 1.498,
+      "begin_shape_index": 37,
+      "end_shape_index": 64
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto นค.2024.",
+      "bearing_before": 131,
+      "bearing_after": 33,
+      "time": 91.611,
+      "length": 0.636,
+      "begin_shape_index": 64,
+      "end_shape_index": 77
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left onto ถนนเฉลิมพระเกียรติ/2/AH12.",
+      "bearing_before": 35,
+      "bearing_after": 308,
+      "time": 255.434,
+      "length": 2.702,
+      "begin_shape_index": 77,
+      "end_shape_index": 118
+     },
+     {
+      "type": 8,
+      "instruction": "Continue on A12/AH12.",
+      "bearing_before": 351,
+      "bearing_after": 351,
+      "time": 44.842,
+      "length": 0.634,
+      "begin_shape_index": 118,
+      "end_shape_index": 142
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 260,
+      "bearing_after": 339,
+      "time": 338.468,
+      "length": 0.562,
+      "begin_shape_index": 142,
+      "end_shape_index": 161
+     },
+     {
+      "type": 9,
+      "instruction": "Bear right onto A12/AH12.",
+      "bearing_before": 128,
+      "bearing_after": 168,
+      "time": 14.931,
+      "length": 0.21,
+      "begin_shape_index": 161,
+      "end_shape_index": 163
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right onto ທະໝົນ ທ່າເດື່ອ/AH12. Continue on AH12.",
+      "bearing_before": 169,
+      "bearing_after": 259,
+      "time": 950.128,
+      "length": 8.813,
+      "begin_shape_index": 163,
+      "end_shape_index": 316
+     },
+     {
+      "type": 26,
+      "instruction": "Enter the roundabout and take the 2nd exit onto ຖະໝົນ ທ່າເດື່ອ/AH12.",
+      "bearing_before": 331,
+      "bearing_after": 8,
+      "time": 10.789,
+      "length": 0.048,
+      "begin_shape_index": 316,
+      "end_shape_index": 328,
+      "roundabout_exit_count": 2
+     },
+     {
+      "type": 27,
+      "instruction": "Exit the roundabout onto ຖະໝົນ ທ່າເດື່ອ/AH12.",
+      "bearing_before": 252,
+      "bearing_after": 305,
+      "time": 476.334,
+      "length": 3.038,
+      "begin_shape_index": 328,
+      "end_shape_index": 406
+     },
+     {
+      "type": 26,
+      "instruction": "Enter the roundabout and take the 1st exit onto ຖະໝົນ ທ່າເດື່ອ/AH12.",
+      "bearing_before": 310,
+      "bearing_after": 323,
+      "time": 2.415,
+      "length": 0.012,
+      "begin_shape_index": 406,
+      "end_shape_index": 413,
+      "roundabout_exit_count": 1
+     },
+     {
+      "type": 27,
+      "instruction": "Exit the roundabout onto ຖະໝົນ ທ່າເດື່ອ/AH12.",
+      "bearing_before": 323,
+      "bearing_after": 334,
+      "time": 162.002,
+      "length": 1.034,
+      "begin_shape_index": 413,
+      "end_shape_index": 433
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 348,
+      "bearing_after": 80,
+      "time": 113.677,
+      "length": 0.615,
+      "begin_shape_index": 433,
+      "end_shape_index": 455
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 0,
+      "bearing_after": 65,
+      "time": 79.61,
+      "length": 0.439,
+      "begin_shape_index": 455,
+      "end_shape_index": 471
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left.",
+      "bearing_before": 68,
+      "bearing_after": 12,
+      "time": 144.513,
+      "length": 0.796,
+      "begin_shape_index": 471,
+      "end_shape_index": 491
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 356,
+      "bearing_after": 98,
+      "time": 50.221,
+      "length": 0.194,
+      "begin_shape_index": 491,
+      "end_shape_index": 498
+     },
+     {
+      "type": 15,
+      "instruction": "Turn left.",
+      "bearing_before": 97,
+      "bearing_after": 43,
+      "time": 16.309,
+      "length": 0.064,
+      "begin_shape_index": 498,
+      "end_shape_index": 501
+     },
+     {
+      "type": 10,
+      "instruction": "Turn right.",
+      "bearing_before": 35,
+      "bearing_after": 116,
+      "time": 78.341,
+      "length": 0.321,
+      "begin_shape_index": 501,
+      "end_shape_index": 507
+     },
+     {
+      "type": 6,
+      "instruction": "Your destination is on the left.",
+      "bearing_before": 103,
+      "time": 0.0,
+      "length": 0.0,
+      "begin_shape_index": 507,
+      "end_shape_index": 507
+     }
+    ],
+    "summary": {
+     "admins": [
+      {
+       "country_code": "TH",
+       "country_text": "ประเทศไทย",
+       "state_code": "43",
+       "state_text": "จังหวัดหนองคาย"
+      },
+      {
+       "country_code": "LA",
+       "country_text": "ປະເທດລາວ",
+       "state_code": "VT",
+       "state_text": "ນະຄອນຫຼວງວຽງຈັນ"
+      }
+     ],
+     "admin_crossings": [
+      {
+       "from_admin_index": 0,
+       "to_admin_index": 1,
+       "begin_shape_index": 116,
+       "end_shape_index": 118
+      }
+     ],
+     "has_time_restrictions": false,
+     "has_toll": false,
+     "has_highway": false,
+     "has_ferry": false,
+     "min_lat": 17.857335,
+     "min_lon": 102.619425,
+     "max_lat": 17.930381,
+     "max_lon": 102.723543,
+     "time": 3334.197,
+     "length": 23.078,
+     "cost": 3621.801
+    },
+    "shape": "azaaa@a|h{bEsMoQuZc[qd@k`@_ZyQsSgPmm@_g@mBmDry@yb@nr@qWfX_UnCcBqAcHyZcd@cPq\\sI}QkCkEQwG|B}FrG}C|KaAtGoAlImB`MiHrSaIzY{G|TcEzTaDlLqD`OiGhMuIvGaJfCiCnJ_ClNwF~KeExKaCrG]gAot@eBag@{Ce^yA_Qe@qFeJwd@oFiRoCuKwI{JmVyVuLgR}Uuc@sGmPgCsGgMwWyFeS[qBct@ccByLcg@eDoMiZghAcBgb@lAaTn_@kc@nCuBrEeEpr@i~@uT{MyGcGuEqHi]eq@mEcGeE_EiKsGy|Bw`AkBM_BRsd@kXaNqIcFgDyLhQmPfV{OjUaH~JaKbNiTlYmLlPcGpLoErLyElNkE|LgG`KmLpS}@pAoBtC}IpN_F`EiHhD}UfG{A`@yIbCgEdAwHxD_C|AMHsKtLkFtH_PrT_QlT{M|NqZvTeWvOah@nSoRjFiZbGa[|C}n@`Fum@|F}qAdLoc@xDgsRfdBipAjLeOvC{JvDeIrDeJ`IaAnAuBlCaE`IgE`NYlCy@lHc@~Jl@hKlA`JlJd_@xCtRErD_@jDq@nBuEtMg@zEHtFxBv^h@|FoQhFyJ~Bo@Ve@f@Wp@Iv@Ft@bl@tvCVp@d@f@n@Zt@Fr@GhTkEfBjAjCTht@oHbKiFnI{LbeB}U`LuA|AjN`Jjx@`CdTlChLd@jEdFvd@`Dp[xFhk@PrA~VnqBvDxWv@xFjBtMfFpXrUl{@tA~EdPjl@pUn|@dMtb@bk@`tBli@vmBlMxd@dG~PlBnFfNjZfAdClEzJdIvNdkAx~A`Yp`@|MnT~Wti@xEjK`FlLbHfRdS|g@vBtF~C`HnDlJr]fz@bg@lmAdC~G`EfLjLpb@rFx^bGx`AtAxVvCrd@|@zNhA~PhCx`@jDfi@V~EpAnU`AlQfA~RTnEdJ|}AdAjR~@bQ~A~WhDfh@tDto@dCd`@Bd@v@lKhHjnArArVxOr`CbAlPxD|r@NzAdHxgAtBf]hFh{@hF`{@xJd`BvC`f@tWjgE~K|hBl@vJdAdQlAzQtDjk@`Cr^f@`JrG|bAX|MIjMq@rLmBxK[hBqCzLoDnJyEjJeHhL{FpHkH|GcHbFuIjF_PtGmb@xNgeDxcA{R`GwOvEcZ`Kkb@|LeMrDeQdFsJtCydAlZcJjCqs@vSgQdFyIfC{JtCuHxBiJrCiLbD}VlHwGjBa]tJai@hOc`@xK_EpAyf@vOoc@hNiWfIyGtBeDhA}|Bvv@}a@zMkFfBkTxGyZxIiCr@oq@rQy@RuZlHgSzEcg@nMoV~Fg`@zJeMrD{LbD}Ad@mWvG}E?]Hs`@xIeYvLiQxIyE|BeAYkAIeADmAX_Af@w@v@i@`A[hAKtA@PD`AXpA}BdDwAtC}k@jiAoAxF{AxBsOrWwh@h~@uQz\\cWbg@cOvYc@~@eH|NgIvP}MxXqAlCoIfQmDpHeS|`@yInQuI|Ps@`Bi\\`q@iDnHyHfOaBfDoFxKiD~GsIdQ_Xri@aM`W]v@yF|MwAlCm@fAuRl_@U^{d@tv@wBnD{[|f@qE~GcFzHaAzAaUb_@c[`g@aC`EaTf]cGvJsShZsBjDoHvK}JbPeYba@yUtUcb@|[gPvM{]n[ya@z]cz@hq@{GhGmElEyEnG{CdFsCvFsB~E}AlEaAzDoBfJaArFuF~c@YzBmMpbAo@bEwB`JuDfYeA|EmAjD_BhC{CpD]J[L[NYRUTUVQZgCzAeCz@iCp@{Bf@uCZkqApJg{AvIcUlAqKf@w`@nCuQhA{|@rFu~@`EyZdBsEXoKz@gXvAgQfBga@zEig@jHuCwZeBuQcCuUgAsKsBwLcBwDgC}GwAmC_CeD{BmB_Bm@mBQsHbAun@zJec@lGeo@hJsq@rJiEn@yBXaB?{@Wg@Oq@k@g@_Am@sBk@iG{BcSgAcWLi`@IaEgFei@kEmj@{BsV_@aEoAkMo@{GuAoGaBkF_Dk@kFm@u_@jCsD]m\\}CgMaAkVkAgH]yUiAiEKmRw@YAm]gBcp@qEk[FaQT}j@vBmr@tCm\\tAgOf@r@kKfFsX|@_DdBiFlQku@Ew@K_As@gAwAoAcW_QzWss@hDe]zAyNgA_IvE{j@jEo["
+   }
+  ],
+  "units": "kilometers",
+  "locations": [
+   {
+    "type": "break",
+    "lat": 17.86,
+    "lon": 102.7,
+    "original_index": 0
+   },
+   {
+    "type": "break",
+    "lat": 17.93,
+    "lon": 102.63,
+    "side_of_street": "left",
+    "original_index": 1
+   }
+  ]
+ }
+}

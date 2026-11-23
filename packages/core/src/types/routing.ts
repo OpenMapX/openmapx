@@ -119,9 +119,9 @@ export interface RouteStep extends ContributingRecord {
   /** Interchange signage (exit number / branch / toward), when known. */
   sign?: ManeuverSign;
   /**
-   * Legal driving side at this step ("left"/"right"), when the engine reports it
-   * (OSRM). Lets the UI draw roundabouts in the correct rotation. Valhalla does
-   * not expose it per maneuver, so it is undefined on Valhalla-served routes.
+   * Legal driving side at this step ("left"/"right"), when known: OSRM reports
+   * it, and Valhalla's provider reads it from the country the step starts in.
+   * Lets the UI draw roundabouts and U-turns the right way round.
    */
   drivingSide?: "left" | "right";
   /** Travel bearing immediately before / after the maneuver, degrees clockwise from north. */

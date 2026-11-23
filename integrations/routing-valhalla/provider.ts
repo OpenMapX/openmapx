@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { drivingSideIn } from "./driving-side.js";
 import { type CoverageTraceResponse, traceRouteCoverage } from "./live-coverage.js";
 import { readTrafficProof } from "./traffic-proof.js";
 /**
@@ -342,9 +343,28 @@ interface ValhallaManeuver {
   bearing_after?: number;
 }
 
+/** A country or region the leg passes, as `admin_crossings` lists them. */
+interface ValhallaAdmin {
+  country_code?: string;
+}
+
+/** Where the leg passes from one listed region into another, by shape index. */
+interface ValhallaAdminCrossing {
+  from_admin_index: number;
+  to_admin_index: number;
+  begin_shape_index: number;
+  end_shape_index: number;
+}
+
 interface ValhallaLeg {
   shape: string; // polyline6 encoded
-  summary: { length: number; time: number };
+  summary: {
+    length: number;
+    time: number;
+    /** With `admin_crossings`: the regions the leg lies in, and where it crosses between them. */
+    admins?: ValhallaAdmin[];
+    admin_crossings?: ValhallaAdminCrossing[];
+  };
   maneuvers: ValhallaManeuver[];
   elevation?: number[];
   elevation_interval?: number;
@@ -563,9 +583,31 @@ export function valhallaSign(sign: ValhallaSign | undefined): ManeuverSign | und
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * The side traffic keeps to where each maneuver begins: the country the leg
+ * starts in until it has crossed into the next. Undefined where Valhalla names
+ * no country (an engine without `admin_crossings`).
+ */
+function maneuverDrivingSides(leg: ValhallaLeg): ("left" | "right" | undefined)[] {
+  const admins = leg.summary.admins ?? [];
+  const crossings = [...(leg.summary.admin_crossings ?? [])].sort(
+    (a, b) => a.begin_shape_index - b.begin_shape_index,
+  );
+  const startIndex = crossings[0]?.from_admin_index ?? 0;
+  return leg.maneuvers.map((m) => {
+    let index = startIndex;
+    // Past the end of the edge that crosses the border, the leg is in the next country.
+    for (const crossing of crossings) {
+      if (m.begin_shape_index >= crossing.end_shape_index) index = crossing.to_admin_index;
+    }
+    return drivingSideIn(admins[index]?.country_code);
+  });
+}
+
 function transformLeg(leg: ValhallaLeg, distanceMetresPerUnit: number): RouteLeg {
   const coords = decodePolyline(leg.shape, 6);
-  const steps: RouteStep[] = leg.maneuvers.map((m) => ({
+  const sides = maneuverDrivingSides(leg);
+  const steps: RouteStep[] = leg.maneuvers.map((m, i) => ({
     instruction: m.instruction,
     distance: m.length * distanceMetresPerUnit,
     duration: m.time,
@@ -582,6 +624,7 @@ function transformLeg(leg: ValhallaLeg, distanceMetresPerUnit: number): RouteLeg
     motorway: m.highway === true ? true : undefined,
     bearingBefore: typeof m.bearing_before === "number" ? m.bearing_before : undefined,
     bearingAfter: typeof m.bearing_after === "number" ? m.bearing_after : undefined,
+    drivingSide: sides[i],
   }));
 
   const firstNamed = leg.maneuvers.find((m) => m.street_names && m.street_names.length > 0);
@@ -1063,6 +1106,8 @@ export function createValhallaService(
           language: options.lang ?? "en",
         },
         turn_lanes: true,
+        // The countries along the route, for the side traffic keeps to.
+        admin_crossings: true,
         date_time: buildDateTime(options),
         elevation_interval: ELEVATION_INTERVAL,
         ...buildExclusions(options),
@@ -1155,6 +1200,8 @@ export function createValhallaService(
           language: options.lang ?? "en",
         },
         turn_lanes: true,
+        // The countries along the route, for the side traffic keeps to.
+        admin_crossings: true,
         date_time: buildDateTime(options),
         elevation_interval: ELEVATION_INTERVAL,
         ...buildExclusions(options),
