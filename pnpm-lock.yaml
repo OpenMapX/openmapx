@@ -3030,6 +3030,9 @@ importers:
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../transitous-core
+      '@photostructure/tz-lookup':
+        specifier: ^11.8.0
+        version: 11.8.0
       '@tanstack/react-query':
         specifier: ^5.105.0
         version: 5.107.1(@types/react@19.3.0)(react@19.3.1)
@@ -3042,9 +3045,6 @@ importers:
       '@types/geojson':
         specifier: ^7946.0.16
         version: 7946.0.16
-      '@types/tz-lookup':
-        specifier: ^6.1.2
-        version: 6.1.2
       better-auth:
         specifier: 1.7.18
         version: 1.7.18(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@4.1.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -3066,9 +3066,6 @@ importers:
       tar-stream:
         specifier: 3.2.2
         version: 3.2.2
-      tz-lookup:
-        specifier: ^6.1.25
-        version: 6.1.25
       undici:
         specifier: ^8.12.3
         version: 8.12.4
@@ -6853,6 +6850,9 @@ packages:
     peerDependencies:
       '@photo-sphere-viewer/core': 5.15.1
 
+  '@photostructure/tz-lookup@11.8.0':
+    resolution: {integrity: sha512-RvTkAjjWAfgvoaHVXugwi9XOw4rwyrL8wuqox4PwRLW9FZwpmPhNUY31MgY7k5avK6sbD9S7i1/rUtM4A310/g==}
+
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
 
@@ -7760,9 +7760,6 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
-
-  '@types/tz-lookup@6.1.2':
-    resolution: {integrity: sha512-9y31Xf/8FHXrCHjvVjGZLcsayAa6ABNc8bZlk6MPOQLLlr41tICSqW3TRPRIx2nodbzdKs5N7ipHWBrUsWUiAA==}
 
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
@@ -12612,9 +12609,6 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  tz-lookup@6.1.25:
-    resolution: {integrity: sha512-fFewT9o1uDzsW1QnUU1ValqaihFnwiUiiHr1S79/fxOzKXYYvX+EHeRnpvQJ9B3Qg67wPXT6QF2Esc4pFOrvLg==}
-
   ufo@1.6.4:
     resolution: {integrity: sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA==}
 
@@ -16765,6 +16759,8 @@ snapshots:
     dependencies:
       '@photo-sphere-viewer/core': 5.15.1
 
+  '@photostructure/tz-lookup@11.8.0': {}
+
   '@pinojs/redact@0.4.0': {}
 
   '@pkgjs/parseargs@0.11.0':
@@ -17629,8 +17625,6 @@ snapshots:
   '@types/tough-cookie@4.0.5': {}
 
   '@types/trusted-types@2.0.7': {}
-
-  '@types/tz-lookup@6.1.2': {}
 
   '@types/use-sync-external-store@0.0.6': {}
 
@@ -23108,8 +23102,6 @@ snapshots:
   typedarray@0.0.6: {}
 
   typescript@6.0.3: {}
-
-  tz-lookup@6.1.25: {}
 
   ufo@1.6.4: {}
 

@@ -9,6 +9,18 @@ const HOURS = "Mo-Su 06:30-23:00";
 describe("parseOpeningHours — place-local timezone", () => {
   afterEach(() => vi.useRealTimers());
 
+  it.each([
+    ["Ciudad Juárez", 31.6904, -106.4245, "2026-11-21T12:30:00Z", "06:30-23:00", false],
+    ["Coyhaique", -45.5752, -72.0662, "2026-07-15T12:30:00Z", "09:00-10:00", true],
+  ] as const)(
+    "evaluates opening hours in %s's current zone",
+    (_city, lat, lon, at, hours, isOpen) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(at));
+      expect(parseOpeningHours(`Mo-Su ${hours}`, { lat, lon })?.isOpen).toBe(isOpen);
+    },
+  );
+
   it("is closed at 01:30 place-local even when the server clock reads 23:30 UTC", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-28T23:30:00Z")); // 01:30 in Berlin

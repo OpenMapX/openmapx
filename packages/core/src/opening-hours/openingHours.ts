@@ -3,9 +3,9 @@
 // `../types/openingHoursInfo.ts` (re-exported below) so client code can refer
 // to the shapes without pulling in this runtime.
 
+import tzLookup from "@photostructure/tz-lookup";
 import type { nominatim_object } from "opening_hours";
 import opening_hours from "opening_hours";
-import tzLookup from "tz-lookup";
 import type {
   DaySchedule,
   LocationContext,
@@ -56,7 +56,7 @@ function placeNow(location?: LocationContext): Date {
   try {
     tz = tzLookup(location.lat, location.lon);
   } catch {
-    return real; // coordinates outside the tz dataset (e.g. open ocean)
+    return real; // invalid coordinates
   }
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
