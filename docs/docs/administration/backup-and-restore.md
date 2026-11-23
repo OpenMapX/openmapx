@@ -81,11 +81,22 @@ setup.
 Keep a copy of `secrets-key` with every off-host database backup, exactly as
 the erasure journal key below. Restore it to `infra/docker/secrets/secrets-key`
 before the API starts against the restored database; a render never replaces an
-existing key, and one generated afresh cannot open the restored values. Copy it
-byte for byte, for example with `cp -p`: the API and the render accept only the
-43 characters with no trailing newline, mode `0444` and the deployment's user as
-owner. A stored secret the current key cannot open is marked as unreadable in
-the admin settings.
+existing key, and one generated afresh cannot open the restored values. The API
+and the render accept only the 43 characters with no trailing newline, in a
+file with one link, mode `0444` and the deployment's user as owner. As that
+user, from the repository root, replace any key a render already generated
+(the read-only file cannot be copied over) and copy the backup byte for byte:
+
+```sh
+rm -f infra/docker/secrets/secrets-key
+cp /path/to/backup/secrets-key infra/docker/secrets/secrets-key
+chmod 0444 infra/docker/secrets/secrets-key
+wc -c < infra/docker/secrets/secrets-key   # prints 43
+```
+
+The new file belongs to the user who runs `cp`, whoever owned the backup copy.
+A stored secret the current key cannot open is marked as unreadable in the
+admin settings.
 
 For erasure-safe restore, retain both
 `infra/docker/data/erasure/journal.jsonl` and
