@@ -8,7 +8,7 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
-    "three": "0.185.1"
+    "three": "0.187.0"
   },
   "peerDependencies": {
     "maplibre-gl": "^6.16.0",
@@ -17,7 +17,7 @@
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.3.0",
-    "@types/three": "0.185.4",
+    "@types/three": "0.187.0",
     "maplibre-gl": "^6.16.0",
     "react": "19.3.1"
   }

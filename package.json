@@ -91,7 +91,7 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@commitlint/types": "^21.2.3",
     "@graphql-codegen/typed-document-node": "8.0.0",
-    "@graphql-codegen/typescript-operations": "7.0.0",
+    "@graphql-codegen/typescript-operations": "7.0.1",
     "@vitest/coverage-v8": "^5.0.5",
     "esbuild": "^0.28.2",
     "graphql": "17.0.2",
