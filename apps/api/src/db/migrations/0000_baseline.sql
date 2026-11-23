@@ -204,7 +204,6 @@ CREATE TABLE "data_manager"."configuration_fence" (
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."feed_state" (
-	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"region" text NOT NULL,
 	"name" text NOT NULL,
 	"last_fetched_at" timestamp with time zone,
@@ -213,7 +212,10 @@ CREATE TABLE "data_manager"."feed_state" (
 	"validation_status" text,
 	"validation_message" text,
 	"status" text DEFAULT 'unknown' NOT NULL,
-	"consecutive_failures" integer DEFAULT 0 NOT NULL
+	"consecutive_failures" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "feed_state_pkey" PRIMARY KEY("region","name"),
+	CONSTRAINT "feed_state_status_check" CHECK ("data_manager"."feed_state"."status" IN ('active','stale','failed','unknown')),
+	CONSTRAINT "feed_state_validation_status_check" CHECK ("data_manager"."feed_state"."validation_status" IN ('ok','warning','error'))
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."job_stages" (
@@ -287,6 +289,15 @@ CREATE TABLE "data_manager"."offline_package_jobs" (
 	"updated_at" timestamp with time zone NOT NULL,
 	"lease_owner" text,
 	"lease_expires_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "data_manager"."overture_release" (
+	"region" text NOT NULL,
+	"release" text NOT NULL,
+	"imported_at" timestamp with time zone NOT NULL,
+	"status" text NOT NULL,
+	CONSTRAINT "overture_release_pkey" PRIMARY KEY("region"),
+	CONSTRAINT "overture_release_status_check" CHECK ("data_manager"."overture_release"."status" IN ('imported','links_pending'))
 );
 --> statement-breakpoint
 CREATE TABLE "data_subject_request" (

@@ -1,5 +1,5 @@
 {
-  "id": "4de9b4b7-a881-4705-b66e-19114f30255d",
+  "id": "6bd6f705-4b5b-4f00-8001-461c1a1b3687",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1914,13 +1914,6 @@
       "name": "feed_state",
       "schema": "data_manager",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
         "region": {
           "name": "region",
           "type": "text",
@@ -1980,10 +1973,27 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "feed_state_pkey": {
+          "name": "feed_state_pkey",
+          "columns": [
+            "region",
+            "name"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "feed_state_status_check": {
+          "name": "feed_state_status_check",
+          "value": "\"data_manager\".\"feed_state\".\"status\" IN ('active','stale','failed','unknown')"
+        },
+        "feed_state_validation_status_check": {
+          "name": "feed_state_validation_status_check",
+          "value": "\"data_manager\".\"feed_state\".\"validation_status\" IN ('ok','warning','error')"
+        }
+      },
       "isRLSEnabled": false
     },
     "data_manager.job_stages": {
@@ -2570,6 +2580,55 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "data_manager.overture_release": {
+      "name": "overture_release",
+      "schema": "data_manager",
+      "columns": {
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "release": {
+          "name": "release",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "imported_at": {
+          "name": "imported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "overture_release_pkey": {
+          "name": "overture_release_pkey",
+          "columns": [
+            "region"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "overture_release_status_check": {
+          "name": "overture_release_status_check",
+          "value": "\"data_manager\".\"overture_release\".\"status\" IN ('imported','links_pending')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.data_subject_request": {

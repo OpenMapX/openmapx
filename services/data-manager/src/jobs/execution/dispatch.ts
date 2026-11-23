@@ -16,7 +16,6 @@ import { buildNotablePlaces } from "../notable-places/build.js";
 import { notablePlacesSettings } from "../notable-places/schedule.js";
 import { createNotablePlacesRuntimeState } from "../notable-places/state.js";
 import { extractOsmPois } from "../overture/extract-osm-pois.js";
-import { writeOvertureFeedState } from "../overture/feed-state.js";
 import { ingestOverture } from "../overture/ingest.js";
 import { withOvertureOperationLock } from "../overture/operation-lock.js";
 import { assertValidRegion, pullOverture } from "../overture/pull.js";
@@ -25,6 +24,7 @@ import {
   rebuildOvertureLinksUnlocked,
 } from "../overture/rebuild-links.js";
 import { assertOvertureRecoveryInputs } from "../overture/recovery.js";
+import { writeOvertureRelease } from "../overture/release-state.js";
 import {
   finalizeOvertureReleaseFiles,
   overtureReleaseRetentionFromEnv,
@@ -361,10 +361,11 @@ export function createDataExecutionDispatcher(deps: {
           sql: context.sql,
           region: input.region,
         });
-        await writeOvertureFeedState(
+        await writeOvertureRelease(
           context.sql,
           input.region,
           result.release,
+          result.conflation,
           asJobLogger(
             jobChildLogger({ job: "overture-sync", jobId: context.execution.executionId }),
           ),

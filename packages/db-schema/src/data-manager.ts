@@ -165,29 +165,59 @@ export const jobStages = dataManager.table(
   ],
 );
 
-export const feedState = dataManager.table("feed_state", {
-  id: uuid("id").primaryKey().default(sql`uuidv7()`),
-  /** e.g. "de" */
-  region: text("region").notNull(),
-  /** Source name from feeds/<region>.json */
-  name: text("name").notNull(),
-  lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
-  lastImportedAt: timestamp("last_imported_at", { withTimezone: true }),
-  /** sha256 of latest fetched archive */
-  hash: text("hash"),
-  /** "ok" | "warning" | "error" */
-  validationStatus: text("validation_status"),
-  validationMessage: text("validation_message"),
-  /** "active" | "stale" | "failed" | "unknown" */
-  status: text("status").notNull().default("unknown"),
-  /**
-   * Number of consecutive validation failures since the last successful
-   * validation. Reset to 0 on `validation_status = 'ok'`. Drives the
-   * staleness-alert cron (G2) — at >= 3 consecutive failures we emit a
-   * structured warning + (optional) GitHub Issue.
-   */
-  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
-});
+/** One row per transit feed source, keyed by its region and source name. */
+export const feedState = dataManager.table(
+  "feed_state",
+  {
+    /** e.g. "de" */
+    region: text("region").notNull(),
+    /** Source name from feeds/<region>.json */
+    name: text("name").notNull(),
+    lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
+    lastImportedAt: timestamp("last_imported_at", { withTimezone: true }),
+    /** sha256 of the latest fetched archive */
+    hash: text("hash"),
+    /** "ok" | "warning" | "error" */
+    validationStatus: text("validation_status"),
+    validationMessage: text("validation_message"),
+    /** "active" | "stale" | "failed" | "unknown" */
+    status: text("status").notNull().default("unknown"),
+    /**
+     * Number of consecutive validation failures since the last successful
+     * validation. Reset to 0 on `validation_status = 'ok'`. Drives the
+     * staleness alert: at 3 or more consecutive failures it emits a
+     * structured warning and, optionally, a GitHub issue.
+     */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ name: "feed_state_pkey", columns: [table.region, table.name] }),
+    check("feed_state_status_check", sql`${table.status} IN ('active','stale','failed','unknown')`),
+    check(
+      "feed_state_validation_status_check",
+      sql`${table.validationStatus} IN ('ok','warning','error')`,
+    ),
+  ],
+);
+
+/**
+ * The Overture places release each region last imported. `links_pending`
+ * means the release is live but its link rebuild did not complete.
+ */
+export const overtureRelease = dataManager.table(
+  "overture_release",
+  {
+    region: text("region").notNull(),
+    release: text("release").notNull(),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull(),
+    /** "imported" | "links_pending" */
+    status: text("status").notNull(),
+  },
+  (table) => [
+    primaryKey({ name: "overture_release_pkey", columns: [table.region] }),
+    check("overture_release_status_check", sql`${table.status} IN ('imported','links_pending')`),
+  ],
+);
 
 /** Durable physical offline-package work. Opaque principals live only in the owner table. */
 export const offlinePackageJobs = dataManager.table(

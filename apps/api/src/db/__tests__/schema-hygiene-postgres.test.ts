@@ -52,6 +52,16 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "status",
     values: ["held", "source_capture_pending", "action_required", "captured", "released"],
   },
+  feed_state_status_check: {
+    table: "feed_state",
+    column: "status",
+    values: ["active", "stale", "failed", "unknown"],
+  },
+  feed_state_validation_status_check: {
+    table: "feed_state",
+    column: "validation_status",
+    values: ["ok", "warning", "error"],
+  },
   health_history_status_check: {
     table: "health_history",
     column: "status",
@@ -81,6 +91,11 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     table: "mobile_auth_handoff",
     column: "purpose",
     values: ["sign-in", "link-provider", "add-passkey"],
+  },
+  overture_release_status_check: {
+    table: "overture_release",
+    column: "status",
+    values: ["imported", "links_pending"],
   },
   parked_location_source_check: {
     table: "parked_location",
@@ -260,7 +275,7 @@ integration("schema hygiene", () => {
       FROM pg_constraint c
       JOIN pg_class r ON r.oid = c.conrelid
       JOIN pg_namespace n ON n.oid = r.relnamespace
-      WHERE c.contype = 'c' AND n.nspname = 'public' AND c.conname IN ${fixture.sql(
+      WHERE c.contype = 'c' AND n.nspname IN ('public', 'data_manager') AND c.conname IN ${fixture.sql(
         Object.keys(CLOSED_VALUE_SETS),
       )}`;
     const byName = new Map(checks.map((row) => [row.name, row]));

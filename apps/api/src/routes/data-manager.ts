@@ -263,7 +263,6 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
     return {
       feeds: feeds.map((f) => ({
-        id: f.id,
         region: f.region,
         name: f.name,
         lastFetchedAt: f.lastFetchedAt?.toISOString() ?? null,

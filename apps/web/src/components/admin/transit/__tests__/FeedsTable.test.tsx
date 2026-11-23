@@ -47,7 +47,6 @@ const baseState: TransitStateSummary = {
 const sampleFeeds: TransitFeedsResponse = {
   feeds: [
     {
-      id: "de/db-ice",
       region: "de/db",
       name: "Deutsche Bahn ICE",
       lastFetchedAt: "2026-05-22T08:00:00.000Z",
@@ -58,7 +57,6 @@ const sampleFeeds: TransitFeedsResponse = {
       status: "stale",
     },
     {
-      id: "ch/sbb-ic",
       region: "ch/sbb",
       name: "SBB IC",
       lastFetchedAt: null,

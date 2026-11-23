@@ -86,6 +86,7 @@
     "apps/api/src/services/transit-feed-credentials-postgres.test.ts",
     "services/data-manager/__tests__/transitous/catalog-review.test.ts",
     "services/data-manager/__tests__/transitous/catalog-workflow-postgres.test.ts",
+    "services/data-manager/__tests__/transitous/feed-state-postgres.test.ts",
     "apps/api/src/services/activity-catalog-postgres.test.ts"
   ],
   "configuration-recovery": [

@@ -86,6 +86,13 @@ Secret system settings, such as the SMTP password, live encrypted in a new
 cleared when that account is deleted. See the separate note on the generated
 secrets key.
 
+Data-manager keeps one state row per transit feed, keyed by its region and
+source name, so two runs at once no longer create a duplicate row or lose a
+validation failure from the count. In the admin API's transit feed list, entries
+no longer carry an `id`; the region and name identify a feed. The Overture
+release each region imported is recorded in its own
+`data_manager.overture_release` table instead of a transit feed row.
+
 The constraints and indexes of OpenMapX's own tables follow PostgreSQL's naming
 convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,
 `<table>_<column>_fkey` and `<table>_<what>_check`. A partial unique index

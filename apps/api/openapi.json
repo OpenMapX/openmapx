@@ -109995,9 +109995,6 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": {
-                            "type": "string"
-                          },
                           "region": {
                             "type": "string"
                           },
@@ -110051,7 +110048,6 @@
                           }
                         },
                         "required": [
-                          "id",
                           "region",
                           "name",
                           "lastFetchedAt",
