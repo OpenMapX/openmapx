@@ -128,6 +128,10 @@ development databases. No released installation exists.
 ## Required action
 
 Install fresh with an empty database volume. The API refuses to start on a
-database created before this change and reports that a relation already exists;
-there is no upgrade path. Recreate local development databases and apply the
-migrations again.
+database created before this change and reports
+`schema "data_manager" already exists`; there is no upgrade path. Recreate
+local development databases and apply the migrations again.
+
+Later schema changes are made the usual way: once a release containing this
+baseline is installed anywhere, each change adds an incremental migration and
+the baseline is never regenerated again.

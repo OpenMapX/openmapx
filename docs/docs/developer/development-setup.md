@@ -373,9 +373,14 @@ The API's migrations in `apps/api/src/db/migrations` are two files:
   account role `CHECK` on Better Auth's `user` table.
   `apps/api/src/db/custom-migration.test.ts` refuses any other statement kind.
 
-No installation predates the baseline, so a schema change regenerates both files
-from an empty folder instead of adding a migration: `pnpm db:generate` on its own
-would write a new `0002_*` migration, which this repository does not keep. From
+Regenerating the baseline is allowed only until the first release that
+contains it is installed anywhere. After that, every installed database must
+stay upgradeable: a schema change adds an incremental migration with
+`pnpm db:generate` from `apps/api`, which writes the next `0002_*` file, and
+`0000` and `0001` are never edited or regenerated again.
+
+Until then, no installation predates the baseline, so a schema change
+regenerates both files from an empty folder instead of adding a migration. From
 `apps/api`:
 
 1. Copy the body of `0001_database_objects.sql` aside.
@@ -389,13 +394,16 @@ would write a new `0002_*` migration, which this repository does not keep. From
 drizzle-kit gives every snapshot a random `id` and every journal entry a new
 timestamp; an unchanged regeneration has byte-identical SQL files and snapshots
 that differ only in `id` and `prevId`. A database created before a
-regeneration cannot be migrated and fails with "relation already exists";
+regeneration cannot be migrated and fails with
+`schema "data_manager" already exists`, the baseline's first statement;
 recreate it. `pnpm check-drizzle-drift`, part of `pnpm check:policy`, runs
 `drizzle-kit check` and `drizzle-kit generate` and fails when generation writes
-anything or the folder holds uncommitted changes. It also regenerates the
-baseline into a temporary folder and fails unless `0000_baseline.sql` is
-byte-identical to the committed file and its snapshot differs only in `id` and
-`prevId`, so a hand edit to the generated SQL is refused.
+anything or the folder holds uncommitted changes. While the journal holds only
+`0000_baseline` and `0001_database_objects`, it also regenerates the baseline
+into a temporary folder and fails unless `0000_baseline.sql` is byte-identical
+to the committed file and its snapshot differs only in `id` and `prevId`, so a
+hand edit to the generated SQL is refused. Once an incremental migration
+follows the baseline, it skips that comparison and says so.
 
 Better Auth's tables are declared in `apps/api/src/db/auth-schema.ts`, which is
 exactly what `pnpm auth:generate` writes, formatted by Biome; it is never edited
@@ -412,7 +420,9 @@ change them:
    `auth-schema.ts` empty; restore it with `git checkout` and try again.
 3. From the repository root, run
    `pnpm exec biome check --write apps/api/src/db/auth-schema.ts`.
-4. Regenerate the migrations as described above.
+4. Regenerate the migrations as described above, or, once a release containing
+   the baseline is installed, add an incremental migration with
+   `pnpm db:generate`.
 
 Every timestamp column in the app's own tables is `timestamp with time zone`:
 declare it as `timestamp("…", { withTimezone: true })`. Better Auth's columns stay
