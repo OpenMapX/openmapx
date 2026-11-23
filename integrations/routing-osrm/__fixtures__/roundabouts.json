@@ -1,0 +1,1033 @@
+{
+  "strausbergerPlatz": [
+    {
+      "intersections": [
+        {
+          "out": 1,
+          "in": 0,
+          "entry": [
+            false,
+            true,
+            true
+          ],
+          "bearings": [
+            120,
+            210,
+            300
+          ],
+          "location": [
+            13.418691,
+            52.521412
+          ]
+        },
+        {
+          "out": 1,
+          "in": 0,
+          "entry": [
+            false,
+            true,
+            false
+          ],
+          "bearings": [
+            30,
+            120,
+            300
+          ],
+          "location": [
+            13.41858,
+            52.521275
+          ]
+        },
+        {
+          "lanes": [
+            {
+              "valid": true,
+              "indications": [
+                "none"
+              ]
+            },
+            {
+              "valid": true,
+              "indications": [
+                "straight"
+              ]
+            },
+            {
+              "valid": false,
+              "indications": [
+                "right"
+              ]
+            }
+          ],
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            120,
+            210,
+            300
+          ],
+          "location": [
+            13.422389,
+            52.520122
+          ]
+        },
+        {
+          "out": 0,
+          "in": 1,
+          "entry": [
+            true,
+            false
+          ],
+          "bearings": [
+            120,
+            300
+          ],
+          "location": [
+            13.427018,
+            52.518732
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "maneuver": {
+        "bearing_after": 205,
+        "bearing_before": 295,
+        "location": [
+          13.418691,
+          52.521412
+        ],
+        "modifier": "uturn",
+        "type": "continue"
+      },
+      "geometry": {
+        "coordinates": [
+          [
+            13.418691,
+            52.521412
+          ],
+          [
+            13.41858,
+            52.521275
+          ],
+          [
+            13.419129,
+            52.521108
+          ],
+          [
+            13.419411,
+            52.521023
+          ],
+          [
+            13.419651,
+            52.52095
+          ],
+          [
+            13.421879,
+            52.520276
+          ],
+          [
+            13.422138,
+            52.520198
+          ],
+          [
+            13.422198,
+            52.52018
+          ],
+          [
+            13.422345,
+            52.520135
+          ],
+          [
+            13.422389,
+            52.520122
+          ],
+          [
+            13.422438,
+            52.520107
+          ],
+          [
+            13.422581,
+            52.520064
+          ],
+          [
+            13.423146,
+            52.519893
+          ],
+          [
+            13.423174,
+            52.519884
+          ],
+          [
+            13.42329,
+            52.519849
+          ],
+          [
+            13.425008,
+            52.519326
+          ],
+          [
+            13.425243,
+            52.519255
+          ],
+          [
+            13.425471,
+            52.519186
+          ],
+          [
+            13.425904,
+            52.519055
+          ],
+          [
+            13.426029,
+            52.519018
+          ],
+          [
+            13.426225,
+            52.518966
+          ],
+          [
+            13.426269,
+            52.518955
+          ],
+          [
+            13.426467,
+            52.518907
+          ],
+          [
+            13.426617,
+            52.51887
+          ],
+          [
+            13.426716,
+            52.518842
+          ],
+          [
+            13.426822,
+            52.518809
+          ],
+          [
+            13.426852,
+            52.518796
+          ],
+          [
+            13.427018,
+            52.518732
+          ],
+          [
+            13.427186,
+            52.518668
+          ],
+          [
+            13.427254,
+            52.51864
+          ],
+          [
+            13.427322,
+            52.518608
+          ],
+          [
+            13.427501,
+            52.5185
+          ],
+          [
+            13.427641,
+            52.518406
+          ]
+        ],
+        "type": "LineString"
+      },
+      "ref": "B 1; B 5",
+      "name": "Karl-Marx-Allee",
+      "mode": "driving",
+      "duration": 73.3,
+      "distance": 712.1
+    },
+    {
+      "intersections": [
+        {
+          "out": 0,
+          "in": 1,
+          "entry": [
+            true,
+            false,
+            false
+          ],
+          "bearings": [
+            150,
+            315,
+            345
+          ],
+          "location": [
+            13.427641,
+            52.518406
+          ]
+        },
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            135,
+            165,
+            330
+          ],
+          "location": [
+            13.427669,
+            52.518381
+          ]
+        },
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            false,
+            false
+          ],
+          "bearings": [
+            73,
+            248,
+            261
+          ],
+          "location": [
+            13.428576,
+            52.518143
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "maneuver": {
+        "exit": 2,
+        "bearing_after": 144,
+        "bearing_before": 136,
+        "location": [
+          13.427641,
+          52.518406
+        ],
+        "modifier": "straight",
+        "type": "rotary"
+      },
+      "rotary_name": "Strausberger Platz",
+      "destinations": "B 1, , B 5: Lichtenberg, Friedrichshain",
+      "geometry": {
+        "coordinates": [
+          [
+            13.427641,
+            52.518406
+          ],
+          [
+            13.427669,
+            52.518381
+          ],
+          [
+            13.427859,
+            52.518257
+          ],
+          [
+            13.427943,
+            52.518217
+          ],
+          [
+            13.428045,
+            52.518177
+          ],
+          [
+            13.428199,
+            52.518149
+          ],
+          [
+            13.428345,
+            52.518135
+          ],
+          [
+            13.428464,
+            52.518134
+          ],
+          [
+            13.428576,
+            52.518143
+          ],
+          [
+            13.428592,
+            52.518146
+          ]
+        ],
+        "type": "LineString"
+      },
+      "ref": "B 1; B 5",
+      "name": "Strausberger Platz",
+      "mode": "driving",
+      "duration": 8.8,
+      "distance": 75.5
+    },
+    {
+      "intersections": [
+        {
+          "out": 1,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            70,
+            80,
+            253
+          ],
+          "location": [
+            13.428592,
+            52.518146
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "maneuver": {
+        "exit": 2,
+        "bearing_after": 78,
+        "bearing_before": 71,
+        "location": [
+          13.428592,
+          52.518146
+        ],
+        "modifier": "straight",
+        "type": "exit rotary"
+      },
+      "destinations": "B 1, , B 5: Lichtenberg, Friedrichshain",
+      "geometry": {
+        "coordinates": [
+          [
+            13.428592,
+            52.518146
+          ],
+          [
+            13.428853,
+            52.518181
+          ],
+          [
+            13.429106,
+            52.518204
+          ],
+          [
+            13.42915,
+            52.518206
+          ],
+          [
+            13.429225,
+            52.51821
+          ],
+          [
+            13.429272,
+            52.518212
+          ],
+          [
+            13.429421,
+            52.518213
+          ]
+        ],
+        "type": "LineString"
+      },
+      "ref": "B 1; B 5",
+      "name": "Strausberger Platz",
+      "mode": "driving",
+      "duration": 7.2,
+      "distance": 56.9
+    }
+  ],
+  "osdorferStrasse": [
+    {
+      "intersections": [
+        {
+          "lanes": [
+            {
+              "valid": true,
+              "indications": [
+                "left"
+              ]
+            },
+            {
+              "valid": false,
+              "indications": [
+                "straight"
+              ]
+            },
+            {
+              "valid": false,
+              "indications": [
+                "straight"
+              ]
+            }
+          ],
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            60,
+            135,
+            330
+          ],
+          "location": [
+            13.271632,
+            52.399023
+          ]
+        },
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            false,
+            false,
+            true
+          ],
+          "bearings": [
+            60,
+            150,
+            240,
+            330
+          ],
+          "location": [
+            13.271743,
+            52.399072
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.271632,
+            52.399023
+          ],
+          [
+            13.271743,
+            52.399072
+          ],
+          [
+            13.271801,
+            52.399098
+          ],
+          [
+            13.271849,
+            52.399119
+          ],
+          [
+            13.271868,
+            52.399128
+          ],
+          [
+            13.271906,
+            52.399147
+          ],
+          [
+            13.27199,
+            52.39919
+          ],
+          [
+            13.272064,
+            52.399241
+          ],
+          [
+            13.272133,
+            52.399304
+          ],
+          [
+            13.272151,
+            52.399329
+          ],
+          [
+            13.27218,
+            52.399369
+          ],
+          [
+            13.272233,
+            52.39949
+          ],
+          [
+            13.272274,
+            52.399605
+          ],
+          [
+            13.272366,
+            52.399834
+          ],
+          [
+            13.272388,
+            52.399889
+          ],
+          [
+            13.272461,
+            52.4
+          ],
+          [
+            13.27249,
+            52.400074
+          ],
+          [
+            13.272541,
+            52.400153
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "bearing_after": 53,
+        "bearing_before": 144,
+        "location": [
+          13.271632,
+          52.399023
+        ],
+        "modifier": "left",
+        "type": "turn"
+      },
+      "name": "Schönower Straße",
+      "mode": "driving",
+      "duration": 18.9,
+      "distance": 145.4
+    },
+    {
+      "intersections": [
+        {
+          "out": 0,
+          "in": 1,
+          "entry": [
+            true,
+            false,
+            false
+          ],
+          "bearings": [
+            75,
+            195,
+            270
+          ],
+          "location": [
+            13.272541,
+            52.400153
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.272541,
+            52.400153
+          ],
+          [
+            13.272595,
+            52.400166
+          ],
+          [
+            13.272639,
+            52.400188
+          ],
+          [
+            13.27267,
+            52.400218
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "exit": 1,
+        "bearing_after": 68,
+        "bearing_before": 18,
+        "location": [
+          13.272541,
+          52.400153
+        ],
+        "modifier": "right",
+        "type": "roundabout"
+      },
+      "name": "Osdorfer Straße",
+      "mode": "driving",
+      "duration": 1.4,
+      "distance": 11.8
+    },
+    {
+      "intersections": [
+        {
+          "out": 1,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            15,
+            90,
+            210
+          ],
+          "location": [
+            13.27267,
+            52.400218
+          ]
+        },
+        {
+          "out": 0,
+          "in": 1,
+          "entry": [
+            true,
+            false
+          ],
+          "bearings": [
+            90,
+            255
+          ],
+          "location": [
+            13.274508,
+            52.400307
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.27267,
+            52.400218
+          ],
+          [
+            13.272819,
+            52.400232
+          ],
+          [
+            13.273096,
+            52.400253
+          ],
+          [
+            13.273294,
+            52.400242
+          ],
+          [
+            13.273443,
+            52.400236
+          ],
+          [
+            13.27369,
+            52.400233
+          ],
+          [
+            13.273877,
+            52.40024
+          ],
+          [
+            13.274508,
+            52.400307
+          ],
+          [
+            13.274698,
+            52.400316
+          ],
+          [
+            13.274999,
+            52.400323
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "exit": 1,
+        "bearing_after": 90,
+        "bearing_before": 30,
+        "location": [
+          13.27267,
+          52.400218
+        ],
+        "modifier": "right",
+        "type": "exit roundabout"
+      },
+      "name": "Osdorfer Straße",
+      "mode": "driving",
+      "duration": 14.3,
+      "distance": 159.5
+    }
+  ],
+  "neissestrasse": [
+    {
+      "intersections": [
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            60,
+            240,
+            330
+          ],
+          "location": [
+            13.241342,
+            52.40023
+          ]
+        },
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false,
+            true
+          ],
+          "bearings": [
+            60,
+            150,
+            240,
+            330
+          ],
+          "location": [
+            13.242288,
+            52.40059
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.241342,
+            52.40023
+          ],
+          [
+            13.241806,
+            52.400407
+          ],
+          [
+            13.242288,
+            52.40059
+          ],
+          [
+            13.243157,
+            52.400913
+          ],
+          [
+            13.243346,
+            52.400975
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "bearing_after": 57,
+        "bearing_before": 149,
+        "location": [
+          13.241342,
+          52.40023
+        ],
+        "modifier": "left",
+        "type": "turn"
+      },
+      "name": "Am Teltowkanal",
+      "mode": "driving",
+      "duration": 25.2,
+      "distance": 159.6
+    },
+    {
+      "intersections": [
+        {
+          "out": 0,
+          "in": 1,
+          "entry": [
+            true,
+            false,
+            false
+          ],
+          "bearings": [
+            135,
+            240,
+            330
+          ],
+          "location": [
+            13.243346,
+            52.400975
+          ]
+        },
+        {
+          "out": 1,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            60,
+            150,
+            255
+          ],
+          "location": [
+            13.243489,
+            52.400945
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.243346,
+            52.400975
+          ],
+          [
+            13.243374,
+            52.400957
+          ],
+          [
+            13.24341,
+            52.400946
+          ],
+          [
+            13.24345,
+            52.400941
+          ],
+          [
+            13.243489,
+            52.400945
+          ],
+          [
+            13.243512,
+            52.400869
+          ],
+          [
+            13.243599,
+            52.400774
+          ],
+          [
+            13.243661,
+            52.40071
+          ],
+          [
+            13.243981,
+            52.400376
+          ],
+          [
+            13.244002,
+            52.400354
+          ],
+          [
+            13.244073,
+            52.40029
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "exit": 1,
+        "bearing_after": 137,
+        "bearing_before": 59,
+        "location": [
+          13.243346,
+          52.400975
+        ],
+        "modifier": "right",
+        "type": "roundabout turn"
+      },
+      "name": "Neißestraße",
+      "mode": "driving",
+      "duration": 20.5,
+      "distance": 94.5
+    },
+    {
+      "intersections": [
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            true,
+            false
+          ],
+          "bearings": [
+            60,
+            240,
+            330
+          ],
+          "location": [
+            13.244073,
+            52.40029
+          ]
+        },
+        {
+          "out": 0,
+          "in": 2,
+          "entry": [
+            true,
+            false,
+            false
+          ],
+          "bearings": [
+            60,
+            150,
+            240
+          ],
+          "location": [
+            13.244098,
+            52.4003
+          ]
+        }
+      ],
+      "driving_side": "right",
+      "geometry": {
+        "coordinates": [
+          [
+            13.244073,
+            52.40029
+          ],
+          [
+            13.244098,
+            52.4003
+          ],
+          [
+            13.24431,
+            52.40038
+          ],
+          [
+            13.245418,
+            52.400788
+          ],
+          [
+            13.245661,
+            52.400879
+          ],
+          [
+            13.246455,
+            52.40118
+          ]
+        ],
+        "type": "LineString"
+      },
+      "maneuver": {
+        "bearing_after": 56,
+        "bearing_before": 147,
+        "location": [
+          13.244073,
+          52.40029
+        ],
+        "modifier": "left",
+        "type": "end of road"
+      },
+      "name": "Oderstraße",
+      "mode": "driving",
+      "duration": 25.7,
+      "distance": 189.9
+    }
+  ]
+}

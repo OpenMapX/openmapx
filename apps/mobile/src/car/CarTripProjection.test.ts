@@ -256,6 +256,28 @@ it("names the roundabout's exit step as leaving it", () => {
   );
 });
 
+it("reads a rotary and the step leaving it as OSRM names them", () => {
+  // OSRM calls a large named roundabout a rotary and names the driving side.
+  const rotary = strausberger.map((step, i) =>
+    i === 1
+      ? { ...step, maneuver: { type: "rotary", modifier: "straight" }, drivingSide: "right" }
+      : i === 2
+        ? { ...step, maneuver: { type: "exit rotary", modifier: "straight" }, drivingSide: "right" }
+        : step,
+  );
+  expect(buildCarTripProjection(withSteps(rotary, 0), 1000)?.roundabout).toEqual({
+    exit: 2,
+    clockwise: false,
+    angle: 238,
+  });
+  expect(buildCarTripProjection(withSteps(rotary, 1), 1000)?.roundabout).toEqual({
+    exit: 2,
+    clockwise: false,
+    angle: 238,
+    leaving: true,
+  });
+});
+
 it("names an exit step a server sent as a second roundabout as leaving it", () => {
   // Saved routes from before the exit step had its own name carry this shape.
   const legacy = strausberger.map((step, i) =>

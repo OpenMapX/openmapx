@@ -199,8 +199,8 @@ describe("roundaboutTurnAt", () => {
   );
 
   it("gives no turn when no step says where the roundabout is left", () => {
-    // OSRM's roundabout step runs on along the exit road to the next
-    // manoeuvre, so its far end says nothing about the exit.
+    // Without a step that leaves it, as on a route that ends on the
+    // roundabout, the roundabout step's far end says nothing about the exit.
     const [before, roundabout] = circling(false, 90);
     expect(roundaboutTurnAt([before, roundabout], 1)).toBeUndefined();
   });
