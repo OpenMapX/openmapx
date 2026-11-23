@@ -1,6 +1,6 @@
 {
-  "id": "4ff38007-87da-4fb4-8da3-8b20edd03a40",
-  "prevId": "8c94acb7-d368-4687-bedc-551d64f1743d",
+  "id": "9244f627-1be8-45de-8577-0f188f5d4694",
+  "prevId": "ce843bc2-f3d1-4e3b-be20-26b2ada3098a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2127,13 +2127,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
         "finished_at": {
           "name": "finished_at",
           "type": "timestamp with time zone",
@@ -2164,45 +2157,39 @@
           "primaryKey": false,
           "notNull": false
         },
-        "execution_version": {
-          "name": "execution_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "operation_key": {
           "name": "operation_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "operation_fingerprint": {
           "name": "operation_fingerprint",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "execution_fingerprint": {
           "name": "execution_fingerprint",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "admitted_at": {
           "name": "admitted_at",
-          "type": "bigint",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "deadline_at": {
           "name": "deadline_at",
-          "type": "bigint",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "requested_deadline_at": {
           "name": "requested_deadline_at",
-          "type": "bigint",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2216,13 +2203,19 @@
           "name": "execution_input",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "execution_state": {
           "name": "execution_state",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
+        },
+        "execution_ref": {
+          "name": "execution_ref",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
         },
         "execution_agent_operations": {
           "name": "execution_agent_operations",
@@ -2263,40 +2256,35 @@
           "default": 0
         }
       },
-      "indexes": {
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
         "jobs_operation_key_key": {
           "name": "jobs_operation_key_key",
           "columns": [
-            {
-              "expression": "operation_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "operation_key"
           ],
-          "isUnique": true,
-          "with": {},
-          "method": "btree",
-          "where": "\"data_manager\".\"jobs\".\"operation_key\" IS NOT NULL",
-          "concurrently": false
+          "nullsNotDistinct": false
         }
       },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "jobs_status_check": {
+          "name": "jobs_status_check",
+          "value": "\"data_manager\".\"jobs\".\"status\" IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')"
+        },
         "jobs_execution_bounds_check": {
           "name": "jobs_execution_bounds_check",
           "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 524288)"
         },
         "jobs_execution_row_check": {
           "name": "jobs_execution_row_check",
-          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2) AND (\"data_manager\".\"jobs\".\"execution_version\" IS DISTINCT FROM 2 OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"released_at\" IS NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL)"
+          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"released_at\" IS NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL)"
         },
         "jobs_execution_shape_check": {
           "name": "jobs_execution_shape_check",
-          "value": "\"data_manager\".\"jobs\".\"execution_version\" IS NULL OR coalesce((\"data_manager\".\"jobs\".\"execution_version\" = 2 AND \"data_manager\".\"jobs\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"jobs\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"admitted_at\" >= 0 AND \"data_manager\".\"jobs\".\"deadline_at\" > \"data_manager\".\"jobs\".\"admitted_at\" AND \"data_manager\".\"jobs\".\"execution_input\" IS NOT NULL AND \"data_manager\".\"jobs\".\"execution_state\" IS NOT NULL), false)"
+          "value": "\"data_manager\".\"jobs\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"jobs\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"deadline_at\" > \"data_manager\".\"jobs\".\"admitted_at\""
         }
       },
       "isRLSEnabled": false

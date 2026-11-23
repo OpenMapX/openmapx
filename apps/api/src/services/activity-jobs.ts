@@ -113,23 +113,21 @@ function dataManagerWhere(filter?: ActivityJobFilter) {
       : ordinary;
 }
 function dataManagerRecoveryPending() {
-  return sql<boolean>`coalesce(${dataManagerJobs.executionVersion}=2 AND ${dataManagerJobs.status}='interrupted' AND ${dataManagerJobs.finishedAt} IS NULL AND ${dataManagerJobs.executionState}->>'publication'='unknown',false)`;
+  return sql<boolean>`coalesce(${dataManagerJobs.status}='interrupted' AND ${dataManagerJobs.finishedAt} IS NULL AND ${dataManagerJobs.executionState}->>'publication'='unknown',false)`;
 }
 function currentDataManagerMutation(job: {
-  executionVersion: number | null;
   status: string;
   finishedAt: Date | null;
   executionState: unknown;
 }) {
   return (
-    job.executionVersion === 2 &&
-    (["queued", "running", "cancel_pending"].includes(job.status) ||
-      (job.status === "interrupted" &&
-        job.finishedAt === null &&
-        typeof job.executionState === "object" &&
-        job.executionState !== null &&
-        "publication" in job.executionState &&
-        job.executionState.publication === "unknown"))
+    ["queued", "running", "cancel_pending"].includes(job.status) ||
+    (job.status === "interrupted" &&
+      job.finishedAt === null &&
+      typeof job.executionState === "object" &&
+      job.executionState !== null &&
+      "publication" in job.executionState &&
+      job.executionState.publication === "unknown")
   );
 }
 
@@ -165,19 +163,16 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
         when ${dataManagerJobs.status} = 'error' then 'failed'
         else ${dataManagerJobs.status}
       end`.as("status"),
-      payload:
-        sql<unknown>`CASE WHEN ${dataManagerJobs.executionVersion}=2 THEN ${dataManagerJobs.executionInput} ELSE ${dataManagerJobs.metadata} END`.as(
-          "payload",
-        ),
+      payload: sql<unknown>`${dataManagerJobs.executionInput}`.as("payload"),
       error: sql<string | null>`null::text`.as("error"),
       progress: sql<number | null>`null::integer`.as("progress"),
       createdBy: sql<string | null>`null::text`.as("created_by"),
       triggeredBy: dataManagerJobs.triggeredBy,
-      createdAt: dataManagerJobs.startedAt,
-      startedAt: dataManagerJobs.startedAt,
+      createdAt: dataManagerJobs.admittedAt,
+      startedAt: dataManagerJobs.admittedAt,
       finishedAt: dataManagerJobs.finishedAt,
       cancelable:
-        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
+        sql<boolean>`(${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()})`.as(
           "cancelable",
         ),
     })
@@ -280,14 +275,14 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
     id: String(job.id),
     type: job.kind,
     status: normalizeDataManagerJobStatus(job.status),
-    payload: job.executionVersion === 2 ? job.executionInput : job.metadata,
+    payload: job.executionInput,
     result: null,
     error: null,
     progress: null,
     createdBy: actor.userId,
     actorLabel: actor.label,
-    createdAt: job.startedAt,
-    startedAt: job.startedAt,
+    createdAt: job.admittedAt,
+    startedAt: job.admittedAt,
     finishedAt: job.finishedAt,
     cancelable:
       currentDataManagerMutation(job) &&

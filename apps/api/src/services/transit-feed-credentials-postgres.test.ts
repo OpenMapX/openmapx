@@ -665,7 +665,7 @@ describe.skipIf(!enabled)(
         // lease, beside its prepared fence.
         expect(dm.posts).toBe(2);
         const links = await state.fixture
-          .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${startedAt}`;
+          .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${new Date(startedAt).toISOString()}::text::timestamptz`;
         expect(links).toHaveLength(1);
         expect(links[0]).toMatchObject({ status: "ok" });
         expect(itemAt(links, 0).execution_input.leaseId).toEqual(expect.any(String));

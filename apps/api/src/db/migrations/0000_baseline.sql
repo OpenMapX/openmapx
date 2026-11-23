@@ -236,31 +236,32 @@ CREATE TABLE "data_manager"."job_stages" (
 CREATE TABLE "data_manager"."jobs" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"kind" text NOT NULL,
-	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"finished_at" timestamp with time zone,
 	"status" text NOT NULL,
 	"triggered_by" text,
 	"idempotency_key" text,
 	"metadata" jsonb,
-	"execution_version" integer,
-	"operation_key" text,
-	"operation_fingerprint" text,
-	"execution_fingerprint" text,
-	"admitted_at" bigint,
-	"deadline_at" bigint,
-	"requested_deadline_at" bigint,
+	"operation_key" text NOT NULL,
+	"operation_fingerprint" text NOT NULL,
+	"execution_fingerprint" text NOT NULL,
+	"admitted_at" timestamp with time zone NOT NULL,
+	"deadline_at" timestamp with time zone NOT NULL,
+	"requested_deadline_at" timestamp with time zone,
 	"execution_parent" jsonb,
-	"execution_input" jsonb,
-	"execution_state" jsonb,
+	"execution_input" jsonb NOT NULL,
+	"execution_state" jsonb NOT NULL,
+	"execution_ref" jsonb NOT NULL,
 	"execution_agent_operations" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"execution_admission" jsonb,
 	"execution_progress" jsonb,
 	"execution_completion" jsonb,
 	"released_at" timestamp with time zone,
 	"ownership_version" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "jobs_operation_key_key" UNIQUE("operation_key"),
+	CONSTRAINT "jobs_status_check" CHECK ("data_manager"."jobs"."status" IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')),
 	CONSTRAINT "jobs_execution_bounds_check" CHECK ("data_manager"."jobs"."ownership_version" >= 0 AND ("data_manager"."jobs"."execution_progress" IS NULL OR octet_length("data_manager"."jobs"."execution_progress"::text) <= 524288)),
-	CONSTRAINT "jobs_execution_row_check" CHECK (("data_manager"."jobs"."execution_admission" IS NULL) = ("data_manager"."jobs"."execution_progress" IS NULL) AND ("data_manager"."jobs"."execution_admission" IS NULL OR "data_manager"."jobs"."execution_version" = 2) AND ("data_manager"."jobs"."execution_version" IS DISTINCT FROM 2 OR "data_manager"."jobs"."execution_admission" IS NOT NULL OR "data_manager"."jobs"."finished_at" IS NOT NULL) AND ("data_manager"."jobs"."execution_completion" IS NULL OR "data_manager"."jobs"."execution_admission" IS NOT NULL) AND ("data_manager"."jobs"."released_at" IS NULL OR "data_manager"."jobs"."finished_at" IS NOT NULL)),
-	CONSTRAINT "jobs_execution_shape_check" CHECK ("data_manager"."jobs"."execution_version" IS NULL OR coalesce(("data_manager"."jobs"."execution_version" = 2 AND "data_manager"."jobs"."operation_key" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND "data_manager"."jobs"."operation_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."execution_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."admitted_at" >= 0 AND "data_manager"."jobs"."deadline_at" > "data_manager"."jobs"."admitted_at" AND "data_manager"."jobs"."execution_input" IS NOT NULL AND "data_manager"."jobs"."execution_state" IS NOT NULL), false))
+	CONSTRAINT "jobs_execution_row_check" CHECK (("data_manager"."jobs"."execution_admission" IS NULL) = ("data_manager"."jobs"."execution_progress" IS NULL) AND ("data_manager"."jobs"."execution_admission" IS NOT NULL OR "data_manager"."jobs"."finished_at" IS NOT NULL) AND ("data_manager"."jobs"."execution_completion" IS NULL OR "data_manager"."jobs"."execution_admission" IS NOT NULL) AND ("data_manager"."jobs"."released_at" IS NULL OR "data_manager"."jobs"."finished_at" IS NOT NULL)),
+	CONSTRAINT "jobs_execution_shape_check" CHECK ("data_manager"."jobs"."operation_key" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND "data_manager"."jobs"."operation_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."execution_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."deadline_at" > "data_manager"."jobs"."admitted_at")
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."offline_package_artifact_references" (
@@ -1028,7 +1029,6 @@ CREATE INDEX "data_disclosure_event_occurred_at_idx" ON "data_disclosure_event" 
 CREATE UNIQUE INDEX "data_disclosure_event_idempotency_key_key" ON "data_disclosure_event" USING btree ("idempotency_key") WHERE "data_disclosure_event"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "configuration_fence_state_prepared_key" ON "data_manager"."configuration_fence" USING btree ("state") WHERE "data_manager"."configuration_fence"."state" = 'prepared';--> statement-breakpoint
 CREATE INDEX "job_stages_job_id_idx" ON "data_manager"."job_stages" USING btree ("job_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "jobs_operation_key_key" ON "data_manager"."jobs" USING btree ("operation_key") WHERE "data_manager"."jobs"."operation_key" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "offline_package_artifact_references_package_id_idx" ON "data_manager"."offline_package_artifact_references" USING btree ("package_id");--> statement-breakpoint
 CREATE INDEX "offline_package_artifact_references_principal_retained_at_idx" ON "data_manager"."offline_package_artifact_references" USING btree ("principal","retained_at");--> statement-breakpoint
 CREATE INDEX "offline_package_job_owners_principal_idx" ON "data_manager"."offline_package_job_owners" USING btree ("principal");--> statement-breakpoint

@@ -106,16 +106,15 @@ export async function cancelAdminDataChildren(
           execution: z.object({ executor: z.literal("host-cli"), operationKey: z.literal(cliKey) }),
         })
         .safeParse(row.executionParent);
-      if (row.executionVersion !== 2 || !parent.success)
-        throw new JobObservationPending("invalid_identity");
+      if (!parent.success) throw new JobObservationPending("invalid_identity");
       const state = dataExecutionStatusSchema.parse({
         id: String(row.id),
         kind: row.kind,
         status: row.status,
         operationKey: row.operationKey,
         fingerprint: row.executionFingerprint,
-        admittedAt: Number(row.admittedAt),
-        deadlineAt: Number(row.deadlineAt),
+        admittedAt: row.admittedAt.getTime(),
+        deadlineAt: row.deadlineAt.getTime(),
         ...z
           .object({
             cancellationRequestedAt: z.string().nullable(),

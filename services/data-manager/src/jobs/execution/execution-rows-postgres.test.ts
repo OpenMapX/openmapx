@@ -219,8 +219,8 @@ describe.skipIf(
       });
       const rowless = randomUUID();
       await expect(
-        sql`INSERT INTO data_manager.jobs(id,kind,status,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
-          VALUES(${rowless},'download-fonts','queued',2,${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},1,${deadline},'{}','{}')`,
+        sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${rowless},'download-fonts','queued',${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},now(),${new Date(deadline).toISOString()}::text::timestamptz,'{}','{}','{}')`,
       ).rejects.toThrow(/jobs_execution_row_check/);
     } finally {
       await dm.runtime.close();
@@ -386,8 +386,8 @@ describe.skipIf(
       // Each run left its runner journal, which holds a runner capability.
       const local = installationState(dm.installation);
       for (const row of Object.values(rows)) {
-        await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
-          VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,2,${row.key},${"a".repeat(64)},${"b".repeat(64)},${row.admittedAt},${row.admittedAt + HOUR},'{}','{}')`;
+        await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,${row.key},${"a".repeat(64)},${"b".repeat(64)},${new Date(row.admittedAt).toISOString()}::text::timestamptz,${new Date(row.admittedAt + HOUR).toISOString()}::text::timestamptz,'{}','{}','{}')`;
         writePrivateRecord(local, "observations", `runners-${row.key}.json`, { attempts: [] });
       }
       const swept = async () =>

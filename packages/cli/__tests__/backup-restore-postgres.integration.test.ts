@@ -503,8 +503,8 @@ INSERT INTO session (id, expires_at, token, created_at, updated_at, user_id, imp
 VALUES ('impersonated-session', now() + interval '1 day', 'impersonated-session-token', now(), now(), '${UNRELATED_USER_ID}', '${DELETED_USER_ID}');
 INSERT INTO admin_action_reauthentication (actor_id, starting_session_id, purpose, target_id, nonce_digest, expires_at)
 VALUES ('${UNRELATED_USER_ID}', 'unrelated-session', 'account.verify', '${DELETED_USER_ID}', 'restore-fixture-nonce', now() + interval '5 minutes');
-INSERT INTO data_manager.jobs (kind, status, triggered_by)
-VALUES ('restore-fixture', 'ok', 'api:user:${DELETED_USER_ID}');
+INSERT INTO data_manager.jobs (kind, status, triggered_by, finished_at, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref)
+VALUES ('restore-fixture', 'ok', 'api:user:${DELETED_USER_ID}', now(), 'opk1_restore_fixture_job_1', '${"a".repeat(64)}', '${"b".repeat(64)}', now(), now() + interval '1 hour', '{}', '{}', '{}');
 COMMIT;
 `);
 }
@@ -842,15 +842,16 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
   it("fails every job that was in progress when the backup was taken", async () => {
     await resetMigratedDatabase();
     const hex = (digit: string) => digit.repeat(64);
-    const v2 = (
+    const job = (
       id: string,
       key: string,
       status: string,
       publication: string,
       finished: string,
-      children = "[]",
+      { children = "[]", kind = "full-update", metadata = "NULL" } = {},
     ) =>
-      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '{}', '{"children":${children}}', '{}')`;
+      `('${id}', '${kind}', '${status}', ${finished}, ${metadata}, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', now() - interval '1 hour', now() + interval '1 hour', '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '{}', '{}', '{"children":${children}}', '{}')`;
+    const sync = { kind: "transitous-sync" };
     // A sent child's cell, as data-manager last observed it.
     const sent = (observed: string) =>
       `[{"ordinal":0,"evidence":null,"binding":{},"delegation":{},"owner":{"cancellationRequestedAt":null,"observed":${observed}}}]`;
@@ -864,25 +865,23 @@ VALUES
   ('{"label":"job-failed"}', 'system.update', 'failed', now()),
   ('{"label":"job-canceled"}', 'system.diagnostics', 'canceled', now());
 UPDATE admin_job SET error = 'original failure' WHERE payload->>'label' = 'job-failed';
-INSERT INTO data_manager.jobs (id, kind, status, finished_at, metadata)
-VALUES
-  ('00000000-0000-4000-8000-000000000001', 'transitous-sync', 'running', NULL, '{"region":"de"}'),
-  ('00000000-0000-4000-8000-000000000002', 'transitous-sync', 'ok', now(), NULL),
-  ('00000000-0000-4000-8000-000000000003', 'transitous-sync', 'partial', now(), NULL),
-  ('00000000-0000-4000-8000-000000000004', 'transitous-sync', 'error', now(), NULL),
-  ('00000000-0000-4000-8000-000000000005', 'transitous-sync', 'canceled', now(), NULL),
-  ('00000000-0000-4000-8000-000000000006', 'transitous-sync', 'interrupted', NULL, NULL);
 INSERT INTO data_manager.jobs
-  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_admission, execution_progress, execution_completion)
+  (id, kind, status, finished_at, metadata, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref, execution_admission, execution_progress, execution_completion)
 VALUES
-  ${v2("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
-  ${v2("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", sent("null"))},
-  ${v2("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", sent('{"state":"observing"}'))},
-  ${v2("00000000-0000-4000-8000-00000000000a", "d", "interrupted", "unknown", "NULL")},
-  ${v2("00000000-0000-4000-8000-00000000000b", "e", "interrupted", "not_started", "now()")},
-  ${v2("00000000-0000-4000-8000-00000000000c", "f", "error", "unknown", "now()")},
-  ${v2("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", sent('{"state":"observing"}'))},
-  ${v2("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", sent('{"state":"terminal"}'))};
+  ${job("00000000-0000-4000-8000-000000000001", "i", "running", "not_started", "NULL", { ...sync, metadata: `'{"region":"de"}'` })},
+  ${job("00000000-0000-4000-8000-000000000002", "j", "ok", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000003", "k", "partial", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000004", "l", "error", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000005", "m", "canceled", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000006", "n", "interrupted", "not_started", "NULL", sync)},
+  ${job("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
+  ${job("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", { children: sent("null") })},
+  ${job("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", { children: sent('{"state":"observing"}') })},
+  ${job("00000000-0000-4000-8000-00000000000a", "d", "interrupted", "unknown", "NULL")},
+  ${job("00000000-0000-4000-8000-00000000000b", "e", "interrupted", "not_started", "now()")},
+  ${job("00000000-0000-4000-8000-00000000000c", "f", "error", "unknown", "now()")},
+  ${job("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", { children: sent('{"state":"observing"}') })},
+  ${job("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", { children: sent('{"state":"terminal"}') })};
 INSERT INTO data_manager.offline_package_jobs (id, request_key, package_id, request, status, created_at, updated_at, lease_owner, lease_expires_at)
 VALUES
   ('00000000-0000-4000-8000-000000000011', 'request-preparing', 'package-preparing', '{}', 'preparing', now(), now(), 'worker', now() + interval '1 hour'),
@@ -962,10 +961,10 @@ VALUES
     ).toBe("0");
     const executions = JSON.parse(
       await psql(
-        "SELECT json_agg(json_build_object('id', right(id::text, 2), 'status', status, 'publication', execution_state->>'publication') ORDER BY id) FROM data_manager.jobs WHERE execution_version = 2;",
+        "SELECT json_agg(json_build_object('id', right(id::text, 2), 'status', status, 'publication', execution_state->>'publication') ORDER BY id) FROM data_manager.jobs;",
       ),
     ) as Array<{ id: string; status: string; publication: string }>;
-    expect(executions).toHaveLength(8);
+    expect(executions).toHaveLength(14);
     for (const execution of executions)
       expect(isDataExecutionTerminal(execution as never), `execution ${execution.id}`).toBe(true);
     expect(
@@ -975,16 +974,22 @@ VALUES
     ).toBe("0");
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || coalesce(jsonb_array_length(execution_progress->'children'), 0) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || coalesce(jsonb_array_length(execution_progress->'children'), 0) FROM data_manager.jobs WHERE right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
       ),
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
     // A closed execution loses its execution row and worker completion; a settled one keeps them.
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || (execution_admission IS NULL AND execution_progress IS NULL AND execution_completion IS NULL)::text FROM data_manager.jobs WHERE execution_version = 2 ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || (execution_admission IS NULL AND execution_progress IS NULL AND execution_completion IS NULL)::text FROM data_manager.jobs ORDER BY id;",
       ),
     ).toBe(
       [
+        "01=true",
+        "02=false",
+        "03=false",
+        "04=false",
+        "05=false",
+        "06=true",
         "07=true",
         "08=true",
         "09=true",

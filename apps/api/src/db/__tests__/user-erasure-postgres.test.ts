@@ -420,12 +420,15 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
       VALUES ('warn', ${`erased-${suffix}`}, ${`failure for ${email.toUpperCase()}`}, NULL),
              ('warn', ${`erased-${suffix}`}, 'no identifier', ${JSON.stringify({ subject: userId })}::jsonb),
              ('warn', ${`kept-${suffix}`}, ${`failure for ${otherEmail}`}, NULL)`;
-    const [job] = await api<{ id: string }[]>`
-      INSERT INTO data_manager.jobs (kind, status, triggered_by)
-      VALUES ('erasure-fixture', 'ok', ${`api:user:${userId}`}) RETURNING id`;
-    const [cronJob] = await api<{ id: string }[]>`
-      INSERT INTO data_manager.jobs (kind, status, triggered_by)
-      VALUES ('erasure-fixture', 'ok', 'cron:data-manager-cron') RETURNING id`;
+    const finishedJob = (triggeredBy: string) => api<{ id: string }[]>`
+      INSERT INTO data_manager.jobs (kind, status, triggered_by, finished_at, operation_key,
+        operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input,
+        execution_state, execution_ref)
+      VALUES ('erasure-fixture', 'ok', ${triggeredBy}, now(),
+        ${`opk1_erasure_${randomUUID().replaceAll("-", "")}`}, ${"a".repeat(64)}, ${"b".repeat(64)},
+        now(), now() + interval '1 hour', '{}', '{}', '{}') RETURNING id`;
+    const [job] = await finishedJob(`api:user:${userId}`);
+    const [cronJob] = await finishedJob("cron:data-manager-cron");
     await api`INSERT INTO admin_action_reauthentication (actor_id, starting_session_id, purpose,
         target_id, nonce_digest, expires_at)
       VALUES (${otherId}, 'session', 'account.verify', ${userId}, ${`nonce-a-${suffix}`}, now() + interval '5 minutes'),

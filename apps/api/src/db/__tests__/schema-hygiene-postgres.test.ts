@@ -92,6 +92,20 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "purpose",
     values: ["sign-in", "link-provider", "add-passkey"],
   },
+  jobs_status_check: {
+    table: "jobs",
+    column: "status",
+    values: [
+      "queued",
+      "running",
+      "cancel_pending",
+      "ok",
+      "partial",
+      "error",
+      "canceled",
+      "interrupted",
+    ],
+  },
   job_stages_stage_check: {
     table: "job_stages",
     column: "stage",

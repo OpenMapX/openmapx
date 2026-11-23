@@ -840,8 +840,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // A running data job keeps data-manager from preparing the fence. Data-
       // manager's tables are shared by every fixture, so the job is removed after.
       const dataJob = randomUUID();
-      await fixture.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key)
-        VALUES(${dataJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`})`;
+      await fixture.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,
+          execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref,
+          execution_admission,execution_progress)
+        VALUES(${dataJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`},
+          ${"a".repeat(64)},${"b".repeat(64)},now(),now() + interval '1 hour','{}','{}','{}','{}','{}')`;
       const ctx = await job();
       const outcome = await owned(ctx, async () => {
         const candidate = await credentialCandidate(ctx, "synthetic-refused-credential");

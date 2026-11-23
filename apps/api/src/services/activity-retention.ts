@@ -137,7 +137,7 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
           isNotNull(dataManagerJobs.releasedAt),
           preservationAllowsDeletion({
             registrationId: "data-manager-trigger-attribution",
-            candidateTimestamp: dataManagerJobs.startedAt,
+            candidateTimestamp: dataManagerJobs.admittedAt,
             subjectIds: [dataManagerJobSubject],
             // An operator preserves this registration's rows by hand.
             blockingStatuses: ["held", "action_required"],

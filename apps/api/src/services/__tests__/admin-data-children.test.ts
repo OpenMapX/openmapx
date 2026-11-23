@@ -68,7 +68,6 @@ it("keeps an interrupted unknown durable Activity execution explicitly cancelabl
     {
       id: owned.id,
       kind: owned.kind,
-      executionVersion: 2,
       status: "interrupted",
       finishedAt: null,
       executionState: { publication: "unknown" },
@@ -95,7 +94,8 @@ it("keeps an interrupted unknown durable Activity execution explicitly cancelabl
   vi.stubGlobal("fetch", sent);
   expect(await cancelDataManagerActivityJob(owned.id)).toBe(true);
   expect(sent).toHaveBeenCalledTimes(1);
-  itemAt(fixture.rows, 0).executionVersion = 1;
+  // Once it settled, it is no longer cancelable.
+  Object.assign(itemAt(fixture.rows, 0), { status: "error", finishedAt: new Date() });
   expect(await cancelDataManagerActivityJob(owned.id)).toBe(false);
   expect(sent).toHaveBeenCalledTimes(1);
 });
@@ -152,9 +152,8 @@ it("discovers the exact fixed CLI descendant from its durable DM row before canc
       status: "running",
       operationKey: dataKey,
       executionFingerprint: owned.fingerprint,
-      admittedAt: at,
-      deadlineAt: deadline,
-      executionVersion: 2,
+      admittedAt: new Date(at),
+      deadlineAt: new Date(deadline),
       executionParent: {
         issuer: "host-cli",
         execution: { executor: "host-cli", operationKey: cliKey },

@@ -203,23 +203,32 @@ interface Row extends Record<string, unknown> {
   operation_key: string;
   operation_fingerprint: string;
   execution_fingerprint: string;
-  admitted_at: string | number;
-  deadline_at: string | number;
-  requested_deadline_at: string | number | null;
+  admitted_at: Date | string;
+  deadline_at: Date | string;
+  requested_deadline_at: Date | string | null;
   execution_parent: unknown;
   execution_input: unknown;
   execution_state: unknown;
+  execution_ref: unknown;
   execution_progress: unknown;
   execution_agent_operations: unknown;
   ownership_version: number;
   finished_at: Date | string | null;
-  metadata: unknown;
 }
-function safeEpoch(value: string | number): number {
-  const result = Number(value);
-  if (!Number.isSafeInteger(result) || result < 0) throw Error("Invalid stored execution time");
-  return result;
+/** A stored instant as epoch milliseconds, the form the execution contracts carry. */
+function epochOf(value: unknown): number {
+  return retainedDataDatabaseTimestamp(value).getTime();
 }
+/** Epoch milliseconds as the text form a `timestamptz` parameter is cast from. */
+function instant(epoch: number): string;
+function instant(epoch: number | null | undefined): string | null;
+function instant(epoch: number | null | undefined): string | null {
+  return epoch == null ? null : new Date(epoch).toISOString();
+}
+const executionRefColumnSchema = z.strictObject({
+  execution: executionRefSchema,
+  childReservations: z.array(dataOpsChildReservedSchema).max(32),
+});
 function decode(row: Row): DataExecutionRecord {
   const input = normalizeDataExecutionInput(row.execution_input);
   const mutable = z
@@ -237,23 +246,13 @@ function decode(row: Row): DataExecutionRecord {
     status: row.status,
     operationKey: row.operation_key,
     fingerprint: row.execution_fingerprint,
-    admittedAt: safeEpoch(row.admitted_at),
-    deadlineAt: safeEpoch(row.deadline_at),
+    admittedAt: epochOf(row.admitted_at),
+    deadlineAt: epochOf(row.deadline_at),
     ...mutable,
   });
   if (dataExecutionInputFingerprint(input) !== row.operation_fingerprint || row.kind !== input.kind)
     throw Error("Stored execution body mismatch");
-  const {
-    dataExecution: { execution, childReservations },
-  } = z
-    .object({
-      dataExecution: z.strictObject({
-        version: z.literal(1),
-        execution: executionRefSchema,
-        childReservations: z.array(dataOpsChildReservedSchema).max(32).optional(),
-      }),
-    })
-    .parse(row.metadata);
+  const { execution, childReservations } = executionRefColumnSchema.parse(row.execution_ref);
   if (
     execution.executor !== "data-manager" ||
     execution.executionId !== status.id ||
@@ -277,7 +276,7 @@ function decode(row: Row): DataExecutionRecord {
     })
   )
     throw Error("Stored execution fingerprint mismatch");
-  const reservations = (childReservations ?? []).map((value) => {
+  const reservations = childReservations.map((value) => {
     const parsed = dataOpsChildAttemptSchema.parse(value);
     if (parsed.state !== "reserved") throw Error("Invalid reserved body");
     return parsed;
@@ -292,7 +291,7 @@ function decode(row: Row): DataExecutionRecord {
     input,
     operationFingerprint: row.operation_fingerprint,
     requestedDeadlineAt:
-      row.requested_deadline_at === null ? null : safeEpoch(row.requested_deadline_at),
+      row.requested_deadline_at === null ? null : epochOf(row.requested_deadline_at),
     parent,
     version: z.number().int().nonnegative().safe().parse(row.ownership_version),
     children: childrenOf(reservations, row.execution_progress),
@@ -340,8 +339,8 @@ export function createPostgresDataExecutionStore(
   const now = options.now ?? Date.now;
   const findByIdempotencyKey = async (tx: postgres.Sql | postgres.TransactionSql, key: string) => {
     const rows = await tx.unsafe<Row[]>(
-      "SELECT * FROM data_manager.jobs WHERE idempotency_key=$1 AND (started_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY started_at DESC,id LIMIT 1",
-      [key, new Date(now() - 24 * 3600000).toISOString()],
+      "SELECT * FROM data_manager.jobs WHERE idempotency_key=$1 AND (admitted_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY admitted_at DESC,id LIMIT 1",
+      [key, instant(now() - 24 * 3600000)],
     );
     return rows[0];
   };
@@ -352,7 +351,7 @@ export function createPostgresDataExecutionStore(
     lock = false,
   ) => {
     const rows = await tx.unsafe<Row[]>(
-      `SELECT * FROM data_manager.jobs WHERE execution_version=2 AND ${key}=$1${lock ? " FOR UPDATE" : ""}`,
+      `SELECT * FROM data_manager.jobs WHERE ${key}=$1${lock ? " FOR UPDATE" : ""}`,
       [value],
     );
     return rows[0] ? decode(rows[0]) : null;
@@ -494,8 +493,6 @@ export function createPostgresDataExecutionStore(
       if (idempotencyKey && (input.kind !== "transit-sync" || admission.parent))
         throw new DataExecutionConflict("Idempotency key is bound only to local transit admission");
       const matchIdempotent = (row: Row) => {
-        if (row.execution_version !== 2)
-          throw new DataExecutionConflict("Idempotency key belongs to a different kind of job");
         const record = decode(row);
         if (
           record.input.kind !== "transit-sync" ||
@@ -592,7 +589,7 @@ export function createPostgresDataExecutionStore(
         // nor wait.
         if (!short) {
           const active =
-            await tx`SELECT id FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
+            await tx`SELECT id FROM data_manager.jobs WHERE finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
           if (active.length) throw new DataConfigurationMaintenanceBusy();
         }
         const normalized = normalizeExecutionAdmission({
@@ -638,12 +635,12 @@ export function createPostgresDataExecutionStore(
         );
         const rows = await tx<
           Row[]
-        >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,started_at,execution_version,operation_key,operation_fingerprint,
-          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_agent_operations,metadata,
+        >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,operation_key,operation_fingerprint,
+          execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_ref,execution_agent_operations,
           execution_admission,execution_progress)
-          VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${new Date(status.admittedAt).toISOString()}::text::timestamptz,2,${status.operationKey},${operationFingerprint},
-          ${status.fingerprint},${status.admittedAt},${status.deadlineAt},${admission.requestedDeadlineAt ?? null},
-          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb,
+          VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${status.operationKey},${operationFingerprint},
+          ${status.fingerprint},${instant(status.admittedAt)}::text::timestamptz,${instant(status.deadlineAt)}::text::timestamptz,${instant(admission.requestedDeadlineAt)}::text::timestamptz,
+          ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson({ execution, childReservations })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,
           ${row.admission}::text::jsonb,${row.progress}::text::jsonb) RETURNING *`;
         if (!rows[0]) throw Error("Execution admission did not return its durable row");
         return { created: true, record: decode(rows[0]) };
@@ -662,10 +659,7 @@ export function createPostgresDataExecutionStore(
     },
     async lookupByIdempotencyKey(key) {
       const row = await findByIdempotencyKey(sql, z.string().max(200).parse(key));
-      if (!row) return null;
-      if (row.execution_version !== 2)
-        throw new DataExecutionConflict("Idempotency key belongs to a different kind of job");
-      return decode(row);
+      return row ? decode(row) : null;
     },
     inspect: (id) => find(sql, "id", id),
     lookup: (key) => find(sql, "operation_key", key),
@@ -758,11 +752,11 @@ export function createPostgresDataExecutionStore(
     },
     async recordReleased(id) {
       await sql`UPDATE data_manager.jobs SET released_at=now()
-        WHERE id=${id} AND execution_version=2 AND finished_at IS NOT NULL AND released_at IS NULL`;
+        WHERE id=${id} AND finished_at IS NOT NULL AND released_at IS NULL`;
     },
     async listUnsettled() {
-      const rows = await sql<Row[]>`SELECT * FROM data_manager.jobs WHERE execution_version=2
-        AND (finished_at IS NULL OR (execution_admission IS NOT NULL AND released_at IS NULL))
+      const rows = await sql<Row[]>`SELECT * FROM data_manager.jobs
+        WHERE (finished_at IS NULL OR (execution_admission IS NOT NULL AND released_at IS NULL))
         ORDER BY admitted_at,id`;
       return rows.map(decode);
     },

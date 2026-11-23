@@ -194,7 +194,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         )
         .orderBy(
           sql`${dataManagerJobs.finishedAt} desc nulls last`,
-          desc(dataManagerJobs.startedAt),
+          desc(dataManagerJobs.admittedAt),
         )
         .limit(1),
       db.select({ total: count() }).from(dataManagerFeedState),
@@ -215,7 +215,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
             inArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
           ),
         )
-        .orderBy(desc(dataManagerJobs.startedAt))
+        .orderBy(desc(dataManagerJobs.admittedAt))
         .limit(1),
     ]);
 
@@ -234,7 +234,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       lastSyncAt: lastJob?.finishedAt ? lastJob.finishedAt.toISOString() : null,
       lastSyncStatus: lastJob?.status ?? null,
       currentJob: current
-        ? { jobId: current.id, startedAt: current.startedAt.toISOString() }
+        ? { jobId: current.id, startedAt: current.admittedAt.toISOString() }
         : null,
       feedCount: feedCountRow[0]?.total ?? 0,
       feeds: { byRegion, byStatus },
@@ -288,7 +288,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         .select()
         .from(dataManagerJobs)
         .where(eq(dataManagerJobs.kind, kind))
-        .orderBy(desc(dataManagerJobs.startedAt))
+        .orderBy(desc(dataManagerJobs.admittedAt))
         .limit(limit)
         .offset(offset),
       db.select({ total: count() }).from(dataManagerJobs).where(eq(dataManagerJobs.kind, kind)),
@@ -298,7 +298,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         id: j.id,
         kind: j.kind,
         status: j.status,
-        startedAt: j.startedAt.toISOString(),
+        startedAt: j.admittedAt.toISOString(),
         finishedAt: j.finishedAt?.toISOString() ?? null,
         triggeredBy: j.triggeredBy,
         idempotencyKey: j.idempotencyKey,
@@ -329,7 +329,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       id: job.id,
       kind: job.kind,
       status: job.status,
-      startedAt: job.startedAt.toISOString(),
+      startedAt: job.admittedAt.toISOString(),
       finishedAt: job.finishedAt?.toISOString() ?? null,
       triggeredBy: job.triggeredBy,
       idempotencyKey: job.idempotencyKey,

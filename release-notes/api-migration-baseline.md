@@ -94,6 +94,16 @@ no longer carry an `id`; the region and name identify a feed. The Overture
 release each region imported is recorded in its own
 `data_manager.overture_release` table instead of a transit feed row.
 
+`data_manager.jobs` holds only durable executions, the only kind of job
+data-manager writes. Every execution column is required, the operation key is
+a plain unique key, and the status is one of the eight execution statuses. The
+admission time, deadline and requested deadline are `timestamptz` instead of
+epoch milliseconds; the duplicate `started_at` and the constant
+`execution_version` are gone, and the execution reference moved from
+`metadata` to its own `execution_ref` column. In the admin API, a transit job's
+`startedAt` is its admission time, and a data-manager job's Activity payload is
+always its execution input.
+
 A finished data-manager job, with the account that started it, is deleted 90
 days after it finished, as the privacy catalogue now states (it stated ten
 years). `ADMIN_JOB_RETENTION_DAYS` no longer applies to data-manager jobs, and

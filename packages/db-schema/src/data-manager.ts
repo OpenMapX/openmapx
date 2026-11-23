@@ -30,9 +30,9 @@ export const jobs = dataManager.table(
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     /** e.g. "transit-sync", "download-osm" */
     kind: text("kind").notNull(),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
-    /** "running" | "ok" | "partial" | "error" */
+    /** "queued" | "running" | "cancel_pending" | "ok" | "partial" | "error" |
+     * "canceled" | "interrupted" */
     status: text("status").notNull(),
     /**
      * `<trigger>:<actor>`, e.g. "cron:data-manager-cron" or "api:user:<user id>".
@@ -41,23 +41,26 @@ export const jobs = dataManager.table(
      */
     triggeredBy: text("triggered_by"),
     /**
-     * Client-supplied idempotency token. A POST /sync that replays the same
-     * key within a 24h window (E7 contract) returns 409 instead of starting a
-     * second pipeline. NULL when the caller did not supply a key (cron path).
+     * Client-supplied idempotency token of a local transit sync. Replaying the
+     * same key within 24 hours returns the original job instead of starting a
+     * second one. NULL when the caller did not supply a key.
      */
     idempotencyKey: text("idempotency_key"),
-    /** { transitousRef, countries[], ... } */
+    /** Notes outside the execution: a backup restore that closed the job
+     * records `{ failureReason }`. */
     metadata: jsonb("metadata"),
-    executionVersion: integer("execution_version"),
-    operationKey: text("operation_key"),
-    operationFingerprint: text("operation_fingerprint"),
-    executionFingerprint: text("execution_fingerprint"),
-    admittedAt: bigint("admitted_at", { mode: "number" }),
-    deadlineAt: bigint("deadline_at", { mode: "number" }),
-    requestedDeadlineAt: bigint("requested_deadline_at", { mode: "number" }),
+    operationKey: text("operation_key").notNull().unique("jobs_operation_key_key"),
+    operationFingerprint: text("operation_fingerprint").notNull(),
+    executionFingerprint: text("execution_fingerprint").notNull(),
+    admittedAt: timestamp("admitted_at", { withTimezone: true }).notNull(),
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+    requestedDeadlineAt: timestamp("requested_deadline_at", { withTimezone: true }),
     executionParent: jsonb("execution_parent"),
-    executionInput: jsonb("execution_input"),
-    executionState: jsonb("execution_state"),
+    executionInput: jsonb("execution_input").notNull(),
+    executionState: jsonb("execution_state").notNull(),
+    /** The execution data-manager admitted and the child bodies it reserved
+     * with it: `{ execution, childReservations }`, fixed at admission. */
+    executionRef: jsonb("execution_ref").notNull(),
     /** Agent operations of in-process work: reserved at admission, recorded as
      * attempted before the request and as terminal once the agent answers. */
     executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
@@ -83,9 +86,10 @@ export const jobs = dataManager.table(
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
-    uniqueIndex("jobs_operation_key_key")
-      .on(table.operationKey)
-      .where(sql`${table.operationKey} IS NOT NULL`),
+    check(
+      "jobs_status_check",
+      sql`${table.status} IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')`,
+    ),
     // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
     // adds a space after each separator, so it stays under twice that.
     check(
@@ -94,11 +98,11 @@ export const jobs = dataManager.table(
     ),
     check(
       "jobs_execution_row_check",
-      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR ${table.finishedAt} IS NOT NULL)`,
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR ${table.finishedAt} IS NOT NULL)`,
     ),
     check(
       "jobs_execution_shape_check",
-      sql`${table.executionVersion} IS NULL OR coalesce((${table.executionVersion} = 2 AND ${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.admittedAt} >= 0 AND ${table.deadlineAt} > ${table.admittedAt} AND ${table.executionInput} IS NOT NULL AND ${table.executionState} IS NOT NULL), false)`,
+      sql`${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.deadlineAt} > ${table.admittedAt}`,
     ),
   ],
 );

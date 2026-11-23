@@ -499,7 +499,8 @@ releases. A preparation removes the rows that were settled or refused more than
 
 Every data job is a durable execution in `data_manager.jobs`; there is one
 admission. The job row is also the execution row: the job's columns already hold
-its execution, operation, admission time, deadline and parent, and the job row is
+its operation, admission time, deadline and parent, and `execution_ref` its
+execution and the child bodies reserved with it; the job row is
 inserted together with `execution_admission` (targets, reserved children,
 origin) and `execution_progress`, in one statement; the table refuses an open
 job row without them. `execution_progress` holds the progress; each change the
