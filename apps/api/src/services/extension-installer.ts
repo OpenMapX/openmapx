@@ -1094,14 +1094,13 @@ async function removeExtensionNow(
 
   // A removal interrupted after the agent deleted a repository is retried
   // without that repository's services: their runtimes went first, and the
-  // agent, which no longer reports them at all, refuses to act on them.
-  const community =
-    serviceIds.length > 0
-      ? await extensionStep(workflow, "remove.services.before", {}, () =>
-          readCommunityServices({ signal: ctx.signal }),
-        )
-      : null;
-  const reported = new Set(community?.reportedServiceIds ?? []);
+  // agent, which no longer reports them at all, refuses to act on them. The
+  // inventory is read even without service components: an update that
+  // dropped every service leaves its repositories owned by this extension.
+  const community = await extensionStep(workflow, "remove.services.before", {}, () =>
+    readCommunityServices({ signal: ctx.signal }),
+  );
+  const reported = new Set(community.reportedServiceIds);
 
   // Tear down service containers while they're still in the compose file.
   for (const svc of serviceIds.filter((id) => reported.has(id))) {
@@ -1115,7 +1114,7 @@ async function removeExtensionNow(
       throw new Error(`Failed to remove community service runtime ${svc}`);
     }
   }
-  // Remove the repos this extension owns + drop the services from selection.
+  // Drop the services from selection, then remove the repos this extension owns.
   if (serviceIds.length > 0) {
     try {
       await extensionStep(workflow, "selection.disable", serviceIds, async () => {
@@ -1134,52 +1133,44 @@ async function removeExtensionNow(
       await ctx.log(`Failed to disable services: ${(e as Error).message}`, "stderr");
       throw e;
     }
-    // The agent records which extension owns each repository and refuses to
-    // remove another extension's. Its inventory also names repositories an
-    // update dropped from the manifest; the recorded rows cover a retry after
-    // the agent already deleted a checkout. A repository the agent cannot
-    // remove fails the job before the extension record is deleted, so the
-    // removal can be retried.
-    const repositories = await extensionStep(
-      workflow,
-      "remove.repositories.before",
-      {},
-      async () => {
-        const recorded =
-          snapshot.repositoryUrls.length > 0
-            ? await db
-                .select({ hash: serviceRepository.hash })
-                .from(serviceRepository)
-                .where(inArray(serviceRepository.url, snapshot.repositoryUrls))
-            : [];
-        const owned = (community?.repositories ?? [])
-          .filter((repo) => repo.extensionId === id)
-          .map((repo) => repo.repository);
-        return [...new Set([...recorded.map((row) => row.hash), ...owned])];
+  }
+  // The agent records which extension owns each repository and refuses to
+  // remove another extension's. Its inventory also names repositories an
+  // update dropped from the manifest; the recorded rows cover a retry after
+  // the agent already deleted a checkout. A repository the agent cannot
+  // remove fails the job before the extension record is deleted, so the
+  // removal can be retried.
+  const repositories = await extensionStep(workflow, "remove.repositories.before", {}, async () => {
+    const recorded =
+      snapshot.repositoryUrls.length > 0
+        ? await db
+            .select({ hash: serviceRepository.hash })
+            .from(serviceRepository)
+            .where(inArray(serviceRepository.url, snapshot.repositoryUrls))
+        : [];
+    const owned = community.repositories
+      .filter((repo) => repo.extensionId === id)
+      .map((repo) => repo.repository);
+    return [...new Set([...recorded.map((row) => row.hash), ...owned])];
+  });
+  for (const hash of repositories) {
+    await ctx.log(`Removing service repository ${hash}...`);
+    await removeServiceRepository(
+      { repository: hash, extensionId: id },
+      {
+        ctx,
+        operationKey: createDurableOpsKey("extension.repository.remove", `${ctx.jobId}:${hash}`),
+        signal: ctx.signal,
       },
     );
-    for (const hash of repositories) {
-      await ctx.log(`Removing service repository ${hash}...`);
-      await removeServiceRepository(
-        { repository: hash, extensionId: id },
-        {
-          ctx,
-          operationKey: createDurableOpsKey("extension.repository.remove", `${ctx.jobId}:${hash}`),
-          signal: ctx.signal,
-        },
-      );
-      await extensionDatabaseStep(
-        workflow,
-        `remove.repository.row:${hash}`,
-        { hash },
-        async (tx) => {
-          await tx.delete(serviceRepository).where(eq(serviceRepository.hash, hash));
-        },
-      );
-    }
-    // Repository removal changes the authoritative manifest inventory. Re-read
-    // it before sealing the reduced generation; the original selection phase
-    // already committed its desired roots and remains a separate retained step.
+    await extensionDatabaseStep(workflow, `remove.repository.row:${hash}`, { hash }, async (tx) => {
+      await tx.delete(serviceRepository).where(eq(serviceRepository.hash, hash));
+    });
+  }
+  // Repository removal changes the authoritative manifest inventory. Re-read
+  // it before sealing the reduced generation; the original selection phase
+  // already committed its desired roots and remains a separate retained step.
+  if (serviceIds.length > 0 || repositories.length > 0) {
     await initServiceRegistry({ strict: true });
     await renderAndPersistCompose({
       ctx,
