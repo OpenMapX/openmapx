@@ -602,11 +602,10 @@ describe("admin job type catalogue", () => {
   });
 
   it("words every transit pipeline stage, and nothing else", () => {
-    const types = readFileSync(
-      join(root, "services/data-manager/src/jobs/transitous/types.ts"),
-      "utf8",
+    const schema = readFileSync(join(root, "packages/db-schema/src/data-manager.ts"), "utf8");
+    const stages = literals(
+      required(schema, /export const JOB_STAGE_NAMES = \[([^\]]+)\]/, "stage names"),
     );
-    const stages = literals(required(types, /export type StageName =([^;]+);/, "stage names"));
     expect(stages).toEqual(expect.arrayContaining(["motis-import", "promote"]));
     const expected = sorted(stages.map(catalogueKey));
     expect(sorted(Object.keys(en.adminShared.jobStages))).toEqual(expected);
