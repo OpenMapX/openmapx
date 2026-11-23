@@ -496,10 +496,11 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["support-and-operations", "legal-accountability"],
     legalBases: ["legitimate-interest", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "operator-task" },
-    // Deleting the account clears the actor from its jobs.
+    // Deleting the account clears the actor from its jobs; a finished job is
+    // deleted 90 days after it finished (DATA_MANAGER_JOB_RETENTION_DAYS).
     retention: {
       kind: "fixed-days",
-      days: 3650,
+      days: 90,
       daysAfterClosure: 0,
       reasonCode: "accountability",
     },

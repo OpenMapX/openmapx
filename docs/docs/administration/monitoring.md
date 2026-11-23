@@ -517,11 +517,12 @@ The server writes the trail independently of the client. Its operational limits 
   `AUDIT_LOG_RETENTION_DAYS` (default 90), so the table doesn't grow without limit
   on a long-lived instance. Raise or lower it via the env var.
 
-The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished jobs after `ADMIN_JOB_RETENTION_DAYS` (default
-30). That covers the data-manager's pipeline runs too, with their stages, except
-the newest finished run of each kind, so the transit page keeps showing the last
-sync. Jobs that are still running are never pruned, and neither are jobs that a
-pending data-subject request still needs. Between them, the audit log tells you
+The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished admin jobs after `ADMIN_JOB_RETENTION_DAYS` (default
+30). Finished data-manager jobs, with their stages and the account that started
+them, are deleted 90 days after they finished; this period is fixed and matches
+the privacy catalogue. The transit page then no longer shows a last sync older
+than that. Jobs that are still running are never pruned, and neither are jobs
+that a pending data-subject request still needs. Between them, the audit log tells you
 the _intent_ of every admin action and the jobs view shows the _execution_.
 
 Application job details are pushed to the browser over Server-Sent Events

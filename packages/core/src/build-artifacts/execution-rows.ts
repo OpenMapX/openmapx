@@ -142,10 +142,11 @@ export interface ExecutionRows {
   keys(limit: number): Promise<{ keys: string[]; complete: boolean }>;
   remove(operationKeys: readonly string[]): Promise<void>;
   /**
-   * Removes the records a store holds for executions whose row is gone, once
-   * they finished before `finishedBefore` and were admitted before
-   * `admittedBefore`. `release` first removes what else those keys named and
-   * answers whether that is complete; the records go only then.
+   * Settles executions whose row is gone, once they finished before
+   * `finishedBefore` and were admitted before `admittedBefore`. `release`
+   * first removes what else those keys named and answers whether that is
+   * complete; only then does the store drop or mark what it holds for them,
+   * so a later pass no longer offers those keys.
    */
   removeRowless?(
     bounds: { finishedBefore: number; admittedBefore: number },
@@ -444,6 +445,9 @@ const dataJobRowSchema = z.object({
   execution_admission: admissionExtrasSchema.nullable(),
   execution_progress: executionProgressSchema.nullable(),
 });
+/** Clears a job row's execution row and its worker completion. */
+const DROP_EXECUTION_ROW =
+  "execution_admission=NULL,execution_progress=NULL,execution_completion=NULL";
 /** The two columns a new job row carries for its execution row. */
 export function dataJobRowColumns(row: ExecutionRow): { admission: string; progress: string } {
   return {
@@ -533,19 +537,22 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
         complete: rows.length <= limit,
       };
     },
+    // The execution row goes; the finished job row stays, marked as swept, for
+    // the API's job retention. An unfinished job keeps its execution.
     async remove(keys) {
-      // Only a finished job's row goes; an unfinished one keeps its execution.
       for (const key of keys)
         await database.unsafe(
-          "DELETE FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NOT NULL AND operation_key=$1",
+          `UPDATE data_manager.jobs SET ${DROP_EXECUTION_ROW},released_at=coalesce(released_at,now())
+            WHERE execution_version=2 AND finished_at IS NOT NULL AND operation_key=$1`,
           [key],
         );
     },
     // A backup restore closes the jobs it found open and drops their execution
-    // rows; their job rows go by the same retention as the others.
+    // rows, leaving `released_at` unset. Their files named by key go by the
+    // same retention as the others; the row is then marked as swept.
     async removeRowless({ finishedBefore, admittedBefore }, release) {
       const closed =
-        "execution_version=2 AND execution_admission IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint";
+        "execution_version=2 AND execution_admission IS NULL AND released_at IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint";
       const keys = (
         await database.unsafe(
           `SELECT operation_key FROM data_manager.jobs WHERE ${closed} AND operation_key IS NOT NULL ORDER BY operation_key LIMIT 256`,
@@ -554,7 +561,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
       ).map((row) => z.string().parse(row.operation_key));
       if (!keys.length || !release(keys)) return;
       await database.unsafe(
-        `DELETE FROM data_manager.jobs WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
+        `UPDATE data_manager.jobs SET released_at=now() WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
         [finishedBefore, admittedBefore, JSON.stringify(keys)],
       );
     },

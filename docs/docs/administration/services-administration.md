@@ -479,7 +479,9 @@ removed 72 hours after its root key expired, once its outcome is known and any
 target lease it held is released. Records of an operation whose outcome is
 unknown, or that needs recovery, are kept; age alone never authorizes deleting a
 lock or replaying an effect. A failed prune pass is logged as a warning and
-retried at the next pass.
+retried at the next pass. A Data Manager job outlives its control records: the
+prune removes only the job's execution row, and the API deletes the finished
+job, with the account that started it, 90 days after it finished.
 
 A service refuses new control work while its control state filesystem has less
 than 64 MiB free. Free space on that filesystem and retry; recorded work is not

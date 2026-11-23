@@ -1,4 +1,4 @@
-import { and, desc, isNotNull, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   adminAuditLog,
@@ -108,11 +108,15 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
  */
 const dataManagerJobSubject = sql`substring(${dataManagerJobs.triggeredBy} from '^(?:api:user:|manual:admin:|manual:user:)(.+)$')`;
 
+/** How long a finished data-manager job, with the account that started it, is kept. */
+export const DATA_MANAGER_JOB_RETENTION_DAYS = 90;
+
 /**
- * Delete finished data-manager pipeline jobs, and by cascade their stages,
- * that finished more than `days` ago. A running job has no finish time and is
- * never deleted. The newest finished job of each kind is kept, so the transit
- * state still reports the last sync when the schedule runs rarely or is off.
+ * Delete finished data-manager jobs, and by cascade their stages, that
+ * finished more than `days` ago. A job is deleted only once data-manager's
+ * control prune removed its execution row and the records named by its key
+ * (`released_at` set on a row without one). A running job has no finish time
+ * and is never deleted.
  */
 export async function pruneDataManagerJobs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
@@ -123,22 +127,14 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
     return 0;
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
-  const result = await withPreservationRetentionLock(db, (tx) => {
-    // Managed execution rows belong to data-manager's control prune, including
-    // finished rows still referenced by an original owner awaiting recovery.
-    const legacyPipelineJob = isNull(dataManagerJobs.executionVersion);
-    const newestFinishedOfEachKind = tx
-      .selectDistinctOn([dataManagerJobs.kind], { id: dataManagerJobs.id })
-      .from(dataManagerJobs)
-      .where(and(legacyPipelineJob, isNotNull(dataManagerJobs.finishedAt)))
-      .orderBy(dataManagerJobs.kind, desc(dataManagerJobs.startedAt));
-    return tx
+  const result = await withPreservationRetentionLock(db, (tx) =>
+    tx
       .delete(dataManagerJobs)
       .where(
         and(
-          legacyPipelineJob,
           lt(dataManagerJobs.finishedAt, cutoff),
-          notInArray(dataManagerJobs.id, newestFinishedOfEachKind),
+          isNull(dataManagerJobs.executionAdmission),
+          isNotNull(dataManagerJobs.releasedAt),
           preservationAllowsDeletion({
             registrationId: "data-manager-trigger-attribution",
             candidateTimestamp: dataManagerJobs.startedAt,
@@ -148,8 +144,8 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
           }),
         ),
       )
-      .returning({ id: dataManagerJobs.id });
-  });
+      .returning({ id: dataManagerJobs.id }),
+  );
   return result.length;
 }
 

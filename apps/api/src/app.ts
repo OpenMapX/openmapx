@@ -61,6 +61,7 @@ import {
   uniformErrorHandler,
 } from "./server-wiring";
 import {
+  DATA_MANAGER_JOB_RETENTION_DAYS,
   parseRequiredRetentionDays,
   pruneAppLogs,
   pruneAuditLog,
@@ -418,7 +419,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Admin job prune failed"),
     );
-    void pruneDataManagerJobs(JOB_RETENTION_DAYS).catch((err) =>
+    void pruneDataManagerJobs(DATA_MANAGER_JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Data-manager job prune failed"),
     );
     void pruneAppLogs(APP_LOG_RETENTION_DAYS).catch((err) =>

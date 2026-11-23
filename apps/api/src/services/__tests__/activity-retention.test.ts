@@ -17,6 +17,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 
 const { lt } = await import("drizzle-orm");
 const {
+  DATA_MANAGER_JOB_RETENTION_DAYS,
   parseRequiredRetentionDays,
   pruneAppLogs,
   pruneAuditLog,
@@ -126,6 +127,14 @@ describe("pruneDataManagerJobs retention guard", () => {
       expect(processLogger.warn).toHaveBeenCalled();
     },
   );
+
+  it("keeps finished jobs exactly as long as the privacy catalogue discloses", async () => {
+    const { SUBJECT_DATA_CATALOGUE_BY_ID } = await import("../../privacy/catalogue.js");
+    expect(SUBJECT_DATA_CATALOGUE_BY_ID.get("data-manager-trigger-attribution")?.retention).toEqual(
+      expect.objectContaining({ kind: "fixed-days", days: DATA_MANAGER_JOB_RETENTION_DAYS }),
+    );
+    expect(DATA_MANAGER_JOB_RETENTION_DAYS).toBe(90);
+  });
 });
 
 describe("parseRequiredRetentionDays", () => {

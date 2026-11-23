@@ -94,6 +94,13 @@ no longer carry an `id`; the region and name identify a feed. The Overture
 release each region imported is recorded in its own
 `data_manager.overture_release` table instead of a transit feed row.
 
+A finished data-manager job, with the account that started it, is deleted 90
+days after it finished, as the privacy catalogue now states (it stated ten
+years). `ADMIN_JOB_RETENTION_DAYS` no longer applies to data-manager jobs, and
+the newest run of each kind is no longer kept past that period. Data-manager's
+control prune removes only a job's execution row and the files named by its
+key; the job row stays until then.
+
 The constraints and indexes of OpenMapX's own tables follow PostgreSQL's naming
 convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,
 `<table>_<column>_fkey` and `<table>_<what>_check`. A partial unique index

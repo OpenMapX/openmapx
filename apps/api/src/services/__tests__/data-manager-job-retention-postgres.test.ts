@@ -11,7 +11,7 @@ import {
 } from "../../db/schema.js";
 import { releasePreservation } from "../../privacy/preservation.js";
 import { PrivacyRequestService } from "../../privacy/request-service.js";
-import { pruneDataManagerJobs } from "../activity-retention.js";
+import { DATA_MANAGER_JOB_RETENTION_DAYS, pruneDataManagerJobs } from "../activity-retention.js";
 
 const DAY = 86_400_000;
 const users: string[] = [];
@@ -26,42 +26,41 @@ afterEach(async () => {
 
 interface Fixture {
   status?: string;
+  /** Days since the job finished, or since it was admitted for an unfinished one. */
   daysAgo: number;
   triggeredBy?: string;
   finished?: boolean;
-  managed?: boolean;
+  /**
+   * `swept`: data-manager's control prune removed its execution row and the
+   * records named by its key. `restored`: a backup restore dropped its
+   * execution row and the prune has not swept its key yet. `execution`: it
+   * still holds its execution row.
+   */
+  control?: "swept" | "restored" | "execution";
 }
 
 async function insertJob(kind: string, fixture: Fixture): Promise<string> {
-  const startedAt = new Date(Date.now() - fixture.daysAgo * DAY);
+  const finishedAt = new Date(Date.now() - fixture.daysAgo * DAY);
+  const admittedAt = new Date(finishedAt.getTime() - 60_000);
+  const control = fixture.finished === false ? "execution" : (fixture.control ?? "swept");
   const [row] = await db
     .insert(dataManagerJobs)
     .values({
       kind,
       status: fixture.status ?? "ok",
-      startedAt,
-      finishedAt: fixture.finished === false ? null : new Date(startedAt.getTime() + 60_000),
+      startedAt: admittedAt,
+      finishedAt: fixture.finished === false ? null : finishedAt,
       triggeredBy: fixture.triggeredBy ?? "cron:data-manager-cron",
-      ...(fixture.managed
-        ? {
-            executionVersion: 2,
-            operationKey: `opk1_retention_${randomUUID().replaceAll("-", "")}`,
-            operationFingerprint: "1".repeat(64),
-            executionFingerprint: "2".repeat(64),
-            admittedAt: startedAt.getTime(),
-            deadlineAt: startedAt.getTime() + 60_000,
-            requestedDeadlineAt: startedAt.getTime() + 60_000,
-            executionInput: {},
-            executionState: {},
-          }
-        : {}),
-      ...(kind === "configuration-maintenance"
-        ? {
-            metadata: {
-              configurationMaintenance: { version: 1, guardState: "settled", receipt: {} },
-            },
-          }
-        : {}),
+      executionVersion: 2,
+      operationKey: `opk1_retention_${randomUUID().replaceAll("-", "")}`,
+      operationFingerprint: "1".repeat(64),
+      executionFingerprint: "2".repeat(64),
+      admittedAt: admittedAt.getTime(),
+      deadlineAt: admittedAt.getTime() + 3_600_000,
+      executionInput: {},
+      executionState: {},
+      ...(control === "execution" ? { executionAdmission: {}, executionProgress: {} } : {}),
+      ...(control === "swept" ? { releasedAt: finishedAt } : {}),
     })
     .returning({ id: dataManagerJobs.id });
   assert.isDefined(row);
@@ -69,8 +68,8 @@ async function insertJob(kind: string, fixture: Fixture): Promise<string> {
     jobId: row.id,
     stage: "fetch",
     status: "ok",
-    startedAt,
-    finishedAt: startedAt,
+    startedAt: admittedAt,
+    finishedAt: admittedAt,
     durationMs: 1,
   });
   return row.id;
@@ -87,20 +86,18 @@ async function remaining(ids: string[]): Promise<string[]> {
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "data-manager job retention on PostgreSQL",
   () => {
-    it("deletes finished jobs past retention with their stages and keeps the rest", async () => {
+    it("deletes finished jobs with their stages 90 days after they finished and not before", async () => {
       const kind = `retention-fixture-${randomUUID()}`;
-      const otherKind = `retention-fixture-${randomUUID()}`;
-      const expired = await insertJob(kind, { daysAgo: 40 });
-      const interrupted = await insertJob(kind, { daysAgo: 35, status: "interrupted" });
-      const running = await insertJob(kind, { daysAgo: 45, status: "running", finished: false });
-      const newest = await insertJob(kind, { daysAgo: 2 });
-      // A rarely run kind keeps its only run, however old.
-      const onlyRunOfOtherKind = await insertJob(otherKind, { daysAgo: 90 });
+      const days = DATA_MANAGER_JOB_RETENTION_DAYS;
+      const expired = await insertJob(kind, { daysAgo: days + 1 });
+      const interrupted = await insertJob(kind, { daysAgo: days + 2, status: "interrupted" });
+      const notYet = await insertJob(kind, { daysAgo: days - 1 });
+      const running = await insertJob(kind, { daysAgo: days + 30, finished: false });
 
-      expect(await pruneDataManagerJobs(30)).toBeGreaterThanOrEqual(2);
+      expect(await pruneDataManagerJobs(days)).toBeGreaterThanOrEqual(2);
 
-      expect(await remaining([expired, interrupted, running, newest, onlyRunOfOtherKind])).toEqual(
-        [running, newest, onlyRunOfOtherKind].sort(),
+      expect(await remaining([expired, interrupted, notYet, running])).toEqual(
+        [notYet, running].sort(),
       );
       const stages = await db
         .select({ jobId: dataManagerJobStages.jobId })
@@ -109,20 +106,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(stages).toEqual([]);
     });
 
-    it("leaves managed execution rows to the control prune while pruning legacy pipeline history", async () => {
+    it("leaves a job to data-manager's control prune until it swept the job's records", async () => {
       const kind = `retention-fixture-${randomUUID()}`,
-        expiredLegacy = await insertJob(kind, { daysAgo: 50 }),
-        lastLegacy = await insertJob(kind, { daysAgo: 45 }),
-        managed = await insertJob(kind, { daysAgo: 40, managed: true });
-      await pruneDataManagerJobs(30);
-      expect(await remaining([expiredLegacy, lastLegacy, managed])).toEqual(
-        [lastLegacy, managed].sort(),
-      );
-      const stages = await db
-        .select({ jobId: dataManagerJobStages.jobId })
-        .from(dataManagerJobStages)
-        .where(inArray(dataManagerJobStages.jobId, [expiredLegacy, lastLegacy, managed]));
-      expect(stages.map((row) => row.jobId).sort()).toEqual([lastLegacy, managed].sort());
+        days = DATA_MANAGER_JOB_RETENTION_DAYS,
+        swept = await insertJob(kind, { daysAgo: days + 5 }),
+        restored = await insertJob(kind, { daysAgo: days + 5, control: "restored" }),
+        execution = await insertJob(kind, { daysAgo: days + 5, control: "execution" });
+      await pruneDataManagerJobs(days);
+      expect(await remaining([swept, restored, execution])).toEqual([restored, execution].sort());
     });
 
     it("keeps the jobs an account triggered while its data-subject request needs them", async () => {
@@ -145,19 +136,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       requests.push(request.id);
 
       const kind = `retention-fixture-${randomUUID()}`;
-      const heldApi = await insertJob(kind, { daysAgo: 40, triggeredBy: `api:user:${userId}` });
+      const days = DATA_MANAGER_JOB_RETENTION_DAYS;
+      const heldApi = await insertJob(kind, {
+        daysAgo: days + 10,
+        triggeredBy: `api:user:${userId}`,
+      });
       const heldManual = await insertJob(kind, {
-        daysAgo: 39,
+        daysAgo: days + 9,
         triggeredBy: `manual:admin:${userId}`,
       });
       const otherUser = await insertJob(kind, {
-        daysAgo: 38,
+        daysAgo: days + 8,
         triggeredBy: `api:user:${randomUUID()}`,
       });
-      const scheduled = await insertJob(kind, { daysAgo: 37 });
+      const scheduled = await insertJob(kind, { daysAgo: days + 7 });
       const newest = await insertJob(kind, { daysAgo: 1 });
 
-      await pruneDataManagerJobs(30);
+      await pruneDataManagerJobs(days);
       expect(await remaining([heldApi, heldManual, otherUser, scheduled, newest])).toEqual(
         [heldApi, heldManual, newest].sort(),
       );
@@ -176,13 +171,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
       // The operator still has to preserve this registration's rows by hand.
       expect(holds).toEqual([{ id: holds[0]?.id, status: "action_required" }]);
-      await pruneDataManagerJobs(30);
+      await pruneDataManagerJobs(days);
       expect(await remaining([heldApi, heldManual, newest])).toHaveLength(3);
 
       assert.isDefined(holds[0]);
       await releasePreservation({ id: holds[0].id, database: db });
 
-      await pruneDataManagerJobs(30);
+      await pruneDataManagerJobs(days);
       expect(await remaining([heldApi, heldManual, newest])).toEqual([newest]);
     });
   },

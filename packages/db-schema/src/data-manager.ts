@@ -36,7 +36,8 @@ export const jobs = dataManager.table(
     status: text("status").notNull(),
     /**
      * `<trigger>:<actor>`, e.g. "cron:data-manager-cron" or "api:user:<user id>".
-     * A user id here is personal data: retention prunes the row once it ages out.
+     * A user id here is personal data: the API deletes a finished row 90 days
+     * after it finished, and deleting the account clears the column.
      */
     triggeredBy: text("triggered_by"),
     /**
@@ -75,7 +76,9 @@ export const jobs = dataManager.table(
      * or by recovery for a worker that died with its process. */
     executionCompletion: jsonb("execution_completion"),
     /** When a finished job released what it held (its own lease, if any);
-     * startup recovery leaves the row alone from then on. */
+     * startup recovery leaves the row alone from then on. On a row without an
+     * execution row, when the control prune removed the records named by its
+     * key; until then it is NULL. */
     releasedAt: timestamp("released_at", { withTimezone: true }),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
@@ -91,7 +94,7 @@ export const jobs = dataManager.table(
     ),
     check(
       "jobs_execution_row_check",
-      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR (${table.finishedAt} IS NOT NULL AND ${table.executionAdmission} IS NOT NULL))`,
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR ${table.finishedAt} IS NOT NULL)`,
     ),
     check(
       "jobs_execution_shape_check",

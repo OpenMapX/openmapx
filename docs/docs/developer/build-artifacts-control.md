@@ -728,12 +728,17 @@ removed: its operation key, the children it reserved that have no admission of
 their own, the spawn records of its fixed children and, for a preparation, its
 maintenance and helper progress records. A record of another execution that
 merely names it stays. The execution row goes last; on the agent, removing it
-removes the operation's journal row, and on data-manager its finished job row. A pass that stopped in between leaves strays
+removes the operation's journal row, and on data-manager it clears
+`execution_admission`, `execution_progress` and `execution_completion` from the
+finished job row and sets its `released_at`. A pass that stopped in between leaves strays
 that a later pass removes once they are 72 hours old. A backup restore closes the
-data jobs it found open and drops their execution rows; data-manager's prune
-deletes such a job row once it finished 72 hours ago and was admitted more than
-ten days ago, by which time its key has expired, after removing the files named
-by its key (a transit run's runner journal among them). A pass examines at most 256
+data jobs it found open and drops their execution rows; once such a job finished
+72 hours ago and was admitted more than ten days ago, by which time its key has
+expired, data-manager's prune removes the files named by its key (a transit
+run's runner journal among them) and then sets the row's `released_at`. The API
+deletes a finished data-manager job row 90 days after it finished, once it has
+no execution row and its `released_at` is set, unless a privacy case preserves
+it. A pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
 stay regardless of age, and the agent also keeps those of a preparation a
