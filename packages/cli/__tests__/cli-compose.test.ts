@@ -553,7 +553,7 @@ describe("renderComposeForRepo", () => {
       writeManifest(id, manifest);
     }
     const secretPath = join(tmp, "infra", "docker", "secrets", "secrets-key");
-    expect(existsSync(secretPath)).toBe(false);
+    expect(() => readFileSync(secretPath)).toThrow(/ENOENT/);
 
     await renderComposeForRepo({
       rootDir: tmp,
@@ -565,7 +565,6 @@ describe("renderComposeForRepo", () => {
 
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(Buffer.from(key, "base64url")).toHaveLength(32);
-    expect(statSync(secretPath).mode & 0o777).toBe(0o444);
     expect(yaml).not.toContain(key);
     expect(yaml).not.toMatch(/OPENMAPX_SECRETS_KEY:/);
     expect(yaml.match(/secrets-key:\/run\/secrets\/secrets-key:ro/g)).toHaveLength(1);
@@ -584,6 +583,7 @@ describe("renderComposeForRepo", () => {
       services: ["api,data-manager"],
     });
     expect(readFileSync(secretPath, "utf8")).toBe(key);
+    expect(statSync(secretPath).mode & 0o777).toBe(0o444);
   });
 
   it("creates the agent's stores before mounting its integration store read-only into the API", async () => {
