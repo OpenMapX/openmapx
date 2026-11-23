@@ -301,7 +301,21 @@ function entrypointRoleSql(): string {
     .replaceAll("\\$", "$")}\n`;
 }
 
+/** Waits until Docker reports the database healthy. A restore restarts the
+ * container, and its entrypoint then alters the platform roles again; the
+ * healthcheck needs the sentinel the entrypoint removes on start and writes
+ * when it is done, so a healthy container no longer changes its roles. */
+async function waitForPostgresHealthy(): Promise<void> {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const health = (await compose(["ps", "--format", "{{.Health}}", "postgis"], false)).trim();
+    if (health === "healthy") return;
+    await new Promise((resolveWaiter) => setTimeout(resolveWaiter, 250));
+  }
+  throw new Error("fixture PostgreSQL did not become healthy");
+}
+
 async function resetMigratedDatabase(): Promise<void> {
+  await waitForPostgresHealthy();
   await psql(
     `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\n`,
     "postgres",
