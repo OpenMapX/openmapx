@@ -44,6 +44,7 @@ import {
   getSecret,
   isSecretsConfigured,
   resolveVaultSecrets,
+  secretsKeyProblem,
   setSecret,
 } from "../secrets.js"; // NOTE: `.js` extension — this package's TS imports use it (see sibling tests)
 
@@ -180,6 +181,62 @@ describe("crypto layer", () => {
         symlinkSync(path, link);
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", link);
         expect(() => encrypt("x")).toThrow(/must be a regular file/);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("secretsKeyProblem", () => {
+    it("is null for a usable key", () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
+      expect(secretsKeyProblem()).toBeNull();
+    });
+
+    it("names a missing key and how to generate it", () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
+      vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", undefined);
+      expect(secretsKeyProblem()).toMatch(/not configured.*pnpm openmapx compose render/);
+    });
+
+    it("names both variables when both are set", () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
+      vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", "/synthetic/secrets-key");
+      expect(secretsKeyProblem()).toMatch(
+        /Set either OPENMAPX_SECRETS_KEY_FILE or OPENMAPX_SECRETS_KEY, not both/,
+      );
+    });
+
+    it("names a malformed variable without repeating its value", () => {
+      const short = Buffer.alloc(16, 7).toString("base64url");
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", short);
+      const problem = secretsKeyProblem();
+      expect(problem).toMatch(/^OPENMAPX_SECRETS_KEY must hold 32 random bytes/);
+      expect(problem).not.toContain(short);
+    });
+
+    it("names the file rule that failed without its contents", () => {
+      const directory = mkdtempSync(join(tmpdir(), "openmapx-secrets-key-problem-"));
+      try {
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
+        const loose = join(directory, "loose-key");
+        writeFileSync(loose, KEY_B, { mode: 0o600 });
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", loose);
+        const mode = secretsKeyProblem();
+        expect(mode).toMatch(/^Secrets key file must have mode 0444 \(OPENMAPX_SECRETS_KEY_FILE\)/);
+        expect(mode).not.toContain(KEY_B);
+
+        const owned = join(directory, "owned-key");
+        writeFileSync(owned, KEY_B, { mode: 0o444 });
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", owned);
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_UID", String((process.getuid?.() ?? 0) + 1));
+        expect(secretsKeyProblem()).toMatch(/^Secrets key file has an invalid owner/);
+
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_UID", undefined);
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", join(directory, "absent-key"));
+        expect(secretsKeyProblem()).toMatch(
+          /^Secrets key file is missing or unreadable.*pnpm openmapx compose render/,
+        );
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }

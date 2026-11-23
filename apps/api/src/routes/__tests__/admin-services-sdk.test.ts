@@ -157,7 +157,10 @@ vi.mock("../../services/service-secrets", () => ({
   setServiceSecret: (...args: unknown[]) => setSecret(...args),
   deleteServiceSecret: (...args: unknown[]) => deleteSecret(...args),
 }));
-vi.mock("../../services/secrets", () => ({ isSecretsConfigured: () => true }));
+vi.mock("../../services/secrets", () => ({
+  isSecretsConfigured: () => true,
+  secretsKeyProblem: () => null,
+}));
 const dockerAvailable = vi.fn().mockResolvedValue(true);
 vi.mock("../../services/admin-ops", () => ({
   INFRA_DIR: "/synthetic/infra",

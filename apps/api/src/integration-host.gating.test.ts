@@ -35,7 +35,7 @@ import {
   setDisallowedSourceResolver,
   shutdownIntegrations,
 } from "./integration-host.js";
-import { isSecretsConfigured } from "./services/secrets.js";
+import { secretsKeyProblem } from "./services/secrets.js";
 
 describe("integration-host boundaries", () => {
   it("has no integration-specific runtime lifecycle imports", () => {
@@ -57,7 +57,7 @@ afterEach(async () => {
   }
   delete process.env.INTEGRATION_GAMMA_ENABLED;
   vi.clearAllMocks();
-  vi.mocked(isSecretsConfigured).mockReturnValue(true);
+  vi.mocked(secretsKeyProblem).mockReturnValue(null);
 });
 
 describe("integration-host — disallowed resolvers via ctx", () => {

@@ -217,6 +217,7 @@ const mockDeleteSecret = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../../services/secrets.js", () => ({
   isSecretsConfigured: (...args: unknown[]) => mockIsSecretsConfigured(...args),
+  secretsKeyProblem: () => (mockIsSecretsConfigured() ? null : "Synthetic secrets key reason"),
   listAllSecrets: (...args: unknown[]) => mockListAllSecrets(...args),
   listSecrets: (...args: unknown[]) => mockListSecrets(...args),
   setSecret: (...args: unknown[]) => mockSetSecret(...args),
@@ -684,7 +685,7 @@ describe("actual integration producers through generated SDK", () => {
           { "idempotency-key": crypto.randomUUID() },
           { client },
         ),
-      ).toMatchObject({ status: 503, data: { hint: expect.any(String) } });
+      ).toMatchObject({ status: 503, data: { hint: "Synthetic secrets key reason" } });
       mockApply.mockRejectedValueOnce(Error("synthetic-secret"));
       const failed = await sdk.enableAdminIntegration(
         id,

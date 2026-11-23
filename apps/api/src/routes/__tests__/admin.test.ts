@@ -155,6 +155,7 @@ const mockDeleteSecret = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../../services/secrets.js", () => ({
   isSecretsConfigured: (...args: unknown[]) => mockIsSecretsConfigured(...args),
+  secretsKeyProblem: () => (mockIsSecretsConfigured() ? null : "Synthetic secrets key reason"),
   listAllSecrets: (...args: unknown[]) => mockListAllSecrets(...args),
   listSecrets: (...args: unknown[]) => mockListSecrets(...args),
   setSecret: (...args: unknown[]) => mockSetSecret(...args),

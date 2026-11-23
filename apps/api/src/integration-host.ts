@@ -83,7 +83,7 @@ import {
   ProviderHealth,
   setProviderHealth,
 } from "./services/provider-health/registry";
-import { getSecret, isSecretsConfigured } from "./services/secrets";
+import { getSecret, secretsKeyProblem } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "./services/upstream-runtime";
 
@@ -884,19 +884,19 @@ export async function initIntegrations(
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
   // surfaces it as a boot error with a clear remediation hint.
-  if (!isSecretsConfigured()) {
+  const keyProblem = secretsKeyProblem();
+  if (keyProblem) {
     const requiringSecrets = sorted.filter((d) =>
       manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
       const names = requiringSecrets.map((d) => d.manifest.id).join(", ");
       throw new Error(
-        `The secrets key (OPENMAPX_SECRETS_KEY_FILE) is not usable but the following integrations require it: ${names}. ` +
-          "Run `pnpm openmapx compose render` to generate it; the former 64-character hex format is not accepted",
+        `The secrets key is not usable, but the following integrations require it: ${names}. ${keyProblem}`,
       );
     }
     fastify.log.warn(
-      "The secrets key (OPENMAPX_SECRETS_KEY_FILE) is not usable — vault-backed integration secrets cannot be stored or decrypted",
+      `The secrets key is not usable, so vault-backed integration secrets cannot be stored or decrypted. ${keyProblem}`,
     );
   }
 

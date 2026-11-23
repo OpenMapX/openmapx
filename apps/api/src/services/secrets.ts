@@ -90,13 +90,21 @@ function getSecretsKey(): Buffer {
   return key;
 }
 
-export function isSecretsConfigured(): boolean {
+/**
+ * Why the secrets key cannot be used, or null when it can: the variable or
+ * file rule that failed and how to fix it. Never includes key material.
+ */
+export function secretsKeyProblem(): string | null {
   try {
     getSecretsKey();
-    return true;
-  } catch {
-    return false;
+    return null;
+  } catch (error) {
+    return error instanceof SecretsKeyError ? error.message : "The secrets key cannot be read";
   }
+}
+
+export function isSecretsConfigured(): boolean {
+  return secretsKeyProblem() === null;
 }
 
 /** Throws the reason the secrets key cannot be used, or returns. */

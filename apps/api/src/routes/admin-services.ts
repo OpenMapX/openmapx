@@ -31,7 +31,7 @@ import {
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { osmExtractFor, readDataManagerDatasets } from "../services/osm-extract";
 import { lookupMaintenanceJob } from "../services/retained-maintenance-job";
-import { isSecretsConfigured } from "../services/secrets";
+import { isSecretsConfigured, secretsKeyProblem } from "../services/secrets";
 import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
 import { listServiceSecrets } from "../services/service-secrets";
@@ -550,12 +550,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           error: DAWARICH_CREDENTIAL_MANAGED_ERROR,
         };
       }
-      if (!isSecretsConfigured()) {
+      const keyProblem = secretsKeyProblem();
+      if (keyProblem) {
         reply.status(400);
-        return {
-          error:
-            "Secret vault not configured — run `pnpm openmapx compose render` so the api service receives OPENMAPX_SECRETS_KEY_FILE",
-        };
+        return { error: `Secret vault not configured: ${keyProblem}` };
       }
       const field = getSecretFields(svc.manifest.configSchema).find(
         (f) => f.key === req.params.key,

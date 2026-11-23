@@ -54,7 +54,7 @@ import {
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { processLogger } from "./process-logger";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
-import { isSecretsConfigured } from "./services/secrets.js";
+import { secretsKeyProblem } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
 import { RateLimiter } from "./utils/rate-limit.js";
 
@@ -86,8 +86,8 @@ afterEach(async () => {
   // clearAllMocks resets call history but preserves mockReturnValue / mockResolvedValue
   // implementations so subsequent tests don't see undefined from mocked dependencies.
   vi.clearAllMocks();
-  // Restore secrets mock to default (configured = true) in case a test changed it.
-  vi.mocked(isSecretsConfigured).mockReturnValue(true);
+  // Restore secrets mock to default (a usable key) in case a test changed it.
+  vi.mocked(secretsKeyProblem).mockReturnValue(null);
 });
 
 describe("integration route rate tiers", () => {
@@ -418,7 +418,7 @@ describe("initIntegrations — loader", () => {
         },
       },
     });
-    vi.mocked(isSecretsConfigured).mockReturnValue(false);
+    vi.mocked(secretsKeyProblem).mockReturnValue("The secrets key is not configured");
     const app = makeApp();
 
     try {
@@ -783,21 +783,23 @@ describe("initIntegrations — loader", () => {
 
   it("secret-needer loads when the secrets key is configured", async () => {
     // Confirm that the fixture directory containing secret-needer loads without
-    // error when isSecretsConfigured returns true (the default in this suite).
+    // error when the secrets key is usable (the default in this suite).
     const app = makeApp();
     await initIntegrations(app, [FIXTURES_DIR]);
 
     expect(getAllIntegrations().some((i) => i.id === "secret-needer")).toBe(true);
   });
 
-  it("throws at boot when a manifest declares vault secrets but the secrets key is unusable", async () => {
-    vi.mocked(isSecretsConfigured).mockReturnValue(false);
+  it("throws at boot with the reason when a manifest declares vault secrets but the secrets key is unusable", async () => {
+    const reason =
+      "Secrets key file must have mode 0444 (OPENMAPX_SECRETS_KEY_FILE). It must hold 32 random bytes";
+    vi.mocked(secretsKeyProblem).mockReturnValue(reason);
 
     const app = makeApp();
 
-    await expect(initIntegrations(app, [FIXTURES_DIR])).rejects.toThrow(
-      /secrets key \(OPENMAPX_SECRETS_KEY_FILE\) is not usable.*pnpm openmapx compose render/,
-    );
+    const boot = initIntegrations(app, [FIXTURES_DIR]);
+    await expect(boot).rejects.toThrow(/secrets key is not usable.*secret-needer/);
+    await expect(boot).rejects.toThrow(reason);
   });
 });
 
