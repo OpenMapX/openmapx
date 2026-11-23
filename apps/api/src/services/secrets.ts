@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { integrationSecret } from "../db/schema";
@@ -9,23 +10,96 @@ import {
 } from "./administrative-configuration-context";
 
 const ALGORITHM = "aes-256-gcm" as const;
+const KEY_FILE_VARIABLE = "OPENMAPX_SECRETS_KEY_FILE";
+const KEY_VARIABLE = "OPENMAPX_SECRETS_KEY";
+const KEY_FORMAT =
+  "32 random bytes as 43 base64url characters, the format `pnpm openmapx compose render` " +
+  "generates; the former 64-character hex format is not accepted";
 
-export function isSecretsConfigured(): boolean {
-  const keyHex = process.env.OPENMAPX_SECRETS_KEY;
-  if (!keyHex) return false;
-  return Buffer.from(keyHex, "hex").length === 32;
+/** The secrets key is absent, unreadable or not in the one accepted format. */
+export class SecretsKeyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SecretsKeyError";
+  }
 }
 
+/** A stored secret does not open with the configured secrets key. */
+export class SecretDecryptionError extends Error {
+  constructor() {
+    super(
+      "A stored secret cannot be decrypted with the configured secrets key: the key differs " +
+        "from the one the secret was saved with, or the stored value is damaged",
+    );
+    this.name = "SecretDecryptionError";
+  }
+}
+
+function decodeSecretsKey(value: string, origin: string): Buffer {
+  const decoded = Buffer.from(value, "base64url");
+  if (
+    !/^[A-Za-z0-9_-]{43}$/.test(value) ||
+    decoded.length !== 32 ||
+    decoded.toString("base64url") !== value
+  ) {
+    throw new SecretsKeyError(`${origin} must hold ${KEY_FORMAT}`);
+  }
+  return decoded;
+}
+
+let cachedKey: { source: string; key: Buffer } | undefined;
+
+/**
+ * The API's secrets key. A rendered deployment mounts the file
+ * `openmapx compose render` generated and names it in
+ * OPENMAPX_SECRETS_KEY_FILE; development without a render may put the same
+ * value in OPENMAPX_SECRETS_KEY. The key is read once per source.
+ */
 function getSecretsKey(): Buffer {
-  const keyHex = process.env.OPENMAPX_SECRETS_KEY;
-  if (!keyHex) {
-    throw new Error("OPENMAPX_SECRETS_KEY is not set. Generate one with: openssl rand -hex 32");
+  const path = process.env[KEY_FILE_VARIABLE]?.trim() ?? "";
+  const inline = process.env[KEY_VARIABLE]?.trim() ?? "";
+  if (path && inline) {
+    throw new SecretsKeyError(
+      `Set either ${KEY_FILE_VARIABLE} or ${KEY_VARIABLE}, not both; a rendered deployment uses the key file`,
+    );
   }
-  const key = Buffer.from(keyHex, "hex");
-  if (key.length !== 32) {
-    throw new Error("OPENMAPX_SECRETS_KEY must be 64 hex characters (32 bytes)");
+  if (!path && !inline) {
+    throw new SecretsKeyError(
+      `The secrets key is not configured: run \`pnpm openmapx compose render\`, which generates it and gives the api service ${KEY_FILE_VARIABLE}`,
+    );
   }
+  const source = path ? `file:${path}` : `env:${inline}`;
+  if (cachedKey?.source === source) return cachedKey.key;
+  let key: Buffer;
+  if (path) {
+    let contents: string;
+    try {
+      contents = readServiceSecretFile(path, "Secrets key");
+    } catch (error) {
+      throw new SecretsKeyError(
+        `${(error as Error).message} (${KEY_FILE_VARIABLE}); run \`pnpm openmapx compose render\` to generate it`,
+      );
+    }
+    key = decodeSecretsKey(contents, `The secrets key file (${KEY_FILE_VARIABLE})`);
+  } else {
+    key = decodeSecretsKey(inline, KEY_VARIABLE);
+  }
+  cachedKey = { source, key };
   return key;
+}
+
+export function isSecretsConfigured(): boolean {
+  try {
+    getSecretsKey();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Throws the reason the secrets key cannot be used, or returns. */
+export function assertSecretsConfigured(): void {
+  getSecretsKey();
 }
 
 export function encrypt(plaintext: string): { ciphertext: string; iv: string; tag: string } {
@@ -43,13 +117,17 @@ export function encrypt(plaintext: string): { ciphertext: string; iv: string; ta
 
 export function decrypt(ciphertext: string, iv: string, tag: string): string {
   const key = getSecretsKey();
-  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, "base64"));
-  decipher.setAuthTag(Buffer.from(tag, "base64"));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(ciphertext, "base64")),
-    decipher.final(),
-  ]);
-  return decrypted.toString("utf8");
+  try {
+    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, "base64"));
+    decipher.setAuthTag(Buffer.from(tag, "base64"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(ciphertext, "base64")),
+      decipher.final(),
+    ]);
+    return decrypted.toString("utf8");
+  } catch {
+    throw new SecretDecryptionError();
+  }
 }
 
 export async function setSecret(

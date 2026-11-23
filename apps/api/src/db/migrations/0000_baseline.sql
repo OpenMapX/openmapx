@@ -828,6 +828,16 @@ CREATE TABLE "share_link" (
 	CONSTRAINT "share_link_snapshot_check" CHECK (("share_link"."mode" = 'snapshot') = ("share_link"."snapshot" is not null))
 );
 --> statement-breakpoint
+CREATE TABLE "system_secret" (
+	"key" text NOT NULL,
+	"ciphertext" text NOT NULL,
+	"iv" text NOT NULL,
+	"tag" text NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_by" text,
+	CONSTRAINT "system_secret_pkey" PRIMARY KEY("key")
+);
+--> statement-breakpoint
 CREATE TABLE "system_settings" (
 	"key" text PRIMARY KEY NOT NULL,
 	"value" jsonb NOT NULL,
@@ -968,6 +978,7 @@ ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "session_auth_assurance" ADD CONSTRAINT "session_auth_assurance_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session_auth_assurance" ADD CONSTRAINT "session_auth_assurance_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "share_link" ADD CONSTRAINT "share_link_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "system_secret" ADD CONSTRAINT "system_secret_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "system_settings" ADD CONSTRAINT "system_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transit_credential_preview" ADD CONSTRAINT "transit_credential_preview_actor_id_fkey" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -1064,6 +1075,7 @@ CREATE INDEX "session_expires_at_idx" ON "session" USING btree ("expires_at");--
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_auth_assurance_user_id_authenticated_at_idx" ON "session_auth_assurance" USING btree ("user_id","authenticated_at");--> statement-breakpoint
 CREATE INDEX "share_link_user_id_idx" ON "share_link" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "system_secret_updated_by_idx" ON "system_secret" USING btree ("updated_by");--> statement-breakpoint
 CREATE INDEX "system_settings_updated_by_idx" ON "system_settings" USING btree ("updated_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "transit_credential_preview_actor_id_operation_key_key" ON "transit_credential_preview" USING btree ("actor_id","operation_key");--> statement-breakpoint
 CREATE INDEX "transit_credential_preview_expires_at_idx" ON "transit_credential_preview" USING btree ("expires_at");--> statement-breakpoint

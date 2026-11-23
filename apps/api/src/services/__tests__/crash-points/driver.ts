@@ -681,7 +681,6 @@ export class CrashHost {
       ACME_EMAIL: "crash-points@example.org",
       POSTGRES_PASSWORD: secret(),
       BETTER_AUTH_SECRET: secret(),
-      OPENMAPX_SECRETS_KEY: secret(),
       OPENMAPX_LOCAL_ADMIN_TOKEN: secret(),
       OPENMAPX_HOST_DIR: this.hostDir,
       DOCKER_GID: String(process.getegid?.() ?? 0),

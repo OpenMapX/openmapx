@@ -285,7 +285,8 @@ export function AdminOverview() {
           {!credentialsOverview.data?.secretsConfigured && (
             <CompactAlert severity="warning" variant="outlined" sx={{ mb: 1.25 }}>
               {t.rich("credentialsVaultNotConfigured", {
-                variable: "OPENMAPX_SECRETS_KEY",
+                variable: "OPENMAPX_SECRETS_KEY_FILE",
+                command: "pnpm openmapx compose render",
                 code: (chunks) => <code>{chunks}</code>,
               })}
             </CompactAlert>

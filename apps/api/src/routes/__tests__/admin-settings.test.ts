@@ -78,19 +78,26 @@ const insertChain = {
   values: vi.fn().mockReturnThis(),
   onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
 };
+const deleteChain = { where: vi.fn().mockResolvedValue(undefined) };
+const mockDbDelete = vi.fn();
 mockDbSelect.mockImplementation(() => makeSelectChain());
 mockDbInsert.mockReturnValue(insertChain);
+mockDbDelete.mockReturnValue(deleteChain);
 
 vi.mock("../../db/index.js", () => ({
   db: {
     select: (...args: unknown[]) => mockDbSelect(...args),
     insert: (...args: unknown[]) => mockDbInsert(...args),
     transaction: async (run: (tx: unknown) => Promise<unknown>) =>
-      run({ insert: (...args: unknown[]) => mockDbInsert(...args) }),
+      run({
+        insert: (...args: unknown[]) => mockDbInsert(...args),
+        delete: (...args: unknown[]) => mockDbDelete(...args),
+      }),
   },
 }));
 vi.mock("../../db/schema.js", () => ({
   systemSettings: { key: "key", value: "value", updatedAt: "updatedAt", updatedBy: "updatedBy" },
+  systemSecret: { key: "key", updatedAt: "updatedAt", updatedBy: "updatedBy" },
 }));
 
 let app: FastifyInstance;
@@ -453,20 +460,47 @@ describe("map settings review regressions", () => {
       }),
     );
   });
-  it.each(["replacement-key", ""])(
-    "allows an explicit secret replacement or clearing: %s",
-    async (value) => {
-      const res = await app.inject({
-        method: "PATCH",
-        url: "/admin/settings",
-        payload: { maptilerApiKey: value },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(insertChain.values).toHaveBeenCalledWith(
-        expect.objectContaining({ key: "maptilerApiKey", value }),
-      );
-    },
-  );
+  it("stores an explicit secret replacement encrypted", async () => {
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x5a).toString("base64url"));
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { maptilerApiKey: "replacement-key" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(insertChain.values).toHaveBeenCalledTimes(1);
+    const [row] = insertChain.values.mock.calls[0] ?? [];
+    expect(row).toMatchObject({
+      key: "maptilerApiKey",
+      ciphertext: expect.any(String),
+      iv: expect.any(String),
+      tag: expect.any(String),
+    });
+    expect(row).not.toHaveProperty("value");
+    expect(JSON.stringify(row)).not.toContain("replacement-key");
+  });
+  it("removes a secret cleared to empty, even without a key", async () => {
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { maptilerApiKey: "" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mockDbDelete).toHaveBeenCalledTimes(1);
+    expect(insertChain.values).not.toHaveBeenCalled();
+  });
+  it("refuses to save a secret without a usable key and says how to get one", async () => {
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x5a).toString("hex"));
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { maptilerApiKey: "replacement-key", hostedBasemapProvider: "openfreemap" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/64-character hex format is not accepted/);
+    expect(mockDbInsert).not.toHaveBeenCalled();
+  });
   it("allows saving the provider when an invalid environment selection is ignored", async () => {
     vi.stubEnv("BASEMAP_PROVIDER", "invalid");
     const get = await app.inject("/admin/settings");

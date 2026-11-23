@@ -122,7 +122,7 @@ function encodeLocator(value: string): string {
 }
 
 /** A stored locator that cannot be decrypted (for example after a changed
- * OPENMAPX_SECRETS_KEY) is an operational failure, never "no subject". */
+ * secrets key) is an operational failure, never "no subject". */
 function decodeLocator(envelope: string): string {
   let value: unknown;
   try {

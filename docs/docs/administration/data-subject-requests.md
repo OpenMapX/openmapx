@@ -116,8 +116,9 @@ case retention (3 years by default) and declare the deployment's additional
 sources. Environment values override saved settings and appear locked in the
 editor. Public legal pages refresh their cached facts within about a minute.
 
-Assisted requests store the requester's locator encrypted with
-`OPENMAPX_SECRETS_KEY`. No other key or storage volume is needed.
+Assisted requests store the requester's locator encrypted with the API's
+secrets key (`infra/docker/secrets/secrets-key`). No other key or storage
+volume is needed.
 
 ## Operational checks
 

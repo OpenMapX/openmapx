@@ -7,6 +7,13 @@ import * as schema from "../db/schema";
 
 /** Never consumes DATABASE_URL: all migrations and requests use a disposable database. */
 export async function createMigratedPostgresFixture() {
+  const { container: _container, ...fixture } = await createMigratedPostgresContainer();
+  return fixture;
+}
+
+/** The migrated fixture together with its container, for tests that run a
+ * PostgreSQL client tool such as pg_dump inside it. */
+export async function createMigratedPostgresContainer() {
   const container = await new PostgreSqlContainer(
     "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
   )
@@ -29,7 +36,7 @@ export async function createMigratedPostgresFixture() {
     await migrate(db, {
       migrationsFolder: fileURLToPath(new URL("../db/migrations", import.meta.url)),
     });
-    return { sql, db, stop, connectionUri: container.getConnectionUri() };
+    return { sql, db, stop, connectionUri: container.getConnectionUri(), container };
   } catch (error) {
     await stop();
     throw error;

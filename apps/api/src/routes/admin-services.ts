@@ -552,7 +552,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       }
       if (!isSecretsConfigured()) {
         reply.status(400);
-        return { error: "Secret vault not configured — set OPENMAPX_SECRETS_KEY" };
+        return {
+          error:
+            "Secret vault not configured — run `pnpm openmapx compose render` so the api service receives OPENMAPX_SECRETS_KEY_FILE",
+        };
       }
       const field = getSecretFields(svc.manifest.configSchema).find(
         (f) => f.key === req.params.key,

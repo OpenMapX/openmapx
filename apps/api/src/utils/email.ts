@@ -6,6 +6,7 @@ import { systemSettings } from "../db/schema";
 import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
 import { redis } from "../redis";
 import { appLogger } from "../services/app-logger.js";
+import { isSecretSetting, loadSecretSettings } from "../services/settings.js";
 import { MailDeliveryRefusedError } from "./mail-outcome";
 import { createMailRecipientLimit } from "./mail-recipient-limit";
 
@@ -61,14 +62,17 @@ function pickString(env: string | undefined, db: unknown, fallback = ""): string
 
 /**
  * Load the active email configuration by merging environment variables over
- * `system_settings` rows. Env always wins so deployments that pin secrets
- * via .env keep working unchanged; admin-panel values take effect when env
- * is unset. Re-evaluated on every send so admin edits apply without a
- * server restart.
+ * `system_settings` rows and the encrypted `system_secret` values. Env always
+ * wins so deployments that pin secrets via .env keep working unchanged;
+ * admin-panel values take effect when env is unset. Re-evaluated on every
+ * send so admin edits apply without a server restart.
  */
 async function loadEmailConfig(): Promise<EmailConfig> {
   const rows = await db.select().from(systemSettings);
-  const dbMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const dbMap: Record<string, unknown> = {
+    ...Object.fromEntries(rows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value])),
+    ...(await loadSecretSettings()),
+  };
 
   const from = pickString(
     process.env.EMAIL_FROM,

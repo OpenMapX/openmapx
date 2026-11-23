@@ -79,7 +79,7 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     if (!isSecretsConfigured()) {
       return reply.status(503).send({
         error: "Secrets vault not configured",
-        hint: "Set OPENMAPX_SECRETS_KEY env var (openssl rand -hex 32)",
+        hint: "Run `pnpm openmapx compose render` so the api service receives its secrets key file (OPENMAPX_SECRETS_KEY_FILE); the former 64-character hex format is not accepted",
       });
     }
 

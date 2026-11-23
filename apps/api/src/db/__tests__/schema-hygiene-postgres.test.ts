@@ -316,6 +316,7 @@ integration("schema hygiene", () => {
       "integration_secret",
       "service_config",
       "service_secret",
+      "system_secret",
     ];
     const keys = await fixture.sql<{ table: string; constraint: string; columns: string[] }[]>`
       SELECT r.relname AS table, c.conname AS constraint,
@@ -347,6 +348,7 @@ integration("schema hygiene", () => {
         constraint: "service_secret_pkey",
         columns: ["service_id", "key"],
       },
+      { table: "system_secret", constraint: "system_secret_pkey", columns: ["key"] },
     ]);
     const surrogates = await fixture.sql<{ table: string }[]>`
       SELECT table_name AS table FROM information_schema.columns
@@ -364,6 +366,8 @@ integration("schema hygiene", () => {
       "service_config_pkey",
       "service_secret_pkey",
       "service_secret_updated_by_idx",
+      "system_secret_pkey",
+      "system_secret_updated_by_idx",
     ]);
   });
 

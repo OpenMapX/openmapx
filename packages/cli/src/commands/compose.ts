@@ -272,6 +272,8 @@ export async function renderComposeWithWriter(
   );
   ensurePlatformSecretFile(redisPasswordPath);
   ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
+  // The API's key for the secrets it stores encrypted in the database.
+  ensurePlatformSecretFile(join(paths.infraDir, "secrets", "secrets-key"));
   const erasureJournalKey = Buffer.from(
     ensurePlatformSecretFile(erasureJournalKeyPath),
     "base64url",

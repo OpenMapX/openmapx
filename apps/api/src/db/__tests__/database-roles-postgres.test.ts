@@ -154,6 +154,7 @@ integration("database roles", () => {
       "integration_config",
       "integration_secret",
       "system_settings",
+      "system_secret",
       "platform_configuration_preview",
     ]) {
       const [column] = await superuser<{ name: string }[]>`

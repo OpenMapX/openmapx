@@ -218,7 +218,7 @@ form or in API responses and is set through the Credentials tab instead. The
 `config.json` and environment overrides in that order. See the
 [admin page](../administration/integrations-administration.md#the-config-cascade).
 An integration that declares any secret field will refuse to load at startup
-unless the vault key (`OPENMAPX_SECRETS_KEY`) is present, so a missing key is a
+unless the vault key (`OPENMAPX_SECRETS_KEY_FILE`) is usable, so a missing key is a
 hard boot error rather than a silent degrade.
 
 ### Personal-data storage declarations
@@ -1623,8 +1623,8 @@ it depends on; a dependency cycle, or a dependency that is not installed, drops
 the affected integration with a warning.
 
 Before any integration loads, the host also performs a fail-fast check: if any
-discovered manifest declares secret config fields but `OPENMAPX_SECRETS_KEY` is
-unset, boot aborts with a clear remediation message rather than failing later on
+discovered manifest declares secret config fields but the secrets key is
+missing or unusable, boot aborts with a clear remediation message rather than failing later on
 a user request.
 
 ### 3. Per-integration setup

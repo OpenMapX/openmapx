@@ -36,6 +36,7 @@
     "apps/api/src/services/capability-bindings.test.ts",
     "apps/api/src/services/mobileAuthHandoff.test.ts",
     "apps/api/src/services/service-config-writer-postgres.test.ts",
+    "apps/api/src/services/secret-settings-postgres.test.ts",
     "apps/api/src/account/auth-policy-postgres.test.ts",
     "apps/api/src/account/admin-invariant-postgres.test.ts",
     "apps/api/src/account/admin-reauthentication-postgres.test.ts",

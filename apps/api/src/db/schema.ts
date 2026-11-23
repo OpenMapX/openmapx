@@ -104,6 +104,8 @@ export { type ServiceRepositoryRow, serviceRepository } from "./service-reposito
 export { serviceSecret } from "./service-secret-schema";
 // Revocable public share links for saved lists and routes
 export { shareLink, shareLinkRelations } from "./share-link-schema";
+// Encrypted secret system settings
+export { systemSecret } from "./system-secret-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";
 // Encrypted per-user Dawarich timeline connection

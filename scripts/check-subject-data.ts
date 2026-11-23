@@ -38,6 +38,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "personal_vehicle.user_id": "personal-vehicles",
   "saved_list.user_id": "saved-lists",
   "service_secret.updated_by": "secret-update-attribution",
+  "system_secret.updated_by": "secret-update-attribution",
   "transit_credential_preview.actor_id": "secret-update-attribution",
   "configuration_migration_preview.actor_id": "secret-update-attribution",
   "session.user_id": "auth-sessions",

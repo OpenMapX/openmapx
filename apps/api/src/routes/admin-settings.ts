@@ -4,7 +4,9 @@ import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
+import { assertSecretsConfigured } from "../services/secrets";
 import {
+  isSecretSetting,
   matchesDeclaredType,
   parseEnvValue,
   resolveSettings,
@@ -69,6 +71,14 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       return reply.status(400).send({
         error: `Value type does not match the setting definition: ${rejected.join(", ")}`,
       });
+    }
+    // Secret settings are stored encrypted; without a usable key none is saved.
+    if (toWrite.some(({ key, value }) => isSecretSetting(key) && value !== "")) {
+      try {
+        assertSecretsConfigured();
+      } catch (error) {
+        return reply.status(400).send({ error: (error as Error).message });
+      }
     }
 
     await saveSystemSettings(toWrite, adminSession.user.id);

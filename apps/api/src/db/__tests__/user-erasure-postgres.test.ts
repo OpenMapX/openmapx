@@ -112,6 +112,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "session.user_id:c",
       "session_auth_assurance.user_id:n",
       "share_link.user_id:c",
+      "system_secret.updated_by:n",
       "system_settings.updated_by:n",
       "transit_credential_preview.actor_id:c",
       "two_factor.user_id:c",
@@ -400,6 +401,8 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
              (${`v-kept-${suffix}`}, ${otherEmail}, 'code', now() + interval '1 hour', now(), now())`;
     await api`INSERT INTO system_settings (key, value, updated_by)
       VALUES (${`setting-${suffix}`}, '"value"', ${userId})`;
+    await api`INSERT INTO system_secret (key, ciphertext, iv, tag, updated_by)
+      VALUES (${`secret-${suffix}`}, 'c', 'i', 't', ${userId})`;
     const [audit] = await api<{ id: string }[]>`
       INSERT INTO admin_audit_log (actor_id, target_id, target_type, target_user_id, action,
         details, ip_address, user_agent)
@@ -453,6 +456,9 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     ).toEqual([`v-kept-${suffix}`]);
     expect(
       await api`SELECT updated_by FROM system_settings WHERE key = ${`setting-${suffix}`}`,
+    ).toEqual([{ updated_by: null }]);
+    expect(
+      await api`SELECT updated_by FROM system_secret WHERE key = ${`secret-${suffix}`}`,
     ).toEqual([{ updated_by: null }]);
     expect(
       await api`SELECT actor_id, target_id, target_user_id, details, ip_address, user_agent

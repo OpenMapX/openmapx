@@ -54,7 +54,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
   });
   beforeEach(() => {
     now = new Date("2026-03-01T12:00:00Z");
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("hex"));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("base64url"));
   });
 
   async function subject() {

@@ -481,7 +481,7 @@ async function ownedFenceFixture(
     OPS_AGENT_URL: await app.listen({ host: "127.0.0.1", port: 0 }),
     OPS_AGENT_TOKEN_FILE: tokenFile,
     OPENMAPX_ROOT_DIR: host.root,
-    OPENMAPX_SECRETS_KEY: "71".repeat(32),
+    OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
     OPENMAPX_RELEASE: "local",
     BETTER_AUTH_SECRET: "owned-fence-synthetic-secret-at-least-32",
     DOMAIN: "example.test",

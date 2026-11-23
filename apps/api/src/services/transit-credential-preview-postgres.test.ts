@@ -22,7 +22,7 @@ import {
 const enabled = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1";
 beforeAll(async () => {
   if (!enabled) return;
-  vi.stubEnv("OPENMAPX_SECRETS_KEY", "57".repeat(32));
+  vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x57).toString("base64url"));
   state.fixture = await createMigratedPostgresFixture();
   await state.fixture.db.insert(user).values({
     id: "transit-preview-admin",

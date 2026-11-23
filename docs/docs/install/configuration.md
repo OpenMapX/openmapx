@@ -171,11 +171,11 @@ Authentication and internal service secrets. `BETTER_AUTH_SECRET` must contain
 at least 32 characters in production; the CLI validates it before deployment and
 the API validates it again at startup. Generate each with the command shown.
 
-| Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                     | Required / Default                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                              | **Required**                           |
-| `OPENMAPX_SECRETS_KEY`       | 32-byte key encoded as 64 hexadecimal characters for the secret vault, including personal timeline credentials. Preserve it across restarts and restores; losing or changing it makes existing encrypted values unreadable. Generate with `openssl rand -hex 32`.                                                                                                               | **Required** (to use the secret vault) |
-| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`. | Optional (recommended). Default unset  |
+| Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Required / Default                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                                                                                                                                                                                    | **Required**                          |
+| `OPENMAPX_SECRETS_KEY`       | Not set in `.env`. The key that encrypts the secrets the API stores in the database (the credential vault, personal timeline credentials and secret settings such as the SMTP password) is the file `infra/docker/secrets/secrets-key`, which `pnpm openmapx compose render` generates once and mounts into `api` as `OPENMAPX_SECRETS_KEY_FILE`. The API refuses this variable beside the file. The former 64-character hex format is not accepted. See [Generated secret files and recovery](#generated-secret-files-and-recovery). | Do not set                            |
+| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`.                                                                                                                                                       | Optional (recommended). Default unset |
 
 ### Data-manager caller tokens
 
@@ -236,14 +236,19 @@ published named prerelease and fails if none exists. Changing configuration does
 
 `compose render` creates platform files under `infra/docker/secrets/`, including
 Redis authentication, distinct ops-agent tokens, offline-package signing,
-erasure-journal, subject-export, and runner capability keys.
+erasure-journal, subject-export, and runner capability keys, and the API's
+secrets key `secrets-key`: 32 random bytes as 43 base64url characters, mounted
+only into `api` as `OPENMAPX_SECRETS_KEY_FILE`. It encrypts the credential
+vault, personal timeline credentials and secret settings saved in the admin
+panel; losing or changing it makes those values unreadable.
 They belong to the deployment's user (`UID`), which the containers run as. Do not replace them as a
 routine configuration refresh. Managed Dawarich credentials are provisioned
 through its dedicated admin setup, not this renderer.
 
 Ordinary volume backups do not include `.env`, this secret directory, the
 configuration generations, or the erasure journal. Preserve required deployment
-keys and recovery state through a protected operator recovery procedure. See
+keys and recovery state through a protected operator recovery procedure; a
+restored database needs the same `secrets-key` to decrypt its stored secrets. See
 [Backup and restore](../administration/backup-and-restore.md) before testing a
 restore or rotating encryption keys.
 
@@ -589,7 +594,8 @@ Keys and overrides for the `api` traffic and tile proxies.
 
 Used for email verification, password reset, and email-change flows. The provider is
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
-settable in `/admin/settings/email`; env always wins.
+settable in `/admin/settings/email`; env always wins. Passwords, keys and tokens
+saved there are stored encrypted with the API's secrets key, never in clear.
 
 Authentication mail that anyone can trigger for any address (sign-up
 verification, verification resends, password reset and email-change codes) is

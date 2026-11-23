@@ -104,8 +104,10 @@ credential body. Credential status reports the effective source, which can be
 metadata is separate from the layer currently supplying the value.
 
 Set or rotate a secret from that tab. Its value is encrypted at rest in the
-database vault, which requires `OPENMAPX_SECRETS_KEY` to be set on the API host
-(generate one with `openssl rand -hex 32`). Without that key the vault is
+database vault, which requires the API's secrets key. `pnpm openmapx compose render`
+generates it once as `infra/docker/secrets/secrets-key` and gives the `api`
+service its path in `OPENMAPX_SECRETS_KEY_FILE`; keys in the former
+64-character hex format are not accepted. Without that key the vault is
 unavailable and the panel says so; an integration that _declares_ secret fields
 will refuse to load at startup until the key is present, so configure it before starting the API even when credentials will come from environment overrides.
 

@@ -522,8 +522,8 @@ function CredentialsTab({
       {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
           {t.rich("vaultNotConfiguredSecrets", {
-            variable: "OPENMAPX_SECRETS_KEY",
-            command: "openssl rand -hex 32",
+            variable: "OPENMAPX_SECRETS_KEY_FILE",
+            command: "pnpm openmapx compose render",
             code: (chunks) => <code>{chunks}</code>,
           })}
         </Alert>

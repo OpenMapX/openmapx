@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Inline drizzle-builder stub kept in vi.hoisted so the vi.mock factory (hoisted
@@ -44,8 +47,8 @@ import {
   setSecret,
 } from "../secrets.js"; // NOTE: `.js` extension — this package's TS imports use it (see sibling tests)
 
-const KEY_A = Buffer.alloc(32, 1).toString("hex"); // obviously-fake 32-byte key
-const KEY_B = Buffer.alloc(32, 2).toString("hex"); // different obviously-fake key
+const KEY_A = Buffer.alloc(32, 1).toString("base64url"); // obviously-fake 32-byte key
+const KEY_B = Buffer.alloc(32, 2).toString("base64url"); // different obviously-fake key
 
 /** Base64-decode, flip one byte, re-encode — used to corrupt a ciphertext/tag/iv field. */
 function flipByte(base64: string): string {
@@ -110,20 +113,53 @@ describe("crypto layer", () => {
     expect(() => decrypt(ciphertext, iv, tag)).toThrow();
   });
 
+  it("names the key mismatch when decryption fails", () => {
+    const { ciphertext, iv, tag } = encrypt("secret-value");
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_B);
+    expect(() => decrypt(ciphertext, iv, tag)).toThrow(
+      /cannot be decrypted with the configured secrets key/,
+    );
+  });
+
   describe("isSecretsConfigured", () => {
-    it("returns true for a valid 64-hex-char (32-byte) key", () => {
+    it("returns true for a canonical base64url 32-byte key", () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
       expect(isSecretsConfigured()).toBe(true);
     });
 
     it("returns false for a too-short key", () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(16, 1).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(16, 1).toString("base64url"));
       expect(isSecretsConfigured()).toBe(false);
+    });
+
+    it("refuses the former 64-character hex format", () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 1).toString("hex"));
+      expect(isSecretsConfigured()).toBe(false);
+      expect(() => encrypt("x")).toThrow(/64-character hex format is not accepted/);
     });
 
     it("returns false when the key is unset", () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
       expect(isSecretsConfigured()).toBe(false);
+      expect(() => encrypt("x")).toThrow(/run `pnpm openmapx compose render`/);
+    });
+
+    it("reads the key from the file OPENMAPX_SECRETS_KEY_FILE names", () => {
+      const directory = mkdtempSync(join(tmpdir(), "openmapx-secrets-key-"));
+      try {
+        const path = join(directory, "secrets-key");
+        writeFileSync(path, KEY_A, { mode: 0o444 });
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", path);
+        const sealed = encrypt("from-file");
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", undefined);
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
+        expect(decrypt(sealed.ciphertext, sealed.iv, sealed.tag)).toBe("from-file");
+        vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", path);
+        expect(isSecretsConfigured()).toBe(false);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     });
   });
 });

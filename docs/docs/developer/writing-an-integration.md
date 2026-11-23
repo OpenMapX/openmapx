@@ -224,7 +224,7 @@ example needs none, but a provider with a key looks like this:
 A property marked `"x-openmapx-secret": true` is a credential: it is hidden from
 the config form and API responses, set through the Credentials tab, and stored in
 the encrypted vault. Note that declaring _any_ secret field makes the integration
-refuse to load unless `OPENMAPX_SECRETS_KEY` is set: a missing key is a hard boot
+refuse to load unless the API's secrets key is configured: a missing key is a hard boot
 error, not a silent degrade. The config cascade resolves defaults,
 database values, vault secrets, `config.json` and environment overrides in that
 order. An environment override follows the pattern

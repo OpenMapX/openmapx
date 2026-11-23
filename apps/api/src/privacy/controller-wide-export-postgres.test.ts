@@ -498,7 +498,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 60_000);
 
     it("lets a freshly signed-in owner verify and download an admin-created case linked to the account", async () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("base64url"));
       const service = new PrivacyRequestService({ database: db });
       // An administrator recorded a postal request and linked it to the account.
       const assisted = await service.create({
@@ -568,7 +568,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 60_000);
 
     it("returns a linked case that waits on the requester to work with the same verification", async () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("base64url"));
       const service = new PrivacyRequestService({ database: db });
       const assisted = await service.create({
         channel: "email",

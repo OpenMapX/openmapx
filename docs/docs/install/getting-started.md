@@ -43,7 +43,6 @@ Edit the file before rendering. Supply these values:
 | `ACME_EMAIL`                 | Certificate contact email                              |
 | `POSTGRES_PASSWORD`          | Unique database superuser password, 24+ characters     |
 | `BETTER_AUTH_SECRET`         | Unique signing secret, at least 32 characters          |
-| `OPENMAPX_SECRETS_KEY`       | 32 random bytes encoded as 64 hexadecimal characters   |
 | `OPENMAPX_LOCAL_ADMIN_TOKEN` | Unique token for CLI loopback admin requests           |
 | `OPENMAPX_HOST_DIR`          | Absolute checkout path, as printed by `pwd`            |
 | `DOCKER_GID`                 | Socket group ID from `stat -c %g /var/run/docker.sock` |
@@ -54,7 +53,10 @@ renderer rejects known placeholders and weak database/application secrets.
 Do not reuse the database username as its password. The API and data-manager do
 not use the superuser: the render generates their own database passwords in
 `infra/docker/secrets/` (see [Database roles](./configuration.md#database-roles)),
-together with each data-manager caller's token.
+together with each data-manager caller's token and the API's secrets key
+`secrets-key`, which encrypts the credentials and secret settings saved in the
+admin panel. Do not set `OPENMAPX_SECRETS_KEY`; its former 64-character hex
+format is not accepted.
 
 `UID` and `GID` name the deployment's user: the stack's own containers
 (`api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)

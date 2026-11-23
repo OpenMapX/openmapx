@@ -72,9 +72,16 @@ Snapshots do not contain `infra/docker/.env`, host secret files, the external
 erasure journal or service-selection/configuration generations.
 Protect recovery copies of the configuration actually used by your deployment,
 including generated credentials and any external secret manager records.
-`BETTER_AUTH_SECRET` protects authentication material; `OPENMAPX_SECRETS_KEY`
-is required to decrypt vault credentials. A database archive alone cannot
-reconstruct these keys or a compatible host setup.
+`BETTER_AUTH_SECRET` protects authentication material;
+`infra/docker/secrets/secrets-key` is required to decrypt vault credentials,
+personal timeline credentials and secret settings such as the SMTP password.
+A database archive alone cannot reconstruct these keys or a compatible host
+setup.
+
+Keep a copy of `secrets-key` with every off-host database backup, exactly as
+the erasure journal key below. Restore it to `infra/docker/secrets/secrets-key`
+before the API starts against the restored database; a render never replaces an
+existing key, and one generated afresh cannot open the restored values.
 
 For erasure-safe restore, retain both
 `infra/docker/data/erasure/journal.jsonl` and

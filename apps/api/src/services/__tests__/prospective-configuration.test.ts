@@ -75,7 +75,7 @@ it("authoritative full preparation cannot treat existing vault rows without a ke
 });
 
 it("counts retained orphan feed credentials in UTF-8 before publishing a full snapshot", async () => {
-  vi.stubEnv("OPENMAPX_SECRETS_KEY", "51".repeat(32));
+  vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x51).toString("base64url"));
   const value = JSON.stringify(
     Object.fromEntries(Array.from({ length: 8 }, (_, n) => [`orphan-${n}`, 'ü\\"'.repeat(1500)])),
   );

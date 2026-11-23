@@ -390,7 +390,7 @@ graph LR
    `custom_integrations/`) for `manifest.json`.
 2. Validate: apply the manifest schema and business rules. Invalid manifests
    are skipped with a warning. Required host configuration can still fail
-   startup, including a missing `OPENMAPX_SECRETS_KEY` for discovered
+   startup, including a missing or unusable secrets key for discovered
    integrations that declare vault-backed secrets.
 3. Topological sort: order by each manifest's `dependencies:` so
    orchestrators load before their providers.

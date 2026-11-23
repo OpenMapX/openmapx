@@ -82,7 +82,7 @@ settings=(
   "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
   "BETTER_AUTH_URL=https://localhost"
   "CORS_ORIGIN=https://localhost"
-  "OPENMAPX_SECRETS_KEY=$(openssl rand -hex 32)"
+  "OPENMAPX_SECRETS_KEY=$(openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=\n')"
   "HOST=0.0.0.0"
   "PORT=3001"
 )

@@ -8,7 +8,7 @@ import type {
 } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
 import { configurationMigrationInventorySchema } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
 import { db } from "../../db";
-import { systemSettings } from "../../db/schema";
+import { systemSecret, systemSettings } from "../../db/schema";
 import {
   type AdministrativeConfigurationReadContext,
   withAdministrativeConfigurationRead,
@@ -125,8 +125,16 @@ export async function configurationMigrationInventory() {
         (await serviceOwnershipSnapshot(service.manifest.id, read, source)).ownership,
       );
     const rows = await db.select().from(systemSettings);
+    const storedSecrets = new Set(
+      (await db.select({ key: systemSecret.key }).from(systemSecret)).map((r) => r.key),
+    );
     for (const def of SETTING_DEFS) {
-      const row = rows.find((r) => r.key === def.key),
+      // A secret setting's value lives only in `system_secret`.
+      const row = def.secret
+          ? storedSecrets.has(def.key)
+            ? { key: def.key, value: undefined }
+            : undefined
+          : rows.find((r) => r.key === def.key),
         host = def.env && read.env[def.env] !== undefined;
       const ownership = projectFieldOwnership({
         source: host ? "env" : row ? "database" : "default",

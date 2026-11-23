@@ -115,7 +115,7 @@ describeDatabase("authentication before the request body, through createApp()", 
     vi.stubEnv("REDIS_URL", "");
     vi.stubEnv("BETTER_AUTH_SECRET", "fixture-secret-with-enough-length-for-auth-0123456789");
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", "ab".repeat(32));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0xab).toString("base64url"));
     vi.stubEnv("CORS_ORIGIN", TRUSTED_ORIGIN);
     vi.stubEnv("OSM_API_URL", CLOSED_LOCAL_URL);
     vi.stubEnv("OSM_WEB_URL", CLOSED_LOCAL_URL);

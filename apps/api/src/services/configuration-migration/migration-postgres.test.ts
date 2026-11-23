@@ -120,7 +120,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPENMAPX_SECRETS_KEY: "71".repeat(32),
+        OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "migration-local-synthetic",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         BETTER_AUTH_SECRET: "migration-owned-synthetic-auth-secret",

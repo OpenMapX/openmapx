@@ -81,6 +81,11 @@ no standalone install recorded a source, and entries no longer carry
 `adoptable`. Assisted privacy requests no longer accept the `username` subject
 locator type; OpenMapX accounts have no usernames.
 
+Secret system settings, such as the SMTP password, live encrypted in a new
+`system_secret` table instead of in clear in `system_settings`; its updater is
+cleared when that account is deleted. See the separate note on the generated
+secrets key.
+
 The constraints and indexes of OpenMapX's own tables follow PostgreSQL's naming
 convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,
 `<table>_<column>_fkey` and `<table>_<what>_check`. A partial unique index

@@ -174,8 +174,8 @@ before retrying. See [Configuration](../install/configuration.md).
 
 ### Credentials
 
-Set declared secret fields here, with `OPENMAPX_SECRETS_KEY` configured for the
-API vault. Values are encrypted in the database and rendered as private files;
+Set declared secret fields here. The API vault uses the secrets key the render
+generates (`infra/docker/secrets/secrets-key`). Values are encrypted in the database and rendered as private files;
 containers receive `<KEY>_FILE=/run/secrets/<KEY>`. The API returns status and
 masked values instead of the credential body.
 

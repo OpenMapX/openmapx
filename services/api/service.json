@@ -44,6 +44,7 @@
       "REDIS_PASSWORD_FILE": "/run/secrets/redis-password",
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE": "/run/secrets/offline-package-principal-key",
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
+      "OPENMAPX_SECRETS_KEY_FILE": "/run/secrets/secrets-key",
       "ERASURE_JOURNAL_PATH": "/var/lib/openmapx/erasure/journal.jsonl",
       "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
       "ERASURE_JOURNAL_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
@@ -69,7 +70,6 @@
       "BETTER_AUTH_URL": "https://${DOMAIN:-localhost}",
       "PASSKEY_RP_ID": "${DOMAIN:-localhost}",
       "PASSKEY_ORIGIN": "https://${DOMAIN:-localhost},openmapx://",
-      "OPENMAPX_SECRETS_KEY": "${OPENMAPX_SECRETS_KEY:-}",
       "OSM_CLIENT_ID": "${OSM_CLIENT_ID:-}",
       "OSM_CLIENT_SECRET": "${OSM_CLIENT_SECRET:-}",
       "MAPILLARY_CLIENT_ID": "${MAPILLARY_CLIENT_ID:-}",
@@ -201,6 +201,11 @@
     {
       "source": "@infra:secrets/offline-package-principal-key",
       "target": "/run/secrets/offline-package-principal-key",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/secrets-key",
+      "target": "/run/secrets/secrets-key",
       "readOnly": true
     },
     {

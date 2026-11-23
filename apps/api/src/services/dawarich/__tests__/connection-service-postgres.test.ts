@@ -44,7 +44,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ]);
     }, 120_000);
     beforeEach(async () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("base64url"));
       await state.fixture.db.delete(personalTimelineConnection);
       const encrypted = encrypt("stored-key");
       await state.fixture.db.insert(personalTimelineConnection).values({

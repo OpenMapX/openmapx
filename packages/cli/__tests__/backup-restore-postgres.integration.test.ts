@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
   createReadStream,
@@ -1063,6 +1063,58 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
     ).rejects.toThrow(/replay|erasure|fixture rejects user deletion/i);
     expect(await isServiceRunning("api")).toBe(false);
     await compose(["start", "api"]);
+  }, 120_000);
+
+  it("restores an encrypted secret setting that the deployment's key file opens again", async () => {
+    await resetMigratedDatabase();
+    const value = "restore-fixture-smtp-password";
+    // The key file the render generated; it travels beside the backup, not in it.
+    const keyPath = join(fixture.infra, "secrets", "secrets-key");
+    mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
+    rmSync(keyPath, { force: true });
+    writeFileSync(keyPath, randomBytes(32).toString("base64url"), { mode: 0o444 });
+    const previousFile = process.env.OPENMAPX_SECRETS_KEY_FILE;
+    const previousInline = process.env.OPENMAPX_SECRETS_KEY;
+    process.env.OPENMAPX_SECRETS_KEY_FILE = keyPath;
+    delete process.env.OPENMAPX_SECRETS_KEY;
+    try {
+      const { decrypt, encrypt } = await import("../../../apps/api/src/services/secrets");
+      const sealed = encrypt(value);
+      await psql(
+        `INSERT INTO system_secret (key, ciphertext, iv, tag) VALUES ('smtpPassword', '${sealed.ciphertext}', '${sealed.iv}', '${sealed.tag}');`,
+      );
+      const dump = await compose([
+        "exec",
+        "-T",
+        "postgis",
+        "pg_dump",
+        "-U",
+        POSTGRES_USER,
+        "--data-only",
+        "--column-inserts",
+        "--table=public.system_secret",
+        DATABASE,
+      ]);
+      expect(dump).toContain("'smtpPassword'");
+      expect(dump).not.toContain(value);
+      await createDatabaseBackup("secret-settings");
+      await psql("DELETE FROM system_secret;");
+      await resetJournal();
+
+      await restoreBackup({ rootDir: fixture.root, name: "secret-settings", stopRunning: true });
+
+      const [ciphertext = "", iv = "", tag = ""] = (
+        await psql(
+          "SELECT ciphertext || ' ' || iv || ' ' || tag FROM system_secret WHERE key = 'smtpPassword';",
+        )
+      ).split(" ");
+      expect(decrypt(ciphertext, iv, tag)).toBe(value);
+    } finally {
+      if (previousFile === undefined) delete process.env.OPENMAPX_SECRETS_KEY_FILE;
+      else process.env.OPENMAPX_SECRETS_KEY_FILE = previousFile;
+      if (previousInline === undefined) delete process.env.OPENMAPX_SECRETS_KEY;
+      else process.env.OPENMAPX_SECRETS_KEY = previousInline;
+    }
   }, 120_000);
 
   it("runs the CLI's database sessions in UTC whatever the database's default", async () => {

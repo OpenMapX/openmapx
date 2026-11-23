@@ -152,7 +152,7 @@ shared key.
 3. Paste your key and choose **Connect**.
 
 OpenMapX validates `/api/v1/users/me` and `/api/v1/settings`, then stores the key
-encrypted with `OPENMAPX_SECRETS_KEY`. The connection response does not return the
+encrypted with the API's secrets key. The connection response does not return the
 raw key. External origins are checked for unsafe targets; HTTP, embedded
 credentials, and unsupported origins are rejected. Operators can allow specific
 private DNS hostnames through `OPENMAPX_DAWARICH_PRIVATE_HOSTS`; this is a narrow

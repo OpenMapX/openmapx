@@ -15,7 +15,7 @@ import {
 } from "../connection-service.js";
 import { timelinePrivateHostAllowlist } from "../private-hosts.js";
 
-const SECRETS_KEY = Buffer.alloc(32, 7).toString("hex");
+const SECRETS_KEY = Buffer.alloc(32, 7).toString("base64url");
 const USER_ID = "user-a";
 
 function connectionRow(

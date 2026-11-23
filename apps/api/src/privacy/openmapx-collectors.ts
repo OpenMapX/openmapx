@@ -40,6 +40,7 @@ import {
   serviceSecret,
   session,
   shareLink,
+  systemSecret,
   systemSettings,
   transitCredentialPreview,
   twoFactor,
@@ -1012,6 +1013,20 @@ export async function* streamOpenMapxRegistrationRecords(
             and(eq(serviceSecret.updatedBy, context.userId), lte(serviceSecret.createdAt, cutoff)),
           )
           .orderBy(asc(serviceSecret.serviceId), asc(serviceSecret.key)),
+        { policyCodes: ["secret-value-redacted"] },
+      );
+      yield* emit(
+        database
+          .select({
+            key: systemSecret.key,
+            updatedAt: systemSecret.updatedAt,
+            updatedBy: systemSecret.updatedBy,
+          })
+          .from(systemSecret)
+          .where(
+            and(eq(systemSecret.updatedBy, context.userId), lte(systemSecret.updatedAt, cutoff)),
+          )
+          .orderBy(asc(systemSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
       );
       yield* emit(

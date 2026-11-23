@@ -4,7 +4,7 @@ import { user } from "./auth-schema";
 /**
  * Encrypted operator secrets for self-hosted *services* (the container track),
  * mirroring `integration_secret` for the in-process integration track. Values
- * are AES-256-GCM encrypted at rest with `OPENMAPX_SECRETS_KEY`; the render
+ * are AES-256-GCM encrypted at rest with the API's secrets key; the render
  * step decrypts them into mounted secret files (Docker `secrets:`), never into
  * the container environment.
  */

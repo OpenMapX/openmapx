@@ -83,7 +83,7 @@ it("uses the actual env > file > vault cascade and keeps separate vault audit wi
     } as IntegrationManifest,
   };
   installed = integration;
-  vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+  vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
   vi.stubEnv("INTEGRATION_FIXTURE_APIKEY", "synthetic-env");
   writeFileSync(join(directory, "config.json"), JSON.stringify({ apiKey: "synthetic-file" }));
   expect((await computeCredentialStatus(integration))[0]).toMatchObject({

@@ -104,7 +104,7 @@ describe.skipIf(!enabled)(
       pauseKind = scenario.pauseAt;
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
       state.fixture = await createConfigurationPostgresFixture({
         withAccountAdministration: true,
         withConfigurationMigration: scenario.configurationMigration,
@@ -409,7 +409,7 @@ describe.skipIf(!enabled)(
           retained: "c".repeat(7000),
         });
         // Actual declared source vault export under a different source master key.
-        vi.stubEnv("OPENMAPX_SECRETS_KEY", "92".repeat(32));
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x92).toString("base64url"));
         await state.fixture.db
           .update(schema.serviceSecret)
           .set(encrypt(importedMap))
@@ -431,7 +431,7 @@ describe.skipIf(!enabled)(
           passphrase: "synthetic transfer passphrase",
         });
         await state.fixture.db.delete(schema.serviceSecret);
-        vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
         await state.fixture.db.insert(schema.serviceSecret).values({
           serviceId: "data-manager",
           key: "TRANSITOUS_API_KEYS",

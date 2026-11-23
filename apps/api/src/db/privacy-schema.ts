@@ -74,7 +74,7 @@ export const dataSubjectRequest = pgTable(
     userId: text("user_id"),
     actorUserId: text("actor_user_id"),
     actorSessionId: text("actor_session_id"),
-    /** Assisted requests only: the locator value, encrypted with OPENMAPX_SECRETS_KEY. */
+    /** Assisted requests only: the locator value, encrypted with the API's secrets key. */
     encryptedLocator: text("encrypted_locator"),
     locatorType: text("locator_type").notNull().default("user_id"),
     accountState: text("account_state").notNull().default("current"),

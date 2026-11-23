@@ -781,7 +781,7 @@ describe("initIntegrations — loader", () => {
     expect(warnCalls).toMatch(/BROKEN|skip/i);
   });
 
-  it("secret-needer loads when OPENMAPX_SECRETS_KEY is configured", async () => {
+  it("secret-needer loads when the secrets key is configured", async () => {
     // Confirm that the fixture directory containing secret-needer loads without
     // error when isSecretsConfigured returns true (the default in this suite).
     const app = makeApp();
@@ -790,13 +790,13 @@ describe("initIntegrations — loader", () => {
     expect(getAllIntegrations().some((i) => i.id === "secret-needer")).toBe(true);
   });
 
-  it("throws at boot when a manifest declares vault secrets but OPENMAPX_SECRETS_KEY is not set", async () => {
+  it("throws at boot when a manifest declares vault secrets but the secrets key is unusable", async () => {
     vi.mocked(isSecretsConfigured).mockReturnValue(false);
 
     const app = makeApp();
 
     await expect(initIntegrations(app, [FIXTURES_DIR])).rejects.toThrow(
-      /OPENMAPX_SECRETS_KEY is not set/,
+      /secrets key \(OPENMAPX_SECRETS_KEY_FILE\) is not usable.*pnpm openmapx compose render/,
     );
   });
 });

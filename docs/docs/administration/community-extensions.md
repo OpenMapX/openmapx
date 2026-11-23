@@ -485,8 +485,8 @@ installation does not prove that their database and feed credentials are valid.
 1. Open **System → Services → openconditions-ingest** and
    **openconditions-contributions-api**. Read each installed manifest's fields
    and setup guides.
-2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the
-   API vault; generated containers receive private secret files through
+2. Set secrets on **Credentials**. The API vault needs the secrets key that
+   `pnpm openmapx compose render` generates; generated containers receive private secret files through
    `<KEY>_FILE`. The ingest and contributions services need `DATABASE_URL`.
    Never give a community service the PostgreSQL superuser's URL, even when its
    own documentation suggests one, nor the `openmapx_api` and

@@ -442,7 +442,7 @@ dbDescribe("atomic last administrator protection", () => {
       jobId = randomUUID(),
       previewId = randomUUID(),
       operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", "73".repeat(32));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x73).toString("base64url"));
     const { encrypt } = await import("../services/secrets"),
       encrypted = encrypt("synthetic private proposal");
     await fixture.db.insert(adminJob).values({

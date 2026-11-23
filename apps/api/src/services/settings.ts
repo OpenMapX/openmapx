@@ -1,9 +1,11 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { systemSettings } from "../db/schema";
+import { systemSecret, systemSettings } from "../db/schema";
 import { actorUserIdOrNull } from "../utils/actor";
 import { resolveSettingPrecedence, type SettingSource } from "../utils/settings-resolution";
 import { appLogger } from "./app-logger";
+import { assertSecretsConfigured, decrypt, encrypt } from "./secrets";
 
 interface SettingDef {
   group: string;
@@ -531,16 +533,46 @@ export function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
   }
 }
 
+const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set(
+  SETTING_DEFS.filter((def) => def.secret).map((def) => def.key),
+);
+
+/** Whether a setting's value is kept encrypted in `system_secret`. */
+export function isSecretSetting(key: string): boolean {
+  return SECRET_SETTING_KEYS.has(key);
+}
+
 /** Store the given settings in one transaction, attributed to the acting
- * administrator (none for the loopback actor, which has no account). */
+ * administrator (none for the loopback actor, which has no account). Secret
+ * settings are encrypted into `system_secret`; an empty value removes one. */
 export async function saveSystemSettings(
   entries: ReadonlyArray<{ key: string; value: unknown }>,
   actorId: string,
   database: typeof db = db,
 ): Promise<void> {
   const updatedBy = actorUserIdOrNull(actorId);
+  const secrets = entries.filter(({ key }) => isSecretSetting(key));
+  for (const { key, value } of secrets) {
+    if (typeof value !== "string") throw new Error(`The secret setting ${key} must be a string`);
+  }
+  if (secrets.some(({ value }) => value !== "")) assertSecretsConfigured();
   await database.transaction(async (transaction) => {
     for (const { key, value } of entries) {
+      if (isSecretSetting(key)) {
+        if (value === "") {
+          await transaction.delete(systemSecret).where(eq(systemSecret.key, key));
+          continue;
+        }
+        const sealed = encrypt(value as string);
+        await transaction
+          .insert(systemSecret)
+          .values({ key, ...sealed, updatedBy })
+          .onConflictDoUpdate({
+            target: systemSecret.key,
+            set: { ...sealed, updatedAt: new Date(), updatedBy },
+          });
+        continue;
+      }
       await transaction
         .insert(systemSettings)
         .values({ key, value: value as never, updatedBy })
@@ -552,9 +584,39 @@ export async function saveSystemSettings(
   });
 }
 
+/**
+ * The stored values of the secret settings, decrypted. Environment overrides
+ * such as SMTP_PASS take precedence and are the caller's to apply. Throws,
+ * naming the setting, when the secrets key is missing or is not the key a
+ * value was saved with.
+ */
+export async function loadSecretSettings(
+  database: typeof db = db,
+): Promise<Record<string, string>> {
+  const rows = await database.select().from(systemSecret);
+  const values: Record<string, string> = {};
+  for (const row of rows) {
+    if (!isSecretSetting(row.key)) continue;
+    try {
+      values[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+    } catch (error) {
+      throw new Error(`The secret setting ${row.key} cannot be read: ${(error as Error).message}`, {
+        cause: error,
+      });
+    }
+  }
+  return values;
+}
+
 export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {
   const dbRows = await database.select().from(systemSettings);
-  const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
+  const dbMap: Record<string, unknown> = Object.fromEntries(
+    dbRows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value]),
+  );
+  // A stored secret is shown only as configured; it is never decrypted here.
+  for (const { key } of await database.select({ key: systemSecret.key }).from(systemSecret)) {
+    if (isSecretSetting(key)) dbMap[key] = "***";
+  }
 
   const grouped: Record<string, ResolvedSetting[]> = {};
 
