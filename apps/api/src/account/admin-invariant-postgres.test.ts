@@ -173,7 +173,7 @@ dbDescribe("atomic last administrator protection", () => {
           role,
         }),
       ).rejects.toMatchObject({
-        cause: { constraint_name: "openmapx_canonical_account_role" },
+        cause: { constraint_name: "user_role_check" },
       });
       expect(await active()).toHaveLength(1);
     },

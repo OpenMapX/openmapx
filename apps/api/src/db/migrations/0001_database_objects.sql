@@ -27,7 +27,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA "data_manager" GRANT SELECT, INSERT, UPDATE, 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;--> statement-breakpoint
 
 -- Better Auth generates the "user" table and cannot declare a CHECK on it.
-ALTER TABLE "user" ADD CONSTRAINT openmapx_canonical_account_role CHECK (role IS NULL OR role IN ('user','admin'));--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT user_role_check CHECK (role IS NULL OR role IN ('user','admin'));--> statement-breakpoint
 
 -- At least one active administrator always remains. The guard row counts the
 -- active administrators; the trigger keeps it in step with every insert and

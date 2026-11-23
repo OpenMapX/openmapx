@@ -175,6 +175,7 @@ integration("schema hygiene", () => {
   it("app-owned object names follow the convention", async () => {
     // Constraints, then the indexes that back no constraint. Extension-owned
     // tables (PostGIS in the test image) and Better Auth's are not the app's.
+    // NOT NULL constraints (contype 'n') are left out: PostgreSQL names them itself.
     const objects = await fixture.sql<
       { table: string; name: string; kind: string; columns: string[]; subset: boolean }[]
     >`

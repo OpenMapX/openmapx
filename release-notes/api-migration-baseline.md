@@ -86,6 +86,7 @@ convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,
 `<table>_<column>_fkey` and `<table>_<what>_check`. A partial unique index
 names the rows it covers, such as `mangrove_keypair_wrap_user_id_passphrase_key`.
 No name exceeds PostgreSQL's 63-character limit, so none is truncated. The
+account role check on the `user` table is `user_role_check`; otherwise the
 tables of Better Auth keep the names it generates.
 
 ## Who is affected
