@@ -99,6 +99,15 @@ export interface DeadReckonOptions {
   routeLengthMeters: number;
 }
 
+/** Moving at least this fast, the puck does not step back for a small correction. */
+const SLOW_MIN_SPEED_MPS = 2;
+/** Ahead by at most this many seconds of travel, the puck slows instead of stepping back. */
+const SLOW_MAX_AHEAD_S = 3;
+/** While ahead, the puck slows to this share of the travel speed, never less. */
+const SLOW_MIN_SHARE = 0.4;
+/** Ahead by this many seconds of travel, the puck would stop but for the floor above. */
+const SLOW_STOP_AHEAD_S = 2;
+
 /**
  * Advance a displayed along-route distance toward where the traveller actually
  * is, one animation frame at a time.
@@ -111,26 +120,31 @@ export interface DeadReckonOptions {
  * first-order (exponential) filter, so when the traveller slows the marker
  * gently catches down to the next (shorter-than-predicted) fix rather than
  * jumping backward.
+ *
+ * A fix that lands a little behind the marker while moving (one delivered late,
+ * or after a noisy one ahead) would pull it back, and with fixes arriving
+ * unevenly it bounces back and forth. Instead the marker drives on more slowly,
+ * never below 40% of the speed, until the projection is level again; it neither
+ * steps back nor stops while the traveller is moving. A gap of more than three
+ * seconds of travel, or a stop, is still corrected by the ease.
  */
-/** Moving at least this fast, a small backward correction is held, not shown. */
-const HOLD_MIN_SPEED_MPS = 2;
-/** Behind by at most this, the projection catches up within about a second. */
-const HOLD_MAX_BEHIND_M = 12;
-
 export function stepDeadReckon(
   displayedMeters: number,
   target: DeadReckonTarget,
   dtSeconds: number,
   opts: DeadReckonOptions,
 ): number {
+  const speed = Math.max(target.speedMps, 0);
   const lead = Math.min(Math.max(target.ageSeconds, 0), opts.maxLeadSeconds);
-  const projected = target.fixAlongMeters + Math.max(target.speedMps, 0) * lead;
-  // While moving, a fix a few metres behind the displayed position (a late or
-  // noisy fix) is caught up within a moment: hold rather than step back, or
-  // the puck bounces back and forth. A stop or a large gap still corrects.
-  const behind = displayedMeters - projected;
-  if (target.speedMps >= HOLD_MIN_SPEED_MPS && behind > 0 && behind <= HOLD_MAX_BEHIND_M) {
-    return Math.min(Math.max(displayedMeters, 0), opts.routeLengthMeters);
+  const projected = target.fixAlongMeters + speed * lead;
+  const ahead = displayedMeters - projected;
+  if (speed >= SLOW_MIN_SPEED_MPS && ahead > 0 && ahead <= speed * SLOW_MAX_AHEAD_S) {
+    // Slower the further ahead, and only as fast as the projection still
+    // moves: once the lead cap stops it, nothing would catch the marker up.
+    const projectionSpeed = target.ageSeconds < opts.maxLeadSeconds ? speed : 0;
+    const share = Math.max(SLOW_MIN_SHARE, 1 - ahead / (speed * SLOW_STOP_AHEAD_S));
+    const next = displayedMeters + projectionSpeed * share * Math.max(dtSeconds, 0);
+    return Math.min(Math.max(next, 0), opts.routeLengthMeters);
   }
   const tau = Math.max(opts.tauSeconds, 1e-3);
   const alpha = 1 - Math.exp(-Math.max(dtSeconds, 0) / tau);

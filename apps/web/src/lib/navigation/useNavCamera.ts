@@ -19,6 +19,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { COAST_START_DELAY_MS } from "@openmapx/core/navigation";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
@@ -59,9 +60,11 @@ const NAV_ENTER_ZOOM = 16;
 const ENTER_EASE_MS = 350;
 const SETTLE_MS = ENTER_EASE_MS + 20;
 // First-order filter constants (seconds): position chase, forward-prediction
-// cap, and a slightly snappier bearing so turns track without spinning.
+// cap, and a slightly snappier bearing so turns track without spinning. The
+// prediction runs until the engine starts coasting through a fix gap, so the
+// puck does not stand still in between.
 const POS_TAU = 0.45;
-const MAX_LEAD = 1.5;
+const MAX_LEAD = COAST_START_DELAY_MS / 1000;
 const BEARING_TAU = 0.35;
 /** Time constant (s) of the puck sliding into or out of a highlighted lane. */
 const LANE_OFFSET_TAU = 0.4;
