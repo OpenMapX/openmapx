@@ -774,8 +774,10 @@ export async function collectCoverageSnapshot(
     buildOvertureStream(
       overture.exists,
       overture.row,
-      overtureReleases.find((release) => release.region === overture.row?.region) ??
-        overtureReleases[0],
+      // Only the published region's own import counts as its last attempt.
+      overture.row
+        ? overtureReleases.find((release) => release.region === overture.row?.region)
+        : undefined,
       now,
     ),
   );
