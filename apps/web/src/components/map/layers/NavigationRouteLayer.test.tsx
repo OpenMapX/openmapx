@@ -538,6 +538,28 @@ describe("NavigationRouteLayer in 3D navigation", () => {
     expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
   });
 
+  it.each([
+    [1, true],
+    [2, false],
+  ])("a highlight for step %d steps the route aside before step 1: %s", (stepIndex, aside) => {
+    // Three steps, the traveller on the first: step 1 is the upcoming turn.
+    const steps = [0, 1, 2].map((i) => ({ instruction: `Step ${i}`, distance: 700, duration: 40 }));
+    navState.route = { ...route, steps } as typeof route;
+    navState.progress = { alongMeters: 300, currentStepIndex: 0 } as typeof navState.progress;
+    render(<NavigationRouteLayer />);
+    act(() => {
+      useNavigationSceneStore.getState().setActive(true);
+      useNavigationSceneStore.getState().setHighlightSpan({
+        fromAlong: 900,
+        toAlong: 1100,
+        stepIndex,
+      });
+    });
+    const remaining = fake.state.paint.get(REMAINING)?.["line-gradient"] as unknown[];
+    expect(remaining.includes(navRouteProgressFraction(preparedRoute, 900))).toBe(aside);
+    navState.route = route;
+  });
+
   it("the route and its ghost leave the raised arrow's span to the arrow", () => {
     const { rerender } = render(<NavigationRouteLayer />);
     navState.progress = { alongMeters: 300 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigationStore } from "@openmapx/core";
+import { upcomingManeuverIndex, useNavigationStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -157,8 +157,17 @@ export function NavigationRouteLayer() {
     // turn the white arrow blue. The two spans meet, so one stretch covers both.
     // Nothing paints the route there, so the attribution union has a gap; that
     // only ever over-credits.
+    // Only the highlight for this route's upcoming turn, as the arrow and the
+    // puck read it: one left behind for another turn would hide the route there.
+    const upcoming = route?.steps?.length
+      ? upcomingManeuverIndex(progress?.currentStepIndex ?? 0, route.steps.length)
+      : undefined;
     const highlight =
-      highlightSpan && (highlightSpan.route === undefined || highlightSpan.route === route)
+      highlightSpan &&
+      (highlightSpan.route === undefined || highlightSpan.route === route) &&
+      (highlightSpan.stepIndex === undefined ||
+        upcoming === undefined ||
+        highlightSpan.stepIndex === upcoming)
         ? highlightSpan
         : null;
     const spans = [highlight, arrowSpan].filter(
@@ -196,7 +205,16 @@ export function NavigationRouteLayer() {
       }
     });
     return { paint };
-  }, [activeFeatures, navLine, progressFraction, highlightSpan, arrowSpan, sceneActive, route]);
+  }, [
+    activeFeatures,
+    navLine,
+    progressFraction,
+    highlightSpan,
+    arrowSpan,
+    sceneActive,
+    route,
+    progress?.currentStepIndex,
+  ]);
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FEATURE_COLLECTION;

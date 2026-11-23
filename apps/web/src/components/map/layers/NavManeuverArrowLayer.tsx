@@ -93,7 +93,9 @@ export function NavManeuverArrowLayer() {
     const tip = line?.at(-1);
     if (!line || !tip || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
-    const outline = raisedArrowPolygon(line, RAISED_WIDTH_M, RAISED_HEAD_M);
+    const outline = raisedArrowPolygon(line, RAISED_WIDTH_M, RAISED_HEAD_M, {
+      drivingSide: step.drivingSide,
+    });
     return {
       type: "FeatureCollection" as const,
       features: [
@@ -135,7 +137,9 @@ export function NavManeuverArrowLayer() {
       map.off("zoom", sync);
     };
   }, [mapRef, mapReady]);
-  const raised = sceneActive && closeEnough;
+  // Without an outline (a turn too tangled to draw one), the flat arrow stays.
+  const hasOutline = data.features.some((feature) => feature.geometry.type === "Polygon");
+  const raised = sceneActive && closeEnough && hasOutline;
   // The route ghost is drawn above the scene; it leaves the raised arrow's
   // span alone so the arrow stays white.
   const setArrowSpan = useNavigationSceneStore((s) => s.setArrowSpan);
