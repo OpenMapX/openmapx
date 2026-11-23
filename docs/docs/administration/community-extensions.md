@@ -124,9 +124,9 @@ its existing job instead of installing twice.
 
 In **Local integrations**, the inventory includes CLI-installed directories,
 standalone owners, invalid legacy content and missing local files, independently
-of catalog availability. **Adopt** records the reviewed content under a community
-owner. Without authenticated provenance, its source remains `legacy_unknown`;
-adoption does not invent a repository URL or grant verified trust.
+of catalog availability. A directory without an owner record shows no source;
+to manage it from the admin panel, install it again with **Install integration**
+so its provenance is recorded.
 
 **Remove** requires confirmation of the reviewed content digest. The agent keeps
 the original directory in quarantine until reload and ownership bookkeeping

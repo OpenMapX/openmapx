@@ -57,7 +57,6 @@ export const standaloneInstallInspectionSchema = z.strictObject({
   denials: z.array(z.string().max(512)).max(64),
 });
 export const standaloneIntegrationProvenanceSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("legacy_unknown"), contentDigest: digest }),
   z.strictObject({
     kind: z.literal("artifact"),
     url: remote,
@@ -99,8 +98,8 @@ export const standaloneInventoryEntrySchema = standaloneFilesystemEntrySchema
   .extend({
     ownership: z.enum(["extension", "standalone", "unmanaged", "conflict"]),
     extensionId: z.string().max(128).nullable(),
-    provenance: z.enum(["artifact", "source", "uploaded-artifact", "legacy_unknown"]),
-    adoptable: z.boolean(),
+    /** Recorded source of a standalone install; null without a standalone owner record. */
+    provenance: z.enum(["artifact", "source", "uploaded-artifact"]).nullable(),
     removable: z.boolean(),
   });
 export type StandaloneInventoryEntry = z.infer<typeof standaloneInventoryEntrySchema>;

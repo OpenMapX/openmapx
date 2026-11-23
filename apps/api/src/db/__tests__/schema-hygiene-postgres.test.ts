@@ -42,6 +42,11 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "stream",
     values: ["stdout", "stderr"],
   },
+  data_subject_request_locator_type_check: {
+    table: "data_subject_request",
+    column: "locator_type",
+    values: ["user_id", "email", "erasure_reference", "other_reference"],
+  },
   data_subject_request_preservation_status_check: {
     table: "data_subject_request_preservation",
     column: "status",
@@ -65,7 +70,7 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
   installed_integration_source_type_check: {
     table: "installed_integration",
     column: "source_type",
-    values: ["registry", "artifact", "source", "uploaded-artifact", "legacy_unknown"],
+    values: ["registry", "artifact", "source", "uploaded-artifact"],
   },
   mangrove_keypair_wrap_wrap_type_check: {
     table: "mangrove_keypair_wrap",
@@ -183,6 +188,14 @@ integration("schema hygiene", () => {
       expect(listed.sort(), name).toEqual([...expected.values].sort());
       expect(check?.definition, name).toContain(expected.column);
     }
+  });
+
+  it("records extension ownership only as component links and keeps no constant columns", async () => {
+    const columns = await fixture.sql<{ table: string; column: string }[]>`
+      SELECT table_name AS table, column_name AS column FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name IN ('managed_by_extension', 'activation_version')`;
+    expect(columns).toEqual([]);
   });
 
   it("indexes the prune paths and active admin jobs", async () => {

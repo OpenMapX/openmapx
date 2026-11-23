@@ -29,7 +29,6 @@ const inventory = [
   ["applyAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/apply"],
 
   ["listAdminStandaloneIntegrations", "GET", "/api/admin/standalone-integrations"],
-  ["adoptAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/adopt"],
   ["removeAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/remove"],
   ["previewAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/preview"],
   ["installAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/install"],
@@ -197,7 +196,6 @@ function success(
     | "previewAdminStandaloneIntegration"
     | "installAdminStandaloneIntegration"
     | "listAdminStandaloneIntegrations"
-    | "adoptAdminStandaloneIntegration"
     | "removeAdminStandaloneIntegration"
   >,
   value: unknown,

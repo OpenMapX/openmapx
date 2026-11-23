@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
   adminJob,
@@ -9,7 +9,6 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { getIntegration, reloadIntegrations } from "../../integration-host";
-import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
 import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../admin-job-state";
@@ -41,24 +40,17 @@ export async function standaloneInventory() {
     entries: mergeStandaloneInventory({ files: files.entries, integrations, parents, components }),
   };
 }
-function permission(
-  before: Awaited<ReturnType<typeof ownershipSnapshot>>,
-  action: "adopt" | "remove",
-) {
+function permission(before: Awaited<ReturnType<typeof ownershipSnapshot>>) {
   const { integration, components, parent } = before,
-    owner = components[0]?.extensionId ?? integration?.managedByExtension ?? null;
+    owner = components[0]?.extensionId ?? null;
   if (
-    (owner &&
-      (!integration || components.length !== 1 || integration.managedByExtension !== owner)) ||
     components.length > 1 ||
-    (integration?.managedByExtension && integration.managedByExtension !== owner) ||
-    (owner && (!parent || parent.installationKind !== "standalone"))
+    (owner && (!integration || !parent || parent.installationKind !== "standalone"))
   )
     throw new AdminJobFailure(
       "Integration has a conflicting or catalog owner; use that owner's controls",
       {},
     );
-  if (action === "adopt" && owner) throw new AdminJobFailure("Integration is already managed", {});
   return owner;
 }
 async function save(ctx: JobContext, state: OwnershipState) {
@@ -79,7 +71,7 @@ async function readState(
     state.operationId !== payload.operationId ||
     state.ownerId !== payload.ownerId ||
     canonicalJson(state.request) !== canonicalJson(payload.request) ||
-    state.action !== (ctx.jobType === "standalone.adopt" ? "adopt" : "remove")
+    ctx.jobType !== "standalone.remove"
   )
     throw new JobObservationPending("recovery_required");
   return state;
@@ -124,76 +116,33 @@ async function persist(ctx: JobContext, state: OwnershipState, write: boolean): 
     if (canonicalJson(current) !== state.before)
       throw new JobObservationPending("recovery_required");
     if (!write) return false;
-    permission(current, state.action);
+    permission(current);
     if (!state.inspection?.allowed) throw new JobObservationPending("recovery_required");
     const id = state.request.integrationId;
-    if (state.action === "adopt") {
-      const contentDigest = state.request.expectedContentDigest,
-        version = state.inspection.version;
-      if (!contentDigest || !version) throw new JobObservationPending("recovery_required");
-      const parentId = state.parentId;
-      if (!parentId) throw new JobObservationPending("recovery_required");
-      await tx.insert(installedExtension).values({
-        id: parentId,
-        name: id,
-        sourceUrl: null,
-        sourceTrust: "community",
-        installationKind: "standalone",
-        provenance: { kind: "legacy_unknown", contentDigest },
-        lastOperationId: state.operationId,
-        installedVersion: version,
-        manifest: null,
-        installedBy: actorUserIdOrNull(state.ownerId),
-      });
+    if (state.parentId) {
+      const owned = await tx
+        .select()
+        .from(installedExtensionComponent)
+        .where(eq(installedExtensionComponent.extensionId, state.parentId))
+        .for("update");
+      if (owned.length !== 1 || owned[0]?.componentId !== id || owned[0].kind !== "integration")
+        throw new AdminJobFailure(
+          "Installation contains other components; use its extension controls",
+          {},
+        );
       await tx
-        .insert(installedIntegration)
-        .values({
-          id,
-          repository: null,
-          sourceType: "legacy_unknown",
-          installedVersion: version,
-          managedByExtension: parentId,
-          installedBy: actorUserIdOrNull(state.ownerId),
-        })
-        .onConflictDoUpdate({
-          target: installedIntegration.id,
-          set: {
-            managedByExtension: parentId,
-            repository: null,
-            sourceType: "legacy_unknown",
-            installedVersion: version,
-            updatedAt: new Date(),
-          },
-        });
-      await tx
-        .insert(installedExtensionComponent)
-        .values({ extensionId: parentId, kind: "integration", componentId: id });
-    } else {
-      if (state.parentId) {
-        const owned = await tx
-          .select()
-          .from(installedExtensionComponent)
-          .where(eq(installedExtensionComponent.extensionId, state.parentId))
-          .for("update");
-        if (owned.length !== 1 || owned[0]?.componentId !== id || owned[0].kind !== "integration")
-          throw new AdminJobFailure(
-            "Installation contains other components; use its extension controls",
-            {},
-          );
-        await tx
-          .delete(installedExtensionComponent)
-          .where(
-            and(
-              eq(installedExtensionComponent.extensionId, state.parentId),
-              eq(installedExtensionComponent.kind, "integration"),
-              eq(installedExtensionComponent.componentId, id),
-            ),
-          );
-      }
-      await tx.delete(installedIntegration).where(eq(installedIntegration.id, id));
-      if (state.parentId)
-        await tx.delete(installedExtension).where(eq(installedExtension.id, state.parentId));
+        .delete(installedExtensionComponent)
+        .where(
+          and(
+            eq(installedExtensionComponent.extensionId, state.parentId),
+            eq(installedExtensionComponent.kind, "integration"),
+            eq(installedExtensionComponent.componentId, id),
+          ),
+        );
     }
+    await tx.delete(installedIntegration).where(eq(installedIntegration.id, id));
+    if (state.parentId)
+      await tx.delete(installedExtension).where(eq(installedExtension.id, state.parentId));
     const committed = { ...state, phase: "persisted" as const };
     const result = {
       ...value,
@@ -226,13 +175,10 @@ export function handleStandaloneOwnership(ctx: JobContext): Promise<Record<strin
     if (!state) {
       if (ctx.observationOnly) throw new JobObservationPending("recovery_required");
       ctx.signal.throwIfAborted();
-      const action = ctx.jobType === "standalone.adopt" ? "adopt" : "remove";
-      if (action === "adopt" && !payload.request.expectedContentDigest)
-        throw new AdminJobFailure("Missing integrations cannot be adopted", {});
       const before = await db.transaction(async (tx) => {
         await lockOwnership(tx, payload.request.integrationId);
         const value = await ownershipSnapshot(tx, payload.request.integrationId);
-        permission(value, action);
+        permission(value);
         return value;
       });
       state = {
@@ -241,9 +187,9 @@ export function handleStandaloneOwnership(ctx: JobContext): Promise<Record<strin
         jobId: ctx.jobId,
         operationId: payload.operationId,
         ownerId: payload.ownerId,
-        action,
+        action: "remove",
         request: payload.request,
-        parentId: action === "adopt" ? `local-${payload.operationId}` : (before.parent?.id ?? null),
+        parentId: before.parent?.id ?? null,
         before: canonicalJson(before),
         inspection: null,
         phase: "prepared",
@@ -288,16 +234,15 @@ export function handleStandaloneOwnership(ctx: JobContext): Promise<Record<strin
       await save(ctx, state);
     }
     if (state.phase === "inspected") {
-      if (state.action === "remove")
-        await executeAdminJobOperation(
-          ctx,
-          {
-            kind: "integration.remove",
-            transactionId: state.operationId,
-            expectedContentDigest: state.request.expectedContentDigest,
-          },
-          "standalone.ownership.remove",
-        );
+      await executeAdminJobOperation(
+        ctx,
+        {
+          kind: "integration.remove",
+          transactionId: state.operationId,
+          expectedContentDigest: state.request.expectedContentDigest,
+        },
+        "standalone.ownership.remove",
+      );
       state.phase = "removed";
       await save(ctx, state);
     }
@@ -309,12 +254,7 @@ export function handleStandaloneOwnership(ctx: JobContext): Promise<Record<strin
         state.phase = "reload_attempted";
         await save(ctx, state);
         await reloadIntegrations();
-        if (
-          (state.action === "remove" && getIntegration(state.request.integrationId)) ||
-          (state.action === "adopt" &&
-            getIntegration(state.request.integrationId)?.manifest.version !==
-              (state.inspection?.allowed ? state.inspection.version : null))
-        )
+        if (getIntegration(state.request.integrationId))
           throw new JobObservationPending("recovery_required");
         state.phase = "reloaded";
         await save(ctx, state);

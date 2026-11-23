@@ -2,8 +2,8 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Community service repositories installed by extensions. The operations agent
- * owns the checkouts in its community store; this table records
- * which extension installed which exact commit.
+ * owns the checkouts in its community store and records which extension owns
+ * each one; this table records the exact commit and agent transaction.
  */
 export const serviceRepository = pgTable("service_repository", {
   // First 16 hex digits of the SHA-256 of the canonical URL; the checkout's
@@ -13,7 +13,6 @@ export const serviceRepository = pgTable("service_repository", {
   lastSha: text("last_sha").notNull(),
   // Tag, branch or commit the extension manifest requested.
   pinnedRef: text("pinned_ref"),
-  managedByExtension: text("managed_by_extension").notNull(),
   // The agent transaction that installed `lastSha`. Writing it in the same
   // database transaction as the extension record makes the install
   // authoritative; startup recovery commits a pending agent transaction only

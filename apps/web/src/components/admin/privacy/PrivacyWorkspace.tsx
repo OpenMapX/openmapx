@@ -205,7 +205,7 @@ function Intake({
   const [channel, setChannel] = useState<"email" | "post" | "representative" | "internal">("email"),
     [locator, setLocator] = useState(""),
     [locatorType, setLocatorType] = useState<
-      "email" | "user_id" | "username" | "erasure_reference" | "other_reference"
+      "email" | "user_id" | "erasure_reference" | "other_reference"
     >("email"),
     [accountState, setAccountState] = useState<"current" | "inaccessible" | "deleted" | "unknown">(
       "inaccessible",
@@ -233,13 +233,11 @@ function Intake({
         value={locatorType}
         onChange={(e) => setLocatorType(e.target.value as typeof locatorType)}
       >
-        {(["email", "user_id", "username", "erasure_reference", "other_reference"] as const).map(
-          (x) => (
-            <MenuItem key={x} value={x}>
-              {x}
-            </MenuItem>
-          ),
-        )}
+        {(["email", "user_id", "erasure_reference", "other_reference"] as const).map((x) => (
+          <MenuItem key={x} value={x}>
+            {x}
+          </MenuItem>
+        ))}
       </TextField>
       <TextField
         label={t("subjectLocator")}

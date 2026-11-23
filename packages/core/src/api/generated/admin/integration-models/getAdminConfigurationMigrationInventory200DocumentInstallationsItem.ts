@@ -14,6 +14,5 @@ export type GetAdminConfigurationMigrationInventory200DocumentInstallationsItem 
   ownership: GetAdminConfigurationMigrationInventory200DocumentInstallationsItemOwnership;
   extensionId: string | null;
   provenance: GetAdminConfigurationMigrationInventory200DocumentInstallationsItemProvenance;
-  adoptable: boolean;
   removable: boolean;
 };

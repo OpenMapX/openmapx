@@ -1,7 +1,12 @@
 /** Native API-role process fixture. Only the test's fixed owned job is read. */
 import { eq } from "drizzle-orm";
 import { db, sql } from "../../../db";
-import { adminJob, installedExtension, installedIntegration } from "../../../db/schema";
+import {
+  adminJob,
+  installedExtension,
+  installedExtensionComponent,
+  installedIntegration,
+} from "../../../db/schema";
 import { checkpointOwnedAdminJob } from "../../admin-job-checkpoint";
 import { jobCheckpoint, jobOwnership, replaceJobCheckpoint } from "../../admin-job-state";
 import { publishIntegration, settleIntegration } from "../../agent-integrations";
@@ -94,13 +99,16 @@ await extensionDatabaseStep(cursor, "bookkeeping", { bundle: payload.bundle }, a
       repository: payload.source.url,
       sourceType: "registry",
       installedVersion: "1.0.0",
-      managedByExtension: payload.bundle,
       lastTransactionId: publication.transactionId,
     })
     .onConflictDoUpdate({
       target: installedIntegration.id,
-      set: { managedByExtension: payload.bundle, lastTransactionId: publication.transactionId },
+      set: { lastTransactionId: publication.transactionId },
     });
+  await tx
+    .insert(installedExtensionComponent)
+    .values({ extensionId: payload.bundle, kind: "integration", componentId: "workflow-map" })
+    .onConflictDoNothing();
 });
 await boundary("bookkept");
 await extensionStep(cursor, "settle", { transactionId: publication.transactionId }, () =>

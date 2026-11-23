@@ -10,10 +10,7 @@ export async function assertOwnershipSettlementCheckpoint(
   operation: OpsOperation,
   connection: Pick<typeof db, "execute" | "select">,
 ) {
-  if (
-    !["standalone.adopt", "standalone.remove"].includes(row.type) ||
-    operation.kind !== "integration.settle"
-  )
+  if (row.type !== "standalone.remove" || operation.kind !== "integration.settle")
     throw new JobOwnershipLost();
   const result = row.result as Record<string, unknown>,
     payload = row.payload as Record<string, unknown>,
@@ -51,19 +48,12 @@ export async function assertOwnershipSettlementCheckpoint(
   await lockOwnership(connection, state.request.integrationId);
   const current = await ownershipSnapshot(connection, state.request.integrationId);
   if (operation.decision === "commit") {
-    if (state.phase !== "persisted") throw new JobOwnershipLost();
-    if (state.action === "adopt") {
-      if (
-        current.parent?.id !== state.parentId ||
-        current.parent.lastOperationId !== state.operationId ||
-        current.parent.installationKind !== "standalone" ||
-        current.integration?.managedByExtension !== state.parentId ||
-        current.integration.sourceType !== "legacy_unknown" ||
-        current.components.length !== 1 ||
-        current.components[0]?.extensionId !== state.parentId
-      )
-        throw new JobOwnershipLost();
-    } else if (current.integration || current.components.length || current.parent)
+    if (
+      state.phase !== "persisted" ||
+      current.integration ||
+      current.components.length ||
+      current.parent
+    )
       throw new JobOwnershipLost();
   } else if (state.phase !== "restore" || canonicalJson(current) !== state.before)
     throw new JobOwnershipLost();

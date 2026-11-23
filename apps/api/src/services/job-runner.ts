@@ -159,7 +159,6 @@ const IMMEDIATE_CONFIGURATION_JOB_TYPES = [
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "extension.install",
   "extension.remove",
-  "standalone.adopt",
   "standalone.remove",
   "standalone.preview",
   "standalone.install",
@@ -229,7 +228,7 @@ function hasRetainedStandalone(job: { type: string; result: unknown }) {
     _standaloneSettled?: unknown;
   } | null;
   return (
-    ["standalone.install", "standalone.adopt", "standalone.remove"].includes(job.type) &&
+    ["standalone.install", "standalone.remove"].includes(job.type) &&
     value?._standaloneSettled !== true &&
     typeof value?._standalone?.body === "string"
   );
@@ -303,7 +302,7 @@ class AdminJobRunner {
 
   /** Two fixed standalone producers share actor/key serialization and immutable request identity. */
   async enqueueStandalone(
-    type: "standalone.preview" | "standalone.install" | "standalone.adopt" | "standalone.remove",
+    type: "standalone.preview" | "standalone.install" | "standalone.remove",
     payload: Record<string, unknown>,
     actorId: string,
     key: string,

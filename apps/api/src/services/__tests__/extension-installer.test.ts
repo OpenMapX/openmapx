@@ -675,7 +675,6 @@ describe("installExtension", () => {
       url: REPO_URL,
       lastSha: COMMIT,
       pinnedRef: null,
-      managedByExtension: "bundle-x",
       lastTransactionId: transactionFor(REPO_ONE),
     });
   });
@@ -691,7 +690,6 @@ describe("installExtension", () => {
     expect(integrationInsert.values).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "intg-one",
-        managedByExtension: "bundle-x",
         lastTransactionId: INTEGRATION_TRANSACTION,
       }),
     );
@@ -1192,9 +1190,9 @@ describe("installExtension", () => {
 
 describe("removeExtension", () => {
   it("has the agent remove the extension's repositories before deleting its records", async () => {
-    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ id: "bundle-x", manifest: MANIFEST }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
-    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    dbMock.queueSelect([{ hash: REPO_ONE }]);
 
     await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toEqual({
       id: "bundle-x",
@@ -1218,9 +1216,9 @@ describe("removeExtension", () => {
   });
 
   it("keeps the extension record when the agent cannot remove its repository", async () => {
-    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ id: "bundle-x", manifest: MANIFEST }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
-    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    dbMock.queueSelect([{ hash: REPO_ONE }]);
     removeRepositoryMock.mockRejectedValueOnce(new Error("busy"));
 
     await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).rejects.toThrow("busy");
@@ -1229,10 +1227,35 @@ describe("removeExtension", () => {
     expect(renderMock).not.toHaveBeenCalled();
   });
 
-  it("retries a removal whose repository the agent already deleted", async () => {
-    dbMock.queueSelect([{ id: "bundle-x" }]);
+  it("removes a repository the agent records for the extension after an update dropped it", async () => {
+    dbMock.queueSelect([{ id: "bundle-x", manifest: { ...MANIFEST, services: [] } }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
-    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    readCommunityMock.mockResolvedValueOnce({
+      revisionId: `cfg1_${"d".repeat(43)}`,
+      repositories: [
+        { repository: REPO_TWO, url: null, commit: COMMIT, extensionId: "bundle-x", pending: null },
+        { repository: REPO_ONE, url: null, commit: COMMIT, extensionId: "other", pending: null },
+      ],
+      services: [],
+      problems: [],
+      reportedServiceIds: ["svc-one"],
+    } as never);
+
+    await expect(removeExtension(makeCtx("extension.remove"), "bundle-x")).resolves.toMatchObject({
+      id: "bundle-x",
+    });
+
+    expect(removeRepositoryMock).toHaveBeenCalledTimes(1);
+    expect(removeRepositoryMock).toHaveBeenCalledWith(
+      { repository: REPO_TWO, extensionId: "bundle-x" },
+      expect.anything(),
+    );
+  });
+
+  it("retries a removal whose repository the agent already deleted", async () => {
+    dbMock.queueSelect([{ id: "bundle-x", manifest: MANIFEST }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
+    dbMock.queueSelect([{ hash: REPO_ONE }]);
     readCommunityMock.mockResolvedValueOnce({
       revisionId: `cfg1_${"d".repeat(43)}`,
       repositories: [],

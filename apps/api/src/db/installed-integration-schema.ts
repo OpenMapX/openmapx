@@ -13,9 +13,8 @@ export const installedIntegration = pgTable(
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
-    // Extension id that owns this integration (installed as part of a bundle).
-    // The standalone integration store skips update/remove of managed rows.
-    managedByExtension: text("managed_by_extension"),
+    // The owning extension, if any, is the installed_extension_component row
+    // of kind "integration" for this id.
     // The operations agent's install transaction this row records. Writing it
     // commits the install; recovery commits a pending agent transaction only
     // when it matches. Null for rows written before the agent installed
@@ -26,7 +25,7 @@ export const installedIntegration = pgTable(
     index("installed_integration_installed_by_idx").on(table.installedBy),
     check(
       "installed_integration_source_type_check",
-      sql`${table.sourceType} in ('registry','artifact','source','uploaded-artifact','legacy_unknown')`,
+      sql`${table.sourceType} in ('registry','artifact','source','uploaded-artifact')`,
     ),
   ],
 );

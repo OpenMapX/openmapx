@@ -60,9 +60,9 @@ export async function loadAuthPolicy(
 ): Promise<AuthPolicySnapshot> {
   try {
     const rows = await database.select().from(authPolicyState).where(eq(authPolicyState.id, 1));
-    if (!rows.length) return unactivatedAuthPolicy;
+    // The stored row is the activation: no row means the defaults were never activated.
     const row = rows[0];
-    if (!row || row.activationVersion !== 1) throw new AuthPolicyError("AUTH_POLICY_INVALID");
+    if (!row) return unactivatedAuthPolicy;
     const parsed = authPolicySettingsSchema.safeParse(row.settings);
     if (!parsed.success) throw new AuthPolicyError("AUTH_POLICY_INVALID");
     const stored = snapshotWithoutEnv(parsed.data);
@@ -147,7 +147,6 @@ export async function applyAuthPolicy(
       .insert(authPolicyState)
       .values({
         id: 1,
-        activationVersion: 1,
         settings: request.settings,
         revision: stored.revision,
         activatedBy: actorId,

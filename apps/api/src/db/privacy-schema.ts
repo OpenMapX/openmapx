@@ -106,7 +106,7 @@ export const dataSubjectRequest = pgTable(
     check("data_subject_request_version_check", sql`${table.version} > 0`),
     check(
       "data_subject_request_locator_type_check",
-      sql`${table.locatorType} in ('user_id', 'email', 'username', 'erasure_reference', 'other_reference')`,
+      sql`${table.locatorType} in ('user_id', 'email', 'erasure_reference', 'other_reference')`,
     ),
     check(
       "data_subject_request_account_state_check",

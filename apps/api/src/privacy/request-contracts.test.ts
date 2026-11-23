@@ -110,6 +110,21 @@ describe("subject request intake", () => {
     ).toBe(true);
   });
 
+  it("locates a subject only by kinds OpenMapX accounts have", () => {
+    const parse = (locatorType: string) =>
+      createSubjectRequestSchema.safeParse({
+        channel: "email",
+        subject: { locatorType, locator: "subject", accountState: "unknown" },
+      }).success;
+    expect(["user_id", "email", "erasure_reference", "other_reference"].map(parse)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(parse("username")).toBe(false);
+  });
+
   it("no longer accepts a representative contact", () => {
     expect(
       createSubjectRequestSchema.safeParse({

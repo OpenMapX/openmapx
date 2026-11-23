@@ -66,7 +66,7 @@ export async function checkpointOwnedAdminJob(
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
         return { capacity: true as const, result: current, protocol: currentProtocol };
       const settlement =
-        ["standalone.install", "standalone.adopt", "standalone.remove"].includes(row.type) &&
+        ["standalone.install", "standalone.remove"].includes(row.type) &&
         operation.operation?.kind === "integration.settle"
           ? operation.operation
           : undefined;

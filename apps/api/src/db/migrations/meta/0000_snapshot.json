@@ -1,5 +1,5 @@
 {
-  "id": "0c4c02a2-4b2e-4df4-916c-d971245aa3e4",
+  "id": "8ad043ca-7c90-4254-b09d-de728e5583be",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1336,12 +1336,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "activation_version": {
-          "name": "activation_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
         "settings": {
           "name": "settings",
           "type": "jsonb",
@@ -1406,7 +1400,7 @@
       "checkConstraints": {
         "auth_policy_singleton": {
           "name": "auth_policy_singleton",
-          "value": "\"auth_policy_state\".\"id\"=1 AND \"auth_policy_state\".\"activation_version\"=1"
+          "value": "\"auth_policy_state\".\"id\"=1"
         }
       },
       "isRLSEnabled": false
@@ -2908,7 +2902,7 @@
         },
         "data_subject_request_locator_type_check": {
           "name": "data_subject_request_locator_type_check",
-          "value": "\"data_subject_request\".\"locator_type\" in ('user_id', 'email', 'username', 'erasure_reference', 'other_reference')"
+          "value": "\"data_subject_request\".\"locator_type\" in ('user_id', 'email', 'erasure_reference', 'other_reference')"
         },
         "data_subject_request_account_state_check": {
           "name": "data_subject_request_account_state_check",
@@ -3816,7 +3810,7 @@
         },
         "installed_extension_standalone_provenance_check": {
           "name": "installed_extension_standalone_provenance_check",
-          "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
+          "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
         }
       },
       "isRLSEnabled": false
@@ -3951,12 +3945,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "managed_by_extension": {
-          "name": "managed_by_extension",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_transaction_id": {
           "name": "last_transaction_id",
           "type": "text",
@@ -4002,7 +3990,7 @@
       "checkConstraints": {
         "installed_integration_source_type_check": {
           "name": "installed_integration_source_type_check",
-          "value": "\"installed_integration\".\"source_type\" in ('registry','artifact','source','uploaded-artifact','legacy_unknown')"
+          "value": "\"installed_integration\".\"source_type\" in ('registry','artifact','source','uploaded-artifact')"
         }
       },
       "isRLSEnabled": false
@@ -6755,12 +6743,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "managed_by_extension": {
-          "name": "managed_by_extension",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
         },
         "last_transaction_id": {
           "name": "last_transaction_id",

@@ -2,11 +2,11 @@ import type { StandaloneFilesystemEntry, StandaloneInventoryEntry } from "@openm
 
 interface Input {
   files: StandaloneFilesystemEntry[];
-  integrations: Array<{ id: string; installedVersion: string; managedByExtension: string | null }>;
+  integrations: Array<{ id: string; installedVersion: string }>;
   parents: Array<{
     id: string;
     installationKind: "catalog" | "standalone";
-    provenance: { kind: string; contentDigest?: string } | null;
+    provenance: { kind: "artifact" | "source" | "uploaded-artifact" } | null;
   }>;
   components: Array<{ kind: string; componentId: string; extensionId: string }>;
 }
@@ -23,17 +23,11 @@ export function mergeStandaloneInventory(input: Input): StandaloneInventoryEntry
       components = input.components.filter(
         (x) => x.kind === "integration" && x.componentId === integrationId,
       ),
-      owner = components[0]?.extensionId ?? row?.managedByExtension ?? null,
+      owner = components[0]?.extensionId ?? null,
       parent = input.parents.find((x) => x.id === owner);
     let ownership: StandaloneInventoryEntry["ownership"] = "unmanaged",
       denialReason = file?.denialReason ?? null;
-    if (
-      (owner && (!row || components.length !== 1 || row.managedByExtension !== owner)) ||
-      components.length > 1 ||
-      (row?.managedByExtension && row.managedByExtension !== owner) ||
-      (owner && !parent)
-    )
-      ownership = "conflict";
+    if (components.length > 1 || (owner && (!row || !parent))) ownership = "conflict";
     else if (parent)
       ownership = parent.installationKind === "standalone" ? "standalone" : "extension";
     if (!file) {
@@ -53,7 +47,6 @@ export function mergeStandaloneInventory(input: Input): StandaloneInventoryEntry
     if (ownership === "extension")
       denialReason ??= "Managed by an extension; use that extension's controls.";
     const usable = !!file?.valid && file.contentDigest !== null;
-    const recordedProvenance = parent?.provenance?.kind;
     return {
       ...(file?.pendingTransactionId ? { pendingTransactionId: file.pendingTransactionId } : {}),
       integrationId,
@@ -61,11 +54,7 @@ export function mergeStandaloneInventory(input: Input): StandaloneInventoryEntry
       ownership,
       extensionId: owner,
       contentDigest: file?.contentDigest ?? null,
-      provenance: (recordedProvenance &&
-      ["artifact", "source", "uploaded-artifact"].includes(recordedProvenance)
-        ? recordedProvenance
-        : "legacy_unknown") as StandaloneInventoryEntry["provenance"],
-      adoptable: usable && ownership === "unmanaged",
+      provenance: parent?.provenance?.kind ?? null,
       removable:
         (usable && (ownership === "standalone" || ownership === "unmanaged")) ||
         (!file && ownership === "standalone"),

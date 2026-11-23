@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { installedExtension, installedIntegration } from "../db/schema";
+import {
+  installedExtension,
+  installedExtensionComponent,
+  installedIntegration,
+} from "../db/schema";
 import { processLogger } from "../process-logger";
 import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
@@ -317,8 +321,15 @@ export async function recoverAgentIntegrations(
     })
     .from(installedIntegration)
     .leftJoin(
+      installedExtensionComponent,
+      and(
+        eq(installedExtensionComponent.kind, "integration"),
+        eq(installedExtensionComponent.componentId, installedIntegration.id),
+      ),
+    )
+    .leftJoin(
       installedExtension,
-      eq(installedExtension.id, installedIntegration.managedByExtension),
+      eq(installedExtension.id, installedExtensionComponent.extensionId),
     );
   for (const row of rows) {
     if (recorded.has(row.id) || row.installationKind === "standalone") continue;

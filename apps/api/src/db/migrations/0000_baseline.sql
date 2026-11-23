@@ -136,12 +136,11 @@ CREATE TABLE "auth_policy_application" (
 --> statement-breakpoint
 CREATE TABLE "auth_policy_state" (
 	"id" integer PRIMARY KEY NOT NULL,
-	"activation_version" integer NOT NULL,
 	"settings" jsonb NOT NULL,
 	"revision" text NOT NULL,
 	"activated_by" text,
 	"activated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "auth_policy_singleton" CHECK ("auth_policy_state"."id"=1 AND "auth_policy_state"."activation_version"=1)
+	CONSTRAINT "auth_policy_singleton" CHECK ("auth_policy_state"."id"=1)
 );
 --> statement-breakpoint
 CREATE TABLE "capability_binding" (
@@ -321,7 +320,7 @@ CREATE TABLE "data_subject_request" (
 	CONSTRAINT "data_subject_request_channel_check" CHECK ("data_subject_request"."channel" in ('self_service', 'email', 'post', 'representative', 'internal')),
 	CONSTRAINT "data_subject_request_state_check" CHECK ("data_subject_request"."state" in ('open', 'in_progress', 'waiting_on_requester', 'completed', 'refused')),
 	CONSTRAINT "data_subject_request_version_check" CHECK ("data_subject_request"."version" > 0),
-	CONSTRAINT "data_subject_request_locator_type_check" CHECK ("data_subject_request"."locator_type" in ('user_id', 'email', 'username', 'erasure_reference', 'other_reference')),
+	CONSTRAINT "data_subject_request_locator_type_check" CHECK ("data_subject_request"."locator_type" in ('user_id', 'email', 'erasure_reference', 'other_reference')),
 	CONSTRAINT "data_subject_request_account_state_check" CHECK ("data_subject_request"."account_state" in ('current', 'inaccessible', 'deleted', 'unknown')),
 	CONSTRAINT "data_subject_request_identity_check" CHECK (("data_subject_request"."identity_method" is null and "data_subject_request"."identity_verified_at" is null) or ("data_subject_request"."identity_method" in ('account_session', 'manual') and "data_subject_request"."identity_verified_at" is not null))
 );
@@ -413,7 +412,7 @@ CREATE TABLE "installed_extension" (
 	"installed_by" text,
 	CONSTRAINT "installed_extension_source_trust_check" CHECK ("installed_extension"."source_trust" in ('built-in','verified','community')),
 	CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone')),
-	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
+	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
 );
 --> statement-breakpoint
 CREATE TABLE "installed_extension_component" (
@@ -432,9 +431,8 @@ CREATE TABLE "installed_integration" (
 	"installed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by" text,
-	"managed_by_extension" text,
 	"last_transaction_id" text,
-	CONSTRAINT "installed_integration_source_type_check" CHECK ("installed_integration"."source_type" in ('registry','artifact','source','uploaded-artifact','legacy_unknown'))
+	CONSTRAINT "installed_integration_source_type_check" CHECK ("installed_integration"."source_type" in ('registry','artifact','source','uploaded-artifact'))
 );
 --> statement-breakpoint
 CREATE TABLE "integration_config" (
@@ -770,7 +768,6 @@ CREATE TABLE "service_repository" (
 	"url" text NOT NULL,
 	"last_sha" text NOT NULL,
 	"pinned_ref" text,
-	"managed_by_extension" text NOT NULL,
 	"last_transaction_id" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "service_repository_url_unique" UNIQUE("url")

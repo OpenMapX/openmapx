@@ -43,7 +43,6 @@ function LocalInstallations() {
     key = useMemo(() => ["admin", "standalone-integrations", apiUrl] as const, [apiUrl]);
   const [selected, setSelected] = useState<{
       entry: StandaloneInventoryEntry;
-      action: "adopt" | "remove";
       key: string;
     } | null>(null),
     [busy, setBusy] = useState(false),
@@ -94,7 +93,7 @@ function LocalInstallations() {
         !selected ||
         result?.operationId !== accepted.operationId ||
         result.integrationId !== selected.entry.integrationId ||
-        result.action !== selected.action ||
+        result.action !== "remove" ||
         result.outcome !== "committed"
       ) {
         setError(t("theOwnershipResponseCouldNot"));
@@ -105,38 +104,24 @@ function LocalInstallations() {
       void invalidateExtensionAdministration(qc, apiUrl, "components");
     } else setError(job.error ?? t("operationDidNotCompleteInspect"));
   }, [operation.data, accepted, owner, selected, qc, apiUrl, key, t]);
-  const open = (entry: StandaloneInventoryEntry, action: "adopt" | "remove") => {
-    setSelected({ entry, action, key: crypto.randomUUID() });
+  const open = (entry: StandaloneInventoryEntry) => {
+    setSelected({ entry, key: crypto.randomUUID() });
     setAccepted(null);
     setError(null);
     setSuccess(false);
   };
   const submit = async () => {
-    if (
-      !selected ||
-      (selected.action === "adopt" && !selected.entry.contentDigest) ||
-      busy ||
-      accepted
-    )
-      return;
+    if (!selected || busy || accepted) return;
     setBusy(true);
     setError(null);
     try {
       const result = sdk.unwrapAdminResponse(
-        // An adoption without a digest returned above, so it never reaches the removal.
-        await (selected.action === "adopt" && selected.entry.contentDigest
-          ? sdk.adoptAdminStandaloneIntegration(
-              selected.entry.integrationId,
-              { expectedContentDigest: selected.entry.contentDigest },
-              { "idempotency-key": selected.key },
-              { client, timeoutMs: 30000 },
-            )
-          : sdk.removeAdminStandaloneIntegration(
-              selected.entry.integrationId,
-              { expectedContentDigest: selected.entry.contentDigest },
-              { "idempotency-key": selected.key },
-              { client, timeoutMs: 30000 },
-            )),
+        await sdk.removeAdminStandaloneIntegration(
+          selected.entry.integrationId,
+          { expectedContentDigest: selected.entry.contentDigest },
+          { "idempotency-key": selected.key },
+          { client, timeoutMs: 30000 },
+        ),
       );
       register({
         client,
@@ -182,7 +167,7 @@ function LocalInstallations() {
                 })}
               </Typography>
               <Typography variant="body2">
-                {entry.provenance === "legacy_unknown"
+                {entry.provenance === null
                   ? t("sourceUnknownReviewANew")
                   : t("sourceProvenance", { provenance: entry.provenance.replaceAll("-", "_") })}
               </Typography>
@@ -198,19 +183,11 @@ function LocalInstallations() {
                 </Button>
               )}
               <Stack direction="row" spacing={1}>
-                {entry.adoptable && (
-                  <Button
-                    aria-label={t("adoptIntegration", { integrationId: entry.integrationId })}
-                    onClick={() => open(entry, "adopt")}
-                  >
-                    {t("adopt")}
-                  </Button>
-                )}
                 {entry.removable && (
                   <Button
                     color="error"
                     aria-label={t("removeIntegration", { integrationId: entry.integrationId })}
-                    onClick={() => open(entry, "remove")}
+                    onClick={() => open(entry)}
                   >
                     {t("remove")}
                   </Button>
@@ -228,19 +205,13 @@ function LocalInstallations() {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>
-          {selected?.action === "adopt" ? t("adoptLocalIntegration") : t("removeLocalIntegration")}
-        </DialogTitle>
+        <DialogTitle>{t("removeLocalIntegration")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2}>
             <Typography sx={{ overflowWrap: "anywhere" }}>
               {selected?.entry.integrationId}
             </Typography>
-            <Typography>
-              {selected?.action === "adopt"
-                ? t("recordTheReviewedLocalBytes")
-                : t("quarantineTheReviewedDirectoryReload")}
-            </Typography>
+            <Typography>{t("quarantineTheReviewedDirectoryReload")}</Typography>
             <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
               {t("contentDigest", {
                 digest: selected?.entry.contentDigest ?? "",
@@ -263,13 +234,8 @@ function LocalInstallations() {
             {tCommon("close")}
           </Button>
           {!accepted && (
-            <Button
-              variant="contained"
-              color={selected?.action === "remove" ? "error" : "primary"}
-              disabled={busy}
-              onClick={() => void submit()}
-            >
-              {selected?.action === "adopt" ? t("confirmAdoption") : t("confirmRemoval")}
+            <Button variant="contained" color="error" disabled={busy} onClick={() => void submit()}>
+              {t("confirmRemoval")}
             </Button>
           )}
         </DialogActions>

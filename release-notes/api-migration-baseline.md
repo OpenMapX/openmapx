@@ -63,6 +63,24 @@ job's log line and byte counts are plain columns instead of values rewritten in
 the job's runner state on every line. In the admin Activity API a job's log
 lines no longer carry an `id`; `seq` identifies a line within its job.
 
+Which extension owns an installed integration is recorded once, as the
+extension's component link; the integration and service repository records no
+longer carry their own copy. An extension's removal finds its service
+repositories from its recorded manifest and the operations agent, which already
+records each repository's owner. The stored auth policy no longer has a constant
+activation version column: a stored policy is the activation. The admin API's
+policy responses still report `activationVersion`.
+
+Local integration directories without an owner record can no longer be adopted:
+the admin endpoint `POST /api/admin/standalone-integrations/:id/adopt`, the
+Activity job type `standalone.adopt` and the `legacy_unknown` provenance kind
+are gone. Such a directory can still be removed, or installed again through
+**Install integration** so that its source is recorded. In the local
+integration inventory, `provenance` is `null` instead of `legacy_unknown` when
+no standalone install recorded a source, and entries no longer carry
+`adoptable`. Assisted privacy requests no longer accept the `username` subject
+locator type; OpenMapX accounts have no usernames.
+
 ## Who is affected
 
 Every database created by an earlier development build, including local
