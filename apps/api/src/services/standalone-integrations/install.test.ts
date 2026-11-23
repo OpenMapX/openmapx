@@ -9,6 +9,7 @@ import Fastify from "fastify";
 import { afterAll, assert, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDeterministicTarGz } from "../../../../../packages/integration-framework/src/deterministic-tar";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
+import { artifactTransferPolicySchema } from "../../../../ops-agent/src/artifact-transfer/policy";
 import { installArtifactTransferRuntime } from "../../../../ops-agent/src/artifact-transfer/runtime";
 import { ArtifactTransferStore } from "../../../../ops-agent/src/artifact-transfer/store";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -69,6 +70,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         dataRoot: join(state.host.infraDir, "data/.openmapx-transfers"),
         privateRoot: join(state.host.cleanupRoot, "transfer-metadata"),
         capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
+        // Every standalone owner here comes from a reviewed upload, so the
+        // one test principal retains more stages than the production default.
+        policy: artifactTransferPolicySchema.parse({ maxRetainedStagesPerPrincipal: 16 }),
       });
       installArtifactTransferRuntime(state.host.runtime, store);
       installStandaloneIntegrationRuntime(state.host.runtime, { rootDir: state.host.root, store });
