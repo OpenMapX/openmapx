@@ -39,6 +39,9 @@ shutdown() {
   for pid in "$downloader_pid" "$transfer_pid" "$engine_pid" "$sleeper_pid"; do
     [[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true
   done
+  # A child started just before the signal may not have its pid recorded yet
+  # (the loop's sleep); stop every remaining job, or the wait below sits it out.
+  for pid in $(jobs -p); do kill "$pid" 2>/dev/null || true; done
   wait 2>/dev/null || true
   exit 0
 }

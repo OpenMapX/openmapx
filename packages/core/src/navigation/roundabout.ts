@@ -91,7 +91,8 @@ function bend(points: readonly LngLat[]): number {
 function circulationOf(step: RoundaboutStep): RoundaboutCirculation {
   if (step.drivingSide === "left") return "cw";
   if (step.drivingSide === "right") return "ccw";
-  // Engines that name no driving side (Valhalla) still draw the way round.
+  // Without a driving side (an engine or route without country data), the
+  // path still shows the way round.
   const bent = bend(step.coordinates ?? []);
   if (bent >= MIN_BEND_DEG) return "cw";
   // Most of the world drives on the right, so a path too short to bend

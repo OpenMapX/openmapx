@@ -1,7 +1,9 @@
 import type { RoutingOptions } from "@openmapx/core";
 import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import borderFixture from "./__fixtures__/nong-khai-vientiane-border.json";
 import { valhallaHarness } from "./__tests__/valhalla-http.js";
+import { drivingSideIn } from "./driving-side.js";
 import {
   buildCostingOptions,
   buildExclusions,
@@ -293,6 +295,72 @@ describe("transformTrip motorway flag and bearings", () => {
   });
 });
 
+describe("transformTrip driving side", () => {
+  type Trip = Parameters<typeof transformTrip>[0];
+  const border = borderFixture.trip as unknown as Trip;
+
+  it("names the side traffic keeps to on each step, from the country it starts in", () => {
+    // Over the Friendship Bridge: Thailand drives on the left, Laos on the right.
+    const steps = transformTrip(border, "driving").steps;
+    const crossing = border.legs[0]?.maneuvers.findIndex((m) => m.begin_shape_index >= 118) ?? -1;
+    expect(crossing).toBeGreaterThan(0);
+    expect(steps.slice(0, crossing).every((step) => step.drivingSide === "left")).toBe(true);
+    expect(steps.slice(crossing).every((step) => step.drivingSide === "right")).toBe(true);
+    // The roundabouts in Vientiane are circled counter-clockwise.
+    expect(
+      steps.filter((s) => s.maneuver?.type === "roundabout").map((s) => s.drivingSide),
+    ).toEqual(["right", "right"]);
+  });
+
+  it("leaves the side unknown where Valhalla names no country", () => {
+    const leg = border.legs[0] as Trip["legs"][number];
+    const withoutAdmins = {
+      ...border,
+      legs: [{ ...leg, summary: { length: leg.summary.length, time: leg.summary.time } }],
+    } as Trip;
+    expect(
+      transformTrip(withoutAdmins, "driving").steps.every((s) => s.drivingSide === undefined),
+    ).toBe(true);
+  });
+
+  it("reads one country without crossings for the whole leg", () => {
+    const leg = border.legs[0] as Trip["legs"][number];
+    const japan = {
+      ...border,
+      legs: [
+        {
+          ...leg,
+          summary: { ...leg.summary, admins: [{ country_code: "jp" }], admin_crossings: [] },
+        },
+      ],
+    } as Trip;
+    expect(transformTrip(japan, "driving").steps.every((s) => s.drivingSide === "left")).toBe(true);
+  });
+});
+
+describe("drivingSideIn", () => {
+  it.each([
+    ["GB", "left"],
+    ["IE", "left"],
+    ["JP", "left"],
+    ["AU", "left"],
+    ["IN", "left"],
+    ["ZA", "left"],
+    ["VI", "left"],
+    ["DE", "right"],
+    ["US", "right"],
+    ["GI", "right"],
+    ["LA", "right"],
+  ] as const)("%s drives on the %s", (country, side) => {
+    expect(drivingSideIn(country)).toBe(side);
+  });
+
+  it("knows nothing without a country", () => {
+    expect(drivingSideIn(undefined)).toBeUndefined();
+    expect(drivingSideIn("")).toBeUndefined();
+  });
+});
+
 describe("buildCostingOptions", () => {
   const defaultSpeedTypes = { speed_types: ["freeflow", "constrained", "predicted"] };
 
@@ -487,6 +555,13 @@ describe("valhalla.service.getRoute exclusion body params", () => {
     expect(capturedBody).not.toHaveProperty("exclude_locations");
     expect(capturedBody).not.toHaveProperty("exclude_polygons");
     expect(capturedBody.turn_lanes).toBe(true);
+  });
+
+  it("asks for the countries the route passes, for the side traffic keeps to", async () => {
+    await valhalla.service.getRoute(WPS, "driving", {});
+    expect(capturedBody.admin_crossings).toBe(true);
+    await valhalla.service.optimizeRoute?.(WPS, "driving", {});
+    expect(capturedBody.admin_crossings).toBe(true);
   });
 
   it("credits the self-hosted source unless Stadia Maps served the route", async () => {
