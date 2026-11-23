@@ -1,4 +1,5 @@
 import type { CatalogPinSet } from "@openmapx/core/catalog-pins/types";
+import type { JOB_STAGE_NAMES, JOB_STAGE_STATUSES } from "@openmapx/db-schema";
 import type { TransitousLock, TransitSource } from "@openmapx/transitous-core";
 
 import type { DatasetMetadata, StateStore } from "../../state.js";
@@ -16,28 +17,10 @@ export interface FeedDownloadFailure {
   message: string;
 }
 
-export type StageStatus = "ok" | "skipped" | "error" | "partial";
+/** The database refuses a stage row outside these sets. */
+export type StageStatus = (typeof JOB_STAGE_STATUSES)[number];
 
-export type StageName =
-  | "prepare"
-  | "filter"
-  | "preflight"
-  | "compile-gbfs"
-  | "fetch"
-  | "fetch-operator"
-  | "validate"
-  | "gen-motis-config"
-  | "assemble-staging"
-  | "stage-proxy"
-  | "motis-import"
-  | "motis-health"
-  | "gen-full-config"
-  | "gen-attribution"
-  | "promote"
-  | "gc"
-  // Mirror mode (TRANSIT_SOURCE=mirror): replaces `fetch` — downloads
-  // Transitous's already-cleaned GTFS archives instead of running fetch.py.
-  | "mirror";
+export type StageName = (typeof JOB_STAGE_NAMES)[number];
 
 export interface StageResult {
   stage: StageName;

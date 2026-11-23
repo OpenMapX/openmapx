@@ -1,6 +1,6 @@
 {
-  "id": "bb7fc65f-2111-4389-ae4b-ab0e6348ab15",
-  "prevId": "6bd6f705-4b5b-4f00-8001-461c1a1b3687",
+  "id": "b94cf7d6-0d17-41b7-be25-bbbe9fda4ecb",
+  "prevId": "36c84e5d-34f3-41f4-9838-9a4070b39ef3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2098,7 +2098,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "job_stages_stage_check": {
+          "name": "job_stages_stage_check",
+          "value": "\"data_manager\".\"job_stages\".\"stage\" IN ('prepare','filter','preflight','compile-gbfs','fetch','fetch-operator','validate','gen-motis-config','assemble-staging','stage-proxy','motis-import','motis-health','gen-full-config','gen-attribution','promote','gc','mirror')"
+        },
+        "job_stages_status_check": {
+          "name": "job_stages_status_check",
+          "value": "\"data_manager\".\"job_stages\".\"status\" IN ('ok','skipped','error','partial')"
+        }
+      },
       "isRLSEnabled": false
     },
     "data_manager.jobs": {
@@ -2579,7 +2588,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "offline_package_jobs_status_check": {
+          "name": "offline_package_jobs_status_check",
+          "value": "\"data_manager\".\"offline_package_jobs\".\"status\" IN ('preparing','ready-to-download','failed','expired')"
+        }
+      },
       "isRLSEnabled": false
     },
     "data_manager.overture_release": {

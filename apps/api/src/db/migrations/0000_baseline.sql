@@ -228,7 +228,9 @@ CREATE TABLE "data_manager"."job_stages" (
 	"duration_ms" integer NOT NULL,
 	"message" text,
 	"error" jsonb,
-	"artifacts" jsonb
+	"artifacts" jsonb,
+	CONSTRAINT "job_stages_stage_check" CHECK ("data_manager"."job_stages"."stage" IN ('prepare','filter','preflight','compile-gbfs','fetch','fetch-operator','validate','gen-motis-config','assemble-staging','stage-proxy','motis-import','motis-health','gen-full-config','gen-attribution','promote','gc','mirror')),
+	CONSTRAINT "job_stages_status_check" CHECK ("data_manager"."job_stages"."status" IN ('ok','skipped','error','partial'))
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."jobs" (
@@ -288,7 +290,8 @@ CREATE TABLE "data_manager"."offline_package_jobs" (
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL,
 	"lease_owner" text,
-	"lease_expires_at" timestamp with time zone
+	"lease_expires_at" timestamp with time zone,
+	CONSTRAINT "offline_package_jobs_status_check" CHECK ("data_manager"."offline_package_jobs"."status" IN ('preparing','ready-to-download','failed','expired'))
 );
 --> statement-breakpoint
 CREATE TABLE "data_manager"."overture_release" (

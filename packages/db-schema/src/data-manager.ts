@@ -1,5 +1,6 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   check,
   foreignKey,
@@ -137,14 +138,43 @@ export const configurationFence = dataManager.table(
   ],
 );
 
+/** The stages of a transit run that record a row, in pipeline order. */
+export const JOB_STAGE_NAMES = [
+  "prepare",
+  "filter",
+  "preflight",
+  "compile-gbfs",
+  "fetch",
+  "fetch-operator",
+  "validate",
+  "gen-motis-config",
+  "assemble-staging",
+  "stage-proxy",
+  "motis-import",
+  "motis-health",
+  "gen-full-config",
+  "gen-attribution",
+  "promote",
+  "gc",
+  // Mirror mode (TRANSIT_SOURCE=mirror) runs this instead of `fetch`: it
+  // downloads the GTFS archives Transitous already cleaned.
+  "mirror",
+] as const;
+/** How a recorded stage ended. */
+export const JOB_STAGE_STATUSES = ["ok", "skipped", "error", "partial"] as const;
+
+/** `column IN (…)` over a closed set of values written as SQL literals. */
+function inValues(column: AnyPgColumn, values: readonly string[]): SQL {
+  if (values.some((value) => !/^[a-z][a-z-]*$/.test(value))) throw Error("Unsafe value literal");
+  return sql`${column} IN (${sql.raw(values.map((value) => `'${value}'`).join(","))})`;
+}
+
 export const jobStages = dataManager.table(
   "job_stages",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     jobId: uuid("job_id").notNull(),
-    /** StageName */
     stage: text("stage").notNull(),
-    /** StageStatus */
     status: text("status").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
@@ -162,6 +192,8 @@ export const jobStages = dataManager.table(
       foreignColumns: [jobs.id],
     }).onDelete("cascade"),
     index("job_stages_job_id_idx").on(table.jobId),
+    check("job_stages_stage_check", inValues(table.stage, JOB_STAGE_NAMES)),
+    check("job_stages_status_check", inValues(table.status, JOB_STAGE_STATUSES)),
   ],
 );
 
@@ -242,6 +274,10 @@ export const offlinePackageJobs = dataManager.table(
       .where(sql`${table.status} IN ('preparing', 'ready-to-download')`),
     index("offline_package_jobs_status_created_at_idx").on(table.status, table.createdAt),
     index("offline_package_jobs_package_id_idx").on(table.packageId),
+    check(
+      "offline_package_jobs_status_check",
+      sql`${table.status} IN ('preparing','ready-to-download','failed','expired')`,
+    ),
   ],
 );
 

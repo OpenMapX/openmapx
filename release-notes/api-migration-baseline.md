@@ -46,7 +46,8 @@ them at once.
 The database checks the fixed value sets of OpenMapX's own tables, such as job
 and health statuses, share-link targets and modes, extension trust and source
 kinds, vehicle kinds and powertrains, parking sources, timeline connection
-states and account actions. It refuses a share link whose shape the app never
+states, account actions, and data-manager's transit run stages and offline
+package states. It refuses a share link whose shape the app never
 writes (a route share that is live or names a target, a list share without its
 list, a snapshot without its payload or a live share with one) and a second
 passphrase unlock for the same review key.
