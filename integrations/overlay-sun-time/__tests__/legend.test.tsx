@@ -77,7 +77,11 @@ describe("SunTimeLegend", () => {
 
   it("pins the instant when the time slider moves", () => {
     render(<SunTimeLegend />);
-    fireEvent.change(screen.getByLabelText("sunTime.time"), { target: { value: "540" } });
+    const slider = screen.getByLabelText("sunTime.time") as HTMLInputElement;
+    // Two hours from the minute it shows now: a value equal to the current one
+    // fires no change, so a fixed value fails once a day.
+    const moved = (Number(slider.value) + 120) % 1440;
+    fireEvent.change(slider, { target: { value: String(moved) } });
     expect(useSunTimeStore.getState().timeMs).not.toBeNull();
   });
 
