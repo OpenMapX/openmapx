@@ -81,6 +81,13 @@ no standalone install recorded a source, and entries no longer carry
 `adoptable`. Assisted privacy requests no longer accept the `username` subject
 locator type; OpenMapX accounts have no usernames.
 
+The constraints and indexes of OpenMapX's own tables follow PostgreSQL's naming
+convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,
+`<table>_<column>_fkey` and `<table>_<what>_check`. A partial unique index
+names the rows it covers, such as `mangrove_keypair_wrap_user_id_passphrase_key`.
+No name exceeds PostgreSQL's 63-character limit, so none is truncated. The
+tables of Better Auth keep the names it generates.
+
 ## Who is affected
 
 Every database created by an earlier development build, including local

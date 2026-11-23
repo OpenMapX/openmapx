@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const installedIntegration = pgTable(
@@ -12,7 +12,7 @@ export const installedIntegration = pgTable(
     sourceType: text("source_type").notNull().default("registry"),
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-    installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
+    installedBy: text("installed_by"),
     // The owning extension, if any, is the installed_extension_component row
     // of kind "integration" for this id.
     // The operations agent's install transaction this row records. Writing it
@@ -22,6 +22,11 @@ export const installedIntegration = pgTable(
     lastTransactionId: text("last_transaction_id"),
   },
   (table) => [
+    foreignKey({
+      name: "installed_integration_installed_by_fkey",
+      columns: [table.installedBy],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
     index("installed_integration_installed_by_idx").on(table.installedBy),
     check(
       "installed_integration_source_type_check",

@@ -1,14 +1,21 @@
 /** Private encrypted transit credential proposals. Never exposed as admin-job payloads. */
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 export const transitCredentialPreview = pgTable(
   "transit_credential_preview",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    actorId: text("actor_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").notNull(),
     operationKey: text("operation_key").notNull(),
     intentFingerprint: text("intent_fingerprint").notNull(),
     ciphertext: text("ciphertext").notNull(),
@@ -24,10 +31,18 @@ export const transitCredentialPreview = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("transit_credential_preview_actor_key_uq").on(t.actorId, t.operationKey),
-    index("transit_credential_preview_expiry_idx").on(t.expiresAt),
+    foreignKey({
+      name: "transit_credential_preview_actor_id_fkey",
+      columns: [t.actorId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    uniqueIndex("transit_credential_preview_actor_id_operation_key_key").on(
+      t.actorId,
+      t.operationKey,
+    ),
+    index("transit_credential_preview_expires_at_idx").on(t.expiresAt),
     check(
-      "transit_credential_preview_bounds",
+      "transit_credential_preview_bounds_check",
       sql`octet_length(${t.ciphertext}) <= 1500000 and length(${t.intentFingerprint}) = 64 and length(${t.iv}) = 16 and length(${t.tag}) = 24`,
     ),
   ],

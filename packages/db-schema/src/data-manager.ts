@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -78,21 +79,21 @@ export const jobs = dataManager.table(
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
-    uniqueIndex("data_manager_jobs_execution_key_uq")
+    uniqueIndex("jobs_operation_key_key")
       .on(table.operationKey)
       .where(sql`${table.operationKey} IS NOT NULL`),
     // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
     // adds a space after each separator, so it stays under twice that.
     check(
-      "data_manager_jobs_execution_bounds",
+      "jobs_execution_bounds_check",
       sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 524288)`,
     ),
     check(
-      "data_manager_jobs_execution_row",
+      "jobs_execution_row_check",
       sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR (${table.finishedAt} IS NOT NULL AND ${table.executionAdmission} IS NOT NULL))`,
     ),
     check(
-      "data_manager_jobs_execution_shape",
+      "jobs_execution_shape_check",
       sql`${table.executionVersion} IS NULL OR coalesce((${table.executionVersion} = 2 AND ${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.admittedAt} >= 0 AND ${table.deadlineAt} > ${table.admittedAt} AND ${table.executionInput} IS NOT NULL AND ${table.executionState} IS NOT NULL), false)`,
     ),
   ],
@@ -111,8 +112,8 @@ export const configurationFence = dataManager.table(
   {
     maintenanceId: uuid("maintenance_id").primaryKey(),
     /** The agent's prepare execution id and operation key. */
-    fenceId: uuid("fence_id").notNull().unique(),
-    operationKey: text("operation_key").notNull().unique(),
+    fenceId: uuid("fence_id").notNull().unique("configuration_fence_fence_id_key"),
+    operationKey: text("operation_key").notNull().unique("configuration_fence_operation_key_key"),
     candidateId: uuid("candidate_id").notNull(),
     planDigest: text("plan_digest").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
@@ -126,11 +127,11 @@ export const configurationFence = dataManager.table(
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("configuration_fence_one_prepared_uq")
+    uniqueIndex("configuration_fence_state_prepared_key")
       .on(table.state)
       .where(sql`${table.state} = 'prepared'`),
     check(
-      "configuration_fence_state",
+      "configuration_fence_state_check",
       sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.state} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
@@ -140,9 +141,7 @@ export const jobStages = dataManager.table(
   "job_stages",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").notNull(),
     /** StageName */
     stage: text("stage").notNull(),
     /** StageStatus */
@@ -156,7 +155,14 @@ export const jobStages = dataManager.table(
   },
   // Deleting a job cascades here once per job row, and the job detail views
   // read stages by job. Without this index each of those is a full table scan.
-  (table) => [index("job_stages_job_id_idx").on(table.jobId)],
+  (table) => [
+    foreignKey({
+      name: "job_stages_job_id_fkey",
+      columns: [table.jobId],
+      foreignColumns: [jobs.id],
+    }).onDelete("cascade"),
+    index("job_stages_job_id_idx").on(table.jobId),
+  ],
 );
 
 export const feedState = dataManager.table("feed_state", {
@@ -201,10 +207,10 @@ export const offlinePackageJobs = dataManager.table(
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("offline_package_jobs_live_request_key_uq")
+    uniqueIndex("offline_package_jobs_request_key_live_key")
       .on(table.requestKey)
       .where(sql`${table.status} IN ('preparing', 'ready-to-download')`),
-    index("offline_package_jobs_status_created_idx").on(table.status, table.createdAt),
+    index("offline_package_jobs_status_created_at_idx").on(table.status, table.createdAt),
     index("offline_package_jobs_package_id_idx").on(table.packageId),
   ],
 );
@@ -213,14 +219,20 @@ export const offlinePackageJobs = dataManager.table(
 export const offlinePackageJobOwners = dataManager.table(
   "offline_package_job_owners",
   {
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => offlinePackageJobs.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").notNull(),
     principal: text("principal").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.jobId, table.principal] }),
+    primaryKey({
+      name: "offline_package_job_owners_pkey",
+      columns: [table.jobId, table.principal],
+    }),
+    foreignKey({
+      name: "offline_package_job_owners_job_id_fkey",
+      columns: [table.jobId],
+      foreignColumns: [offlinePackageJobs.id],
+    }).onDelete("cascade"),
     index("offline_package_job_owners_principal_idx").on(table.principal),
   ],
 );
@@ -235,8 +247,14 @@ export const offlinePackageArtifactReferences = dataManager.table(
     retainedAt: timestamp("retained_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.principal, table.packageId] }),
-    index("offline_package_artifact_refs_package_idx").on(table.packageId),
-    index("offline_package_artifact_refs_principal_age_idx").on(table.principal, table.retainedAt),
+    primaryKey({
+      name: "offline_package_artifact_references_pkey",
+      columns: [table.principal, table.packageId],
+    }),
+    index("offline_package_artifact_references_package_id_idx").on(table.packageId),
+    index("offline_package_artifact_references_principal_retained_at_idx").on(
+      table.principal,
+      table.retainedAt,
+    ),
   ],
 );

@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { foreignKey, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -21,10 +21,15 @@ export const serviceSecret = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
-    updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by"),
   },
   (table) => [
     primaryKey({ name: "service_secret_pkey", columns: [table.serviceId, table.key] }),
+    foreignKey({
+      name: "service_secret_updated_by_fkey",
+      columns: [table.updatedBy],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
     index("service_secret_updated_by_idx").on(table.updatedBy),
   ],
 );

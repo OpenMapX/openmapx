@@ -9,7 +9,9 @@ export const capabilityBinding = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.integrationId, t.capability] })],
+  (t) => [
+    primaryKey({ name: "capability_binding_pkey", columns: [t.integrationId, t.capability] }),
+  ],
 );
 
 export type CapabilityBindingRow = typeof capabilityBinding.$inferSelect;

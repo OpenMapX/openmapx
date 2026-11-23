@@ -221,7 +221,7 @@ describe.skipIf(
       await expect(
         sql`INSERT INTO data_manager.jobs(id,kind,status,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
           VALUES(${rowless},'download-fonts','queued',2,${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},1,${deadline},'{}','{}')`,
-      ).rejects.toThrow(/data_manager_jobs_execution_row/);
+      ).rejects.toThrow(/jobs_execution_row_check/);
     } finally {
       await dm.runtime.close();
       await foreign.runtime.close();

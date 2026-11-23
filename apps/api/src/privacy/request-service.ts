@@ -11,7 +11,12 @@ import {
 import { defaultLocale, resolveLocale } from "@openmapx/i18n";
 import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
-import type { PrivacyNotificationTemplate, RequestState } from "../db/privacy-schema.js";
+import {
+  ACTIVE_REQUEST_KIND_KEY,
+  type PrivacyNotificationTemplate,
+  REQUEST_EVENT_IDEMPOTENCY_KEY,
+  type RequestState,
+} from "../db/privacy-schema.js";
 import {
   dataSubjectRequest,
   dataSubjectRequestEvent,
@@ -359,7 +364,7 @@ export class PrivacyRequestService {
     } catch (error: unknown) {
       // The partial unique index decides a race between two first requests:
       // the loser returns the winner's active case.
-      if (parsed.userId && isUniqueViolation(error, "data_subject_request_active_user_kind_idx")) {
+      if (parsed.userId && isUniqueViolation(error, ACTIVE_REQUEST_KIND_KEY)) {
         const raced = await this.activeRequestFor(parsed.userId, parsed.kind);
         if (raced) return raced;
         throw new PrivacyRequestError("REQUEST_ALREADY_ACTIVE", 409);
@@ -535,7 +540,7 @@ export class PrivacyRequestService {
         return work(tx, current);
       });
     } catch (error) {
-      if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx"))
+      if (isUniqueViolation(error, REQUEST_EVENT_IDEMPOTENCY_KEY))
         return this.getById(input.requestId);
       throw error;
     }

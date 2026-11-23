@@ -59,15 +59,21 @@ export const PRIVACY_NOTIFICATION_STATES = [
 ] as const;
 export type PrivacyNotificationState = (typeof PRIVACY_NOTIFICATION_STATES)[number];
 
+/** One open case per account and kind; registering a second raises this index. */
+export const ACTIVE_REQUEST_KIND_KEY = "data_subject_request_user_id_kind_active_key";
+/** One event per case and mutation key; replaying a mutation raises this index. */
+export const REQUEST_EVENT_IDEMPOTENCY_KEY =
+  "data_subject_request_event_request_id_idempotency_key_key";
+
 export const dataSubjectRequest = pgTable(
   "data_subject_request",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     kind: text("kind").$type<RequestKind>().notNull(),
     channel: text("channel").$type<RequestChannel>().notNull(),
-    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
-    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
-    actorSessionId: text("actor_session_id").references(() => session.id, { onDelete: "set null" }),
+    userId: text("user_id"),
+    actorUserId: text("actor_user_id"),
+    actorSessionId: text("actor_session_id"),
     /** Assisted requests only: the locator value, encrypted with OPENMAPX_SECRETS_KEY. */
     encryptedLocator: text("encrypted_locator"),
     locatorType: text("locator_type").notNull().default("user_id"),
@@ -91,6 +97,21 @@ export const dataSubjectRequest = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "data_subject_request_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "data_subject_request_actor_user_id_fkey",
+      columns: [table.actorUserId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "data_subject_request_actor_session_id_fkey",
+      columns: [table.actorSessionId],
+      foreignColumns: [session.id],
+    }).onDelete("set null"),
     check(
       "data_subject_request_kind_check",
       sql`${table.kind} in ('access', 'portability', 'access_and_portability')`,
@@ -116,11 +137,11 @@ export const dataSubjectRequest = pgTable(
       "data_subject_request_identity_check",
       sql`(${table.identityMethod} is null and ${table.identityVerifiedAt} is null) or (${table.identityMethod} in ('account_session', 'manual') and ${table.identityVerifiedAt} is not null)`,
     ),
-    index("data_subject_request_user_state_idx").on(table.userId, table.state),
-    index("data_subject_request_due_idx").on(table.state, table.dueAt),
+    index("data_subject_request_user_id_state_idx").on(table.userId, table.state),
+    index("data_subject_request_state_due_at_idx").on(table.state, table.dueAt),
     index("data_subject_request_actor_user_id_idx").on(table.actorUserId),
     index("data_subject_request_actor_session_id_idx").on(table.actorSessionId),
-    uniqueIndex("data_subject_request_active_user_kind_idx")
+    uniqueIndex(ACTIVE_REQUEST_KIND_KEY)
       .on(table.userId, table.kind)
       .where(
         sql`${table.userId} is not null and ${table.state} in ('open', 'in_progress', 'waiting_on_requester')`,
@@ -132,9 +153,7 @@ export const dataSubjectRequestEvent = pgTable(
   "data_subject_request_event",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
     eventType: text("event_type").notNull(),
     actorKind: text("actor_kind").notNull(),
     /** The acting account; null for system and loopback actors and after the
@@ -148,14 +167,22 @@ export const dataSubjectRequestEvent = pgTable(
   },
   (table) => [
     foreignKey({
+      name: "data_subject_request_event_request_id_fkey",
+      columns: [table.requestId],
+      foreignColumns: [dataSubjectRequest.id],
+    }).onDelete("cascade"),
+    foreignKey({
       name: "data_subject_request_event_actor_user_id_fkey",
       columns: [table.actorUserId],
       foreignColumns: [user.id],
     }).onDelete("set null"),
     check("data_subject_request_event_payload_version_check", sql`${table.payloadVersion} > 0`),
-    index("data_subject_request_event_request_idx").on(table.requestId, table.createdAt),
+    index("data_subject_request_event_request_id_created_at_idx").on(
+      table.requestId,
+      table.createdAt,
+    ),
     index("data_subject_request_event_actor_user_id_idx").on(table.actorUserId),
-    uniqueIndex("data_subject_request_event_idempotency_idx")
+    uniqueIndex(REQUEST_EVENT_IDEMPOTENCY_KEY)
       .on(table.requestId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),
   ],
@@ -167,9 +194,7 @@ export const dataSubjectRequestTask = pgTable(
   "data_subject_request_task",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
     registrationId: text("registration_id").notNull(),
     source: text("source").notNull(),
     status: text("status").$type<TaskState>().notNull().default("open"),
@@ -180,7 +205,12 @@ export const dataSubjectRequestTask = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("data_subject_request_task_request_registration_idx").on(
+    foreignKey({
+      name: "data_subject_request_task_request_id_fkey",
+      columns: [table.requestId],
+      foreignColumns: [dataSubjectRequest.id],
+    }).onDelete("cascade"),
+    uniqueIndex("data_subject_request_task_request_id_registration_id_key").on(
       table.requestId,
       table.registrationId,
     ),
@@ -193,9 +223,7 @@ export const dataSubjectRequestPreservation = pgTable(
   "data_subject_request_preservation",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
     registrationId: text("registration_id").notNull(),
     sourceCutoffAt: timestamp("source_cutoff_at", { withTimezone: true }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
@@ -205,11 +233,16 @@ export const dataSubjectRequestPreservation = pgTable(
     outcomeCode: text("outcome_code"),
   },
   (table) => [
-    uniqueIndex("data_subject_request_preservation_request_registration_idx").on(
+    foreignKey({
+      name: "data_subject_request_preservation_request_id_fkey",
+      columns: [table.requestId],
+      foreignColumns: [dataSubjectRequest.id],
+    }).onDelete("cascade"),
+    uniqueIndex("data_subject_request_preservation_request_registration_key").on(
       table.requestId,
       table.registrationId,
     ),
-    index("data_subject_request_preservation_registration_status_idx").on(
+    index("data_subject_request_preservation_registration_id_status_idx").on(
       table.registrationId,
       table.status,
     ),
@@ -227,10 +260,8 @@ export const dataSubjectRequestNotification = pgTable(
   "data_subject_request_notification",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    recipientUserId: text("recipient_user_id").references(() => user.id, { onDelete: "set null" }),
+    requestId: uuid("request_id").notNull(),
+    recipientUserId: text("recipient_user_id"),
     template: text("template").$type<PrivacyNotificationTemplate>().notNull(),
     channel: text("channel").$type<PrivacyNotificationChannel>().notNull().default("email"),
     locale: text("locale").notNull().default("en"),
@@ -248,18 +279,32 @@ export const dataSubjectRequestNotification = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "data_subject_request_notification_request_id_fkey",
+      columns: [table.requestId],
+      foreignColumns: [dataSubjectRequest.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "data_subject_request_notification_recipient_user_id_fkey",
+      columns: [table.recipientUserId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
+    // One delivery of a template per case, channel, recipient and occurrence.
     // Nulls stay distinct: deleting several alerted administrators nulls each
     // of their recipient ids, and those alerts must not collide. Every insert
     // names a live recipient, so a null never needs deduplicating.
-    uniqueIndex("data_subject_request_notification_event_idx").on(
+    uniqueIndex("data_subject_request_notification_delivery_key").on(
       table.requestId,
       table.template,
       table.channel,
       table.recipientUserId,
       table.occurrenceKey,
     ),
-    index("data_subject_request_notification_state_idx").on(table.state, table.nextAttemptAt),
-    index("data_subject_request_notification_recipient_idx").on(
+    index("data_subject_request_notification_state_next_attempt_at_idx").on(
+      table.state,
+      table.nextAttemptAt,
+    ),
+    index("data_subject_request_notification_recipient_created_at_idx").on(
       table.recipientUserId,
       table.createdAt,
     ),

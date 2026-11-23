@@ -16,7 +16,7 @@ export const healthHistory = pgTable(
       "health_history_status_check",
       sql`${table.status} in ('healthy','degraded','unhealthy','error')`,
     ),
-    index("healthHistory_serviceId_checkedAt_idx").on(table.serviceId, table.checkedAt),
+    index("health_history_service_id_checked_at_idx").on(table.serviceId, table.checkedAt),
     // Retention prunes by age across every service.
     index("health_history_checked_at_idx").on(table.checkedAt),
   ],

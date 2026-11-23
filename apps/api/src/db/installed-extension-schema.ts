@@ -2,6 +2,7 @@ import type { StandaloneIntegrationProvenance } from "@openmapx/core/ops";
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -35,9 +36,14 @@ export const installedExtension = pgTable(
     manifest: jsonb("manifest"),
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-    installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
+    installedBy: text("installed_by"),
   },
   (table) => [
+    foreignKey({
+      name: "installed_extension_installed_by_fkey",
+      columns: [table.installedBy],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
     index("installed_extension_installed_by_idx").on(table.installedBy),
     check(
       "installed_extension_source_trust_check",
@@ -60,14 +66,20 @@ export const installedExtension = pgTable(
 export const installedExtensionComponent = pgTable(
   "installed_extension_component",
   {
-    extensionId: text("extension_id")
-      .notNull()
-      .references(() => installedExtension.id, { onDelete: "cascade" }),
+    extensionId: text("extension_id").notNull(),
     kind: text("kind").notNull(), // "integration" | "service"
     componentId: text("component_id").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.extensionId, table.kind, table.componentId] }),
+    primaryKey({
+      name: "installed_extension_component_pkey",
+      columns: [table.extensionId, table.kind, table.componentId],
+    }),
+    foreignKey({
+      name: "installed_extension_component_extension_id_fkey",
+      columns: [table.extensionId],
+      foreignColumns: [installedExtension.id],
+    }).onDelete("cascade"),
     check(
       "installed_extension_component_kind_check",
       sql`${table.kind} in ('integration','service')`,
@@ -75,7 +87,7 @@ export const installedExtensionComponent = pgTable(
     // One installed component belongs to exactly one extension. Without this a
     // second extension could claim a component another extension installed and
     // then remove or reconfigure it.
-    uniqueIndex("installedExtensionComponent_kind_componentId_key").on(
+    uniqueIndex("installed_extension_component_kind_component_id_key").on(
       table.kind,
       table.componentId,
     ),

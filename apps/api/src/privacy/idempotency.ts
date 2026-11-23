@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
+import { REQUEST_EVENT_IDEMPOTENCY_KEY } from "../db/privacy-schema.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
 import { isUniqueViolation } from "../db/unique-violation.js";
 import { actorUserIdOrNull } from "../utils/actor.js";
@@ -123,7 +124,7 @@ export async function recordIdempotentEvent(
       createdAt: new Date(),
     });
   } catch (error) {
-    if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx")) {
+    if (isUniqueViolation(error, REQUEST_EVENT_IDEMPOTENCY_KEY)) {
       await findIdempotentEvent(database, {
         requestId: input.requestId,
         idempotencyKey: input.idempotencyKey,

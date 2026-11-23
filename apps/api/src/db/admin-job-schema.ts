@@ -2,6 +2,7 @@ import { type SQL, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -15,7 +16,7 @@ import {
 import { user } from "./auth-schema";
 
 /** Admission is arbitrated by this index; it must stay in step with the system routes. */
-export const ACTIVE_SYSTEM_MAINTENANCE_INDEX = "adminJob_one_active_system_maintenance_uq";
+export const ACTIVE_SYSTEM_MAINTENANCE_INDEX = "admin_job_active_system_maintenance_key";
 
 /** The statuses of a job the runner still owns. */
 export const ACTIVE_ADMIN_JOB_STATUSES = ["queued", "running", "cancel_pending"] as const;
@@ -55,12 +56,17 @@ export const adminJob = pgTable(
     logEvents: integer("log_events").notNull().default(0),
     /** UTF-8 bytes of those lines. */
     logBytes: integer("log_bytes").notNull().default(0),
-    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (table) => [
+    foreignKey({
+      name: "admin_job_created_by_fkey",
+      columns: [table.createdBy],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
     check(
       "admin_job_status_check",
       sql`${table.status} in ('queued','running','cancel_pending','success','failed','canceled')`,
@@ -70,7 +76,7 @@ export const adminJob = pgTable(
       .on(table.type)
       .where(adminJobStatusIn(table.status, ACTIVE_ADMIN_JOB_STATUSES)),
     index("admin_job_created_by_idx").on(table.createdBy),
-    index("adminJob_createdAt_idx").on(table.createdAt),
+    index("admin_job_created_at_idx").on(table.createdAt),
     // The update-check, update-apply and diagnostics requests share one host
     // writer slot. The constant key makes the whole active set a single entry.
     uniqueIndex(ACTIVE_SYSTEM_MAINTENANCE_INDEX)
@@ -84,9 +90,7 @@ export const adminJob = pgTable(
 export const adminJobLog = pgTable(
   "admin_job_log",
   {
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => adminJob.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").notNull(),
     /** Position in the job's log, allocated from `admin_job.log_events`. */
     seq: integer("seq").notNull(),
     stream: text("stream").notNull().default("stdout"),
@@ -97,6 +101,11 @@ export const adminJobLog = pgTable(
   },
   (table) => [
     primaryKey({ name: "admin_job_log_pkey", columns: [table.jobId, table.seq] }),
+    foreignKey({
+      name: "admin_job_log_job_id_fkey",
+      columns: [table.jobId],
+      foreignColumns: [adminJob.id],
+    }).onDelete("cascade"),
     check("admin_job_log_stream_check", sql`${table.stream} in ('stdout','stderr')`),
     uniqueIndex("admin_job_log_job_id_source_event_id_key")
       .on(table.jobId, table.sourceEventId)

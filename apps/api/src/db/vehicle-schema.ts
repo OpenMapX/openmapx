@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -15,7 +16,7 @@ import {
 import { user } from "./auth-schema";
 
 /** Unique per account; a write that repeats a vehicle name raises this constraint. */
-export const PERSONAL_VEHICLE_NAME_UNIQUE = "personalVehicle_userId_name_unq";
+export const PERSONAL_VEHICLE_NAME_UNIQUE = "personal_vehicle_user_id_name_key";
 
 /**
  * A user's small garage. The EV spec is one JSON value rather than seven
@@ -26,9 +27,7 @@ export const personalVehicle = pgTable(
   "personal_vehicle",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     name: text("name").notNull(),
     kind: text("kind").$type<VehicleKind>().notNull(),
     powertrain: text("powertrain").$type<VehiclePowertrain>().notNull(),
@@ -43,6 +42,11 @@ export const personalVehicle = pgTable(
       .notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "personal_vehicle_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
     unique(PERSONAL_VEHICLE_NAME_UNIQUE).on(table.userId, table.name),
     check("personal_vehicle_kind_check", sql`${table.kind} in ('car','motorcycle','bicycle')`),
     check(
@@ -66,10 +70,8 @@ export const parkedLocation = pgTable(
   "parked_location",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    vehicleId: uuid("vehicle_id").references(() => personalVehicle.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    vehicleId: uuid("vehicle_id"),
     lat: doublePrecision("lat").notNull(),
     lng: doublePrecision("lng").notNull(),
     address: text("address"),
@@ -84,7 +86,17 @@ export const parkedLocation = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("parkedLocation_userId_vehicleId_unq")
+    foreignKey({
+      name: "parked_location_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "parked_location_vehicle_id_fkey",
+      columns: [table.vehicleId],
+      foreignColumns: [personalVehicle.id],
+    }).onDelete("cascade"),
+    unique("parked_location_user_id_vehicle_id_key")
       .on(table.userId, table.vehicleId)
       .nullsNotDistinct(),
     index("parked_location_vehicle_id_idx").on(table.vehicleId),

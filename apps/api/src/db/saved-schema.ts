@@ -3,6 +3,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -15,15 +16,13 @@ import {
 import { user } from "./auth-schema";
 
 /** Unique per account; a write that repeats a list name raises this constraint. */
-export const SAVED_LIST_NAME_UNIQUE = "savedList_userId_name_unq";
+export const SAVED_LIST_NAME_UNIQUE = "saved_list_user_id_name_key";
 
 export const savedList = pgTable(
   "saved_list",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     name: text("name").notNull(),
     icon: text("icon"),
     isPrivate: boolean("is_private").default(true).notNull(),
@@ -34,16 +33,21 @@ export const savedList = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name)],
+  (table) => [
+    foreignKey({
+      name: "saved_list_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name),
+  ],
 );
 
 export const savedPlace = pgTable(
   "saved_place",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    listId: uuid("list_id")
-      .notNull()
-      .references(() => savedList.id, { onDelete: "cascade" }),
+    listId: uuid("list_id").notNull(),
     name: text("name").notNull(),
     address: text("address"),
     lat: doublePrecision("lat").notNull(),
@@ -54,16 +58,21 @@ export const savedPlace = pgTable(
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("savedPlace_listId_idx").on(table.listId)],
+  (table) => [
+    foreignKey({
+      name: "saved_place_list_id_fkey",
+      columns: [table.listId],
+      foreignColumns: [savedList.id],
+    }).onDelete("cascade"),
+    index("saved_place_list_id_idx").on(table.listId),
+  ],
 );
 
 export const labeledPlace = pgTable(
   "labeled_place",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     label: text("label").notNull(),
     icon: text("icon"),
     name: text("name").notNull(),
@@ -73,7 +82,14 @@ export const labeledPlace = pgTable(
     placeId: text("place_id"),
     fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
   },
-  (table) => [unique("labeledPlace_userId_label_unq").on(table.userId, table.label)],
+  (table) => [
+    foreignKey({
+      name: "labeled_place_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    unique("labeled_place_user_id_label_key").on(table.userId, table.label),
+  ],
 );
 
 export const savedListRelations = relations(savedList, ({ one, many }) => ({

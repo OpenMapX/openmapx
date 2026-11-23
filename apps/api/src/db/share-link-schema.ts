@@ -1,5 +1,14 @@
 import { relations, sql } from "drizzle-orm";
-import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -14,11 +23,9 @@ export const shareLink = pgTable(
   "share_link",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     /** SHA-256 of the raw token, base64url. Never the token itself. */
-    tokenHash: text("token_hash").notNull().unique(),
+    tokenHash: text("token_hash").notNull().unique("share_link_token_hash_key"),
     targetType: text("target_type").notNull(), // "list" | "route"
     /**
      * saved_list.id for list shares (both modes — owner-side grouping only;
@@ -40,7 +47,12 @@ export const shareLink = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (table) => [
-    index("shareLink_userId_idx").on(table.userId),
+    foreignKey({
+      name: "share_link_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    index("share_link_user_id_idx").on(table.userId),
     check("share_link_target_type_check", sql`${table.targetType} in ('list','route')`),
     check("share_link_mode_check", sql`${table.mode} in ('live','snapshot')`),
     // A route share is always a frozen snapshot with no target; a list share

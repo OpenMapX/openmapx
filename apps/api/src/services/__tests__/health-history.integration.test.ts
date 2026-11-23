@@ -92,7 +92,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       holder.db = drizzle(pg.sql, { schema: { healthHistory } });
       holder.sql = pg.sql;
       await pg.sql.unsafe(`CREATE TABLE health_history (id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,service_id text NOT NULL, status text NOT NULL, response_time integer, error text, checked_at timestamptz NOT NULL DEFAULT now());
-      CREATE INDEX "healthHistory_serviceId_checkedAt_idx" ON health_history(service_id, checked_at)`);
+      CREATE INDEX health_history_service_id_checked_at_idx ON health_history(service_id, checked_at)`);
       console.info("OWNED_HEALTH_FIXTURE", pg.container.getId());
       console.info("health fixture version", await pg.sql.unsafe("SELECT version() AS version"));
     }, 90000);

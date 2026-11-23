@@ -81,7 +81,7 @@ integration("the API migration baseline", () => {
           VALUES ('ext-b', 'integration', 'overlay-one')
         `,
       ).rejects.toMatchObject({
-        constraint_name: "installedExtensionComponent_kind_componentId_key",
+        constraint_name: "installed_extension_component_kind_component_id_key",
       });
     } finally {
       await sql.end({ timeout: 5 });

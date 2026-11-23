@@ -313,7 +313,7 @@ describe("POST /api/saved/lists", () => {
 
   it("answers 409 when the account already has a list with that name", async () => {
     dbMock.db.insert.mockImplementationOnce(() =>
-      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+      makeQueryChain(Promise.reject(uniqueViolation("saved_list_user_id_name_key"))),
     );
     const res = await app.inject({
       method: "POST",
@@ -344,7 +344,7 @@ describe("PATCH /api/saved/lists/:id name conflicts", () => {
   it("answers 409 when a rename collides with another list", async () => {
     dbMock.queueSelect([{ name: "Trip" }]);
     dbMock.db.update.mockImplementationOnce(() =>
-      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+      makeQueryChain(Promise.reject(uniqueViolation("saved_list_user_id_name_key"))),
     );
     const res = await app.inject({
       method: "PATCH",
@@ -362,7 +362,7 @@ describe("PATCH /api/saved/lists/:id name conflicts", () => {
         Promise.reject(
           Object.assign(new Error("deadlock"), {
             code: "40P01",
-            constraint_name: "savedList_userId_name_unq",
+            constraint_name: "saved_list_user_id_name_key",
           }),
         ),
       ),

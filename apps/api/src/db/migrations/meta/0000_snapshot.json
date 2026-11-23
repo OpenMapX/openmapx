@@ -1,5 +1,5 @@
 {
-  "id": "8ad043ca-7c90-4254-b09d-de728e5583be",
+  "id": "8109a4af-c7cf-479b-897a-60931ae74c95",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -203,8 +203,8 @@
         }
       },
       "indexes": {
-        "account_action_actor_time_idx": {
-          "name": "account_action_actor_time_idx",
+        "account_action_receipt_actor_id_created_at_idx": {
+          "name": "account_action_receipt_actor_id_created_at_idx",
           "columns": [
             {
               "expression": "actor_id",
@@ -224,8 +224,8 @@
           "method": "btree",
           "with": {}
         },
-        "account_action_target_time_idx": {
-          "name": "account_action_target_time_idx",
+        "account_action_receipt_target_id_created_at_idx": {
+          "name": "account_action_receipt_target_id_created_at_idx",
           "columns": [
             {
               "expression": "target_id",
@@ -247,8 +247,8 @@
         }
       },
       "foreignKeys": {
-        "account_action_receipt_actor_id_user_id_fk": {
-          "name": "account_action_receipt_actor_id_user_id_fk",
+        "account_action_receipt_actor_id_fkey": {
+          "name": "account_action_receipt_actor_id_fkey",
           "tableFrom": "account_action_receipt",
           "tableTo": "user",
           "columnsFrom": [
@@ -260,8 +260,8 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "account_action_receipt_target_id_user_id_fk": {
-          "name": "account_action_receipt_target_id_user_id_fk",
+        "account_action_receipt_target_id_fkey": {
+          "name": "account_action_receipt_target_id_fkey",
           "tableFrom": "account_action_receipt",
           "tableTo": "user",
           "columnsFrom": [
@@ -308,12 +308,12 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "account_admin_guard_singleton": {
-          "name": "account_admin_guard_singleton",
+        "account_admin_guard_singleton_check": {
+          "name": "account_admin_guard_singleton_check",
           "value": "\"account_admin_guard\".\"id\"=1"
         },
-        "account_admin_guard_nonnegative": {
-          "name": "account_admin_guard_nonnegative",
+        "account_admin_guard_active_count_check": {
+          "name": "account_admin_guard_active_count_check",
           "value": "\"account_admin_guard\".\"active_count\">=0"
         }
       },
@@ -400,8 +400,8 @@
         }
       },
       "indexes": {
-        "account_mail_action_kind_uq": {
-          "name": "account_mail_action_kind_uq",
+        "account_mail_outbox_request_key_kind_key": {
+          "name": "account_mail_outbox_request_key_kind_key",
           "columns": [
             {
               "expression": "request_key",
@@ -421,8 +421,8 @@
           "method": "btree",
           "with": {}
         },
-        "account_mail_pending_idx": {
-          "name": "account_mail_pending_idx",
+        "account_mail_outbox_state_created_at_idx": {
+          "name": "account_mail_outbox_state_created_at_idx",
           "columns": [
             {
               "expression": "state",
@@ -459,8 +459,8 @@
         }
       },
       "foreignKeys": {
-        "account_mail_outbox_request_key_account_action_receipt_key_fk": {
-          "name": "account_mail_outbox_request_key_account_action_receipt_key_fk",
+        "account_mail_outbox_request_key_fkey": {
+          "name": "account_mail_outbox_request_key_fkey",
           "tableFrom": "account_mail_outbox",
           "tableTo": "account_action_receipt",
           "columnsFrom": [
@@ -472,8 +472,8 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "account_mail_outbox_user_id_user_id_fk": {
-          "name": "account_mail_outbox_user_id_user_id_fk",
+        "account_mail_outbox_user_id_fkey": {
+          "name": "account_mail_outbox_user_id_fkey",
           "tableFrom": "account_mail_outbox",
           "tableTo": "user",
           "columnsFrom": [
@@ -490,12 +490,12 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "account_mail_state_check": {
-          "name": "account_mail_state_check",
+        "account_mail_outbox_state_check": {
+          "name": "account_mail_outbox_state_check",
           "value": "\"account_mail_outbox\".\"state\" in ('queued','sending','sent','failed','unknown')"
         },
-        "account_mail_kind_check": {
-          "name": "account_mail_kind_check",
+        "account_mail_outbox_kind_check": {
+          "name": "account_mail_outbox_kind_check",
           "value": "\"account_mail_outbox\".\"kind\" in ('verification','password_setup')"
         }
       },
@@ -613,8 +613,8 @@
         }
       },
       "indexes": {
-        "admin_reauth_actor_expiry_idx": {
-          "name": "admin_reauth_actor_expiry_idx",
+        "admin_action_reauthentication_actor_id_expires_at_idx": {
+          "name": "admin_action_reauthentication_actor_id_expires_at_idx",
           "columns": [
             {
               "expression": "actor_id",
@@ -649,8 +649,8 @@
           "method": "btree",
           "with": {}
         },
-        "admin_reauth_request_uq": {
-          "name": "admin_reauth_request_uq",
+        "admin_action_reauthentication_actor_id_request_key_key": {
+          "name": "admin_action_reauthentication_actor_id_request_key_key",
           "columns": [
             {
               "expression": "actor_id",
@@ -672,8 +672,8 @@
         }
       },
       "foreignKeys": {
-        "admin_action_reauthentication_actor_id_user_id_fk": {
-          "name": "admin_action_reauthentication_actor_id_user_id_fk",
+        "admin_action_reauthentication_actor_id_fkey": {
+          "name": "admin_action_reauthentication_actor_id_fkey",
           "tableFrom": "admin_action_reauthentication",
           "tableTo": "user",
           "columnsFrom": [
@@ -690,12 +690,12 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "admin_reauth_state_check": {
-          "name": "admin_reauth_state_check",
+        "admin_action_reauthentication_state_check": {
+          "name": "admin_action_reauthentication_state_check",
           "value": "\"admin_action_reauthentication\".\"state\" in ('pending','completed','consumed','superseded','expired')"
         },
-        "admin_reauth_purpose_check": {
-          "name": "admin_reauth_purpose_check",
+        "admin_action_reauthentication_purpose_check": {
+          "name": "admin_action_reauthentication_purpose_check",
           "value": "\"admin_action_reauthentication\".\"purpose\" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')"
         },
         "admin_action_reauthentication_completed_method_check": {
@@ -773,8 +773,8 @@
         }
       },
       "indexes": {
-        "audit_actorId_idx": {
-          "name": "audit_actorId_idx",
+        "admin_audit_log_actor_id_idx": {
+          "name": "admin_audit_log_actor_id_idx",
           "columns": [
             {
               "expression": "actor_id",
@@ -788,8 +788,8 @@
           "method": "btree",
           "with": {}
         },
-        "audit_action_idx": {
-          "name": "audit_action_idx",
+        "admin_audit_log_action_idx": {
+          "name": "admin_audit_log_action_idx",
           "columns": [
             {
               "expression": "action",
@@ -803,8 +803,8 @@
           "method": "btree",
           "with": {}
         },
-        "audit_createdAt_idx": {
-          "name": "audit_createdAt_idx",
+        "admin_audit_log_created_at_idx": {
+          "name": "admin_audit_log_created_at_idx",
           "columns": [
             {
               "expression": "created_at",
@@ -856,8 +856,8 @@
         }
       },
       "foreignKeys": {
-        "admin_audit_log_actor_id_user_id_fk": {
-          "name": "admin_audit_log_actor_id_user_id_fk",
+        "admin_audit_log_actor_id_fkey": {
+          "name": "admin_audit_log_actor_id_fkey",
           "tableFrom": "admin_audit_log",
           "tableTo": "user",
           "columnsFrom": [
@@ -1016,8 +1016,8 @@
           "method": "btree",
           "with": {}
         },
-        "adminJob_createdAt_idx": {
-          "name": "adminJob_createdAt_idx",
+        "admin_job_created_at_idx": {
+          "name": "admin_job_created_at_idx",
           "columns": [
             {
               "expression": "created_at",
@@ -1031,8 +1031,8 @@
           "method": "btree",
           "with": {}
         },
-        "adminJob_one_active_system_maintenance_uq": {
-          "name": "adminJob_one_active_system_maintenance_uq",
+        "admin_job_active_system_maintenance_key": {
+          "name": "admin_job_active_system_maintenance_key",
           "columns": [
             {
               "expression": "(true)",
@@ -1049,8 +1049,8 @@
         }
       },
       "foreignKeys": {
-        "admin_job_created_by_user_id_fk": {
-          "name": "admin_job_created_by_user_id_fk",
+        "admin_job_created_by_fkey": {
+          "name": "admin_job_created_by_fkey",
           "tableFrom": "admin_job",
           "tableTo": "user",
           "columnsFrom": [
@@ -1142,8 +1142,8 @@
         }
       },
       "foreignKeys": {
-        "admin_job_log_job_id_admin_job_id_fk": {
-          "name": "admin_job_log_job_id_admin_job_id_fk",
+        "admin_job_log_job_id_fkey": {
+          "name": "admin_job_log_job_id_fkey",
           "tableFrom": "admin_job_log",
           "tableTo": "admin_job",
           "columnsFrom": [
@@ -1306,8 +1306,8 @@
         }
       },
       "foreignKeys": {
-        "auth_policy_application_actor_id_user_id_fk": {
-          "name": "auth_policy_application_actor_id_user_id_fk",
+        "auth_policy_application_actor_id_fkey": {
+          "name": "auth_policy_application_actor_id_fkey",
           "tableFrom": "auth_policy_application",
           "tableTo": "user",
           "columnsFrom": [
@@ -1380,8 +1380,8 @@
         }
       },
       "foreignKeys": {
-        "auth_policy_state_activated_by_user_id_fk": {
-          "name": "auth_policy_state_activated_by_user_id_fk",
+        "auth_policy_state_activated_by_fkey": {
+          "name": "auth_policy_state_activated_by_fkey",
           "tableFrom": "auth_policy_state",
           "tableTo": "user",
           "columnsFrom": [
@@ -1398,8 +1398,8 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "auth_policy_singleton": {
-          "name": "auth_policy_singleton",
+        "auth_policy_state_singleton_check": {
+          "name": "auth_policy_state_singleton_check",
           "value": "\"auth_policy_state\".\"id\"=1"
         }
       },
@@ -1445,8 +1445,8 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "capability_binding_integration_id_capability_pk": {
-          "name": "capability_binding_integration_id_capability_pk",
+        "capability_binding_pkey": {
+          "name": "capability_binding_pkey",
           "columns": [
             "integration_id",
             "capability"
@@ -1526,8 +1526,8 @@
         }
       },
       "indexes": {
-        "configuration_migration_preview_actor_kind_idx": {
-          "name": "configuration_migration_preview_actor_kind_idx",
+        "configuration_migration_preview_actor_id_kind_idx": {
+          "name": "configuration_migration_preview_actor_id_kind_idx",
           "columns": [
             {
               "expression": "actor_id",
@@ -1547,8 +1547,8 @@
           "method": "btree",
           "with": {}
         },
-        "configuration_migration_preview_expiry_idx": {
-          "name": "configuration_migration_preview_expiry_idx",
+        "configuration_migration_preview_expires_at_idx": {
+          "name": "configuration_migration_preview_expires_at_idx",
           "columns": [
             {
               "expression": "expires_at",
@@ -1564,8 +1564,8 @@
         }
       },
       "foreignKeys": {
-        "configuration_migration_preview_actor_id_user_id_fk": {
-          "name": "configuration_migration_preview_actor_id_user_id_fk",
+        "configuration_migration_preview_actor_id_fkey": {
+          "name": "configuration_migration_preview_actor_id_fkey",
           "tableFrom": "configuration_migration_preview",
           "tableTo": "user",
           "columnsFrom": [
@@ -1582,8 +1582,8 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "configuration_migration_preview_bounds": {
-          "name": "configuration_migration_preview_bounds",
+        "configuration_migration_preview_bounds_check": {
+          "name": "configuration_migration_preview_bounds_check",
           "value": "\"configuration_migration_preview\".\"kind\" in ('migration','credentials') and \"configuration_migration_preview\".\"intent_fingerprint\" ~ '^[a-f0-9]{64}$' and octet_length(\"configuration_migration_preview\".\"ciphertext\") <= 1572864 and length(\"configuration_migration_preview\".\"iv\") = 16 and length(\"configuration_migration_preview\".\"tag\") = 24 and \"configuration_migration_preview\".\"expires_at\" > \"configuration_migration_preview\".\"created_at\" and \"configuration_migration_preview\".\"expires_at\" <= \"configuration_migration_preview\".\"created_at\" + interval '10 minutes'"
         }
       },
@@ -1699,8 +1699,8 @@
         }
       },
       "indexes": {
-        "data_disclosure_event_user_occurred_idx": {
-          "name": "data_disclosure_event_user_occurred_idx",
+        "data_disclosure_event_user_id_occurred_at_idx": {
+          "name": "data_disclosure_event_user_id_occurred_at_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -1720,8 +1720,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_disclosure_event_recipient_idx": {
-          "name": "data_disclosure_event_recipient_idx",
+        "data_disclosure_event_recipient_id_occurred_at_idx": {
+          "name": "data_disclosure_event_recipient_id_occurred_at_idx",
           "columns": [
             {
               "expression": "recipient_id",
@@ -1756,8 +1756,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_disclosure_event_idempotency_idx": {
-          "name": "data_disclosure_event_idempotency_idx",
+        "data_disclosure_event_idempotency_key_key": {
+          "name": "data_disclosure_event_idempotency_key_key",
           "columns": [
             {
               "expression": "idempotency_key",
@@ -1774,8 +1774,8 @@
         }
       },
       "foreignKeys": {
-        "data_disclosure_event_user_id_user_id_fk": {
-          "name": "data_disclosure_event_user_id_user_id_fk",
+        "data_disclosure_event_user_id_fkey": {
+          "name": "data_disclosure_event_user_id_fkey",
           "tableFrom": "data_disclosure_event",
           "tableTo": "user",
           "columnsFrom": [
@@ -1866,8 +1866,8 @@
         }
       },
       "indexes": {
-        "configuration_fence_one_prepared_uq": {
-          "name": "configuration_fence_one_prepared_uq",
+        "configuration_fence_state_prepared_key": {
+          "name": "configuration_fence_state_prepared_key",
           "columns": [
             {
               "expression": "state",
@@ -1886,15 +1886,15 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "configuration_fence_fence_id_unique": {
-          "name": "configuration_fence_fence_id_unique",
+        "configuration_fence_fence_id_key": {
+          "name": "configuration_fence_fence_id_key",
           "nullsNotDistinct": false,
           "columns": [
             "fence_id"
           ]
         },
-        "configuration_fence_operation_key_unique": {
-          "name": "configuration_fence_operation_key_unique",
+        "configuration_fence_operation_key_key": {
+          "name": "configuration_fence_operation_key_key",
           "nullsNotDistinct": false,
           "columns": [
             "operation_key"
@@ -1903,8 +1903,8 @@
       },
       "policies": {},
       "checkConstraints": {
-        "configuration_fence_state": {
-          "name": "configuration_fence_state",
+        "configuration_fence_state_check": {
+          "name": "configuration_fence_state_check",
           "value": "(\"data_manager\".\"configuration_fence\".\"state\" = 'prepared' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'settled' AND \"data_manager\".\"configuration_fence\".\"outcome\" IN ('applied','unused','contained') AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'refused' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL)"
         }
       },
@@ -2070,8 +2070,8 @@
         }
       },
       "foreignKeys": {
-        "job_stages_job_id_jobs_id_fk": {
-          "name": "job_stages_job_id_jobs_id_fk",
+        "job_stages_job_id_fkey": {
+          "name": "job_stages_job_id_fkey",
           "tableFrom": "job_stages",
           "tableTo": "jobs",
           "schemaTo": "data_manager",
@@ -2245,8 +2245,8 @@
         }
       },
       "indexes": {
-        "data_manager_jobs_execution_key_uq": {
-          "name": "data_manager_jobs_execution_key_uq",
+        "jobs_operation_key_key": {
+          "name": "jobs_operation_key_key",
           "columns": [
             {
               "expression": "operation_key",
@@ -2267,16 +2267,16 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "data_manager_jobs_execution_bounds": {
-          "name": "data_manager_jobs_execution_bounds",
+        "jobs_execution_bounds_check": {
+          "name": "jobs_execution_bounds_check",
           "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 524288)"
         },
-        "data_manager_jobs_execution_row": {
-          "name": "data_manager_jobs_execution_row",
+        "jobs_execution_row_check": {
+          "name": "jobs_execution_row_check",
           "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NULL OR \"data_manager\".\"jobs\".\"execution_version\" = 2) AND (\"data_manager\".\"jobs\".\"execution_version\" IS DISTINCT FROM 2 OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"released_at\" IS NULL OR (\"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL AND \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL))"
         },
-        "data_manager_jobs_execution_shape": {
-          "name": "data_manager_jobs_execution_shape",
+        "jobs_execution_shape_check": {
+          "name": "jobs_execution_shape_check",
           "value": "\"data_manager\".\"jobs\".\"execution_version\" IS NULL OR coalesce((\"data_manager\".\"jobs\".\"execution_version\" = 2 AND \"data_manager\".\"jobs\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"jobs\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"admitted_at\" >= 0 AND \"data_manager\".\"jobs\".\"deadline_at\" > \"data_manager\".\"jobs\".\"admitted_at\" AND \"data_manager\".\"jobs\".\"execution_input\" IS NOT NULL AND \"data_manager\".\"jobs\".\"execution_state\" IS NOT NULL), false)"
         }
       },
@@ -2312,8 +2312,8 @@
         }
       },
       "indexes": {
-        "offline_package_artifact_refs_package_idx": {
-          "name": "offline_package_artifact_refs_package_idx",
+        "offline_package_artifact_references_package_id_idx": {
+          "name": "offline_package_artifact_references_package_id_idx",
           "columns": [
             {
               "expression": "package_id",
@@ -2327,8 +2327,8 @@
           "method": "btree",
           "with": {}
         },
-        "offline_package_artifact_refs_principal_age_idx": {
-          "name": "offline_package_artifact_refs_principal_age_idx",
+        "offline_package_artifact_references_principal_retained_at_idx": {
+          "name": "offline_package_artifact_references_principal_retained_at_idx",
           "columns": [
             {
               "expression": "principal",
@@ -2351,8 +2351,8 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "offline_package_artifact_references_principal_package_id_pk": {
-          "name": "offline_package_artifact_references_principal_package_id_pk",
+        "offline_package_artifact_references_pkey": {
+          "name": "offline_package_artifact_references_pkey",
           "columns": [
             "principal",
             "package_id"
@@ -2405,8 +2405,8 @@
         }
       },
       "foreignKeys": {
-        "offline_package_job_owners_job_id_offline_package_jobs_id_fk": {
-          "name": "offline_package_job_owners_job_id_offline_package_jobs_id_fk",
+        "offline_package_job_owners_job_id_fkey": {
+          "name": "offline_package_job_owners_job_id_fkey",
           "tableFrom": "offline_package_job_owners",
           "tableTo": "offline_package_jobs",
           "schemaTo": "data_manager",
@@ -2421,8 +2421,8 @@
         }
       },
       "compositePrimaryKeys": {
-        "offline_package_job_owners_job_id_principal_pk": {
-          "name": "offline_package_job_owners_job_id_principal_pk",
+        "offline_package_job_owners_pkey": {
+          "name": "offline_package_job_owners_pkey",
           "columns": [
             "job_id",
             "principal"
@@ -2512,8 +2512,8 @@
         }
       },
       "indexes": {
-        "offline_package_jobs_live_request_key_uq": {
-          "name": "offline_package_jobs_live_request_key_uq",
+        "offline_package_jobs_request_key_live_key": {
+          "name": "offline_package_jobs_request_key_live_key",
           "columns": [
             {
               "expression": "request_key",
@@ -2528,8 +2528,8 @@
           "method": "btree",
           "with": {}
         },
-        "offline_package_jobs_status_created_idx": {
-          "name": "offline_package_jobs_status_created_idx",
+        "offline_package_jobs_status_created_at_idx": {
+          "name": "offline_package_jobs_status_created_at_idx",
           "columns": [
             {
               "expression": "status",
@@ -2744,8 +2744,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_user_state_idx": {
-          "name": "data_subject_request_user_state_idx",
+        "data_subject_request_user_id_state_idx": {
+          "name": "data_subject_request_user_id_state_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -2765,8 +2765,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_due_idx": {
-          "name": "data_subject_request_due_idx",
+        "data_subject_request_state_due_at_idx": {
+          "name": "data_subject_request_state_due_at_idx",
           "columns": [
             {
               "expression": "state",
@@ -2816,8 +2816,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_active_user_kind_idx": {
-          "name": "data_subject_request_active_user_kind_idx",
+        "data_subject_request_user_id_kind_active_key": {
+          "name": "data_subject_request_user_id_kind_active_key",
           "columns": [
             {
               "expression": "user_id",
@@ -2840,8 +2840,8 @@
         }
       },
       "foreignKeys": {
-        "data_subject_request_user_id_user_id_fk": {
-          "name": "data_subject_request_user_id_user_id_fk",
+        "data_subject_request_user_id_fkey": {
+          "name": "data_subject_request_user_id_fkey",
           "tableFrom": "data_subject_request",
           "tableTo": "user",
           "columnsFrom": [
@@ -2853,8 +2853,8 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "data_subject_request_actor_user_id_user_id_fk": {
-          "name": "data_subject_request_actor_user_id_user_id_fk",
+        "data_subject_request_actor_user_id_fkey": {
+          "name": "data_subject_request_actor_user_id_fkey",
           "tableFrom": "data_subject_request",
           "tableTo": "user",
           "columnsFrom": [
@@ -2866,8 +2866,8 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "data_subject_request_actor_session_id_session_id_fk": {
-          "name": "data_subject_request_actor_session_id_session_id_fk",
+        "data_subject_request_actor_session_id_fkey": {
+          "name": "data_subject_request_actor_session_id_fkey",
           "tableFrom": "data_subject_request",
           "tableTo": "session",
           "columnsFrom": [
@@ -2979,8 +2979,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_event_request_idx": {
-          "name": "data_subject_request_event_request_idx",
+        "data_subject_request_event_request_id_created_at_idx": {
+          "name": "data_subject_request_event_request_id_created_at_idx",
           "columns": [
             {
               "expression": "request_id",
@@ -3015,8 +3015,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_event_idempotency_idx": {
-          "name": "data_subject_request_event_idempotency_idx",
+        "data_subject_request_event_request_id_idempotency_key_key": {
+          "name": "data_subject_request_event_request_id_idempotency_key_key",
           "columns": [
             {
               "expression": "request_id",
@@ -3039,8 +3039,8 @@
         }
       },
       "foreignKeys": {
-        "data_subject_request_event_request_id_data_subject_request_id_fk": {
-          "name": "data_subject_request_event_request_id_data_subject_request_id_fk",
+        "data_subject_request_event_request_id_fkey": {
+          "name": "data_subject_request_event_request_id_fkey",
           "tableFrom": "data_subject_request_event",
           "tableTo": "data_subject_request",
           "columnsFrom": [
@@ -3182,8 +3182,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_notification_event_idx": {
-          "name": "data_subject_request_notification_event_idx",
+        "data_subject_request_notification_delivery_key": {
+          "name": "data_subject_request_notification_delivery_key",
           "columns": [
             {
               "expression": "request_id",
@@ -3221,8 +3221,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_notification_state_idx": {
-          "name": "data_subject_request_notification_state_idx",
+        "data_subject_request_notification_state_next_attempt_at_idx": {
+          "name": "data_subject_request_notification_state_next_attempt_at_idx",
           "columns": [
             {
               "expression": "state",
@@ -3242,8 +3242,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_notification_recipient_idx": {
-          "name": "data_subject_request_notification_recipient_idx",
+        "data_subject_request_notification_recipient_created_at_idx": {
+          "name": "data_subject_request_notification_recipient_created_at_idx",
           "columns": [
             {
               "expression": "recipient_user_id",
@@ -3265,8 +3265,8 @@
         }
       },
       "foreignKeys": {
-        "data_subject_request_notification_request_id_data_subject_request_id_fk": {
-          "name": "data_subject_request_notification_request_id_data_subject_request_id_fk",
+        "data_subject_request_notification_request_id_fkey": {
+          "name": "data_subject_request_notification_request_id_fkey",
           "tableFrom": "data_subject_request_notification",
           "tableTo": "data_subject_request",
           "columnsFrom": [
@@ -3278,8 +3278,8 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "data_subject_request_notification_recipient_user_id_user_id_fk": {
-          "name": "data_subject_request_notification_recipient_user_id_user_id_fk",
+        "data_subject_request_notification_recipient_user_id_fkey": {
+          "name": "data_subject_request_notification_recipient_user_id_fkey",
           "tableFrom": "data_subject_request_notification",
           "tableTo": "user",
           "columnsFrom": [
@@ -3378,8 +3378,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_preservation_request_registration_idx": {
-          "name": "data_subject_request_preservation_request_registration_idx",
+        "data_subject_request_preservation_request_registration_key": {
+          "name": "data_subject_request_preservation_request_registration_key",
           "columns": [
             {
               "expression": "request_id",
@@ -3399,8 +3399,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_preservation_registration_status_idx": {
-          "name": "data_subject_request_preservation_registration_status_idx",
+        "data_subject_request_preservation_registration_id_status_idx": {
+          "name": "data_subject_request_preservation_registration_id_status_idx",
           "columns": [
             {
               "expression": "registration_id",
@@ -3422,8 +3422,8 @@
         }
       },
       "foreignKeys": {
-        "data_subject_request_preservation_request_id_data_subject_request_id_fk": {
-          "name": "data_subject_request_preservation_request_id_data_subject_request_id_fk",
+        "data_subject_request_preservation_request_id_fkey": {
+          "name": "data_subject_request_preservation_request_id_fkey",
           "tableFrom": "data_subject_request_preservation",
           "tableTo": "data_subject_request",
           "columnsFrom": [
@@ -3517,8 +3517,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_task_request_registration_idx": {
-          "name": "data_subject_request_task_request_registration_idx",
+        "data_subject_request_task_request_id_registration_id_key": {
+          "name": "data_subject_request_task_request_id_registration_id_key",
           "columns": [
             {
               "expression": "request_id",
@@ -3555,8 +3555,8 @@
         }
       },
       "foreignKeys": {
-        "data_subject_request_task_request_id_data_subject_request_id_fk": {
-          "name": "data_subject_request_task_request_id_data_subject_request_id_fk",
+        "data_subject_request_task_request_id_fkey": {
+          "name": "data_subject_request_task_request_id_fkey",
           "tableFrom": "data_subject_request_task",
           "tableTo": "data_subject_request",
           "columnsFrom": [
@@ -3634,8 +3634,8 @@
         }
       },
       "indexes": {
-        "healthHistory_serviceId_checkedAt_idx": {
-          "name": "healthHistory_serviceId_checkedAt_idx",
+        "health_history_service_id_checked_at_idx": {
+          "name": "health_history_service_id_checked_at_idx",
           "columns": [
             {
               "expression": "service_id",
@@ -3782,8 +3782,8 @@
         }
       },
       "foreignKeys": {
-        "installed_extension_installed_by_user_id_fk": {
-          "name": "installed_extension_installed_by_user_id_fk",
+        "installed_extension_installed_by_fkey": {
+          "name": "installed_extension_installed_by_fkey",
           "tableFrom": "installed_extension",
           "tableTo": "user",
           "columnsFrom": [
@@ -3839,8 +3839,8 @@
         }
       },
       "indexes": {
-        "installedExtensionComponent_kind_componentId_key": {
-          "name": "installedExtensionComponent_kind_componentId_key",
+        "installed_extension_component_kind_component_id_key": {
+          "name": "installed_extension_component_kind_component_id_key",
           "columns": [
             {
               "expression": "kind",
@@ -3862,8 +3862,8 @@
         }
       },
       "foreignKeys": {
-        "installed_extension_component_extension_id_installed_extension_id_fk": {
-          "name": "installed_extension_component_extension_id_installed_extension_id_fk",
+        "installed_extension_component_extension_id_fkey": {
+          "name": "installed_extension_component_extension_id_fkey",
           "tableFrom": "installed_extension_component",
           "tableTo": "installed_extension",
           "columnsFrom": [
@@ -3877,8 +3877,8 @@
         }
       },
       "compositePrimaryKeys": {
-        "installed_extension_component_extension_id_kind_component_id_pk": {
-          "name": "installed_extension_component_extension_id_kind_component_id_pk",
+        "installed_extension_component_pkey": {
+          "name": "installed_extension_component_pkey",
           "columns": [
             "extension_id",
             "kind",
@@ -3970,8 +3970,8 @@
         }
       },
       "foreignKeys": {
-        "installed_integration_installed_by_user_id_fk": {
-          "name": "installed_integration_installed_by_user_id_fk",
+        "installed_integration_installed_by_fkey": {
+          "name": "installed_integration_installed_by_fkey",
           "tableFrom": "installed_integration",
           "tableTo": "user",
           "columnsFrom": [
@@ -4107,8 +4107,8 @@
         }
       },
       "foreignKeys": {
-        "integration_secret_updated_by_user_id_fk": {
-          "name": "integration_secret_updated_by_user_id_fk",
+        "integration_secret_updated_by_fkey": {
+          "name": "integration_secret_updated_by_fkey",
           "tableFrom": "integration_secret",
           "tableTo": "user",
           "columnsFrom": [
@@ -4258,8 +4258,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "labeled_place_user_id_user_id_fk": {
-          "name": "labeled_place_user_id_user_id_fk",
+        "labeled_place_user_id_fkey": {
+          "name": "labeled_place_user_id_fkey",
           "tableFrom": "labeled_place",
           "tableTo": "user",
           "columnsFrom": [
@@ -4274,8 +4274,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "labeledPlace_userId_label_unq": {
-          "name": "labeledPlace_userId_label_unq",
+        "labeled_place_user_id_label_key": {
+          "name": "labeled_place_user_id_label_key",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
@@ -4331,8 +4331,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "mangrove_keypair_user_id_user_id_fk": {
-          "name": "mangrove_keypair_user_id_user_id_fk",
+        "mangrove_keypair_user_id_fkey": {
+          "name": "mangrove_keypair_user_id_fkey",
           "tableFrom": "mangrove_keypair",
           "tableTo": "user",
           "columnsFrom": [
@@ -4410,8 +4410,8 @@
           "method": "btree",
           "with": {}
         },
-        "mangrove_keypair_wrap_passphrase_key": {
-          "name": "mangrove_keypair_wrap_passphrase_key",
+        "mangrove_keypair_wrap_user_id_passphrase_key": {
+          "name": "mangrove_keypair_wrap_user_id_passphrase_key",
           "columns": [
             {
               "expression": "user_id",
@@ -4428,8 +4428,8 @@
         }
       },
       "foreignKeys": {
-        "mangrove_keypair_wrap_user_id_mangrove_keypair_user_id_fk": {
-          "name": "mangrove_keypair_wrap_user_id_mangrove_keypair_user_id_fk",
+        "mangrove_keypair_wrap_user_id_fkey": {
+          "name": "mangrove_keypair_wrap_user_id_fkey",
           "tableFrom": "mangrove_keypair_wrap",
           "tableTo": "mangrove_keypair",
           "columnsFrom": [
@@ -4538,8 +4538,8 @@
         }
       },
       "indexes": {
-        "mobile_auth_handoff_user_expires_idx": {
-          "name": "mobile_auth_handoff_user_expires_idx",
+        "mobile_auth_handoff_user_id_expires_at_idx": {
+          "name": "mobile_auth_handoff_user_id_expires_at_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -4561,8 +4561,8 @@
         }
       },
       "foreignKeys": {
-        "mobile_auth_handoff_user_id_user_id_fk": {
-          "name": "mobile_auth_handoff_user_id_user_id_fk",
+        "mobile_auth_handoff_user_id_fkey": {
+          "name": "mobile_auth_handoff_user_id_fkey",
           "tableFrom": "mobile_auth_handoff",
           "tableTo": "user",
           "columnsFrom": [
@@ -4577,8 +4577,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "mobile_auth_handoff_callback_code_hash_unique": {
-          "name": "mobile_auth_handoff_callback_code_hash_unique",
+        "mobile_auth_handoff_callback_code_hash_key": {
+          "name": "mobile_auth_handoff_callback_code_hash_key",
           "nullsNotDistinct": false,
           "columns": [
             "callback_code_hash"
@@ -5848,8 +5848,8 @@
         }
       },
       "foreignKeys": {
-        "parked_location_user_id_user_id_fk": {
-          "name": "parked_location_user_id_user_id_fk",
+        "parked_location_user_id_fkey": {
+          "name": "parked_location_user_id_fkey",
           "tableFrom": "parked_location",
           "tableTo": "user",
           "columnsFrom": [
@@ -5861,8 +5861,8 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "parked_location_vehicle_id_personal_vehicle_id_fk": {
-          "name": "parked_location_vehicle_id_personal_vehicle_id_fk",
+        "parked_location_vehicle_id_fkey": {
+          "name": "parked_location_vehicle_id_fkey",
           "tableFrom": "parked_location",
           "tableTo": "personal_vehicle",
           "columnsFrom": [
@@ -5877,8 +5877,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "parkedLocation_userId_vehicleId_unq": {
-          "name": "parkedLocation_userId_vehicleId_unq",
+        "parked_location_user_id_vehicle_id_key": {
+          "name": "parked_location_user_id_vehicle_id_key",
           "nullsNotDistinct": true,
           "columns": [
             "user_id",
@@ -6154,8 +6154,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "personal_timeline_connection_user_id_user_id_fk": {
-          "name": "personal_timeline_connection_user_id_user_id_fk",
+        "personal_timeline_connection_user_id_fkey": {
+          "name": "personal_timeline_connection_user_id_fkey",
           "tableFrom": "personal_timeline_connection",
           "tableTo": "user",
           "columnsFrom": [
@@ -6170,8 +6170,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "personalTimelineConnection_userId_unq": {
-          "name": "personalTimelineConnection_userId_unq",
+        "personal_timeline_connection_user_id_key": {
+          "name": "personal_timeline_connection_user_id_key",
           "nullsNotDistinct": false,
           "columns": [
             "user_id"
@@ -6268,8 +6268,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "personal_vehicle_user_id_user_id_fk": {
-          "name": "personal_vehicle_user_id_user_id_fk",
+        "personal_vehicle_user_id_fkey": {
+          "name": "personal_vehicle_user_id_fkey",
           "tableFrom": "personal_vehicle",
           "tableTo": "user",
           "columnsFrom": [
@@ -6284,8 +6284,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "personalVehicle_userId_name_unq": {
-          "name": "personalVehicle_userId_name_unq",
+        "personal_vehicle_user_id_name_key": {
+          "name": "personal_vehicle_user_id_name_key",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
@@ -6398,8 +6398,8 @@
         }
       },
       "indexes": {
-        "platform_preview_actor_key_uq": {
-          "name": "platform_preview_actor_key_uq",
+        "platform_configuration_preview_actor_id_operation_key_key": {
+          "name": "platform_configuration_preview_actor_id_operation_key_key",
           "columns": [
             {
               "expression": "actor_id",
@@ -6419,8 +6419,8 @@
           "method": "btree",
           "with": {}
         },
-        "platform_preview_fingerprint_uq": {
-          "name": "platform_preview_fingerprint_uq",
+        "platform_configuration_preview_preview_fingerprint_key": {
+          "name": "platform_configuration_preview_preview_fingerprint_key",
           "columns": [
             {
               "expression": "preview_fingerprint",
@@ -6434,8 +6434,8 @@
           "method": "btree",
           "with": {}
         },
-        "platform_preview_expiry_idx": {
-          "name": "platform_preview_expiry_idx",
+        "platform_configuration_preview_expires_at_idx": {
+          "name": "platform_configuration_preview_expires_at_idx",
           "columns": [
             {
               "expression": "expires_at",
@@ -6451,8 +6451,8 @@
         }
       },
       "foreignKeys": {
-        "platform_configuration_preview_actor_id_user_id_fk": {
-          "name": "platform_configuration_preview_actor_id_user_id_fk",
+        "platform_configuration_preview_actor_id_fkey": {
+          "name": "platform_configuration_preview_actor_id_fkey",
           "tableFrom": "platform_configuration_preview",
           "tableTo": "user",
           "columnsFrom": [
@@ -6469,8 +6469,8 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "platform_preview_bounds": {
-          "name": "platform_preview_bounds",
+        "platform_configuration_preview_bounds_check": {
+          "name": "platform_configuration_preview_bounds_check",
           "value": "length(\"platform_configuration_preview\".\"operation_key\") between 1 and 128 and \"platform_configuration_preview\".\"request_fingerprint\" ~ '^[a-f0-9]{64}$' and \"platform_configuration_preview\".\"preview_fingerprint\" ~ '^[a-f0-9]{64}$' and \"platform_configuration_preview\".\"auth_policy_revision\" ~ '^[a-f0-9]{64}$' and octet_length(\"platform_configuration_preview\".\"preview\"::text) <= 131072 and jsonb_typeof(\"platform_configuration_preview\".\"preview\") = 'object' and \"platform_configuration_preview\".\"expires_at\" > \"platform_configuration_preview\".\"created_at\" and \"platform_configuration_preview\".\"expires_at\" <= \"platform_configuration_preview\".\"created_at\" + interval '10 minutes' and ((\"platform_configuration_preview\".\"consumed_at\" is null) = (\"platform_configuration_preview\".\"consumed_by_job_id\" is null)) and (\"platform_configuration_preview\".\"retired_at\" is null or (\"platform_configuration_preview\".\"consumed_at\" is not null and \"platform_configuration_preview\".\"retired_at\" >= \"platform_configuration_preview\".\"consumed_at\"))"
         }
       },
@@ -6536,8 +6536,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "saved_list_user_id_user_id_fk": {
-          "name": "saved_list_user_id_user_id_fk",
+        "saved_list_user_id_fkey": {
+          "name": "saved_list_user_id_fkey",
           "tableFrom": "saved_list",
           "tableTo": "user",
           "columnsFrom": [
@@ -6552,8 +6552,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "savedList_userId_name_unq": {
-          "name": "savedList_userId_name_unq",
+        "saved_list_user_id_name_key": {
+          "name": "saved_list_user_id_name_key",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
@@ -6640,8 +6640,8 @@
         }
       },
       "indexes": {
-        "savedPlace_listId_idx": {
-          "name": "savedPlace_listId_idx",
+        "saved_place_list_id_idx": {
+          "name": "saved_place_list_id_idx",
           "columns": [
             {
               "expression": "list_id",
@@ -6657,8 +6657,8 @@
         }
       },
       "foreignKeys": {
-        "saved_place_list_id_saved_list_id_fk": {
-          "name": "saved_place_list_id_saved_list_id_fk",
+        "saved_place_list_id_fkey": {
+          "name": "saved_place_list_id_fkey",
           "tableFrom": "saved_place",
           "tableTo": "saved_list",
           "columnsFrom": [
@@ -6762,8 +6762,8 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "service_repository_url_unique": {
-          "name": "service_repository_url_unique",
+        "service_repository_url_key": {
+          "name": "service_repository_url_key",
           "nullsNotDistinct": false,
           "columns": [
             "url"
@@ -6847,8 +6847,8 @@
         }
       },
       "foreignKeys": {
-        "service_secret_updated_by_user_id_fk": {
-          "name": "service_secret_updated_by_user_id_fk",
+        "service_secret_updated_by_fkey": {
+          "name": "service_secret_updated_by_fkey",
           "tableFrom": "service_secret",
           "tableTo": "user",
           "columnsFrom": [
@@ -7040,8 +7040,8 @@
         }
       },
       "indexes": {
-        "session_auth_assurance_user_idx": {
-          "name": "session_auth_assurance_user_idx",
+        "session_auth_assurance_user_id_authenticated_at_idx": {
+          "name": "session_auth_assurance_user_id_authenticated_at_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -7063,8 +7063,8 @@
         }
       },
       "foreignKeys": {
-        "session_auth_assurance_session_id_session_id_fk": {
-          "name": "session_auth_assurance_session_id_session_id_fk",
+        "session_auth_assurance_session_id_fkey": {
+          "name": "session_auth_assurance_session_id_fkey",
           "tableFrom": "session_auth_assurance",
           "tableTo": "session",
           "columnsFrom": [
@@ -7076,8 +7076,8 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "session_auth_assurance_user_id_user_id_fk": {
-          "name": "session_auth_assurance_user_id_user_id_fk",
+        "session_auth_assurance_user_id_fkey": {
+          "name": "session_auth_assurance_user_id_fkey",
           "tableFrom": "session_auth_assurance",
           "tableTo": "user",
           "columnsFrom": [
@@ -7176,8 +7176,8 @@
         }
       },
       "indexes": {
-        "shareLink_userId_idx": {
-          "name": "shareLink_userId_idx",
+        "share_link_user_id_idx": {
+          "name": "share_link_user_id_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -7193,8 +7193,8 @@
         }
       },
       "foreignKeys": {
-        "share_link_user_id_user_id_fk": {
-          "name": "share_link_user_id_user_id_fk",
+        "share_link_user_id_fkey": {
+          "name": "share_link_user_id_fkey",
           "tableFrom": "share_link",
           "tableTo": "user",
           "columnsFrom": [
@@ -7209,8 +7209,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "share_link_token_hash_unique": {
-          "name": "share_link_token_hash_unique",
+        "share_link_token_hash_key": {
+          "name": "share_link_token_hash_key",
           "nullsNotDistinct": false,
           "columns": [
             "token_hash"
@@ -7408,8 +7408,8 @@
         }
       },
       "indexes": {
-        "transit_credential_preview_actor_key_uq": {
-          "name": "transit_credential_preview_actor_key_uq",
+        "transit_credential_preview_actor_id_operation_key_key": {
+          "name": "transit_credential_preview_actor_id_operation_key_key",
           "columns": [
             {
               "expression": "actor_id",
@@ -7429,8 +7429,8 @@
           "method": "btree",
           "with": {}
         },
-        "transit_credential_preview_expiry_idx": {
-          "name": "transit_credential_preview_expiry_idx",
+        "transit_credential_preview_expires_at_idx": {
+          "name": "transit_credential_preview_expires_at_idx",
           "columns": [
             {
               "expression": "expires_at",
@@ -7446,8 +7446,8 @@
         }
       },
       "foreignKeys": {
-        "transit_credential_preview_actor_id_user_id_fk": {
-          "name": "transit_credential_preview_actor_id_user_id_fk",
+        "transit_credential_preview_actor_id_fkey": {
+          "name": "transit_credential_preview_actor_id_fkey",
           "tableFrom": "transit_credential_preview",
           "tableTo": "user",
           "columnsFrom": [
@@ -7464,8 +7464,8 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "transit_credential_preview_bounds": {
-          "name": "transit_credential_preview_bounds",
+        "transit_credential_preview_bounds_check": {
+          "name": "transit_credential_preview_bounds_check",
           "value": "octet_length(\"transit_credential_preview\".\"ciphertext\") <= 1500000 and length(\"transit_credential_preview\".\"intent_fingerprint\") = 64 and length(\"transit_credential_preview\".\"iv\") = 16 and length(\"transit_credential_preview\".\"tag\") = 24"
         }
       },
@@ -7818,8 +7818,8 @@
         }
       },
       "indexes": {
-        "integration_application_target_time_idx": {
-          "name": "integration_application_target_time_idx",
+        "integration_application_receipt_integration_id_created_at_idx": {
+          "name": "integration_application_receipt_integration_id_created_at_idx",
           "columns": [
             {
               "expression": "integration_id",
@@ -7839,8 +7839,8 @@
           "method": "btree",
           "with": {}
         },
-        "integration_application_actor_idx": {
-          "name": "integration_application_actor_idx",
+        "integration_application_receipt_actor_id_idx": {
+          "name": "integration_application_receipt_actor_id_idx",
           "columns": [
             {
               "expression": "actor_id",
@@ -7856,8 +7856,8 @@
         }
       },
       "foreignKeys": {
-        "integration_application_receipt_actor_id_user_id_fk": {
-          "name": "integration_application_receipt_actor_id_user_id_fk",
+        "integration_application_receipt_actor_id_fkey": {
+          "name": "integration_application_receipt_actor_id_fkey",
           "tableFrom": "integration_application_receipt",
           "tableTo": "user",
           "columnsFrom": [

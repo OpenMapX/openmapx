@@ -13,7 +13,7 @@ function nameTaken() {
   return new Error("Failed query", {
     cause: Object.assign(new Error("duplicate key value"), {
       code: "23505",
-      constraint_name: "personalVehicle_userId_name_unq",
+      constraint_name: "personal_vehicle_user_id_name_key",
     }),
   });
 }
@@ -176,7 +176,7 @@ describe("vehicles", () => {
       [{ count: 1 }],
       Object.assign(new Error("foreign key"), {
         code: "23503",
-        constraint_name: "personal_vehicle_user_id_user_id_fk",
+        constraint_name: "personal_vehicle_user_id_fkey",
       }),
     );
     const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });

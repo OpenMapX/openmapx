@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -32,16 +32,16 @@ export const mobileAuthHandoff = pgTable(
   {
     id: text("id").primaryKey(),
     /** SHA-256 of the raw callback code, base64url. Never the code itself. */
-    callbackCodeHash: text("callback_code_hash").notNull().unique(),
+    callbackCodeHash: text("callback_code_hash")
+      .notNull()
+      .unique("mobile_auth_handoff_callback_code_hash_key"),
     /** The S256 PKCE challenge. The verifier is never stored. */
     codeChallenge: text("code_challenge").notNull(),
     /** Per-attempt random value, echoed back so a stray callback is detectable. */
     state: text("state").notNull(),
     /** `sign-in` | `link-provider` | `add-passkey`. */
     purpose: text("purpose").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     /** AES-256-GCM envelope for the short-lived Better Auth one-time token. */
     tokenCiphertext: text("token_ciphertext").notNull(),
     tokenIv: text("token_iv").notNull(),
@@ -53,9 +53,14 @@ export const mobileAuthHandoff = pgTable(
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
   },
   (table) => [
+    foreignKey({
+      name: "mobile_auth_handoff_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
     // Expiry scrubbing walks this, and it also bounds how many outstanding
     // attempts one account can accumulate.
-    index("mobile_auth_handoff_user_expires_idx").on(table.userId, table.expiresAt),
+    index("mobile_auth_handoff_user_id_expires_at_idx").on(table.userId, table.expiresAt),
     check(
       "mobile_auth_handoff_purpose_check",
       sql`${table.purpose} in ('sign-in','link-provider','add-passkey')`,

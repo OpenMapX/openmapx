@@ -115,6 +115,26 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
   },
 };
 
+/**
+ * App-owned objects not named for their table and columns alone, by table. A
+ * partial unique index whose predicate selects a subset of rows names that
+ * subset, since its columns alone would read as a key over the whole table; an
+ * index on an expression has no columns to name; and a column list that would
+ * pass PostgreSQL's 63-byte identifier limit is shortened.
+ */
+const NAMED_BY_PURPOSE: Record<string, string> = {
+  admin_job_active_system_maintenance_key: "admin_job",
+  configuration_fence_state_prepared_key: "configuration_fence",
+  data_subject_request_notification_delivery_key: "data_subject_request_notification",
+  data_subject_request_notification_recipient_created_at_idx: "data_subject_request_notification",
+  data_subject_request_preservation_request_registration_key: "data_subject_request_preservation",
+  data_subject_request_user_id_kind_active_key: "data_subject_request",
+  mangrove_keypair_wrap_user_id_passphrase_key: "mangrove_keypair_wrap",
+  offline_package_jobs_request_key_live_key: "offline_package_jobs",
+};
+
+const NAME_SUFFIX: Record<string, string> = { p: "pkey", u: "key", f: "fkey", U: "key", i: "idx" };
+
 type Fixture = Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
 let fixture: Fixture;
 
@@ -150,6 +170,70 @@ integration("schema hygiene", () => {
         AND (u.indkey::int2[])[0:i.indnatts - 1] = (i.indkey::int2[])[0:i.indnatts - 1]
       ORDER BY 1, 2`;
     expect(duplicates).toEqual([]);
+  });
+
+  it("app-owned object names follow the convention", async () => {
+    // Constraints, then the indexes that back no constraint. Extension-owned
+    // tables (PostGIS in the test image) and Better Auth's are not the app's.
+    const objects = await fixture.sql<
+      { table: string; name: string; kind: string; columns: string[]; subset: boolean }[]
+    >`
+      WITH owned AS (
+        SELECT r.oid, r.relname FROM pg_class r
+        JOIN pg_namespace n ON n.oid = r.relnamespace
+        WHERE r.relkind IN ('r', 'p') AND n.nspname IN ('public', 'data_manager')
+          AND NOT (n.nspname = 'public' AND r.relname IN ${fixture.sql(betterAuthTables)})
+          AND NOT EXISTS (SELECT FROM pg_depend d
+            WHERE d.classid = 'pg_class'::regclass AND d.objid = r.oid AND d.deptype = 'e'))
+      SELECT o.relname AS table, c.conname AS name, c.contype::text AS kind,
+        array(
+          SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, position)
+          JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+          ORDER BY k.position
+        ) AS columns,
+        false AS subset
+      FROM pg_constraint c JOIN owned o ON o.oid = c.conrelid
+      WHERE c.contype IN ('p', 'u', 'f', 'c', 'x')
+      UNION ALL
+      SELECT o.relname, ix.relname, CASE WHEN i.indisunique THEN 'U' ELSE 'i' END,
+        array(
+          SELECT coalesce(a.attname::text, '')
+          FROM unnest((i.indkey::int2[])[0:i.indnkeyatts - 1]) WITH ORDINALITY AS k(attnum, position)
+          LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+          ORDER BY k.position
+        ),
+        i.indisunique AND i.indpred IS NOT NULL
+          AND pg_get_expr(i.indpred, i.indrelid) !~ '^\\(?[a-z_]+ IS NOT NULL\\)?$'
+      FROM pg_index i JOIN owned o ON o.oid = i.indrelid
+      JOIN pg_class ix ON ix.oid = i.indexrelid
+      WHERE NOT EXISTS (SELECT FROM pg_constraint c WHERE c.conindid = i.indexrelid
+        AND c.contype IN ('p', 'u', 'x'))
+      ORDER BY 1, 2`;
+    expect(objects.map((row) => row.table)).toEqual(
+      expect.arrayContaining(["admin_job", "jobs", "saved_list"]),
+    );
+    const misnamed: string[] = [];
+    const byPurpose: string[] = [];
+    for (const { table, name, kind, columns, subset } of objects) {
+      if (kind === "c") {
+        if (!new RegExp(`^${table}_[a-z0-9_]+_check$`).test(name)) misnamed.push(name);
+        continue;
+      }
+      const suffix = NAME_SUFFIX[kind];
+      const conventional =
+        kind === "p" ? `${table}_pkey` : `${table}_${columns.join("_")}_${suffix}`;
+      if (subset || columns.includes("") || conventional.length > 63) {
+        byPurpose.push(name);
+        const ok =
+          NAMED_BY_PURPOSE[name] === table &&
+          name.startsWith(`${table}_`) &&
+          name.endsWith(`_${suffix}`) &&
+          name.length <= 63;
+        if (!ok) misnamed.push(`${name} (named by purpose)`);
+      } else if (name !== conventional) misnamed.push(`${name} -> ${conventional}`);
+    }
+    expect(misnamed).toEqual([]);
+    expect(byPurpose.sort()).toEqual(Object.keys(NAMED_BY_PURPOSE).sort());
   });
 
   it("every foreign key column is indexed", async () => {
@@ -208,8 +292,7 @@ integration("schema hygiene", () => {
         'mangrove_keypair_wrap_user_id_idx',
         'admin_audit_log_target_type_target_id_idx',
         'admin_job_type_idx',
-        'adminJob_status_idx',
-        'adminJob_type_idx'
+        'admin_job_status_idx'
       ) ORDER BY 1`;
     expect(Object.fromEntries(indexes.map((row) => [row.name, row.definition]))).toEqual({
       admin_action_reauthentication_expires_at_idx: expect.stringContaining("(expires_at)"),
@@ -359,16 +442,20 @@ integration("schema hygiene", () => {
   });
 
   it("drops indexes no query uses", async () => {
-    const unused = await fixture.sql<{ name: string }[]>`
-      SELECT indexname AS name FROM pg_indexes
-      WHERE schemaname = 'public' AND indexname IN (
-        'installedExtension_sourceTrust_idx',
-        'installedIntegration_sourceType_idx',
-        'idx_capability_binding_service',
-        'app_logs_level_source_idx',
-        'installedExtensionComponent_componentId_idx'
-      )`;
-    expect(unused).toEqual([]);
+    const leading = await fixture.sql<{ table: string; column: string }[]>`
+      SELECT t.relname AS table, a.attname AS column FROM pg_index i
+      JOIN pg_class t ON t.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+      WHERE n.nspname = 'public'`;
+    const unused = new Set([
+      "installed_extension.source_trust",
+      "installed_integration.source_type",
+      "capability_binding.service_id",
+      "app_logs.level",
+      "installed_extension_component.component_id",
+    ]);
+    expect(leading.filter((row) => unused.has(`${row.table}.${row.column}`))).toEqual([]);
   });
 
   it("refuses a second passphrase wrap but admits several passkey wraps", async () => {
@@ -382,7 +469,7 @@ integration("schema hygiene", () => {
     await expect(
       fixture.sql`INSERT INTO mangrove_keypair_wrap (user_id, wrap_type, label)
         VALUES ('wrap-owner', 'passphrase', 'Second')`,
-    ).rejects.toMatchObject({ constraint_name: "mangrove_keypair_wrap_passphrase_key" });
+    ).rejects.toMatchObject({ constraint_name: "mangrove_keypair_wrap_user_id_passphrase_key" });
     await expect(
       fixture.sql`INSERT INTO mangrove_keypair_wrap (user_id, wrap_type, label)
         VALUES ('wrap-owner', 'password', 'Typo')`,

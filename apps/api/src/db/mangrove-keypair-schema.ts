@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -31,19 +31,27 @@ import { user } from "./auth-schema";
  * unlocked (we need the plaintext to re-encrypt with the new recipient
  * set). Same for changing the passphrase.
  */
-export const mangroveKeypair = pgTable("mangrove_keypair", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => user.id, { onDelete: "cascade" }),
-  /** Opaque CAS identity, replaced on every envelope mutation. */
-  revision: text("revision").notNull(),
-  publicJwk: jsonb("public_jwk").notNull(),
-  /** age-encoded ciphertext with a single scrypt recipient. Null if user has no passphrase wrap. */
-  passphraseCiphertext: text("passphrase_ciphertext"),
-  /** age-encoded ciphertext with N WebAuthn PRF recipients. Null if user has no passkey wraps. */
-  recipientsCiphertext: text("recipients_ciphertext"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const mangroveKeypair = pgTable(
+  "mangrove_keypair",
+  {
+    userId: text("user_id").primaryKey(),
+    /** Opaque CAS identity, replaced on every envelope mutation. */
+    revision: text("revision").notNull(),
+    publicJwk: jsonb("public_jwk").notNull(),
+    /** age-encoded ciphertext with a single scrypt recipient. Null if user has no passphrase wrap. */
+    passphraseCiphertext: text("passphrase_ciphertext"),
+    /** age-encoded ciphertext with N WebAuthn PRF recipients. Null if user has no passkey wraps. */
+    recipientsCiphertext: text("recipients_ciphertext"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "mangrove_keypair_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+  ],
+);
 
 /**
  * Metadata for each unlock method. Server enforces:
@@ -63,9 +71,7 @@ export const mangroveKeypairWrap = pgTable(
     // FK points at `mangrove_keypair.user_id` (not directly at `user.id`) so
     // deleting a keypair also drops its wraps. `mangrove_keypair.user_id` itself
     // cascades from `user.id`, so user deletion still propagates all the way.
-    userId: text("user_id")
-      .notNull()
-      .references((): AnyPgColumn => mangroveKeypair.userId, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     wrapType: text("wrap_type").notNull(),
     /** User-friendly label ("Main passphrase", "iPhone", "YubiKey primary"). */
     label: text("label").notNull(),
@@ -78,12 +84,17 @@ export const mangroveKeypairWrap = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    foreignKey({
+      name: "mangrove_keypair_wrap_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [mangroveKeypair.userId],
+    }).onDelete("cascade"),
     check(
       "mangrove_keypair_wrap_wrap_type_check",
       sql`${table.wrapType} in ('passphrase','webauthn')`,
     ),
     index("mangrove_keypair_wrap_user_id_idx").on(table.userId),
-    uniqueIndex("mangrove_keypair_wrap_passphrase_key")
+    uniqueIndex("mangrove_keypair_wrap_user_id_passphrase_key")
       .on(table.userId)
       .where(sql`${table.wrapType} = 'passphrase'`),
   ],
