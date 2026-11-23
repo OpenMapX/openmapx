@@ -108,11 +108,40 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("leaves a job to data-manager's control prune until it swept the job's records", async () => {
       const kind = `retention-fixture-${randomUUID()}`,
         days = DATA_MANAGER_JOB_RETENTION_DAYS,
+        account = `api:user:${randomUUID()}`,
         swept = await insertJob(kind, { daysAgo: days + 5 }),
-        restored = await insertJob(kind, { daysAgo: days + 5, control: "restored" }),
-        execution = await insertJob(kind, { daysAgo: days + 5, control: "execution" });
+        restored = await insertJob(kind, {
+          daysAgo: days + 5,
+          control: "restored",
+          triggeredBy: account,
+        }),
+        execution = await insertJob(kind, {
+          daysAgo: days + 5,
+          control: "execution",
+          triggeredBy: account,
+        }),
+        scheduled = await insertJob(kind, { daysAgo: days + 5, control: "restored" }),
+        recent = await insertJob(kind, {
+          daysAgo: days - 5,
+          control: "restored",
+          triggeredBy: account,
+        });
       await pruneDataManagerJobs(days);
-      expect(await remaining([swept, restored, execution])).toEqual([restored, execution].sort());
+      expect(await remaining([swept, restored, execution, scheduled, recent])).toEqual(
+        [restored, execution, scheduled, recent].sort(),
+      );
+      // The account that started a job is not kept past the period, even on a
+      // row the control prune has not swept; a system actor names no one.
+      const actors = await db
+        .select({ id: dataManagerJobs.id, triggeredBy: dataManagerJobs.triggeredBy })
+        .from(dataManagerJobs)
+        .where(inArray(dataManagerJobs.id, [restored, execution, scheduled, recent]));
+      expect(Object.fromEntries(actors.map((row) => [row.id, row.triggeredBy]))).toEqual({
+        [restored]: null,
+        [execution]: null,
+        [scheduled]: "cron:data-manager-cron",
+        [recent]: account,
+      });
     });
 
     it("keeps the jobs an account triggered while its data-subject request needs them", async () => {
@@ -144,6 +173,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         daysAgo: days + 9,
         triggeredBy: `manual:admin:${userId}`,
       });
+      // Not swept yet: the hold keeps its actor too.
+      const heldUnswept = await insertJob(kind, {
+        daysAgo: days + 9,
+        triggeredBy: `api:user:${userId}`,
+        control: "restored",
+      });
+      const actorOf = async (id: string) =>
+        (
+          await db
+            .select({ triggeredBy: dataManagerJobs.triggeredBy })
+            .from(dataManagerJobs)
+            .where(eq(dataManagerJobs.id, id))
+        )[0]?.triggeredBy;
       const otherUser = await insertJob(kind, {
         daysAgo: days + 8,
         triggeredBy: `api:user:${randomUUID()}`,
@@ -172,12 +214,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(holds).toEqual([{ id: holds[0]?.id, status: "action_required" }]);
       await pruneDataManagerJobs(days);
       expect(await remaining([heldApi, heldManual, newest])).toHaveLength(3);
+      expect(await actorOf(heldUnswept)).toBe(`api:user:${userId}`);
 
       assert.isDefined(holds[0]);
       await releasePreservation({ id: holds[0].id, database: db });
 
       await pruneDataManagerJobs(days);
       expect(await remaining([heldApi, heldManual, newest])).toEqual([newest]);
+      expect(await actorOf(heldUnswept)).toBeNull();
     });
   },
 );

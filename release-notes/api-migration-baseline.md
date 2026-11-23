@@ -109,7 +109,8 @@ days after it finished, as the privacy catalogue now states (it stated ten
 years). `ADMIN_JOB_RETENTION_DAYS` no longer applies to data-manager jobs, and
 the newest run of each kind is no longer kept past that period. Data-manager's
 control prune removes only a job's execution row and the files named by its
-key; the job row stays until then.
+key; the job row stays until then. A finished job that data-manager has not
+swept by then, for example because it is stopped, stays without the account.
 
 The constraints and indexes of OpenMapX's own tables follow PostgreSQL's naming
 convention: `<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_idx`,

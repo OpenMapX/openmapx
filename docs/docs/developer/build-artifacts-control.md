@@ -739,15 +739,18 @@ expired, data-manager's prune removes the files named by its key (a transit
 run's runner journal among them) and then sets the row's `released_at`. The API
 deletes a finished data-manager job row 90 days after it finished, once it has
 no execution row and its `released_at` is set, unless a privacy case preserves
-it. A pass examines at most 256
+it; a finished row it cannot delete yet loses its `triggered_by` account then. A
+pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
 stay regardless of age, and the agent also keeps those of a preparation a
 maintenance control in its journal still names.
 
 Readers never treat a pruned record as permission: a missing admission, effect or
-lease is unknown, and an expired key is refused. There is no separate retention
-clock. A wall clock set back past a pruned key's expiry would admit that key
+lease is unknown, and an expired key is refused. Data-manager answers a repeated
+admission of a key whose job row it still holds with that job's recorded outcome,
+until the API deletes the row; an expired key never admits new work. There is no
+separate retention clock for control records. A wall clock set back past a pruned key's expiry would admit that key
 again, so keep host clocks synchronised. Private records are at most 128 KiB and an
 execution row at most 256 KiB. A role refuses new control work with a busy error, before any effect, while its
 private state filesystem has less than 64 MiB free.

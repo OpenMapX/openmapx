@@ -115,8 +115,10 @@ export const DATA_MANAGER_JOB_RETENTION_DAYS = 90;
  * Delete finished data-manager jobs, and by cascade their stages, that
  * finished more than `days` ago. A job is deleted only once data-manager's
  * control prune removed its execution row and the records named by its key
- * (`released_at` set on a row without one). A running job has no finish time
- * and is never deleted.
+ * (`released_at` set on a row without one). A finished job the control prune
+ * has not swept yet (data-manager stopped, or an execution awaiting recovery)
+ * stays, without the account that started it. A running job has no finish
+ * time and is never touched. Returns the number of deleted jobs.
  */
 export async function pruneDataManagerJobs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
@@ -127,25 +129,31 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
     return 0;
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
-  const result = await withPreservationRetentionLock(db, (tx) =>
-    tx
+  const unheld = preservationAllowsDeletion({
+    registrationId: "data-manager-trigger-attribution",
+    candidateTimestamp: dataManagerJobs.admittedAt,
+    subjectIds: [dataManagerJobSubject],
+    // An operator preserves this registration's rows by hand.
+    blockingStatuses: ["held", "action_required"],
+  });
+  const result = await withPreservationRetentionLock(db, async (tx) => {
+    const deleted = await tx
       .delete(dataManagerJobs)
       .where(
         and(
           lt(dataManagerJobs.finishedAt, cutoff),
           isNull(dataManagerJobs.executionAdmission),
           isNotNull(dataManagerJobs.releasedAt),
-          preservationAllowsDeletion({
-            registrationId: "data-manager-trigger-attribution",
-            candidateTimestamp: dataManagerJobs.admittedAt,
-            subjectIds: [dataManagerJobSubject],
-            // An operator preserves this registration's rows by hand.
-            blockingStatuses: ["held", "action_required"],
-          }),
+          unheld,
         ),
       )
-      .returning({ id: dataManagerJobs.id }),
-  );
+      .returning({ id: dataManagerJobs.id });
+    await tx
+      .update(dataManagerJobs)
+      .set({ triggeredBy: null })
+      .where(and(lt(dataManagerJobs.finishedAt, cutoff), isNotNull(dataManagerJobSubject), unheld));
+    return deleted;
+  });
   return result.length;
 }
 

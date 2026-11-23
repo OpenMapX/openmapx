@@ -17,7 +17,10 @@
  *
  * Deletions are independent and can be repeated. Readers never treat a
  * missing record as permission: a missing admission, effect or lease is
- * unknown, and an expired root key is refused at admission. */
+ * unknown, and an expired root key is refused at admission. Data-manager
+ * answers a repeated admission of a key whose job row it still holds with that
+ * job's recorded outcome, until the API deletes the row; an expired key never
+ * admits new work. */
 import { rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";

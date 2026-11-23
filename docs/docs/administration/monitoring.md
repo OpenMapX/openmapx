@@ -520,7 +520,9 @@ The server writes the trail independently of the client. Its operational limits 
 The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished admin jobs after `ADMIN_JOB_RETENTION_DAYS` (default
 30). Finished data-manager jobs, with their stages and the account that started
 them, are deleted 90 days after they finished; this period is fixed and matches
-the privacy catalogue. The transit page then no longer shows a last sync older
+the privacy catalogue. A finished job that the Data Manager has not yet cleared
+of its control records, for example while it is stopped, is kept until then but
+loses the account at 90 days. The transit page no longer shows a last sync older
 than that. Jobs that are still running are never pruned, and neither are jobs
 that a pending data-subject request still needs. Between them, the audit log tells you
 the _intent_ of every admin action and the jobs view shows the _execution_.
