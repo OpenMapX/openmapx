@@ -269,6 +269,103 @@ describe("the raised arrow outline never crosses itself", () => {
     corner.push([40 * M, 1.5 * M]);
     expect(crossings(raisedArrowPolygon(corner, 2.4, 5))).toEqual([]);
   });
+
+  /** North 40 m, round a half circle `apart` m across to the east (left: west), south 30 m. */
+  const uTurn = (apart: number, side: 1 | -1 = 1): LngLat[] => {
+    const line: LngLat[] = [];
+    for (let y = 0; y <= 40; y += 2) line.push([0, y * M]);
+    for (let deg = 10; deg < 180; deg += 10) {
+      const a = (deg * Math.PI) / 180;
+      line.push([side * (apart / 2) * (1 - Math.cos(a)) * M, (40 + (apart / 2) * Math.sin(a)) * M]);
+    }
+    for (let y = 40; y >= 10; y -= 2) line.push([side * apart * M, y * M]);
+    return line;
+  };
+
+  it.each([0, 0.5, 1, 2, 3, 3.5, 3.75])("on a U-turn whose legs are %d m apart", (apart) => {
+    for (const side of [1, -1] as const) {
+      const ring = raisedArrowPolygon(uTurn(apart, side), 2.4, 5);
+      expect(ring.length).toBeGreaterThan(0);
+      expect(crossings(ring)).toEqual([]);
+    }
+  });
+
+  /** North 40 m, then 40 m on at `turn` degrees right of north. */
+  const corner = (turn: number): LngLat[] => {
+    const line: LngLat[] = [];
+    for (let y = 0; y <= 40; y += 2) line.push([0, y * M]);
+    const b = (turn * Math.PI) / 180;
+    for (let d = 2; d <= 40; d += 2) line.push([Math.sin(b) * d * M, (40 + Math.cos(b) * d) * M]);
+    return line;
+  };
+
+  it.each([155, 160, 170, 175, 179, -160, -179])("round a %d° hairpin corner", (turn) => {
+    const ring = raisedArrowPolygon(corner(turn), 2.4, 5);
+    expect(ring.length).toBeGreaterThan(0);
+    expect(crossings(ring)).toEqual([]);
+  });
+});
+
+describe("the raised arrow on a tight turn", () => {
+  const M = 1 / 111_195;
+  const uTurn = (apart: number): LngLat[] => {
+    const line: LngLat[] = [];
+    for (let y = 0; y <= 40; y += 2) line.push([0, y * M]);
+    for (let deg = 10; deg < 180; deg += 10) {
+      const a = (deg * Math.PI) / 180;
+      line.push([(apart / 2) * (1 - Math.cos(a)) * M, (40 + (apart / 2) * Math.sin(a)) * M]);
+    }
+    for (let y = 40; y >= 10; y -= 2) line.push([apart * M, y * M]);
+    return line;
+  };
+  /** Across the ring, east to west, at `north` m: the shaft's width there. */
+  const spanAt = (ring: LngLat[], north: number) => {
+    const xs: number[] = [];
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [a, b] = [ring[i] as LngLat, ring[i + 1] as LngLat];
+      const [ya, yb] = [a[1] / M, b[1] / M];
+      if ((ya - north) * (yb - north) <= 0 && ya !== yb) {
+        xs.push((a[0] + ((b[0] - a[0]) * (north - ya)) / (yb - ya)) / M);
+      }
+    }
+    return xs.sort((p, q) => p - q);
+  };
+
+  it("keeps its full size where the legs are far enough apart", () => {
+    // Legs 5 m apart: each shaft 2.4 m wide at 21 m north.
+    const [a, b, c, d] = spanAt(raisedArrowPolygon(uTurn(5), 2.4, 5), 21);
+    expect((b as number) - (a as number)).toBeCloseTo(2.4, 1);
+    expect((d as number) - (c as number)).toBeCloseTo(2.4, 1);
+  });
+
+  it("narrows where the legs are too close for the full width", () => {
+    // Legs 3 m apart: a 2.4 m shaft beside a 4.8 m head would overlap.
+    const [a, b, c, d] = spanAt(raisedArrowPolygon(uTurn(3), 2.4, 5), 21);
+    expect((b as number) - (a as number)).toBeLessThan(2.4);
+    expect((b as number) - (a as number)).toBeGreaterThan(1);
+    expect(c as number).toBeGreaterThan(b as number);
+    expect((d as number) - (c as number)).toBeCloseTo((b as number) - (a as number), 1);
+  });
+
+  it("opens a U-turn back along the same road into the two sides of the road", () => {
+    // Driving on the right, a U-turn goes left: up the east side, back down
+    // the west side, each leg on the right of its own travel.
+    const [a, b, c, d] = spanAt(raisedArrowPolygon(uTurn(0), 2.4, 5), 21);
+    expect((b as number) - (a as number)).toBeCloseTo(2.4, 1);
+    expect((d as number) - (c as number)).toBeCloseTo(2.4, 1);
+    expect(b as number).toBeLessThan(c as number);
+    expect(a as number).toBeLessThan(0);
+    expect(d as number).toBeGreaterThan(0);
+  });
+
+  it("puts the way up on the west side where traffic drives on the left", () => {
+    // Up the west side heading north, round to the right, back down the east side.
+    const right = raisedArrowPolygon(uTurn(0), 2.4, 5, { drivingSide: "right" });
+    const left = raisedArrowPolygon(uTurn(0), 2.4, 5, { drivingSide: "left" });
+    // The ring starts on the left edge of the shaft at its foot.
+    expect((right[0] as LngLat)[0]).toBeGreaterThan(0);
+    expect((left[0] as LngLat)[0]).toBeLessThan(0);
+  });
 });
 
 describe("smoothArrowLine", () => {

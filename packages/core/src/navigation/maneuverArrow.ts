@@ -287,12 +287,127 @@ function withoutCrowding(points: readonly XY[], gap: number): XY[] {
 }
 
 /**
+ * Along the arrow, in widths: two points this far apart that come closer than
+ * the arrow needs are a fold (a U-turn, a hairpin), and a loop shorter than
+ * this in an edge of the outline is the inside of a corner, not the road's own.
+ */
+const FOLD_WINDOW_WIDTHS = 6.5;
+/** Space kept between the parts of an arrow that a tight turn brings side by side. */
+const FOLD_CLEARANCE_M = 0.2;
+/** The arrow is never drawn narrower than this; a tighter turn has its legs spread instead. */
+const MIN_RAISED_WIDTH_M = 1;
+
+/** Cumulative length along local points. */
+function lengthsAlong(points: readonly XY[]): number[] {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1] as XY;
+    const b = points[i] as XY;
+    cum.push((cum[i - 1] as number) + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  return cum;
+}
+
+/** The fold gap is sampled this often along the line, so it may read up to half this too wide. */
+const FOLD_SAMPLE_M = 0.25;
+
+/**
+ * How close the line comes to itself between points at least `minAlong`
+ * metres apart along it: on a U-turn, how far apart its legs run.
+ */
+function foldGap(points: readonly XY[], minAlong: number): number {
+  const cum = lengthsAlong(points);
+  const total = cum.at(-1) ?? 0;
+  const samples: { p: XY; along: number }[] = [];
+  let i = 1;
+  for (let along = 0; along <= total; along += FOLD_SAMPLE_M) {
+    while (i < points.length - 1 && (cum[i] as number) < along) i++;
+    const a = points[i - 1] as XY;
+    const b = points[i] as XY;
+    const span = (cum[i] as number) - (cum[i - 1] as number);
+    const t = span > 0 ? Math.min(Math.max((along - (cum[i - 1] as number)) / span, 0), 1) : 0;
+    samples.push({ p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], along });
+  }
+  let closest = Number.POSITIVE_INFINITY;
+  for (let m = 0; m < samples.length; m++) {
+    const sm = samples[m] as { p: XY; along: number };
+    for (let n = m + 1; n < samples.length; n++) {
+      const sn = samples[n] as { p: XY; along: number };
+      if (sn.along - sm.along < minAlong) continue;
+      closest = Math.min(closest, Math.hypot(sn.p[0] - sm.p[0], sn.p[1] - sm.p[1]));
+    }
+  }
+  return closest;
+}
+
+/**
+ * The line's turns in degrees, positive to the right: their sum, and whether
+ * it doubles straight back at a point, as a U-turn on one road does. Such a
+ * reversal turns neither way.
+ */
+function turning(points: readonly XY[]): { total: number; reverses: boolean } {
+  let total = 0;
+  let reverses = false;
+  let previous: number | undefined;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1] as XY;
+    const b = points[i] as XY;
+    // Bearing clockwise from north, with y north and x east.
+    const heading = (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI;
+    if (previous !== undefined) {
+      const turn = ((((heading - previous) % 360) + 540) % 360) - 180;
+      if (Math.abs(turn) > 179.9) reverses = true;
+      else total += turn;
+    }
+    previous = heading;
+  }
+  return { total, reverses };
+}
+
+/** Whether any two segments of the closed ring cross. */
+function ringCrossesItself(ring: readonly XY[]): boolean {
+  const turn = (p: XY, q: XY, r: XY) =>
+    (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const last = ring.length - 1;
+  for (let i = 0; i < last; i++) {
+    for (let j = i + 2; j < last; j++) {
+      if (i === 0 && j === last - 1) continue;
+      const [a, b, c, d] = [ring[i], ring[i + 1], ring[j], ring[j + 1]] as XY[];
+      if (!a || !b || !c || !d) continue;
+      if (turn(a, b, c) * turn(a, b, d) < 0 && turn(c, d, a) * turn(c, d, b) < 0) return true;
+    }
+  }
+  return false;
+}
+
+/** Options for {@link raisedArrowPolygon}. */
+export interface RaisedArrowOptions {
+  /**
+   * The side traffic keeps to, which decides the way a U-turn back along the
+   * same road is drawn round. Right when unknown.
+   */
+  drivingSide?: "left" | "right";
+}
+
+/**
  * The arrow line as one closed outline on the ground, for the raised 3D arrow
  * (immersive navigation spec §9.3): a shaft `widthMeters` wide and, at the
  * tip, a head twice as wide and `headMeters` long. Empty when the line is too
  * short to carry a head.
+ *
+ * A turn tight enough to bring the head beside the shaft (a U-turn, a hairpin)
+ * narrows the arrow until its parts clear each other. A U-turn back along the
+ * same road leaves no room at any width, so its legs are drawn apart instead,
+ * each on the right of its travel where traffic drives on the right, as the
+ * car turns from one side of the road to the other. An outline that would
+ * still cross itself, which MapLibre fills wrongly, comes back empty.
  */
-export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters = 5): LngLat[] {
+export function raisedArrowPolygon(
+  line: LngLat[],
+  widthMeters = 2.4,
+  headMeters = 5,
+  options: RaisedArrowOptions = {},
+): LngLat[] {
   const tip = line.at(-1);
   if (!tip || line.length < 2) return [];
   const cos = Math.cos((tip[1] * Math.PI) / 180);
@@ -300,8 +415,39 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
   const toLocal = ([lng, lat]: LngLat): LngLat => [(lng - tip[0]) * k * cos, (lat - tip[1]) * k];
   const toLngLat = ([x, y]: LngLat): LngLat => [tip[0] + x / (k * cos), tip[1] + y / k];
   // Points a hair apart give a segment whose direction is noise.
+  const crowding = widthMeters / 4;
+  let local = withoutCrowding(line.map(toLocal), crowding);
+  // Side by side, a shaft and a head twice as wide need 1.5 widths between
+  // their centre lines. Corners up to about 150° never bring points this far
+  // apart along the line that close; sharper ones and U-turns do.
+  const needed = (width: number) => 1.5 * width + FOLD_CLEARANCE_M;
+  const fold = Math.max(foldGap(local, FOLD_WINDOW_WIDTHS * widthMeters) - FOLD_SAMPLE_M / 2, 0);
+  let width = widthMeters;
+  if (fold < needed(widthMeters)) {
+    const fitting = (fold - FOLD_CLEARANCE_M) / 1.5;
+    if (fitting >= MIN_RAISED_WIDTH_M) width = fitting;
+    else {
+      // Spread the legs to the outside of the turn: the right of travel for a
+      // turn to the left. On one road the turn says nothing, the traffic side
+      // does, and the legs lie on top of each other.
+      const { total, reverses } = turning(local);
+      const turnsLeft = reverses ? options.drivingSide !== "left" : total < 0;
+      const half = (needed(widthMeters) - (reverses ? 0 : fold)) / 2;
+      local = withoutCrowding(
+        offsetPoints(local, () => (turnsLeft ? half : -half)),
+        crowding,
+      );
+    }
+  }
+  const ring = arrowOutline(local, width, headMeters);
+  return ring.length > 0 && !ringCrossesItself(ring) ? ring.map(toLngLat) : [];
+}
+
+/** The closed outline in local metres, the tip at the line's last point. */
+function arrowOutline(local: XY[], widthMeters: number, headMeters: number): XY[] {
   const gap = widthMeters / 4;
-  const local = withoutCrowding(line.map(toLocal), gap);
+  const tipPoint = local.at(-1);
+  if (!tipPoint) return [];
   const cum = [0];
   for (let i = 1; i < local.length; i++) {
     const a = local[i - 1] as LngLat;
@@ -337,9 +483,9 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
   const base = shaft[shaft.length - 1] as LngLat;
   // The head points from its base to the tip, and the shaft's end is mitred
   // against that direction, so the shaft meets the head square.
-  const n = rightNormal(base, [0, 0]) ?? [0, 0];
+  const n = rightNormal(base, tipPoint) ?? [0, 0];
   const half = widthMeters / 2;
-  const withTip = [...shaft, [0, 0] as XY];
+  const withTip = [...shaft, tipPoint];
   const side = (offset: number) =>
     cutShortLoops(
       withoutReversals(
@@ -348,16 +494,16 @@ export function raisedArrowPolygon(line: LngLat[], widthMeters = 2.4, headMeters
           .slice(0, -1)
           .map((p) => ({ p })),
       ),
-      2 * widthMeters,
+      FOLD_WINDOW_WIDTHS * widthMeters,
       (p) => ({ p }),
     ).map(({ p }) => p);
   const left = side(-half);
   const right = side(half);
   const headLeft: LngLat = [base[0] - n[0] * widthMeters, base[1] - n[1] * widthMeters];
   const headRight: LngLat = [base[0] + n[0] * widthMeters, base[1] + n[1] * widthMeters];
-  const ring = [...left, headLeft, [0, 0] as LngLat, headRight, ...right.reverse()];
+  const ring = [...left, headLeft, tipPoint, headRight, ...right.reverse()];
   ring.push(ring[0] as LngLat);
-  return ring.map(toLngLat);
+  return ring;
 }
 
 /** The raised and flat arrow heads are this long. */

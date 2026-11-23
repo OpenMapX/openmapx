@@ -60,13 +60,20 @@ const mapRef: { current: unknown } = { current: fake.map };
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
-vi.mock("@openmapx/core", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  useNavigationStore: Object.assign(
-    (selector: (s: typeof navState) => unknown) => selector(navState),
-    { getState: () => navState },
-  ),
-}));
+/** Set to stand in for the raised outline the layer is given. */
+const raisedOverride: { outline: [number, number][] | null } = { outline: null };
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const original = await importOriginal<Record<string, unknown>>();
+  const raised = original.raisedArrowPolygon as (...args: unknown[]) => [number, number][];
+  return {
+    ...original,
+    raisedArrowPolygon: (...args: unknown[]) => raisedOverride.outline ?? raised(...args),
+    useNavigationStore: Object.assign(
+      (selector: (s: typeof navState) => unknown) => selector(navState),
+      { getState: () => navState },
+    ),
+  };
+});
 
 import { NavManeuverArrowLayer } from "./NavManeuverArrowLayer";
 
@@ -78,6 +85,7 @@ function features(): GeoJSON.Feature[] {
 }
 
 afterEach(() => {
+  raisedOverride.outline = null;
   navState.route = route;
   navState.progress = {
     currentStepIndex: 0,
@@ -118,6 +126,63 @@ describe("NavManeuverArrowLayer in 3D", () => {
     for (const id of ["nav-maneuver-arrow-casing", "nav-maneuver-arrow", "nav-maneuver-arrow-head"])
       expect(visibility(id)).toBe("none");
   });
+
+  it("keeps the 2D arrow in 3D where no raised outline can be drawn", () => {
+    raisedOverride.outline = [];
+    render(<NavManeuverArrowLayer />);
+    setZoom(17);
+    act(() => useNavigationSceneStore.getState().setActive(true));
+    expect(visibility("nav-maneuver-arrow")).toBe("visible");
+    expect(visibility("nav-maneuver-arrow-head")).toBe("visible");
+    expect(fake.state.layers.has(RAISED) ? visibility(RAISED) : "none").toBe("none");
+    // The route line stays under the flat arrow.
+    expect(useNavigationSceneStore.getState().arrowSpan).toBeNull();
+  });
+
+  it.each([
+    ["right", "east"],
+    ["left", "west"],
+  ] as const)(
+    "on a U-turn back along the road, %s-hand traffic goes up the %s side",
+    (side, way) => {
+      // North 1112 m, then back south along the same road.
+      const uTurnGeometry: [number, number][] = [
+        [8, 50],
+        [8, 50.01],
+        [8, 50.005],
+      ];
+      navState.route = {
+        geometry: uTurnGeometry,
+        distance: 1668,
+        duration: 120,
+        mode: "driving",
+        steps: [
+          { instruction: "Head north", distance: 1112, duration: 60, maneuver: { type: "depart" } },
+          {
+            instruction: "Make a U-turn",
+            distance: 556,
+            duration: 60,
+            maneuver: { type: "turn", modifier: "uturn" },
+            drivingSide: side,
+          },
+          { instruction: "Arrive", distance: 0, duration: 0, maneuver: { type: "arrive" } },
+        ],
+      };
+      navState.progress = {
+        currentStepIndex: 0,
+        distanceToNextManeuver: 100,
+        speedMps: 10,
+        alongMeters: 1012,
+      };
+      render(<NavManeuverArrowLayer />);
+      const polygon = features().find((f) => f.geometry.type === "Polygon");
+      const ring = (polygon?.geometry as GeoJSON.Polygon | undefined)?.coordinates[0] ?? [];
+      // The ring starts at the foot of the shaft, on its left edge.
+      const startLng = (ring[0] as [number, number] | undefined)?.[0] ?? 8;
+      if (way === "east") expect(startLng).toBeGreaterThan(8);
+      else expect(startLng).toBeLessThan(8);
+    },
+  );
 
   it("below z16.5 the 2D arrow stays", () => {
     render(<NavManeuverArrowLayer />);
