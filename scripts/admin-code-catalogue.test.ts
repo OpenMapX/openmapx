@@ -524,10 +524,6 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
     zodLiterals(adminServiceActionSchema, "action").map((action) => `service.${action}`),
   "apps/api/src/routes/admin-services.ts `service.bulk.${action}`": () =>
     zodLiterals(adminServicesBulkActionSchema, "action").map((action) => `service.bulk.${action}`),
-  "apps/api/src/routes/admin-standalone-integrations.ts `standalone.${action}`": (file) =>
-    literals(required(file, /for \(const action of \[([^\]]+)\] as const\)/, "actions")).map(
-      (action) => `standalone.${action}`,
-    ),
   "apps/api/src/routes/ambient-places.ts `ambient-places.${action}`": (file) =>
     captures(
       required(file, /const operations = \{([^}]+)\}/, "ambient operations"),
