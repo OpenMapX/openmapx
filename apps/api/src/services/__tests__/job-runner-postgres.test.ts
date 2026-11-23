@@ -904,6 +904,50 @@ describe.skipIf(
       .orderBy(adminJobLog.seq);
     expect(lines.map((line) => line.seq)).toEqual(Array.from({ length: 2000 }, (_, n) => n));
   }, 120_000);
+  it("gives concurrent log lines of one job each its own seq, without gaps", async () => {
+    const job = await seedCapacity(0),
+      execution = required(readJobExecution(job.protocol));
+    const { insertOwnedJobLog } = await import("../admin-job-state");
+    const count = 16;
+    const inserted = await Promise.all(
+      Array.from({ length: count }, (_, n) =>
+        insertOwnedJobLog(execution, {
+          jobId: job.id,
+          stream: "stdout",
+          line: `concurrent ${n}`,
+          createdAt: new Date(),
+        }),
+      ),
+    );
+    const expected = Array.from({ length: count }, (_, n) => n);
+    expect(inserted.map((line) => line?.seq).sort((a, b) => (a ?? -1) - (b ?? -1))).toEqual(
+      expected,
+    );
+    const lines = await state.db
+      .select({ seq: adminJobLog.seq })
+      .from(adminJobLog)
+      .where(eq(adminJobLog.jobId, job.id))
+      .orderBy(adminJobLog.seq);
+    expect(lines.map((line) => line.seq)).toEqual(expected);
+    expect((await row(job.id)).logEvents).toBe(count);
+  });
+  it("raises instead of dropping a line when the log counter fell behind the log", async () => {
+    const job = await seed("test.drifted-log-counter"),
+      execution = required(readJobExecution(job.protocol));
+    const { insertOwnedJobLog } = await import("../admin-job-state");
+    const line = { jobId: job.id, stream: "stdout" as const, line: "first", createdAt: new Date() };
+    expect(await insertOwnedJobLog(execution, line)).toEqual({ seq: 0 });
+    await state.db.update(adminJob).set({ logEvents: 0 }).where(eq(adminJob.id, job.id));
+    const failure = await insertOwnedJobLog(execution, { ...line, line: "second" }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const cause = (failure as { cause?: unknown } | undefined)?.cause ?? failure;
+    expect(cause).toMatchObject({ constraint_name: "admin_job_log_pkey" });
+    expect(
+      await state.db.select().from(adminJobLog).where(eq(adminJobLog.jobId, job.id)),
+    ).toHaveLength(1);
+  });
   it("keeps logging a job without agent operations past the operations log capacity", async () => {
     const job = await seed("test.uncapped-log"),
       execution = required(readJobExecution(job.protocol));

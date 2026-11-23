@@ -236,9 +236,12 @@ export interface OwnedJobLogLine {
  * Writes one line to a job's log. The job row's lock serializes the insert
  * with claims, cancellation, settlement and the job's other lines: the line
  * takes the next `seq` from the job's counters, which it advances in the same
- * statement. A job that records agent operations accepts lines only within
- * its log capacity. The returned insertion, not a preflight SELECT, is the
- * event publication authority: `null` means the line was not written.
+ * statement. Once a job records agent operations it accepts lines only within
+ * its log capacity, which counts all its lines, including earlier local ones.
+ * Only a repeated source event is skipped; a `seq` collision raises, since it
+ * means the counter no longer matches the log. The returned insertion, not a
+ * preflight SELECT, is the event publication authority: `null` means the line
+ * was not written.
  */
 export async function insertOwnedJobLog(
   execution: JobExecution | undefined,
@@ -254,7 +257,8 @@ export async function insertOwnedJobLog(
       FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '3' OR (
         owner.log_events < ${ADMIN_JOB_LOG_LIMITS.events}
         AND owner.log_bytes + ${bytes} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
-      ) ON CONFLICT DO NOTHING RETURNING job_id, seq
+      ) ON CONFLICT (job_id, source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
+      RETURNING job_id, seq
     ), charged AS (
       UPDATE ${adminJob} SET log_events = owner.log_events + 1, log_bytes = owner.log_bytes + ${bytes}
       FROM owner, inserted WHERE ${adminJob.id} = owner.id AND inserted.job_id = owner.id
