@@ -86,6 +86,27 @@ export const jobs = dataManager.table(
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
+    // Finished rows stay 90 days. The API's prune and the control prune's
+    // sweep of restore-closed rows select by finish time.
+    index("jobs_finished_at_idx").on(table.finishedAt),
+    // The few rows a backup restore closed whose key-named files the control
+    // prune has yet to sweep, in the key order it reads them.
+    index("jobs_operation_key_idx")
+      .on(table.operationKey)
+      .where(sql`${table.executionAdmission} IS NULL AND ${table.releasedAt} IS NULL`),
+    // The admin job listings and the last-sync lookup read one kind, newest first.
+    index("jobs_kind_admitted_at_idx").on(table.kind, table.admittedAt),
+    // Startup recovery lists these in admission order, and an exclusive
+    // admission looks among them for an unfinished job.
+    index("jobs_admitted_at_idx")
+      .on(table.admittedAt)
+      .where(
+        sql`${table.finishedAt} IS NULL OR (${table.executionAdmission} IS NOT NULL AND ${table.releasedAt} IS NULL)`,
+      ),
+    // A local transit sync replays its idempotency key within 24 hours.
+    index("jobs_idempotency_key_idx")
+      .on(table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
     check(
       "jobs_status_check",
       sql`${table.status} IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')`,

@@ -1029,6 +1029,11 @@ CREATE INDEX "data_disclosure_event_occurred_at_idx" ON "data_disclosure_event" 
 CREATE UNIQUE INDEX "data_disclosure_event_idempotency_key_key" ON "data_disclosure_event" USING btree ("idempotency_key") WHERE "data_disclosure_event"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "configuration_fence_state_prepared_key" ON "data_manager"."configuration_fence" USING btree ("state") WHERE "data_manager"."configuration_fence"."state" = 'prepared';--> statement-breakpoint
 CREATE INDEX "job_stages_job_id_idx" ON "data_manager"."job_stages" USING btree ("job_id");--> statement-breakpoint
+CREATE INDEX "jobs_finished_at_idx" ON "data_manager"."jobs" USING btree ("finished_at");--> statement-breakpoint
+CREATE INDEX "jobs_operation_key_idx" ON "data_manager"."jobs" USING btree ("operation_key") WHERE "data_manager"."jobs"."execution_admission" IS NULL AND "data_manager"."jobs"."released_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "jobs_kind_admitted_at_idx" ON "data_manager"."jobs" USING btree ("kind","admitted_at");--> statement-breakpoint
+CREATE INDEX "jobs_admitted_at_idx" ON "data_manager"."jobs" USING btree ("admitted_at") WHERE "data_manager"."jobs"."finished_at" IS NULL OR ("data_manager"."jobs"."execution_admission" IS NOT NULL AND "data_manager"."jobs"."released_at" IS NULL);--> statement-breakpoint
+CREATE INDEX "jobs_idempotency_key_idx" ON "data_manager"."jobs" USING btree ("idempotency_key") WHERE "data_manager"."jobs"."idempotency_key" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "offline_package_artifact_references_package_id_idx" ON "data_manager"."offline_package_artifact_references" USING btree ("package_id");--> statement-breakpoint
 CREATE INDEX "offline_package_artifact_references_principal_retained_at_idx" ON "data_manager"."offline_package_artifact_references" USING btree ("principal","retained_at");--> statement-breakpoint
 CREATE INDEX "offline_package_job_owners_principal_idx" ON "data_manager"."offline_package_job_owners" USING btree ("principal");--> statement-breakpoint

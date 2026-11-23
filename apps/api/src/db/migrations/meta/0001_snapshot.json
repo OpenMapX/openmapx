@@ -1,6 +1,6 @@
 {
-  "id": "9244f627-1be8-45de-8577-0f188f5d4694",
-  "prevId": "ce843bc2-f3d1-4e3b-be20-26b2ada3098a",
+  "id": "bd3fe870-be3e-4b5a-93b6-fddff6c11741",
+  "prevId": "46fe1187-9810-4bc2-86a4-3e5cb9c4f3ab",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2256,7 +2256,92 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "jobs_finished_at_idx": {
+          "name": "jobs_finished_at_idx",
+          "columns": [
+            {
+              "expression": "finished_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "jobs_operation_key_idx": {
+          "name": "jobs_operation_key_idx",
+          "columns": [
+            {
+              "expression": "operation_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"data_manager\".\"jobs\".\"execution_admission\" IS NULL AND \"data_manager\".\"jobs\".\"released_at\" IS NULL",
+          "concurrently": false
+        },
+        "jobs_kind_admitted_at_idx": {
+          "name": "jobs_kind_admitted_at_idx",
+          "columns": [
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "admitted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "jobs_admitted_at_idx": {
+          "name": "jobs_admitted_at_idx",
+          "columns": [
+            {
+              "expression": "admitted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"data_manager\".\"jobs\".\"finished_at\" IS NULL OR (\"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL AND \"data_manager\".\"jobs\".\"released_at\" IS NULL)",
+          "concurrently": false
+        },
+        "jobs_idempotency_key_idx": {
+          "name": "jobs_idempotency_key_idx",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"data_manager\".\"jobs\".\"idempotency_key\" IS NOT NULL",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {

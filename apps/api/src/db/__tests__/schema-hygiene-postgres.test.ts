@@ -348,7 +348,9 @@ integration("schema hygiene", () => {
   it("indexes the prune paths and active admin jobs", async () => {
     const indexes = await fixture.sql<{ name: string; definition: string }[]>`
       SELECT indexname AS name, indexdef AS definition FROM pg_indexes
-      WHERE schemaname = 'public' AND indexname IN (
+      WHERE schemaname IN ('public', 'data_manager') AND indexname IN (
+        'jobs_finished_at_idx',
+        'jobs_operation_key_idx',
         'admin_action_reauthentication_expires_at_idx',
         'data_disclosure_event_occurred_at_idx',
         'health_history_checked_at_idx',
@@ -367,6 +369,12 @@ integration("schema hygiene", () => {
       ),
       data_disclosure_event_occurred_at_idx: expect.stringContaining("(occurred_at)"),
       health_history_checked_at_idx: expect.stringContaining("(checked_at)"),
+      // Data-manager jobs stay 90 days: the API's prune selects by finish time,
+      // and the control prune sweeps the keys of restore-closed rows.
+      jobs_finished_at_idx: expect.stringContaining("data_manager.jobs USING btree (finished_at)"),
+      jobs_operation_key_idx: expect.stringMatching(
+        /\(operation_key\) WHERE \(\(execution_admission IS NULL\) AND \(released_at IS NULL\)\)$/,
+      ),
       mangrove_keypair_wrap_user_id_idx: expect.stringContaining("(user_id)"),
     });
   });
