@@ -437,7 +437,7 @@ async function observeOperation(
           },
           onLog: async (stream, message, cursor) => {
             try {
-              await context.log(message, stream, `ops:${admission.operationId}:${cursor}`, cursor);
+              await context.log(message, stream, `ops:${admission.operationId}:${cursor}`);
             } catch (error) {
               retireIfLost(error);
               projected.truncated = true;

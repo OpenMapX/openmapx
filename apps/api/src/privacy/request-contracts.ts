@@ -10,7 +10,7 @@ export const requestChannelSchema = z.enum(REQUEST_CHANNELS);
 
 export const assistedSubjectSchema = z
   .object({
-    locatorType: z.enum(["user_id", "email", "username", "erasure_reference", "other_reference"]),
+    locatorType: z.enum(["user_id", "email", "erasure_reference", "other_reference"]),
     locator: z.string().trim().min(1).max(512),
     accountState: z.enum(["current", "inaccessible", "deleted", "unknown"]),
   })

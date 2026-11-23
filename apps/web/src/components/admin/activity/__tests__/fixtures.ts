@@ -27,8 +27,8 @@ export function job(overrides: Partial<AdminActivityJobDetail> = {}): AdminActiv
     ...overrides,
   });
 }
-export function log(id: string, seq: number): AdminActivityJobLog {
-  return { id, jobId: "job-1", seq, stream: "stdout", line: id, createdAt: timestamp };
+export function log(line: string, seq: number): AdminActivityJobLog {
+  return { jobId: "job-1", seq, stream: "stdout", line, createdAt: timestamp };
 }
 
 export function stage(jobId: string): AdminActivityJobStage {

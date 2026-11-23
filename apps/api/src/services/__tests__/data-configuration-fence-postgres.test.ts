@@ -339,8 +339,11 @@ describe.skipIf(
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
       // An unfinished data job refuses the preparation before anything changes.
-      await sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key)
-        VALUES(${busyJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`})`;
+      await sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,
+          execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref,
+          execution_admission,execution_progress)
+        VALUES(${busyJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`},
+          ${"a".repeat(64)},${"b".repeat(64)},now(),now() + interval '1 hour','{}','{}','{}','{}','{}')`;
       await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
         "configuration_maintenance_busy",
       );
@@ -481,7 +484,7 @@ async function ownedFenceFixture(
     OPS_AGENT_URL: await app.listen({ host: "127.0.0.1", port: 0 }),
     OPS_AGENT_TOKEN_FILE: tokenFile,
     OPENMAPX_ROOT_DIR: host.root,
-    OPENMAPX_SECRETS_KEY: "71".repeat(32),
+    OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
     OPENMAPX_RELEASE: "local",
     BETTER_AUTH_SECRET: "owned-fence-synthetic-secret-at-least-32",
     DOMAIN: "example.test",
@@ -809,7 +812,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       if (f.input.hardlinkPlanDigest)
         await expect(admit(own, "ops-agent")).resolves.toBeUndefined();
       else await expect(admit(own, "ops-agent")).rejects.toThrow("configuration_maintenance_busy");
-      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
+      expect(await f.sql`SELECT id FROM data_manager.jobs`).toEqual([]);
       expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual(before);
       await expect(
         fence.withAdmission(async () => {

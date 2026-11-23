@@ -31,6 +31,8 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
     const cleanup: Array<() => Promise<void> | void> = [];
     const subjectId = `primary-stream-${suffix}`;
     const foreignId = `primary-foreign-${suffix}`;
+    // Saved list ids are UUIDs; these sort by index within this run.
+    const listId = (index: number) => `${suffix.slice(0, 24)}${index.toString().padStart(12, "0")}`;
     const cutoffAt = new Date("2026-01-01T00:00:00.000Z");
     const before = new Date("2025-01-01T00:00:00.000Z");
     const after = new Date("2027-01-01T00:00:00.000Z");
@@ -73,21 +75,21 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
       ]);
       await database.insert(savedList).values([
         ...Array.from({ length: 300 }, (_, index) => ({
-          id: `list-${index.toString().padStart(4, "0")}-${suffix}`,
+          id: listId(index),
           userId: subjectId,
           name: `List ${index.toString().padStart(4, "0")} ${suffix}`,
           createdAt: before,
           updatedAt: before,
         })),
         {
-          id: `late-list-${suffix}`,
+          id: listId(900_000),
           userId: subjectId,
           name: `Late ${suffix}`,
           createdAt: after,
           updatedAt: after,
         },
         {
-          id: `foreign-list-${suffix}`,
+          id: listId(900_001),
           userId: foreignId,
           name: `Foreign ${suffix}`,
           createdAt: before,
@@ -174,9 +176,9 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
       expect(savedLines).toHaveLength(300);
       expect(savedLines[0]).toMatchObject({
         registrationId: "saved-lists",
-        sourceId: `list-0000-${suffix}`,
+        sourceId: listId(0),
       });
-      expect(savedLines.at(-1)).toMatchObject({ sourceId: `list-0299-${suffix}` });
+      expect(savedLines.at(-1)).toMatchObject({ sourceId: listId(299) });
 
       await snapshot.disposeSources?.();
       await expect(consume(articleSaved.source as AsyncIterable<Uint8Array>)).rejects.toMatchObject(

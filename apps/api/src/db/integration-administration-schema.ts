@@ -1,5 +1,5 @@
 import type { IntegrationApplyReceipt } from "@openmapx/core/api-contracts";
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 /** Retained across unbinding, so a delete/reinsert cannot restore an old CAS token. */
 export const integrationBindingRevision = pgTable("integration_binding_revision", {
@@ -12,7 +12,7 @@ export const integrationApplicationReceipt = pgTable(
   "integration_application_receipt",
   {
     operationId: text("operation_id").primaryKey(),
-    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    actorId: text("actor_id"),
     integrationId: text("integration_id").notNull(),
     capability: text("capability").notNull(),
     serviceId: text("service_id"),
@@ -23,7 +23,15 @@ export const integrationApplicationReceipt = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    index("integration_application_target_time_idx").on(t.integrationId, t.createdAt),
-    index("integration_application_actor_idx").on(t.actorId),
+    foreignKey({
+      name: "integration_application_receipt_actor_id_fkey",
+      columns: [t.actorId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
+    index("integration_application_receipt_integration_id_created_at_idx").on(
+      t.integrationId,
+      t.createdAt,
+    ),
+    index("integration_application_receipt_actor_id_idx").on(t.actorId),
   ],
 );

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import {
   afterAll,
@@ -80,11 +79,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       vi.restoreAllMocks();
     });
     const seed = (config: Record<string, unknown>) =>
-      fixture.db.insert(serviceConfig).values({ id: randomUUID(), serviceId: "alpha", config });
+      fixture.db.insert(serviceConfig).values({ serviceId: "alpha", config });
     const rows = () =>
       fixture.db
         .select({
-          id: serviceConfig.id,
+          serviceId: serviceConfig.serviceId,
           config: serviceConfig.config,
         })
         .from(serviceConfig);

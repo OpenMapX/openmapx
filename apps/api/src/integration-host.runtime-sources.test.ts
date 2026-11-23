@@ -79,7 +79,7 @@ vi.mock("./services/metrics/recorder.js", () => ({
 }));
 
 vi.mock("./services/secrets.js", () => ({
-  isSecretsConfigured: vi.fn().mockReturnValue(true),
+  secretsKeyProblem: vi.fn().mockReturnValue(null),
   resolveVaultSecrets: vi.fn().mockResolvedValue({}),
   getSecret: vi.fn().mockReturnValue(undefined),
 }));

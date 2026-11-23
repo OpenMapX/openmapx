@@ -14,6 +14,5 @@ export type ExportAdminConfigurationMigration200InstallationsItem = {
   ownership: ExportAdminConfigurationMigration200InstallationsItemOwnership;
   extensionId: string | null;
   provenance: ExportAdminConfigurationMigration200InstallationsItemProvenance;
-  adoptable: boolean;
   removable: boolean;
 };

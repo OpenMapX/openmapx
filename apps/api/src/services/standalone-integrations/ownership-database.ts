@@ -12,7 +12,6 @@ export async function ownershipSnapshot(tx: Connection, id: string) {
     .select({
       id: installedIntegration.id,
       installedVersion: installedIntegration.installedVersion,
-      managedByExtension: installedIntegration.managedByExtension,
       repository: installedIntegration.repository,
       sourceType: installedIntegration.sourceType,
       xmin: sql<string>`xmin::text`,
@@ -35,7 +34,7 @@ export async function ownershipSnapshot(tx: Connection, id: string) {
       ),
     )
     .for("update");
-  const parentId = components[0]?.extensionId ?? integration?.managedByExtension ?? null;
+  const parentId = components[0]?.extensionId ?? null;
   const parents = parentId
     ? await tx
         .select({

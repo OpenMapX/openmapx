@@ -516,7 +516,7 @@ describe("replacing a place's label", () => {
         return json(200, {
           labels: [
             {
-              id: "label-1",
+              id: "0193e4a0-0000-7000-8000-000000000201",
               label: existing,
               icon: null,
               name: ENRICHED.name,

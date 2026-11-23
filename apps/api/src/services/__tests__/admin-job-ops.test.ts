@@ -370,7 +370,7 @@ describe("administrative job operations broker", () => {
       }),
     ).resolves.toEqual({ backupId: "nightly" });
 
-    expect(ctx.log).toHaveBeenCalledWith("done", "stdout", `ops:${operationId}:1`, 1);
+    expect(ctx.log).toHaveBeenCalledWith("done", "stdout", `ops:${operationId}:1`);
     expect(client.events).toHaveBeenCalledWith(operationId, {
       after: 0,
       limit: 100,
@@ -469,7 +469,7 @@ describe("administrative job operations broker", () => {
       signal: expect.any(AbortSignal),
     });
     expect(ctx.log).toHaveBeenCalledTimes(1);
-    expect(ctx.log).toHaveBeenCalledWith("next", "stdout", `ops:${operationId}:2`, 2);
+    expect(ctx.log).toHaveBeenCalledWith("next", "stdout", `ops:${operationId}:2`);
   });
 
   it("requests exact agent cancellation and treats response loss as pending until terminal", async () => {

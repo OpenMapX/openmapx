@@ -3,7 +3,7 @@ import z from "zod/v4";
 import { parseSavedPlaceContributors } from "../../../saved-place-contributors";
 import { SAVED_EXPORT_FORMATS } from "../../../saved-place-export";
 
-const id = z.string().min(1);
+const id = z.uuid();
 const timestamp = z.iso.datetime({ offset: true });
 const latitude = z.number().min(-90).max(90);
 const longitude = z.number().min(-180).max(180);

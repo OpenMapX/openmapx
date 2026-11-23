@@ -21,7 +21,7 @@ import {
   installedIntegration,
 } from "../../db/schema";
 import { reloadIntegrations } from "../../integration-host";
-import { dbActorId } from "../../utils/actor";
+import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
 import { readProjection } from "../admin-job-projection";
@@ -162,15 +162,8 @@ async function ownership(integrationId: string) {
       ),
     )
     .limit(1);
-  const [integration] = await db
-    .select()
-    .from(installedIntegration)
-    .where(eq(installedIntegration.id, integrationId))
-    .limit(1);
   if (row && row.parent.installationKind !== "standalone")
     throw new AdminJobFailure("Integration belongs to a catalog extension", { integrationId });
-  if (integration?.managedByExtension && integration.managedByExtension !== row?.parent.id)
-    throw new JobObservationPending("recovery_required");
   return row?.parent.id ?? null;
 }
 async function bookkeeping(
@@ -208,9 +201,8 @@ async function bookkeeping(
         parent.installationKind !== "standalone" ||
         parent.sourceTrust !== "community" ||
         canonicalJson(parent.provenance) !== canonicalJson(source) ||
-        integration?.managedByExtension !== state.parentId ||
         component?.extensionId !== state.parentId ||
-        integration.installedVersion !== state.inspection.version
+        integration?.installedVersion !== state.inspection.version
       )
         throw new JobObservationPending("recovery_required");
       return "committed";
@@ -238,7 +230,7 @@ async function bookkeeping(
         lastOperationId: state.operationId,
         installedVersion: state.inspection.version,
         manifest: null,
-        installedBy: dbActorId(state.ownerId),
+        installedBy: actorUserIdOrNull(state.ownerId),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -260,8 +252,7 @@ async function bookkeeping(
         repository,
         sourceType: source.kind,
         installedVersion: state.inspection.version,
-        installedBy: dbActorId(state.ownerId),
-        managedByExtension: state.parentId,
+        installedBy: actorUserIdOrNull(state.ownerId),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -270,7 +261,6 @@ async function bookkeeping(
           repository,
           sourceType: source.kind,
           installedVersion: state.inspection.version,
-          managedByExtension: state.parentId,
           updatedAt: now,
         },
       });

@@ -38,6 +38,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "personal_vehicle.user_id": "personal-vehicles",
   "saved_list.user_id": "saved-lists",
   "service_secret.updated_by": "secret-update-attribution",
+  "system_secret.updated_by": "secret-update-attribution",
   "transit_credential_preview.actor_id": "secret-update-attribution",
   "configuration_migration_preview.actor_id": "secret-update-attribution",
   "session.user_id": "auth-sessions",
@@ -47,7 +48,39 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "data_subject_request.user_id": "privacy-case-records",
   "data_subject_request.actor_user_id": "privacy-case-records",
   "data_subject_request_notification.recipient_user_id": "privacy-case-records",
+  "data_subject_request_event.actor_user_id": "privacy-case-records",
+  "admin_audit_log.target_user_id": "admin-audit-attribution",
+  "system_settings.updated_by": "system-setting-attribution",
   "session_auth_assurance.user_id": "auth-sessions",
+};
+
+/** Columns that hold an account's id, or a value derived from it, without a
+ * direct foreign key to "user", and what removes it when the account is
+ * deleted. "Erasure trigger" is `openmapx_erase_user_residue()`, which runs
+ * on every delete of a "user" row. The live catalog test in
+ * user-erasure-postgres.test.ts refuses any other such column. */
+export const USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY: Record<string, string> = {
+  "admin_audit_log.target_id": "erasure trigger: set to NULL where target_type is 'user'",
+  "admin_action_reauthentication.target_id":
+    "erasure trigger: the row is deleted for an account.* purpose",
+  "session.impersonated_by": "erasure trigger: the impersonation sessions are deleted",
+  "verification.identifier": "erasure trigger: the rows naming the email are deleted",
+  "verification.value": "erasure trigger: the rows holding the id are deleted",
+  "data_manager.jobs.triggered_by": "erasure trigger: 'api:user:<id>' is set to NULL",
+  "data_manager.offline_package_job_owners.principal":
+    "API delete hook (HMAC of the id under an API-only key); otherwise retention",
+  "data_manager.offline_package_artifact_references.principal":
+    "API delete hook (HMAC of the id under an API-only key); otherwise retention",
+  "mangrove_keypair_wrap.user_id": "foreign key CASCADE to mangrove_keypair.user_id",
+};
+
+/** Columns whose name looks like an account reference but holds none. */
+export const NON_USER_ID_COLUMNS: Record<string, string> = {
+  "share_link.target_id": "a saved list or route; the row cascades with share_link.user_id",
+  "personal_timeline_connection.upstream_user_id":
+    "the account in the external Dawarich instance; the row cascades",
+  "data_disclosure_event.recipient_id": "the third party that received a disclosure",
+  "data_manager.offline_package_jobs.lease_owner": "a worker",
 };
 
 const MANIFEST_SUBJECT_TYPES = ["integration", "service"] as const;

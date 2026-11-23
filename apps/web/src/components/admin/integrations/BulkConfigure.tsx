@@ -333,7 +333,8 @@ function CredentialsTable({
       {!secretsConfigured && (
         <Alert severity="warning" variant="outlined" sx={{ mb: 1 }}>
           {t.rich("vaultNotConfiguredEnvFallback", {
-            variable: "OPENMAPX_SECRETS_KEY",
+            variable: "OPENMAPX_SECRETS_KEY_FILE",
+            command: "pnpm openmapx compose render",
             code: (chunks) => <code>{chunks}</code>,
           })}
         </Alert>

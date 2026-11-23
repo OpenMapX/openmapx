@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { serviceConfig } from "../db/schema.js";
@@ -16,7 +15,7 @@ export async function mergeServiceConfig(
 ): Promise<void> {
   await db
     .insert(serviceConfig)
-    .values({ id: randomUUID(), serviceId, config: updates })
+    .values({ serviceId, config: updates })
     .onConflictDoUpdate({
       target: serviceConfig.serviceId,
       set: {

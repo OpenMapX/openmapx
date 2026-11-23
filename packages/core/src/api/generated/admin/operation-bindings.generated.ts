@@ -23,13 +23,6 @@ export async function addAdminExtensionSourceRequest<T>(
 ): Promise<T> {
   return addAdminExtensionSourceBound<T>(url, options);
 }
-const adoptAdminStandaloneIntegrationBound = bindAdminOperation("adoptAdminStandaloneIntegration");
-export async function adoptAdminStandaloneIntegrationRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return adoptAdminStandaloneIntegrationBound<T>(url, options);
-}
 const applyAdminAuthPolicyBound = bindAdminOperation("applyAdminAuthPolicy");
 export async function applyAdminAuthPolicyRequest<T>(
   url: string,

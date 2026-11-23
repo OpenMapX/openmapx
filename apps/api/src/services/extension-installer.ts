@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
-import { and, eq } from "drizzle-orm";
+import { and, eq, exists, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   installedExtension,
@@ -11,7 +11,7 @@ import {
   serviceRepository,
 } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
-import { dbActorId } from "../utils/actor";
+import { actorUserIdOrNull } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
 import { getServiceSelectionSummary } from "./admin-cli";
@@ -444,7 +444,7 @@ async function installExtensionNow(
   }
   const { manifest } = opts;
   // Synthetic (loopback) actors have no user row → attribute to null.
-  const installedBy = dbActorId(opts.actorId);
+  const installedBy = actorUserIdOrNull(opts.actorId);
 
   // Everything that can be decided without touching the deployment is decided
   // here, before the first mutation.
@@ -558,7 +558,6 @@ async function installExtensionNow(
         url: inspection.url,
         lastSha: published.commit,
         pinnedRef: svc.ref ?? null,
-        managedByExtension: manifest.id,
         lastTransactionId: published.transactionId,
       });
     }
@@ -725,7 +724,6 @@ async function installExtensionNow(
               set: {
                 lastSha: row.lastSha,
                 pinnedRef: row.pinnedRef,
-                managedByExtension: row.managedByExtension,
                 lastTransactionId: row.lastTransactionId,
               },
             });
@@ -741,7 +739,6 @@ async function installExtensionNow(
               installedAt: now,
               updatedAt: now,
               installedBy,
-              managedByExtension: manifest.id,
               lastTransactionId: row.transactionId,
             })
             .onConflictDoUpdate({
@@ -751,7 +748,6 @@ async function installExtensionNow(
                 installedVersion: manifest.version,
                 sourceType: "registry",
                 updatedAt: now,
-                managedByExtension: manifest.id,
                 lastTransactionId: row.transactionId,
               },
             });
@@ -1069,18 +1065,25 @@ async function removeExtensionNow(
     dockerComposeAction,
     renderAndPersistCompose,
   } = extensionEffects(workflow, ctx);
-  const components = await extensionStep(workflow, "remove.snapshot", { id }, async () => {
+  const snapshot = await extensionStep(workflow, "remove.snapshot", { id }, async () => {
     const [ext] = await db
       .select()
       .from(installedExtension)
       .where(eq(installedExtension.id, id))
       .limit(1);
     if (!ext) throw new Error(`Extension "${id}" is not installed`);
-    return db
+    const components = await db
       .select()
       .from(installedExtensionComponent)
       .where(eq(installedExtensionComponent.extensionId, id));
+    // The recorded manifest holds the canonical repository URLs it installed.
+    const manifest = ext.manifest as ExtensionManifest | null;
+    return {
+      components,
+      repositoryUrls: [...new Set((manifest?.services ?? []).map((service) => service.repo))],
+    };
   });
+  const { components } = snapshot;
 
   const serviceIds = components.filter((c) => c.kind === "service").map((c) => c.componentId);
   const integrationIds = components
@@ -1091,17 +1094,13 @@ async function removeExtensionNow(
 
   // A removal interrupted after the agent deleted a repository is retried
   // without that repository's services: their runtimes went first, and the
-  // agent, which no longer reports them at all, refuses to act on them.
-  const reported =
-    serviceIds.length > 0
-      ? new Set(
-          (
-            await extensionStep(workflow, "remove.services.before", {}, () =>
-              readCommunityServices({ signal: ctx.signal }),
-            )
-          ).reportedServiceIds,
-        )
-      : new Set<string>();
+  // agent, which no longer reports them at all, refuses to act on them. The
+  // inventory is read even without service components: an update that
+  // dropped every service leaves its repositories owned by this extension.
+  const community = await extensionStep(workflow, "remove.services.before", {}, () =>
+    readCommunityServices({ signal: ctx.signal }),
+  );
+  const reported = new Set(community.reportedServiceIds);
 
   // Tear down service containers while they're still in the compose file.
   for (const svc of serviceIds.filter((id) => reported.has(id))) {
@@ -1115,7 +1114,7 @@ async function removeExtensionNow(
       throw new Error(`Failed to remove community service runtime ${svc}`);
     }
   }
-  // Remove the repos this extension owns + drop the services from selection.
+  // Drop the services from selection, then remove the repos this extension owns.
   if (serviceIds.length > 0) {
     try {
       await extensionStep(workflow, "selection.disable", serviceIds, async () => {
@@ -1134,36 +1133,44 @@ async function removeExtensionNow(
       await ctx.log(`Failed to disable services: ${(e as Error).message}`, "stderr");
       throw e;
     }
-    const repos = await extensionStep(workflow, "remove.repositories.before", {}, () =>
-      db.select().from(serviceRepository).where(eq(serviceRepository.managedByExtension, id)),
+  }
+  // The agent records which extension owns each repository and refuses to
+  // remove another extension's. Its inventory also names repositories an
+  // update dropped from the manifest; the recorded rows cover a retry after
+  // the agent already deleted a checkout. A repository the agent cannot
+  // remove fails the job before the extension record is deleted, so the
+  // removal can be retried.
+  const repositories = await extensionStep(workflow, "remove.repositories.before", {}, async () => {
+    const recorded =
+      snapshot.repositoryUrls.length > 0
+        ? await db
+            .select({ hash: serviceRepository.hash })
+            .from(serviceRepository)
+            .where(inArray(serviceRepository.url, snapshot.repositoryUrls))
+        : [];
+    const owned = community.repositories
+      .filter((repo) => repo.extensionId === id)
+      .map((repo) => repo.repository);
+    return [...new Set([...recorded.map((row) => row.hash), ...owned])];
+  });
+  for (const hash of repositories) {
+    await ctx.log(`Removing service repository ${hash}...`);
+    await removeServiceRepository(
+      { repository: hash, extensionId: id },
+      {
+        ctx,
+        operationKey: createDurableOpsKey("extension.repository.remove", `${ctx.jobId}:${hash}`),
+        signal: ctx.signal,
+      },
     );
-    // A repository the agent cannot remove fails the job before the extension
-    // record is deleted, so the removal can be retried.
-    for (const repo of repos) {
-      await ctx.log(`Removing service repository ${repo.hash}...`);
-      await removeServiceRepository(
-        { repository: repo.hash, extensionId: id },
-        {
-          ctx,
-          operationKey: createDurableOpsKey(
-            "extension.repository.remove",
-            `${ctx.jobId}:${repo.hash}`,
-          ),
-          signal: ctx.signal,
-        },
-      );
-      await extensionDatabaseStep(
-        workflow,
-        `remove.repository.row:${repo.hash}`,
-        { hash: repo.hash },
-        async (tx) => {
-          await tx.delete(serviceRepository).where(eq(serviceRepository.hash, repo.hash));
-        },
-      );
-    }
-    // Repository removal changes the authoritative manifest inventory. Re-read
-    // it before sealing the reduced generation; the original selection phase
-    // already committed its desired roots and remains a separate retained step.
+    await extensionDatabaseStep(workflow, `remove.repository.row:${hash}`, { hash }, async (tx) => {
+      await tx.delete(serviceRepository).where(eq(serviceRepository.hash, hash));
+    });
+  }
+  // Repository removal changes the authoritative manifest inventory. Re-read
+  // it before sealing the reduced generation; the original selection phase
+  // already committed its desired roots and remains a separate retained step.
+  if (serviceIds.length > 0 || repositories.length > 0) {
     await initServiceRegistry({ strict: true });
     await renderAndPersistCompose({
       ctx,
@@ -1207,14 +1214,24 @@ async function removeExtensionNow(
         `remove.integration.row:${intgId}`,
         { id: intgId },
         async (tx) => {
-          await tx
-            .delete(installedIntegration)
-            .where(
-              and(
-                eq(installedIntegration.id, intgId),
-                eq(installedIntegration.managedByExtension, id),
+          // Only while this extension's component link still records it as the owner.
+          await tx.delete(installedIntegration).where(
+            and(
+              eq(installedIntegration.id, intgId),
+              exists(
+                tx
+                  .select({ owned: sql`1` })
+                  .from(installedExtensionComponent)
+                  .where(
+                    and(
+                      eq(installedExtensionComponent.extensionId, id),
+                      eq(installedExtensionComponent.kind, "integration"),
+                      eq(installedExtensionComponent.componentId, intgId),
+                    ),
+                  ),
               ),
-            );
+            ),
+          );
         },
       );
     }

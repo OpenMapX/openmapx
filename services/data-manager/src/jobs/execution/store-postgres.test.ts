@@ -6,6 +6,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { present } from "../../../__tests__/helpers/present.js";
 import {
   createPostgresDataExecutionStore,
   DATA_ADMISSION_LOCK,
@@ -72,6 +73,57 @@ describe.skipIf(
     await expect(
       two.admit({ kind: "notable-places-build" }, { operationKey, requestedDeadlineAt }),
     ).rejects.toThrow(/conflict/i);
+  });
+  it("stores admission times as instants whatever the session time zone", async () => {
+    // A session outside UTC, as on a database whose default time zone is not UTC.
+    const zoned = postgres(present(process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL), {
+      max: 1,
+      connection: { TimeZone: "Pacific/Chatham" },
+    });
+    try {
+      const admittedAt = Date.now() - 5_123,
+        requestedDeadlineAt = Date.now() + 60000;
+      const store = createPostgresDataExecutionStore(zoned, {
+        controlJournal: journal,
+        now: () => admittedAt,
+      });
+      const operationKey = createControlRootOperationKey({
+        notAfter: requestedDeadlineAt,
+        nonce: randomBytes(16),
+      });
+      const { record } = await store.admit(
+        { kind: "download-fonts" },
+        { operationKey, requestedDeadlineAt },
+      );
+      ids.push(record.status.id);
+      expect(record.status.admittedAt).toBe(admittedAt);
+      expect(record.requestedDeadlineAt).toBe(requestedDeadlineAt);
+      expect((await store.inspect(record.status.id))?.status.admittedAt).toBe(admittedAt);
+      const [row] = await sql`SELECT
+          admitted_at = ${new Date(admittedAt).toISOString()}::timestamptz AS admitted,
+          requested_deadline_at = ${new Date(requestedDeadlineAt).toISOString()}::timestamptz AS requested,
+          deadline_at > admitted_at AS ordered
+        FROM data_manager.jobs WHERE id=${record.status.id}`;
+      expect(row).toEqual({ admitted: true, requested: true, ordered: true });
+    } finally {
+      await zoned.end();
+    }
+  });
+  it("refuses a job row without an operation key or with an unknown status", async () => {
+    const at = new Date().toISOString(),
+      deadline = new Date(Date.now() + 60000).toISOString(),
+      operationKey = createControlRootOperationKey({
+        notAfter: Date.now() + 60000,
+        nonce: randomBytes(16),
+      });
+    await expect(
+      sql`INSERT INTO data_manager.jobs(kind,status,finished_at,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+        VALUES('download-fonts','error',now(),${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
+    ).rejects.toMatchObject({ code: "23502", column_name: "operation_key" });
+    await expect(
+      sql`INSERT INTO data_manager.jobs(kind,status,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+        VALUES('download-fonts','running-legacy',now(),${operationKey},${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
+    ).rejects.toMatchObject({ constraint_name: "jobs_status_check" });
   });
   it("allows one owner-version writer and retains cancel intent before finalization", async () => {
     const store = createPostgresDataExecutionStore(sql, { controlJournal: journal });

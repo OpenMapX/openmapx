@@ -604,7 +604,7 @@ describe.skipIf(
     }
   }, 60000);
   it.each(["startup", "periodic"] as const)(
-    "prunes a finished execution's records and row through the production %s prune",
+    "prunes a finished execution's records and execution row through the production %s prune",
     async (phase) => {
       const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
       if (!url) throw Error("Owned PostgreSQL required");
@@ -677,13 +677,21 @@ describe.skipIf(
           await vi.advanceTimersByTimeAsync(3600_000);
           await stopRetention?.();
         }
-        expect(await store.inspect(id)).toBeNull();
-        await expect(
-          store.admit(
-            { kind: "transit-sync", countries: ["de"] },
-            { operationKey: key, requestedDeadlineAt: deadline },
-          ),
-        ).rejects.toThrow(/fresh dated|expired/i);
+        // The execution row goes; the finished job row stays for the API's
+        // job retention and still answers its key as a known duplicate.
+        const [pruned] =
+          await sql`SELECT execution_admission, execution_progress, released_at FROM data_manager.jobs WHERE id=${id}`;
+        expect(pruned).toMatchObject({ execution_admission: null, execution_progress: null });
+        expect(pruned?.released_at).not.toBeNull();
+        const repeated = await store.admit(
+          { kind: "transit-sync", countries: ["de"] },
+          { operationKey: key, requestedDeadlineAt: deadline },
+        );
+        expect(repeated).toMatchObject({
+          created: false,
+          record: { status: { id, status: "ok" } },
+        });
+        expect(repeated.record.children).toEqual([]);
       } finally {
         await stopRetention?.();
         vi.useRealTimers();

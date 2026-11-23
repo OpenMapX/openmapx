@@ -170,7 +170,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [key, value] of Object.entries({
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
-        OPENMAPX_SECRETS_KEY: "71".repeat(32),
+        OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "binding-owned-admin",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         BETTER_AUTH_SECRET: "binding-owned-synthetic-auth-secret-only",
@@ -378,7 +378,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 90000);
     it("keeps disabled integrations pending instead of claiming an active provider", async () => {
       await state.fixture
-        .sql`INSERT INTO integration_config (id,integration_id,config,created_at,updated_at) VALUES (${randomUUID()},'binding-test','{"enabled":false}'::jsonb,now(),now())`;
+        .sql`INSERT INTO integration_config (integration_id,config,created_at,updated_at) VALUES ('binding-test','{"enabled":false}'::jsonb,now(),now())`;
       await (await import("../integration-host")).reloadIntegrations();
       const before = await desired();
       expect(before.runtime).toBeNull();
@@ -635,7 +635,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         if (failure === "vault") {
           const encrypted = (await import("./secrets")).encrypt("private-value");
           await state.fixture
-            .sql`INSERT INTO integration_secret(id,integration_id,key,ciphertext,iv,tag) VALUES (${randomUUID()},'binding-test','TOKEN','invalid',${encrypted.iv},${encrypted.tag})`;
+            .sql`INSERT INTO integration_secret(integration_id,key,ciphertext,iv,tag) VALUES ('binding-test','TOKEN','invalid',${encrypted.iv},${encrypted.tag})`;
         }
         try {
           expect(await state.fixture.sql`SELECT * FROM capability_binding`).toHaveLength(1);

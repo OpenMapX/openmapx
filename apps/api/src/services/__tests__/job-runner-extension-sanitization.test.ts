@@ -13,6 +13,8 @@ const database = vi.hoisted(() => {
           inserts.push(value);
           return Object.assign(Promise.resolve([]), {
             onConflictDoNothing: vi.fn().mockResolvedValue([]),
+            // The database assigns the id.
+            returning: vi.fn().mockResolvedValue([{ id: "0193e4a0-0000-7000-8001-000000000006" }]),
           });
         }),
       })),

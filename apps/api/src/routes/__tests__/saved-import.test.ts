@@ -66,40 +66,58 @@ describe("saved list imports", () => {
     authMock.requireAuthHook.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),
     );
-    expect((await request({ listId: "list-1" })).statusCode).toBe(401);
+    expect((await request({ listId: "0193e4a0-0000-7000-8000-000000000001" })).statusCode).toBe(
+      401,
+    );
     expect(state.transactions).toBe(0);
   });
   it("imports into an owned system list, skips near duplicates, and appends sort order", async () => {
     state.queue.push(
       LOCK,
-      [{ id: "list-1", name: "$favorites" }],
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "$favorites" }],
       [{ name: "Cafe", lat: 52.000009, lng: 13.000009, sortOrder: 8 }],
       [{ count: 10 }],
       [],
       [],
     );
-    const response = await request({ listId: "list-1" }, [
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
       point,
       { ...point, name: "New" },
       { ...point, name: "New", lat: 52.000001 },
     ]);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      listId: "list-1",
+      listId: "0193e4a0-0000-7000-8000-000000000001",
       name: "$favorites",
       imported: 1,
       skippedDuplicates: 2,
     });
     expect(state.transactions).toBe(1);
     expect(state.inserted[0]?.rows).toEqual([
-      expect.objectContaining({ name: "New", sortOrder: 9, placeId: null, listId: "list-1" }),
+      expect.objectContaining({
+        name: "New",
+        sortOrder: 9,
+        placeId: null,
+        listId: "0193e4a0-0000-7000-8000-000000000001",
+      }),
     ]);
   });
   it("stores validated field captures without changing duplicate handling", async () => {
     const fieldContributors = { lat: [{ sourceId: "geo", name: "Geocoder" }], lng: [] };
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
+    state.queue.push(
+      LOCK,
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
+      [],
+      [],
+      [],
+      [],
+    );
     expect(
-      (await request({ listId: "list-1" }, [{ ...point, fieldContributors }])).statusCode,
+      (
+        await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
+          { ...point, fieldContributors },
+        ])
+      ).statusCode,
     ).toBe(200);
     expect(state.inserted[0]?.rows).toEqual([expect.objectContaining({ fieldContributors })]);
   });
@@ -114,7 +132,16 @@ describe("saved list imports", () => {
     },
   );
   it("suffixes a colliding list name without exceeding 200 characters", async () => {
-    state.queue.push(LOCK, [{ count: 3 }], [], [{ id: "new-list" }], [], [], [], []);
+    state.queue.push(
+      LOCK,
+      [{ count: 3 }],
+      [],
+      [{ id: "0193e4a0-0000-7000-8000-000000000401" }],
+      [],
+      [],
+      [],
+      [],
+    );
     const response = await request({ name: "a".repeat(200) });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ name: `${"a".repeat(196)} (2)`, imported: 1 });
@@ -142,16 +169,18 @@ describe("saved list imports", () => {
   ])("against a saved place, imports %s %d times", async (_case, saved, incoming, imported) => {
     state.queue.push(
       LOCK,
-      [{ id: "list-1", name: "Trip" }],
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
       [{ name: "Cafe", ...saved, sortOrder: 4 }],
       [{ count: 1 }],
       [],
       [],
     );
-    const response = await request({ listId: "list-1" }, [{ ...point, ...incoming }]);
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
+      { ...point, ...incoming },
+    ]);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      listId: "list-1",
+      listId: "0193e4a0-0000-7000-8000-000000000001",
       name: "Trip",
       imported,
       skippedDuplicates: 1 - imported,
@@ -160,13 +189,15 @@ describe("saved list imports", () => {
   it("keeps a place with another name at the same point", async () => {
     state.queue.push(
       LOCK,
-      [{ id: "list-1", name: "Trip" }],
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
       [{ name: "Cafe", lat: 52, lng: 13, sortOrder: 4 }],
       [{ count: 1 }],
       [],
       [],
     );
-    const response = await request({ listId: "list-1" }, [{ ...point, name: "Bakery" }]);
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
+      { ...point, name: "Bakery" },
+    ]);
     expect(response.json()).toMatchObject({ imported: 1, skippedDuplicates: 0 });
     expect(state.inserted[0]?.rows).toEqual([
       expect.objectContaining({ name: "Bakery", sortOrder: 5 }),
@@ -190,7 +221,7 @@ describe("saved list imports", () => {
       LOCK,
       [{ count: 3 }],
       ...Array.from({ length: taken }, () => []),
-      [{ id: "new-list" }],
+      [{ id: "0193e4a0-0000-7000-8000-000000000401" }],
       [],
       [{ count: 0 }],
       [],
@@ -209,7 +240,9 @@ describe("saved list imports", () => {
     expect(lists.at(-1)?.rows).toMatchObject({ name: expected });
   });
   it("returns 404 for a missing or other user's list", async () => {
-    expect((await request({ listId: "not-mine" })).statusCode).toBe(404);
+    expect((await request({ listId: "0193e4a0-0000-7000-8000-000000000f04" })).statusCode).toBe(
+      404,
+    );
     expect(state.inserted).toHaveLength(0);
   });
   it.each([{}, { listId: "a", name: "b" }, { name: "$favorites" }, { name: "" }, { name: "   " }])(
@@ -232,18 +265,32 @@ describe("saved list imports", () => {
     expect((await request({ name: "Trip" }, places)).statusCode).toBe(400),
   );
   it("accepts 2000 places with full notes beyond Fastify's default body limit", async () => {
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
+    state.queue.push(
+      LOCK,
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
+      [],
+      [],
+      [],
+      [],
+    );
     const places = Array.from({ length: 2000 }, (_, index) => ({
       ...point,
       name: `Place ${index}`,
       note: "a".repeat(2000),
     }));
-    const response = await request({ listId: "list-1" }, places);
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, places);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ imported: 2000, skippedDuplicates: 0 });
   });
   it("accepts 2000 realistic rows", async () => {
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
+    state.queue.push(
+      LOCK,
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
+      [],
+      [],
+      [],
+      [],
+    );
     const places = Array.from({ length: 2000 }, (_, index) => ({
       name: `Cafe ${index}`,
       address: `${index} Example Street, Berlin`,
@@ -251,7 +298,7 @@ describe("saved list imports", () => {
       lng: 13 + index / 10_000,
       note: "Imported from a takeout file.",
     }));
-    const response = await request({ listId: "list-1" }, places);
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, places);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ imported: 2000, skippedDuplicates: 0 });
   });
@@ -263,9 +310,11 @@ describe("saved list imports", () => {
     expect(state.transactions).toBe(0);
   });
   it("does not report success when a transactional insert fails", async () => {
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], []);
+    state.queue.push(LOCK, [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }], [], []);
     state.failInsert = true;
-    expect((await request({ listId: "list-1" })).statusCode).toBe(500);
+    expect((await request({ listId: "0193e4a0-0000-7000-8000-000000000001" })).statusCode).toBe(
+      500,
+    );
   });
   it("refuses a new list once the account holds the list limit", async () => {
     state.queue.push(LOCK, [{ count: 500 }]);
@@ -278,15 +327,33 @@ describe("saved list imports", () => {
     expect(state.inserted).toHaveLength(0);
   });
   it("refuses a whole batch that would pass the place limit", async () => {
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [{ count: 49_999 }]);
-    const response = await request({ listId: "list-1" }, [point, { ...point, name: "Second" }]);
+    state.queue.push(
+      LOCK,
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
+      [],
+      [{ count: 49_999 }],
+    );
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
+      point,
+      { ...point, name: "Second" },
+    ]);
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ code: "SAVED_PLACE_LIMIT" });
     expect(state.inserted).toHaveLength(0);
   });
   it("still imports a batch that exactly reaches the place limit", async () => {
-    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [{ count: 49_998 }], [], []);
-    const response = await request({ listId: "list-1" }, [point, { ...point, name: "Second" }]);
+    state.queue.push(
+      LOCK,
+      [{ id: "0193e4a0-0000-7000-8000-000000000001", name: "Trip" }],
+      [],
+      [{ count: 49_998 }],
+      [],
+      [],
+    );
+    const response = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" }, [
+      point,
+      { ...point, name: "Second" },
+    ]);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ imported: 2 });
   });
@@ -294,7 +361,7 @@ describe("saved list imports", () => {
     for (let index = 0; index < 100; index++) {
       expect((await request({ name: "" })).statusCode).toBe(400);
     }
-    const limited = await request({ listId: "list-1" });
+    const limited = await request({ listId: "0193e4a0-0000-7000-8000-000000000001" });
     expect(limited.statusCode).toBe(429);
     expect(limited.headers["retry-after"]).toBe("6");
     expect(limited.json()).toEqual({ error: "Too many requests", retryAfter: 6 });

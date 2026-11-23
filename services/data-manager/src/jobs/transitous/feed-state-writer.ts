@@ -1,5 +1,5 @@
 import { feedState } from "@openmapx/db-schema";
-import { and, eq } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { scrubSecretsOptional } from "../../utils/scrub-secrets.js";
 import type { FeedFileEntry } from "./types.js";
@@ -62,7 +62,7 @@ export function resetFeedStateCircuitForTests(): void {
 
 /**
  * Per-feed write surface used by the fetch + validate stages. Each call upserts
- * a row keyed on `(region, name)` so the staleness-alert cron (G2) can read
+ * a row keyed on `(region, name)` so the staleness alert can read
  * `lastFetchedAt` + `validationStatus` + `consecutiveFailures` directly from
  * Postgres without poking at the in-memory state of a running pipeline.
  *
@@ -123,8 +123,8 @@ export async function recordFetchOutcome(outcome: FetchOutcome): Promise<void> {
 
 /**
  * Mark the validation outcome. Success resets `consecutive_failures` to 0;
- * failure bumps the counter atomically via a SQL increment so concurrent
- * pipelines never lose a count.
+ * a failure increments the stored counter in the same statement, so
+ * concurrent pipelines never lose a count.
  */
 export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<void> {
   const validationMessage = scrubSecretsOptional(outcome.message) ?? null;
@@ -143,81 +143,54 @@ export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<v
     );
     return;
   }
-  // Lookup-then-update/insert because `(region, name)` is not a declared
-  // unique constraint yet — see the comment in `upsertFeedState`. Increments
-  // are read-modify-write under a serialisable-enough envelope (one writer
-  // per region+name within a single pipeline run).
-  await withTimeout(async () => {
-    const existing = await db
-      .select({
-        id: feedState.id,
-        consecutiveFailures: feedState.consecutiveFailures,
-      })
-      .from(feedState)
-      .where(and(eq(feedState.region, outcome.region), eq(feedState.name, outcome.name)))
-      .limit(1);
-    if (existing[0]) {
-      await db
-        .update(feedState)
-        .set({
-          validationStatus: "error",
-          validationMessage,
-          status: "failed",
-          consecutiveFailures: existing[0].consecutiveFailures + 1,
-        })
-        .where(eq(feedState.id, existing[0].id));
-      return;
-    }
-    await db.insert(feedState).values({
+  await withTimeout(() =>
+    upsertFeedState({
       region: outcome.region,
       name: outcome.name,
-      validationStatus: "error",
-      validationMessage,
-      status: "failed",
-      consecutiveFailures: 1,
-    });
-  });
+      values: {
+        validationStatus: "error",
+        validationMessage,
+        status: "failed",
+        consecutiveFailures: 1,
+      },
+      onConflict: { consecutiveFailures: sql`${feedState.consecutiveFailures} + 1` },
+    }),
+  );
+}
+
+interface FeedStateValues {
+  lastFetchedAt?: Date | null;
+  lastImportedAt?: Date | null;
+  hash?: string | null;
+  validationStatus?: string | null;
+  validationMessage?: string | null;
+  status?: string;
+  consecutiveFailures?: number;
 }
 
 interface UpsertArgs {
   region: string;
   name: string;
-  values: Partial<{
-    lastFetchedAt: Date | null;
-    lastImportedAt: Date | null;
-    hash: string | null;
-    validationStatus: string | null;
-    validationMessage: string | null;
-    status: string;
-    consecutiveFailures: number;
-  }>;
+  /** Written on a new row, and on an existing one unless `onConflict` replaces them. */
+  values: FeedStateValues;
+  onConflict?: { consecutiveFailures: SQL };
 }
 
+/** One statement keyed on `(region, name)`: inserts the row or updates the given columns. */
 async function upsertFeedState(args: UpsertArgs): Promise<void> {
-  // `(region, name)` is the natural key but the table currently has no unique
-  // constraint declared (drizzle schema in `packages/db-schema`). We emulate
-  // the upsert with an explicit lookup + update/insert split so this code
-  // remains correct even if a future migration adds the unique index.
-  const existing = await db
-    .select({ id: feedState.id })
-    .from(feedState)
-    .where(and(eq(feedState.region, args.region), eq(feedState.name, args.name)))
-    .limit(1);
-  if (existing[0]) {
-    await db.update(feedState).set(args.values).where(eq(feedState.id, existing[0].id));
-    return;
-  }
-  await db.insert(feedState).values({
-    region: args.region,
-    name: args.name,
-    ...args.values,
-  });
+  await db
+    .insert(feedState)
+    .values({ region: args.region, name: args.name, ...args.values })
+    .onConflictDoUpdate({
+      target: [feedState.region, feedState.name],
+      set: { ...args.values, ...args.onConflict },
+    });
 }
 
 /**
  * Resolve a `FeedFileEntry` and an upstream source name into the
- * `(region, name)` natural key the feed_state table uses. The schema currently
- * stores `region` as the country code (lowercased) and `name` as the
+ * `(region, name)` primary key of the feed_state table. It stores `region` as
+ * the country code (lowercased) and `name` as the
  * upstream-published source name (lowercased) so it lines up with how the
  * alert emitter logs and titles GitHub Issues.
  */

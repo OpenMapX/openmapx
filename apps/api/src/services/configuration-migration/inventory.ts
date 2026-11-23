@@ -18,7 +18,7 @@ import {
   projectFieldOwnership,
   serviceOwnershipSnapshot,
 } from "../configuration-ownership-view";
-import { matchesDeclaredType, SETTING_DEFS } from "../settings";
+import { matchesDeclaredType, SETTING_DEFS, storedSecretSettingKeys } from "../settings";
 import { standaloneInventory } from "../standalone-integrations/ownership";
 
 export { migrationSources } from "./sources";
@@ -125,15 +125,18 @@ export async function configurationMigrationInventory() {
         (await serviceOwnershipSnapshot(service.manifest.id, read, source)).ownership,
       );
     const rows = await db.select().from(systemSettings);
+    const storedSecrets = await storedSecretSettingKeys();
     for (const def of SETTING_DEFS) {
-      const row = rows.find((r) => r.key === def.key),
-        host = def.env && read.env[def.env] !== undefined;
+      // A secret setting's value lives only in `system_secret` and is never read here.
+      const row = def.secret ? undefined : rows.find((r) => r.key === def.key);
+      const stored = def.secret ? storedSecrets.has(def.key) : row !== undefined;
+      const host = def.env && read.env[def.env] !== undefined;
       const ownership = projectFieldOwnership({
-        source: host ? "env" : row ? "database" : "default",
+        source: host ? "env" : stored ? "database" : "default",
         secret: !!def.secret,
       });
       add("account", "settings", { [def.key]: ownership });
-      if (!def.secret && !host && row) {
+      if (!host && row) {
         if (!matchesDeclaredType(def, row.value)) throw Error("Invalid declared setting");
         document.settings[def.key] = row.value as never;
       }

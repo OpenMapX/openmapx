@@ -51,8 +51,12 @@ const LOCAL_PARKED = {
 
 const boundary = {
   get: async (_path: string): Promise<unknown> => ({ vehicles: [], parked: [] }),
-  post: async (_path: string, _body: unknown): Promise<unknown> => ({ id: "server" }),
-  put: async (_path: string, _body: unknown): Promise<unknown> => ({ id: "pin" }),
+  post: async (_path: string, _body: unknown): Promise<unknown> => ({
+    id: "0193e4a0-0000-7000-8002-000000000003",
+  }),
+  put: async (_path: string, _body: unknown): Promise<unknown> => ({
+    id: "0193e4a0-0000-7000-8002-000000000004",
+  }),
 };
 
 let storage: ReturnType<typeof memoryStorage>;
@@ -122,8 +126,12 @@ describe("GarageSyncBridge", () => {
 
   it("uploads local rows once, then clears them and records the user", async () => {
     session.value = { user: { id: "user-1" } };
-    const post = vi.spyOn(boundary, "post").mockResolvedValue({ id: "v-server" } as never);
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "p-server" } as never);
+    const post = vi
+      .spyOn(boundary, "post")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000001" } as never);
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000002" } as never);
     vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] } as never);
 
     const view = render(<GarageSyncBridge />, { wrapper });
@@ -142,8 +150,10 @@ describe("GarageSyncBridge", () => {
     const post = vi
       .spyOn(boundary, "post")
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ id: "v-server" });
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "p-server" });
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000001" });
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000002" });
     vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] });
     const view = render(<GarageSyncBridge />, { wrapper });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -162,10 +172,16 @@ describe("GarageSyncBridge", () => {
 
   it("does not overwrite a server vehicle with the same name", async () => {
     session.value = { user: { id: "user-1" } };
-    const post = vi.spyOn(boundary, "post").mockResolvedValue({ id: "v" } as never);
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "p" } as never);
+    const post = vi
+      .spyOn(boundary, "post")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000006" } as never);
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000007" } as never);
     vi.spyOn(boundary, "get").mockResolvedValue({
-      vehicles: [{ ...LOCAL_VEHICLE, id: "v-server", name: "local car" }],
+      vehicles: [
+        { ...LOCAL_VEHICLE, id: "0193e4a0-0000-7000-8002-000000000001", name: "local car" },
+      ],
       parked: [],
     } as never);
 
@@ -195,13 +211,17 @@ describe("garage import parking ownership", () => {
     );
     vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] });
     let created = 0;
-    vi.spyOn(boundary, "post").mockImplementation(async () => ({ id: `server-${++created}` }));
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "pin" });
+    vi.spyOn(boundary, "post").mockImplementation(async () => ({
+      id: `0193e4a0-0000-7000-8002-00000000010${++created}`,
+    }));
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000004" });
     render(<GarageSyncBridge />, { wrapper });
     await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
     expect(
       put.mock.calls.map((call) => (call[1] as { vehicleId: string | null }).vehicleId),
-    ).toEqual(["server-1", "server-2"]);
+    ).toEqual(["0193e4a0-0000-7000-8002-000000000101", "0193e4a0-0000-7000-8002-000000000102"]);
   });
 
   it("maps a retry to the existing vehicle and keeps the account parking pin", async () => {
@@ -211,11 +231,22 @@ describe("garage import parking ownership", () => {
       JSON.stringify([{ ...LOCAL_PARKED, vehicleId: "v-local" }]),
     );
     vi.spyOn(boundary, "get").mockResolvedValue({
-      vehicles: [{ ...LOCAL_VEHICLE, id: "server", name: "local car" }],
-      parked: [{ ...LOCAL_PARKED, id: "remote-pin", vehicleId: "server", lat: 49 }],
+      vehicles: [
+        { ...LOCAL_VEHICLE, id: "0193e4a0-0000-7000-8002-000000000003", name: "local car" },
+      ],
+      parked: [
+        {
+          ...LOCAL_PARKED,
+          id: "0193e4a0-0000-7000-8002-000000000005",
+          vehicleId: "0193e4a0-0000-7000-8002-000000000003",
+          lat: 49,
+        },
+      ],
     });
     const post = vi.spyOn(boundary, "post");
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "pin" });
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000004" });
     render(<GarageSyncBridge />, { wrapper });
     await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
     expect(post).not.toHaveBeenCalled();
@@ -231,8 +262,12 @@ describe("garage import parking ownership", () => {
           resolveRead = resolve;
         }),
     );
-    const post = vi.spyOn(boundary, "post").mockResolvedValue({ id: "server" });
-    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "pin" });
+    const post = vi
+      .spyOn(boundary, "post")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000003" });
+    const put = vi
+      .spyOn(boundary, "put")
+      .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000004" });
     const view = render(<GarageSyncBridge />, { wrapper });
     session.value = null;
     view.rerender(<GarageSyncBridge />);
@@ -246,7 +281,9 @@ describe("garage import parking ownership", () => {
 it("preserves local rows when parking success does not match the server contract", async () => {
   session.value = { user: { id: "user-1" } };
   vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] } as never);
-  vi.spyOn(boundary, "post").mockResolvedValue({ id: "v-server" } as never);
+  vi.spyOn(boundary, "post").mockResolvedValue({
+    id: "0193e4a0-0000-7000-8002-000000000001",
+  } as never);
   const put = vi.spyOn(boundary, "put").mockResolvedValue({} as never);
   render(<GarageSyncBridge />, { wrapper });
   await waitFor(() => expect(put).toHaveBeenCalledTimes(1));

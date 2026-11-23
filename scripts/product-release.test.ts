@@ -119,7 +119,6 @@ function setup() {
     environment: "synthetic fixture only",
     platform: "linux/amd64",
     testedAt: "2026-10-18T10:00:00Z",
-    upgradeOrigin: "prebaseline",
     checks: Object.fromEntries(
       readinessChecks.map((name: string) => [
         name,

@@ -13,7 +13,7 @@ function nameTaken() {
   return new Error("Failed query", {
     cause: Object.assign(new Error("duplicate key value"), {
       code: "23505",
-      constraint_name: "personalVehicle_userId_name_unq",
+      constraint_name: "personal_vehicle_user_id_name_key",
     }),
   });
 }
@@ -93,7 +93,7 @@ const VEHICLE_BODY = {
 
 const at = "2026-10-23T00:00:00.000Z";
 const vehicleRow = {
-  id: "v1",
+  id: "0193e4a0-0000-7000-8000-000000000501",
   ...VEHICLE_BODY,
   isDefault: true,
   presetId: null,
@@ -102,7 +102,7 @@ const vehicleRow = {
   updatedAt: at,
 };
 const parkingRow = {
-  id: "p1",
+  id: "0193e4a0-0000-7000-8000-000000000601",
   vehicleId: null,
   lat: 51.5,
   lng: 6.6,
@@ -127,7 +127,8 @@ describe("vehicles", () => {
   });
 
   it("creates a vehicle and makes the first one the default", async () => {
-    prime([{ count: 0 }]);
+    // Count, default reset, then the row the database creates.
+    prime([{ count: 0 }], [], [{ id: "0193e4a0-0000-7000-8000-000000000501" }]);
     const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });
     expect(res.statusCode).toBe(200);
     expect(res.json().isDefault).toBe(true);
@@ -163,7 +164,7 @@ describe("vehicles", () => {
     prime([vehicleRow], nameTaken());
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/vehicles/v1",
+      url: "/api/vehicles/0193e4a0-0000-7000-8000-000000000501",
       payload: { name: "Taken", isDefault: false },
     });
     expect(res.statusCode).toBe(409);
@@ -175,7 +176,7 @@ describe("vehicles", () => {
       [{ count: 1 }],
       Object.assign(new Error("foreign key"), {
         code: "23503",
-        constraint_name: "personal_vehicle_user_id_user_id_fk",
+        constraint_name: "personal_vehicle_user_id_fkey",
       }),
     );
     const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });
@@ -186,24 +187,27 @@ describe("vehicles", () => {
     prime([]);
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/vehicles/other",
+      url: "/api/vehicles/0193e4a0-0000-7000-8000-000000000f05",
       payload: { name: "Nope" },
     });
     expect(res.statusCode).toBe(404);
     const lookup = predicates.at(-1);
     expect(lookup?.sql).toContain("user_id");
     expect(lookup?.params).toContain("user-1");
-    expect(lookup?.params).toEqual(["other", "user-1"]);
+    expect(lookup?.params).toEqual(["0193e4a0-0000-7000-8000-000000000f05", "user-1"]);
   });
 
   it("404s DELETE on a vehicle the caller does not own", async () => {
     prime([]);
-    const res = await app.inject({ method: "DELETE", url: "/api/vehicles/other" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/vehicles/0193e4a0-0000-7000-8000-000000000f05",
+    });
     expect(res.statusCode).toBe(404);
     const lookup = predicates.at(-1);
     expect(lookup?.sql).toContain("user_id");
     expect(lookup?.params).toContain("user-1");
-    expect(lookup?.params).toEqual(["other", "user-1"]);
+    expect(lookup?.params).toEqual(["0193e4a0-0000-7000-8000-000000000f05", "user-1"]);
   });
 });
 
@@ -226,7 +230,7 @@ describe("parking", () => {
       payload: { vehicleId: null, lat: 51.5, lng: 6.6, source: "manual" },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().id).toBe("p1");
+    expect(res.json().id).toBe("0193e4a0-0000-7000-8000-000000000601");
   });
 
   it("404s when the vehicleId is not the caller's", async () => {
@@ -234,13 +238,18 @@ describe("parking", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/api/parking",
-      payload: { vehicleId: "someone-elses", lat: 51.5, lng: 6.6, source: "manual" },
+      payload: {
+        vehicleId: "0193e4a0-0000-7000-8000-000000000f07",
+        lat: 51.5,
+        lng: 6.6,
+        source: "manual",
+      },
     });
     expect(res.statusCode).toBe(404);
     const lookup = predicates.at(-1);
     expect(lookup?.sql).toContain("user_id");
     expect(lookup?.params).toContain("user-1");
-    expect(lookup?.params).toEqual(["someone-elses", "user-1"]);
+    expect(lookup?.params).toEqual(["0193e4a0-0000-7000-8000-000000000f07", "user-1"]);
   });
 
   it("rejects coordinates outside the world", async () => {
@@ -256,34 +265,41 @@ describe("parking", () => {
     prime([]);
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/parking/other",
+      url: "/api/parking/0193e4a0-0000-7000-8000-000000000f06",
       payload: { note: "Level 3" },
     });
     expect(res.statusCode).toBe(404);
     const lookup = predicates.at(-1);
     expect(lookup?.sql).toContain("user_id");
     expect(lookup?.params).toContain("user-1");
-    expect(lookup?.params).toEqual(["other", "user-1"]);
+    expect(lookup?.params).toEqual(["0193e4a0-0000-7000-8000-000000000f06", "user-1"]);
   });
 
   it("404s DELETE on a record the caller does not own", async () => {
     prime([]);
-    const res = await app.inject({ method: "DELETE", url: "/api/parking/other" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/parking/0193e4a0-0000-7000-8000-000000000f06",
+    });
     expect(res.statusCode).toBe(404);
     const lookup = predicates.at(-1);
     expect(lookup?.sql).toContain("user_id");
     expect(lookup?.params).toContain("user-1");
-    expect(lookup?.params).toEqual(["other", "user-1"]);
+    expect(lookup?.params).toEqual(["0193e4a0-0000-7000-8000-000000000f06", "user-1"]);
   });
 });
 
 // Removing an ownership clause from a successful write must fail these checks too.
 describe("successful write ownership predicates", () => {
   it("scopes default resets and vehicle updates to the caller", async () => {
-    prime([{ id: "v1", ...VEHICLE_BODY, isDefault: false }], [], []);
+    prime(
+      [{ id: "0193e4a0-0000-7000-8000-000000000501", ...VEHICLE_BODY, isDefault: false }],
+      [],
+      [],
+    );
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/vehicles/v1",
+      url: "/api/vehicles/0193e4a0-0000-7000-8000-000000000501",
       payload: { isDefault: true },
     });
     expect(res.statusCode).toBe(200);
@@ -292,12 +308,12 @@ describe("successful write ownership predicates", () => {
     for (const predicate of writes) {
       expect(predicate.sql).toContain("user_id");
       expect(predicate.params).toContain("user-1");
-      expect(predicate.params).toContain("v1");
+      expect(predicate.params).toContain("0193e4a0-0000-7000-8000-000000000501");
     }
   });
 
   it("scopes creation default resets to the caller", async () => {
-    prime([{ count: 1 }], [], []);
+    prime([{ count: 1 }], [], [{ id: "0193e4a0-0000-7000-8000-000000000502" }]);
     const res = await app.inject({
       method: "POST",
       url: "/api/vehicles",
@@ -310,19 +326,33 @@ describe("successful write ownership predicates", () => {
   });
 
   it("scopes parking updates and deletions to the caller", async () => {
-    prime([{ id: "p1", vehicleId: null, lat: 51.5, lng: 6.6, source: "manual" }], []);
+    prime(
+      [
+        {
+          id: "0193e4a0-0000-7000-8000-000000000601",
+          vehicleId: null,
+          lat: 51.5,
+          lng: 6.6,
+          source: "manual",
+        },
+      ],
+      [],
+    );
     const patch = await app.inject({
       method: "PATCH",
-      url: "/api/parking/p1",
+      url: "/api/parking/0193e4a0-0000-7000-8000-000000000601",
       payload: { note: "Level 3" },
     });
     expect(patch.statusCode).toBe(200);
-    prime([{ id: "p1" }]);
-    const remove = await app.inject({ method: "DELETE", url: "/api/parking/p1" });
+    prime([{ id: "0193e4a0-0000-7000-8000-000000000601" }]);
+    const remove = await app.inject({
+      method: "DELETE",
+      url: "/api/parking/0193e4a0-0000-7000-8000-000000000601",
+    });
     expect(remove.statusCode).toBe(200);
     for (const predicate of predicates.filter((p) => ["update", "delete"].includes(p.operation))) {
       expect(predicate.sql).toContain("user_id");
-      expect(predicate.params).toEqual(["p1", "user-1"]);
+      expect(predicate.params).toEqual(["0193e4a0-0000-7000-8000-000000000601", "user-1"]);
     }
   });
 });

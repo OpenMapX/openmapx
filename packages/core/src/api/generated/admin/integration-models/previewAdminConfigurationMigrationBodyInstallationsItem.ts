@@ -14,6 +14,5 @@ export type PreviewAdminConfigurationMigrationBodyInstallationsItem = {
   ownership: PreviewAdminConfigurationMigrationBodyInstallationsItemOwnership;
   extensionId: string | null;
   provenance: PreviewAdminConfigurationMigrationBodyInstallationsItemProvenance;
-  adoptable: boolean;
   removable: boolean;
 };

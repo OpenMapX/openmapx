@@ -17,7 +17,6 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "integration.binding.remove",
       "standalone.preview",
       "standalone.install",
-      "standalone.adopt",
       "standalone.remove",
       "provider.reset",
     ],

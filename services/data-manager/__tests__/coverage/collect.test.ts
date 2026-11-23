@@ -8,12 +8,15 @@ import { StateStore } from "../../src/state.js";
 
 const NOW = new Date("2026-09-10T12:00:00.000Z");
 
-function emptySql() {
+function emptySql(overture?: { publication?: object; releases: object[] }) {
   const unsafe = vi.fn(async (query: string) => {
     if (query.includes("to_regclass('osm_search.index_state')")) return [{ exists: false }];
     if (query.includes("to_regclass('overture_places.conflation_state')"))
-      return [{ exists: false }];
+      return [{ exists: overture?.publication !== undefined }];
+    if (query.includes("FROM overture_places.conflation_state") && overture?.publication)
+      return [overture.publication];
     if (query.includes("data_manager.feed_state")) return [];
+    if (query.includes("data_manager.overture_release")) return overture?.releases ?? [];
     throw new Error(`unexpected SQL in fixture: ${query}`);
   });
   return { unsafe } as unknown as postgres.Sql;
@@ -71,6 +74,86 @@ describe("data-manager coverage collection", () => {
         result.streams.find((stream) => stream.key === "service:data-manager:osm-search")?.reasons,
       ).toEqual(expect.arrayContaining(["schema_unavailable", "no_publication_evidence"]));
       expect(result.unassignedSourceCount).toBe(6);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the published region's imported Overture release as the last attempt", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-overture-"));
+    try {
+      const result = await collectCoverageSnapshot({
+        dataDir,
+        sql: emptySql({
+          publication: {
+            release: "2026-11-19.0",
+            region: "germany",
+            place_count: "12",
+            status: "ready",
+            places_published_at: "2026-09-10T10:00:00.000Z",
+            updated_at: "2026-09-10T10:00:00.000Z",
+          },
+          releases: [
+            {
+              region: "austria",
+              release: "2026-11-19.0",
+              imported_at: new Date("2026-09-10T11:00:00.000Z"),
+              status: "imported",
+            },
+            {
+              region: "germany",
+              release: "2026-11-19.0",
+              imported_at: new Date("2026-09-10T10:00:00.000Z"),
+              status: "links_pending",
+            },
+          ],
+        }),
+        store: new StateStore(dataDir),
+        now: () => NOW,
+      });
+      const stream = result.streams.find(
+        (entry) => entry.key === "service:data-manager:overture-places",
+      );
+      expect(stream?.observedAt).toBe("2026-09-10T10:00:00.000Z");
+      expect(stream?.attempt).toEqual({
+        at: "2026-09-10T10:00:00.000Z",
+        outcome: "succeeded",
+        message: "Imported Overture release 2026-11-19.0; link rebuild pending",
+      });
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("credits no other region's Overture import to the published region", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-overture-other-"));
+    try {
+      const publication = {
+        release: "2026-11-19.0",
+        region: "germany",
+        place_count: "12",
+        status: "ready",
+        places_published_at: "2026-09-10T10:00:00.000Z",
+        updated_at: "2026-09-10T10:30:00.000Z",
+      };
+      const austria = {
+        region: "austria",
+        release: "2026-11-19.0",
+        imported_at: new Date("2026-09-10T11:00:00.000Z"),
+        status: "imported",
+      };
+      for (const overture of [{ publication, releases: [austria] }, { releases: [austria] }]) {
+        const result = await collectCoverageSnapshot({
+          dataDir,
+          sql: emptySql(overture),
+          store: new StateStore(dataDir),
+          now: () => NOW,
+        });
+        const stream = result.streams.find(
+          (entry) => entry.key === "service:data-manager:overture-places",
+        );
+        expect(stream?.attempt).toEqual({ at: null, outcome: "unknown" });
+      }
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }

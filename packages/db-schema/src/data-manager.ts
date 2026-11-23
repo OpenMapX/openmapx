@@ -1,7 +1,9 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -25,36 +27,40 @@ export const dataManager = pgSchema("data_manager");
 export const jobs = dataManager.table(
   "jobs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
     /** e.g. "transit-sync", "download-osm" */
     kind: text("kind").notNull(),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
-    /** "running" | "ok" | "partial" | "error" */
+    /** "queued" | "running" | "cancel_pending" | "ok" | "partial" | "error" |
+     * "canceled" | "interrupted" */
     status: text("status").notNull(),
     /**
      * `<trigger>:<actor>`, e.g. "cron:data-manager-cron" or "api:user:<user id>".
-     * A user id here is personal data: retention prunes the row once it ages out.
+     * A user id here is personal data: the API deletes a finished row 90 days
+     * after it finished, and deleting the account clears the column.
      */
     triggeredBy: text("triggered_by"),
     /**
-     * Client-supplied idempotency token. A POST /sync that replays the same
-     * key within a 24h window (E7 contract) returns 409 instead of starting a
-     * second pipeline. NULL when the caller did not supply a key (cron path).
+     * Client-supplied idempotency token of a local transit sync. Replaying the
+     * same key within 24 hours returns the original job instead of starting a
+     * second one. NULL when the caller did not supply a key.
      */
     idempotencyKey: text("idempotency_key"),
-    /** { transitousRef, countries[], ... } */
+    /** Notes outside the execution: a backup restore that closed the job
+     * records `{ failureReason }`. */
     metadata: jsonb("metadata"),
-    executionVersion: integer("execution_version"),
-    operationKey: text("operation_key"),
-    operationFingerprint: text("operation_fingerprint"),
-    executionFingerprint: text("execution_fingerprint"),
-    admittedAt: bigint("admitted_at", { mode: "number" }),
-    deadlineAt: bigint("deadline_at", { mode: "number" }),
-    requestedDeadlineAt: bigint("requested_deadline_at", { mode: "number" }),
+    operationKey: text("operation_key").notNull().unique("jobs_operation_key_key"),
+    operationFingerprint: text("operation_fingerprint").notNull(),
+    executionFingerprint: text("execution_fingerprint").notNull(),
+    admittedAt: timestamp("admitted_at", { withTimezone: true }).notNull(),
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+    requestedDeadlineAt: timestamp("requested_deadline_at", { withTimezone: true }),
     executionParent: jsonb("execution_parent"),
-    executionInput: jsonb("execution_input"),
-    executionState: jsonb("execution_state"),
+    executionInput: jsonb("execution_input").notNull(),
+    executionState: jsonb("execution_state").notNull(),
+    /** The execution data-manager admitted and the child bodies it reserved
+     * with it: `{ execution, childReservations }`, fixed at admission. */
+    executionRef: jsonb("execution_ref").notNull(),
     /** Agent operations of in-process work: reserved at admission, recorded as
      * attempted before the request and as terminal once the agent answers. */
     executionAgentOperations: jsonb("execution_agent_operations").notNull().default([]),
@@ -73,27 +79,51 @@ export const jobs = dataManager.table(
      * or by recovery for a worker that died with its process. */
     executionCompletion: jsonb("execution_completion"),
     /** When a finished job released what it held (its own lease, if any);
-     * startup recovery leaves the row alone from then on. */
+     * startup recovery leaves the row alone from then on. On a row without an
+     * execution row, when the control prune removed the records named by its
+     * key; until then it is NULL. */
     releasedAt: timestamp("released_at", { withTimezone: true }),
     ownershipVersion: integer("ownership_version").notNull().default(0),
   },
   (table) => [
-    uniqueIndex("data_manager_jobs_execution_key_uq")
+    // Finished rows stay 90 days. The API's prune and the control prune's
+    // sweep of restore-closed rows select by finish time.
+    index("jobs_finished_at_idx").on(table.finishedAt),
+    // The few rows a backup restore closed whose key-named files the control
+    // prune has yet to sweep, in the key order it reads them.
+    index("jobs_operation_key_idx")
       .on(table.operationKey)
-      .where(sql`${table.operationKey} IS NOT NULL`),
+      .where(sql`${table.executionAdmission} IS NULL AND ${table.releasedAt} IS NULL`),
+    // The admin job listings and the last-sync lookup read one kind, newest first.
+    index("jobs_kind_admitted_at_idx").on(table.kind, table.admittedAt),
+    // Startup recovery lists these in admission order, and an exclusive
+    // admission looks among them for an unfinished job.
+    index("jobs_admitted_at_idx")
+      .on(table.admittedAt)
+      .where(
+        sql`${table.finishedAt} IS NULL OR (${table.executionAdmission} IS NOT NULL AND ${table.releasedAt} IS NULL)`,
+      ),
+    // A local transit sync replays its idempotency key within 24 hours.
+    index("jobs_idempotency_key_idx")
+      .on(table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    check(
+      "jobs_status_check",
+      sql`${table.status} IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')`,
+    ),
     // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
     // adds a space after each separator, so it stays under twice that.
     check(
-      "data_manager_jobs_execution_bounds",
+      "jobs_execution_bounds_check",
       sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 524288)`,
     ),
     check(
-      "data_manager_jobs_execution_row",
-      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NULL OR ${table.executionVersion} = 2) AND (${table.executionVersion} IS DISTINCT FROM 2 OR ${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR (${table.finishedAt} IS NOT NULL AND ${table.executionAdmission} IS NOT NULL))`,
+      "jobs_execution_row_check",
+      sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR ${table.finishedAt} IS NOT NULL)`,
     ),
     check(
-      "data_manager_jobs_execution_shape",
-      sql`${table.executionVersion} IS NULL OR coalesce((${table.executionVersion} = 2 AND ${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.admittedAt} >= 0 AND ${table.deadlineAt} > ${table.admittedAt} AND ${table.executionInput} IS NOT NULL AND ${table.executionState} IS NOT NULL), false)`,
+      "jobs_execution_shape_check",
+      sql`${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.deadlineAt} > ${table.admittedAt}`,
     ),
   ],
 );
@@ -111,8 +141,8 @@ export const configurationFence = dataManager.table(
   {
     maintenanceId: uuid("maintenance_id").primaryKey(),
     /** The agent's prepare execution id and operation key. */
-    fenceId: uuid("fence_id").notNull().unique(),
-    operationKey: text("operation_key").notNull().unique(),
+    fenceId: uuid("fence_id").notNull().unique("configuration_fence_fence_id_key"),
+    operationKey: text("operation_key").notNull().unique("configuration_fence_operation_key_key"),
     candidateId: uuid("candidate_id").notNull(),
     planDigest: text("plan_digest").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
@@ -126,26 +156,53 @@ export const configurationFence = dataManager.table(
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("configuration_fence_one_prepared_uq")
+    uniqueIndex("configuration_fence_state_prepared_key")
       .on(table.state)
       .where(sql`${table.state} = 'prepared'`),
     check(
-      "configuration_fence_state",
+      "configuration_fence_state_check",
       sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.state} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
 );
 
+/** The stages of a transit run that record a row, in pipeline order. */
+export const JOB_STAGE_NAMES = [
+  "prepare",
+  "filter",
+  "preflight",
+  "compile-gbfs",
+  "fetch",
+  "fetch-operator",
+  "validate",
+  "gen-motis-config",
+  "assemble-staging",
+  "stage-proxy",
+  "motis-import",
+  "motis-health",
+  "gen-full-config",
+  "gen-attribution",
+  "promote",
+  "gc",
+  // Mirror mode (TRANSIT_SOURCE=mirror) runs this instead of `fetch`: it
+  // downloads the GTFS archives Transitous already cleaned.
+  "mirror",
+] as const;
+/** How a recorded stage ended. */
+export const JOB_STAGE_STATUSES = ["ok", "skipped", "error", "partial"] as const;
+
+/** `column IN (…)` over a closed set of values written as SQL literals. */
+function inValues(column: AnyPgColumn, values: readonly string[]): SQL {
+  if (values.some((value) => !/^[a-z][a-z-]*$/.test(value))) throw Error("Unsafe value literal");
+  return sql`${column} IN (${sql.raw(values.map((value) => `'${value}'`).join(","))})`;
+}
+
 export const jobStages = dataManager.table(
   "job_stages",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
-    /** StageName */
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    jobId: uuid("job_id").notNull(),
     stage: text("stage").notNull(),
-    /** StageStatus */
     status: text("status").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
@@ -156,32 +213,71 @@ export const jobStages = dataManager.table(
   },
   // Deleting a job cascades here once per job row, and the job detail views
   // read stages by job. Without this index each of those is a full table scan.
-  (table) => [index("job_stages_job_id_idx").on(table.jobId)],
+  (table) => [
+    foreignKey({
+      name: "job_stages_job_id_fkey",
+      columns: [table.jobId],
+      foreignColumns: [jobs.id],
+    }).onDelete("cascade"),
+    index("job_stages_job_id_idx").on(table.jobId),
+    check("job_stages_stage_check", inValues(table.stage, JOB_STAGE_NAMES)),
+    check("job_stages_status_check", inValues(table.status, JOB_STAGE_STATUSES)),
+  ],
 );
 
-export const feedState = dataManager.table("feed_state", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /** e.g. "de" */
-  region: text("region").notNull(),
-  /** Source name from feeds/<region>.json */
-  name: text("name").notNull(),
-  lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
-  lastImportedAt: timestamp("last_imported_at", { withTimezone: true }),
-  /** sha256 of latest fetched archive */
-  hash: text("hash"),
-  /** "ok" | "warning" | "error" */
-  validationStatus: text("validation_status"),
-  validationMessage: text("validation_message"),
-  /** "active" | "stale" | "failed" | "unknown" */
-  status: text("status").notNull().default("unknown"),
-  /**
-   * Number of consecutive validation failures since the last successful
-   * validation. Reset to 0 on `validation_status = 'ok'`. Drives the
-   * staleness-alert cron (G2) — at >= 3 consecutive failures we emit a
-   * structured warning + (optional) GitHub Issue.
-   */
-  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
-});
+/** One row per transit feed source, keyed by its region and source name. */
+export const feedState = dataManager.table(
+  "feed_state",
+  {
+    /** e.g. "de" */
+    region: text("region").notNull(),
+    /** Source name from feeds/<region>.json */
+    name: text("name").notNull(),
+    lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
+    lastImportedAt: timestamp("last_imported_at", { withTimezone: true }),
+    /** sha256 of the latest fetched archive */
+    hash: text("hash"),
+    /** "ok" | "warning" | "error" */
+    validationStatus: text("validation_status"),
+    validationMessage: text("validation_message"),
+    /** "active" | "stale" | "failed" | "unknown" */
+    status: text("status").notNull().default("unknown"),
+    /**
+     * Number of consecutive validation failures since the last successful
+     * validation. Reset to 0 on `validation_status = 'ok'`. Drives the
+     * staleness alert: at 3 or more consecutive failures it emits a
+     * structured warning and, optionally, a GitHub issue.
+     */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ name: "feed_state_pkey", columns: [table.region, table.name] }),
+    check("feed_state_status_check", sql`${table.status} IN ('active','stale','failed','unknown')`),
+    check(
+      "feed_state_validation_status_check",
+      sql`${table.validationStatus} IN ('ok','warning','error')`,
+    ),
+  ],
+);
+
+/**
+ * The Overture places release each region last imported. `links_pending`
+ * means the release is live but its link rebuild did not complete.
+ */
+export const overtureRelease = dataManager.table(
+  "overture_release",
+  {
+    region: text("region").notNull(),
+    release: text("release").notNull(),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull(),
+    /** "imported" | "links_pending" */
+    status: text("status").notNull(),
+  },
+  (table) => [
+    primaryKey({ name: "overture_release_pkey", columns: [table.region] }),
+    check("overture_release_status_check", sql`${table.status} IN ('imported','links_pending')`),
+  ],
+);
 
 /** Durable physical offline-package work. Opaque principals live only in the owner table. */
 export const offlinePackageJobs = dataManager.table(
@@ -201,11 +297,15 @@ export const offlinePackageJobs = dataManager.table(
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("offline_package_jobs_live_request_key_uq")
+    uniqueIndex("offline_package_jobs_request_key_live_key")
       .on(table.requestKey)
       .where(sql`${table.status} IN ('preparing', 'ready-to-download')`),
-    index("offline_package_jobs_status_created_idx").on(table.status, table.createdAt),
+    index("offline_package_jobs_status_created_at_idx").on(table.status, table.createdAt),
     index("offline_package_jobs_package_id_idx").on(table.packageId),
+    check(
+      "offline_package_jobs_status_check",
+      sql`${table.status} IN ('preparing','ready-to-download','failed','expired')`,
+    ),
   ],
 );
 
@@ -213,14 +313,20 @@ export const offlinePackageJobs = dataManager.table(
 export const offlinePackageJobOwners = dataManager.table(
   "offline_package_job_owners",
   {
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => offlinePackageJobs.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").notNull(),
     principal: text("principal").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.jobId, table.principal] }),
+    primaryKey({
+      name: "offline_package_job_owners_pkey",
+      columns: [table.jobId, table.principal],
+    }),
+    foreignKey({
+      name: "offline_package_job_owners_job_id_fkey",
+      columns: [table.jobId],
+      foreignColumns: [offlinePackageJobs.id],
+    }).onDelete("cascade"),
     index("offline_package_job_owners_principal_idx").on(table.principal),
   ],
 );
@@ -235,8 +341,14 @@ export const offlinePackageArtifactReferences = dataManager.table(
     retainedAt: timestamp("retained_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.principal, table.packageId] }),
-    index("offline_package_artifact_refs_package_idx").on(table.packageId),
-    index("offline_package_artifact_refs_principal_age_idx").on(table.principal, table.retainedAt),
+    primaryKey({
+      name: "offline_package_artifact_references_pkey",
+      columns: [table.principal, table.packageId],
+    }),
+    index("offline_package_artifact_references_package_id_idx").on(table.packageId),
+    index("offline_package_artifact_references_principal_retained_at_idx").on(
+      table.principal,
+      table.retainedAt,
+    ),
   ],
 );

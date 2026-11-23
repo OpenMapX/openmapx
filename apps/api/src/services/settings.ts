@@ -1,8 +1,11 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { systemSettings } from "../db/schema";
+import { systemSecret, systemSettings } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import { resolveSettingPrecedence, type SettingSource } from "../utils/settings-resolution";
 import { appLogger } from "./app-logger";
+import { assertSecretsConfigured, decrypt, encrypt } from "./secrets";
 
 interface SettingDef {
   group: string;
@@ -485,6 +488,8 @@ interface ResolvedSetting {
   envVar?: string;
   envOverride: boolean;
   showWhen?: { key: string; equals: unknown | unknown[] };
+  /** A stored secret in effect that the current secrets key cannot decrypt. */
+  unreadable?: true;
 }
 
 interface SettingsGroup {
@@ -530,9 +535,135 @@ export function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
   }
 }
 
+const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set(
+  SETTING_DEFS.filter((def) => def.secret).map((def) => def.key),
+);
+
+/** Whether a setting's value is kept encrypted in `system_secret`. */
+export function isSecretSetting(key: string): boolean {
+  return SECRET_SETTING_KEYS.has(key);
+}
+
+/** Store the given settings in one transaction, attributed to the acting
+ * administrator (none for the loopback actor, which has no account). Secret
+ * settings are encrypted into `system_secret`; an empty value removes one. */
+export async function saveSystemSettings(
+  entries: ReadonlyArray<{ key: string; value: unknown }>,
+  actorId: string,
+  database: typeof db = db,
+): Promise<void> {
+  const updatedBy = actorUserIdOrNull(actorId);
+  const secrets = entries.filter(({ key }) => isSecretSetting(key));
+  for (const { key, value } of secrets) {
+    if (typeof value !== "string") throw new Error(`The secret setting ${key} must be a string`);
+  }
+  if (secrets.some(({ value }) => value !== "")) assertSecretsConfigured();
+  await database.transaction(async (transaction) => {
+    for (const { key, value } of entries) {
+      if (isSecretSetting(key)) {
+        if (value === "") {
+          await transaction.delete(systemSecret).where(eq(systemSecret.key, key));
+          continue;
+        }
+        const sealed = encrypt(value as string);
+        await transaction
+          .insert(systemSecret)
+          .values({ key, ...sealed, updatedBy })
+          .onConflictDoUpdate({
+            target: systemSecret.key,
+            set: { ...sealed, updatedAt: new Date(), updatedBy },
+          });
+        continue;
+      }
+      await transaction
+        .insert(systemSettings)
+        .values({ key, value: value as never, updatedBy })
+        .onConflictDoUpdate({
+          target: systemSettings.key,
+          set: { value: value as never, updatedAt: new Date(), updatedBy },
+        });
+    }
+  });
+}
+
+/** A stored secret setting cannot be decrypted: the secrets key is missing,
+ * unusable or not the key the value was saved with. */
+export class SecretSettingUnreadableError extends Error {
+  constructor(
+    readonly setting: string,
+    cause: unknown,
+  ) {
+    super(`The secret setting ${setting} cannot be read: ${(cause as Error).message}`, { cause });
+    this.name = "SecretSettingUnreadableError";
+  }
+}
+
+/** The secret settings that have a stored value. Nothing is decrypted. */
+export async function storedSecretSettingKeys(database: typeof db = db): Promise<Set<string>> {
+  const rows = await database.select({ key: systemSecret.key }).from(systemSecret);
+  return new Set(rows.map((row) => row.key).filter(isSecretSetting));
+}
+
+/**
+ * The stored values of the given secret settings, decrypted; a setting without
+ * a stored value is absent. Only the listed settings are decrypted, so callers
+ * pass just those whose environment override (SMTP_PASS, MAPTILER_KEY, …) is
+ * unset, and an unreadable value never breaks a setting the environment
+ * supplies. Throws SecretSettingUnreadableError, naming the setting, when a
+ * listed value cannot be decrypted.
+ */
+export async function loadSecretSettings(
+  keys: readonly string[],
+  database: typeof db = db,
+): Promise<Record<string, string>> {
+  const wanted = keys.filter(isSecretSetting);
+  if (wanted.length === 0) return {};
+  const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, wanted));
+  const values: Record<string, string> = {};
+  for (const row of rows) {
+    try {
+      values[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+    } catch (error) {
+      throw new SecretSettingUnreadableError(row.key, error);
+    }
+  }
+  return values;
+}
+
+/** The stored secret settings among `keys` that cannot be decrypted, without throwing. */
+async function unreadableSecretSettings(
+  keys: readonly string[],
+  database: typeof db,
+): Promise<Set<string>> {
+  const unreadable = new Set<string>();
+  if (keys.length === 0) return unreadable;
+  const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, keys));
+  for (const row of rows) {
+    try {
+      decrypt(row.ciphertext, row.iv, row.tag);
+    } catch {
+      unreadable.add(row.key);
+    }
+  }
+  return unreadable;
+}
+
 export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {
   const dbRows = await database.select().from(systemSettings);
-  const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
+  const dbMap: Record<string, unknown> = Object.fromEntries(
+    dbRows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value]),
+  );
+  // A stored secret is shown only as configured, never with its value. One in
+  // effect (no environment override) is also checked against the current key,
+  // so the editor can say when a restore brought it back without its key.
+  const storedSecrets = await storedSecretSettingKeys(database);
+  for (const key of storedSecrets) dbMap[key] = "***";
+  const unreadable = await unreadableSecretSettings(
+    SETTING_DEFS.filter(
+      (def) => def.secret && storedSecrets.has(def.key) && !(def.env && process.env[def.env]),
+    ).map((def) => def.key),
+    database,
+  );
 
   const grouped: Record<string, ResolvedSetting[]> = {};
 
@@ -582,6 +713,7 @@ export async function resolveSettings(database: typeof db = db): Promise<Setting
       envVar: def.env,
       envOverride: source === "env",
       showWhen: def.showWhen,
+      ...(source === "database" && unreadable.has(def.key) ? { unreadable: true } : {}),
     });
   }
 

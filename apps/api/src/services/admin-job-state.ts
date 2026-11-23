@@ -224,34 +224,50 @@ export async function renewAdminJobClaim(id: string, execution: JobExecution | u
   if (!rows.length) throw new JobOwnershipLost();
 }
 
-/** Row locking serializes the insert with claims/cancel/settlement. The returned
- * insertion, not a preflight SELECT, is the event publication authority. */
+export interface OwnedJobLogLine {
+  jobId: string;
+  stream: "stdout" | "stderr";
+  line: string;
+  createdAt: Date;
+  /** The agent event a relayed line came from; a repeated id is not written again. */
+  sourceEventId?: string;
+}
+/**
+ * Writes one line to a job's log. The job row's lock serializes the insert
+ * with claims, cancellation, settlement and the job's other lines: the line
+ * takes the next `seq` from the job's counters, which it advances in the same
+ * statement. Once a job records agent operations it accepts lines only within
+ * its log capacity, which counts all its lines, including earlier local ones.
+ * Only a repeated source event is skipped; a `seq` collision raises, since it
+ * means the counter no longer matches the log. The returned insertion, not a
+ * preflight SELECT, is the event publication authority: `null` means the line
+ * was not written.
+ */
 export async function insertOwnedJobLog(
   execution: JobExecution | undefined,
-  entry: typeof adminJobLog.$inferInsert,
-): Promise<boolean> {
-  const [result] = await db.execute<{ owned: boolean; inserted: boolean }>(sql`
+  entry: OwnedJobLogLine,
+): Promise<{ seq: number } | null> {
+  const bytes = Buffer.byteLength(entry.line, "utf8");
+  const [result] = await db.execute<{ owned: boolean; seq: number | null }>(sql`
     WITH owner AS MATERIALIZED (
-      SELECT ${adminJob.id}, ${adminJob.result}, ${adminJob.protocol} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
+      SELECT ${adminJob.id}, ${adminJob.logEvents}, ${adminJob.logBytes}, ${adminJob.protocol} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
     ), inserted AS (
-      INSERT INTO ${adminJobLog} (id, job_id, seq, stream, line, created_at)
-      SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamp
+      INSERT INTO ${adminJobLog} (job_id, seq, stream, line, source_event_id, created_at)
+      SELECT owner.id, owner.log_events, ${entry.stream}, ${entry.line}, ${entry.sourceEventId ?? null}, ${entry.createdAt.toISOString()}::timestamptz
       FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '3' OR (
-        coalesce((owner.protocol->'handler'->>'_opsLogEvents')::integer,0) < ${ADMIN_JOB_LOG_LIMITS.events}
-        AND coalesce((owner.protocol->'handler'->>'_opsLogBytes')::integer,0) + ${Buffer.byteLength(entry.line, "utf8")} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
-      ) ON CONFLICT (id) DO NOTHING RETURNING job_id
+        owner.log_events < ${ADMIN_JOB_LOG_LIMITS.events}
+        AND owner.log_bytes + ${bytes} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
+      ) ON CONFLICT (job_id, source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
+      RETURNING job_id, seq
     ), charged AS (
-      UPDATE ${adminJob} SET protocol=${adminJob.protocol} || jsonb_build_object('handler',
-        coalesce(owner.protocol->'handler','{}'::jsonb) || jsonb_build_object(
-        '_opsLogEvents',coalesce((owner.protocol->'handler'->>'_opsLogEvents')::integer,0)+1,
-        '_opsLogBytes',coalesce((owner.protocol->'handler'->>'_opsLogBytes')::integer,0)+${Buffer.byteLength(entry.line, "utf8")}))
-      FROM owner,inserted WHERE ${adminJob.id}=owner.id AND inserted.job_id=owner.id AND owner.protocol->'operations'->>'version'='3'
+      UPDATE ${adminJob} SET log_events = owner.log_events + 1, log_bytes = owner.log_bytes + ${bytes}
+      FROM owner, inserted WHERE ${adminJob.id} = owner.id AND inserted.job_id = owner.id
       RETURNING ${adminJob.id}
     )
-    SELECT EXISTS (SELECT 1 FROM owner) AS owned, EXISTS (SELECT 1 FROM inserted) AS inserted
+    SELECT EXISTS (SELECT 1 FROM owner) AS owned, (SELECT seq FROM inserted) AS seq
   `);
   if (!result?.owned) throw new JobOwnershipLost();
-  return result.inserted;
+  return result.seq === null ? null : { seq: Number(result.seq) };
 }
 
 /** Both fields change in one PostgreSQL statement; the old claim is the CAS token. */

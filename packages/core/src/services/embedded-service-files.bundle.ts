@@ -91,6 +91,12 @@ export function embeddedBuiltInServiceFiles(): EmbeddedServiceFiles | null {
       },
       {
         serviceId: "postgis",
+        path: "scripts/initdb-extensions.sh",
+        executable: true,
+        url: new URL("../../../../services/postgis/scripts/initdb-extensions.sh", import.meta.url),
+      },
+      {
+        serviceId: "postgis",
         path: "scripts/sync-password.sh",
         executable: true,
         url: new URL("../../../../services/postgis/scripts/sync-password.sh", import.meta.url),

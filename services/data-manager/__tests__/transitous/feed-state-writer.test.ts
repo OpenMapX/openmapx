@@ -1,20 +1,22 @@
+import { is, SQL } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Drizzle query builders are lazy thenables: nothing reaches the database until
- * the builder is awaited. The mock mirrors that, so `lookups`/`updates`/`inserted`
- * count queries that were actually *executed*, not merely constructed.
+ * the builder is awaited. The mock mirrors that, so `upserts` counts statements
+ * that were actually *executed*, not merely constructed.
  */
 const mocks = vi.hoisted(() => {
   const state = {
-    existing: [] as Array<{ id: string; consecutiveFailures: number }>,
-    lookups: 0,
-    updates: [] as Array<Record<string, unknown>>,
-    inserted: [] as Array<Record<string, unknown>>,
+    upserts: [] as Array<{
+      values: Record<string, unknown>;
+      target: unknown;
+      set: Record<string, unknown>;
+    }>,
     /** Settles every executed query; swap to reject or stay pending. */
     gate: (): Promise<void> => Promise.resolve(),
-    /** When set, `db.select` throws before returning a builder. */
-    selectThrows: undefined as Error | undefined,
+    /** When set, `db.insert` throws before returning a builder. */
+    insertThrows: undefined as Error | undefined,
   };
 
   const lazy = <T>(execute: () => T): PromiseLike<T> => ({
@@ -33,37 +35,27 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../../src/db/index.js", () => ({
   db: {
-    select: () => {
-      if (mocks.state.selectThrows) throw mocks.state.selectThrows;
+    insert: () => {
+      if (mocks.state.insertThrows) throw mocks.state.insertThrows;
       return {
-        from: () => ({
-          where: () => ({
-            limit: () =>
-              mocks.lazy(() => {
-                mocks.state.lookups += 1;
-                return mocks.state.existing;
-              }),
-          }),
+        values: (values: Record<string, unknown>) => ({
+          onConflictDoUpdate: ({
+            target,
+            set,
+          }: {
+            target: unknown;
+            set: Record<string, unknown>;
+          }) =>
+            mocks.lazy(() => {
+              mocks.state.upserts.push({ values, target, set });
+            }),
         }),
       };
     },
-    update: () => ({
-      set: (values: Record<string, unknown>) => ({
-        where: () =>
-          mocks.lazy(() => {
-            mocks.state.updates.push(values);
-          }),
-      }),
-    }),
-    insert: () => ({
-      values: (values: Record<string, unknown>) =>
-        mocks.lazy(() => {
-          mocks.state.inserted.push(values);
-        }),
-    }),
   },
 }));
 
+import { feedState } from "@openmapx/db-schema";
 import {
   recordFetchOutcome,
   recordPromotedSource,
@@ -76,16 +68,13 @@ const CIRCUIT_OPEN = "feed_state writes disabled (previous write failed)";
 const state = mocks.state;
 
 function resetState(): void {
-  state.existing = [];
-  state.lookups = 0;
-  state.updates.length = 0;
-  state.inserted.length = 0;
+  state.upserts.length = 0;
   state.gate = () => Promise.resolve();
-  state.selectThrows = undefined;
+  state.insertThrows = undefined;
 }
 
 function queryCount(): number {
-  return state.lookups + state.updates.length + state.inserted.length;
+  return state.upserts.length;
 }
 
 /** Let any queued microtasks (and thus any admitted queries) run. */
@@ -107,101 +96,80 @@ describe("recordValidateOutcome", () => {
 
     await recordValidateOutcome({ region: "de", name: "demo", ok: false, message });
 
-    expect(state.inserted).toHaveLength(1);
-    expect(state.inserted[0]?.validationMessage).toBe("fetch https://example.org/archive failed");
-    expect(JSON.stringify(state.inserted)).not.toMatch(/FEED-PASSWORD|FEED-TOKEN|feed-user/);
+    expect(state.upserts).toHaveLength(1);
+    expect(state.upserts[0]?.values.validationMessage).toBe(
+      "fetch https://example.org/archive failed",
+    );
+    expect(state.upserts[0]?.set.validationMessage).toBe(
+      "fetch https://example.org/archive failed",
+    );
+    expect(JSON.stringify(state.upserts.map((u) => u.values))).not.toMatch(
+      /FEED-PASSWORD|FEED-TOKEN|feed-user/,
+    );
     expect(message).toContain("FEED-TOKEN");
   });
 
-  it("starts a failure counter at 1 for a feed without a row", async () => {
+  it("starts a new row at 1 and increments an existing row's counter in the database", async () => {
     await recordValidateOutcome({ region: "de", name: "demo", ok: false, message: "bad" });
 
-    expect(state.updates).toEqual([]);
-    expect(state.inserted).toEqual([
-      {
-        region: "de",
-        name: "demo",
-        validationStatus: "error",
-        validationMessage: "bad",
-        status: "failed",
-        consecutiveFailures: 1,
-      },
-    ]);
-  });
-
-  it("increments the stored failure count and scrubs the message on an existing row", async () => {
-    state.existing = [{ id: "row-1", consecutiveFailures: 2 }];
-
-    await recordValidateOutcome({
+    const upsert = state.upserts[0];
+    expect(upsert?.target).toEqual([feedState.region, feedState.name]);
+    expect(upsert?.values).toEqual({
       region: "de",
       name: "demo",
-      ok: false,
-      message: "fetch https://u:SECRET-PW@example.org/a failed",
+      validationStatus: "error",
+      validationMessage: "bad",
+      status: "failed",
+      consecutiveFailures: 1,
     });
-
-    expect(state.inserted).toEqual([]);
-    expect(state.updates).toEqual([
-      {
-        validationStatus: "error",
-        validationMessage: "fetch https://example.org/a failed",
-        status: "failed",
-        consecutiveFailures: 3,
-      },
-    ]);
+    expect(upsert?.set).toMatchObject({
+      validationStatus: "error",
+      validationMessage: "bad",
+      status: "failed",
+    });
+    expect(is(upsert?.set.consecutiveFailures, SQL)).toBe(true);
   });
 
   it("resets the failure counter on a successful validation", async () => {
-    state.existing = [{ id: "row-1", consecutiveFailures: 4 }];
-
     await recordValidateOutcome({ region: "de", name: "demo", ok: true });
 
-    expect(state.updates).toEqual([
-      {
-        validationStatus: "ok",
-        validationMessage: null,
-        consecutiveFailures: 0,
-        status: "active",
-      },
-    ]);
+    expect(state.upserts[0]?.set).toEqual({
+      validationStatus: "ok",
+      validationMessage: null,
+      consecutiveFailures: 0,
+      status: "active",
+    });
   });
 });
 
 describe("closed-circuit persistence", () => {
-  it("inserts a new row for a successful fetch", async () => {
+  it("upserts the fetch result for a successful fetch", async () => {
     await recordFetchOutcome({ region: "de", name: "demo", ok: true, hash: "abc" });
 
-    expect(state.updates).toEqual([]);
-    expect(state.inserted).toEqual([
-      {
-        region: "de",
-        name: "demo",
-        lastFetchedAt: expect.any(Date),
-        hash: "abc",
-        status: "active",
-      },
-    ]);
+    expect(state.upserts[0]?.values).toEqual({
+      region: "de",
+      name: "demo",
+      lastFetchedAt: expect.any(Date),
+      hash: "abc",
+      status: "active",
+    });
   });
 
-  it("updates the existing row for a failed fetch without touching lastFetchedAt", async () => {
-    state.existing = [{ id: "row-1", consecutiveFailures: 0 }];
-
+  it("records a failed fetch without touching lastFetchedAt", async () => {
     await recordFetchOutcome({ region: "de", name: "demo", ok: false });
 
-    expect(state.inserted).toEqual([]);
-    expect(state.updates).toEqual([{ status: "failed" }]);
+    expect(state.upserts[0]?.set).toEqual({ status: "failed" });
   });
 
   it("normalizes region and name when recording a promoted source", async () => {
     await recordPromotedSource({ region: "DE", name: "Demo" });
 
-    expect(state.inserted).toEqual([
-      {
-        region: "de",
-        name: "demo",
-        lastImportedAt: expect.any(Date),
-        status: "active",
-      },
-    ]);
+    expect(state.upserts[0]?.values).toEqual({
+      region: "de",
+      name: "demo",
+      lastImportedAt: expect.any(Date),
+      status: "active",
+    });
   });
 });
 
@@ -222,7 +190,7 @@ describe("circuit breaker admission", () => {
     await expect(recordFetchOutcome({ region: "de", name: "opener", ok: true })).rejects.toThrow(
       "connection refused",
     );
-    // The failed attempt did execute its lookup; later calls must add nothing.
+    // The failed attempt did execute its statement; later calls must add nothing.
     expect(queryCount()).toBe(1);
     resetState();
   }
@@ -257,16 +225,16 @@ describe("circuit breaker admission", () => {
     resetFeedStateCircuitForTests();
     await recordFetchOutcome({ region: "de", name: "demo", ok: true });
 
-    expect(state.inserted).toHaveLength(1);
+    expect(state.upserts).toHaveLength(1);
   });
 
   it("opens the circuit when query setup throws synchronously", async () => {
-    state.selectThrows = new Error("pool exhausted");
+    state.insertThrows = new Error("pool exhausted");
     await expect(recordFetchOutcome({ region: "de", name: "demo", ok: true })).rejects.toThrow(
       "pool exhausted",
     );
 
-    state.selectThrows = undefined;
+    state.insertThrows = undefined;
     await expect(recordFetchOutcome({ region: "de", name: "demo", ok: true })).rejects.toThrow(
       CIRCUIT_OPEN,
     );
@@ -289,10 +257,10 @@ describe("circuit breaker admission", () => {
       (err: Error) => err,
     );
     await vi.advanceTimersByTimeAsync(0);
-    expect(state.lookups).toBe(1);
+    expect(queryCount()).toBe(1);
 
     await vi.advanceTimersByTimeAsync(799);
-    expect(state.lookups).toBe(1);
+    expect(queryCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     expect((await first)?.message).toBe("feed_state write timed out after 800ms");
 
@@ -301,9 +269,7 @@ describe("circuit breaker admission", () => {
     expect(later.every((r) => r.status === "rejected" && r.reason.message === CIRCUIT_OPEN)).toBe(
       true,
     );
-    expect(state.lookups).toBe(1);
-    expect(state.updates).toEqual([]);
-    expect(state.inserted).toEqual([]);
+    expect(queryCount()).toBe(1);
 
     // The timed-out operation is not cancelled; its eventual failure must stay handled.
     rejectFirst(new Error("late connection failure"));

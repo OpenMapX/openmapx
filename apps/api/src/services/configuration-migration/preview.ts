@@ -4,6 +4,7 @@ import {
   adminPlatformPreviewSchema,
   authPolicySettingsSchema,
 } from "@openmapx/core/api-contracts";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { canonicalJson, protectedConfigurationServiceIdSchema } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { sql } from "drizzle-orm";
@@ -236,7 +237,7 @@ export async function prepareMigrationPlan(
       platformPreview = adminPlatformPreviewSchema.parse(
         services.buildPlatformConfigurationPreview({
           actorId: writer.actorId,
-          previewId: randomUUID(),
+          previewId: uuidv7(),
           authPolicyRevision: policy.revision,
           sourceRevision: source.sourceRevision,
           currentRevisionId: source.revisionId,
@@ -317,7 +318,7 @@ export async function previewConfigurationMigration(
   const plan = await prepareMigrationPlan(raw, writer),
     stage = plan.denials.length
       ? {
-          previewId: randomUUID(),
+          previewId: uuidv7(),
           fingerprint: randomBytes(32).toString("hex"),
           expiresAt: new Date(Date.now() + 600000).toISOString(),
         }

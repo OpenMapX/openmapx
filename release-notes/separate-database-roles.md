@@ -9,7 +9,8 @@ impacts: [breaking, migration, operator-action]
 `openmapx_data_manager` may change only its own tables and the search and place
 schemas it rebuilds, and can no longer read or change accounts, administrative
 jobs or saved configuration. Martin's tile functions run as
-`openmapx_tiles_owner`, which only reads OpenConditions' tables.
+`openmapx_tiles_owner`, which reads only the OpenConditions tables and
+functions that OpenConditions' migration grants it for traffic tiles.
 [Database roles](../docs/docs/install/configuration.md#database-roles) describes
 the roles and their known limits.
 
@@ -53,10 +54,6 @@ nothing reads it any more.
 For host-run development, set `DATABASE_URL`, `DATABASE_PASSWORD_FILE` and the
 data-manager token files in `apps/api/.env` and `services/data-manager/.env` as
 their examples show.
-
-After installing or upgrading OpenConditions, restart PostGIS or run the grants
-in [Martin overlays](../docs/docs/guides/map-tiles.md#martin-overlays), or
-traffic tiles fail with a permission error.
 
 Give each community service that uses the shared database its own role with
 only the access it needs, as [Community extensions](../docs/docs/administration/community-extensions.md)

@@ -83,6 +83,7 @@ export interface SettingsEditorText {
   envOverrides: string;
   envOverrideHelp: (envVar: string) => string;
   envSecretValue: string;
+  unreadableSecret: string;
   showSecret: string;
   hideSecret: string;
   databaseSource: string;
@@ -104,6 +105,7 @@ function useDefaultEditorText(): SettingsEditorText {
       envOverrides: t("editor.envOverrides"),
       envOverrideHelp: (envVar) => t("editor.envOverrideHelp", { envVar }),
       envSecretValue: t("editor.envSecretValue"),
+      unreadableSecret: t("editor.unreadableSecret"),
       showSecret: t("editor.showSecret"),
       hideSecret: t("editor.hideSecret"),
       databaseSource: t("editor.databaseSource"),
@@ -291,6 +293,8 @@ function SettingField({
   // other field (including non-secret env overrides) shows its real value so
   // the operator can see what's actually in effect.
   const isEnvSecret = setting.envOverride && setting.secret;
+  // A stored secret the current key cannot open, until a replacement is typed.
+  const isUnreadableSecret = setting.unreadable === true && value === setting.value;
   const displayValue = isEnvSecret ? text.envSecretValue : String(value ?? "");
   const inputType = isEnvSecret
     ? "text"
@@ -307,7 +311,8 @@ function SettingField({
       type={inputType}
       value={displayValue}
       disabled={disabled}
-      helperText={setting.description}
+      error={isUnreadableSecret}
+      helperText={isUnreadableSecret ? text.unreadableSecret : setting.description}
       onChange={(e) =>
         onChange(setting.type === "number" ? Number(e.target.value) : e.target.value)
       }

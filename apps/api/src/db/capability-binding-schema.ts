@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 export const capabilityBinding = pgTable(
   "capability_binding",
@@ -6,12 +6,11 @@ export const capabilityBinding = pgTable(
     integrationId: text("integration_id").notNull(),
     capability: text("capability").notNull(),
     serviceId: text("service_id").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.integrationId, t.capability] }),
-    index("idx_capability_binding_service").on(t.serviceId),
+    primaryKey({ name: "capability_binding_pkey", columns: [t.integrationId, t.capability] }),
   ],
 );
 

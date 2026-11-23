@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 
 /**
@@ -86,8 +87,34 @@ export function orderByArgs(dbMock: DbMock, op: Op, callIndex = -1): unknown[] {
 }
 
 /**
+ * An insert chain. A queued result wins; otherwise an insert with `RETURNING`
+ * resolves to its rows with a database-assigned `id`, as PostgreSQL's column
+ * default would give them, and one without resolves to `[]`.
+ */
+function makeInsertChain(queued: { rows: unknown } | undefined): Record<string, unknown> {
+  let rows: Record<string, unknown>[] = [];
+  let returning = false;
+  const chain = makeQueryChain([]);
+  chain.values = vi.fn((values: Record<string, unknown> | Record<string, unknown>[]) => {
+    rows = Array.isArray(values) ? values : [values];
+    return chain;
+  });
+  chain.returning = vi.fn(() => {
+    returning = true;
+    return chain;
+  });
+  // biome-ignore lint/suspicious/noThenProperty: drizzle builders are thenable; the stub must mirror that.
+  chain.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+    Promise.resolve(
+      queued ? queued.rows : returning ? rows.map((row) => ({ id: randomUUID(), ...row })) : [],
+    ).then(onFulfilled, onRejected);
+  return chain;
+}
+
+/**
  * Build a queue-driven `db` mock. Each `db.<op>()` call shifts the next queued
- * result for that op (defaulting to `[]`) and returns a thenable chain that
+ * result for that op (defaulting to `[]`, or for an insert with `RETURNING`
+ * to its rows with an assigned `id`) and returns a thenable chain that
  * resolves to it. Assert on `dbMock.db.select.mock.calls` etc.
  */
 export function createDbMock(): DbMock {
@@ -95,7 +122,9 @@ export function createDbMock(): DbMock {
   const make = (op: Op) => vi.fn(() => makeQueryChain(queues[op].shift() ?? []));
   const db: DbMock["db"] = {
     select: make("select"),
-    insert: make("insert"),
+    insert: vi.fn(() =>
+      makeInsertChain(queues.insert.length ? { rows: queues.insert.shift() } : undefined),
+    ),
     update: make("update"),
     delete: make("delete"),
     execute: vi.fn(async () => []),

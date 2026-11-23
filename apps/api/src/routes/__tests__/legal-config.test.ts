@@ -6,7 +6,8 @@ vi.mock("../admin-settings.js", () => {
   throw new Error("Public legal settings must not load the admin route");
 });
 vi.mock("../../services/app-logger.js", () => ({
-  appLogger: { add: vi.fn() },
+  // The process logger, reached through the secrets service, mirrors into this stream.
+  appLogger: { add: vi.fn(), createPinoStream: () => ({ write: () => true }) },
 }));
 
 let selectResolveWith: unknown[] = [];
@@ -24,6 +25,7 @@ mockDbSelect.mockImplementation(() => makeSelectChain());
 vi.mock("../../db/index.js", () => ({ db: { select: (...a: unknown[]) => mockDbSelect(...a) } }));
 vi.mock("../../db/schema.js", () => ({
   systemSettings: { key: "key", value: "value", updatedAt: "updatedAt", updatedBy: "updatedBy" },
+  systemSecret: { key: "key" },
 }));
 
 let app: FastifyInstance;

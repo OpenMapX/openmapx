@@ -6,7 +6,7 @@ dist/
 .turbo/
 pnpm-lock.yaml
 infra/docker/data/
-# Generated migrations and their snapshots (never hand-edited)
+# Drizzle migrations: the generated baseline and snapshots, and the custom migration
 **/db/migrations/
 # Frozen fixtures are compared as captured
 **/__fixtures__/

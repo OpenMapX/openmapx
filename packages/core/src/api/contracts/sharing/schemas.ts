@@ -14,7 +14,7 @@ export const MAX_SHARE_WAYPOINTS = 10;
 export const MAX_SHARE_LABEL_LENGTH = 200;
 /** 1000 places can each retain 64KiB of captured attribution plus bounded text. */
 export const MAX_PUBLIC_SHARE_JSON_BYTES = 128 * 1024 * 1024;
-const id = z.string().min(1).max(100);
+const id = z.uuid();
 const token = z.string().regex(new RegExp(SHARE_TOKEN_PATTERN));
 const timestamp = z.iso.datetime({ offset: true });
 export const sharingWaypointSchema = z.strictObject({

@@ -13,7 +13,7 @@ import {
 } from "../services/integration-credential-status";
 import { executeIntegrationHealthCheck } from "../services/integration-health";
 import { jobRunner } from "../services/job-runner";
-import { isSecretsConfigured, listSecrets } from "../services/secrets";
+import { isSecretsConfigured, listSecrets, secretsKeyProblem } from "../services/secrets";
 import { writeAuditLog } from "../utils/audit-log";
 import { getAdminSession } from "../utils/require-admin";
 import { getSecretFields } from "../utils/validate-config-body";
@@ -76,10 +76,11 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
       return reply.status(400).send({ error: "value must be a non-empty string" });
     }
 
-    if (!isSecretsConfigured()) {
+    const keyProblem = secretsKeyProblem();
+    if (keyProblem) {
       return reply.status(503).send({
         error: "Secrets vault not configured",
-        hint: "Set OPENMAPX_SECRETS_KEY env var (openssl rand -hex 32)",
+        hint: keyProblem,
       });
     }
 

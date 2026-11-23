@@ -1,14 +1,22 @@
 import type { TimelineConnectionMode, TimelineConnectionStatus } from "@openmapx/core";
-import { index, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  foreignKey,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const personalTimelineConnection = pgTable(
   "personal_timeline_connection",
   {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    userId: text("user_id").notNull(),
     mode: text("mode").$type<TimelineConnectionMode>().notNull(),
     publicOrigin: text("public_origin").notNull(),
     displayName: text("display_name").notNull(),
@@ -30,8 +38,17 @@ export const personalTimelineConnection = pgTable(
       .notNull(),
   },
   (table) => [
-    index("personalTimelineConnection_userId_idx").on(table.userId),
-    unique("personalTimelineConnection_userId_unq").on(table.userId),
+    foreignKey({
+      name: "personal_timeline_connection_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    unique("personal_timeline_connection_user_id_key").on(table.userId),
+    check("personal_timeline_connection_mode_check", sql`${table.mode} in ('external','managed')`),
+    check(
+      "personal_timeline_connection_status_check",
+      sql`${table.status} in ('connected','degraded','invalid')`,
+    ),
   ],
 );
 

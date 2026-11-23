@@ -400,11 +400,15 @@ describe.skipIf(
       const named = () => files().filter((name) => batch.some((key) => name.includes(key)));
       const rows = () =>
         h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch})`;
+      const executionRows = () =>
+        h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch}) AND execution_admission IS NOT NULL`;
       expect(named()).toEqual([]);
-      expect(await rows()).toHaveLength(30);
+      expect(await executionRows()).toHaveLength(30);
       const removed = await control.pruneControlRecords(h.installation, { now: pruneAfter });
       expect(removed.sort()).toEqual([...batch].sort());
-      expect(await rows()).toHaveLength(0);
+      // The job rows stay for the API's job retention, without their execution rows.
+      expect(await executionRows()).toHaveLength(0);
+      expect(await rows()).toHaveLength(30);
     }
   }, 120_000);
 

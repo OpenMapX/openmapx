@@ -4,11 +4,15 @@ import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
+import { assertSecretsConfigured } from "../services/secrets";
 import {
+  isSecretSetting,
   matchesDeclaredType,
   parseEnvValue,
   resolveSettings,
   SETTING_DEFS,
+  SecretSettingUnreadableError,
+  saveSystemSettings,
 } from "../services/settings";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
@@ -69,26 +73,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         error: `Value type does not match the setting definition: ${rejected.join(", ")}`,
       });
     }
-
-    await db.transaction(async (transaction) => {
-      for (const { key, value } of toWrite) {
-        await transaction
-          .insert(systemSettings)
-          .values({
-            key,
-            value: value as never,
-            updatedBy: adminSession.user.id,
-          })
-          .onConflictDoUpdate({
-            target: systemSettings.key,
-            set: {
-              value: value as never,
-              updatedAt: new Date(),
-              updatedBy: adminSession.user.id,
-            },
-          });
+    // Secret settings are stored encrypted; without a usable key none is saved.
+    if (toWrite.some(({ key, value }) => isSecretSetting(key) && value !== "")) {
+      try {
+        assertSecretsConfigured();
+      } catch (error) {
+        return reply.status(400).send({ error: (error as Error).message });
       }
-    });
+    }
+
+    await saveSystemSettings(toWrite, adminSession.user.id);
 
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -124,7 +118,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     async (request, reply) => {
       const adminSession = getAdminSession(request);
 
-      const config = await loadEmailConfig();
+      let config: Awaited<ReturnType<typeof loadEmailConfig>>;
+      try {
+        config = await loadEmailConfig();
+      } catch (error) {
+        // A stored credential the current secrets key cannot open: say so.
+        if (error instanceof SecretSettingUnreadableError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        throw error;
+      }
 
       // Validate the active provider has the inputs it needs before
       // attempting to send. Errors here become 400s so the operator gets

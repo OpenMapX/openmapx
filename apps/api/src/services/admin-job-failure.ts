@@ -41,11 +41,7 @@ export class JobObservationPending extends Error {
 
 /** Standalone acquisition inputs are public metadata; ownership and request MACs are not. */
 export function publicAdminJobPayload(type: string, payload: unknown): unknown {
-  if (
-    !["standalone.preview", "standalone.install", "standalone.adopt", "standalone.remove"].includes(
-      type,
-    )
-  ) {
+  if (!["standalone.preview", "standalone.install", "standalone.remove"].includes(type)) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
     return Object.fromEntries(
       Object.entries(payload).filter(([key]) => key !== "_maintenanceRequest"),

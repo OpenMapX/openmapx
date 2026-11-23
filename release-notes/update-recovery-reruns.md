@@ -1,5 +1,5 @@
 ---
-impacts: [breaking, migration]
+impacts: [breaking]
 ---
 
 ## What changes
@@ -37,11 +37,6 @@ An administrative job whose agent operation was interrupted by an agent restart
 now ends failed with the error code `recovery_required` instead of staying
 running. The agent keeps that operation's services held until an operator
 records the outcome with `openmapx control resolve`.
-
-The API database gains an `admin_job.protocol` column (migration
-`0066_update_system_job_rows`) that
-holds the job runner's own state. The migration copies nothing: install fresh,
-as `update-system-fresh-install.md` describes.
 
 Configuration results in the administration API no longer contain
 `publisherCleanupFailed`; the publisher it described was removed with the sealed

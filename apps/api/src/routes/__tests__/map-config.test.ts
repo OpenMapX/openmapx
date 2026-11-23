@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   rows: [] as { key: string; value: unknown }[],
+  secrets: {} as Record<string, string>,
   local: false,
   fail: false,
   reads: 0,
@@ -20,6 +21,10 @@ vi.mock("../../db/index.js", () => ({
   },
 }));
 vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
+vi.mock("../../services/settings.js", () => ({
+  isSecretSetting: (key: string) => key === "maptilerApiKey",
+  loadSecretSettings: async () => state.secrets,
+}));
 vi.mock("../../services/service-registry.js", () => ({
   serviceUrl: () => (state.local ? "http://tileserver:8080" : null),
 }));
@@ -32,6 +37,7 @@ import { mapConfigRoute } from "../map-config.js";
 
 afterEach(() => {
   state.rows = [];
+  state.secrets = {};
   state.local = false;
   state.fail = false;
   state.reads = 0;
@@ -62,10 +68,8 @@ describe("public map configuration", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
   });
   it("uses admin selection and key but never exposes the credential", async () => {
-    state.rows = [
-      { key: "hostedBasemapProvider", value: "openfreemap" },
-      { key: "maptilerApiKey", value: "private-db-key" },
-    ];
+    state.rows = [{ key: "hostedBasemapProvider", value: "openfreemap" }];
+    state.secrets = { maptilerApiKey: "private-db-key" };
     const res = await request();
     expect(res.json()).toMatchObject({
       hostedBasemapProvider: "openfreemap",

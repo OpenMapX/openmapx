@@ -32,7 +32,7 @@ const client = () => new QueryClient({ defaultOptions: { queries: { retry: false
 let storage: ReturnType<typeof memoryStorage>;
 
 const LOCAL_ROW = {
-  id: "v-local",
+  id: "0193e4a0-0000-7000-8002-000000000008",
   name: "Local Car",
   kind: "car",
   powertrain: "petrol",
@@ -80,7 +80,11 @@ describe("useVehicles", () => {
 
   it("reads the API when signed in", async () => {
     session.value = { user: { id: "user-1" } };
-    const serverRow = { ...LOCAL_ROW, id: "v-server", name: "Server Car" };
+    const serverRow = {
+      ...LOCAL_ROW,
+      id: "0193e4a0-0000-7000-8002-000000000001",
+      name: "Server Car",
+    };
     const get = vi.mocked(fetch).mockImplementation(async () => json({ vehicles: [serverRow] }));
 
     const { result } = renderHook(() => useVehicles(), { wrapper: wrapper(client()) });
@@ -96,7 +100,11 @@ describe("useVehicles", () => {
   it("caches the two identities separately", async () => {
     storage.map.set(LOCAL_VEHICLES_KEY, JSON.stringify([LOCAL_ROW]));
     vi.mocked(fetch).mockImplementation(async () =>
-      json({ vehicles: [{ ...LOCAL_ROW, id: "v-server", name: "Server Car" }] }),
+      json({
+        vehicles: [
+          { ...LOCAL_ROW, id: "0193e4a0-0000-7000-8002-000000000001", name: "Server Car" },
+        ],
+      }),
     );
     const shared = client();
 
@@ -153,11 +161,14 @@ describe("useSaveParkedLocation", () => {
 
   it("PUTs to the API when signed in", async () => {
     session.value = { user: { id: "user-1" } };
-    const put = vi
-      .mocked(fetch)
-      .mockImplementation(async () =>
-        json({ ...DRAFT, id: "p1", savedAt: LOCAL_ROW.createdAt, updatedAt: LOCAL_ROW.updatedAt }),
-      );
+    const put = vi.mocked(fetch).mockImplementation(async () =>
+      json({
+        ...DRAFT,
+        id: "0193e4a0-0000-7000-8002-000000000002",
+        savedAt: LOCAL_ROW.createdAt,
+        updatedAt: LOCAL_ROW.updatedAt,
+      }),
+    );
 
     const { result } = renderHook(() => useSaveParkedLocation(), { wrapper: wrapper(client()) });
     await result.current.mutateAsync(DRAFT);
@@ -201,7 +212,9 @@ it("cancels the prior account acquisition when the identity changes", async () =
   });
   vi.mocked(fetch)
     .mockImplementationOnce(async () => pending)
-    .mockImplementation(async () => json({ vehicles: [{ ...LOCAL_ROW, id: "account-two" }] }));
+    .mockImplementation(async () =>
+      json({ vehicles: [{ ...LOCAL_ROW, id: "0193e4a0-0000-7000-8002-000000000009" }] }),
+    );
   const shared = client();
   const view = renderHook(() => useVehicles(), { wrapper: wrapper(shared) });
   try {
@@ -210,13 +223,15 @@ it("cancels the prior account acquisition when the identity changes", async () =
     assert.isDefined(options, "the account read was sent without options");
     session.value = { user: { id: "user-2" } };
     view.rerender();
-    await waitFor(() => expect(view.result.current.data?.[0]?.id).toBe("account-two"));
+    await waitFor(() =>
+      expect(view.result.current.data?.[0]?.id).toBe("0193e4a0-0000-7000-8002-000000000009"),
+    );
     expect(options.signal?.aborted).toBe(true);
-    release(json({ vehicles: [{ ...LOCAL_ROW, id: "retired-account" }] }));
+    release(json({ vehicles: [{ ...LOCAL_ROW, id: "0193e4a0-0000-7000-8002-00000000000a" }] }));
     await waitFor(() =>
       expect(shared.getQueryData(["garage", "vehicles", "user-1"])).toBeUndefined(),
     );
-    expect(view.result.current.data?.[0]?.id).toBe("account-two");
+    expect(view.result.current.data?.[0]?.id).toBe("0193e4a0-0000-7000-8002-000000000009");
   } finally {
     release(json({ vehicles: [] }));
     view.unmount();

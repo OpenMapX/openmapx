@@ -12,34 +12,30 @@ export async function adminStandaloneIntegrationsRoute(app: FastifyInstance): Pr
   registerIntegrationAdminRoute(app, "listAdminStandaloneIntegrations", async () =>
     (await import("../services/standalone-integrations/ownership")).standaloneInventory(),
   );
-  for (const action of ["adopt", "remove"] as const) {
-    const id =
-      action === "adopt" ? "adoptAdminStandaloneIntegration" : "removeAdminStandaloneIntegration";
-    registerIntegrationAdminRoute(app, id, async (request, reply) => {
-      try {
-        const actorId = getAdminSession(request).user.id;
-        const accepted = await jobRunner.enqueueStandalone(
-          `standalone.${action}`,
-          { integrationId: request.params.id, ...request.body },
-          actorId,
-          String(request.headers["idempotency-key"]),
-        );
-        await writeAuditLog({
-          actorId,
-          action: `standalone.${action}`,
-          targetType: "integration",
-          targetId: request.params.id,
-          details: { jobId: accepted.jobId },
-          request,
-        });
-        return reply.code(202).send(accepted);
-      } catch (error) {
-        if (error instanceof RetainedJobConflict)
-          return reply.code(409).send({ error: error.message });
-        throw error;
-      }
-    });
-  }
+  registerIntegrationAdminRoute(app, "removeAdminStandaloneIntegration", async (request, reply) => {
+    try {
+      const actorId = getAdminSession(request).user.id;
+      const accepted = await jobRunner.enqueueStandalone(
+        "standalone.remove",
+        { integrationId: request.params.id, ...request.body },
+        actorId,
+        String(request.headers["idempotency-key"]),
+      );
+      await writeAuditLog({
+        actorId,
+        action: "standalone.remove",
+        targetType: "integration",
+        targetId: request.params.id,
+        details: { jobId: accepted.jobId },
+        request,
+      });
+      return reply.code(202).send(accepted);
+    } catch (error) {
+      if (error instanceof RetainedJobConflict)
+        return reply.code(409).send({ error: error.message });
+      throw error;
+    }
+  });
   for (const id of [
     "previewAdminStandaloneIntegration",
     "installAdminStandaloneIntegration",

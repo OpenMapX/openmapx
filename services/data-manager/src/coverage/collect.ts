@@ -29,7 +29,9 @@ import { scrubSecrets } from "../utils/scrub-secrets.js";
 import {
   type FeedStateRow,
   type OverturePublicationRow,
+  type OvertureReleaseRow,
   readOverturePublication,
+  readOvertureReleases,
   readSearchPublication,
   readTransitFeedStates,
   type SearchPublicationRow,
@@ -265,7 +267,7 @@ function buildSearchStream(
 function buildOvertureStream(
   exists: boolean,
   row: OverturePublicationRow | null,
-  feed: FeedStateRow | undefined,
+  imported: OvertureReleaseRow | undefined,
   now: Date,
 ): StreamEvidence {
   const publishedAt = iso(row?.places_published_at);
@@ -283,7 +285,7 @@ function buildOvertureStream(
     stream: "places",
     domain: "pois",
     now,
-    observedAt: iso(feed?.last_fetched_at) ?? iso(row?.updated_at) ?? now.toISOString(),
+    observedAt: iso(imported?.imported_at) ?? iso(row?.updated_at) ?? now.toISOString(),
     presence: active ? (count === 0 ? "empty" : "present") : "unknown",
     region: row
       ? { keys: [regionKeyForExtract(row.region)], basis: "published-region", relation: "unknown" }
@@ -293,10 +295,12 @@ function buildOvertureStream(
       : {}),
     publication: { version: row?.release ?? null, publishedAt, active: active },
     attempt: makeAttempt(
-      iso(feed?.last_fetched_at),
-      feed?.validation_status === "ok" ? "succeeded" : feed ? "failed" : "unknown",
+      iso(imported?.imported_at),
+      imported ? "succeeded" : "unknown",
       null,
-      feed?.validation_message,
+      imported
+        ? `Imported Overture release ${imported.release}${imported.status === "links_pending" ? "; link rebuild pending" : ""}`
+        : null,
     ),
     lastSuccessfulCheckAt: publishedAt,
     lastSuccessfullyCheckedVersion: row?.release ?? null,
@@ -733,14 +737,17 @@ export async function collectCoverageSnapshot(
     row: null,
   };
   let transitRows: FeedStateRow[] = [];
+  let overtureReleases: OvertureReleaseRow[] = [];
   const reads = await Promise.allSettled([
     readSearchPublication(opts.sql),
     readOverturePublication(opts.sql),
     readTransitFeedStates(opts.sql),
+    readOvertureReleases(opts.sql),
   ]);
   if (reads[0].status === "fulfilled") search = reads[0].value;
   if (reads[1].status === "fulfilled") overture = reads[1].value;
   if (reads[2].status === "fulfilled") transitRows = reads[2].value;
+  if (reads[3].status === "fulfilled") overtureReleases = reads[3].value;
   const failedReads = reads.filter((result) => result.status === "rejected").length;
   if (failedReads) {
     context.partial = true;
@@ -767,7 +774,10 @@ export async function collectCoverageSnapshot(
     buildOvertureStream(
       overture.exists,
       overture.row,
-      transitRows.find((row) => row.name === "overture-places"),
+      // Only the published region's own import counts as its last attempt.
+      overture.row
+        ? overtureReleases.find((release) => release.region === overture.row?.region)
+        : undefined,
       now,
     ),
   );

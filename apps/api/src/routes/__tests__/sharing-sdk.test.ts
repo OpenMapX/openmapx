@@ -22,11 +22,11 @@ let app: FastifyInstance;
 const client = createApiClient({ baseUrl: "https://sharing.example", credentials: "include" });
 const at = new Date("2026-10-23T00:00:00Z");
 const row = {
-  id: "share",
+  id: "0193e4a0-0000-7000-8000-000000000701",
   userId: "owner",
   tokenHash: "private",
   targetType: "list",
-  targetId: "list",
+  targetId: "0193e4a0-0000-7000-8000-000000000001",
   mode: "snapshot",
   label: "Trip",
   createdAt: at,
@@ -78,12 +78,18 @@ it("round-trips all five producers through the generated SDK without private fie
   expect(created.status).toBe(201);
   const token = sdk.unwrapSharingResponse(created).token;
   expect(token).toHaveLength(43);
-  database.queueUpdate([{ id: "share" }]);
-  expect(sdk.unwrapSharingResponse(await sdk.rotateShareToken("share", { client })).token).not.toBe(
-    token,
-  );
-  database.queueDelete([{ id: "share" }]);
-  expect(sdk.unwrapSharingResponse(await sdk.revokeShare("share", { client }))).toEqual({
+  database.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000701" }]);
+  expect(
+    sdk.unwrapSharingResponse(
+      await sdk.rotateShareToken("0193e4a0-0000-7000-8000-000000000701", { client }),
+    ).token,
+  ).not.toBe(token);
+  database.queueDelete([{ id: "0193e4a0-0000-7000-8000-000000000701" }]);
+  expect(
+    sdk.unwrapSharingResponse(
+      await sdk.revokeShare("0193e4a0-0000-7000-8000-000000000701", { client }),
+    ),
+  ).toEqual({
     ok: true,
   });
   session.mockResolvedValue(null);
@@ -108,7 +114,7 @@ it("enforces real session and CSRF guards before writes", async () => {
   session.mockResolvedValue({ user: { id: "owner" } });
   expect(
     (
-      await sdk.revokeShare("share", {
+      await sdk.revokeShare("0193e4a0-0000-7000-8000-000000000701", {
         client,
         headers: { origin: "https://foreign.example", cookie: "session=synthetic" },
       })

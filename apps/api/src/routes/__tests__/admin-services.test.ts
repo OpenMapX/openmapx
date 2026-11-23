@@ -149,6 +149,7 @@ vi.mock("../../utils/validate-config-body.js", async (importActual) => ({
 const mockIsSecretsConfigured = vi.fn().mockReturnValue(true);
 vi.mock("../../services/secrets.js", () => ({
   isSecretsConfigured: (...args: unknown[]) => mockIsSecretsConfigured(...args),
+  secretsKeyProblem: () => (mockIsSecretsConfigured() ? null : "Synthetic secrets key reason"),
 }));
 
 const mockIsDockerAvailable = vi.fn().mockResolvedValue(true);
@@ -1058,6 +1059,7 @@ describe("service credentials", () => {
     });
 
     expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("Secret vault not configured: Synthetic secrets key reason");
     expect(mockSetServiceSecret).not.toHaveBeenCalled();
   });
 

@@ -28,7 +28,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   () => {
     beforeAll(async () => {
       state.fixture = await createMigratedPostgresFixture();
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
       await state.fixture.db.insert(user).values([
         {
           id: "migration-admin",

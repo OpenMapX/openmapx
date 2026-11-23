@@ -2,6 +2,7 @@
  * It adds the existing handoff producer to the SAME staged generation. */
 import { createHash, randomUUID } from "node:crypto";
 import { adminPlatformPreviewSchema } from "@openmapx/core/api-contracts";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { type ConfigurationSourcesInspection, canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { sql } from "drizzle-orm";
@@ -35,7 +36,7 @@ export async function previewProtectedCredentialMigration(input: {
   const preview = adminPlatformPreviewSchema.parse(
     services.buildPlatformConfigurationPreview({
       actorId: input.actorId,
-      previewId: randomUUID(),
+      previewId: uuidv7(),
       authPolicyRevision: policy.revision,
       sourceRevision: input.source.sourceRevision,
       currentRevisionId: input.source.revisionId,

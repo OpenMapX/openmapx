@@ -118,15 +118,12 @@ describe.each(["install-smoke", "update-smoke"])("%s concurrency", (name) => {
 
 describe("install smoke script", () => {
   it("generates every secret at random and never prints the environment", () => {
-    for (const key of [
-      "POSTGRES_PASSWORD",
-      "BETTER_AUTH_SECRET",
-      "OPENMAPX_SECRETS_KEY",
-      "OPENMAPX_LOCAL_ADMIN_TOKEN",
-    ])
+    for (const key of ["POSTGRES_PASSWORD", "BETTER_AUTH_SECRET", "OPENMAPX_LOCAL_ADMIN_TOKEN"])
       expect(script).toContain(`set_env_secret ${key}\n`);
-    // Render generates the data-manager tokens and database role passwords.
+    // Render generates the data-manager tokens, database role passwords and
+    // the API's secrets key file.
     expect(script).not.toContain("DATA_MANAGER_AUTH_TOKEN");
+    expect(script).not.toContain("OPENMAPX_SECRETS_KEY");
     expect(script).toContain("openssl rand -hex 32");
     expect(script).not.toMatch(
       /\bcat\b[^\n]*\.env|docker inspect[^\n]*\.Config\.Env|docker compose[^\n]* config\b/,

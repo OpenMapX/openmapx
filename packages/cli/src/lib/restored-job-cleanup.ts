@@ -19,7 +19,8 @@ export const RESTORED_JOB_FAILURE_REASON = "restored from backup";
  * dropped: they could only be settled with receipts from a host timeline that
  * the restore replaced, and an unsettled child lets the recovery pass pull a
  * closed execution back to interrupted/unknown. Data-manager's control prune
- * deletes such a row once it finished 72 hours ago and its key expired. A row
+ * removes the files named by its key once it finished 72 hours ago and its
+ * key expired, and the API deletes the row 90 days after it finished. A row
  * that is already settled, including its children, is left untouched.
  * Offline packages still being prepared are failed the same way; a finished
  * package stays available.

@@ -19,6 +19,7 @@
  */
 import { createWriteStream } from "node:fs";
 import { parseArgs } from "node:util";
+import { DATABASE_SESSION_TIME_ZONE } from "@openmapx/core/database-session";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -60,9 +61,16 @@ process.env.DATABASE_URL = "postgresql://scratch-export-only.invalid/none";
 const schema = await import("../../src/db/schema.js");
 const { prepareSubjectExport } = await import("../../src/privacy/subject-export.js");
 
+const connection = { TimeZone: DATABASE_SESSION_TIME_ZONE };
 const sql = socketDir
-  ? postgres({ host: socketDir, database: values.database, username: values.user, max: 2 })
-  : postgres(databaseUrl as string, { max: 2 });
+  ? postgres({
+      host: socketDir,
+      database: values.database,
+      username: values.user,
+      max: 2,
+      connection,
+    })
+  : postgres(databaseUrl as string, { max: 2, connection });
 const database = drizzle(sql, { schema });
 try {
   const prepared = await prepareSubjectExport({

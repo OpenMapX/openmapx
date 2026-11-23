@@ -19,7 +19,7 @@ vi.mock("../../db/index.js", () => ({
 }));
 
 const LIST_ROW = {
-  id: "list-1",
+  id: "0193e4a0-0000-7000-8000-000000000001",
   userId: USER_ID,
   name: "Trip",
   icon: null,
@@ -29,8 +29,8 @@ const LIST_ROW = {
   updatedAt: new Date("2026-08-30T10:00:00Z"),
 };
 const PLACE_ROW = {
-  id: "place-1",
-  listId: "list-1",
+  id: "0193e4a0-0000-7000-8000-000000000101",
+  listId: "0193e4a0-0000-7000-8000-000000000001",
   name: "Cafe",
   address: "Street 1",
   lat: 52.5,
@@ -82,14 +82,18 @@ describe("POST /api/shares", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/shares",
-      payload: { targetType: "list", targetId: "list-1", mode: "live" },
+      payload: {
+        targetType: "list",
+        targetId: "0193e4a0-0000-7000-8000-000000000001",
+        mode: "live",
+      },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(body.share).toMatchObject({
       targetType: "list",
-      targetId: "list-1",
+      targetId: "0193e4a0-0000-7000-8000-000000000001",
       mode: "live",
       label: "Trip",
       expiresAt: null,
@@ -109,7 +113,12 @@ describe("POST /api/shares", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/shares",
-      payload: { targetType: "list", targetId: "list-1", mode: "snapshot", expiresInDays: 7 },
+      payload: {
+        targetType: "list",
+        targetId: "0193e4a0-0000-7000-8000-000000000001",
+        mode: "snapshot",
+        expiresInDays: 7,
+      },
     });
     expect(res.statusCode).toBe(201);
     const row = insertedRow();
@@ -127,7 +136,9 @@ describe("POST /api/shares", () => {
         },
       ],
     });
-    expect(JSON.stringify(row.snapshot)).not.toMatch(/place-1|list-1|user-1/);
+    expect(JSON.stringify(row.snapshot)).not.toMatch(
+      /0193e4a0-0000-7000-8000-000000000101|0193e4a0-0000-7000-8000-000000000001|user-1/,
+    );
     const { PLACE_ORDER } = await import("../saved.js");
     const order = orderByArgs(dbMock, "select", 3);
     expect(order).toHaveLength(PLACE_ORDER.length);
@@ -157,7 +168,11 @@ describe("POST /api/shares", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/shares",
-      payload: { targetType: "list", targetId: "someone-elses", mode: "live" },
+      payload: {
+        targetType: "list",
+        targetId: "0193e4a0-0000-7000-8000-000000000f07",
+        mode: "live",
+      },
     });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ error: "List not found" });
@@ -166,7 +181,7 @@ describe("POST /api/shares", () => {
   it("400s a list mint without targetId/mode and a route mint without payload", async () => {
     const cases = [
       { targetType: "list" },
-      { targetType: "list", targetId: "list-1" },
+      { targetType: "list", targetId: "0193e4a0-0000-7000-8000-000000000001" },
       { targetType: "route" },
       { targetType: "route", route: { ...ROUTE_PAYLOAD, mode: "transit" } },
     ];
@@ -203,11 +218,11 @@ describe("GET /api/shares", () => {
   it("lists the owner's shares without hashes or snapshots", async () => {
     dbMock.queueSelect([
       {
-        id: "share-1",
+        id: "0193e4a0-0000-7000-8000-000000000701",
         userId: USER_ID,
         tokenHash: "HASH",
         targetType: "list",
-        targetId: "list-1",
+        targetId: "0193e4a0-0000-7000-8000-000000000001",
         mode: "live",
         label: "Trip",
         snapshot: null,
@@ -242,28 +257,40 @@ describe("GET /api/shares", () => {
 
 describe("POST /api/shares/:id/rotate", () => {
   it("returns a fresh token and updates only the caller's row", async () => {
-    dbMock.queueUpdate([{ id: "share-1" }]);
-    const res = await app.inject({ method: "POST", url: "/api/shares/share-1/rotate" });
+    dbMock.queueUpdate([{ id: "0193e4a0-0000-7000-8000-000000000701" }]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/shares/0193e4a0-0000-7000-8000-000000000701/rotate",
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json().token).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
   it("404s when the row is not owned", async () => {
     dbMock.queueUpdate([]);
-    const res = await app.inject({ method: "POST", url: "/api/shares/other/rotate" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/shares/0193e4a0-0000-7000-8000-000000000f08/rotate",
+    });
     expect(res.statusCode).toBe(404);
   });
 });
 
 describe("DELETE /api/shares/:id", () => {
   it("hard-deletes and confirms", async () => {
-    dbMock.queueDelete([{ id: "share-1" }]);
-    const res = await app.inject({ method: "DELETE", url: "/api/shares/share-1" });
+    dbMock.queueDelete([{ id: "0193e4a0-0000-7000-8000-000000000701" }]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/shares/0193e4a0-0000-7000-8000-000000000701",
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
   });
   it("404s when the row is not owned", async () => {
     dbMock.queueDelete([]);
-    const res = await app.inject({ method: "DELETE", url: "/api/shares/other" });
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/shares/0193e4a0-0000-7000-8000-000000000f08",
+    });
     expect(res.statusCode).toBe(404);
   });
 });
@@ -272,11 +299,11 @@ describe("GET /api/shares/:token (public)", () => {
   const VALID_TOKEN = "A".repeat(43);
   const NOW = Date.now();
   const baseRow = {
-    id: "share-1",
+    id: "0193e4a0-0000-7000-8000-000000000701",
     userId: USER_ID,
     tokenHash: "irrelevant-the-query-matches",
     targetType: "list",
-    targetId: "list-1",
+    targetId: "0193e4a0-0000-7000-8000-000000000001",
     mode: "live",
     label: "Trip",
     snapshot: null,
@@ -308,7 +335,9 @@ describe("GET /api/shares/:token (public)", () => {
         },
       ],
     });
-    expect(res.payload).not.toMatch(/user-1|share-1|list-1|place-1|tokenHash/);
+    expect(res.payload).not.toMatch(
+      /user-1|0193e4a0-0000-7000-8000-000000000701|0193e4a0-0000-7000-8000-000000000001|0193e4a0-0000-7000-8000-000000000101|tokenHash/,
+    );
     // Places read in the owner's order, ties included, and the cut-off keeps the same ones.
     const { PLACE_ORDER } = await import("../saved.js");
     const order = orderByArgs(dbMock, "select", 2);
@@ -392,11 +421,11 @@ describe("sharing wire contracts", () => {
   it("treats malformed public snapshot coordinates as uniformly gone", async () => {
     dbMock.queueSelect([
       {
-        id: "share-1",
+        id: "0193e4a0-0000-7000-8000-000000000701",
         userId: USER_ID,
         targetType: "list",
         mode: "snapshot",
-        targetId: "list-1",
+        targetId: "0193e4a0-0000-7000-8000-000000000001",
         expiresAt: null,
         snapshot: { name: "Trip", icon: null, places: [{ name: "Invalid", lat: 999, lng: 13 }] },
       },
@@ -408,7 +437,7 @@ describe("sharing wire contracts", () => {
   it("rejects an invalid owner projection before sending a successful reply", async () => {
     dbMock.queueSelect([
       {
-        id: "share-1",
+        id: "0193e4a0-0000-7000-8000-000000000701",
         targetType: "internal-invalid-target",
         mode: "invalid-mode",
         targetId: null,
@@ -427,11 +456,11 @@ describe("sharing wire contracts", () => {
 it("does not erase malformed captured attribution to publish a live share", async () => {
   dbMock.queueSelect([
     {
-      id: "share",
+      id: "0193e4a0-0000-7000-8000-000000000702",
       userId: USER_ID,
       targetType: "list",
       mode: "live",
-      targetId: "list-1",
+      targetId: "0193e4a0-0000-7000-8000-000000000001",
       expiresAt: null,
     },
   ]);

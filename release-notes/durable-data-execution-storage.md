@@ -1,14 +1,15 @@
 ---
-impacts: [migration, operator-action]
+impacts: [operator-action]
 ---
 
 ## What changes
 
-Migration 0042 adds retained execution identities, deadlines, ownership versions,
-bounded child receipts and a configuration maintenance guard to data-manager jobs.
+Data-manager jobs keep retained execution identities, deadlines, ownership
+versions, bounded child receipts and a configuration maintenance guard.
 Ref-only catalog approval is disabled until paired validation and activation are
-available. Every data job is now such a durable execution; see
-`data-manager-in-process-jobs.md` for the jobs that ran outside it before.
+available. Every data job is such a durable execution, including live, predicted
+and maintenance traffic, transit catalog proposals, dataset reloads and ambient
+place publication.
 
 ## Who is affected
 

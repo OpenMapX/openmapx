@@ -14,7 +14,7 @@ export const ownershipStateSchema = z.strictObject({
   jobId: z.uuid(),
   operationId: z.uuid(),
   ownerId: z.string().max(128),
-  action: z.enum(["adopt", "remove"]),
+  action: z.literal("remove"),
   request: ownershipRequestSchema,
   parentId: z.string().max(128).nullable(),
   before: z.string().max(65536),

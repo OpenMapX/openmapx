@@ -26,6 +26,14 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./database-session": {
+      "types": "./src/database-session.ts",
+      "default": "./src/database-session.ts"
+    },
+    "./ids/uuidv7": {
+      "types": "./src/ids/uuidv7.ts",
+      "default": "./src/ids/uuidv7.ts"
+    },
     "./deployment-secret-policy": {
       "types": "./src/deployment-secret-policy.ts",
       "default": "./src/deployment-secret-policy.ts"
@@ -33,10 +41,6 @@
     "./erasure-journal": {
       "types": "./src/erasure-journal.ts",
       "default": "./src/erasure-journal.ts"
-    },
-    "./erasure-cleanup": {
-      "types": "./src/erasure-cleanup.ts",
-      "default": "./src/erasure-cleanup.ts"
     },
     "./map-config": {
       "types": "./src/api/map-config.ts",

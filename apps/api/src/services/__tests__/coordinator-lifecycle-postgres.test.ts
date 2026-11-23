@@ -432,7 +432,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         OPS_AGENT_URL: await agent.listen({ host: "127.0.0.1", port: 0 }),
         OPS_AGENT_TOKEN_FILE: tokenFile,
         OPENMAPX_ROOT_DIR: host.root,
-        OPENMAPX_SECRETS_KEY: "71".repeat(32),
+        OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
         OPENMAPX_LOCAL_ADMIN_TOKEN: "task012-coordinator-local-admin",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         DATA_MANAGER_URL: dm.baseUrl,
@@ -1516,7 +1516,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       it("applies an ordinary unrelated configuration change after an update was canceled once its pull finished", async () => {
         await fixture.db
           .insert(schema.serviceConfig)
-          .values({ id: crypto.randomUUID(), serviceId: "motis", config: { MODE: "old" } });
+          .values({ serviceId: "motis", config: { MODE: "old" } });
         await canceledSuccessfulCoordinatorStage();
         const before = services.currentConfigurationGeneration(host.infraDir);
         // The pulled image moved the tag; the running coordinator still runs the

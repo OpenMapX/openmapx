@@ -545,6 +545,47 @@ describe("renderComposeForRepo", () => {
     expect(readFileSync(secretPath, "utf8")).toBe(key);
   });
 
+  it("generates the API's secrets key once and mounts it into the API only", async () => {
+    for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+    const secretPath = join(tmp, "infra", "docker", "secrets", "secrets-key");
+    expect(() => readFileSync(secretPath)).toThrow(/ENOENT/);
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["api,data-manager"],
+    });
+    const key = readFileSync(secretPath, "utf8");
+    const yaml = readFileSync(generatedCompose(), "utf8");
+
+    expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(Buffer.from(key, "base64url")).toHaveLength(32);
+    expect(yaml).not.toContain(key);
+    expect(yaml).not.toMatch(/OPENMAPX_SECRETS_KEY:/);
+    expect(yaml.match(/secrets-key:\/run\/secrets\/secrets-key:ro/g)).toHaveLength(1);
+    const api = renderedService(yaml, "api");
+    expect(api.environment?.OPENMAPX_SECRETS_KEY_FILE).toBe("/run/secrets/secrets-key");
+    expect(
+      api.volumes?.some((mount) => mount.endsWith("/secrets-key:/run/secrets/secrets-key:ro")),
+    ).toBe(true);
+    const dataManager = JSON.stringify(renderedService(yaml, "data-manager"));
+    expect(dataManager).not.toContain("OPENMAPX_SECRETS_KEY");
+    expect(dataManager).not.toContain("secrets-key");
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["api,data-manager"],
+    });
+    expect(readFileSync(secretPath, "utf8")).toBe(key);
+    expect(statSync(secretPath).mode & 0o777).toBe(0o444);
+  });
+
   it("creates the agent's stores before mounting its integration store read-only into the API", async () => {
     for (const id of ["api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
       const manifest = JSON.parse(

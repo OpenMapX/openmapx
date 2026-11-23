@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   rows: [] as { key: string; value: unknown }[],
+  secrets: {} as Record<string, string>,
+  secretFailure: undefined as Error | undefined,
+  secretLoads: 0,
   reads: 0,
   fail: false,
 }));
@@ -17,11 +20,23 @@ vi.mock("../db/index.js", () => ({
   },
 }));
 vi.mock("../db/schema.js", () => ({ systemSettings: {} }));
+vi.mock("../services/settings", () => ({
+  isSecretSetting: (key: string) => key === "maptilerApiKey",
+  loadSecretSettings: async () => {
+    state.secretLoads++;
+    if (state.secretFailure) throw state.secretFailure;
+    return state.secrets;
+  },
+}));
 
+import { processLogger } from "../process-logger";
 import { invalidateMapSettings, loadMapSettings } from "./map-settings";
 
 afterEach(() => {
   state.rows = [];
+  state.secrets = {};
+  state.secretFailure = undefined;
+  state.secretLoads = 0;
   state.reads = 0;
   state.fail = false;
   invalidateMapSettings();
@@ -29,19 +44,45 @@ afterEach(() => {
 });
 describe("effective map settings", () => {
   it("uses environment credentials over admin credentials", async () => {
-    state.rows = [{ key: "maptilerApiKey", value: "db-key" }];
+    state.secrets = { maptilerApiKey: "db-key" };
     vi.stubEnv("MAPTILER_KEY", "env-key");
     expect((await loadMapSettings()).maptilerApiKey).toBe("env-key");
   });
   it("treats whitespace credentials as absent", async () => {
-    state.rows = [{ key: "maptilerApiKey", value: "db-key" }];
+    state.secrets = { maptilerApiKey: "db-key" };
     vi.stubEnv("MAPTILER_KEY", "  ");
     expect((await loadMapSettings()).maptilerApiKey).toBe("db-key");
   });
+  it("reads the stored key only from the encrypted secret settings", async () => {
+    state.rows = [{ key: "maptilerApiKey", value: "plain-row" }];
+    expect((await loadMapSettings()).maptilerApiKey).toBe("");
+  });
+  it("keeps the map working without a stored key that cannot be decrypted, warning once", async () => {
+    state.rows = [{ key: "hostedBasemapProvider", value: "openfreemap" }];
+    state.secretFailure = new Error("The secret setting maptilerApiKey cannot be read");
+    const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => undefined);
+    try {
+      expect(await loadMapSettings()).toEqual({
+        hostedBasemapProvider: "openfreemap",
+        maptilerApiKey: "",
+      });
+      invalidateMapSettings();
+      await loadMapSettings();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("decrypts nothing while MAPTILER_KEY overrides the stored key", async () => {
+    state.secretFailure = new Error("The secret setting maptilerApiKey cannot be read");
+    vi.stubEnv("MAPTILER_KEY", "env-key");
+    expect((await loadMapSettings()).maptilerApiKey).toBe("env-key");
+    expect(state.secretLoads).toBe(0);
+  });
   it("reuses database settings until invalidated, then observes admin updates", async () => {
-    state.rows = [{ key: "maptilerApiKey", value: "first" }];
+    state.secrets = { maptilerApiKey: "first" };
     expect((await loadMapSettings()).maptilerApiKey).toBe("first");
-    state.rows = [{ key: "maptilerApiKey", value: "second" }];
+    state.secrets = { maptilerApiKey: "second" };
     expect((await loadMapSettings()).maptilerApiKey).toBe("first");
     expect(state.reads).toBe(1);
     invalidateMapSettings();

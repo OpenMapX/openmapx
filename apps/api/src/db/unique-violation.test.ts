@@ -7,23 +7,25 @@ const violation = (constraint: string, code = "23505") =>
 describe("isUniqueViolation", () => {
   it("recognizes the named constraint directly and through driver wrapping", () => {
     expect(
-      isUniqueViolation(violation("savedList_userId_name_unq"), "savedList_userId_name_unq"),
+      isUniqueViolation(violation("saved_list_user_id_name_key"), "saved_list_user_id_name_key"),
     ).toBe(true);
-    const wrapped = new Error("Failed query", { cause: violation("savedList_userId_name_unq") });
-    expect(isUniqueViolation(wrapped, "savedList_userId_name_unq")).toBe(true);
+    const wrapped = new Error("Failed query", { cause: violation("saved_list_user_id_name_key") });
+    expect(isUniqueViolation(wrapped, "saved_list_user_id_name_key")).toBe(true);
   });
 
   it("rejects other constraints, other error codes and non-database errors", () => {
-    expect(isUniqueViolation(violation("savedList_pkey"), "savedList_userId_name_unq")).toBe(false);
-    expect(
-      isUniqueViolation(
-        violation("savedList_userId_name_unq", "23503"),
-        "savedList_userId_name_unq",
-      ),
-    ).toBe(false);
-    expect(isUniqueViolation(new Error("connection reset"), "savedList_userId_name_unq")).toBe(
+    expect(isUniqueViolation(violation("saved_list_pkey"), "saved_list_user_id_name_key")).toBe(
       false,
     );
-    expect(isUniqueViolation(null, "savedList_userId_name_unq")).toBe(false);
+    expect(
+      isUniqueViolation(
+        violation("saved_list_user_id_name_key", "23503"),
+        "saved_list_user_id_name_key",
+      ),
+    ).toBe(false);
+    expect(isUniqueViolation(new Error("connection reset"), "saved_list_user_id_name_key")).toBe(
+      false,
+    );
+    expect(isUniqueViolation(null, "saved_list_user_id_name_key")).toBe(false);
   });
 });

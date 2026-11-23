@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   account,
@@ -40,6 +40,7 @@ import {
   serviceSecret,
   session,
   shareLink,
+  systemSecret,
   systemSettings,
   transitCredentialPreview,
   twoFactor,
@@ -765,7 +766,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .select({
             id: adminAuditLog.id,
             actorId: adminAuditLog.actorId,
-            targetId: adminAuditLog.targetId,
+            targetUserId: adminAuditLog.targetUserId,
             targetType: adminAuditLog.targetType,
             action: adminAuditLog.action,
             details: adminAuditLog.details,
@@ -776,10 +777,7 @@ export async function* streamOpenMapxRegistrationRecords(
             and(
               or(
                 eq(adminAuditLog.actorId, context.userId),
-                and(
-                  eq(adminAuditLog.targetId, context.userId),
-                  inArray(adminAuditLog.targetType, ["user", "account"]),
-                ),
+                eq(adminAuditLog.targetUserId, context.userId),
               ),
               lte(adminAuditLog.createdAt, cutoff),
             ),
@@ -790,7 +788,7 @@ export async function* streamOpenMapxRegistrationRecords(
           map: (row) => ({
             recordId: pseudonymousIdentifier(row.id),
             actor: row.actorId === context.userId ? "subject" : "other-actor",
-            target: row.targetId === context.userId ? "subject" : "other-target",
+            target: row.targetUserId === context.userId ? "subject" : "other-target",
             targetType: row.targetType,
             action: row.action,
             details: safeAuditDetails(row.details),
@@ -985,7 +983,6 @@ export async function* streamOpenMapxRegistrationRecords(
       yield* emit(
         database
           .select({
-            id: integrationSecret.id,
             integrationId: integrationSecret.integrationId,
             key: integrationSecret.key,
             createdAt: integrationSecret.createdAt,
@@ -999,13 +996,12 @@ export async function* streamOpenMapxRegistrationRecords(
               lte(integrationSecret.createdAt, cutoff),
             ),
           )
-          .orderBy(asc(integrationSecret.id)),
+          .orderBy(asc(integrationSecret.integrationId), asc(integrationSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
       );
       yield* emit(
         database
           .select({
-            id: serviceSecret.id,
             serviceId: serviceSecret.serviceId,
             key: serviceSecret.key,
             createdAt: serviceSecret.createdAt,
@@ -1016,7 +1012,21 @@ export async function* streamOpenMapxRegistrationRecords(
           .where(
             and(eq(serviceSecret.updatedBy, context.userId), lte(serviceSecret.createdAt, cutoff)),
           )
-          .orderBy(asc(serviceSecret.id)),
+          .orderBy(asc(serviceSecret.serviceId), asc(serviceSecret.key)),
+        { policyCodes: ["secret-value-redacted"] },
+      );
+      yield* emit(
+        database
+          .select({
+            key: systemSecret.key,
+            updatedAt: systemSecret.updatedAt,
+            updatedBy: systemSecret.updatedBy,
+          })
+          .from(systemSecret)
+          .where(
+            and(eq(systemSecret.updatedBy, context.userId), lte(systemSecret.updatedAt, cutoff)),
+          )
+          .orderBy(asc(systemSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
       );
       yield* emit(

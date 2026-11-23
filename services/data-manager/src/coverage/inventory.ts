@@ -23,6 +23,13 @@ export interface OverturePublicationRow {
   updated_at: Date | string | null;
 }
 
+export interface OvertureReleaseRow {
+  region: string;
+  release: string;
+  imported_at: Date | string;
+  status: "imported" | "links_pending";
+}
+
 export interface FeedStateRow {
   region: string;
   name: string;
@@ -90,6 +97,17 @@ export async function readOverturePublication(
        LIMIT 1`,
   );
   return { exists: true, row: rows[0] ?? null };
+}
+
+/** The Overture release each region last imported, newest first. */
+export async function readOvertureReleases(sql: CoverageSql): Promise<OvertureReleaseRow[]> {
+  return boundedQuery<OvertureReleaseRow[]>(
+    sql,
+    `SELECT region, release, imported_at, status
+       FROM data_manager.overture_release
+      ORDER BY imported_at DESC, region
+      LIMIT 1000`,
+  );
 }
 
 export async function readTransitFeedStates(sql: CoverageSql): Promise<FeedStateRow[]> {

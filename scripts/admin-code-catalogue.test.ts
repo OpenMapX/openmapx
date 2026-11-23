@@ -524,10 +524,6 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
     zodLiterals(adminServiceActionSchema, "action").map((action) => `service.${action}`),
   "apps/api/src/routes/admin-services.ts `service.bulk.${action}`": () =>
     zodLiterals(adminServicesBulkActionSchema, "action").map((action) => `service.bulk.${action}`),
-  "apps/api/src/routes/admin-standalone-integrations.ts `standalone.${action}`": (file) =>
-    literals(required(file, /for \(const action of \[([^\]]+)\] as const\)/, "actions")).map(
-      (action) => `standalone.${action}`,
-    ),
   "apps/api/src/routes/ambient-places.ts `ambient-places.${action}`": (file) =>
     captures(
       required(file, /const operations = \{([^}]+)\}/, "ambient operations"),
@@ -606,11 +602,10 @@ describe("admin job type catalogue", () => {
   });
 
   it("words every transit pipeline stage, and nothing else", () => {
-    const types = readFileSync(
-      join(root, "services/data-manager/src/jobs/transitous/types.ts"),
-      "utf8",
+    const schema = readFileSync(join(root, "packages/db-schema/src/data-manager.ts"), "utf8");
+    const stages = literals(
+      required(schema, /export const JOB_STAGE_NAMES = \[([^\]]+)\]/, "stage names"),
     );
-    const stages = literals(required(types, /export type StageName =([^;]+);/, "stage names"));
     expect(stages).toEqual(expect.arrayContaining(["motis-import", "promote"]));
     const expected = sorted(stages.map(catalogueKey));
     expect(sorted(Object.keys(en.adminShared.jobStages))).toEqual(expected);

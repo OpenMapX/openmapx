@@ -54,7 +54,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
   });
   beforeEach(() => {
     now = new Date("2026-03-01T12:00:00Z");
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("hex"));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("base64url"));
   });
 
   async function subject() {
@@ -110,14 +110,21 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       identityMethod: "account_session",
       encryptedLocator: null,
     });
+    // The database assigns time-ordered version 7 ids to the case and its rows.
+    const VERSION_7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    expect(request.id).toMatch(VERSION_7);
     const created = await tasks(request.id);
     expect(created.map((task) => task.registrationId).sort()).toEqual(OPERATOR_SOURCES);
     expect(created.every((task) => task.status === "open")).toBe(true);
     const holds = await fixture.db
-      .select({ registrationId: dataSubjectRequestPreservation.registrationId })
+      .select({
+        id: dataSubjectRequestPreservation.id,
+        registrationId: dataSubjectRequestPreservation.registrationId,
+      })
       .from(dataSubjectRequestPreservation)
       .where(eq(dataSubjectRequestPreservation.requestId, request.id));
     expect(holds).toHaveLength(HELD_SOURCES.length);
+    expect(holds.every((hold) => VERSION_7.test(hold.id))).toBe(true);
     expect(
       (await notifications(request.id))
         .map(({ template, recipientUserId }) => `${template}:${recipientUserId}`)

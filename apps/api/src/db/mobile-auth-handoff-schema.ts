@@ -1,4 +1,5 @@
-import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, foreignKey, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -31,29 +32,38 @@ export const mobileAuthHandoff = pgTable(
   {
     id: text("id").primaryKey(),
     /** SHA-256 of the raw callback code, base64url. Never the code itself. */
-    callbackCodeHash: text("callback_code_hash").notNull().unique(),
+    callbackCodeHash: text("callback_code_hash")
+      .notNull()
+      .unique("mobile_auth_handoff_callback_code_hash_key"),
     /** The S256 PKCE challenge. The verifier is never stored. */
     codeChallenge: text("code_challenge").notNull(),
     /** Per-attempt random value, echoed back so a stray callback is detectable. */
     state: text("state").notNull(),
     /** `sign-in` | `link-provider` | `add-passkey`. */
     purpose: text("purpose").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
     /** AES-256-GCM envelope for the short-lived Better Auth one-time token. */
     tokenCiphertext: text("token_ciphertext").notNull(),
     tokenIv: text("token_iv").notNull(),
     tokenTag: text("token_tag").notNull(),
     tokenKeyVersion: integer("token_key_version").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     /** Set the moment it is redeemed, so a replay finds a consumed row. */
-    consumedAt: timestamp("consumed_at"),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
   },
   (table) => [
+    foreignKey({
+      name: "mobile_auth_handoff_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
     // Expiry scrubbing walks this, and it also bounds how many outstanding
     // attempts one account can accumulate.
-    index("mobile_auth_handoff_user_expires_idx").on(table.userId, table.expiresAt),
+    index("mobile_auth_handoff_user_id_expires_at_idx").on(table.userId, table.expiresAt),
+    check(
+      "mobile_auth_handoff_purpose_check",
+      sql`${table.purpose} in ('sign-in','link-provider','add-passkey')`,
+    ),
   ],
 );

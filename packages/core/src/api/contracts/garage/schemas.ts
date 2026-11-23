@@ -3,7 +3,7 @@ import { CONNECTOR_STANDARDS, type EvVehicleSpec } from "../../../types/ev";
 import { PARKED_SOURCES, VEHICLE_KINDS, VEHICLE_POWERTRAINS } from "../../../vehicles/types";
 import { MAX_VEHICLE_FUEL_L_PER_100KM, MAX_VEHICLE_NAME_LENGTH } from "../../../vehicles/validate";
 
-const id = z.string().min(1);
+const id = z.uuid();
 const timestamp = z.iso.datetime({ offset: true });
 const latitude = z.number().min(-90).max(90);
 const longitude = z.number().min(-180).max(180);
@@ -69,7 +69,7 @@ export const garageCreateVehicleSchema = z.strictObject({
 });
 export const garageUpdateVehicleSchema = garageCreateVehicleSchema.partial();
 export const garageSaveParkedSchema = z.strictObject({
-  vehicleId: z.string().nullable().optional(),
+  vehicleId: id.nullable().optional(),
   lat: latitude,
   lng: longitude,
   address: z.string().nullable().optional(),

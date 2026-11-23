@@ -77,7 +77,7 @@ suite("privacy case administration on PostgreSQL", () => {
   });
   beforeEach(() => {
     authFixture.sessionId = "admin-session";
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 9).toString("hex"));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 9).toString("base64url"));
   });
 
   /** A case in an exact state, verified, without operator-held tasks. */
@@ -666,7 +666,7 @@ suite("privacy case administration on PostgreSQL", () => {
       idempotencyKey: `verify-${created.id}`,
     });
     // The secrets key changed since the locator was stored.
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 10).toString("hex"));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 10).toString("base64url"));
     const row = await service().getById(created.id);
     expect(() => service().subjectUserId(row)).toThrow(
       expect.objectContaining({ code: "SUBJECT_LOCATOR_UNREADABLE", statusCode: 503 }),

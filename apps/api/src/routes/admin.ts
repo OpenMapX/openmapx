@@ -2,6 +2,7 @@ import { and, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { adminAuditLog } from "../db/schema";
+import { adminAuditEntry } from "../utils/admin-audit-entry";
 import { requireAdmin } from "../utils/require-admin";
 import { resolveActors } from "../utils/resolve-actor";
 import { declareRouteAuth } from "../utils/route-auth.js";
@@ -75,7 +76,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     const actors = await resolveActors(entries.map((e) => e.actorId));
     return {
       entries: entries.map((e) => ({
-        ...e,
+        ...adminAuditEntry(e),
         actor: e.actorId ? (actors.get(e.actorId) ?? null) : null,
       })),
       total: countRow?.total ?? 0,
@@ -113,7 +114,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
 
     const actors = await resolveActors(entries.map((e) => e.actorId));
     const enriched = entries.map((e) => ({
-      ...e,
+      ...adminAuditEntry(e),
       actor: e.actorId ? (actors.get(e.actorId) ?? null) : null,
     }));
     reply.header("Content-Type", "application/json; charset=utf-8");

@@ -210,7 +210,6 @@ export type CreatePrivacyAdminCaseBodySubjectLocatorType =
 export const CreatePrivacyAdminCaseBodySubjectLocatorType = {
   user_id: "user_id",
   email: "email",
-  username: "username",
   erasure_reference: "erasure_reference",
   other_reference: "other_reference",
 } as const;

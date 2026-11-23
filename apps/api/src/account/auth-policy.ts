@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   type AuthPolicySettings,
   type AuthPolicySnapshot,
@@ -13,6 +13,7 @@ import {
   systemSettings,
   user,
 } from "../db/schema";
+import { actorUserIdOrNull } from "../utils/actor";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 export const defaultAuthPolicySettings: Readonly<AuthPolicySettings> = Object.freeze({
   emailVerificationRequired: true,
@@ -59,9 +60,9 @@ export async function loadAuthPolicy(
 ): Promise<AuthPolicySnapshot> {
   try {
     const rows = await database.select().from(authPolicyState).where(eq(authPolicyState.id, 1));
-    if (!rows.length) return unactivatedAuthPolicy;
+    // The stored row is the activation: no row means the defaults were never activated.
     const row = rows[0];
-    if (!row || row.activationVersion !== 1) throw new AuthPolicyError("AUTH_POLICY_INVALID");
+    if (!row) return unactivatedAuthPolicy;
     const parsed = authPolicySettingsSchema.safeParse(row.settings);
     if (!parsed.success) throw new AuthPolicyError("AUTH_POLICY_INVALID");
     const stored = snapshotWithoutEnv(parsed.data);
@@ -146,7 +147,6 @@ export async function applyAuthPolicy(
       .insert(authPolicyState)
       .values({
         id: 1,
-        activationVersion: 1,
         settings: request.settings,
         revision: stored.revision,
         activatedBy: actorId,
@@ -163,13 +163,12 @@ export async function applyAuthPolicy(
     for (const [key, value] of Object.entries(request.settings))
       await tx
         .insert(systemSettings)
-        .values({ key, value, updatedBy: actorId })
+        .values({ key, value, updatedBy: actorUserIdOrNull(actorId) })
         .onConflictDoUpdate({
           target: systemSettings.key,
-          set: { value, updatedBy: actorId, updatedAt: new Date() },
+          set: { value, updatedBy: actorUserIdOrNull(actorId), updatedAt: new Date() },
         });
     await tx.insert(adminAuditLog).values({
-      id: randomUUID(),
       actorId,
       targetType: "auth-policy",
       targetId: result.revision,

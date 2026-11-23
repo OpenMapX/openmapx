@@ -20,7 +20,7 @@ pattern non_copy() {
     // INTEGRATION_<ID>_<KEY> and SERVICE_<ID>_<KEY> name patterns.
     r"[\"'`](?:OPENMAPX_[A-Z0-9_]+|(?:INTEGRATION|SERVICE)_<ID>_<KEY>|TRANSITOUS_API_KEYS|PUBLIC_URL|EMAIL_FROM|AUTH_EMAIL_VERIFICATION)[\"'`]",
     // Commands, file names and protocol names.
-    r"[\"'`](?:openssl rand -hex 32|pnpm openmapx compose down|infra/docker/\.env|extension\.json|tcp)[\"'`]",
+    r"[\"'`](?:openssl rand -hex 32|pnpm openmapx compose down|pnpm openmapx compose render|infra/docker/\.env|extension\.json|tcp)[\"'`]",
     // Licence identifiers.
     r"[\"'`](?:CC-BY-4\.0)[\"'`]",
     // Example input values shown as placeholders.

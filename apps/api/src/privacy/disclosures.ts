@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import z from "zod/v4";
+import { DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY } from "../db/disclosure-schema.js";
 import { db as defaultDb } from "../db/index.js";
 import { dataDisclosureEvent } from "../db/schema.js";
 import { isUniqueViolation } from "../db/unique-violation.js";
@@ -182,7 +183,7 @@ export async function recordDataDisclosure(
     // Stable operation IDs are idempotent. Other failures must surface so the
     // caller can reconcile an external disclosure without pretending success.
     // Only the idempotency-key index counts as a replay.
-    if (safe.idempotencyKey && isUniqueViolation(error, "data_disclosure_event_idempotency_idx"))
+    if (safe.idempotencyKey && isUniqueViolation(error, DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY))
       return;
     throw error;
   }

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   ConnectPersonalTimelineRequest,
   PersonalTimelineErrorCode,
@@ -6,6 +5,7 @@ import type {
   TimelineConnectionStatus,
   TimelineConnectionView,
 } from "@openmapx/core";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import {
@@ -384,7 +384,7 @@ export class TimelineConnectionService {
     this.privateHosts = options.privateHosts ?? timelinePrivateHostAllowlist();
     this.audit = options.audit ?? writeAuditLog;
     this.now = options.now ?? (() => new Date());
-    this.id = options.id ?? randomUUID;
+    this.id = options.id ?? (() => uuidv7());
     this.metricNow = options.metricNow ?? (() => performance.now());
     this.recordMetric = options.recordMetric ?? recordPersonalTimelineRequest;
     this.recordDisclosure = options.recordDisclosure;

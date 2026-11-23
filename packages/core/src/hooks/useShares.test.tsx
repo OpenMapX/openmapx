@@ -33,9 +33,9 @@ it("returns the creation receipt and encodes opaque IDs for rotate/revoke", asyn
   const token = "A".repeat(43),
     at = new Date().toISOString();
   const share = {
-    id: "s",
+    id: "0193e4a0-0000-7000-8000-000000000701",
     targetType: "list",
-    targetId: "l",
+    targetId: "0193e4a0-0000-7000-8000-000000000001",
     mode: "live",
     label: "Trip",
     createdAt: at,
@@ -44,7 +44,12 @@ it("returns the creation receipt and encodes opaque IDs for rotate/revoke", asyn
   };
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ id: "s", token, share }, { status: 201, headers }))
+    .mockResolvedValueOnce(
+      Response.json(
+        { id: "0193e4a0-0000-7000-8000-000000000701", token, share },
+        { status: 201, headers },
+      ),
+    )
     .mockResolvedValueOnce(Response.json({ token }, { headers }))
     .mockResolvedValueOnce(Response.json({ ok: true }, { headers }));
   vi.stubGlobal("fetch", fetcher);
@@ -54,8 +59,12 @@ it("returns the creation receipt and encodes opaque IDs for rotate/revoke", asyn
   );
   await act(async () => {
     expect(
-      await result.current.create.mutateAsync({ targetType: "list", targetId: "l", mode: "live" }),
-    ).toEqual({ id: "s", token, share });
+      await result.current.create.mutateAsync({
+        targetType: "list",
+        targetId: "0193e4a0-0000-7000-8000-000000000001",
+        mode: "live",
+      }),
+    ).toEqual({ id: "0193e4a0-0000-7000-8000-000000000701", token, share });
     await result.current.rotate.mutateAsync("a / café");
     await result.current.revoke.mutateAsync("a / café");
   });

@@ -1,5 +1,5 @@
 ---
-impacts: [breaking, migration, operator-action]
+impacts: [breaking, operator-action]
 ---
 
 ## What changes
@@ -19,10 +19,6 @@ termination. Re-render and recreate the agent to adopt that setting. Forced
 crashes can still require supervised recovery; see the service-administration
 runbook before clearing a stale writer guard.
 
-The API migrations add account-policy, integration ownership, artifact-transfer
-and privacy-workflow storage alongside durable execution records. Existing auth
-settings are activated explicitly through the account-policy workflow.
-
 New web and mobile sessions have a fixed maximum lifetime (168 hours by default,
 or the active policy value). Activity no longer refreshes that deadline. Users
 must sign in again after expiry; existing sessions keep their original expiry.
@@ -35,8 +31,7 @@ and operations agent, and authors of community service manifests.
 
 ## Required action
 
-Apply the normal API database migrations and upgrade the control services
-together. Preserve existing installation keys, pending jobs and recovery
+Upgrade the control services together. Preserve existing installation keys, pending jobs and recovery
 records. Inspect Activity before retrying an uncertain mutation; deleting its
 records does not prove that its host effect stopped.
 

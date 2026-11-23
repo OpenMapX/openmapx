@@ -49,10 +49,25 @@ describe("writeAuditLog", () => {
       actorId: "admin-1",
       action: "user.ban",
       targetId: "u-2",
+      targetUserId: "u-2",
       ipAddress: "203.0.113.5",
       userAgent: "vitest-ua",
     });
-    expect(typeof values.id).toBe("string");
+    // The database assigns the id.
+    expect(values).not.toHaveProperty("id");
+  });
+
+  it("references the target account only when the target is a user", async () => {
+    await writeAuditLog({
+      actorId: "admin-1",
+      targetType: "service",
+      targetId: "u-2",
+      action: "x",
+    });
+    await writeAuditLog({ actorId: "admin-1", targetType: "user", targetId: null, action: "y" });
+
+    expect(callArg(h.valuesMock, 0, 0)).toMatchObject({ targetId: "u-2", targetUserId: null });
+    expect(callArg(h.valuesMock, 1, 0)).toMatchObject({ targetId: null, targetUserId: null });
   });
 
   it("maps the loopback sentinel actor to null with a tagged user-agent", async () => {

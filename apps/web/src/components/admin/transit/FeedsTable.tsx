@@ -159,7 +159,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
             </TableHead>
             <TableBody>
               {data.feeds.map((feed) => (
-                <TableRow key={feed.id} hover>
+                <TableRow key={`${feed.region}/${feed.name}`} hover>
                   <TableCell>
                     <Typography
                       variant="caption"
@@ -171,18 +171,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Stack spacing={0.25}>
-                      <Typography variant="body2">{feed.name}</Typography>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: "text.secondary",
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {feed.id}
-                      </Typography>
-                    </Stack>
+                    <Typography variant="body2">{feed.name}</Typography>
                   </TableCell>
                   <TableCell>
                     <Chip

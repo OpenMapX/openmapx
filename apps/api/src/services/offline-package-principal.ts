@@ -1,71 +1,24 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { type FileHandle, open } from "node:fs/promises";
+import { readGeneratedKeyFile } from "./generated-key-file";
 
-const PRINCIPAL_KEY_ENCODED_BYTES = 43;
+/** Where the API reads the principal key when no path is configured. */
+export const OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT =
+  "/run/secrets/offline-package-principal-key";
 const PREPARE_WINDOW_MS = 10 * 60 * 1_000;
 const PREPARE_MAX = 2;
 const PRINCIPAL_PATTERN = /^[a-f0-9]{64}$/;
 
-function errorCode(error: unknown): string | undefined {
-  return error && typeof error === "object" && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : undefined;
-}
-
 /**
- * Load the generated API-only principal key through an already-open descriptor.
- * The exact encoded size/mode/owner/link-count checks make replacement or
- * alternate-file shapes fail closed without ever including secret bytes in an
- * error.
+ * Load the generated API-only principal key. The exact encoded
+ * size/mode/owner/link-count checks make replacement or alternate-file shapes
+ * fail closed without ever including secret bytes in an error.
  */
 export async function readOfflinePackagePrincipalKeyFile(path: string): Promise<Buffer> {
-  let handle: FileHandle;
-  try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  } catch (error) {
-    if (errorCode(error) === "ELOOP") {
-      throw new Error("Offline package principal key must be a regular file");
-    }
-    throw new Error("Offline package principal key is missing or unreadable");
-  }
-
-  try {
-    const stat = await handle.stat();
-    if (!stat.isFile()) throw new Error("Offline package principal key must be a regular file");
-    if (stat.nlink !== 1) throw new Error("Offline package principal key must have one link");
-    if ((stat.mode & 0o777) !== 0o444) {
-      throw new Error("Offline package principal key must have mode 0444");
-    }
-    const configuredUid = process.env.OFFLINE_PACKAGE_PRINCIPAL_KEY_UID?.trim();
-    const expectedUid = configuredUid
-      ? Number(configuredUid)
-      : typeof process.getuid === "function"
-        ? process.getuid()
-        : stat.uid;
-    if (!Number.isSafeInteger(expectedUid) || expectedUid < 0 || stat.uid !== expectedUid) {
-      throw new Error("Offline package principal key has an invalid owner");
-    }
-    if (stat.size !== PRINCIPAL_KEY_ENCODED_BYTES) {
-      throw new Error("Offline package principal key has an invalid size");
-    }
-    const encodedBytes = Buffer.alloc(PRINCIPAL_KEY_ENCODED_BYTES + 1);
-    const { bytesRead } = await handle.read(encodedBytes, 0, encodedBytes.length, 0);
-    if (bytesRead !== PRINCIPAL_KEY_ENCODED_BYTES) {
-      throw new Error("Offline package principal key has an invalid size");
-    }
-    const encoded = encodedBytes.subarray(0, bytesRead).toString("ascii");
-    if (!/^[A-Za-z0-9_-]{43}$/.test(encoded)) {
-      throw new Error("Offline package principal key is not canonical base64url");
-    }
-    const decoded = Buffer.from(encoded, "base64url");
-    if (decoded.byteLength !== 32 || decoded.toString("base64url") !== encoded) {
-      throw new Error("Offline package principal key is not canonical 32-byte base64url");
-    }
-    return decoded;
-  } finally {
-    await handle.close();
-  }
+  return readGeneratedKeyFile(
+    path,
+    "Offline package principal key",
+    process.env.OFFLINE_PACKAGE_PRINCIPAL_KEY_UID,
+  );
 }
 
 export function deriveOfflinePackagePrincipal(userId: string, key: Buffer): string {

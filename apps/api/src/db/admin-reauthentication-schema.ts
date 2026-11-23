@@ -1,6 +1,15 @@
 import type { AdminReauthPurpose } from "@openmapx/core/api-contracts";
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 import type { SessionAuthMethod } from "./privacy-auth-schema";
 
@@ -8,10 +17,8 @@ type ReauthenticationState = "pending" | "completed" | "consumed" | "superseded"
 export const adminActionReauthentication = pgTable(
   "admin_action_reauthentication",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    actorId: text("actor_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    actorId: text("actor_id").notNull(),
     startingSessionId: text("starting_session_id").notNull(),
     purpose: text("purpose").$type<AdminReauthPurpose>().notNull(),
     targetId: text("target_id").notNull(),
@@ -29,15 +36,28 @@ export const adminActionReauthentication = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
+    foreignKey({
+      name: "admin_action_reauthentication_actor_id_fkey",
+      columns: [t.actorId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
     check(
-      "admin_reauth_state_check",
+      "admin_action_reauthentication_state_check",
       sql`${t.state} in ('pending','completed','consumed','superseded','expired')`,
     ),
     check(
-      "admin_reauth_purpose_check",
+      "admin_action_reauthentication_purpose_check",
       sql`${t.purpose} in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')`,
     ),
-    index("admin_reauth_actor_expiry_idx").on(t.actorId, t.expiresAt),
-    uniqueIndex("admin_reauth_request_uq").on(t.actorId, t.requestKey),
+    check(
+      "admin_action_reauthentication_completed_method_check",
+      sql`${t.completedMethod} in ('password','password_totp','password_recovery','passkey','federated')`,
+    ),
+    index("admin_action_reauthentication_actor_id_expires_at_idx").on(t.actorId, t.expiresAt),
+    index("admin_action_reauthentication_expires_at_idx").on(t.expiresAt),
+    uniqueIndex("admin_action_reauthentication_actor_id_request_key_key").on(
+      t.actorId,
+      t.requestKey,
+    ),
   ],
 );

@@ -7,11 +7,18 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { controlledRequestLoggingOptions, uniformErrorHandler } from "../../server-wiring.js";
 import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
 
-const databaseState = vi.hoisted(() => ({ rows: [] as { key: string; value: unknown }[] }));
+const databaseState = vi.hoisted(() => ({
+  rows: [] as { key: string; value: unknown }[],
+  secrets: {} as Record<string, string>,
+}));
 vi.mock("../../db/index.js", () => ({
   db: { select: () => ({ from: async () => databaseState.rows }) },
 }));
 vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
+vi.mock("../../services/settings.js", () => ({
+  isSecretSetting: (key: string) => key === "maptilerApiKey",
+  loadSecretSettings: async () => databaseState.secrets,
+}));
 
 import { invalidateMapSettings } from "../../utils/map-settings.js";
 
@@ -31,6 +38,7 @@ afterAll(async () => {
 
 afterEach(() => {
   databaseState.rows = [];
+  databaseState.secrets = {};
   invalidateMapSettings();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -623,7 +631,7 @@ describe("MapTiler key never reaches the client", () => {
 describe("admin-configured MapTiler credentials", () => {
   it("authenticates upstream requests with the effective database key without returning it", async () => {
     vi.stubEnv("MAPTILER_KEY", "");
-    databaseState.rows = [{ key: "maptilerApiKey", value: "admin-secret-key" }];
+    databaseState.secrets = { maptilerApiKey: "admin-secret-key" };
     vi.stubGlobal("fetch", async (url: URL) => {
       expect(url.searchParams.get("key")).toBe("admin-secret-key");
       return Response.json({

@@ -14,7 +14,7 @@ import {
   useSavedLists,
 } from "../useSavedPlaces";
 
-const list = (id = "l1") => ({
+const list = (id = "0193e4a0-0000-7000-8000-000000000001") => ({
   id,
   name: "Trip",
   icon: null,
@@ -25,8 +25,8 @@ const list = (id = "l1") => ({
   updatedAt: "2026-10-01T00:00:00Z",
 });
 const place = {
-  id: "p1",
-  listId: "l1",
+  id: "0193e4a0-0000-7000-8000-000000000101",
+  listId: "0193e4a0-0000-7000-8000-000000000001",
   name: "Cafe",
   address: null,
   lat: 52,
@@ -50,7 +50,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 describe("saved query acquisition", () => {
   it("imports places and invalidates lists, target places and membership", async () => {
-    const response = { listId: "l1", name: "Trip", imported: 1, skippedDuplicates: 0 };
+    const response = {
+      listId: "0193e4a0-0000-7000-8000-000000000001",
+      name: "Trip",
+      imported: 1,
+      skippedDuplicates: 0,
+    };
     let wire: unknown;
     respond((url, init) => {
       expect(url.pathname).toBe("/api/saved/lists/import");
@@ -59,7 +64,11 @@ describe("saved query acquisition", () => {
       return response;
     });
     const client = createTestQueryClient();
-    for (const key of [["savedLists"], ["savedListPlaces", "l1"], ["savedCheck", "p1"]])
+    for (const key of [
+      ["savedLists"],
+      ["savedListPlaces", "0193e4a0-0000-7000-8000-000000000001"],
+      ["savedCheck", "p1"],
+    ])
       client.setQueryData(key, []);
     const { result, unmount } = renderHook(() => useImportPlaces(), {
       wrapper: createQueryWrapper(client),
@@ -70,7 +79,11 @@ describe("saved query acquisition", () => {
         expect(await result.current.mutateAsync(payload)).toEqual(response);
       });
       expect(wire).toEqual(payload);
-      for (const key of [["savedLists"], ["savedListPlaces", "l1"], ["savedCheck", "p1"]])
+      for (const key of [
+        ["savedLists"],
+        ["savedListPlaces", "0193e4a0-0000-7000-8000-000000000001"],
+        ["savedCheck", "p1"],
+      ])
         expect(client.getQueryState(key)?.isInvalidated).toBe(true);
     } finally {
       unmount();
@@ -94,10 +107,10 @@ describe("saved query acquisition", () => {
     try {
       await waitFor(() => expect(reads).toBe(1));
       await act(async () => {
-        await result.current.remove.mutateAsync("l1");
+        await result.current.remove.mutateAsync("0193e4a0-0000-7000-8000-000000000001");
       });
       await act(async () => {
-        finishRead({ listIds: ["l1"] });
+        finishRead({ listIds: ["0193e4a0-0000-7000-8000-000000000001"] });
         await oldRead;
       });
       await waitFor(() => expect(result.current.membership.data).toEqual([]));
@@ -108,7 +121,7 @@ describe("saved query acquisition", () => {
       client.clear();
     }
   });
-  it.each([{ remaining: [] }, { remaining: ["l2"] }])(
+  it.each([{ remaining: [] }, { remaining: ["0193e4a0-0000-7000-8000-000000000002"] }])(
     "refreshes membership to $remaining after deleting its list",
     async ({ remaining }) => {
       let deleted = false;
@@ -118,30 +131,52 @@ describe("saved query acquisition", () => {
           return { ok: true };
         }
         if (url.pathname === "/api/saved/lists")
-          return { lists: (deleted ? remaining : ["l1", ...remaining]).map((id) => list(id)) };
+          return {
+            lists: (deleted
+              ? remaining
+              : ["0193e4a0-0000-7000-8000-000000000001", ...remaining]
+            ).map((id) => list(id)),
+          };
         if (url.pathname === "/api/saved/check")
-          return { listIds: deleted ? remaining : ["l1", ...remaining] };
+          return {
+            listIds: deleted ? remaining : ["0193e4a0-0000-7000-8000-000000000001", ...remaining],
+          };
         throw new Error("Unexpected saved request");
       });
       const client = createTestQueryClient();
       client.setQueryDefaults(["savedListPlaces"], { gcTime: Infinity });
-      client.setQueryData(["savedListPlaces", "l1"], [{ id: "deleted-place" }]);
-      client.setQueryData(["savedListPlaces", "l2"], [{ id: "retained-place" }]);
+      client.setQueryData(
+        ["savedListPlaces", "0193e4a0-0000-7000-8000-000000000001"],
+        [{ id: "deleted-place" }],
+      );
+      client.setQueryData(
+        ["savedListPlaces", "0193e4a0-0000-7000-8000-000000000002"],
+        [{ id: "retained-place" }],
+      );
       const { result, unmount } = renderHook(
         () => ({ lists: useSavedLists(), membership: useIsSaved("p1"), remove: useDeleteList() }),
         { wrapper: createQueryWrapper(client) },
       );
       try {
-        await waitFor(() => expect(result.current.membership.data).toEqual(["l1", ...remaining]));
+        await waitFor(() =>
+          expect(result.current.membership.data).toEqual([
+            "0193e4a0-0000-7000-8000-000000000001",
+            ...remaining,
+          ]),
+        );
         await act(async () => {
-          await result.current.remove.mutateAsync("l1");
+          await result.current.remove.mutateAsync("0193e4a0-0000-7000-8000-000000000001");
         });
         await waitFor(() =>
           expect(result.current.lists.data).toEqual(remaining.map((id) => list(id))),
         );
         await waitFor(() => expect(result.current.membership.data).toEqual(remaining));
-        expect(client.getQueryData(["savedListPlaces", "l1"])).toBeUndefined();
-        expect(client.getQueryData(["savedListPlaces", "l2"])).toEqual([{ id: "retained-place" }]);
+        expect(
+          client.getQueryData(["savedListPlaces", "0193e4a0-0000-7000-8000-000000000001"]),
+        ).toBeUndefined();
+        expect(
+          client.getQueryData(["savedListPlaces", "0193e4a0-0000-7000-8000-000000000002"]),
+        ).toEqual([{ id: "retained-place" }]);
       } finally {
         unmount();
         client.clear();
@@ -157,7 +192,7 @@ describe("saved query acquisition", () => {
     const hooks = [
       renderHook(() => useSavedLists(), { wrapper }),
       renderHook(() => useLabeledPlaces(), { wrapper }),
-      renderHook(() => useSavedListPlaces("l1"), { wrapper }),
+      renderHook(() => useSavedListPlaces("0193e4a0-0000-7000-8000-000000000001"), { wrapper }),
       renderHook(() => useIsSaved("p1"), { wrapper }),
     ];
     try {
@@ -169,7 +204,7 @@ describe("saved query acquisition", () => {
   });
   it("reads validated lists, labels, places and membership through generated paths", async () => {
     const label = {
-      id: "label",
+      id: "0193e4a0-0000-7000-8000-000000000201",
       label: "home",
       name: "Home",
       icon: null,
@@ -186,7 +221,9 @@ describe("saved query acquisition", () => {
         return { places: [place] };
       }
       expect(url.searchParams.get("placeId")).toBe("osm:node:1");
-      return { listIds: ["l1", "l2"] };
+      return {
+        listIds: ["0193e4a0-0000-7000-8000-000000000001", "0193e4a0-0000-7000-8000-000000000002"],
+      };
     });
     const client = createTestQueryClient();
     const wrapper = createQueryWrapper(client);
@@ -211,7 +248,10 @@ describe("saved query acquisition", () => {
       expect(result.current.lists.data).toEqual([list()]);
       expect(result.current.labels.data).toEqual([label]);
       expect(result.current.places.data).toEqual([place]);
-      expect(result.current.saved.data).toEqual(["l1", "l2"]);
+      expect(result.current.saved.data).toEqual([
+        "0193e4a0-0000-7000-8000-000000000001",
+        "0193e4a0-0000-7000-8000-000000000002",
+      ]);
     } finally {
       unmount();
       client.clear();
@@ -234,7 +274,7 @@ describe("saved query acquisition", () => {
     }
   });
   it("rejects malformed saved HTTP successes before query-cache publication", async () => {
-    respond(() => ({ lists: [{ id: "l1" }] }));
+    respond(() => ({ lists: [{ id: "0193e4a0-0000-7000-8000-000000000001" }] }));
     const client = createTestQueryClient();
     const { result, unmount } = renderHook(() => useSavedLists(), {
       wrapper: createQueryWrapper(client),

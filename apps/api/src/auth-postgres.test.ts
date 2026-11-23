@@ -450,6 +450,49 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     expect(notices[0]?.text).not.toContain(changedEmail);
   });
 
+  it("removes the emailed codes Better Auth stored for an account when the account is deleted", async () => {
+    const email = "otp-erasure-fixture@example.test";
+    const changedEmail = "otp-erasure-changed@example.test";
+    const otherEmail = `prefix-${email}`;
+    const { userId, cookie } = await verifiedUser(email);
+    for (const type of [
+      "sign-in",
+      "email-verification",
+      "forget-password",
+      "change-email",
+    ] as const)
+      await auth.api.createVerificationOTP({ body: { email: email.toUpperCase(), type } });
+    await auth.api.createVerificationOTP({ body: { email: otherEmail, type: "sign-in" } });
+    const change = await request(
+      "/api/auth/email-otp/request-email-change",
+      { newEmail: changedEmail },
+      cookie,
+    );
+    expect(change.statusCode, change.body).toBe(200);
+    const codes = async () =>
+      (
+        await fixture.sql<{ identifier: string }[]>`
+          SELECT identifier FROM verification
+          WHERE identifier LIKE '%otp-erasure-%'`
+      )
+        .map((row) => row.identifier)
+        .sort();
+    expect(await codes()).toEqual(
+      [
+        `change-email-otp-${email}`,
+        `change-email-otp-${userId}:${changedEmail}`,
+        `email-verification-otp-${email}`,
+        `forget-password-otp-${email}`,
+        `sign-in-otp-${email}`,
+        `sign-in-otp-${otherEmail}`,
+      ].sort(),
+    );
+
+    await fixture.sql`DELETE FROM "user" WHERE id = ${userId}`;
+
+    expect(await codes()).toEqual([`sign-in-otp-${otherEmail}`]);
+  });
+
   async function ageAssurance(userId: string) {
     await fixture.db
       .update(sessionAuthAssurance)

@@ -12,12 +12,30 @@ request, verify identity and scope before using **Users → Delete**. Keep a
 separate record of processor and off-host work that OpenMapX cannot perform.
 
 OpenMapX account deletion removes live account-owned rows through database
-cascades and explicitly scrubs verification challenges, system-setting updater
-IDs, exactly matched persisted log references, and identifiers in audit records. Audit events may
-remain for accountability, but the deleted actor's ID, IP address, user agent,
-target ID, and matching details are cleared. Before that transaction starts, the API
-durably appends an HMAC-pseudonymised request to the erasure journal. If the
-journal is unavailable, deletion fails without pretending that it succeeded.
+cascades and clears every other column that names the account through a
+foreign key or the database's erasure trigger, which runs on every deletion of
+an account row: from the app, from the restore replay or from plain SQL. The
+trigger deletes pending verification challenges: rows whose value is the
+account ID, rows for the account's email, the emailed sign-in, email
+verification, password reset and email change codes for that address, and
+the codes sent to a new address the account asked to change to. Another
+account's challenges stay, including those for a longer address that contains
+this one. It also deletes persisted log entries that mention
+the account's ID or its email as a whole address (in any letter case, but not
+a longer address that contains it), pending administrator confirmations of account
+actions and the sessions the account impersonated as an administrator. It
+clears the account from data jobs it started. Audit events and privacy case
+events may remain for accountability, but the deleted actor's ID, IP address,
+user agent, target ID and matching details are cleared. The API also removes the
+account's offline-package records, which name it only by a keyed hash. Before
+that transaction starts, the API durably appends an HMAC-pseudonymised request
+to the erasure journal. If the journal is unavailable, deletion fails without
+pretending that it succeeded.
+
+Delete accounts in the app. Deleting with plain SQL as `openmapx_api`
+(`DELETE FROM "user" WHERE id = …`) runs the same trigger but not the API's
+journal entry or offline-package cleanup. `TRUNCATE "user"` fires no row
+trigger and leaves all of this behind.
 
 After the server confirms self-service deletion, the browser attempts to clear
 React Query state, OpenMapX IndexedDB data, offline packages, Cache Storage and
@@ -58,7 +76,10 @@ notice (default 30). The operations agent prunes at startup and daily, every
 successful backup also prunes, and restore refuses expired archives. Restore
 also verifies the journal/key binding, refuses a backup older than journal
 coverage, and replays every retained erasure request after loading the OpenMapX
-database. Journal compaction advances the coverage floor when old requests
+database: it deletes each matching account row as `openmapx_api`, which runs
+the erasure trigger with the API role's rights. The replay cannot derive the
+offline-package key hash, so restored offline-package records of an erased
+account remain until their 30-day retention ends. Journal compaction advances the coverage floor when old requests
 are discarded; increasing backup retention later cannot make those older
 backups safe to restore again. When `api`
 is running, restore requires `--stop-running`; it keeps the API offline until

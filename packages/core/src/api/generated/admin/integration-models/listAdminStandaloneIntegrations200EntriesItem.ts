@@ -14,6 +14,5 @@ export type ListAdminStandaloneIntegrations200EntriesItem = {
   ownership: ListAdminStandaloneIntegrations200EntriesItemOwnership;
   extensionId: string | null;
   provenance: ListAdminStandaloneIntegrations200EntriesItemProvenance;
-  adoptable: boolean;
   removable: boolean;
 };

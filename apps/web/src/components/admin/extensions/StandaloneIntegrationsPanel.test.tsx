@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
-import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { act, cleanup, createTestQueryClient, fireEvent, render, screen } from "@/test";
 import { deferred } from "@/test/extensionAdmin";
 import { job } from "../activity/__tests__/fixtures";
 import { StandaloneIntegrationsPanel } from "./StandaloneIntegrationsPanel";
@@ -20,8 +20,7 @@ const entry = {
   ownership: "unmanaged",
   extensionId: null,
   contentDigest: "a".repeat(64),
-  provenance: "legacy_unknown",
-  adoptable: true,
+  provenance: null,
   removable: true,
   denialReason: null,
 };
@@ -42,13 +41,12 @@ beforeEach(() => {
             ...entry,
             integrationId: "catalog-map",
             ownership: "extension",
-            adoptable: false,
             removable: false,
             denialReason: "Managed by a catalog extension",
           },
         ],
       });
-    if (url.pathname.endsWith("/adopt") || url.pathname.endsWith("/remove"))
+    if (url.pathname.endsWith("/remove"))
       return Response.json({ jobId, operationId }, { status: 202 });
     if (url.pathname.endsWith(jobId))
       return Response.json(
@@ -59,7 +57,7 @@ beforeEach(() => {
           result: {
             operationId,
             outcome: "committed",
-            action: "adopt",
+            action: "remove",
             integrationId: entry.integrationId,
           },
         }),
@@ -83,18 +81,11 @@ function mount() {
     </QueryClientProvider>,
   );
 }
-it("shows local legacy inventory independently of the catalog and adopts only reviewed bytes", async () => {
+it("shows local inventory independently of the catalog and offers removal only", async () => {
   mount();
   await screen.findByText("legacy-map");
   expect(screen.getAllByText(/Source unknown/)[0]).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Adopt legacy-map" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm adoption" }));
-  await screen.findByText(/Ownership change completed/);
-  const mutation = requests.find((x) => x.url.pathname.endsWith("/adopt"));
-  expect(JSON.parse(String(mutation?.init.body))).toEqual({
-    expectedContentDigest: entry.contentDigest,
-  });
-  expect(new Headers(mutation?.init.headers).get("idempotency-key")).toMatch(/^[a-f0-9-]{36}$/);
+  expect(screen.queryByRole("button", { name: /Adopt/ })).not.toBeInTheDocument();
   expect(requests.some((x) => x.url.pathname.includes("/catalog"))).toBe(false);
   expect(screen.queryByRole("button", { name: "Remove catalog-map" })).not.toBeInTheDocument();
 });
@@ -104,10 +95,12 @@ it("requires an explicit removal confirmation and submits only the exact current
   fireEvent.click(screen.getByRole("button", { name: "Remove legacy-map" }));
   expect(requests.some((x) => x.init.method === "POST")).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
-  await waitFor(() => expect(requests.some((x) => x.url.pathname.endsWith("/remove"))).toBe(true));
-  expect(
-    JSON.parse(String(requests.find((x) => x.url.pathname.endsWith("/remove"))?.init.body)),
-  ).toEqual({ expectedContentDigest: entry.contentDigest });
+  await screen.findByText(/Ownership change completed/);
+  const mutation = requests.find((x) => x.url.pathname.endsWith("/remove"));
+  expect(JSON.parse(String(mutation?.init.body))).toEqual({
+    expectedContentDigest: entry.contentDigest,
+  });
+  expect(new Headers(mutation?.init.headers).get("idempotency-key")).toMatch(/^[a-f0-9-]{36}$/);
 });
 
 it("retires a late mutation acknowledgement across A to B to A navigation", async () => {
@@ -123,12 +116,12 @@ it("retires a late mutation acknowledgement across A to B to A navigation", asyn
   const original = globalThis.fetch,
     held = deferred<Response>();
   vi.stubGlobal("fetch", async (raw: string, init: RequestInit) =>
-    new URL(raw).pathname.endsWith("/adopt") ? held.promise : original(raw, init),
+    new URL(raw).pathname.endsWith("/remove") ? held.promise : original(raw, init),
   );
   const view = render(ui());
   await screen.findByText("legacy-map");
-  fireEvent.click(screen.getByRole("button", { name: "Adopt legacy-map" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm adoption" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove legacy-map" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
   apiUrl = "https://other.example";
   view.rerender(ui());
   await screen.findByText("legacy-map");

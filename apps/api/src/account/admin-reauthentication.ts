@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { type AdminReauthPurpose, adminReauthStartSchema } from "@openmapx/core/api-contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -167,25 +167,27 @@ export class AdminActionReauthentication {
             family.length ? eq(challenge.purpose, input.purpose) : sql`true`,
           ),
         );
-      const policy = input.purpose === "platform.domain.apply" ? await this.policy(tx) : null,
-        id = randomUUID();
-      await tx.insert(challenge).values({
-        id,
-        actorId: input.actorId,
-        startingSessionId: input.startingSessionId,
-        purpose: input.purpose,
-        targetId: input.targetId,
-        intentFingerprint:
-          input.intentFingerprint ??
-          (input.purpose === "platform.domain.apply" ? input.targetId : null),
-        nonceDigest: digestReauthenticationNonce(nonce),
-        requestKey: key,
-        authPolicyRevision: policy?.revision ?? null,
-        expiresAt,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return { challengeId: id, nonce, expiresAt };
+      const policy = input.purpose === "platform.domain.apply" ? await this.policy(tx) : null;
+      const [created] = await tx
+        .insert(challenge)
+        .values({
+          actorId: input.actorId,
+          startingSessionId: input.startingSessionId,
+          purpose: input.purpose,
+          targetId: input.targetId,
+          intentFingerprint:
+            input.intentFingerprint ??
+            (input.purpose === "platform.domain.apply" ? input.targetId : null),
+          nonceDigest: digestReauthenticationNonce(nonce),
+          requestKey: key,
+          authPolicyRevision: policy?.revision ?? null,
+          expiresAt,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: challenge.id });
+      if (!created) throw new Error("Reauthentication challenge was not created");
+      return { challengeId: created.id, nonce, expiresAt };
     });
   }
   private async validate(

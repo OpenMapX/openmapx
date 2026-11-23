@@ -1,3 +1,4 @@
+import { DATABASE_SESSION_TIME_ZONE } from "@openmapx/core/database-session";
 import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-secret-policy";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -18,7 +19,7 @@ export const sql = postgres(connectionString, {
   max: 10,
   connect_timeout: 10,
   idle_timeout: 60,
-  connection: { application_name: "openmapx-api" },
+  connection: { application_name: "openmapx-api", TimeZone: DATABASE_SESSION_TIME_ZONE },
 });
 
 /**
@@ -32,7 +33,11 @@ export const integrationSql = postgres(connectionString, {
   max: 4,
   connect_timeout: 10,
   idle_timeout: 60,
-  connection: { application_name: "openmapx-api-integrations", statement_timeout: 5000 },
+  connection: {
+    application_name: "openmapx-api-integrations",
+    statement_timeout: 5000,
+    TimeZone: DATABASE_SESSION_TIME_ZONE,
+  },
 });
 
 export const db = drizzle(sql, { schema });
@@ -45,6 +50,9 @@ export const db = drizzle(sql, { schema });
 export function openMigrationSession() {
   return postgres(connectionString, {
     max: 1,
-    connection: { application_name: "openmapx-api-migrations" },
+    connection: {
+      application_name: "openmapx-api-migrations",
+      TimeZone: DATABASE_SESSION_TIME_ZONE,
+    },
   });
 }

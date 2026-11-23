@@ -46,7 +46,10 @@ export const session = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     impersonatedBy: text("impersonated_by"),
   },
-  (table) => [index("session_userId_idx").on(table.userId)],
+  (table) => [
+    index("session_expires_at_idx").on(table.expiresAt),
+    index("session_userId_idx").on(table.userId),
+  ],
 );
 
 export const account = pgTable(
@@ -70,7 +73,10 @@ export const account = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)],
+  (table) => [
+    uniqueIndex("account_provider_id_account_id_key").on(table.providerId, table.accountId),
+    index("account_userId_idx").on(table.userId),
+  ],
 );
 
 export const verification = pgTable(
@@ -107,6 +113,7 @@ export const passkey = pgTable(
     aaguid: text("aaguid"),
   },
   (table) => [
+    uniqueIndex("passkey_credential_id_key").on(table.credentialID),
     index("passkey_userId_idx").on(table.userId),
     index("passkey_credentialID_idx").on(table.credentialID),
   ],
@@ -254,6 +261,7 @@ export const oauthRefreshToken = pgTable(
     scopes: text("scopes").array().notNull(),
   },
   (table) => [
+    index("oauth_refresh_token_expires_at_idx").on(table.expiresAt),
     index("oauthRefreshToken_clientId_idx").on(table.clientId),
     index("oauthRefreshToken_sessionId_idx").on(table.sessionId),
     index("oauthRefreshToken_userId_idx").on(table.userId),
@@ -287,6 +295,7 @@ export const oauthAccessToken = pgTable(
     scopes: text("scopes").array().notNull(),
   },
   (table) => [
+    index("oauth_access_token_expires_at_idx").on(table.expiresAt),
     index("oauthAccessToken_clientId_idx").on(table.clientId),
     index("oauthAccessToken_sessionId_idx").on(table.sessionId),
     index("oauthAccessToken_userId_idx").on(table.userId),

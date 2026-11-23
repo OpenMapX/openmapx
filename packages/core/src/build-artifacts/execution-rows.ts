@@ -8,6 +8,7 @@ import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { leaseTargetsSchema } from "../ops/lease-records";
 import { dataControlDelegationSchema } from "../services/data-manager/contracts/executions";
+import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { AnchoredDirectory, acquireGuardDirectory, identity } from "./filesystem";
 import {
   type ControlChildPhase,
@@ -142,10 +143,11 @@ export interface ExecutionRows {
   keys(limit: number): Promise<{ keys: string[]; complete: boolean }>;
   remove(operationKeys: readonly string[]): Promise<void>;
   /**
-   * Removes the records a store holds for executions whose row is gone, once
-   * they finished before `finishedBefore` and were admitted before
-   * `admittedBefore`. `release` first removes what else those keys named and
-   * answers whether that is complete; the records go only then.
+   * Settles executions whose row is gone, once they finished before
+   * `finishedBefore` and were admitted before `admittedBefore`. `release`
+   * first removes what else those keys named and answers whether that is
+   * complete; only then does the store drop or mark what it holds for them,
+   * so a later pass no longer offers those keys.
    */
   removeRowless?(
     bounds: { finishedBefore: number; admittedBefore: number },
@@ -432,10 +434,11 @@ export interface DataJobRowsDatabase {
   ): Promise<readonly Record<string, unknown>[]>;
 }
 const DATA_JOB_ROW =
-  "SELECT metadata,kind,execution_input,admitted_at,requested_deadline_at,execution_parent,execution_admission,execution_progress FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1";
-const epoch = z.union([z.string(), z.number()]).transform(Number).pipe(z.number().int().safe());
+  "SELECT execution_ref,kind,execution_input,admitted_at,requested_deadline_at,execution_parent,execution_admission,execution_progress FROM data_manager.jobs WHERE operation_key=$1";
+/** A job row's `timestamptz` as the epoch milliseconds the control records carry. */
+const epoch = z.unknown().transform((value) => retainedDataDatabaseTimestamp(value).getTime());
 const dataJobRowSchema = z.object({
-  metadata: z.object({ dataExecution: z.object({ execution: executionRefSchema }) }),
+  execution_ref: z.object({ execution: executionRefSchema }),
   kind: z.string(),
   execution_input: z.unknown(),
   admitted_at: epoch,
@@ -444,6 +447,9 @@ const dataJobRowSchema = z.object({
   execution_admission: admissionExtrasSchema.nullable(),
   execution_progress: executionProgressSchema.nullable(),
 });
+/** Clears a job row's execution row and its worker completion. */
+const DROP_EXECUTION_ROW =
+  "execution_admission=NULL,execution_progress=NULL,execution_completion=NULL";
 /** The two columns a new job row carries for its execution row. */
 export function dataJobRowColumns(row: ExecutionRow): { admission: string; progress: string } {
   return {
@@ -457,7 +463,7 @@ function dataJobAdmission(
   extras: z.infer<typeof admissionExtrasSchema>,
 ): ExecutionAdmission {
   return {
-    execution: row.metadata.dataExecution.execution,
+    execution: row.execution_ref.execution,
     kind: row.kind,
     operation: row.execution_input,
     admittedAt: row.admitted_at,
@@ -516,7 +522,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
         if (after === before) return result;
         assertExecutionRowCapacity(after);
         const written = await database.unsafe(
-          "UPDATE data_manager.jobs SET execution_progress=$3::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
+          "UPDATE data_manager.jobs SET execution_progress=$3::text::jsonb WHERE operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
           [key, before, after],
         );
         if (written.length) return result;
@@ -525,7 +531,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
     },
     async keys(limit) {
       const rows = await database.unsafe(
-        "SELECT operation_key FROM data_manager.jobs WHERE execution_version=2 AND execution_admission IS NOT NULL ORDER BY operation_key LIMIT $1",
+        "SELECT operation_key FROM data_manager.jobs WHERE execution_admission IS NOT NULL ORDER BY operation_key LIMIT $1",
         [limit + 1],
       );
       return {
@@ -533,29 +539,36 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
         complete: rows.length <= limit,
       };
     },
+    // The execution row goes; the finished job row stays, marked as swept, for
+    // the API's job retention. An unfinished job keeps its execution.
     async remove(keys) {
-      // Only a finished job's row goes; an unfinished one keeps its execution.
       for (const key of keys)
         await database.unsafe(
-          "DELETE FROM data_manager.jobs WHERE execution_version=2 AND finished_at IS NOT NULL AND operation_key=$1",
+          `UPDATE data_manager.jobs SET ${DROP_EXECUTION_ROW},released_at=coalesce(released_at,now())
+            WHERE finished_at IS NOT NULL AND operation_key=$1`,
           [key],
         );
     },
     // A backup restore closes the jobs it found open and drops their execution
-    // rows; their job rows go by the same retention as the others.
+    // rows, leaving `released_at` unset. Their files named by key go by the
+    // same retention as the others; the row is then marked as swept.
     async removeRowless({ finishedBefore, admittedBefore }, release) {
       const closed =
-        "execution_version=2 AND execution_admission IS NULL AND finished_at < to_timestamp($1::bigint / 1000.0) AND admitted_at < $2::bigint";
+        "execution_admission IS NULL AND released_at IS NULL AND finished_at < $1::text::timestamptz AND admitted_at < $2::text::timestamptz";
+      const bounds = [
+        new Date(finishedBefore).toISOString(),
+        new Date(admittedBefore).toISOString(),
+      ];
       const keys = (
         await database.unsafe(
-          `SELECT operation_key FROM data_manager.jobs WHERE ${closed} AND operation_key IS NOT NULL ORDER BY operation_key LIMIT 256`,
-          [finishedBefore, admittedBefore],
+          `SELECT operation_key FROM data_manager.jobs WHERE ${closed} ORDER BY operation_key LIMIT 256`,
+          bounds,
         )
       ).map((row) => z.string().parse(row.operation_key));
       if (!keys.length || !release(keys)) return;
       await database.unsafe(
-        `DELETE FROM data_manager.jobs WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
-        [finishedBefore, admittedBefore, JSON.stringify(keys)],
+        `UPDATE data_manager.jobs SET released_at=now() WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
+        [...bounds, JSON.stringify(keys)],
       );
     },
   };

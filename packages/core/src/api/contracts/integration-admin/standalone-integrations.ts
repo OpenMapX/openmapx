@@ -25,11 +25,11 @@ const responses = {
 export const standaloneOwnershipParamsSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
 });
-export const standaloneOwnershipRequestSchema = z.strictObject({
-  expectedContentDigest: z.string().regex(/^[a-f0-9]{64}$/),
-});
-const standaloneRemovalRequestSchema = standaloneOwnershipRequestSchema.extend({
-  expectedContentDigest: standaloneOwnershipRequestSchema.shape.expectedContentDigest.nullable(),
+const standaloneRemovalRequestSchema = z.strictObject({
+  expectedContentDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
 });
 export const standaloneIntegrationAdminOperations = {
   listAdminStandaloneIntegrations: {
@@ -42,17 +42,6 @@ export const standaloneIntegrationAdminOperations = {
         z.strictObject({ entries: z.array(standaloneInventoryEntrySchema).max(2048) }),
       ),
     },
-  },
-  adoptAdminStandaloneIntegration: {
-    method: "POST",
-    path: "/api/admin/standalone-integrations/:id/adopt",
-    auth: "admin",
-    request: {
-      params: standaloneOwnershipParamsSchema,
-      body: standaloneOwnershipRequestSchema,
-      headers: adminIntegrationIdempotencyHeadersSchema,
-    },
-    responses,
   },
   removeAdminStandaloneIntegration: {
     method: "POST",

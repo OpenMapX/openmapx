@@ -16,7 +16,6 @@ export const transitStateSummarySchema = z.strictObject({
   }),
 });
 export const transitFeedSchema = z.strictObject({
-  id: z.string(),
   region: z.string(),
   name: z.string(),
   lastFetchedAt: timestamp.nullable(),

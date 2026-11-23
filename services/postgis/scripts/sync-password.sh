@@ -252,21 +252,41 @@ ALTER ROLE ${DATA_MANAGER_ROLE} RESET ALL;
 SELECT format('ALTER ROLE %I IN DATABASE %I RESET ALL', r, current_database())
   FROM unnest(ARRAY['${API_ROLE}', '${DATA_MANAGER_ROLE}']) r
 \gexec
--- Without the default "\$user" entry, a schema named after a role cannot
--- shadow the tables either role reads unqualified from public.
-ALTER ROLE ${API_ROLE} SET search_path = public;
-ALTER ROLE ${DATA_MANAGER_ROLE} SET search_path = public;
+-- The API reads its own tables unqualified from public, which it owns, and
+-- every role finds PostGIS and the other extensions in the extensions schema.
+-- Data-manager names the schema of every table it uses, so it searches
+-- nothing the API can write, and no function the API puts in public can
+-- stand in for one data-manager calls. Without the default "\$user" entry, a
+-- schema named after a role cannot shadow either.
+ALTER ROLE ${API_ROLE} SET search_path = public, extensions;
+ALTER ROLE ${DATA_MANAGER_ROLE} SET search_path = extensions;
+-- A data-manager session left idle inside a transaction would hold its locks
+-- on the tables the API reads; its long statements need no limit.
+ALTER ROLE ${DATA_MANAGER_ROLE} SET idle_in_transaction_session_timeout = '10min';
 SELECT format('GRANT CREATE ON DATABASE %I TO ${API_ROLE}, ${DATA_MANAGER_ROLE}', current_database())
 \gexec
 ALTER SCHEMA public OWNER TO ${API_ROLE};
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT USAGE ON SCHEMAS TO ${API_ROLE};
 ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT SELECT ON TABLES TO ${API_ROLE};
--- Trusted extensions belong to the superuser and are installed here, as
--- neither role may install one.
-CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+-- The extensions live in a schema only the superuser can create objects in,
+-- and every role may use, OpenConditions' among them. They are installed
+-- here, as no other role may install one; the image's own initdb script,
+-- which would put PostGIS into public, is replaced by a no-op. PostGIS
+-- cannot move to another schema once installed.
+-- Only the grants set here survive a start.
+CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION CURRENT_USER;
+ALTER SCHEMA extensions OWNER TO CURRENT_USER;
+SELECT DISTINCT format('REVOKE ALL ON SCHEMA extensions FROM %s CASCADE',
+    CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END)
+  FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
+  WHERE n.nspname = 'extensions' AND a.grantee <> n.nspowner
+\gexec
+GRANT USAGE ON SCHEMA extensions TO PUBLIC;
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;
 -- Only the superuser creates large objects. Neither the platform nor
 -- OpenConditions uses them, they are no schema object the event triggers
 -- below could refuse, and a restore refuses one owned by a role that cannot
@@ -279,14 +299,13 @@ SELECT format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', p.oid::regprocedure)
 -- Code data-manager writes must never run with another role's rights. The
 -- API reads its schemas, and a function, rule, trigger, policy, domain check,
 -- coercion, extension or view runs as whoever's query reaches it, so
--- data-manager may create only tables, indexes, sequences and schemas, and
--- drop the view it created before this rule. Check
+-- data-manager may create only tables, indexes, sequences and schemas. Check
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
 -- The API may install no extension: a trusted extension's script runs as the
 -- superuser and finds names through the public schema, which the API owns.
 -- The tile roles create nothing: the tile owner runs whatever a tile reaches,
--- the API's functions in the public schema among them, and cannot log in to restore an
+-- OpenConditions' functions among them, and cannot log in to restore an
 -- object of its own, which only this script gives it.
 CREATE SCHEMA IF NOT EXISTS openmapx_guard;
 REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
@@ -300,8 +319,7 @@ BEGIN
       'CREATE SCHEMA', 'ALTER SCHEMA', 'DROP SCHEMA',
       'CREATE TABLE', 'CREATE TABLE AS', 'ALTER TABLE', 'DROP TABLE',
       'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
-      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
-      'DROP VIEW'))
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE'))
     OR (current_user = '${API_ROLE}' AND tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION'))
     OR current_user IN ('${TILES_ROLE}', '${TILES_OWNER}')
   THEN
@@ -315,14 +333,15 @@ CREATE OR REPLACE FUNCTION openmapx_guard.check_ddl()
   SET search_path = pg_catalog
 AS \$\$
 DECLARE
-  data_manager_schemas constant text := '^((osm_search|notable_places)(__staging|__previous)?|ambient_places|overture_[a-z0-9_]{1,55})\$';
+  data_manager_schemas constant text := '^((osm_search|notable_places|overture_places)(__staging|__previous)?|ambient_places|overture_embeddings)\$';
   api_schemas constant text := '^(data_manager|drizzle)\$';
   command record;
 BEGIN
   FOR command IN SELECT object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
     -- Each role creates only the schemas it needs, so neither can take a name
     -- another component trusts, such as a role's name or the schemas the
-    -- tile server's functions read.
+    -- tile server's functions read. No schema for one of Overture's
+    -- ODbL-licensed themes can sit beside data-manager's Overture places.
     IF command.object_type = 'schema' AND (
       (current_user = '${DATA_MANAGER_ROLE}' AND command.object_identity !~ data_manager_schemas)
       OR (current_user = '${API_ROLE}' AND command.object_identity !~ api_schemas))
@@ -352,11 +371,13 @@ echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} rea
 # it, never runs with more rights than that. The traffic-flow function calls
 # OpenConditions' `conditions.segment_flow`, which reads OpenConditions'
 # tables through its own helper functions and calls PostGIS unqualified,
-# hence `public` on the search path. PostGIS grants the owner role read
-# access to every table in `conditions` on each start, so a tile keeps working
-# when OpenConditions' functions read another of its tables; a restore keeps
-# the grants. OpenConditions installed after PostGIS started needs a PostGIS
-# restart, and until then tiles fail with a permission error.
+# hence `extensions` on the search path. Martin itself asks for the PostGIS
+# version unqualified when it connects, so its login searches `extensions`
+# too; neither searches public. PostGIS grants the owner role nothing in
+# `conditions`: OpenConditions' own migration grants it exactly the tables and
+# functions `conditions.segment_flow` reads, so tiles render as soon as
+# OpenConditions has migrated, and its credentials and crowd data stay
+# unreadable. A restore keeps the grants.
 # Without MARTIN_DB_PASSWORD the tile server cannot log in.
 if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
   ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}
@@ -376,6 +397,7 @@ ALTER ROLE ${TILES_OWNER} RESET ALL;
 SELECT format('ALTER ROLE %I IN DATABASE %I RESET ALL', r, current_database())
   FROM unnest(ARRAY['${TILES_ROLE}', '${TILES_OWNER}']) r
 \gexec
+ALTER ROLE ${TILES_ROLE} SET search_path = extensions;
 CREATE SCHEMA IF NOT EXISTS tiles;
 ALTER SCHEMA tiles OWNER TO CURRENT_USER;
 REVOKE ALL ON SCHEMA tiles FROM PUBLIC;
@@ -383,7 +405,7 @@ GRANT USAGE ON SCHEMA tiles TO ${TILES_ROLE}, ${TILES_OWNER};
 CREATE OR REPLACE FUNCTION tiles.segment_flow(z integer, x integer, y integer, query_params json)
   RETURNS bytea
   LANGUAGE plpgsql STABLE STRICT PARALLEL SAFE SECURITY DEFINER
-  SET search_path = pg_catalog, public, pg_temp
+  SET search_path = pg_catalog, extensions, pg_temp
 AS \$\$
 BEGIN
   RETURN conditions.segment_flow(z, x, y, query_params);
@@ -392,15 +414,6 @@ END;
 ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO ${TILES_OWNER};
 REVOKE ALL ON FUNCTION tiles.segment_flow(integer, integer, integer, json) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO ${TILES_ROLE};
-SELECT 'GRANT USAGE ON SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
-SELECT 'GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
-SELECT 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO ${TILES_OWNER}'
-  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
-\gexec
 SQL
 echo "[openmapx-postgis] tile server role ${TILES_ROLE} ready"
 

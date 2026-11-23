@@ -1,6 +1,7 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { execa } from "execa";
+import { databaseClientExec } from "../lib/database-session";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
@@ -61,9 +62,7 @@ export async function execPsql(
     "docker",
     [
       ...coreServices.stackComposeArgs(paths),
-      "exec",
-      "-T",
-      target.serviceId,
+      ...databaseClientExec(target.serviceId),
       "psql",
       "-U",
       target.user,

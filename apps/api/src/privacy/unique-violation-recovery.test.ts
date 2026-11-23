@@ -1,5 +1,7 @@
 import { DrizzleQueryError } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY } from "../db/disclosure-schema.js";
+import { ACTIVE_REQUEST_KIND_KEY, REQUEST_EVENT_IDEMPOTENCY_KEY } from "../db/privacy-schema.js";
 import { recordDataDisclosure } from "./disclosures.js";
 import { recordIdempotentEvent } from "./idempotency.js";
 import { PrivacyRequestService } from "./request-service.js";
@@ -56,9 +58,7 @@ const disclosure = {
 
 describe("privacy unique-constraint race recovery", () => {
   it("cannot see the constraint name in the wrapped driver error text", () => {
-    expect(String(uniqueViolation("data_subject_request_active_user_kind_idx"))).not.toContain(
-      "data_subject_request_active_user_kind_idx",
-    );
+    expect(String(uniqueViolation(ACTIVE_REQUEST_KIND_KEY))).not.toContain(ACTIVE_REQUEST_KIND_KEY);
   });
 
   describe("create", () => {
@@ -67,7 +67,7 @@ describe("privacy unique-constraint race recovery", () => {
       const fake = {
         select: selectStub([[], [winnerRow]]),
         transaction: vi.fn(async () => {
-          throw uniqueViolation("data_subject_request_active_user_kind_idx");
+          throw uniqueViolation(ACTIVE_REQUEST_KIND_KEY);
         }),
       };
       await expect(serviceWith(fake).create(createInput)).resolves.toBe(winnerRow);
@@ -77,7 +77,7 @@ describe("privacy unique-constraint race recovery", () => {
       const fake = {
         select: selectStub([[], []]),
         transaction: vi.fn(async () => {
-          throw uniqueViolation("data_subject_request_active_user_kind_idx");
+          throw uniqueViolation(ACTIVE_REQUEST_KIND_KEY);
         }),
       };
       await expect(serviceWith(fake).create(createInput)).rejects.toMatchObject({
@@ -103,7 +103,7 @@ describe("privacy unique-constraint race recovery", () => {
     const fake = {
       select: selectStub([[row], [row]]),
       transaction: vi.fn(async () => {
-        throw uniqueViolation("data_subject_request_event_idempotency_idx");
+        throw uniqueViolation(REQUEST_EVENT_IDEMPOTENCY_KEY);
       }),
     };
     await expect(serviceWith(fake).withdraw("r1", "u1", 1, "replay-key-0000000001")).resolves.toBe(
@@ -121,7 +121,7 @@ describe("privacy unique-constraint race recovery", () => {
 
     it("treats an idempotency-key race as a replay", async () => {
       const fake = {
-        insert: throwingInsert(uniqueViolation("data_subject_request_event_idempotency_idx")),
+        insert: throwingInsert(uniqueViolation(REQUEST_EVENT_IDEMPOTENCY_KEY)),
         select: selectStub([[]]),
       };
       await expect(recordIdempotentEvent(fake as never, input)).resolves.toBeUndefined();
@@ -137,7 +137,7 @@ describe("privacy unique-constraint race recovery", () => {
   describe("recordDataDisclosure", () => {
     it("treats an idempotency-key race as success", async () => {
       const fake = {
-        insert: throwingInsert(uniqueViolation("data_disclosure_event_idempotency_idx")),
+        insert: throwingInsert(uniqueViolation(DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY)),
       };
       await expect(
         recordDataDisclosure({ ...disclosure, idempotencyKey: "op-1" }, fake as never),
@@ -145,7 +145,7 @@ describe("privacy unique-constraint race recovery", () => {
     });
 
     it("rethrows the idempotency-key violation when the write carried no key", async () => {
-      const error = uniqueViolation("data_disclosure_event_idempotency_idx");
+      const error = uniqueViolation(DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY);
       const fake = { insert: throwingInsert(error) };
       await expect(recordDataDisclosure(disclosure, fake as never)).rejects.toBe(error);
     });

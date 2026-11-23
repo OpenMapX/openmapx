@@ -72,9 +72,31 @@ Snapshots do not contain `infra/docker/.env`, host secret files, the external
 erasure journal or service-selection/configuration generations.
 Protect recovery copies of the configuration actually used by your deployment,
 including generated credentials and any external secret manager records.
-`BETTER_AUTH_SECRET` protects authentication material; `OPENMAPX_SECRETS_KEY`
-is required to decrypt vault credentials. A database archive alone cannot
-reconstruct these keys or a compatible host setup.
+`BETTER_AUTH_SECRET` protects authentication material;
+`infra/docker/secrets/secrets-key` is required to decrypt vault credentials,
+personal timeline credentials and secret settings such as the SMTP password.
+A database archive alone cannot reconstruct these keys or a compatible host
+setup.
+
+Keep a copy of `secrets-key` with every off-host database backup, exactly as
+the erasure journal key below. Restore it to `infra/docker/secrets/secrets-key`
+before the API starts against the restored database; a render never replaces an
+existing key, and one generated afresh cannot open the restored values. The API
+and the render accept only the 43 characters with no trailing newline, in a
+file with one link, mode `0444` and the deployment's user as owner. As that
+user, from the repository root, replace any key a render already generated
+(the read-only file cannot be copied over) and copy the backup byte for byte:
+
+```sh
+rm -f infra/docker/secrets/secrets-key
+cp /path/to/backup/secrets-key infra/docker/secrets/secrets-key
+chmod 0444 infra/docker/secrets/secrets-key
+wc -c < infra/docker/secrets/secrets-key   # prints 43
+```
+
+The new file belongs to the user who runs `cp`, whoever owned the backup copy.
+A stored secret the current key cannot open is marked as unreadable in the
+admin settings.
 
 For erasure-safe restore, retain both
 `infra/docker/data/erasure/journal.jsonl` and
@@ -394,8 +416,9 @@ by default).
 
 After the selected data has been restored and before restarting the API, the
 CLI revalidates the journal/key pair and HMAC-matches restored
-user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every
-match. The journal contains neither raw user IDs nor email addresses. The journal
+user IDs against `infra/docker/data/erasure/journal.jsonl` and deletes every
+match as `openmapx_api`; the database's erasure trigger clears the account's
+remaining traces, as for a deletion in the app. The journal contains neither raw user IDs nor email addresses. The journal
 and `infra/docker/secrets/erasure-journal-key` are deliberately outside the
 PostgreSQL backup. Disaster-recovery copies must include both. Do not rotate or
 discard the key while a backup that could contain an erased account exists;

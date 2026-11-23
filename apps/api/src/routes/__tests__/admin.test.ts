@@ -155,6 +155,7 @@ const mockDeleteSecret = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../../services/secrets.js", () => ({
   isSecretsConfigured: (...args: unknown[]) => mockIsSecretsConfigured(...args),
+  secretsKeyProblem: () => (mockIsSecretsConfigured() ? null : "Synthetic secrets key reason"),
   listAllSecrets: (...args: unknown[]) => mockListAllSecrets(...args),
   listSecrets: (...args: unknown[]) => mockListSecrets(...args),
   setSecret: (...args: unknown[]) => mockSetSecret(...args),
@@ -260,7 +261,7 @@ describe("GET /admin/overview", () => {
       jobs: [
         {
           source: "data-manager",
-          id: "job-dm",
+          id: "0193e4a0-0000-7000-8001-000000000002",
           type: "transit-sync",
           payload: {},
           progress: null,
@@ -281,12 +282,15 @@ describe("GET /admin/overview", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().activeJobs).toEqual([
-      expect.objectContaining({ source: "data-manager", id: "job-dm" }),
+      expect.objectContaining({
+        source: "data-manager",
+        id: "0193e4a0-0000-7000-8001-000000000002",
+      }),
     ]);
     expect(res.json().attention).toContainEqual(
       expect.objectContaining({
         type: "job_failed",
-        target: "job-dm",
+        target: "0193e4a0-0000-7000-8001-000000000002",
         job: { type: "transit-sync", status: "failed" },
       }),
     );
@@ -513,7 +517,7 @@ describe("GET /admin/jobs/:id", () => {
   it("loads a source-aware data-manager job detail", async () => {
     mockGetActivityJob.mockResolvedValueOnce({
       source: "data-manager",
-      id: "job-dm",
+      id: "0193e4a0-0000-7000-8001-000000000002",
       type: "download",
       status: "running",
       payload: null,
@@ -532,15 +536,21 @@ describe("GET /admin/jobs/:id", () => {
 
     const res = await app.inject({
       method: "GET",
-      url: "/admin/jobs/job-dm?source=data-manager",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000002?source=data-manager",
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockGetActivityJob).toHaveBeenCalledWith("job-dm", "data-manager");
+    expect(mockGetActivityJob).toHaveBeenCalledWith(
+      "0193e4a0-0000-7000-8001-000000000002",
+      "data-manager",
+    );
   });
 
   it("rejects an unknown job source", async () => {
-    const res = await app.inject({ method: "GET", url: "/admin/jobs/job-dm?source=other" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000002?source=other",
+    });
 
     expect(res.statusCode).toBe(400);
     expect(mockGetActivityJob).not.toHaveBeenCalled();
@@ -553,14 +563,17 @@ describe("POST /admin/jobs/:id/cancel", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/admin/jobs/job-abc/cancel",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000003/cancel",
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
-    expect(mockJobRunnerCancel).toHaveBeenCalledWith("job-abc");
+    expect(mockJobRunnerCancel).toHaveBeenCalledWith("0193e4a0-0000-7000-8001-000000000003");
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "job.cancel", targetId: "job-abc" }),
+      expect.objectContaining({
+        action: "job.cancel",
+        targetId: "0193e4a0-0000-7000-8001-000000000003",
+      }),
     );
   });
 
@@ -569,7 +582,7 @@ describe("POST /admin/jobs/:id/cancel", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/admin/jobs/already-done/cancel",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000004/cancel",
     });
 
     expect(res.statusCode).toBe(400);
@@ -579,7 +592,7 @@ describe("POST /admin/jobs/:id/cancel", () => {
   it("does not offer application cancellation for data-manager jobs", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/admin/jobs/job-dm/cancel?source=data-manager",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000002/cancel?source=data-manager",
     });
 
     expect(res.statusCode).toBe(400);
@@ -589,7 +602,7 @@ describe("POST /admin/jobs/:id/cancel", () => {
   it("rejects cancellation for an unknown job source", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/admin/jobs/job-abc/cancel?source=other",
+      url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000003/cancel?source=other",
     });
 
     expect(res.statusCode).toBe(400);
@@ -610,9 +623,10 @@ describe("GET /admin/audit", () => {
       userAgent: "test-agent",
       createdAt: new Date("2026-06-17T12:00:00.000Z"),
     };
-    // Entries, their count, then the actor lookup.
+    // Entries as the table returns them, their count, then the actor lookup.
+    // The target account column stays out of the strict response.
     mockDbSelect
-      .mockImplementationOnce(() => makeSelectChain([row]))
+      .mockImplementationOnce(() => makeSelectChain([{ ...row, targetUserId: "user-99" }]))
       .mockImplementationOnce(() => makeSelectChain([{ total: 7 }]))
       .mockImplementationOnce(() =>
         makeSelectChain([{ id: "user-1", name: "Ada", email: "ada@example.test" }]),

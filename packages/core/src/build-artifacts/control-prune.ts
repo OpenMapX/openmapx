@@ -2,7 +2,8 @@
  *
  * The prune walks the role's execution rows (the agent's journal rows for its
  * own operations, data-manager's job rows, a row file per execution otherwise);
- * removing a data-manager row removes its finished job row. An execution's records
+ * removing a data-manager row clears it from its finished job row, which the
+ * API's job retention deletes later. An execution's records
  * are removed once it settled, its root key has expired, at least 72 hours
  * have passed since it settled, every lease it owns or borrowed has released
  * its root (so no attempted child is unsettled), and no unfinished
@@ -16,7 +17,10 @@
  *
  * Deletions are independent and can be repeated. Readers never treat a
  * missing record as permission: a missing admission, effect or lease is
- * unknown, and an expired root key is refused at admission. */
+ * unknown, and an expired root key is refused at admission. Data-manager
+ * answers a repeated admission of a key whose job row it still holds with that
+ * job's recorded outcome, until the API deletes the row; an expired key never
+ * admits new work. */
 import { rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";

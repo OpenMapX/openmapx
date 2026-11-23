@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 import { cpus, totalmem } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { DATABASE_SESSION_TIME_ZONE } from "@openmapx/core/database-session";
 
 export const scenarios = [
   "initial",
@@ -489,7 +490,10 @@ async function replay(
               sql = postgres(uri, {
                 max: 1,
                 onnotice: () => {},
-                connection: { application_name: "openmapx-replay-observer" },
+                connection: {
+                  application_name: "openmapx-replay-observer",
+                  TimeZone: DATABASE_SESSION_TIME_ZONE,
+                },
               });
               await sql.unsafe(
                 "CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS pg_stat_statements",
@@ -698,6 +702,7 @@ async function replay(
                 connection: {
                   application_name:
                     index === 0 ? "openmapx-replay-baseline" : "openmapx-replay-candidate",
+                  TimeZone: DATABASE_SESSION_TIME_ZONE,
                 },
                 debug: () => {
                   if (measuring) statementCount++;

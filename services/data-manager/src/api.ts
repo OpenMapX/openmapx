@@ -1045,10 +1045,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return reply.code(503).send({ error: "Durable catalog review is unavailable" });
     const proposalId = req.query.proposalId;
     const matching = proposalId
-      ? and(
-          eq(jobs.executionVersion, 2),
-          drizzleSql`${jobs.executionInput}->>'proposalId' = ${proposalId}`,
-        )
+      ? drizzleSql`${jobs.executionInput}->>'proposalId' = ${proposalId}`
       : undefined;
     const [executions, validations] = proposalId
       ? await Promise.all([
@@ -1056,13 +1053,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             .select({ id: jobs.id })
             .from(jobs)
             .where(and(matching, inArray(jobs.kind, ["catalog.validate", "catalog.activate"])))
-            .orderBy(desc(jobs.startedAt), desc(jobs.id))
+            .orderBy(desc(jobs.admittedAt), desc(jobs.id))
             .limit(1),
           db
             .select({ id: jobs.id })
             .from(jobs)
             .where(and(matching, eq(jobs.kind, "catalog.validate")))
-            .orderBy(desc(jobs.startedAt), desc(jobs.id))
+            .orderBy(desc(jobs.admittedAt), desc(jobs.id))
             .limit(1),
         ])
       : [[], []];

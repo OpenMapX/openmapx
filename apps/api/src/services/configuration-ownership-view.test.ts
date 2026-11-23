@@ -40,7 +40,7 @@ describe("effective configuration ownership metadata", () => {
     },
   );
   it("reads the actual strict cascade, preserves empty env as unset, and locks a file winner", async () => {
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
     const root = mkdtempSync(join(tmpdir(), "openmapx-ownership-"));
     roots.push(root);
     mkdirSync(join(root, "fixture"));
@@ -72,7 +72,6 @@ describe("effective configuration ownership metadata", () => {
       serviceSecretRows: [],
       integrationRows: [
         {
-          id: "row",
           integrationId: "fixture",
           config: { REGION: "saved" },
           createdAt: now,
@@ -81,7 +80,6 @@ describe("effective configuration ownership metadata", () => {
       ],
       integrationSecretRows: [
         {
-          id: "secret",
           integrationId: "fixture",
           key: "TOKEN",
           ...encrypt("vault-private"),

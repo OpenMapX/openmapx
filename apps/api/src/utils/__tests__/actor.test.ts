@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { dbActorId, LOOPBACK_ACTOR_ID } from "../actor";
+import { actorUserIdOrNull, LOOPBACK_ACTOR_ID } from "../actor";
 
-describe("dbActorId", () => {
+describe("actorUserIdOrNull", () => {
   it("nulls the synthetic loopback actor (no user row to FK against)", () => {
-    expect(dbActorId(LOOPBACK_ACTOR_ID)).toBeNull();
+    expect(actorUserIdOrNull(LOOPBACK_ACTOR_ID)).toBeNull();
   });
 
   it("nulls null/undefined/empty", () => {
-    expect(dbActorId(null)).toBeNull();
-    expect(dbActorId(undefined)).toBeNull();
-    expect(dbActorId("")).toBeNull();
+    expect(actorUserIdOrNull(null)).toBeNull();
+    expect(actorUserIdOrNull(undefined)).toBeNull();
+    expect(actorUserIdOrNull("")).toBeNull();
   });
 
   it("passes a real user id through", () => {
-    expect(dbActorId("user_abc123")).toBe("user_abc123");
+    expect(actorUserIdOrNull("user_abc123")).toBe("user_abc123");
   });
 });

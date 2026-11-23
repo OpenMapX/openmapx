@@ -524,7 +524,7 @@ dbDescribe("retained finite maintenance requests", () => {
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
     vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
     const { jobRunner } = await import("../job-runner"),
       { handleComposeRenderJob } = await import("../admin-compose-render"),
       { registerAdminComposeRoutes } = await import("../../routes/admin-compose");

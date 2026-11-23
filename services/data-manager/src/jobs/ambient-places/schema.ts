@@ -45,8 +45,6 @@ CREATE TABLE IF NOT EXISTS ambient_places.planet_builds (
   checkpoint JSONB NOT NULL, error TEXT,
   started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
--- The API reads the published features itself; data-manager defines no view.
-DROP VIEW IF EXISTS ambient_places.features_all;
 INSERT INTO ambient_places.state(singleton) VALUES(1) ON CONFLICT DO NOTHING;
 `;
 const initialization = new WeakMap<postgres.Sql, Promise<void>>();

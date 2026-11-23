@@ -148,7 +148,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(actual.pid).toBe(owner.pid);
             await tx
               .insert(schema.serviceConfig)
-              .values({ id: randomUUID(), serviceId: "rollback-fixture", config: { WORKERS: 4 } });
+              .values({ serviceId: "rollback-fixture", config: { WORKERS: 4 } });
             throw Error("synthetic failure after desired write");
           }),
         ).rejects.toBeInstanceOf(subject.ConfigurationWriteRolledBack);
@@ -163,7 +163,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await expect(
           subject.withConfigurationWriteTransaction(owned, async (tx) => {
             await tx.insert(schema.serviceConfig).values({
-              id: randomUUID(),
               serviceId: "nested-rollback-fixture",
               config: { WORKERS: 7 },
             });

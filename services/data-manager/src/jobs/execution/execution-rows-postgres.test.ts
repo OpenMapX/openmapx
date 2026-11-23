@@ -219,9 +219,9 @@ describe.skipIf(
       });
       const rowless = randomUUID();
       await expect(
-        sql`INSERT INTO data_manager.jobs(id,kind,status,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
-          VALUES(${rowless},'download-fonts','queued',2,${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},1,${deadline},'{}','{}')`,
-      ).rejects.toThrow(/data_manager_jobs_execution_row/);
+        sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${rowless},'download-fonts','queued',${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},now(),${new Date(deadline).toISOString()}::text::timestamptz,'{}','{}','{}')`,
+      ).rejects.toThrow(/jobs_execution_row_check/);
     } finally {
       await dm.runtime.close();
       await foreign.runtime.close();
@@ -355,7 +355,7 @@ describe.skipIf(
     }
   }, 60000);
 
-  it("prunes a job row a restore left without its execution row once it finished 72 hours ago and its key expired", async () => {
+  it("sweeps the key of a job row a restore left without its execution row once it finished 72 hours ago and its key expired", async () => {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
     const sql = postgres(url, { max: 4 }),
@@ -386,21 +386,30 @@ describe.skipIf(
       // Each run left its runner journal, which holds a runner capability.
       const local = installationState(dm.installation);
       for (const row of Object.values(rows)) {
-        await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,execution_version,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state)
-          VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,2,${row.key},${"a".repeat(64)},${"b".repeat(64)},${row.admittedAt},${row.admittedAt + HOUR},'{}','{}')`;
+        await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,${row.key},${"a".repeat(64)},${"b".repeat(64)},${new Date(row.admittedAt).toISOString()}::text::timestamptz,${new Date(row.admittedAt + HOUR).toISOString()}::text::timestamptz,'{}','{}','{}')`;
         writePrivateRecord(local, "observations", `runners-${row.key}.json`, { attempts: [] });
       }
+      const swept = async () =>
+        (
+          await sql`SELECT id FROM data_manager.jobs WHERE released_at IS NOT NULL AND id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`
+        ).map((row) => row.id);
       await control.pruneControlRecords(dm.installation, { now });
-      const left = (
-        await sql`SELECT id FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`
-      )
-        .map((row) => row.id)
-        .sort();
-      expect(left).toEqual([rows.keyLive.id, rows.recent.id].sort());
-      // The pruned job's files went with it; the others keep theirs.
+      // Every job row stays for the API's job retention; the swept one is marked.
+      expect(
+        await sql`SELECT count(*)::int AS n FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`,
+      ).toEqual([{ n: 3 }]);
+      expect(await swept()).toEqual([rows.expired.id]);
+      // The swept job's files are gone; the others keep theirs.
       expect(observationFiles(root).sort()).toEqual(
         [`runners-${rows.keyLive.key}.json`, `runners-${rows.recent.key}.json`].sort(),
       );
+      // A later pass does not offer the swept key again.
+      writePrivateRecord(local, "observations", `runners-${rows.expired.key}.json`, {
+        attempts: [],
+      });
+      await control.pruneControlRecords(dm.installation, { now });
+      expect(observationFiles(root)).toContain(`runners-${rows.expired.key}.json`);
     } finally {
       await dm.runtime.close();
       await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`;
@@ -451,9 +460,15 @@ describe.skipIf(
       await dm.runtime.reconcile();
       expect(await listed()).toEqual([]);
 
-      // A job a backup restore closed has no execution row; the prune removes it.
+      // A job a backup restore closed has no execution row; the control prune
+      // sweeps its key and the API's job retention deletes it.
       await sql`UPDATE data_manager.jobs SET execution_admission=NULL,execution_progress=NULL,execution_completion=NULL,released_at=NULL WHERE id=${finished}`;
       expect(await listed()).toEqual([]);
+      // A release recorded for it would make the API delete it before the
+      // prune removed the files named by its key; only that prune marks it.
+      await dm.store.recordReleased(finished);
+      const [restored] = await sql`SELECT released_at FROM data_manager.jobs WHERE id=${finished}`;
+      expect(restored?.released_at).toBeNull();
 
       const { record } = await dm.store.admit({ kind: "download-fonts" }, fresh());
       ids.push(record.status.id);

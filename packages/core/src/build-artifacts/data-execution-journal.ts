@@ -92,11 +92,10 @@ const runnerJournalSchema = z.strictObject({
 });
 const rowSchema = z.object({
   id: z.uuid(),
-  execution_version: z.literal(2),
   operation_key: z.string(),
   execution_fingerprint: z.string(),
-  admitted_at: z.union([z.string(), z.number()]),
-  deadline_at: z.union([z.string(), z.number()]),
+  admitted_at: z.unknown().transform((value) => retainedDataDatabaseTimestamp(value).getTime()),
+  deadline_at: z.unknown().transform((value) => retainedDataDatabaseTimestamp(value).getTime()),
   kind: z.string(),
   status: z.string(),
   execution_state: z.unknown(),
@@ -106,7 +105,10 @@ const rowSchema = z.object({
     .unknown()
     .transform((value) => (value === null ? null : retainedDataDatabaseTimestamp(value))),
   ownership_version: z.number().int(),
-  metadata: z.unknown(),
+  execution_ref: z.object({
+    execution: executionRefSchema,
+    childReservations: z.array(z.record(z.string(), z.unknown())).max(32),
+  }),
   execution_completion: workerSchema.nullable(),
 });
 const mutableSchema = z.strictObject({
@@ -235,14 +237,7 @@ export function dataChildRecord(child: {
 }
 /** The children a job row records, as `dataExecutionChildren` composes them. */
 function rowChildren(row: z.infer<typeof rowSchema>): Record<string, unknown>[] {
-  const { childReservations } = z
-    .object({
-      dataExecution: z.object({
-        childReservations: z.array(z.record(z.string(), z.unknown())).max(32).optional(),
-      }),
-    })
-    .parse(row.metadata).dataExecution;
-  return dataExecutionChildren(childReservations ?? [], row.execution_progress);
+  return dataExecutionChildren(row.execution_ref.childReservations, row.execution_progress);
 }
 export const dataTerminalReceiptDigest = (status: DataExecutionStatus) =>
   controlDigest({ version: 1, status: dataExecutionStatusSchema.parse(status) });
@@ -253,15 +248,13 @@ function statusOf(raw: unknown) {
     id: row.id,
     operationKey: row.operation_key,
     fingerprint: row.execution_fingerprint,
-    admittedAt: Number(row.admitted_at),
-    deadlineAt: Number(row.deadline_at),
+    admittedAt: row.admitted_at,
+    deadlineAt: row.deadline_at,
     kind: row.kind,
     status: row.status,
     ...state,
   });
-  const execution = z
-    .object({ dataExecution: z.object({ execution: executionRefSchema }) })
-    .parse(row.metadata).dataExecution.execution;
+  const { execution } = row.execution_ref;
   if (
     execution.executionId !== status.id ||
     execution.operationKey !== status.operationKey ||
@@ -291,10 +284,9 @@ export function createDataExecutionControlJournal(
   // Each execution's row lives on its job row.
   local.rows = dataJobExecutionRows(database);
   async function load(execution: ExecutionRef) {
-    const rows = await database.unsafe(
-      "SELECT * FROM data_manager.jobs WHERE execution_version=2 AND operation_key=$1",
-      [execution.operationKey],
-    );
+    const rows = await database.unsafe("SELECT * FROM data_manager.jobs WHERE operation_key=$1", [
+      execution.operationKey,
+    ]);
     if (rows.length !== 1) throw Error("Original data journal row required");
     const value = statusOf(rows[0]);
     if (controlDigest(value.execution) !== controlDigest(execution))
@@ -304,7 +296,7 @@ export function createDataExecutionControlJournal(
   /** Records how the worker ended, once. */
   async function recordCompletion(execution: ExecutionRef, completion: unknown) {
     const written = await database.unsafe(
-      "UPDATE data_manager.jobs SET execution_completion=$2::text::jsonb WHERE execution_version=2 AND operation_key=$1 AND execution_completion IS NULL RETURNING id",
+      "UPDATE data_manager.jobs SET execution_completion=$2::text::jsonb WHERE operation_key=$1 AND execution_completion IS NULL RETURNING id",
       [execution.operationKey, canonicalJson(workerSchema.parse(completion))],
     );
     if (written.length !== 1) throw Error("Original worker completion exists");
@@ -538,7 +530,7 @@ export function createDataExecutionControlJournal(
         publication: "unknown",
       };
       const rows = await database.unsafe(
-        "UPDATE data_manager.jobs SET status=$1,execution_state=$2::text::jsonb,finished_at=NULL,ownership_version=ownership_version+1 WHERE id=$3::uuid AND execution_version=2 AND operation_key=$4 AND ownership_version=$5 RETURNING id",
+        "UPDATE data_manager.jobs SET status=$1,execution_state=$2::text::jsonb,finished_at=NULL,ownership_version=ownership_version+1 WHERE id=$3::uuid AND operation_key=$4 AND ownership_version=$5 RETURNING id",
         [
           status.status,
           canonicalJson({

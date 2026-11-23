@@ -21,7 +21,6 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
 import {
   assertErasureJournalKey,
   isErasedSubject,
@@ -34,6 +33,7 @@ import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
 import { completeCliCommand } from "../lib/control-context";
+import { databaseClientExec } from "../lib/database-session";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 import { withHostTargets } from "../lib/host-effect";
 import { log, table } from "../lib/output";
@@ -1053,7 +1053,6 @@ export function validateRestoreDataProtection(
 
 interface RestoredUser {
   id: string;
-  email: string;
 }
 
 export async function replayErasureRequests(opts: {
@@ -1084,9 +1083,7 @@ async function listRestoredUsers(
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       user,
@@ -1094,7 +1091,7 @@ async function listRestoredUsers(
       database,
       "-At",
       "-c",
-      `SELECT json_build_object('id', id, 'email', email)::text FROM "user"`,
+      `SELECT json_build_object('id', id)::text FROM "user"`,
     ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
   );
@@ -1105,10 +1102,10 @@ async function listRestoredUsers(
     .filter(Boolean)
     .map((line) => {
       const parsed = JSON.parse(line) as Partial<RestoredUser>;
-      if (typeof parsed.id !== "string" || typeof parsed.email !== "string") {
+      if (typeof parsed.id !== "string") {
         throw new Error("Restored user query returned invalid data");
       }
-      return { id: parsed.id, email: parsed.email };
+      return { id: parsed.id };
     });
 }
 
@@ -1119,57 +1116,15 @@ async function eraseRestoredUser(
   database: string,
   restoredUser: RestoredUser,
 ): Promise<void> {
-  const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(restoredUser);
-  const copyRow = [restoredUser.id, restoredUser.email, emailIdentifier, changeEmailIdentifier]
-    .map(postgresCopyTextField)
-    .join("\t");
+  // The temp table carries the id as COPY data, never as SQL text. Deleting
+  // the row runs the database's erasure trigger, which clears every residue
+  // it can identify; offline-package rows, keyed by a hash only the API can
+  // compute, stay until their retention ends.
   const statement = `BEGIN;
-CREATE TEMP TABLE _openmapx_erasure_subject (
-  user_id text NOT NULL,
-  user_email text NOT NULL,
-  verification_email text NOT NULL,
-  verification_change_email text NOT NULL
-) ON COMMIT DROP;
-COPY _openmapx_erasure_subject (
-  user_id, user_email, verification_email, verification_change_email
-) FROM STDIN;
-${copyRow}
+CREATE TEMP TABLE _openmapx_erasure_subject (user_id text NOT NULL) ON COMMIT DROP;
+COPY _openmapx_erasure_subject (user_id) FROM STDIN;
+${postgresCopyTextField(restoredUser.id)}
 \\.
-UPDATE data_subject_request request
-SET account_state = 'deleted',
-    version = request.version + 1,
-    updated_at = CURRENT_TIMESTAMP
-FROM _openmapx_erasure_subject subject
-WHERE request.user_id = subject.user_id
-  AND request.account_state <> 'deleted';
-DELETE FROM verification verification
-USING _openmapx_erasure_subject subject
-WHERE verification.value = subject.user_id
-   OR lower(verification.identifier) = lower(subject.verification_email)
-   OR lower(verification.identifier) = lower(subject.verification_change_email);
-UPDATE system_settings settings
-SET updated_by = NULL
-FROM _openmapx_erasure_subject subject
-WHERE settings.updated_by = subject.user_id;
-UPDATE admin_audit_log audit
-SET actor_id = NULL, ip_address = NULL, user_agent = NULL
-FROM _openmapx_erasure_subject subject
-WHERE audit.actor_id = subject.user_id;
-UPDATE admin_audit_log audit
-SET target_id = NULL
-FROM _openmapx_erasure_subject subject
-WHERE audit.target_id = subject.user_id;
-UPDATE admin_audit_log audit
-SET details = NULL
-FROM _openmapx_erasure_subject subject
-WHERE position(subject.user_id in audit.details::text) > 0
-   OR position(lower(subject.user_email) in lower(audit.details::text)) > 0;
-DELETE FROM app_logs logs
-USING _openmapx_erasure_subject subject
-WHERE position(subject.user_id in logs.msg) > 0
-   OR position(lower(subject.user_email) in lower(logs.msg)) > 0
-   OR position(subject.user_id in logs.metadata::text) > 0
-   OR position(lower(subject.user_email) in lower(logs.metadata::text)) > 0;
 DELETE FROM "user" restored_user
 USING _openmapx_erasure_subject subject
 WHERE restored_user.id = subject.user_id;
@@ -1179,9 +1134,7 @@ COMMIT;
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       postgresUser,
@@ -1207,9 +1160,7 @@ async function failRestoredJobs(
     "docker",
     [
       ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
+      ...databaseClientExec(serviceId),
       "psql",
       "-U",
       postgresUser,
@@ -1548,10 +1499,10 @@ function databaseContainer(
               "docker",
               [
                 ...ctx.composeArgs,
-                "exec",
-                "-T",
-                ...(catalogsOnly ? ["-e", `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : []),
-                serviceId,
+                ...databaseClientExec(
+                  serviceId,
+                  catalogsOnly ? [`PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : [],
+                ),
                 ...command,
               ],
               {
@@ -1620,7 +1571,16 @@ async function loadPlainDump(
   });
   const psql = execa(
     "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "psql", "-U", user, "-v", "ON_ERROR_STOP=1", db],
+    [
+      ...ctx.composeArgs,
+      ...databaseClientExec(serviceId),
+      "psql",
+      "-U",
+      user,
+      "-v",
+      "ON_ERROR_STOP=1",
+      db,
+    ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
   );
 
@@ -1641,7 +1601,7 @@ async function execWithArchive(
   archive: string,
   preamble: string,
 ): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
-  const sub = execa("docker", [...ctx.composeArgs, "exec", "-T", serviceId, ...command], {
+  const sub = execa("docker", [...ctx.composeArgs, ...databaseClientExec(serviceId), ...command], {
     ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,

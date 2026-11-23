@@ -174,8 +174,8 @@ before retrying. See [Configuration](../install/configuration.md).
 
 ### Credentials
 
-Set declared secret fields here, with `OPENMAPX_SECRETS_KEY` configured for the
-API vault. Values are encrypted in the database and rendered as private files;
+Set declared secret fields here. The API vault uses the secrets key the render
+generates (`infra/docker/secrets/secrets-key`). Values are encrypted in the database and rendered as private files;
 containers receive `<KEY>_FILE=/run/secrets/<KEY>`. The API returns status and
 masked values instead of the credential body.
 
@@ -479,7 +479,9 @@ removed 72 hours after its root key expired, once its outcome is known and any
 target lease it held is released. Records of an operation whose outcome is
 unknown, or that needs recovery, are kept; age alone never authorizes deleting a
 lock or replaying an effect. A failed prune pass is logged as a warning and
-retried at the next pass.
+retried at the next pass. A Data Manager job outlives its control records: the
+prune removes only the job's execution row, and the API deletes the finished
+job, with the account that started it, 90 days after it finished.
 
 A service refuses new control work while its control state filesystem has less
 than 64 MiB free. Free space on that filesystem and retry; recorded work is not

@@ -83,7 +83,7 @@ import {
   ProviderHealth,
   setProviderHealth,
 } from "./services/provider-health/registry";
-import { getSecret, isSecretsConfigured } from "./services/secrets";
+import { getSecret, secretsKeyProblem } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "./services/upstream-runtime";
 
@@ -880,23 +880,23 @@ export async function initIntegrations(
   const sorted = topologicalSort(discovered);
 
   // Hard-fail at startup when any selected integration declares vault-backed
-  // secret fields but OPENMAPX_SECRETS_KEY is missing. The lazy fallback in
+  // secret fields but the secrets key is unusable. The lazy fallback in
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
   // surfaces it as a boot error with a clear remediation hint.
-  if (!isSecretsConfigured()) {
+  const keyProblem = secretsKeyProblem();
+  if (keyProblem) {
     const requiringSecrets = sorted.filter((d) =>
       manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
       const names = requiringSecrets.map((d) => d.manifest.id).join(", ");
       throw new Error(
-        `OPENMAPX_SECRETS_KEY is not set but the following integrations require it: ${names}. ` +
-          `Generate a key with: openssl rand -hex 32`,
+        `The secrets key is not usable, but the following integrations require it: ${names}. ${keyProblem}`,
       );
     }
     fastify.log.warn(
-      "OPENMAPX_SECRETS_KEY is not set — vault-backed integration secrets cannot be stored or decrypted",
+      `The secrets key is not usable, so vault-backed integration secrets cannot be stored or decrypted. ${keyProblem}`,
     );
   }
 

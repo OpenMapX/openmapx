@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { i18n } from "@better-auth/i18n";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
@@ -23,6 +22,7 @@ import {
 } from "./account/credential-change-policy";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
 import { shareGenericOAuthProviders } from "./account/shared-oauth-providers";
+import { schemaIndexes } from "./auth/schema-indexes-plugin";
 import {
   exchangeMapillaryAuthorizationCode,
   fetchMapillaryUserInfo,
@@ -34,6 +34,7 @@ import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
 import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
+import { actorUserIdOrNull } from "./utils/actor";
 import { type AdminAuditCtx, handleAdminAuditEvent } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendAuthMail } from "./utils/email";
@@ -199,10 +200,10 @@ function createPolicyAuth(
         await currentAuthDatabase()
           .insert(adminAuditLog)
           .values({
-            id: randomUUID(),
             actorId: null,
             targetType: "user",
             targetId: user.id,
+            targetUserId: actorUserIdOrNull(user.id),
             action: "user.password.reset",
             details: { channel: "email" },
           });
@@ -425,6 +426,8 @@ function createPolicyAuth(
       }),
       jwt(),
       oauthProvider(managedOAuthProviderOptions),
+      // After the plugins whose tables it indexes.
+      schemaIndexes(),
     ],
   } satisfies BetterAuthOptions;
 

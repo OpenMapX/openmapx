@@ -1,8 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
+import { REQUEST_EVENT_IDEMPOTENCY_KEY } from "../db/privacy-schema.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
 import { isUniqueViolation } from "../db/unique-violation.js";
+import { actorUserIdOrNull } from "../utils/actor.js";
 import { PrivacyRequestError } from "./errors.js";
 import { eventPayloadSchema } from "./request-contracts.js";
 
@@ -69,7 +71,7 @@ export async function findIdempotentEvent(
  */
 export async function findIdempotentCreate(
   database: typeof defaultDb,
-  input: { idempotencyKey: string; actorId: string | null; operationDigest: string },
+  input: { idempotencyKey: string; actorUserId: string | null; operationDigest: string },
 ) {
   if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) throw new PrivacyIdempotencyError();
   const rows = await database
@@ -79,9 +81,9 @@ export async function findIdempotentCreate(
       and(
         eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
         eq(dataSubjectRequestEvent.eventType, "received"),
-        input.actorId === null
-          ? isNull(dataSubjectRequestEvent.actorId)
-          : eq(dataSubjectRequestEvent.actorId, input.actorId),
+        input.actorUserId === null
+          ? isNull(dataSubjectRequestEvent.actorUserId)
+          : eq(dataSubjectRequestEvent.actorUserId, input.actorUserId),
       ),
     )
     .limit(1);
@@ -99,7 +101,7 @@ export async function recordIdempotentEvent(
     idempotencyKey: string;
     eventType: string;
     actorKind: string;
-    actorId?: string | null;
+    actorUserId?: string | null;
     payload?: Record<string, unknown>;
     operationDigest?: string;
   },
@@ -112,18 +114,17 @@ export async function recordIdempotentEvent(
   });
   try {
     await database.insert(dataSubjectRequestEvent).values({
-      id: randomUUID(),
       requestId: input.requestId,
       eventType: input.eventType,
       actorKind: input.actorKind.slice(0, 32),
-      actorId: input.actorId ? input.actorId.slice(0, 256) : null,
+      actorUserId: actorUserIdOrNull(input.actorUserId),
       payloadVersion: 1,
       payload,
       idempotencyKey: input.idempotencyKey,
       createdAt: new Date(),
     });
   } catch (error) {
-    if (isUniqueViolation(error, "data_subject_request_event_idempotency_idx")) {
+    if (isUniqueViolation(error, REQUEST_EVENT_IDEMPOTENCY_KEY)) {
       await findIdempotentEvent(database, {
         requestId: input.requestId,
         idempotencyKey: input.idempotencyKey,

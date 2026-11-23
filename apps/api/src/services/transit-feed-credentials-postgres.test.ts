@@ -104,7 +104,7 @@ describe.skipIf(!enabled)(
       pauseKind = scenario.pauseAt;
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
       state.fixture = await createConfigurationPostgresFixture({
         withAccountAdministration: true,
         withConfigurationMigration: scenario.configurationMigration,
@@ -338,7 +338,6 @@ describe.skipIf(!enabled)(
       assert.exists(pins, "no catalog pin set is installed");
       const catalog = pins.generationId;
       const prior = {
-        id: randomUUID(),
         serviceId: "data-manager",
         key: "TRANSITOUS_API_KEYS",
         ...encrypt('{"orphan":" untouched "}'),
@@ -410,13 +409,12 @@ describe.skipIf(!enabled)(
           retained: "c".repeat(7000),
         });
         // Actual declared source vault export under a different source master key.
-        vi.stubEnv("OPENMAPX_SECRETS_KEY", "92".repeat(32));
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x92).toString("base64url"));
         await state.fixture.db
           .update(schema.serviceSecret)
           .set(encrypt(importedMap))
           .where(eq(schema.serviceSecret.key, "TRANSITOUS_API_KEYS"));
         await state.fixture.db.insert(schema.serviceSecret).values({
-          id: randomUUID(),
           serviceId: "data-manager",
           key: "ORDINARY_TOKEN",
           ...encrypt("synthetic ordinary credential"),
@@ -433,9 +431,8 @@ describe.skipIf(!enabled)(
           passphrase: "synthetic transfer passphrase",
         });
         await state.fixture.db.delete(schema.serviceSecret);
-        vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+        vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
         await state.fixture.db.insert(schema.serviceSecret).values({
-          id: randomUUID(),
           serviceId: "data-manager",
           key: "TRANSITOUS_API_KEYS",
           ...encrypt(
@@ -668,7 +665,7 @@ describe.skipIf(!enabled)(
         // lease, beside its prepared fence.
         expect(dm.posts).toBe(2);
         const links = await state.fixture
-          .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${startedAt}`;
+          .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${new Date(startedAt).toISOString()}::text::timestamptz`;
         expect(links).toHaveLength(1);
         expect(links[0]).toMatchObject({ status: "ok" });
         expect(itemAt(links, 0).execution_input.leaseId).toEqual(expect.any(String));

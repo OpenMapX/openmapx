@@ -1,8 +1,9 @@
 import type { SavedPlaceFieldContributors } from "@openmapx/core/saved-place-contributors";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -10,31 +11,34 @@ import {
   text,
   timestamp,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /** Unique per account; a write that repeats a list name raises this constraint. */
-export const SAVED_LIST_NAME_UNIQUE = "savedList_userId_name_unq";
+export const SAVED_LIST_NAME_UNIQUE = "saved_list_user_id_name_key";
 
 export const savedList = pgTable(
   "saved_list",
   {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    userId: text("user_id").notNull(),
     name: text("name").notNull(),
     icon: text("icon"),
     isPrivate: boolean("is_private").default(true).notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [
-    index("savedList_userId_idx").on(table.userId),
+    foreignKey({
+      name: "saved_list_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
     unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name),
   ],
 );
@@ -42,10 +46,8 @@ export const savedList = pgTable(
 export const savedPlace = pgTable(
   "saved_place",
   {
-    id: text("id").primaryKey(),
-    listId: text("list_id")
-      .notNull()
-      .references(() => savedList.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    listId: uuid("list_id").notNull(),
     name: text("name").notNull(),
     address: text("address"),
     lat: doublePrecision("lat").notNull(),
@@ -54,18 +56,23 @@ export const savedPlace = pgTable(
     fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
     note: text("note"),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("savedPlace_listId_idx").on(table.listId)],
+  (table) => [
+    foreignKey({
+      name: "saved_place_list_id_fkey",
+      columns: [table.listId],
+      foreignColumns: [savedList.id],
+    }).onDelete("cascade"),
+    index("saved_place_list_id_idx").on(table.listId),
+  ],
 );
 
 export const labeledPlace = pgTable(
   "labeled_place",
   {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    userId: text("user_id").notNull(),
     label: text("label").notNull(),
     icon: text("icon"),
     name: text("name").notNull(),
@@ -76,8 +83,12 @@ export const labeledPlace = pgTable(
     fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
   },
   (table) => [
-    index("labeledPlace_userId_idx").on(table.userId),
-    unique("labeledPlace_userId_label_unq").on(table.userId, table.label),
+    foreignKey({
+      name: "labeled_place_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    unique("labeled_place_user_id_label_key").on(table.userId, table.label),
   ],
 );
 

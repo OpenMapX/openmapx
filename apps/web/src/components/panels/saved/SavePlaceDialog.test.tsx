@@ -19,8 +19,8 @@ const place = createPlace({
   coordinates: [8, 50],
 });
 const row = {
-  id: "sp1",
-  listId: "l1",
+  id: "0193e4a0-0000-7000-8000-000000000101",
+  listId: "0193e4a0-0000-7000-8000-000000000001",
   name: "Place",
   placeId: place.id,
   lat: 50,
@@ -46,7 +46,7 @@ function setup(initial = false, savedPlace = place) {
   const rows: SavedPlace[] = initial ? [row] : [];
   const lists: SavedList[] = [
     {
-      id: "l1",
+      id: "0193e4a0-0000-7000-8000-000000000001",
       name: "Trip",
       icon: null,
       isPrivate: true,
@@ -67,7 +67,7 @@ function setup(initial = false, savedPlace = place) {
         rejectCreate = reject;
         finishCreate = () => {
           const list = {
-            id: "l2",
+            id: "0193e4a0-0000-7000-8000-000000000002",
             name: (data as { name: string }).name,
             icon: null,
             isPrivate: true,
@@ -87,7 +87,7 @@ function setup(initial = false, savedPlace = place) {
           ...row,
           ...(data as object),
           listId: String(url).split("/").at(-2),
-          id: "sp1",
+          id: "0193e4a0-0000-7000-8000-000000000101",
         } as SavedPlace;
         if (!rows.some((existing) => existing.id === saved.id)) rows.push(saved);
         resolve(saved);
@@ -185,7 +185,9 @@ describe("saved-place membership intent", () => {
     fixture.rows.push(row);
     await act(async () => fixture.client.invalidateQueries({ queryKey: ["savedCheck", place.id] }));
     await waitFor(() =>
-      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]),
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([
+        "0193e4a0-0000-7000-8000-000000000001",
+      ]),
     );
     await act(async () => fixture.finishPost());
     await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
@@ -322,7 +324,9 @@ describe("saved-place failure and creation reconciliation", () => {
       }
       await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
       expect(fixture.rows).toEqual([row]);
-      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]);
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([
+        "0193e4a0-0000-7000-8000-000000000001",
+      ]);
       if (failure === "lookup") expect(fixture.remove).not.toHaveBeenCalled();
       await reopen(fixture);
       await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
@@ -357,7 +361,7 @@ describe("saved-place failure and creation reconciliation", () => {
       await act(async () => fixture.finishCreate());
       await waitFor(() => expect(fixture.post).toHaveBeenCalledTimes(2));
       expect(fixture.post).toHaveBeenLastCalledWith(
-        `${API_ENDPOINTS.savedLists}/l2/places`,
+        `${API_ENDPOINTS.savedLists}/0193e4a0-0000-7000-8000-000000000002/places`,
         expect.objectContaining({ placeId: place.id, name: place.name, lat: 50, lng: 8 }),
       );
       await act(async () => {
@@ -367,7 +371,7 @@ describe("saved-place failure and creation reconciliation", () => {
       await screen.findByText("New list");
       await waitFor(() =>
         expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(
-          outcome === "save failure" ? [] : ["l2"],
+          outcome === "save failure" ? [] : ["0193e4a0-0000-7000-8000-000000000002"],
         ),
       );
       expect(fixture.rows).toHaveLength(outcome === "save failure" ? 0 : 1);
@@ -406,10 +410,14 @@ describe("saved-place failure and creation reconciliation", () => {
     fixture.get.mockImplementation(original);
     await act(async () => fixture.finishPost());
     await waitFor(() =>
-      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]),
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([
+        "0193e4a0-0000-7000-8000-000000000001",
+      ]),
     );
     await act(async () => finishRead());
-    expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]);
+    expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([
+      "0193e4a0-0000-7000-8000-000000000001",
+    ]);
     expect(screen.getByRole("checkbox")).toBeChecked();
     expect(fixture.rows).toEqual([row]);
     await reopen(fixture);

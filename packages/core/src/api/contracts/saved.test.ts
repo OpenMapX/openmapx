@@ -15,7 +15,13 @@ import {
 
 describe("canonical saved wire shapes", () => {
   it("distinguishes creation receipts and acknowledgements from complete list records", () => {
-    const created = { id: "list", name: "Trip", icon: null, isPrivate: true };
+    const created = {
+      id: "0193e4a0-0000-7000-8000-000000000001",
+      name: "Trip",
+      icon: null,
+      isPrivate: true,
+    };
+    expect(savedListCreatedSchema.safeParse({ ...created, id: "list" }).success).toBe(false);
     expect(savedListCreatedSchema.safeParse(created).success).toBe(true);
     expect(savedListSchema.safeParse(created).success).toBe(false);
     expect(
@@ -28,7 +34,12 @@ describe("canonical saved wire shapes", () => {
       }).success,
     ).toBe(true);
     expect(savedOkSchema.parse({ ok: true })).toEqual({ ok: true });
-    expect(savedLabelWrittenSchema.safeParse({ id: "label", label: "home" }).success).toBe(true);
+    expect(
+      savedLabelWrittenSchema.safeParse({
+        id: "0193e4a0-0000-7000-8000-000000000201",
+        label: "home",
+      }).success,
+    ).toBe(true);
     expect(savedListCreatedSchema.safeParse({ ok: true }).success).toBe(false);
   });
   it("retains complete captured licence policy and authoritative empty field receipts", () => {

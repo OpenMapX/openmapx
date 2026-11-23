@@ -28,7 +28,12 @@ export async function createConfigurationPostgresFixture(
       "integration_secret",
       "transit_credential_preview",
       ...(options.withConfigurationMigration
-        ? ["configuration_migration_preview", "system_settings", "platform_configuration_preview"]
+        ? [
+            "configuration_migration_preview",
+            "system_settings",
+            "system_secret",
+            "platform_configuration_preview",
+          ]
         : []),
       ...(options.withAccountAdministration
         ? [

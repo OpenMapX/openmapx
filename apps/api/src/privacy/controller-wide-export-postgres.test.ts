@@ -34,6 +34,8 @@ import { PrivacyRequestService } from "./request-service.js";
 
 const SUBJECT_ID = "controller-acceptance-subject";
 const FOREIGN_ID = "controller-acceptance-foreign";
+/** The administrator who decides on assisted cases; events reference the account. */
+const ADMIN_ID = "controller-acceptance-admin";
 const SESSION_ID = "controller-acceptance-session";
 const OPERATOR_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy === "operator_task").map(
   (r) => r.id,
@@ -138,6 +140,13 @@ async function seedSubject() {
       createdAt,
       updatedAt: createdAt,
     },
+    {
+      id: ADMIN_ID,
+      name: "Controller acceptance administrator",
+      email: "admin@example.test",
+      createdAt,
+      updatedAt: createdAt,
+    },
   ]);
   await db.insert(account).values([
     {
@@ -163,14 +172,14 @@ async function seedSubject() {
   ]);
   await db.insert(savedList).values([
     {
-      id: "controller-acceptance-list",
+      id: "0193e4a0-0000-7000-8006-000000000002",
       userId: SUBJECT_ID,
       name: "Subject hiking list",
       createdAt,
       updatedAt: createdAt,
     },
     {
-      id: "controller-acceptance-foreign-list",
+      id: "0193e4a0-0000-7000-8006-000000000003",
       userId: FOREIGN_ID,
       name: "FOREIGN-SAVED-LIST",
       createdAt,
@@ -178,7 +187,7 @@ async function seedSubject() {
     },
   ]);
   await db.insert(personalTimelineConnection).values({
-    id: "controller-acceptance-timeline",
+    id: "0193e4a0-0000-7000-8006-000000000004",
     userId: SUBJECT_ID,
     mode: "managed",
     publicOrigin: "https://timeline.example.test",
@@ -328,6 +337,7 @@ beforeEach(async () => {
   await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
+  await db.delete(user).where(eq(user.id, ADMIN_ID));
   await seedSubject();
 });
 
@@ -336,6 +346,7 @@ afterEach(async () => {
   await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
+  await db.delete(user).where(eq(user.id, ADMIN_ID));
   vi.unstubAllEnvs();
   await rm(temporary, { recursive: true, force: true });
 });
@@ -487,7 +498,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 60_000);
 
     it("lets a freshly signed-in owner verify and download an admin-created case linked to the account", async () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("base64url"));
       const service = new PrivacyRequestService({ database: db });
       // An administrator recorded a postal request and linked it to the account.
       const assisted = await service.create({
@@ -557,7 +568,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 60_000);
 
     it("returns a linked case that waits on the requester to work with the same verification", async () => {
-      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("base64url"));
       const service = new PrivacyRequestService({ database: db });
       const assisted = await service.create({
         channel: "email",
@@ -572,7 +583,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         version: assisted.version,
         decision: "waiting_on_requester",
         reasonCode: "asked-for-identity",
-        actorId: "controller-acceptance-admin",
+        actorId: ADMIN_ID,
         idempotencyKey: `wait-${assisted.id}`,
       });
       expect(waiting.state).toBe("waiting_on_requester");

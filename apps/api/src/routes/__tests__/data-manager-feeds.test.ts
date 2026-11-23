@@ -94,7 +94,6 @@ describe("GET /data-manager/transit/feeds", () => {
   it("returns paginated feed_state rows", async () => {
     fakeDb.feeds = [
       {
-        id: "uuid-1",
         region: "de",
         name: "delfi",
         lastFetchedAt: new Date("2026-05-21T03:00:00.000Z"),

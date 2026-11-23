@@ -1,13 +1,25 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+
+/** Unique per external operation; recording one twice raises this index. */
+export const DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY = "data_disclosure_event_idempotency_key_key";
 
 /** Minimal account-linked recipient ledger; payloads and query content are intentionally absent. */
 export const dataDisclosureEvent = pgTable(
   "data_disclosure_event",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    userId: text("user_id"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recipientId: text("recipient_id").notNull(),
     recipientName: text("recipient_name").notNull(),
@@ -26,9 +38,18 @@ export const dataDisclosureEvent = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("data_disclosure_event_user_occurred_idx").on(table.userId, table.occurredAt),
-    index("data_disclosure_event_recipient_idx").on(table.recipientId, table.occurredAt),
-    uniqueIndex("data_disclosure_event_idempotency_idx")
+    foreignKey({
+      name: "data_disclosure_event_user_id_fkey",
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete("set null"),
+    index("data_disclosure_event_user_id_occurred_at_idx").on(table.userId, table.occurredAt),
+    index("data_disclosure_event_recipient_id_occurred_at_idx").on(
+      table.recipientId,
+      table.occurredAt,
+    ),
+    index("data_disclosure_event_occurred_at_idx").on(table.occurredAt),
+    uniqueIndex(DATA_DISCLOSURE_EVENT_IDEMPOTENCY_KEY)
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),
     check(

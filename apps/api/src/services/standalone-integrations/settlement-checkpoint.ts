@@ -24,7 +24,7 @@ export async function assertStandaloneSettlementCheckpoint(
   operation: OpsOperation,
   connection: Pick<typeof db, "execute" | "select">,
 ): Promise<void> {
-  if (row.type === "standalone.adopt" || row.type === "standalone.remove")
+  if (row.type === "standalone.remove")
     return assertOwnershipSettlementCheckpoint(row, operation, connection);
   if (row.type !== "standalone.install" || operation.kind !== "integration.settle")
     throw new JobOwnershipLost();
@@ -107,7 +107,7 @@ export async function assertStandaloneSettlementCheckpoint(
       parent.installationKind !== "standalone" ||
       parent.sourceTrust !== "community" ||
       parent.provenance?.contentDigest !== state.inspection.contentDigest ||
-      integration?.managedByExtension !== state.parentId ||
+      !integration ||
       integration.installedVersion !== state.inspection.version ||
       component?.extensionId !== state.parentId
     )
@@ -115,8 +115,7 @@ export async function assertStandaloneSettlementCheckpoint(
   } else if (
     state.phase !== "restore" ||
     parent?.lastOperationId === state.operationId ||
-    (component && component.extensionId !== state.parentId) ||
-    (integration?.managedByExtension && integration.managedByExtension !== state.parentId)
+    (component && component.extensionId !== state.parentId)
   )
     throw new JobOwnershipLost();
   // The unchanged parent/body/address checks in the caller and the agent's own

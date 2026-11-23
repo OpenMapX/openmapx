@@ -1,5 +1,6 @@
 /** Private immutable encrypted proposals; public intents contain no value-derived hashes. */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import type { FeedCredentialChange } from "@openmapx/transitous-core/feed-credentials";
@@ -142,7 +143,7 @@ export async function retainFeedCredentialPreview(
     );
     if (total >= 4096 || actor >= 100)
       throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_PREVIEW_CAPACITY");
-    const previewId = randomUUID(),
+    const previewId = uuidv7(),
       expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     const preview: FeedCredentialChangePreview = {
       previewId,

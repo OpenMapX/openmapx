@@ -1,7 +1,6 @@
 /** One finite managed-map adapter in the existing configuration writer/transaction. */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
 import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import {
@@ -498,16 +497,17 @@ export async function persistPreparedFeedCredentialRow(input: {
         })
         .where(
           and(
-            eq(serviceSecret.id, before.id),
+            eq(serviceSecret.serviceId, SERVICE),
+            eq(serviceSecret.key, KEY),
             sql`xmin::text = ${(before as typeof before & { _rowVersion?: string })._rowVersion}`,
           ),
         )
-        .returning({ id: serviceSecret.id })
+        .returning({ key: serviceSecret.key })
     : await tx
         .insert(serviceSecret)
         .values({ ...next, updatedBy: input.writer.actorId })
         .onConflictDoNothing()
-        .returning({ id: serviceSecret.id });
+        .returning({ key: serviceSecret.key });
   if (changed.length !== 1) throw new TransitCredentialConflict();
   const { preview } = state;
   if (!preview) throw new TransitCredentialConflict();
@@ -530,7 +530,6 @@ export async function persistPreparedFeedCredentialRow(input: {
     .returning({ id: transitCredentialPreview.id });
   if (marked.length !== 1) throw new TransitCredentialConflict();
   await tx.insert(adminAuditLog).values({
-    id: randomUUID(),
     action: "transit.credentials.update",
     actorId: input.writer.actorId,
     targetType: "transit.credentials",

@@ -45,6 +45,6 @@ After updating, optionally remove what the API no longer reads:
   `LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS`.
 
 `PRIVACY_DEADLINE_REMINDER_INTERVAL_MS` replaces the escalation interval.
-Assisted requests encrypt the requester's locator with the existing
-`OPENMAPX_SECRETS_KEY`. Give a person who used `privacy_admin` the `admin` role
+Assisted requests encrypt the requester's locator with the API's existing
+secrets key (`infra/docker/secrets/secrets-key`). Give a person who used `privacy_admin` the `admin` role
 if they should keep handling privacy cases.

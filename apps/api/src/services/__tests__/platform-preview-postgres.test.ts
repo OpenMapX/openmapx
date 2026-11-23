@@ -47,7 +47,7 @@ dbDescribe("durable exact platform preview", () => {
     fixture = await createMigratedPostgresFixture();
     connection.fixture = fixture;
     connection.source.sourceRevision = randomUUID();
-    vi.stubEnv("OPENMAPX_SECRETS_KEY", "41".repeat(32));
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x41).toString("base64url"));
   }, 90000);
   afterAll(async () => {
     await fixture?.stop();

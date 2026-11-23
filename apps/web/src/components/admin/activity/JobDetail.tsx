@@ -309,7 +309,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
           ) : (
             data.logs.map((log) => (
               <Box
-                key={log.id}
+                key={log.seq}
                 component="div"
                 sx={{ color: log.stream === "stderr" ? "error.300" : "grey.100" }}
               >

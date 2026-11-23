@@ -1,6 +1,7 @@
 /** Read-only acquisition plus immutable, actor-bound reviewed previews. */
 import { createHash, randomUUID } from "node:crypto";
 import { adminPlatformPreviewInputSchema } from "@openmapx/core/api-contracts";
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
@@ -29,10 +30,7 @@ export async function inspectPlatformConfiguration() {
   const pending = await db
     .select({ jobId: adminJob.id, status: adminJob.status })
     .from(platformConfigurationPreview)
-    .innerJoin(
-      adminJob,
-      eq(adminJob.id, sql`${platformConfigurationPreview.consumedByJobId}::text`),
-    )
+    .innerJoin(adminJob, eq(adminJob.id, platformConfigurationPreview.consumedByJobId))
     .where(
       and(
         isNotNull(platformConfigurationPreview.consumedByJobId),
@@ -84,7 +82,7 @@ export async function previewPlatformConfiguration(input: {
     );
     return services.buildPlatformConfigurationPreview({
       actorId: input.actorId,
-      previewId: randomUUID(),
+      previewId: uuidv7(),
       authPolicyRevision: policy.revision,
       sourceRevision: current.sourceRevision,
       currentRevisionId: current.revisionId,

@@ -206,7 +206,7 @@ const CASES: SelectionCase[] = [
       "/api/saved/labels": {
         labels: [
           {
-            id: "label-1",
+            id: "0193e4a0-0000-7000-8000-000000000201",
             label: "home",
             icon: null,
             name: "Wohnung",

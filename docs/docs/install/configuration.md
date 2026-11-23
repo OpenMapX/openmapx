@@ -89,6 +89,29 @@ before it reports healthy.
   ambient places). The API can read those schemas. Data-manager has no access to
   accounts, administrative jobs or saved configuration.
 
+PostGIS, `pg_trgm`, `fuzzystrmatch` and `btree_gist` live in the `extensions`
+schema. It belongs to the superuser, and only the superuser can create objects
+in it; every role may use it. PostGIS installs the extensions there on every
+start, before it reports healthy. The image's own initialisation script, which
+would install PostGIS into `public` together with the topology and TIGER
+geocoder extensions and a `template_postgis` database, is replaced by a no-op.
+PostGIS cannot be moved to another schema once installed.
+
+Each role's search path is set by PostGIS on every start, and settings a role
+gives itself are reset:
+
+| Role                    | Search path          | Notes                                                                                           |
+| ----------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| `openmapx_api`          | `public, extensions` | Reads its own tables from `public` without a schema                                             |
+| `openmapx_data_manager` | `extensions`         | Names the schema of every table; a session idle inside a transaction is closed after 10 minutes |
+| `openmapx_tiles`        | `extensions`         | Martin's login; it asks for the PostGIS version when it connects                                |
+
+The tile functions search `pg_catalog, extensions, pg_temp`. OpenConditions'
+roles need `conditions, extensions`; see
+[Community extensions](../administration/community-extensions.md). No service's
+role but the API's searches `public`, so no function the API creates there can
+stand in for one another service calls without a schema.
+
 Data-manager is the least trusted of the two: its code must never run with the
 API's or the superuser's rights. Two structural rules keep it that way:
 
@@ -117,43 +140,27 @@ The tile server's roles may create nothing at all. PostGIS creates the tile
 function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
 a backup holding any other object of a role that cannot log in, so code that
 runs as the tile owner can leave nothing behind for a restoring superuser.
-PostGIS also revokes from every role but the superuser the right to create
-large objects, which no event trigger sees and nothing in OpenMapX or
-OpenConditions uses.
+The tile owner reads in `conditions` only the tables and functions
+OpenConditions' migration grants it; PostGIS grants it nothing there (see
+[Martin overlays](../guides/map-tiles.md#martin-overlays)). PostGIS also
+revokes from every role but the superuser the right to create large objects,
+which no event trigger sees and nothing in OpenMapX or OpenConditions uses.
 
 These guarantees have known limits:
 
-- PostGIS lives in `public`, which the API owns, and the API may create
-  functions and operators there. Every role finds PostGIS, and any other
-  function or operator called without a schema, through `public`. A compromised
-  API can therefore make any role that calls such a name, with or without the
-  `public.` prefix, run the API's code instead, when the API's version matches
-  the call's types more closely: data-manager, OpenConditions' roles, including
-  the owner of `conditions`, and `openmapx_tiles_owner` through the tile
-  function. It can also run code as data-manager through a trigger, rule, policy
-  or default on the `data_manager` tables it owns. Each such move gives the API
-  that role's rights: data-manager's right to change its schemas,
-  OpenConditions' right to change its tables and functions, the tile owner's
-  right to read every OpenConditions table. None reaches the superuser, as long
-  as no service connects as the superuser. Moving PostGIS into a schema the API
-  cannot write would close this, but PostGIS cannot be moved in place: it would
-  have to be reinstalled, with every spatial column and index that depends on
-  it, and the new schema put ahead of `public` on every role's search path.
-- As the owner of `public`, a compromised API can revoke other roles' use of
-  it, so that data-manager, OpenConditions and the tile function no longer find
-  PostGIS. That stops them working but gives the API none of their rights.
+- A compromised API can run code as data-manager through a trigger, rule,
+  policy or default on the `data_manager` tables it owns. That gives the API
+  data-manager's right to change its schemas, never the superuser's rights, as
+  long as no service connects as the superuser.
 - A superuser session of your own runs a role's code with superuser rights
   when it reads or writes an object that role owns, such as a view, or a table
   with a trigger, default or check constraint, and when it calls a function or
-  operator in `public`, PostGIS's among them, whether by its `public.` name or
-  through its search path. Connect as the owning role, or run
-  `SET search_path = pg_catalog` first and call no PostGIS function.
+  operator in `public` by its `public.` name or through the default search
+  path, which includes `public`. Connect as the owning role, or run
+  `SET search_path = pg_catalog, extensions` first; that also finds PostGIS,
+  which the default search path does not.
 - PostGIS grants every role read access to its catalogue tables
-  (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
-  `topology.topology` and `topology.layer`).
-- OpenConditions installed after PostGIS started needs a PostGIS restart before
-  traffic tiles work. Until then tiles fail with a permission error, and nothing
-  runs as the superuser.
+  (`spatial_ref_sys`, `geometry_columns` and `geography_columns`).
 
 There are no environment variables for these passwords. To change one, delete
 its file, render again and restart PostGIS, `api` and `data-manager`.
@@ -164,11 +171,11 @@ Authentication and internal service secrets. `BETTER_AUTH_SECRET` must contain
 at least 32 characters in production; the CLI validates it before deployment and
 the API validates it again at startup. Generate each with the command shown.
 
-| Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                     | Required / Default                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                              | **Required**                           |
-| `OPENMAPX_SECRETS_KEY`       | 32-byte key encoded as 64 hexadecimal characters for the secret vault, including personal timeline credentials. Preserve it across restarts and restores; losing or changing it makes existing encrypted values unreadable. Generate with `openssl rand -hex 32`.                                                                                                               | **Required** (to use the secret vault) |
-| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`. | Optional (recommended). Default unset  |
+| Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Required / Default                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                                                                                                                                                                                    | **Required**                          |
+| `OPENMAPX_SECRETS_KEY`       | Not set in `.env`. The key that encrypts the secrets the API stores in the database (the credential vault, personal timeline credentials and secret settings such as the SMTP password) is the file `infra/docker/secrets/secrets-key`, which `pnpm openmapx compose render` generates once and mounts into `api` as `OPENMAPX_SECRETS_KEY_FILE`. The API refuses this variable beside the file. The former 64-character hex format is not accepted. See [Generated secret files and recovery](#generated-secret-files-and-recovery). | Do not set                            |
+| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`.                                                                                                                                                       | Optional (recommended). Default unset |
 
 ### Data-manager caller tokens
 
@@ -229,14 +236,19 @@ published named prerelease and fails if none exists. Changing configuration does
 
 `compose render` creates platform files under `infra/docker/secrets/`, including
 Redis authentication, distinct ops-agent tokens, offline-package signing,
-erasure-journal, subject-export, and runner capability keys.
+erasure-journal, subject-export, and runner capability keys, and the API's
+secrets key `secrets-key`: 32 random bytes as 43 base64url characters, mounted
+only into `api` as `OPENMAPX_SECRETS_KEY_FILE`. It encrypts the credential
+vault, personal timeline credentials and secret settings saved in the admin
+panel; losing or changing it makes those values unreadable.
 They belong to the deployment's user (`UID`), which the containers run as. Do not replace them as a
 routine configuration refresh. Managed Dawarich credentials are provisioned
 through its dedicated admin setup, not this renderer.
 
 Ordinary volume backups do not include `.env`, this secret directory, the
 configuration generations, or the erasure journal. Preserve required deployment
-keys and recovery state through a protected operator recovery procedure. See
+keys and recovery state through a protected operator recovery procedure; a
+restored database needs the same `secrets-key` to decrypt its stored secrets. See
 [Backup and restore](../administration/backup-and-restore.md) before testing a
 restore or rotating encryption keys.
 
@@ -582,7 +594,8 @@ Keys and overrides for the `api` traffic and tile proxies.
 
 Used for email verification, password reset, and email-change flows. The provider is
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
-settable in `/admin/settings/email`; env always wins.
+settable in `/admin/settings/email`; env always wins. Passwords, keys and tokens
+saved there are stored encrypted with the API's secrets key, never in clear.
 
 Authentication mail that anyone can trigger for any address (sign-up
 verification, verification resends, password reset and email-change codes) is
@@ -670,7 +683,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `OPENMAPX_DISABLE_LOCALHOST_AUTH`                       | Set to `1` to disable the loopback admin short-circuit entirely, regardless of `OPENMAPX_LOCAL_ADMIN_TOKEN`. Use on multi-tenant hosts where another local process could reach the API's loopback. | Optional. Commented                                                                               |
 | `ISOCHRONE_PROVIDER`                                    | Ground-mode isochrone provider. Only `valhalla` is supported; unset or empty also selects it. Other values fail. Transit reachability uses the separate MOTIS workflow.                            | Optional. Commented. Default `valhalla`                                                           |
 | `AUDIT_LOG_RETENTION_DAYS`                              | Days to keep admin audit-log entries before the daily prune.                                                                                                                                       | Optional. Commented `90`                                                                          |
-| `ADMIN_JOB_RETENTION_DAYS`                              | Days to keep finished admin jobs and data-manager pipeline runs. In-flight jobs and the newest finished run of each pipeline are never pruned.                                                     | Optional. Commented `30`                                                                          |
+| `ADMIN_JOB_RETENTION_DAYS`                              | Days to keep finished admin jobs. In-flight jobs are never pruned. Finished data-manager jobs are kept a fixed 90 days.                                                                            | Optional. Commented `30`                                                                          |
 | `BACKUP_RETENTION_DAYS`                                 | Days to keep local backups. Expired backups are pruned and refused by restore; apply the same lifecycle to off-host copies.                                                                        | Optional. Default `30`                                                                            |
 | `GITHUB_TOKEN`                                          | GitHub API token for catalog requests. Access and rate limits depend on the token and GitHub policy.                                                                                               | Optional. Commented                                                                               |
 | `EXTENSION_CATALOG_URL`                                 | Default catalog URL for the **Extensions** store. Only a URL naming an exact 40-character commit can carry verified trust.                                                                         | Optional. The `community-extensions` `catalog.json` at the commit the release pins                |

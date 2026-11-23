@@ -338,7 +338,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         for (const [key, value] of Object.entries({
           OPS_AGENT_URL: url,
           OPS_AGENT_TOKEN_FILE: tokenFile,
-          OPENMAPX_SECRETS_KEY: "31".repeat(32),
+          OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x31).toString("base64url"),
           DOMAIN: "example.test",
           DATA_MANAGER_URL: dm.baseUrl,
           DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
@@ -356,7 +356,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             role: "admin",
           });
           await state.fixture.db.insert(schema.serviceConfig).values({
-            id: randomUUID(),
             serviceId: "ops-agent",
             config: { OPENMAPX_MEMORY_MIB: 256, OPENMAPX_CPU_LIMIT: 0.5 },
           });

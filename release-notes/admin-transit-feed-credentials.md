@@ -1,5 +1,5 @@
 ---
-impacts: [breaking, migration, operator-action]
+impacts: [breaking, operator-action]
 ---
 
 ## What changes
@@ -10,8 +10,7 @@ and fresh administrator sign-in. Unselected and obsolete keys are preserved;
 deleting a key requires an explicit selection. The same guarded operation saves
 the encrypted map and recreates an already running Data Manager to consume it.
 
-Migration `0048_admin_transit_credentials` adds encrypted, temporary credential
-proposals. Completed operations retain recovery inputs for at least 72 hours;
+Credential proposals are stored encrypted and temporarily. Completed operations retain recovery inputs for at least 72 hours;
 unresolved operations retain their inputs until they can be reconciled. Values
 are excluded from public previews, job metadata and account data exports.
 
@@ -28,8 +27,7 @@ Operators managing Transitous feed credentials, including installations using
 
 ## Required action
 
-Apply the normal API migrations when upgrading and upgrade the API, CLI and
-ops-agent together. Use **Administration → Transit → Transit feed credentials**
+Upgrade the API, CLI and ops-agent together. Use **Administration → Transit → Transit feed credentials**
 for vault-managed credentials. Data Manager must already be running; this action
 does not start a stopped coordinator. Inspect Activity before retrying an
 unresolved operation.
