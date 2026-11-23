@@ -373,12 +373,12 @@ describe("osrmService", () => {
       expect(instruction).toBe("At the roundabout, take exit 3 onto Ernst-Reuter-Platz");
     });
 
-    it("roundabout without exit → 'At the roundabout, take the exit onto [road]'", async () => {
+    it("roundabout without exit (the route ends on it) → 'Enter the roundabout'", async () => {
       const instruction = await getInstruction({
         name: "Kreisverkehr",
         maneuver: { type: "roundabout", location: [0, 0] },
       });
-      expect(instruction).toBe("At the roundabout, take the exit onto Kreisverkehr");
+      expect(instruction).toBe("Enter the roundabout");
     });
 
     it("on ramp → 'Take the ramp onto [road]'", async () => {

@@ -124,7 +124,26 @@ interface OsrmTripResponse {
   waypoints: OsrmTripWaypoint[];
 }
 
-function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string): string {
+/** OSRM's steps that enter a roundabout; `exit` on them counts the exits to it. */
+const ROUNDABOUT_ENTRIES = new Set(["roundabout", "rotary", "roundabout turn"]);
+
+/**
+ * What to do at a roundabout. A rotary is named by its own name when OSRM has
+ * one, and the road out is left out when it carries that name too. Without an
+ * exit number the route ends on the roundabout.
+ */
+function roundaboutInstruction(step: OsrmStep, road: string): string {
+  const rotaryName = step.rotary_name?.trim();
+  const place = rotaryName || "the roundabout";
+  const exit = step.maneuver.exit;
+  if (!exit) return `Enter ${place}`;
+  const named = Boolean(step.name.trim() || step.ref?.trim());
+  const onto = named && step.name.trim() !== rotaryName ? ` onto ${road}` : "";
+  return `At ${place}, take exit ${exit}${onto}`;
+}
+
+function generateInstruction(step: OsrmStep): string {
+  const { maneuver, name, ref } = step;
   const road = [name, ref ? `(${ref})` : ""].filter(Boolean).join(" ").trim() || "the road";
   switch (maneuver.type) {
     case "depart":
@@ -142,10 +161,16 @@ function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string)
     case "fork":
       return `Keep ${maneuver.modifier ?? "straight"} at the fork onto ${road}`;
     case "roundabout":
-    case "rotary": {
-      const exit = maneuver.exit ? `exit ${maneuver.exit}` : "the exit";
-      return `At the roundabout, take ${exit} onto ${road}`;
-    }
+    case "rotary":
+      return roundaboutInstruction(step, road);
+    // A small roundabout OSRM says to take as a plain turn.
+    case "roundabout turn":
+      return maneuver.modifier === "uturn"
+        ? `At the roundabout, make a U-turn onto ${road}`
+        : `At the roundabout, turn ${maneuver.modifier ?? "straight"} onto ${road}`;
+    case "exit roundabout":
+    case "exit rotary":
+      return `Exit the roundabout onto ${road}`;
     case "end of road":
       return `At the end of the road, turn ${maneuver.modifier ?? "right"} onto ${road}`;
     default:
@@ -287,7 +312,7 @@ export function transformOsrmStep(step: OsrmStep): RouteStep {
     .map((name) => name.trim())
     .filter(Boolean);
   return {
-    instruction: generateInstruction(step.maneuver, step.name, step.ref),
+    instruction: generateInstruction(step),
     distance: step.distance,
     duration: step.duration,
     coordinates: step.geometry.coordinates,
@@ -302,6 +327,14 @@ export function transformOsrmStep(step: OsrmStep): RouteStep {
       typeof step.maneuver.bearing_before === "number" ? step.maneuver.bearing_before : undefined,
     bearingAfter:
       typeof step.maneuver.bearing_after === "number" ? step.maneuver.bearing_after : undefined,
+    // Counted once, on entry, as Valhalla and BRouter count it; OSRM repeats
+    // it on the step that leaves the roundabout.
+    roundaboutExitCount:
+      ROUNDABOUT_ENTRIES.has(step.maneuver.type) &&
+      Number.isInteger(step.maneuver.exit) &&
+      (step.maneuver.exit as number) >= 1
+        ? step.maneuver.exit
+        : undefined,
   };
 }
 

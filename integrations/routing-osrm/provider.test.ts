@@ -1,6 +1,8 @@
+import { roundaboutTurnAt } from "@openmapx/core";
 import { withRoutingContributors } from "@openmapx/integration-framework";
 import { nth } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import roundabouts from "./__fixtures__/roundabouts.json";
 import {
   joinSegmentSpeedLimits,
   osrmRouteSegmentSpeedLimits,
@@ -188,6 +190,73 @@ describe("transformOsrmStep", () => {
     });
     expect(s.bearingBefore).toBe(283);
     expect(s.bearingAfter).toBe(300);
+  });
+});
+
+// Steps as the public demo returned them on 2026-11-23: the road in, the
+// roundabout, and the way out.
+type RawStep = Parameters<typeof transformOsrmStep>[0];
+const demo = (key: keyof typeof roundabouts) =>
+  (roundabouts[key] as unknown as RawStep[]).map(transformOsrmStep);
+
+describe("roundabouts from the demo server", () => {
+  it("carries the exit number on the step that enters the roundabout", () => {
+    expect(demo("strausbergerPlatz")[1]?.roundaboutExitCount).toBe(2);
+    expect(demo("osdorferStrasse")[1]?.roundaboutExitCount).toBe(1);
+    expect(demo("neissestrasse")[1]?.roundaboutExitCount).toBe(1);
+  });
+
+  it("counts the exit once, on entry, as the other engines do", () => {
+    expect(demo("strausbergerPlatz")[2]?.roundaboutExitCount).toBeUndefined();
+    expect(demo("osdorferStrasse")[2]?.roundaboutExitCount).toBeUndefined();
+  });
+
+  it("gives what the turn round the roundabout is read from", () => {
+    // In from the north-west, out east along Karl-Marx-Allee: past straight on.
+    const rotary = roundaboutTurnAt(demo("strausbergerPlatz"), 1);
+    expect(rotary?.circulation).toBe("ccw");
+    expect(rotary?.exitAngle).toBeGreaterThan(200);
+    expect(rotary?.exitAngle).toBeLessThan(250);
+    // In heading north, out east at the first exit.
+    const small = roundaboutTurnAt(demo("osdorferStrasse"), 1);
+    expect(small?.circulation).toBe("ccw");
+    expect(small?.exitAngle).toBeGreaterThan(60);
+    expect(small?.exitAngle).toBeLessThan(130);
+  });
+
+  it("names a rotary by its own name and the exit to take", () => {
+    // The road out is named after the square too, and saying it twice reads badly.
+    expect(demo("strausbergerPlatz")[1]?.instruction).toBe("At Strausberger Platz, take exit 2");
+    const [, rotary] = roundabouts.strausbergerPlatz as unknown as RawStep[];
+    expect(transformOsrmStep({ ...(rotary as RawStep), name: "Karl-Marx-Allee" }).instruction).toBe(
+      "At Strausberger Platz, take exit 2 onto Karl-Marx-Allee (B 1; B 5)",
+    );
+  });
+
+  it("says when the roundabout is left", () => {
+    expect(demo("strausbergerPlatz")[2]?.instruction).toBe(
+      "Exit the roundabout onto Strausberger Platz (B 1; B 5)",
+    );
+    expect(demo("osdorferStrasse")[2]?.instruction).toBe(
+      "Exit the roundabout onto Osdorfer Straße",
+    );
+  });
+
+  it("reads a small roundabout taken as a turn as that turn", () => {
+    expect(demo("neissestrasse")[1]?.instruction).toBe(
+      "At the roundabout, turn right onto Neißestraße",
+    );
+  });
+
+  it("enters a roundabout the route ends on without naming an exit", () => {
+    const [, rotary] = roundabouts.strausbergerPlatz as unknown as RawStep[];
+    const onIt = { ...(rotary as RawStep), maneuver: { ...(rotary as RawStep).maneuver } };
+    delete onIt.maneuver.exit;
+    expect(transformOsrmStep(onIt).instruction).toBe("Enter Strausberger Platz");
+    expect(transformOsrmStep({ ...onIt, rotary_name: undefined }).instruction).toBe(
+      "Enter the roundabout",
+    );
+    expect(transformOsrmStep(onIt).roundaboutExitCount).toBeUndefined();
   });
 });
 

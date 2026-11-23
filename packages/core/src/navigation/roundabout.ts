@@ -160,9 +160,9 @@ function turnOf(
       : finite(step.bearingBefore)
         ? step.bearingBefore
         : segmentBearings(path)[0];
-  // The leaving step starts where the roundabout is left. Without one (OSRM),
-  // the roundabout step runs on along the exit road to the next manoeuvre,
-  // and nothing marks where the exit is.
+  // The leaving step starts where the roundabout is left. Without one (a
+  // route that ends on the roundabout, or an engine that sends none), nothing
+  // marks where the exit is.
   if (!nextLeaves) return undefined;
   const exit =
     roadHeading(next?.coordinates ?? []) ??
