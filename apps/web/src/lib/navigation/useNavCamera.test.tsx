@@ -17,6 +17,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { COAST_START_DELAY_MS } from "@openmapx/core/navigation";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -323,7 +324,7 @@ function modelMovingReplay(
         displayed,
         { fixAlongMeters, speedMps: SPEED_MPS, ageSeconds: (now - fixAtMs) / 1000 },
         dt,
-        { tauSeconds: 0.45, maxLeadSeconds: 1.5, routeLengthMeters },
+        { tauSeconds: 0.45, maxLeadSeconds: COAST_START_DELAY_MS / 1000, routeLengthMeters },
       );
       const { point, bearing } = positionAt(geometry, cum, displayed);
       const bearingAlpha = 1 - Math.exp(-Math.max(dt, 0) / 0.35);
@@ -645,6 +646,21 @@ describe("useNavCamera wake sources", () => {
       frames.flush(16, FRAME_MS);
       expect(marker().lngLat[0]).toBeGreaterThan(before);
     }
+  });
+
+  it("keeps moving after the last fix until the first coast tick is due", async () => {
+    // Fixes stop 1.5 s into the gap the engine waits before coasting; the puck
+    // must not stand still from there until the coast ticks begin at 3 s.
+    const { frames, marker } = await settled();
+    applyFix(START_ALONG, 10);
+    const at = (ms: number) => {
+      frames.flush(Math.round(ms / FRAME_MS), FRAME_MS);
+      return marker().lngLat;
+    };
+    const a = at(1800);
+    const b = at(900);
+    const meters = Math.hypot(b[0] - a[0], b[1] - a[1]) * 111_195;
+    expect(meters).toBeGreaterThan(5);
   });
 
   it("wakes when the north-up setting is toggled", async () => {
@@ -1264,9 +1280,13 @@ describe("useNavCamera approach camera", () => {
   });
 });
 
+/** How far the puck runs on past a single fix before the prediction stops. */
+const LEAD_METERS = (SPEED_MPS * COAST_START_DELAY_MS) / 1000;
+
 describe("useNavCamera look-ahead and junction framing", () => {
-  // 38 m before the bend at 668 m, where the route turns from east to north-east.
-  const BEFORE_BEND = 630;
+  // A fix that leaves the puck 8 m before the bend at 668 m, where the route
+  // turns from east to north-east.
+  const BEFORE_BEND = 660 - LEAD_METERS;
 
   function jumps(fake: FakeMap) {
     return fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
@@ -1314,6 +1334,9 @@ describe("useNavCamera look-ahead and junction framing", () => {
     },
   );
 
+  // A fix that leaves the puck at 630 m, inside the highlighted lane.
+  const IN_LANE = 630 - LEAD_METERS;
+
   it("draws the puck in the highlighted lane, the route position unchanged", async () => {
     const harness = await mountNavCamera();
     act(() =>
@@ -1324,7 +1347,7 @@ describe("useNavCamera look-ahead and junction framing", () => {
         offsetMeters: 3,
       }),
     );
-    applyApproachFix(START_ALONG, SPEED_MPS, 100);
+    applyApproachFix(IN_LANE, SPEED_MPS, 100);
     harness.frames.flush(240, FRAME_MS);
     // Eastbound on the first segment: 3 m to the right is 3 m south of the line.
     const [, lat] = harness.marker().lngLat;
@@ -1341,7 +1364,7 @@ describe("useNavCamera look-ahead and junction framing", () => {
     it("slides back when the highlight ends mid-taper, rather than jumping", async () => {
       const harness = await mountNavCamera();
       act(() => useNavigationSceneStore.getState().setHighlightSpan(span));
-      applyApproachFix(START_ALONG, SPEED_MPS, 100);
+      applyApproachFix(IN_LANE, SPEED_MPS, 100);
       harness.frames.flush(240, FRAME_MS);
       expect(southMeters(harness)).toBeCloseTo(3, 0);
       act(() => useNavigationSceneStore.getState().setHighlightSpan(null));
@@ -1353,7 +1376,7 @@ describe("useNavCamera look-ahead and junction framing", () => {
 
     it("eases in when the highlight arrives with the puck already inside it", async () => {
       const harness = await mountNavCamera();
-      applyApproachFix(START_ALONG, SPEED_MPS, 100);
+      applyApproachFix(IN_LANE, SPEED_MPS, 100);
       harness.frames.flush(240, FRAME_MS);
       act(() => useNavigationSceneStore.getState().setHighlightSpan(span));
       harness.frames.flush(1, FRAME_MS);

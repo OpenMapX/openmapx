@@ -104,16 +104,63 @@ describe("stepDeadReckon", () => {
     expect(next).toBeGreaterThan(125); // moved back < ~5 m in one 60fps frame
   });
 
-  it("holds rather than steps back for a small correction while moving", () => {
-    // Ahead of a late fix by 5 m at 14 m/s: the projection catches up within
-    // half a second, so the puck waits instead of bouncing back and forth.
+  it("slows rather than steps back for a small correction while moving", () => {
+    // Ahead of a late fix by 5 m at 14 m/s: the puck neither bounces back nor
+    // stops, it drives on more slowly while the projection catches up.
+    const dt = 1 / 60;
     const next = stepDeadReckon(
       120,
       { fixAlongMeters: 115, speedMps: 14, ageSeconds: 0 },
+      dt,
+      opts,
+    );
+    expect(next).toBeGreaterThan(120);
+    expect(next).toBeLessThan(120 + 14 * dt);
+  });
+
+  it("keeps rolling after a forward jump at walking pace instead of freezing", () => {
+    // A fix 8 m ahead of the car (multipath) at 3 m/s left the puck ahead.
+    // Fixes keep coming each second; the puck must move every frame, never
+    // back, and meet the car again within a few seconds.
+    const dt = 1 / 60;
+    let displayed = 108;
+    let fixAlong = 100;
+    let prev = displayed;
+    for (let frame = 0; frame < 6 * 60; frame++) {
+      if (frame > 0 && frame % 60 === 0) fixAlong += 3;
+      displayed = stepDeadReckon(
+        displayed,
+        { fixAlongMeters: fixAlong, speedMps: 3, ageSeconds: (frame % 60) * dt },
+        dt,
+        opts,
+      );
+      expect(displayed).toBeGreaterThan(prev);
+      prev = displayed;
+    }
+    expect(displayed - (fixAlong + 3 * 1)).toBeLessThan(1);
+  });
+
+  it("corrects a gap of more than three seconds of travel", () => {
+    // 11 m ahead at 3 m/s would take the car almost four seconds to reach.
+    const next = stepDeadReckon(
+      111,
+      { fixAlongMeters: 100, speedMps: 3, ageSeconds: 0 },
       1 / 60,
       opts,
     );
-    expect(next).toBe(120);
+    expect(next).toBeLessThan(111);
+  });
+
+  it("waits where the prediction stops when no fix comes", () => {
+    // The last fix is older than the lead cap, so the projection has stopped:
+    // nothing will catch the puck up, and it must not drive on alone.
+    const next = stepDeadReckon(
+      115,
+      { fixAlongMeters: 100, speedMps: 8, ageSeconds: 5 },
+      1 / 60,
+      opts,
+    );
+    expect(next).toBe(115);
   });
 
   it("still corrects a large backward gap while moving", () => {
