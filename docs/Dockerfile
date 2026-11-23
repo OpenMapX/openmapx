@@ -3,7 +3,7 @@
 # The build context is `docs/` only — this package is a self-contained pnpm
 # workspace (its own pnpm-workspace.yaml + pnpm-lock.yaml), fully decoupled from
 # the monorepo workspace and the app build.
-FROM node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS build
+FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 COPY package.json /tmp/package.json
 RUN corepack enable && \
@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm typecheck && pnpm build
 
-FROM nginx:1.31.8-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
+FROM nginx:1.31.8-alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
 # The current official image predates Alpine's OpenSSL fix for CVE-2026-14456
 # and later libexpat, util-linux, PCRE2, TIFF (CVE-2026-4775), libX11
 # (CVE-2026-88806), Brotli (CVE-2026-111497), curl (CVE-2026-92392,
