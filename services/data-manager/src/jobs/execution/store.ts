@@ -751,8 +751,10 @@ export function createPostgresDataExecutionStore(
       });
     },
     async recordReleased(id) {
+      // On a row without its execution row `released_at` records that the
+      // control prune swept the files named by its key; only that prune sets it.
       await sql`UPDATE data_manager.jobs SET released_at=now()
-        WHERE id=${id} AND finished_at IS NOT NULL AND released_at IS NULL`;
+        WHERE id=${id} AND finished_at IS NOT NULL AND execution_admission IS NOT NULL AND released_at IS NULL`;
     },
     async listUnsettled() {
       const rows = await sql<Row[]>`SELECT * FROM data_manager.jobs

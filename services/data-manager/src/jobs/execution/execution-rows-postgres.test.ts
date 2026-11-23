@@ -464,6 +464,11 @@ describe.skipIf(
       // sweeps its key and the API's job retention deletes it.
       await sql`UPDATE data_manager.jobs SET execution_admission=NULL,execution_progress=NULL,execution_completion=NULL,released_at=NULL WHERE id=${finished}`;
       expect(await listed()).toEqual([]);
+      // A release recorded for it would make the API delete it before the
+      // prune removed the files named by its key; only that prune marks it.
+      await dm.store.recordReleased(finished);
+      const [restored] = await sql`SELECT released_at FROM data_manager.jobs WHERE id=${finished}`;
+      expect(restored?.released_at).toBeNull();
 
       const { record } = await dm.store.admit({ kind: "download-fonts" }, fresh());
       ids.push(record.status.id);
