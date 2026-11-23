@@ -15,7 +15,12 @@ OpenMapX account deletion removes live account-owned rows through database
 cascades and clears every other column that names the account through a
 foreign key or the database's erasure trigger, which runs on every deletion of
 an account row: from the app, from the restore replay or from plain SQL. The
-trigger deletes verification challenges, persisted log entries that mention
+trigger deletes pending verification challenges: rows whose value is the
+account ID, rows for the account's email, the emailed sign-in, email
+verification, password reset and email change codes for that address, and
+the codes sent to a new address the account asked to change to. Another
+account's challenges stay, including those for a longer address that contains
+this one. It also deletes persisted log entries that mention
 the account's ID or its email as a whole address (in any letter case, but not
 a longer address that contains it), pending administrator confirmations of account
 actions and the sessions the account impersonated as an administrator. It

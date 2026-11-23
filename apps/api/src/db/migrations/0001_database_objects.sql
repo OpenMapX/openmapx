@@ -22,8 +22,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "data_manager" TO o
 ALTER DEFAULT PRIVILEGES IN SCHEMA "data_manager" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO openmapx_data_manager;--> statement-breakpoint
 -- PostgreSQL 15 and later no longer let every role create objects in
 -- `public`; state it, since data-manager must never place tables beside the
--- API's. Data-manager keeps the default use of `public` for PostGIS types and
--- functions, and has no privilege on any API table there.
+-- API's. Data-manager finds PostGIS in the `extensions` schema and has no
+-- privilege on any API table in `public`.
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;--> statement-breakpoint
 
 -- Better Auth generates the "user" table and cannot declare a CHECK on it.
@@ -32,9 +32,11 @@ ALTER TABLE "user" ADD CONSTRAINT user_role_check CHECK (role IS NULL OR role IN
 -- At least one active administrator always remains. The guard row counts the
 -- active administrators; the trigger keeps it in step with every insert and
 -- delete on "user" and every change of role or ban, and refuses the change
--- that would bring it to zero.
+-- that would bring it to zero. The pinned search path finds the guard table
+-- whatever the calling session's search path is.
 INSERT INTO account_admin_guard(id,active_count) SELECT 1,count(*)::integer FROM "user" WHERE role='admin' AND banned IS NOT TRUE;--> statement-breakpoint
-CREATE FUNCTION openmapx_preserve_admin_capacity() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION openmapx_preserve_admin_capacity() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
 DECLARE old_active integer:=0; new_active integer:=0; delta integer;
 BEGIN
  IF TG_OP <> 'INSERT' THEN old_active:=CASE WHEN OLD.role='admin' AND OLD.banned IS NOT TRUE THEN 1 ELSE 0 END; END IF;
@@ -69,16 +71,29 @@ DECLARE
     '(?<![[:alnum:].!#$%&''*+/=?^_`{|}~-])'
     || regexp_replace(erased_email, '([^[:alnum:]@_-])', '\\\1', 'g')
     || '(?![[:alnum:]-]|\.[[:alnum:]])' END;
+  -- Better Auth's emailed code for a change of address names the account,
+  -- not its current address.
+  erased_change_prefix text := 'change-email-otp-' || erased_id || ':';
 BEGIN
   -- Privacy cases keep their history and record that the account is gone.
   UPDATE data_subject_request
   SET account_state = 'deleted', version = version + 1, updated_at = now()
   WHERE user_id = OLD.id AND account_state <> 'deleted';
-  -- Better Auth's pending challenges for the account or its email.
+  -- Better Auth's pending challenges for the account or its email. Its
+  -- emailed codes are stored as `<type>-otp-<address>` with the address in
+  -- lower case, and as `change-email-otp-<account id>:<new address>` for a
+  -- change of address. Plain comparisons, not patterns, so no character of
+  -- the address or the id can widen the match.
   DELETE FROM verification
   WHERE value = OLD.id
      OR lower(identifier) = erased_email
-     OR lower(identifier) = lower('change-email:' || OLD.id || ':' || OLD.email);
+     OR lower(identifier) = lower('change-email:' || OLD.id || ':' || OLD.email)
+     OR lower(identifier) IN ('sign-in-otp-' || erased_email,
+                              'email-verification-otp-' || erased_email,
+                              'forget-password-otp-' || erased_email,
+                              'change-email-otp-' || erased_email)
+     OR (left(identifier, length(erased_change_prefix)) = erased_change_prefix
+         AND strpos(substr(identifier, length(erased_change_prefix) + 1), ':') = 0);
   -- Audit rows stay as the record of what happened, without the person.
   UPDATE admin_audit_log SET actor_id = NULL, ip_address = NULL, user_agent = NULL
   WHERE actor_id = OLD.id;

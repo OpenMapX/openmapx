@@ -394,11 +394,47 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     if (!request) throw new Error("The privacy case was not created");
     await api`INSERT INTO data_subject_request_event (request_id, event_type, actor_kind, actor_user_id)
       VALUES (${request.id}, 'received', 'subject', ${userId})`;
-    await api`INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
-      VALUES (${`v-value-${suffix}`}, 'reset-password:token', ${userId}, now() + interval '1 hour', now(), now()),
-             (${`v-email-${suffix}`}, ${email.toUpperCase()}, 'code', now() + interval '1 hour', now(), now()),
-             (${`v-change-${suffix}`}, ${`change-email:${userId}:${email}`}, 'code', now() + interval '1 hour', now(), now()),
-             (${`v-kept-${suffix}`}, ${otherEmail}, 'code', now() + interval '1 hour', now(), now())`;
+    // Better Auth 1.7.18's email-otp plugin stores its codes under
+    // `${type}-otp-${email}` with the address lower-cased
+    // (plugins/email-otp/utils.mjs:5, routes.mjs:95-101) and a change of
+    // address under `change-email-otp-${userId}:${newEmail}` (routes.mjs:642).
+    // auth-postgres.test.ts creates the same rows through Better Auth itself.
+    const verificationRows: [string, string, string][] = [
+      ["v-value", "reset-password:token", userId],
+      ["v-email", email.toUpperCase(), "code"],
+      ["v-change", `change-email:${userId}:${email}`, "code"],
+      ...["sign-in", "email-verification", "forget-password", "change-email"].map(
+        (type): [string, string, string] => [
+          `v-otp-${type}`,
+          `${type}-otp-${email.toLowerCase()}`,
+          "hash:0",
+        ],
+      ),
+      ["v-otp-mixed-case", `sign-in-otp-${email}`, "hash:0"],
+      ["v-otp-change-address", `change-email-otp-${userId}:new-${suffix}@example.test`, "hash:0"],
+      ["v-kept", otherEmail, "code"],
+      ["v-kept-otp-other-user", `sign-in-otp-${otherEmail}`, "hash:0"],
+      ["v-kept-otp-longer-address", `sign-in-otp-${email.toLowerCase()}.evil`, "hash:0"],
+      ["v-kept-otp-other-type", `magic-link-otp-${email.toLowerCase()}`, "hash:0"],
+      [
+        "v-kept-change-other-user",
+        `change-email-otp-${otherId}:new-${suffix}@example.test`,
+        "hash:0",
+      ],
+      [
+        "v-kept-change-longer-id",
+        `change-email-otp-${userId}-2:new-${suffix}@example.test`,
+        "hash:0",
+      ],
+      [
+        "v-kept-change-id-with-colon",
+        `change-email-otp-${userId}:x:new-${suffix}@example.test`,
+        "hash:0",
+      ],
+    ];
+    for (const [id, identifier, value] of verificationRows)
+      await api`INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
+        VALUES (${`${id}-${suffix}`}, ${identifier}, ${value}, now() + interval '1 hour', now(), now())`;
     await api`INSERT INTO system_settings (key, value, updated_by)
       VALUES (${`setting-${suffix}`}, '"value"', ${userId})`;
     await api`INSERT INTO system_secret (key, ciphertext, iv, tag, updated_by)
@@ -453,10 +489,15 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
         WHERE request_id = ${request.id}`,
     ).toEqual([{ actor_kind: "subject", actor_user_id: null }]);
     expect(
-      (await api`SELECT id FROM verification WHERE id LIKE ${`v-%-${suffix}`} ORDER BY id`).map(
-        (row) => row.id,
-      ),
-    ).toEqual([`v-kept-${suffix}`]);
+      (await api`SELECT id FROM verification WHERE id LIKE ${`v-%-${suffix}`}`)
+        .map((row) => row.id)
+        .sort(),
+    ).toEqual(
+      verificationRows
+        .map(([id]) => `${id}-${suffix}`)
+        .filter((id) => id.startsWith("v-kept"))
+        .sort(),
+    );
     expect(
       await api`SELECT updated_by FROM system_settings WHERE key = ${`setting-${suffix}`}`,
     ).toEqual([{ updated_by: null }]);
@@ -566,18 +607,53 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     ).toEqual([`other-admin-${suffix}`, `own-${suffix}`]);
   });
 
-  it("runs the erasure trigger as the deleting role, with a pinned search path", async () => {
-    const [definition] = await api<{ owner: string; definer: boolean; config: string[] }[]>`
-      SELECT pg_get_userbyid(proowner) AS owner, prosecdef AS definer, proconfig AS config
-      FROM pg_proc WHERE proname = 'openmapx_erase_user_residue'`;
-    expect(definition).toEqual({
-      owner: "openmapx_api",
-      definer: false,
-      config: ["search_path=public, pg_temp"],
-    });
+  it("runs the account triggers as the deleting role, with a pinned search path", async () => {
+    const definitions = await api<
+      { name: string; owner: string; definer: boolean; config: string[] }[]
+    >`
+      SELECT proname AS name, pg_get_userbyid(proowner) AS owner, prosecdef AS definer,
+             proconfig AS config
+      FROM pg_proc
+      WHERE proname IN ('openmapx_erase_user_residue', 'openmapx_preserve_admin_capacity')
+      ORDER BY proname`;
+    expect(definitions).toEqual(
+      ["openmapx_erase_user_residue", "openmapx_preserve_admin_capacity"].map((name) => ({
+        name,
+        owner: "openmapx_api",
+        definer: false,
+        config: ["search_path=public, pg_temp"],
+      })),
+    );
     expect(
       await api`SELECT tgname FROM pg_trigger
         WHERE tgrelid = 'public.user'::regclass AND NOT tgisinternal ORDER BY tgname`,
     ).toEqual([{ tgname: "openmapx_admin_capacity" }, { tgname: "openmapx_erase_user_residue" }]);
+  });
+
+  it("demotes and deletes administrators from a session whose search path lacks public", async () => {
+    const suffix = randomUUID();
+    const demoted = `restricted-demoted-${suffix}`;
+    const deleted = `restricted-deleted-${suffix}`;
+    const remaining = `restricted-remaining-${suffix}`;
+    for (const id of [demoted, deleted, remaining])
+      await insertUser(id, `${id}@example.test`, "admin");
+    const activeAdmins = async () =>
+      count(api`SELECT active_count AS n FROM public.account_admin_guard WHERE id = 1`);
+    const before = await activeAdmins();
+
+    await api.begin(async (tx) => {
+      await tx.unsafe("SET LOCAL search_path = pg_catalog, pg_temp");
+      await tx`UPDATE public."user" SET role = 'user' WHERE id = ${demoted}`;
+      await tx`DELETE FROM public."user" WHERE id = ${deleted}`;
+    });
+
+    expect(await activeAdmins()).toBe(before - 2);
+    expect(
+      await api`SELECT id, role FROM "user" WHERE id IN (${demoted}, ${deleted}, ${remaining})
+        ORDER BY id`,
+    ).toEqual([
+      { id: demoted, role: "user" },
+      { id: remaining, role: "admin" },
+    ]);
   });
 });
