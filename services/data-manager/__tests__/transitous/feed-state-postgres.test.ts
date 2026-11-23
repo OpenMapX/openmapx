@@ -35,7 +35,51 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await state.db.sql`DELETE FROM data_manager.overture_release`;
     });
 
-    it("keeps one row per feed and counts every concurrent validation failure", async () => {
+    it("counts a failure that waited on another writer's uncommitted first row of the feed", async () => {
+      // Another writer inserted the feed's first row and has not committed.
+      let commit = () => {};
+      const committed = new Promise<void>((resolve) => {
+        commit = resolve;
+      });
+      let holding = () => {};
+      const held = new Promise<void>((resolve) => {
+        holding = resolve;
+      });
+      const other = state.db.sql.begin(async (tx) => {
+        await tx`INSERT INTO data_manager.feed_state (region, name, validation_status, status, consecutive_failures)
+          VALUES ('de', 'race', 'error', 'failed', 1)
+          ON CONFLICT (region, name) DO UPDATE SET consecutive_failures = feed_state.consecutive_failures + 1`;
+        holding();
+        await committed;
+      });
+      await held;
+      const writer = recordValidateOutcome({
+        region: "de",
+        name: "race",
+        ok: false,
+        message: "bad",
+      });
+      // The writer blocks on the feed's key until the other one commits.
+      let waiting = 0;
+      for (let attempt = 0; attempt < 50 && waiting === 0; attempt++) {
+        const [row] = await state.db.sql<{ n: number }[]>`SELECT count(*)::int AS n
+          FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query ILIKE '%data_manager%feed_state%'
+            AND pid <> pg_backend_pid()`;
+        waiting = row?.n ?? 0;
+        if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(1);
+      commit();
+      await other;
+      await writer;
+      expect(
+        await state.db.sql`SELECT consecutive_failures FROM data_manager.feed_state
+          WHERE region = 'de' AND name = 'race'`,
+      ).toEqual([{ consecutive_failures: 2 }]);
+    });
+
+    it("keeps one row per feed and counts every validation failure", async () => {
       const failure = { region: "de", name: "demo", ok: false, message: "bad" };
       await Promise.all([recordValidateOutcome(failure), recordValidateOutcome(failure)]);
       await Promise.all([recordValidateOutcome(failure), recordFetchOutcome(failure)]);
