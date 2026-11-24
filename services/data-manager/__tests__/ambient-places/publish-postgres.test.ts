@@ -1,25 +1,36 @@
+import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import { VectorTile } from "@mapbox/vector-tile";
-import { AMBIENT_LIMITS } from "@openmapx/core/ambient-places";
+import { AMBIENT_LIMITS, AMBIENT_PLANET_REGION } from "@openmapx/core/ambient-places";
 import {
+  PUBLISHED_AMBIENT_FEATURES,
   readAmbientManifest,
   readAmbientPlaceByGers,
   readAmbientTile,
 } from "@openmapx/core/ambient-places-server";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { PbfReader } from "pbf";
-import { assert, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import { afterAll, afterEach, assert, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   buildAmbientPlaces,
   rollbackAmbientPlaces,
   setAmbientEnabled,
 } from "../../src/jobs/ambient-places/build.js";
-import { ambientSchemaDDL } from "../../src/jobs/ambient-places/schema.js";
+import { dropRetiredFeatureStorage } from "../../src/jobs/ambient-places/feature-storage.js";
+import {
+  AMBIENT_SCHEMA_VERSION,
+  ambientSchemaDDL,
+  ensureAmbientSchema,
+} from "../../src/jobs/ambient-places/schema.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
+import { PUBLICATION_LOCK_TIMEOUT_MS } from "../../src/jobs/publish-schema-swap.js";
 import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
 } from "../../src/jobs/search-index/schema.js";
-import { startPostgis } from "../helpers/postgis-testcontainer.js";
+import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontainer.js";
 
 function ambientLayer(bytes: Uint8Array) {
   const layer = new VectorTile(new PbfReader(bytes)).layers.ambient_places;
@@ -563,6 +574,565 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       } finally {
         await pg.stop();
       }
+    }, 120_000);
+  },
+);
+
+const GENERATION = "00000000-0000-4000-8000-000000000001";
+const EXPECTED_READER_OUTPUT = new URL("./reader-fixture.expected.json", import.meta.url);
+const availableBytes = async () => 1024 ** 4;
+
+function partition(generation: string): string {
+  return `ambient_places.features_${generation.replaceAll("-", "")}`;
+}
+
+function tileAt(z: number, lng: number, lat: number) {
+  return {
+    z,
+    x: Math.floor(((lng + 180) / 360) * 2 ** z),
+    y: Math.floor(((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * 2 ** z),
+  };
+}
+
+const ATTRIBUTION_KEYS = new Set(["contributors", "fieldContributors"]);
+
+function digest(text: string): string {
+  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
+}
+
+/** Long attribution and lineage values are compared by digest to keep the recording readable. */
+function digestLongStrings(value: unknown): unknown {
+  if (typeof value === "string" && value.length > 120) return digest(value);
+  if (Array.isArray(value)) return value.map(digestLongStrings);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        ATTRIBUTION_KEYS.has(key) ? digest(JSON.stringify(entry)) : digestLongStrings(entry),
+      ]),
+    );
+  return value;
+}
+
+/** Everything a map client reads from a tile, in the order the tile holds it. */
+function decodeTile(bytes: Buffer | null) {
+  if (!bytes) return null;
+  const layer = new VectorTile(new PbfReader(bytes)).layers.ambient_places;
+  if (!layer) return [];
+  return Array.from({ length: layer.length }, (_, i) => {
+    const feature = layer.feature(i);
+    return {
+      properties: feature.properties,
+      geometry: feature.loadGeometry().map((ring) => ring.map(({ x, y }) => [x, y])),
+    };
+  });
+}
+
+describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
+  "ambient storage on one database",
+  () => {
+    let database: PostgisFixture;
+    // Each test gets its own client: data-manager remembers per client that
+    // it has created the ambient schema, which each test drops.
+    const pg = { sql: undefined as unknown as postgres.Sql, connectionString: "" };
+    beforeAll(async () => {
+      database = await startPostgis();
+      pg.connectionString = database.connectionString;
+    }, 120_000);
+    afterAll(async () => {
+      await database?.stop();
+    });
+    beforeEach(async () => {
+      await database.sql.unsafe(
+        `DROP SCHEMA IF EXISTS ambient_places,osm_search,osm_search__staging,osm_search__previous,overture_places,overture_places__staging,overture_places__previous CASCADE`,
+      );
+      pg.sql = postgres(pg.connectionString, { max: 2 });
+      // As in production and the fixture, drizzle replaces the client's serializers.
+      drizzle(pg.sql);
+    });
+    afterEach(async () => {
+      await pg.sql?.end({ timeout: 2 });
+    });
+
+    async function seedRegionalSearchIndex(epoch: string): Promise<void> {
+      await pg.sql.unsafe(
+        buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+      );
+      await pg.sql.unsafe(
+        `INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture',$1,'ready',now(),now(),now())`,
+        [epoch],
+      );
+      await pg.sql.unsafe(
+        `INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',1,'Clinic',ST_Point(6.08,50.77,4326),'amenity/hospital','{}',0.8)`,
+      );
+    }
+
+    it("creates typed geometry, one partitioned feature store, checks and conventional names", async () => {
+      await ensureAmbientSchema(pg.sql);
+      expect(
+        await pg.sql.unsafe(`SELECT singleton,schema_version FROM ambient_places.state`),
+      ).toEqual([{ singleton: 1, schema_version: AMBIENT_SCHEMA_VERSION }]);
+      expect(
+        await pg.sql.unsafe(
+          `SELECT format_type(atttypid,atttypmod) AS type FROM pg_attribute WHERE attrelid='ambient_places.features'::regclass AND attname='geom'`,
+        ),
+      ).toEqual([{ type: "geometry(Geometry,3857)" }]);
+      expect(
+        await pg.sql.unsafe(`SELECT pg_get_partkeydef('ambient_places.features'::regclass) AS key`),
+      ).toEqual([{ key: "LIST (generation)" }]);
+      expect(
+        await pg.sql.unsafe(
+          `SELECT c.relname AS name,c.relkind AS kind FROM pg_class c WHERE c.relnamespace='ambient_places'::regnamespace AND c.relkind IN ('r','p') ORDER BY 1`,
+        ),
+      ).toEqual([
+        { name: "features", kind: "p" },
+        { name: "generations", kind: "r" },
+        { name: "planet_builds", kind: "r" },
+        { name: "state", kind: "r" },
+      ]);
+      expect(
+        (
+          await pg.sql.unsafe<{ name: string }[]>(
+            `SELECT indexrelid::regclass::TEXT AS name FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid WHERE c.relnamespace='ambient_places'::regnamespace ORDER BY 1`,
+          )
+        ).map((row) => row.name),
+      ).toEqual([
+        "ambient_places.features_geom_idx",
+        "ambient_places.features_gers_id_idx",
+        "ambient_places.features_pkey",
+        "ambient_places.generations_pkey",
+        "ambient_places.planet_builds_pkey",
+        "ambient_places.state_pkey",
+      ]);
+      expect(
+        (
+          await pg.sql.unsafe<{ name: string }[]>(
+            `SELECT conname AS name FROM pg_constraint WHERE connamespace='ambient_places'::regnamespace AND contype IN ('c','f') ORDER BY 1`,
+          )
+        ).map((row) => row.name),
+      ).toEqual([
+        "generations_publication_status_check",
+        "generations_storage_check",
+        "planet_builds_generation_fkey",
+        "planet_builds_status_check",
+        "state_active_fkey",
+        "state_previous_fkey",
+        "state_singleton_check",
+      ]);
+      const insert = (storage: string, status: string) =>
+        pg.sql.unsafe(
+          `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,'{}',$2,$3)`,
+          [GENERATION, storage, status],
+        );
+      await expect(insert("legacy", "published")).rejects.toThrow(/generations_storage_check/);
+      await expect(insert("regional", "retired")).rejects.toThrow(
+        /generations_publication_status_check/,
+      );
+      await insert("regional", "published");
+      // A geometry in another projection does not fit the column.
+      await expect(
+        pg.sql.unsafe(
+          `CREATE TABLE ambient_places.features_probe PARTITION OF ambient_places.features FOR VALUES IN ('${GENERATION}');
+           INSERT INTO ambient_places.features(generation,id,name,category,rank,min_zoom,tenant,sources,geom)
+           VALUES('${GENERATION}','osm:node/1','Clinic','hospital',1,13,false,'osm',ST_SetSRID(ST_MakePoint(6.08,50.77),4326))`,
+        ),
+      ).rejects.toThrow(/SRID/);
+    }, 120_000);
+
+    it("refuses a schema of another version or layout and names the remedy", async () => {
+      const clients: postgres.Sql[] = [];
+      const client = () => {
+        const sql = postgres(pg.connectionString, { max: 1 });
+        clients.push(sql);
+        return sql;
+      };
+      try {
+        await ensureAmbientSchema(pg.sql);
+        // Another process finds the current version and creates nothing.
+        await ensureAmbientSchema(client());
+        await pg.sql.unsafe(`UPDATE ambient_places.state SET schema_version=999`);
+        await expect(ensureAmbientSchema(client())).rejects.toThrow(
+          `The ambient_places schema has version 999, but this data manager uses version ${AMBIENT_SCHEMA_VERSION}. Drop it with DROP SCHEMA ambient_places CASCADE and build nearby places again.`,
+        );
+        // A layout from before the version marker.
+        await pg.sql.unsafe(`DROP SCHEMA ambient_places CASCADE;
+          CREATE SCHEMA ambient_places;
+          CREATE TABLE ambient_places.state(singleton SMALLINT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT true);
+          INSERT INTO ambient_places.state VALUES(1,true)`);
+        await expect(ensureAmbientSchema(client())).rejects.toThrow(
+          /has no schema version.*DROP SCHEMA ambient_places CASCADE/,
+        );
+        // Tables without the state table are an unknown layout too.
+        await pg.sql.unsafe(`DROP TABLE ambient_places.state;
+          CREATE TABLE ambient_places.features(generation UUID NOT NULL)`);
+        await expect(ensureAmbientSchema(client())).rejects.toThrow(/has no schema version/);
+        // An empty schema, such as one an operator created, is filled in.
+        await pg.sql.unsafe(`DROP TABLE ambient_places.features`);
+        await ensureAmbientSchema(client());
+        expect(await pg.sql.unsafe(`SELECT schema_version FROM ambient_places.state`)).toEqual([
+          { schema_version: AMBIENT_SCHEMA_VERSION },
+        ]);
+      } finally {
+        for (const sql of clients) await sql.end({ timeout: 2 });
+      }
+    }, 120_000);
+
+    it("attaches and retires partitions without making readers of other generations wait", async () => {
+      const reader = postgres(pg.connectionString, { max: 1 });
+      const probe = postgres(pg.connectionString, { max: 1 });
+      try {
+        await seedRegionalSearchIndex("partitions");
+        const a = await buildAmbientPlaces(pg.sql, region);
+        const b = await buildAmbientPlaces(pg.sql, region);
+        const c = await buildAmbientPlaces(pg.sql, region);
+        const exists = async (generation: string) =>
+          (
+            await pg.sql.unsafe<{ exists: boolean }[]>(
+              `SELECT to_regclass($1) IS NOT NULL AS exists`,
+              [partition(generation)],
+            )
+          )[0]?.exists;
+        const partitions = async () =>
+          (
+            await pg.sql.unsafe<{ name: string }[]>(
+              `SELECT inhrelid::regclass::TEXT AS name FROM pg_inherits WHERE inhparent='ambient_places.features'::regclass ORDER BY 1`,
+            )
+          ).map((row) => row.name);
+        expect(await partitions()).toEqual([a, b, c].map((m) => partition(m.generation)).sort());
+        expect(
+          await pg.sql.unsafe(
+            `SELECT storage,publication_status FROM ambient_places.generations WHERE id=$1`,
+            [a.generation],
+          ),
+        ).toEqual([{ storage: "regional", publication_status: "published" }]);
+        // Reads the active generation without waiting longer than a
+        // publication's lock timeout for a lock, however long another reader
+        // holds the feature store. Only time spent waiting for a lock counts,
+        // so a slow runner cannot trip it; a publication that locked the
+        // feature store would queue the probe behind that reader.
+        const probeActive = async () => {
+          const [row] = await probe.begin(async (tx) => {
+            await tx.unsafe(`SET LOCAL lock_timeout='${PUBLICATION_LOCK_TIMEOUT_MS}ms'`);
+            return tx.unsafe<{ n: number }[]>(
+              `SELECT count(*)::INT AS n FROM ambient_places.features WHERE generation=(SELECT active FROM ambient_places.state)`,
+            );
+          });
+          expect(row?.n).toBe(1);
+        };
+        const whileRunning = async (work: Promise<unknown>) => {
+          let done = false;
+          const finished = work.finally(() => {
+            done = true;
+          });
+          let probes = 0;
+          while (!done) {
+            await probeActive();
+            probes += 1;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          await finished;
+          return probes;
+        };
+
+        // A reader of the active generation holds the parent for four seconds.
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()-interval '1 second' WHERE id=$1`,
+          [a.generation],
+        );
+        let reading!: () => void;
+        const readingActive = new Promise<void>((resolve) => {
+          reading = resolve;
+        });
+        const held = reader.begin(async (tx) => {
+          await tx.unsafe(`SELECT count(*) FROM ambient_places.features WHERE generation=$1`, [
+            c.generation,
+          ]);
+          reading();
+          await tx.unsafe(`SELECT pg_sleep(4)`);
+        });
+        await readingActive;
+        const startedD = performance.now();
+        const d = buildAmbientPlaces(pg.sql, region, undefined, {
+          cleanupRetry: { attempts: 10, backoffMs: 250 },
+        });
+        const firstProbes = await whileRunning(d);
+        // Dropping the expired partition waited for the reader to finish.
+        expect(performance.now() - startedD).toBeGreaterThan(3000);
+        await held;
+        expect(firstProbes).toBeGreaterThan(10);
+        // The new generation is attached and the expired one is gone, table and all.
+        const dManifest = await d;
+        expect(await exists(dManifest.generation)).toBe(true);
+        expect(await exists(a.generation)).toBe(false);
+        expect(
+          await pg.sql.unsafe(`SELECT id FROM ambient_places.generations WHERE id=$1`, [
+            a.generation,
+          ]),
+        ).toEqual([]);
+
+        // A backup-like reader holds every partition, the expired one included,
+        // for longer than the retirement retries.
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()-interval '1 second' WHERE id=$1`,
+          [b.generation],
+        );
+        const bytes = await readAmbientTile(pg.sql, b.generation, tile.z, tile.x, tile.y);
+        expect(bytes).not.toBeNull();
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let holding!: () => void;
+        const holdingAll = new Promise<void>((resolve) => {
+          holding = resolve;
+        });
+        const backup = reader.begin("isolation level repeatable read", async (tx) => {
+          await tx.unsafe(`SELECT count(*) FROM ambient_places.features`);
+          holding();
+          await released;
+        });
+        await holdingAll;
+        // With the default cleanup budget the job ends while the reader still
+        // holds the feature store: the reader is released only after it.
+        const e = buildAmbientPlaces(pg.sql, region);
+        await whileRunning(e);
+        // The publication succeeds; the retired generation is no longer
+        // served, and its table waits for the reader to finish.
+        const eManifest = await e;
+        expect(await exists(eManifest.generation)).toBe(true);
+        expect(await readAmbientTile(pg.sql, b.generation, tile.z, tile.x, tile.y)).toBeNull();
+        expect(await exists(b.generation)).toBe(true);
+        release();
+        await backup;
+        await buildAmbientPlaces(pg.sql, region);
+        expect(await exists(b.generation)).toBe(false);
+        expect(await partitions()).not.toContain(partition(b.generation));
+
+        // Two cleanups at once: one does the work, the other leaves it to it,
+        // and neither reports a failure.
+        await pg.sql.unsafe(`DELETE FROM ambient_places.generations WHERE id=$1`, [c.generation]);
+        const cleanups = postgres(pg.connectionString, { max: 2 });
+        try {
+          expect(
+            await Promise.all([
+              dropRetiredFeatureStorage(cleanups),
+              dropRetiredFeatureStorage(cleanups),
+            ]),
+          ).toEqual([true, true]);
+        } finally {
+          await cleanups.end({ timeout: 2 });
+        }
+        expect(await exists(c.generation)).toBe(false);
+      } finally {
+        await reader.end({ timeout: 2 });
+        await probe.end({ timeout: 2 });
+      }
+    }, 120_000);
+
+    it("admits a planet build at once and leaves the retired partition for a later publication", async () => {
+      const reader = postgres(pg.connectionString, { max: 1 });
+      const probe = postgres(pg.connectionString, { max: 1 });
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
+        );
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+          VALUES('planet','fixture','fixture','fixture','fixture-file','world','ready',2,now(),now(),now());
+          INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+          ('node',1,'Tokyo hospital',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8),('node',2,'Lagos hospital',ST_Point(3.39,6.45,4326),'amenity/hospital','{}',0.8)`);
+        const build = (onClaim?: () => Promise<void>) =>
+          buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, onClaim, {
+            availableBytes,
+            cleanupRetry: { attempts: 2, backoffMs: 100 },
+          });
+        const first = await build();
+        await build();
+        const active = await build();
+        await pg.sql.unsafe(
+          `UPDATE ambient_places.generations SET cache_lease_until=now()-interval '1 second' WHERE id=$1`,
+          [first.generation],
+        );
+        const exists = async (generation: string) =>
+          (
+            await pg.sql.unsafe<{ exists: boolean }[]>(
+              `SELECT to_regclass($1) IS NOT NULL AS exists`,
+              [partition(generation)],
+            )
+          )[0]?.exists;
+
+        // A reader of the active generation holds the feature store, as a
+        // backup or a slow tile request would, until the build has ended.
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let holding!: () => void;
+        const reading = new Promise<void>((resolve) => {
+          holding = resolve;
+        });
+        const held = reader.begin("isolation level repeatable read", async (tx) => {
+          await tx.unsafe(
+            `SELECT count(*) FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1`,
+            [active.generation],
+          );
+          holding();
+          await released;
+        });
+        await reading;
+        try {
+          // The admission answer comes before anything waits for a lock. A
+          // build that retired the partition before answering would wait for
+          // the reader and fail on its lock timeout, never answering.
+          let waitingAtClaim: number | undefined;
+          let done = false;
+          const next = build(async () => {
+            const [row] = await probe.unsafe<{ n: number }[]>(
+              `SELECT count(*)::INT AS n FROM pg_locks WHERE NOT granted`,
+            );
+            waitingAtClaim = row?.n;
+          }).finally(() => {
+            done = true;
+          });
+          let probes = 0;
+          while (!done) {
+            // Only time spent waiting for a lock counts, so a slow runner
+            // cannot trip this. A retirement that locks the whole feature
+            // store queues the probe behind the reader past it.
+            const [row] = await probe.begin(async (tx) => {
+              await tx.unsafe(`SET LOCAL lock_timeout='${PUBLICATION_LOCK_TIMEOUT_MS}ms'`);
+              return tx.unsafe<{ n: number }[]>(
+                `SELECT count(*)::INT AS n FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1`,
+                [active.generation],
+              );
+            });
+            expect(row?.n).toBe(2);
+            probes += 1;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          const manifest = await next;
+          expect(waitingAtClaim).toBe(0);
+          expect(probes).toBeGreaterThan(0);
+          expect(await exists(manifest.generation)).toBe(true);
+          // The retired generation is gone from the catalogue of generations;
+          // its table waits for the reader.
+          expect(
+            await pg.sql.unsafe(`SELECT id FROM ambient_places.generations WHERE id=$1`, [
+              first.generation,
+            ]),
+          ).toEqual([]);
+          expect(await exists(first.generation)).toBe(true);
+        } finally {
+          release();
+          await held;
+        }
+        await build();
+        expect(await exists(first.generation)).toBe(false);
+      } finally {
+        await reader.end({ timeout: 2 });
+        await probe.end({ timeout: 2 });
+      }
+    }, 120_000);
+
+    /**
+     * The API's readers must return the same places whatever data-manager's
+     * storage layout is. The expected output was recorded from the readers
+     * and builders before a storage change and must still match after it.
+     */
+    it("serve the recorded tiles and GERS places for regional and planet generations", async () => {
+      await pg.sql.unsafe(
+        buildSearchIndexSchemaDDL("osm_search") +
+          buildSearchIndexIndexesDDL("osm_search") +
+          buildSchemaDDL("overture_places"),
+      );
+      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+        VALUES(1,'aachen','fixture','fixture','fixture','fixture-file','regional','ready',4,now(),now(),now());
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+        ('node',1,'Klinik',ST_Point(6.08,50.77,4326),'amenity/hospital','{"name:en":"Clinic","name:de":"Klinik"}',0.8),
+        ('node',2,'Bäckerei',ST_Point(6.0805,50.7702,4326),'shop/bakery','{}',0.6),
+        ('way',9007199254740993,'Dom',ST_Point(6.0839,50.7748,4326),'amenity/place_of_worship','{"level":"1"}',0.9),
+        ('node',3,'Closed',ST_Point(6.08,50.77,4326),'shop/bakery','{"disused":"yes"}',1);
+        INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES
+        ('gers-clinic','Clinic',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.8,'open','[{"property":"/names/primary","dataset":"meta"}]','2026-10-01.0'),
+        ('gers-cafe','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','[{"property":"/names/common/de","dataset":"Microsoft"}]','2026-10-01.0');
+        INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
+        VALUES(1,'2026-10-01.0','aachen',2,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"},{"sourceId":"meta-places","name":"Meta"},{"sourceId":"microsoft-places","name":"Microsoft"}]');
+        INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release)
+        VALUES('node',1,'gers-clinic',0.8,1,0,'fixture','{}','2026-10-01.0')`);
+      await buildAmbientPlaces(pg.sql, {
+        name: "Aachen",
+        bounds: [5.9, 50.65, 6.3, 50.95],
+      });
+      // The cafe stays only in the regional generation, so its GERS lookup
+      // falls back from the active planet generation to the regional one.
+      await pg.sql.unsafe(`UPDATE osm_search.index_state SET region='planet',place_count=7,epoch='world';
+        DELETE FROM overture_places.places WHERE gers_id='gers-cafe';
+        UPDATE overture_places.conflation_state SET region='planet',place_count=2;
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+        ('node',11,'病院 East',ST_Point(179.99999,0,4326),'amenity/hospital','{}',0.8),
+        ('node',12,'病院 West',ST_Point(-179.99999,0,4326),'amenity/hospital','{}',0.8),
+        ('way',13,'東京病院',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8);
+        INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
+        ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,0.9,'open','2026-10-01.0');
+        INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
+        VALUES('way',13,'g-tokyo',1,0,'fixture','{}','2026-10-01.0')`);
+      const planet = await buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+        availableBytes,
+      });
+      const [regional] = await pg.sql.unsafe<{ id: string }[]>(
+        `SELECT id FROM ambient_places.generations WHERE id<>$1`,
+        [planet.generation],
+      );
+      if (!regional) throw new Error("The regional generation is missing");
+      const tiles = {
+        aachen: tileAt(16, 6.08, 50.77),
+        aachenOverview: tileAt(13, 6.08, 50.77),
+        dom: tileAt(18, 6.0839, 50.7748),
+        tokyo: tileAt(16, 139.7, 35.7),
+        dateWest: { z: 13, x: 0, y: 4096 },
+        dateEast: { z: 13, x: 8191, y: 4096 },
+      };
+      const read = async (generation: string) =>
+        Object.fromEntries(
+          await Promise.all(
+            Object.entries(tiles).map(async ([name, { z, x, y }]) => [
+              name,
+              decodeTile(await readAmbientTile(pg.sql, generation, z, x, y)),
+            ]),
+          ),
+        );
+      const gers = async (id: string) => {
+        const found = await readAmbientPlaceByGers(pg.sql, id);
+        if (!found) return null;
+        const storage =
+          found.generation === planet.generation
+            ? "planet"
+            : found.generation === regional.id
+              ? "regional"
+              : "unknown";
+        return { storage, place: found.place };
+      };
+      const actual = digestLongStrings(
+        JSON.parse(
+          JSON.stringify({
+            regional: await read(regional.id),
+            planet: await read(planet.generation),
+            gers: {
+              clinic: await gers("gers-clinic"),
+              cafe: await gers("gers-cafe"),
+              tokyo: await gers("g-tokyo"),
+              missing: await gers("gers-missing"),
+            },
+          }),
+        ),
+      );
+      if (process.env.OPENMAPX_AMBIENT_READER_FIXTURE_PATH) {
+        await writeFile(
+          process.env.OPENMAPX_AMBIENT_READER_FIXTURE_PATH,
+          `${JSON.stringify(actual, null, 2)}\n`,
+        );
+        return;
+      }
+      expect(actual).toEqual(JSON.parse(await readFile(EXPECTED_READER_OUTPUT, "utf8")));
     }, 120_000);
   },
 );

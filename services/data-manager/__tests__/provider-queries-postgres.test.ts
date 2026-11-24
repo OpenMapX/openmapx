@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { latLngToCell } from "h3-js";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNotablePlacesSuggestionProvider } from "../../../integrations/search-notable-places/provider.js";
 import { createOsmAliasSuggestionProvider } from "../../../integrations/search-osm-aliases/provider.js";
 import {
@@ -461,8 +461,19 @@ function compareCursor(a: ConflationScoreCursor, b: ConflationScoreCursor): numb
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "provider queries on a fixed fixture",
   () => {
+    let pg: PostgisFixture;
+    beforeAll(async () => {
+      pg = await startPostgis();
+    }, 120_000);
+    afterAll(async () => {
+      await pg?.stop();
+    });
+    const dropSchemas = () =>
+      pg.sql.unsafe(
+        `DROP SCHEMA IF EXISTS osm_search,notable_places,overture_places,overture_embeddings CASCADE`,
+      );
+
     it("return the recorded suggestions and conflation candidates", async () => {
-      const pg = await startPostgis();
       try {
         await seedSearchIndex(pg);
         await seedNotablePlaces(pg);
@@ -547,12 +558,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
         expect(recorded).toEqual(JSON.parse(await readFile(EXPECTED, "utf8")));
       } finally {
-        await pg.stop();
+        await dropSchemas();
       }
     }, 180_000);
 
     it("pages the conflation keyset in cell order without skipping or repeating a POI", async () => {
-      const pg = await startPostgis();
       try {
         // Enough POIs for three pages, spread over many cells, with several
         // POIs sharing a cell so the type and id break ties.
@@ -623,7 +633,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(text).not.toContain("Sort");
         expect(text).not.toContain("(h3_r8)::text");
       } finally {
-        await pg.stop();
+        await dropSchemas();
       }
     }, 180_000);
   },

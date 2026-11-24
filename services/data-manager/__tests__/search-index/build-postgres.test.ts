@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import postgres from "postgres";
-import { assert, describe, expect, it } from "vitest";
+import { afterAll, assert, describe, expect, it } from "vitest";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import type { SearchIndexRuntimeState } from "../../src/jobs/search-index/state.js";
 import { StateStore } from "../../src/state.js";
@@ -65,9 +65,26 @@ function searchIndexFixture(pg: PostgisFixture, dataDir: string) {
   return { runtimeState, build };
 }
 
+let shared: PostgisFixture | undefined;
+
+/** One database for the whole file, emptied of search indexes before each test. */
+async function database(): Promise<PostgisFixture> {
+  shared ??= await startPostgis();
+  await shared.sql.unsafe(
+    `DROP EVENT TRIGGER IF EXISTS refuse_previous_drop;
+     DROP FUNCTION IF EXISTS public.refuse_previous_drop();
+     DROP SCHEMA IF EXISTS osm_search,osm_search__staging,osm_search__previous CASCADE`,
+  );
+  return shared;
+}
+
+afterAll(async () => {
+  await shared?.stop();
+});
+
 describe.skipIf(skipE2e)("search-index publication beside a long reader", () => {
   it("serves searches from the new snapshot while a backup-like reader holds the old one", async () => {
-    const pg = await startPostgis();
+    const pg = await database();
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-search-reader-"));
     const reader = postgres(pg.connectionString, { max: 1 });
     // The build's lock and transaction take both of the fixture's connections.
@@ -127,13 +144,12 @@ describe.skipIf(skipE2e)("search-index publication beside a long reader", () => 
       await reader.end({ timeout: 2 });
       await probe.end({ timeout: 2 });
       await search.end({ timeout: 2 });
-      await pg.stop();
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 90_000);
 
   it("reports a publication as done when only dropping the old schema fails", async () => {
-    const pg = await startPostgis();
+    const pg = await database();
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-search-drop-"));
     try {
       const { runtimeState, build } = searchIndexFixture(pg, dataDir);
@@ -172,7 +188,6 @@ describe.skipIf(skipE2e)("search-index publication beside a long reader", () => 
       );
       expect(after).toEqual({ previous: false, name: "Newest Name" });
     } finally {
-      await pg.stop();
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 90_000);
@@ -180,7 +195,7 @@ describe.skipIf(skipE2e)("search-index publication beside a long reader", () => 
 
 describe.skipIf(skipE2e)("atomic search-index publication", () => {
   it("publishes a complete snapshot and preserves it after a later failure", async () => {
-    const pg = await startPostgis();
+    const pg = await database();
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-search-index-"));
     try {
       const pbfPath = join(dataDir, "fixture.osm.pbf");
@@ -315,7 +330,6 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
         expect(staging?.exists).toBe(false);
       }
     } finally {
-      await pg.stop();
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 120_000);
@@ -324,7 +338,7 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
 it.skipIf(skipE2e)(
   "keeps zero-term native POIs and refuses a changed PBF before publication",
   async () => {
-    const pg = await startPostgis();
+    const pg = await database();
     const dir = mkdtempSync(join(tmpdir(), "global-source-"));
     try {
       const path = join(dir, "planet.osm.pbf");
@@ -386,7 +400,6 @@ it.skipIf(skipE2e)(
       const [retained] = await pg.sql.unsafe(`SELECT epoch FROM osm_search.index_state`);
       expect(retained?.epoch).toBe(first.epoch);
     } finally {
-      await pg.stop();
       rmSync(dir, { recursive: true, force: true });
     }
   },
