@@ -483,4 +483,49 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       .where(inArray(dataSubjectRequest.id, [closed.id, active.id]));
     expect(remaining).toEqual([]);
   });
+
+  it("keeps a closed case while a staff member who handled it has an active request", async () => {
+    vi.stubEnv("LEGAL_DSAR_CASE_RETENTION_DAYS", "30");
+    const handled = await service().create({
+      channel: "email",
+      kind: "access",
+      subject: { locatorType: "email", locator: "handled@example.test", accountState: "unknown" },
+      actorUserId: ADMINS[0],
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await service().recordDecision({
+      requestId: handled.id,
+      version: handled.version,
+      decision: "refused",
+      reasonCode: "identity-not-confirmed",
+      actorId: ADMINS[0],
+      idempotencyKey: `refuse-handled-${handled.id}`,
+    });
+    const ownRequest = await service().create({
+      userId: ADMINS[0],
+      kind: "access",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const later = new Date(now.getTime() + 40 * 86_400_000);
+    await runPrivacyDatabaseCleanup({ database: fixture.db, now: later });
+    expect(await service().getById(handled.id)).toBeDefined();
+    await service().withdraw(
+      ownRequest.id,
+      ADMINS[0],
+      ownRequest.version,
+      `withdraw-${ownRequest.id}`,
+    );
+    await runPrivacyDatabaseCleanup({
+      database: fixture.db,
+      now: new Date(later.getTime() + 40 * 86_400_000),
+    });
+    const remaining = await fixture.db
+      .select({ id: dataSubjectRequest.id })
+      .from(dataSubjectRequest)
+      .where(inArray(dataSubjectRequest.id, [handled.id, ownRequest.id]));
+    expect(remaining).toEqual([]);
+  });
 });

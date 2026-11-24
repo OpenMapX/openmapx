@@ -1,6 +1,6 @@
 /**
  * Shared rendering helpers for the email-processor disclosure in the Privacy
- * Policy (§10), so the DE and EN content files don't each carry a copy of the
+ * Policy (§12), so the DE and EN content files don't each carry a copy of the
  * country/transfer prose.
  */
 type LegalLocale = "en" | "de";

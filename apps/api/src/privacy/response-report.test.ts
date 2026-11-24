@@ -218,6 +218,7 @@ describe("localized privacy response report", () => {
         adminJobRetentionDays: 60,
         serverLogRetentionDays: 14,
         dsarCaseRetentionDays: 400,
+        backupRetentionDays: 21,
       },
     };
     const report = buildPrivacyResponseReport({ locale: "en", context: configured, sources: [] });
@@ -231,6 +232,7 @@ describe("localized privacy response report", () => {
     expect(retentionOf("application-logs")).toMatchObject({ days: 14 });
     expect(retentionOf("privacy-case-records")).toMatchObject({ days: 400 });
     expect(retentionOf("privacy-case-handling-attribution")).toMatchObject({ days: 400 });
+    expect(retentionOf("backup-retained-copies")).toMatchObject({ days: 21 });
     // A 60-day job record no longer counts as short-lived; 14-day logs do.
     expect(report.processingInformation.shortLivedCategories).not.toContain(
       "admin-jobs-attribution",

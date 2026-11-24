@@ -70,7 +70,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 24. November 2026
+        Zuletzt aktualisiert: 25. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -123,6 +123,12 @@ export default function PrivacyContentDe({
             <Typography>
               Veröffentlichung der von Ihnen verfassten Korrekturen bei OpenStreetMap, sofern Sie
               die Beitragsfunktion nutzen (siehe Abschnitt&nbsp;7)
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Weitergabe Ihrer Verkehrs- und Gefahrenmeldungen an OpenConditions, sofern Sie diese
+              Funktion nutzen (siehe Abschnitt&nbsp;8)
             </Typography>
           </li>
           <li>
@@ -705,10 +711,10 @@ export default function PrivacyContentDe({
       <Section title={T.crowdReports}>
         <Typography>
           Wenn diese Instanz Verkehrs- und Gefahrenmeldungen anbietet, können Sie eine Lage auf der
-          Straße melden, etwa einen Unfall, eine Gefahr oder eine Sperrung, und Meldungen anderer
-          bestätigen oder verneinen. Ein Konto ist dafür nicht nötig. Meldungen gehen an den
-          OpenConditions-Dienst, den der Betreiber dieser Instanz anbindet, und werden dort zu
-          Verkehrsmeldungen für alle.
+          Straße melden, etwa einen Unfall, eine Gefahr oder eine Sperrung, und eine Meldung anderer
+          bestätigen oder verneinen, wenn Sie sich ihr nähern. Ein Konto ist dafür nicht nötig.
+          Meldungen gehen an den OpenConditions-Dienst, den der Betreiber dieser Instanz anbindet,
+          und werden dort zu Verkehrsmeldungen für alle.
         </Typography>
         <ul>
           <li>
@@ -716,11 +722,13 @@ export default function PrivacyContentDe({
               <strong>
                 Eine Meldeidentität auf diesem Gerät, nicht mit Ihrem Konto verknüpft.
               </strong>{" "}
-              Bei der ersten Nutzung erzeugt Ihr Browser ein Schlüsselpaar und bewahrt es im lokalen
-              Speicher dieses Browsers auf, zusammen mit einer täglich erneuerten Meldeberechtigung.
-              Jede Meldung und jede Bewertung wird mit diesem Schlüssel signiert. Der Schlüssel wird
-              nie mit Ihrem OpenMapX-Konto verbunden, und OpenMapX speichert Meldungen nicht in
-              seiner eigenen Datenbank. Er wirkt als Pseudonym: OpenConditions kann erkennen, dass
+              Wenn Sie zum ersten Mal eine Meldung oder Rückmeldung senden, erzeugt Ihr Browser ein
+              Schlüsselpaar und bewahrt es im lokalen Speicher dieses Browsers auf, zusammen mit
+              einer Meldeberechtigung, die etwa einen Tag gilt und danach mit Ihrer nächsten Meldung
+              oder Rückmeldung erneuert wird. Jede Meldung und jede Rückmeldung wird mit dem
+              privaten Schlüssel signiert, der den Browser nie verlässt. Der Schlüssel wird nie mit
+              Ihrem OpenMapX-Konto verbunden, und OpenMapX speichert Meldungen nicht in seiner
+              eigenen Datenbank. Er wirkt als Pseudonym: OpenConditions kann erkennen, dass
               Meldungen vom selben Gerät stammen, aber nicht, von wem.
             </Typography>
           </li>
@@ -728,23 +736,25 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Was übermittelt wird.</strong> Eine Meldung enthält die Art der Lage, den von
               Ihnen gewählten Ort, optional die Schwere, den Zeitpunkt sowie den öffentlichen
-              Schlüssel mit Signatur. Eine Bewertung enthält die Meldung, auf die sie sich bezieht,
-              ob Sie sie bestätigen oder verneinen, den Zeitpunkt sowie den öffentlichen Schlüssel
-              mit Signatur. Der Server von OpenMapX leitet sie ohne Ihre IP-Adresse und ohne
-              Browserangaben weiter; OpenConditions sieht nur den Server.
+              Schlüssel mit Signatur. Eine Rückmeldung enthält die Meldung, auf die sie sich
+              bezieht, ob Sie sie bestätigen oder verneinen, den Zeitpunkt sowie den öffentlichen
+              Schlüssel mit Signatur; da Sie nur gefragt werden, wenn Sie sich einer Meldung nähern,
+              zeigt eine Rückmeldung auch, dass das Gerät zu dieser Zeit in der Nähe dieses Orts
+              war. Der Server von OpenMapX leitet sie ohne Ihre IP-Adresse und ohne Browserangaben
+              weiter; OpenConditions sieht nur den Server.
             </Typography>
           </li>
           <li>
             <Typography>
               <strong>Was OpenConditions speichert.</strong> Gespeichert werden der öffentliche
               Schlüssel, wann er zuletzt genutzt wurde, und ein Zuverlässigkeitswert, der sich
-              daraus ergibt, wie frühere Meldungen ausgegangen sind. Ihre Meldungen und Bewertungen
-              bleiben mit dem Schlüssel verknüpft; über diese Verknüpfung wird geprüft, ob die
-              Meldungen eines Geräts zusammen plausibel sind, und Missbrauch begrenzt. Ein
-              Schlüssel, der 12&nbsp;Monate nicht genutzt wird, wird mit seinen Bewertungen
-              gelöscht; seine Meldungen bleiben dann nur als nicht verknüpfte Verkehrsinformationen.
-              Ein wegen Missbrauchs gesperrter Schlüssel bleibt auf der Sperrliste, solange die
-              Sperre besteht.
+              daraus ergibt, wie frühere Meldungen ausgegangen sind. Ihre Meldungen und
+              Rückmeldungen bleiben mit dem Schlüssel verknüpft; über diese Verknüpfung wird
+              geprüft, ob die Meldungen eines Geräts zusammen plausibel sind, und Missbrauch
+              begrenzt. Ein Schlüssel, der 12&nbsp;Monate nicht genutzt wird, wird mit seinen
+              Rückmeldungen gelöscht; seine Meldungen bleiben dann nur als nicht verknüpfte
+              Verkehrsinformationen. Ein wegen Missbrauchs gesperrter Schlüssel bleibt auf der
+              Sperrliste, solange die Sperre besteht.
             </Typography>
           </li>
           <li>
@@ -1052,6 +1062,17 @@ export default function PrivacyContentDe({
               Anzeigeeinstellungen (z.&nbsp;B. Globus- vs. Flachkartenprojektion) wird im
               localStorage gespeichert, damit die Oberfläche Ihre zuletzt genutzte Ansicht
               wiederherstellt. Es sind keine personenbezogenen Daten betroffen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Schlüssel für Verkehrsmeldungen</strong> (
+              <code>openconditions.contrib.deviceKey</code>,{" "}
+              <code>openconditions.contrib.grant</code>) &mdash; Wenn Sie eine Verkehrs- oder
+              Gefahrenmeldung oder eine Rückmeldung senden, werden das Schlüsselpaar und die
+              aktuelle Meldeberechtigung im localStorage gespeichert (siehe Abschnitt&nbsp;8). Sie
+              bleiben, bis Sie die Websitedaten dieses Browsers löschen oder Ihr Konto in diesem
+              Browser löschen.
             </Typography>
           </li>
           <li>
@@ -1383,7 +1404,7 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Verkehrs- und Gefahrenmeldungen</strong> &mdash; die Meldeidentität wird von
               OpenConditions 12&nbsp;Monate nach ihrer letzten Nutzung zusammen mit ihren
-              Bewertungen gelöscht; ihre Meldungen bleiben nur als nicht verknüpfte
+              Rückmeldungen gelöscht; ihre Meldungen bleiben nur als nicht verknüpfte
               Verkehrsinformationen erhalten (siehe Abschnitt&nbsp;8). Der Schlüssel auf Ihrem Gerät
               bleibt, bis Sie die Websitedaten dieses Browsers löschen oder Ihr Konto in diesem
               Browser löschen.

@@ -3935,7 +3935,7 @@
       "automationHeading": "Automatisierte Entscheidungen und Profiling",
       "automation": "OpenMapX verwendet die in dieser Antwort beschriebenen Daten nicht für eine ausschließlich automatisierte Entscheidung mit rechtlicher oder ähnlich erheblicher Wirkung und führt kein solches Profiling durch.",
       "boundariesHeading": "Grenzen der Verantwortlichkeit",
-      "boundaries": "Diese Antwort umfasst Daten dieses Verantwortlichen und seiner angewiesenen Auftragsverarbeiter. Unabhängige Verantwortliche führen eigene Aufzeichnungen und beantworten eigene Anfragen. In öffentlichen Netzen veröffentlichte Daten können bei unabhängigen Empfängern oder Netzbetreibern außerhalb der Verfügungsgewalt dieses Verantwortlichen verbleiben. Verkehrs- und Gefahrenmeldungen werden mit einem Schlüssel signiert, der nur im meldenden Browser liegt, und nie mit einem Konto verknüpft; diese Antwort kann sie daher nicht enthalten. Die Datenschutzerklärung beschreibt, was wie lange gespeichert wird."
+      "boundaries": "Diese Antwort umfasst Daten dieses Verantwortlichen und seiner angewiesenen Auftragsverarbeiter. Unabhängige Verantwortliche führen eigene Aufzeichnungen und beantworten eigene Anfragen. In öffentlichen Netzen veröffentlichte Daten können bei unabhängigen Empfängern oder Netzbetreibern außerhalb der Verfügungsgewalt dieses Verantwortlichen verbleiben. Verkehrs- und Gefahrenmeldungen werden mit einem Schlüssel signiert, dessen privater Teil im meldenden Browser bleibt, und nie mit einem Konto verknüpft; diese Antwort kann sie daher nicht enthalten. Die Datenschutzerklärung beschreibt, was wie lange gespeichert wird."
     },
     "readme": {
       "title": "OpenMapX-Datenauskunft",
@@ -3996,7 +3996,7 @@
         "privacy-case-handling-attribution": {
           "category": "Von Ihnen bearbeitete Datenschutzfälle",
           "purpose": "Nachweisen, wie Datenschutzanfragen bearbeitet wurden",
-          "source": "Erfasst, wenn Sie eine Datenschutzanfrage für eine andere Person erfassen, ihren Status ändern oder ihre Frist verlängern, und wenn Sie eine Benachrichtigung zu einem Fall erhalten",
+          "source": "Erfasst, wenn Sie eine Datenschutzanfrage für eine andere Person erfassen, ihre Identität prüfen, über die Anfrage entscheiden, ihre Frist verlängern, eine Aufgabe erledigen oder einen Export starten, und wenn Sie eine Benachrichtigung zu einem Fall erhalten",
           "retention": "Wird mit dem Fall nach der eingestellten Aufbewahrungsfrist für Fälle gelöscht",
           "safeRepresentation": "Nur was Sie wann getan haben, mit einer pseudonymen Fallreferenz; die betroffene Person und die Einzelheiten des Falls werden zurückgehalten"
         },

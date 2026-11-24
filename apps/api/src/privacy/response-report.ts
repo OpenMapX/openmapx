@@ -103,6 +103,7 @@ export const CONFIGURED_RETENTION: Readonly<
   "application-logs": (deployment) => deployment.serverLogRetentionDays,
   "privacy-case-records": (deployment) => deployment.dsarCaseRetentionDays,
   "privacy-case-handling-attribution": (deployment) => deployment.dsarCaseRetentionDays,
+  "backup-retained-copies": (deployment) => deployment.backupRetentionDays,
 };
 
 function effectiveRetention(

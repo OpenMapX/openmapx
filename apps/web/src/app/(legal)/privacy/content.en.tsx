@@ -70,7 +70,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: November 24, 2026
+        Last updated: November 25, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -121,6 +121,12 @@ export default function PrivacyContent({
             <Typography>
               Publishing corrections you write to OpenStreetMap, if you use the contribution feature
               (see Section&nbsp;7)
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Passing on traffic and hazard reports you submit to OpenConditions, if you use that
+              feature (see Section&nbsp;8)
             </Typography>
           </li>
           <li>
@@ -661,19 +667,22 @@ export default function PrivacyContent({
       <Section title={T.crowdReports}>
         <Typography>
           If this instance offers traffic and hazard reports, you can report a situation on the
-          road, such as an accident, a hazard or a closure, and confirm or deny reports others made.
-          You can do so without an account. Reports go to the OpenConditions service this
-          instance&apos;s operator connects, which turns them into traffic messages for everyone.
+          road, such as an accident, a hazard or a closure, and confirm or deny a report others made
+          when you approach it. You can do so without an account. Reports go to the OpenConditions
+          service this instance&apos;s operator connects, which turns them into traffic messages for
+          everyone.
         </Typography>
         <ul>
           <li>
             <Typography>
-              <strong>A reporting identity on this device, not linked to your account.</strong> On
-              first use, your browser creates a key pair and keeps it in this browser&apos;s local
-              storage, together with a reporting permission that is renewed daily. Every report and
-              vote is signed with this key. The key is never connected to your OpenMapX account, and
-              OpenMapX does not store reports in its own database. It acts as a pseudonym:
-              OpenConditions can tell that reports came from the same device, but not from whom.
+              <strong>A reporting identity on this device, not linked to your account.</strong> When
+              you first send a report or vote, your browser creates a key pair and keeps it in this
+              browser&apos;s local storage, together with a reporting permission that is valid for
+              about a day and renewed with your next report or vote after that. Every report and
+              vote is signed with the private key, which never leaves the browser. The key is never
+              connected to your OpenMapX account, and OpenMapX does not store reports in its own
+              database. It acts as a pseudonym: OpenConditions can tell that reports came from the
+              same device, but not from whom.
             </Typography>
           </li>
           <li>
@@ -681,8 +690,10 @@ export default function PrivacyContent({
               <strong>What is sent.</strong> A report contains the kind of situation, the location
               you chose for it, an optional severity, the time and the public key with its
               signature. A vote contains the report it refers to, whether you confirm or deny it,
-              the time and the public key with its signature. OpenMapX&apos;s server forwards them
-              without your IP address or browser details, so OpenConditions sees only the server.
+              the time and the public key with its signature; since you are asked only when you
+              approach a report, a vote also shows that the device was near that place at that time.
+              OpenMapX&apos;s server forwards them without your IP address or browser details, so
+              OpenConditions sees only the server.
             </Typography>
           </li>
           <li>
@@ -983,6 +994,15 @@ export default function PrivacyContent({
               <strong>View preferences</strong> — A small number of display settings (e.g., globe
               vs. flat map projection) are saved in localStorage so the interface restores your
               last-used view. No personal data is involved.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Traffic reporting key</strong> (<code>openconditions.contrib.deviceKey</code>,{" "}
+              <code>openconditions.contrib.grant</code>) — If you send a traffic or hazard report or
+              vote, the reporting key pair and its current reporting permission are kept in
+              localStorage (see Section&nbsp;8). They stay until you clear this browser&apos;s site
+              data or delete your account in it.
             </Typography>
           </li>
           <li>

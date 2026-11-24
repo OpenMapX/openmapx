@@ -3935,7 +3935,7 @@
       "automationHeading": "Automated decisions and profiling",
       "automation": "OpenMapX does not use the data described in this response for a solely automated decision with legal or similarly significant effects, and does not perform such profiling.",
       "boundariesHeading": "Controller boundaries",
-      "boundaries": "This response covers data held by this deployment controller and its instructed processors. Independent controllers keep their own records and answer their own requests. Data published to public networks may remain with independent recipients or network operators outside this controller's custody. Traffic and hazard reports are signed with a key kept only in the browser that sent them and are never linked to an account, so this response cannot include them; the privacy policy describes what is kept and for how long."
+      "boundaries": "This response covers data held by this deployment controller and its instructed processors. Independent controllers keep their own records and answer their own requests. Data published to public networks may remain with independent recipients or network operators outside this controller's custody. Traffic and hazard reports are signed with a key whose private part stays in the browser that sent them, and they are never linked to an account, so this response cannot include them; the privacy policy describes what is kept and for how long."
     },
     "readme": {
       "title": "OpenMapX data access export",
@@ -3996,7 +3996,7 @@
         "privacy-case-handling-attribution": {
           "category": "Privacy cases you handled",
           "purpose": "Account for how privacy requests were handled",
-          "source": "Recorded when you register a privacy request for someone, change its state or extend its deadline, and when you receive an alert about a case",
+          "source": "Recorded when you register a privacy request for someone, verify their identity, decide on the request, extend its deadline, resolve a task or start an export, and when you receive an alert about a case",
           "retention": "Deleted with the case, after the configured case retention",
           "safeRepresentation": "Only what you did and when, with a pseudonymous case reference; the person the case concerns and the case's details are withheld"
         },
