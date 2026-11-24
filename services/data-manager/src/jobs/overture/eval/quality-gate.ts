@@ -140,7 +140,7 @@ async function queryFusedCase(
               (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               NULLIF(BTRIM(addresses->0->>'freeform'), '') AS address
        FROM "${schema}".places
-       WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+       WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= $6)
          AND (
@@ -205,7 +205,7 @@ async function queryCase(
   const rows = await sql.unsafe<{ gers_id: string }[]>(
     `SELECT gers_id
      FROM "${schema}".places
-     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+     WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
        AND (operating_status IS NULL OR operating_status = 'open')
        AND (confidence IS NULL OR confidence >= $6)
        AND (

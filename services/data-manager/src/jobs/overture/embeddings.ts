@@ -42,6 +42,7 @@ export class SqlEmbeddingCache implements EmbeddingCache {
 
   constructor(private readonly sql: postgres.Sql) {}
 
+  // Once is enough: nothing drops the cache's schema while data-manager runs.
   private ensureReady(): Promise<void> {
     this.ready ??= ensureEmbeddingCache(this.sql).catch((error: unknown) => {
       this.ready = undefined;
