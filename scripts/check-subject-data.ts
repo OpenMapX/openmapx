@@ -47,9 +47,9 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "share_link.user_id": "share-links",
   "two_factor.user_id": "auth-two-factor",
   "data_subject_request.user_id": "privacy-case-records",
-  "data_subject_request.actor_user_id": "privacy-case-records",
-  "data_subject_request_notification.recipient_user_id": "privacy-case-records",
-  "data_subject_request_event.actor_user_id": "privacy-case-records",
+  "data_subject_request.actor_user_id": "privacy-case-handling-attribution",
+  "data_subject_request_notification.recipient_user_id": "privacy-case-handling-attribution",
+  "data_subject_request_event.actor_user_id": "privacy-case-handling-attribution",
   "admin_audit_log.target_user_id": "admin-audit-attribution",
   "system_settings.updated_by": "system-setting-attribution",
   "session_auth_assurance.user_id": "auth-sessions",
@@ -268,6 +268,12 @@ export function validateSubjectDataInventory(
     } else if (owners && !owners.includes(registrationId)) {
       errors.push(
         `direct user foreign key ${foreignKey} is classified under ${registrationId}, but the catalogue locates it under ${owners.join(", ")}`,
+      );
+    } else if (!owners) {
+      // A classified column no registration locates is left out of every
+      // export, however complete the classification looks.
+      errors.push(
+        `direct user foreign key ${foreignKey} is classified under ${registrationId}, which does not locate it`,
       );
     }
   }

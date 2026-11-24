@@ -77,6 +77,30 @@ describe("privacy report legal facts", () => {
     );
   });
 
+  it("reports the retention periods the daily prunes enforce", async () => {
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).resolves.toMatchObject({
+      deployment: {
+        serverLogRetentionDays: 30,
+        auditLogRetentionDays: 365,
+        adminJobRetentionDays: 30,
+      },
+    });
+    vi.stubEnv("LEGAL_SERVER_LOG_RETENTION_DAYS", "60");
+    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", "730");
+    vi.stubEnv("ADMIN_JOB_RETENTION_DAYS", "14");
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).resolves.toMatchObject({
+      deployment: {
+        serverLogRetentionDays: 60,
+        auditLogRetentionDays: 730,
+        adminJobRetentionDays: 14,
+      },
+    });
+    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", "abc");
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).rejects.toThrow(
+      "AUDIT_LOG_RETENTION_DAYS",
+    );
+  });
+
   it("uses persisted controller facts when deployment env is unset", async () => {
     const database = {
       select: () => ({

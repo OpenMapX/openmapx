@@ -229,8 +229,9 @@ it to scroll back. Two things worth knowing about retention:
   best-effort basis. Database unavailability can lose persisted entries; logs
   are not a guaranteed audit or delivery channel.
 
-Persisted application logs are pruned daily using
-`LEGAL_SERVER_LOG_RETENTION_DAYS` (30 days by default). Review the value against
+Persisted application logs are pruned daily using the server-log retention of
+the legal settings, `LEGAL_SERVER_LOG_RETENTION_DAYS` or the value set in the
+administration (30 days by default). Review the value against
 the deployment's published policy. Entries about a person with an open
 data-subject request stay while that request still needs them, including while
 an operator still has to handle the logs for it: until they are captured for the
@@ -514,8 +515,11 @@ The server writes the trail independently of the client. Its operational limits 
 - **A failed write never breaks the action.** If the audit insert fails, the error
   is logged and the underlying operation can still complete.
 - **Retention is bounded.** A daily prune deletes entries older than
-  `AUDIT_LOG_RETENTION_DAYS` (default 90), so the table doesn't grow without limit
-  on a long-lived instance. Raise or lower it via the env var.
+  `AUDIT_LOG_RETENTION_DAYS` (default 365), so the table doesn't grow without
+  limit on a long-lived instance. Raise or lower it via the env var; the privacy
+  page and data-access reports state the configured period. Deleting an account
+  removes it from the entries that name it, with the IP address and browser of
+  its own actions.
 
 The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished admin jobs after `ADMIN_JOB_RETENTION_DAYS` (default
 30). Finished data-manager jobs, with their stages and the account that started

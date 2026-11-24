@@ -40,6 +40,7 @@ import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.j
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
+import { privacyRetention } from "./privacy/settings.js";
 import { processLogger } from "./process-logger";
 import {
   cameraMediaSourcesOf,
@@ -61,6 +62,8 @@ import {
   uniformErrorHandler,
 } from "./server-wiring";
 import {
+  adminJobRetentionDays,
+  auditLogRetentionDays,
   DATA_MANAGER_JOB_RETENTION_DAYS,
   parseRequiredRetentionDays,
   pruneAppLogs,
@@ -408,9 +411,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
 
   // Prune old health history records daily
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  const AUDIT_RETENTION_DAYS = envInt("AUDIT_LOG_RETENTION_DAYS", 90);
-  const JOB_RETENTION_DAYS = envInt("ADMIN_JOB_RETENTION_DAYS", 30);
-  const APP_LOG_RETENTION_DAYS = parseRequiredRetentionDays("LEGAL_SERVER_LOG_RETENTION_DAYS", 30);
+  const AUDIT_RETENTION_DAYS = auditLogRetentionDays();
+  const JOB_RETENTION_DAYS = adminJobRetentionDays();
+  // The server-log period is a legal setting an administrator can change at
+  // runtime, so each run reads it; reading it once here refuses a bad value
+  // at startup.
+  await privacyRetention("serverLog");
   const BACKUP_RETENTION_DAYS = parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30);
 
   const runRetention = () => {
@@ -423,9 +429,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     void pruneDataManagerJobs(DATA_MANAGER_JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Data-manager job prune failed"),
     );
-    void pruneAppLogs(APP_LOG_RETENTION_DAYS).catch((err) =>
-      server.log.warn(err, "Application log prune failed"),
-    );
+    void privacyRetention("serverLog")
+      .then(pruneAppLogs)
+      .catch((err) => server.log.warn(err, "Application log prune failed"));
     void pruneExpiredVerifications().catch((err) =>
       server.log.warn(err, "Expired verification prune failed"),
     );

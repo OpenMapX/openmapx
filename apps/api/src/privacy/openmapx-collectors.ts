@@ -1,5 +1,6 @@
-import { and, asc, eq, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
+import { PRIVACY_ADMIN_NOTIFICATION_TEMPLATES } from "../db/privacy-schema.js";
 import {
   account,
   accountActionReceipt,
@@ -1230,6 +1231,83 @@ export async function* streamOpenMapxRegistrationRecords(
       );
       return;
     }
+    case "privacy-case-handling-attribution":
+      // What a staff member did on other people's privacy cases. The case is
+      // shown only as a pseudonymous reference: its subject, locator, locale,
+      // identity method and the event payload belong to someone else. A case's
+      // `received` event records the account that registered it, so the
+      // registration on `data_subject_request.actor_user_id` is read here.
+      yield* emit(
+        database
+          .select({
+            id: dataSubjectRequestEvent.id,
+            requestId: dataSubjectRequestEvent.requestId,
+            kind: dataSubjectRequest.kind,
+            eventType: dataSubjectRequestEvent.eventType,
+            createdAt: dataSubjectRequestEvent.createdAt,
+          })
+          .from(dataSubjectRequestEvent)
+          .innerJoin(
+            dataSubjectRequest,
+            eq(dataSubjectRequestEvent.requestId, dataSubjectRequest.id),
+          )
+          .where(
+            and(
+              eq(dataSubjectRequestEvent.actorUserId, context.userId),
+              eq(dataSubjectRequestEvent.actorKind, "admin"),
+              lte(dataSubjectRequestEvent.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(dataSubjectRequestEvent.id)),
+        {
+          policyCodes: ["rights-of-others", "protected-case-detail"],
+          map: (row) => ({
+            recordId: pseudonymousIdentifier(row.id),
+            caseRef: pseudonymousIdentifier(row.requestId),
+            actor: "subject",
+            caseKind: row.kind,
+            eventType: row.eventType,
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      // Alerts about new cases and approaching deadlines sent to the staff member.
+      yield* emit(
+        database
+          .select({
+            id: dataSubjectRequestNotification.id,
+            requestId: dataSubjectRequestNotification.requestId,
+            template: dataSubjectRequestNotification.template,
+            channel: dataSubjectRequestNotification.channel,
+            state: dataSubjectRequestNotification.state,
+            sentAt: dataSubjectRequestNotification.sentAt,
+            createdAt: dataSubjectRequestNotification.createdAt,
+          })
+          .from(dataSubjectRequestNotification)
+          .where(
+            and(
+              eq(dataSubjectRequestNotification.recipientUserId, context.userId),
+              inArray(dataSubjectRequestNotification.template, [
+                ...PRIVACY_ADMIN_NOTIFICATION_TEMPLATES,
+              ]),
+              lte(dataSubjectRequestNotification.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(dataSubjectRequestNotification.id)),
+        {
+          policyCodes: ["rights-of-others", "notification-content-redacted"],
+          map: (row) => ({
+            recordId: pseudonymousIdentifier(row.id),
+            caseRef: pseudonymousIdentifier(row.requestId),
+            template: row.template,
+            channel: row.channel,
+            state: row.state,
+            sentAt: row.sentAt,
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      return;
     case "offline-package-ownership": {
       if (!context.offlinePrincipalKey || context.offlinePrincipalKey.byteLength < 32) return;
       const principal = deriveOfflinePackagePrincipal(context.userId, context.offlinePrincipalKey);
@@ -1333,6 +1411,7 @@ const PRIMARY_ARTICLE_TARGETS: Readonly<Record<string, string>> = {
   "timeline-connections": "timeline-connections",
   "admin-audit-attribution": "activity",
   "administrative-receipts": "activity",
+  "privacy-case-handling-attribution": "activity",
   "disclosure-events": "disclosures",
   "privacy-case-records": "requests",
 };

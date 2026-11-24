@@ -67,6 +67,13 @@ export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
       privacySources: safePrivacySources(values.legalPrivacySources),
       // Platform backup retention, validated when the API starts.
       backupRetentionDays: boundedNumber(envString("BACKUP_RETENTION_DAYS", "30"), 30, 1, 36_500),
+      // Administrator audit-log retention, validated when the API starts.
+      auditLogRetentionDays: boundedNumber(
+        envString("AUDIT_LOG_RETENTION_DAYS", "365"),
+        365,
+        1,
+        36_500,
+      ),
     });
   });
 };

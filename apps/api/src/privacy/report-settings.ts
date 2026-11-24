@@ -1,7 +1,11 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { db as defaultDb } from "../db/index.js";
 import { systemSettings } from "../db/schema.js";
-import { parseRequiredRetentionDays } from "../services/activity-retention.js";
+import {
+  adminJobRetentionDays,
+  auditLogRetentionDays,
+  parseRequiredRetentionDays,
+} from "../services/activity-retention.js";
 
 export interface PrivacyReportLegalFacts {
   controller: {
@@ -18,6 +22,12 @@ export interface PrivacyReportLegalFacts {
     dsarCaseRetentionDays: number;
     /** Configured backup retention; backups are kept at most this long. */
     backupRetentionDays: number;
+    /** Configured retention of persisted application logs. */
+    serverLogRetentionDays: number;
+    /** Configured retention of administrator audit-log entries. */
+    auditLogRetentionDays: number;
+    /** Configured retention of finished admin jobs. */
+    adminJobRetentionDays: number;
   };
 }
 
@@ -27,14 +37,19 @@ export class PrivacyLegalConfigurationError extends Error {
   override name = "PrivacyLegalConfigurationError";
 }
 
-function backupRetentionDays(): number {
+/** A platform retention period, validated as the API's daily retention reads it. */
+function platformRetentionDays(read: () => number): number {
   try {
-    return parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30);
+    return read();
   } catch (error) {
     throw new PrivacyLegalConfigurationError(
-      error instanceof Error ? error.message : "Invalid BACKUP_RETENTION_DAYS",
+      error instanceof Error ? error.message : "Invalid retention configuration",
     );
   }
+}
+
+function backupRetentionDays(): number {
+  return platformRetentionDays(() => parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30));
 }
 
 function clean(raw: unknown): string {
@@ -217,6 +232,16 @@ export async function resolvePrivacyReportLegalFacts(
         3650,
       ),
       backupRetentionDays: backupRetentionDays(),
+      serverLogRetentionDays: numberSetting(
+        "LEGAL_SERVER_LOG_RETENTION_DAYS",
+        "legalServerLogRetentionDays",
+        values,
+        30,
+        1,
+        3650,
+      ),
+      auditLogRetentionDays: platformRetentionDays(auditLogRetentionDays),
+      adminJobRetentionDays: platformRetentionDays(adminJobRetentionDays),
     },
   };
 }

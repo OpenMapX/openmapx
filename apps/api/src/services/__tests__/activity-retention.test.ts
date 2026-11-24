@@ -17,6 +17,8 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 
 const { lt } = await import("drizzle-orm");
 const {
+  adminJobRetentionDays,
+  auditLogRetentionDays,
   DATA_MANAGER_JOB_RETENTION_DAYS,
   parseRequiredRetentionDays,
   pruneAppLogs,
@@ -148,5 +150,29 @@ describe("parseRequiredRetentionDays", () => {
         BACKUP_RETENTION_DAYS: value,
       }),
     ).toThrow(/BACKUP_RETENTION_DAYS/);
+  });
+});
+
+describe("audit-log and admin-job retention settings", () => {
+  it("default to the periods the privacy catalogue discloses", async () => {
+    const { SUBJECT_DATA_CATALOGUE_BY_ID } = await import("../../privacy/catalogue.js");
+    expect(auditLogRetentionDays({})).toBe(365);
+    expect(adminJobRetentionDays({})).toBe(30);
+    expect(SUBJECT_DATA_CATALOGUE_BY_ID.get("admin-audit-attribution")?.retention).toEqual(
+      expect.objectContaining({ kind: "fixed-days", days: 365 }),
+    );
+    expect(SUBJECT_DATA_CATALOGUE_BY_ID.get("admin-jobs-attribution")?.retention).toEqual(
+      expect.objectContaining({ kind: "fixed-days", days: 30 }),
+    );
+  });
+
+  it("refuse a value the daily prune could not honour instead of falling back", () => {
+    expect(auditLogRetentionDays({ AUDIT_LOG_RETENTION_DAYS: "730" })).toBe(730);
+    expect(() => auditLogRetentionDays({ AUDIT_LOG_RETENTION_DAYS: "abc" })).toThrow(
+      /AUDIT_LOG_RETENTION_DAYS/,
+    );
+    expect(() => adminJobRetentionDays({ ADMIN_JOB_RETENTION_DAYS: "0" })).toThrow(
+      /ADMIN_JOB_RETENTION_DAYS/,
+    );
   });
 });

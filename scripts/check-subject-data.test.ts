@@ -61,6 +61,22 @@ describe("subject-data policy gate", () => {
     ]);
   });
 
+  it("refuses a classified column that no registration locates", () => {
+    const result = validateSubjectDataInventory({
+      catalogue: SUBJECT_DATA_CATALOGUE.filter(
+        (item) => item.id !== "privacy-case-handling-attribution",
+      ),
+      directUserForeignKeys: ["data_subject_request_event.actor_user_id"],
+      directUserForeignKeyClassifications: {
+        "data_subject_request_event.actor_user_id": "privacy-case-records",
+      },
+      manifestSubjects: [],
+    });
+    expect(result.errors).toEqual([
+      "direct user foreign key data_subject_request_event.actor_user_id is classified under privacy-case-records, which does not locate it",
+    ]);
+  });
+
   it("locates the OAuth client and consent columns under the OAuth resources registration", () => {
     const result = validateSubjectDataInventory({
       directUserForeignKeys: ["oauth_client.user_id", "oauth_consent.user_id"],
@@ -90,6 +106,7 @@ describe("subject-data policy gate", () => {
           ],
         },
       ],
+      directUserForeignKeys: [],
       manifestSubjects: [],
     });
     expect(result.errors).toEqual([

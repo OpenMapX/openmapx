@@ -296,6 +296,7 @@ const CATEGORY_TARGETS: Record<string, ArticleTarget> = {
   "timeline-connections": "timeline-connections",
   "admin-audit-attribution": "activity",
   "administrative-receipts": "activity",
+  "privacy-case-handling-attribution": "activity",
   "disclosure-events": "disclosures",
   "privacy-case-records": "requests",
 };

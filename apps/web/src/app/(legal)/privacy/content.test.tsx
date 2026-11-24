@@ -24,6 +24,7 @@ const legal: PublicLegalConfig = {
   deploymentJurisdiction: "DE-BE",
   privacySources: [],
   backupRetentionDays: 14,
+  auditLogRetentionDays: 730,
 };
 
 function backupStatement(container: HTMLElement, heading: string): string {
@@ -70,6 +71,29 @@ describe("privacy page backup statement", () => {
       "ein Jahr nach der Änderung",
     );
     expect(backupStatement(de, "Aufzeichnungen über Offenlegungen")).toContain("drei Jahre");
+  });
+
+  it("states the configured administrator activity-log retention, or its default", () => {
+    const en = render(<PrivacyContentEn legal={legal} />).container;
+    expect(backupStatement(en, "Administrator activity log")).toContain("deleted after 730 days.");
+    const fallback = render(<PrivacyContentEn legal={null} />).container;
+    expect(backupStatement(fallback, "Administrator activity log")).toContain(
+      "the period the operator configures (365 days by default).",
+    );
+    const de = render(<PrivacyContentDe legal={legal} />).container;
+    expect(backupStatement(de, "Protokoll administrativer Tätigkeiten")).toContain(
+      "nach 730 Tagen gelöscht",
+    );
+  });
+
+  it("describes traffic and hazard reports and their 12-month retention in both languages", () => {
+    const en = render(<PrivacyContentEn legal={legal} />).container;
+    expect(en.textContent).toContain("8. Traffic and Hazard Reports");
+    expect(en.textContent).toContain("never connected to your OpenMapX account");
+    expect(backupStatement(en, "Traffic and hazard reports")).toContain("12 months");
+    const de = render(<PrivacyContentDe legal={legal} />).container;
+    expect(de.textContent).toContain("8. Verkehrs- und Gefahrenmeldungen");
+    expect(backupStatement(de, "Verkehrs- und Gefahrenmeldungen")).toContain("12 Monate");
   });
 
   it("renders the same facts in German", () => {
