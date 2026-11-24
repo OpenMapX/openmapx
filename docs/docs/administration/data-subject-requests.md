@@ -128,6 +128,26 @@ the first request; an incomplete configuration answers exports with
 health, export failures (`privacy_export_failures`) and overdue cases. Case
 retention cleanup runs hourly.
 
+Once a day, at startup and then every 24 hours, the API also deletes the
+records whose period the catalogue declares:
+
+| Records                                                                      | Deleted                          |
+| ---------------------------------------------------------------------------- | -------------------------------- |
+| Sessions and administrator confirmations (`auth-sessions`)                   | 30 days after they expire        |
+| OAuth access and refresh tokens (`auth-oauth-tokens`)                        | 30 days after they expire        |
+| OAuth client assertions (`oauth-client-assertions`, not personal)            | 30 days after they expire        |
+| Disclosure records (`disclosure-events`)                                     | 1,095 days after the disclosure  |
+| Account, sign-in policy and integration receipts (`administrative-receipts`) | 365 days after they were made    |
+| Share links with an expiry date (`share-links`)                              | 30 days after they expire        |
+| Parked locations with a parking time limit (`parked-locations`)              | 30 days after the limit passes   |
+| Offline-package records that match no existing account                       | 30 days after they were recorded |
+
+It deletes in batches of at most 500 rows (for offline-package records, the
+records of at most 500 keyed hashes) and at most 200 batches per table and run,
+so a backlog clears over several days without long locks. A record a
+retention hold of an open case covers stays until the case closes. A failure is
+logged as `Declared retention prune failed` and retried the next day.
+
 ## Intake
 
 The API records receipt time, locale, time zone, request type and a response

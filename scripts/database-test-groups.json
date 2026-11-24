@@ -23,6 +23,7 @@
     "apps/api/src/routes/__tests__/shares-postgres.test.ts",
     "apps/api/src/services/__tests__/app-log-retention-postgres.test.ts",
     "apps/api/src/services/__tests__/data-manager-job-retention-postgres.test.ts",
+    "apps/api/src/services/__tests__/declared-retention-postgres.test.ts",
     "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
     "apps/api/src/services/__tests__/cache-invalidation.valkey.test.ts",
     "apps/api/src/services/dawarich/__tests__/connection-service-postgres.test.ts",

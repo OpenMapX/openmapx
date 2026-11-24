@@ -325,10 +325,14 @@ export const oauthConsent = pgTable(
   ],
 );
 
-export const oauthClientAssertion = pgTable("oauth_client_assertion", {
-  id: text("id").primaryKey(),
-  expiresAt: timestamp("expires_at").notNull(),
-});
+export const oauthClientAssertion = pgTable(
+  "oauth_client_assertion",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => [index("oauth_client_assertion_expires_at_idx").on(table.expiresAt)],
+);
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

@@ -46,6 +46,7 @@ export const authPolicyApplication = pgTable(
       foreignColumns: [user.id],
     }).onDelete("set null"),
     index("auth_policy_application_actor_id_idx").on(t.actorId),
+    index("auth_policy_application_created_at_idx").on(t.createdAt),
   ],
 );
 

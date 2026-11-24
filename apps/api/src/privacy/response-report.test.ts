@@ -100,7 +100,7 @@ describe("localized privacy response report", () => {
       "public networks",
       "off-host-backup",
       "30 days",
-      "security retention period",
+      "expiry of the session or confirmation",
       "Omitted after review",
       "Performance of the service contract",
       "An authorized caseworker recorded a source-specific limitation",
@@ -169,6 +169,7 @@ describe("localized privacy response report", () => {
     const expected = [
       "auth-sessions",
       "auth-verifications",
+      "auth-oauth-tokens",
       "mobile-auth-handoffs",
       "offline-package-ownership",
       "application-logs",

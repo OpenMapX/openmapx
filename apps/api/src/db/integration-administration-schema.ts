@@ -33,5 +33,6 @@ export const integrationApplicationReceipt = pgTable(
       t.createdAt,
     ),
     index("integration_application_receipt_actor_id_idx").on(t.actorId),
+    index("integration_application_receipt_created_at_idx").on(t.createdAt),
   ],
 );

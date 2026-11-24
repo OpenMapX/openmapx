@@ -3876,22 +3876,25 @@
         "account-content": "content deletion or account closure",
         "accountability": "creation of the accountability record",
         "administrative-record": "creation of the administrative record",
+        "assertion-expiry": "expiry of the client assertion",
         "backup-retention": "rotation of the retained backup",
         "case-accountability": "completion or closure of the privacy case",
         "challenge-expiry": "issuance of the authentication challenge",
         "connection-revocation": "revocation of the timeline connection",
         "control-expiry": "creation or refresh of the security control",
-        "current-state": "creation of the current location state",
         "erasure-replay": "account closure or erasure processing",
         "handoff-expiry": "creation of the mobile handoff",
         "key-revocation": "revocation of the publication key",
+        "link-expiry": "revocation or deletion of the published link; a link with an expiry date is deleted 30 days after it expires",
         "log-retention": "creation of the operational log record",
         "offline-job-retention": "completion of the offline package job",
+        "parking-expiry": "clearing of the parked location; a location with a parking time limit is deleted 30 days after the limit passes",
         "processor-retention": "termination of the connected processor service",
         "public-dataset": "publication of the public dataset version",
         "recipient-accountability": "recording of the recipient event",
         "revocation": "revocation or deletion of the published link",
-        "security-retention": "security retention period"
+        "session-expiry": "expiry of the session or confirmation",
+        "token-expiry": "expiry of the token"
       },
       "snapshotLimitations": "The response reflects controller and instructed-processor sources available at the stated snapshot cutoff. Later changes and unavailable or expired sources are identified below.",
       "shortLivedHeading": "Short-lived data",
@@ -3973,10 +3976,40 @@
           "category": "Sessions and security metadata",
           "purpose": "Keep sessions secure and investigate abuse",
           "source": "Generated when you sign in",
-          "retention": "Short security retention",
+          "retention": "Deleted 30 days after the session or confirmation expires",
           "safeRepresentation": "Lifecycle, IP and user-agent metadata; session tokens are withheld",
           "portabilityExclusion": "Security metadata is not portable",
           "rightsOfOthers": "Other-device details may be minimized"
+        },
+        "auth-oauth-tokens": {
+          "category": "Tokens of connected apps",
+          "purpose": "Let apps you authorized access your account and keep that access secure",
+          "source": "Issued when you authorize an app",
+          "retention": "Deleted 30 days after the token expires"
+        },
+        "administrative-receipts": {
+          "category": "Receipts of administrative changes",
+          "purpose": "Prevent an administrative change from being applied twice and account for it",
+          "source": "Recorded when an administrator changes an account, the sign-in policy or an integration",
+          "retention": "Deleted one year after the change"
+        },
+        "oauth-client-assertions": {
+          "category": "OAuth client assertion records",
+          "purpose": "Refuse a replayed client assertion",
+          "source": "Recorded when an OAuth client authenticates",
+          "retention": "Deleted 30 days after the assertion expires"
+        },
+        "share-links": {
+          "retention": "Until you revoke the link or delete your account; a link with an expiry date is deleted 30 days after it expires"
+        },
+        "parked-locations": {
+          "retention": "Until you clear it or delete your account; a parked location with a parking time limit is deleted 30 days after the limit passes"
+        },
+        "disclosure-events": {
+          "retention": "Deleted three years after the disclosure"
+        },
+        "offline-package-ownership": {
+          "retention": "Deleted with your account; records a backup restore brings back for a deleted account are deleted 30 days after they were recorded"
         },
         "saved-lists": {
           "category": "Saved lists",

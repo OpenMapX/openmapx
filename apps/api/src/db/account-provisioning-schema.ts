@@ -53,6 +53,7 @@ export const accountActionReceipt = pgTable(
     }).onDelete("set null"),
     index("account_action_receipt_actor_id_created_at_idx").on(t.actorId, t.createdAt),
     index("account_action_receipt_target_id_created_at_idx").on(t.targetId, t.createdAt),
+    index("account_action_receipt_created_at_idx").on(t.createdAt),
     check(
       "account_action_receipt_action_check",
       sql`${t.action} in ('create','invitation','verification-email','reset-password','verify','password','role')`,

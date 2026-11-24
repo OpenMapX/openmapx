@@ -51,6 +51,27 @@ describe("privacy page backup statement", () => {
     );
   });
 
+  it("states the periods the API's retention enforces in both languages", () => {
+    const en = render(<PrivacyContentEn legal={legal} />).container;
+    expect(backupStatement(en, "Sessions, sign-in confirmations")).toContain(
+      "deleted 30 days after they expire",
+    );
+    expect(backupStatement(en, "Share links")).toContain("deleted 30 days after it expires");
+    expect(backupStatement(en, "Receipts of administrative changes")).toContain(
+      "one year after the change",
+    );
+    expect(backupStatement(en, "Records of disclosures")).toContain("three years");
+    const de = render(<PrivacyContentDe legal={legal} />).container;
+    expect(backupStatement(de, "Sitzungen, Anmeldebestätigungen")).toContain(
+      "30 Tage nach ihrem Ablauf gelöscht",
+    );
+    expect(backupStatement(de, "Freigabelinks")).toContain("30 Tage nach seinem Ablauf");
+    expect(backupStatement(de, "Belege administrativer Änderungen")).toContain(
+      "ein Jahr nach der Änderung",
+    );
+    expect(backupStatement(de, "Aufzeichnungen über Offenlegungen")).toContain("drei Jahre");
+  });
+
   it("renders the same facts in German", () => {
     const { container } = render(<PrivacyContentDe legal={legal} />);
     const statement = backupStatement(container, "Sicherungskopien");

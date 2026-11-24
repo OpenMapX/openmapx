@@ -285,6 +285,7 @@ const CATEGORY_TARGETS: Record<string, ArticleTarget> = {
   "auth-two-factor": "authentication",
   "auth-verifications": "authentication",
   "auth-oauth-resources": "authentication",
+  "auth-oauth-tokens": "authentication",
   "mobile-auth-handoffs": "authentication",
   "saved-lists": "saved-content",
   "saved-places": "saved-content",
@@ -294,6 +295,7 @@ const CATEGORY_TARGETS: Record<string, ArticleTarget> = {
   "share-links": "sharing",
   "timeline-connections": "timeline-connections",
   "admin-audit-attribution": "activity",
+  "administrative-receipts": "activity",
   "disclosure-events": "disclosures",
   "privacy-case-records": "requests",
 };

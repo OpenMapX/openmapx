@@ -69,7 +69,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 22. November 2026
+        Zuletzt aktualisiert: 24. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -1234,7 +1234,41 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Fahrzeuge und Parkposition</strong> &mdash; werden aufbewahrt, bis Sie die
               Parkposition l&ouml;schen, das Fahrzeug entfernen oder Ihr Konto l&ouml;schen. Beim
-              L&ouml;schen eines Fahrzeugs wird auch dessen Parkposition entfernt.
+              L&ouml;schen eines Fahrzeugs wird auch dessen Parkposition entfernt. Eine Parkposition
+              mit Parkzeitbegrenzung wird 30&nbsp;Tage nach deren Ablauf gelöscht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Freigabelinks</strong> — werden aufbewahrt, bis Sie den Link widerrufen oder
+              Ihr Konto löschen. Ein Link mit Ablaufdatum wird 30&nbsp;Tage nach seinem Ablauf
+              gelöscht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Sitzungen, Anmeldebestätigungen und Tokens verbundener Apps</strong> — werden
+              30&nbsp;Tage nach ihrem Ablauf gelöscht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Belege administrativer Änderungen</strong> — Aufzeichnungen darüber, dass eine
+              Administratorin oder ein Administrator ein Konto, die Anmelderichtlinie oder eine
+              Integration geändert hat, werden ein Jahr nach der Änderung gelöscht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Aufzeichnungen über Offenlegungen an Empfänger</strong> — werden drei Jahre
+              nach der Offenlegung gelöscht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Datensätze zu Offline-Paketen</strong> — werden mit Ihrem Konto gelöscht.
+              Datensätze, die eine Wiederherstellung aus einer Sicherung für ein gelöschtes Konto
+              zurückbringt, werden 30&nbsp;Tage nach ihrer Erfassung gelöscht.
             </Typography>
           </li>
           <li>
@@ -1323,6 +1357,12 @@ export default function PrivacyContentDe({
             </Typography>
           </li>
         </ul>
+        <Typography sx={{ mt: 1 }}>
+          Solange eine Datenschutzanfrage zu Ihrer Person offen ist, werden Ihre Sitzungen, Tokens,
+          Freigabelinks, Parkpositionen, Belege und Aufzeichnungen über Offenlegungen, die bei der
+          Anfrage bereits bestanden, bis zum Abschluss der Anfrage aufbewahrt, auch wenn ihre Frist
+          früher endet.
+        </Typography>
       </Section>
       <Section title={T.security}>
         <Typography>

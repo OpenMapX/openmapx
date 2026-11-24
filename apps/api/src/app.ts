@@ -93,6 +93,7 @@ import {
   startDataUsePolicyRefresh,
   stopDataUsePolicyRefresh,
 } from "./services/data-use-policy";
+import { pruneDeclaredRetention } from "./services/declared-retention";
 import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
@@ -427,6 +428,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     );
     void pruneExpiredVerifications().catch((err) =>
       server.log.warn(err, "Expired verification prune failed"),
+    );
+    void pruneDeclaredRetention().catch((err) =>
+      server.log.warn(err, "Declared retention prune failed"),
     );
     const erasureJournalPath = process.env.ERASURE_JOURNAL_PATH?.trim();
     if (erasureJournalPath) {

@@ -14,6 +14,7 @@ describe("Better Auth schema indexes", () => {
     expect(schema).toContain('index("session_expires_at_idx").on(table.expiresAt)');
     expect(schema).toContain('index("oauth_access_token_expires_at_idx").on(table.expiresAt)');
     expect(schema).toContain('index("oauth_refresh_token_expires_at_idx").on(table.expiresAt)');
+    expect(schema).toContain('index("oauth_client_assertion_expires_at_idx").on(table.expiresAt)');
     expect(schema).toContain('uniqueIndex("passkey_credential_id_key").on(table.credentialID)');
     // Better Auth's own non-unique credential index stays as generated.
     expect(schema).toContain('index("passkey_credentialID_idx").on(table.credentialID)');

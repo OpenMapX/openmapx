@@ -53,7 +53,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "auth-sessions",
-    version: 1,
+    version: 2,
     category: "authentication",
     source: "openmapx-db",
     strategy: "collector",
@@ -65,11 +65,12 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["authentication", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "service-generated" },
+    // The API's daily retention deletes them 30 days after they expire.
     retention: {
       kind: "fixed-days",
       days: 30,
       daysAfterClosure: 30,
-      reasonCode: "security-retention",
+      reasonCode: "session-expiry",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
@@ -141,7 +142,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "auth-oauth-resources",
-    version: 1,
+    version: 2,
     category: "authentication",
     source: "openmapx-db",
     strategy: "collector",
@@ -151,6 +152,33 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     legalBases: ["contract"],
     origin: { kind: "subject", descriptionCode: "oauth-registration" },
     retention: { kind: "account-lifetime", daysAfterClosure: 30, reasonCode: "erasure-replay" },
+    recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
+    article15: "include",
+    portability: { decision: "exclude", reasonCode: "authorization-secret" },
+    secretPolicy: { mode: "redact", code: "oauth-secret-redacted" },
+    rightsOfOthers: { mode: "none" },
+  },
+  {
+    id: "auth-oauth-tokens",
+    version: 1,
+    category: "authentication",
+    source: "openmapx-db",
+    strategy: "collector",
+    collectorId: "openmapx-authentication",
+    locators: [
+      { type: "user_id", field: "oauth_refresh_token.user_id" },
+      { type: "user_id", field: "oauth_access_token.user_id" },
+    ],
+    purposes: ["authentication", "security-and-abuse-prevention"],
+    legalBases: ["contract"],
+    origin: { kind: "controller", descriptionCode: "service-generated" },
+    // The API's daily retention deletes them 30 days after they expire.
+    retention: {
+      kind: "fixed-days",
+      days: 30,
+      daysAfterClosure: 30,
+      reasonCode: "token-expiry",
+    },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "exclude", reasonCode: "authorization-secret" },
@@ -231,7 +259,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "parked-locations",
-    version: 1,
+    version: 2,
     category: "vehicles",
     source: "openmapx-db",
     strategy: "collector",
@@ -240,12 +268,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["navigation", "personalization"],
     legalBases: ["contract"],
     origin: { kind: "subject", descriptionCode: "subject-created" },
-    retention: {
-      kind: "ephemeral",
-      hours: 8_760,
-      daysAfterClosure: 0,
-      reasonCode: "current-state",
-    },
+    // Until the owner clears it; one with a parking time limit is deleted by
+    // the API's daily retention 30 days after that limit passes.
+    retention: { kind: "account-lifetime", daysAfterClosure: 0, reasonCode: "parking-expiry" },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "include", format: "geojson" },
@@ -254,7 +279,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "share-links",
-    version: 1,
+    version: 2,
     category: "sharing",
     source: "openmapx-db",
     strategy: "collector",
@@ -263,7 +288,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["saved-content", "publication"],
     legalBases: ["contract", "consent"],
     origin: { kind: "subject", descriptionCode: "subject-published" },
-    retention: { kind: "account-lifetime", daysAfterClosure: 0, reasonCode: "revocation" },
+    // Until revoked; an expiring link is deleted by the API's daily retention
+    // 30 days after it expires.
+    retention: { kind: "account-lifetime", daysAfterClosure: 0, reasonCode: "link-expiry" },
     recipients: [
       { id: "openmapx-controller", roleCode: "controller", country: "DE" },
       { id: "public-recipient", roleCode: "public-recipient" },
@@ -339,7 +366,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-audit-attribution",
-    version: 3,
+    version: 4,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -347,10 +374,6 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     locators: [
       { type: "actor_id", field: "admin_audit_log.actor_id" },
       { type: "target_id", field: "admin_audit_log.target_user_id" },
-      { type: "actor_id", field: "auth_policy_application.actor_id" },
-      { type: "actor_id", field: "integration_application_receipt.actor_id" },
-      { type: "actor_id", field: "account_action_receipt.actor_id" },
-      { type: "target_id", field: "account_action_receipt.target_id" },
       { type: "actor_id", field: "auth_policy_state.activated_by" },
     ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
@@ -361,6 +384,37 @@ const registrationDefinitions: SubjectDataRegistration[] = [
       days: 3650,
       daysAfterClosure: 3650,
       reasonCode: "accountability",
+    },
+    recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
+    article15: "include",
+    portability: { decision: "exclude", reasonCode: "legal-accountability" },
+    secretPolicy: { mode: "metadata", code: "audit-safe-projection" },
+    rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
+  },
+  {
+    // The idempotency receipts of account, sign-in policy and integration
+    // changes an administrator made.
+    id: "administrative-receipts",
+    version: 1,
+    category: "administrative-accountability",
+    source: "openmapx-db",
+    strategy: "collector",
+    collectorId: "openmapx-administration",
+    locators: [
+      { type: "actor_id", field: "auth_policy_application.actor_id" },
+      { type: "actor_id", field: "integration_application_receipt.actor_id" },
+      { type: "actor_id", field: "account_action_receipt.actor_id" },
+      { type: "target_id", field: "account_action_receipt.target_id" },
+    ],
+    purposes: ["legal-accountability", "security-and-abuse-prevention"],
+    legalBases: ["legal-obligation", "legitimate-interest"],
+    origin: { kind: "controller", descriptionCode: "administrative-record" },
+    // The API's daily retention deletes them one year after they were made.
+    retention: {
+      kind: "fixed-days",
+      days: 365,
+      daysAfterClosure: 365,
+      reasonCode: "administrative-record",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
@@ -535,7 +589,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     origin: { kind: "subject", descriptionCode: "subject-requested" },
     // Deleting an account removes these rows at once. Only the API holds the
     // key that derives the principal, so a restore that replays an erasure
-    // leaves the restored rows to this retention period.
+    // leaves the restored rows to this retention period: the API's daily
+    // retention deletes rows that match no existing account 30 days after
+    // they were recorded.
     retention: {
       kind: "fixed-days",
       days: 30,
@@ -640,6 +696,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["legal-accountability", "communications", "publication"],
     legalBases: ["legal-obligation"],
     origin: { kind: "controller", descriptionCode: "disclosure-ledger" },
+    // The API's daily retention deletes them three years after they occurred.
     retention: {
       kind: "fixed-days",
       days: 1095,
@@ -697,6 +754,31 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     portability: { decision: "exclude", reasonCode: "operator-source" },
     secretPolicy: { mode: "operator_review", code: "processor-review-required" },
     rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
+  },
+  {
+    // Better Auth records each OAuth client assertion it accepts so that it
+    // cannot be replayed. The record names the client, not a person. The
+    // API's daily retention deletes it 30 days after it expires.
+    id: "oauth-client-assertions",
+    version: 1,
+    category: "authentication",
+    source: "openmapx-db",
+    strategy: "not_personal",
+    locators: [],
+    purposes: ["security-and-abuse-prevention"],
+    legalBases: ["legitimate-interest"],
+    origin: { kind: "controller", descriptionCode: "service-generated" },
+    retention: {
+      kind: "fixed-days",
+      days: 30,
+      daysAfterClosure: 0,
+      reasonCode: "assertion-expiry",
+    },
+    recipients: [],
+    article15: "not_personal",
+    portability: { decision: "exclude", reasonCode: "replay-protection" },
+    secretPolicy: { mode: "redact", code: "not-personal" },
+    rightsOfOthers: { mode: "none" },
   },
   {
     id: "global-public-data",

@@ -222,6 +222,19 @@ function safeAuditDetails(value: unknown): Record<string, unknown> | null {
 
 type ProjectedRow = Record<string, unknown>;
 
+const OAUTH_POLICY_CODES = ["oauth-secret-redacted", "opaque-identifier-redacted"];
+
+/** OAuth record identifiers become pseudonymous digests. */
+function digestOAuthIds({ id, clientId, sessionId, referenceId, ...row }: ProjectedRow) {
+  return {
+    ...row,
+    resourceIdDigest: pseudonymousIdentifier(id),
+    clientIdDigest: pseudonymousIdentifier(clientId),
+    sessionIdDigest: pseudonymousIdentifier(sessionId),
+    referenceIdDigest: pseudonymousIdentifier(referenceId),
+  };
+}
+
 async function* projectedRows(
   database: QueryDb,
   query: DrizzleCursorQuery<ProjectedRow>,
@@ -433,15 +446,7 @@ export async function* streamOpenMapxRegistrationRecords(
         },
       );
       return;
-    case "auth-oauth-resources": {
-      const policies = ["oauth-secret-redacted", "opaque-identifier-redacted"];
-      const digestTokenIds = ({ id, clientId, sessionId, referenceId, ...row }: ProjectedRow) => ({
-        ...row,
-        resourceIdDigest: pseudonymousIdentifier(id),
-        clientIdDigest: pseudonymousIdentifier(clientId),
-        sessionIdDigest: pseudonymousIdentifier(sessionId),
-        referenceIdDigest: pseudonymousIdentifier(referenceId),
-      });
+    case "auth-oauth-resources":
       yield* emit(
         database
           .select({
@@ -465,7 +470,7 @@ export async function* streamOpenMapxRegistrationRecords(
           )
           .orderBy(asc(oauthClient.id)),
         {
-          policyCodes: policies,
+          policyCodes: OAUTH_POLICY_CODES,
           map: ({ id, clientId, clientDiscoveryId, ...row }) => ({
             ...row,
             resourceIdDigest: pseudonymousIdentifier(id),
@@ -474,6 +479,24 @@ export async function* streamOpenMapxRegistrationRecords(
           }),
         },
       );
+      yield* emit(
+        database
+          .select({
+            id: oauthConsent.id,
+            clientId: oauthConsent.clientId,
+            referenceId: oauthConsent.referenceId,
+            resources: oauthConsent.resources,
+            scopes: oauthConsent.scopes,
+            createdAt: oauthConsent.createdAt,
+            updatedAt: oauthConsent.updatedAt,
+          })
+          .from(oauthConsent)
+          .where(and(eq(oauthConsent.userId, context.userId), lte(oauthConsent.createdAt, cutoff)))
+          .orderBy(asc(oauthConsent.id)),
+        { policyCodes: OAUTH_POLICY_CODES, map: digestOAuthIds },
+      );
+      return;
+    case "auth-oauth-tokens":
       yield* emit(
         database
           .select({
@@ -495,7 +518,7 @@ export async function* streamOpenMapxRegistrationRecords(
             ),
           )
           .orderBy(asc(oauthRefreshToken.id)),
-        { policyCodes: policies, map: digestTokenIds },
+        { policyCodes: OAUTH_POLICY_CODES, map: digestOAuthIds },
       );
       yield* emit(
         database
@@ -518,26 +541,9 @@ export async function* streamOpenMapxRegistrationRecords(
             ),
           )
           .orderBy(asc(oauthAccessToken.id)),
-        { policyCodes: policies, map: digestTokenIds },
-      );
-      yield* emit(
-        database
-          .select({
-            id: oauthConsent.id,
-            clientId: oauthConsent.clientId,
-            referenceId: oauthConsent.referenceId,
-            resources: oauthConsent.resources,
-            scopes: oauthConsent.scopes,
-            createdAt: oauthConsent.createdAt,
-            updatedAt: oauthConsent.updatedAt,
-          })
-          .from(oauthConsent)
-          .where(and(eq(oauthConsent.userId, context.userId), lte(oauthConsent.createdAt, cutoff)))
-          .orderBy(asc(oauthConsent.id)),
-        { policyCodes: policies, map: digestTokenIds },
+        { policyCodes: OAUTH_POLICY_CODES, map: digestOAuthIds },
       );
       return;
-    }
     case "saved-lists":
       yield* emit(
         database
@@ -798,26 +804,6 @@ export async function* streamOpenMapxRegistrationRecords(
       );
       yield* emit(
         database
-          .select({ id: authPolicyApplication.key, createdAt: authPolicyApplication.createdAt })
-          .from(authPolicyApplication)
-          .where(
-            and(
-              eq(authPolicyApplication.actorId, context.userId),
-              lte(authPolicyApplication.createdAt, cutoff),
-            ),
-          )
-          .orderBy(asc(authPolicyApplication.key)),
-        {
-          map: (row) => ({
-            recordId: `policy-application-${pseudonymousIdentifier(String(row.id))}`,
-            actor: "subject",
-            action: "auth.policy.apply",
-            createdAt: row.createdAt,
-          }),
-        },
-      );
-      yield* emit(
-        database
           .select({
             id: authPolicyState.id,
             revision: authPolicyState.revision,
@@ -837,6 +823,28 @@ export async function* streamOpenMapxRegistrationRecords(
             actor: "subject",
             action: "auth.policy.current-owner",
             revision: row.revision,
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      return;
+    case "administrative-receipts":
+      yield* emit(
+        database
+          .select({ id: authPolicyApplication.key, createdAt: authPolicyApplication.createdAt })
+          .from(authPolicyApplication)
+          .where(
+            and(
+              eq(authPolicyApplication.actorId, context.userId),
+              lte(authPolicyApplication.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(authPolicyApplication.key)),
+        {
+          map: (row) => ({
+            recordId: `policy-application-${pseudonymousIdentifier(String(row.id))}`,
+            actor: "subject",
+            action: "auth.policy.apply",
             createdAt: row.createdAt,
           }),
         },
@@ -1284,6 +1292,7 @@ const PRIMARY_ARTICLE_TARGETS: Readonly<Record<string, string>> = {
   "auth-two-factor": "authentication",
   "auth-verifications": "authentication",
   "auth-oauth-resources": "authentication",
+  "auth-oauth-tokens": "authentication",
   "mobile-auth-handoffs": "authentication",
   "saved-lists": "saved-content",
   "saved-places": "saved-content",
@@ -1293,6 +1302,7 @@ const PRIMARY_ARTICLE_TARGETS: Readonly<Record<string, string>> = {
   "share-links": "sharing",
   "timeline-connections": "timeline-connections",
   "admin-audit-attribution": "activity",
+  "administrative-receipts": "activity",
   "disclosure-events": "disclosures",
   "privacy-case-records": "requests",
 };

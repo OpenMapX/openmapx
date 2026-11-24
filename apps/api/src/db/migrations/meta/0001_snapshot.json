@@ -1,6 +1,6 @@
 {
-  "id": "1d1e553c-c872-491c-8d37-43558b5e31c1",
-  "prevId": "356caee3-1657-4c48-9e86-d0f52808d11d",
+  "id": "f0e285aa-fe49-4df7-9338-397dd1404fb2",
+  "prevId": "145c222a-22de-42ff-8ea4-6ca9c7d726bf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -233,6 +233,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "account_action_receipt_created_at_idx": {
+          "name": "account_action_receipt_created_at_idx",
+          "columns": [
             {
               "expression": "created_at",
               "isExpression": false,
@@ -1294,6 +1309,21 @@
           "columns": [
             {
               "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "auth_policy_application_created_at_idx": {
+          "name": "auth_policy_application_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5282,7 +5312,23 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "oauth_client_assertion_expires_at_idx": {
+          "name": "oauth_client_assertion_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -5990,6 +6036,22 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
+          "concurrently": false
+        },
+        "parked_location_expires_at_idx": {
+          "name": "parked_location_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"parked_location\".\"expires_at\" is not null",
           "concurrently": false
         }
       },
@@ -7336,6 +7398,22 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "share_link_expires_at_idx": {
+          "name": "share_link_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"share_link\".\"expires_at\" is not null",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -8077,6 +8155,21 @@
           "columns": [
             {
               "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "integration_application_receipt_created_at_idx": {
+          "name": "integration_application_receipt_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

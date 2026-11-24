@@ -79,7 +79,9 @@ coverage, and replays every retained erasure request after loading the OpenMapX
 database: it deletes each matching account row as `openmapx_api`, which runs
 the erasure trigger with the API role's rights. The replay cannot derive the
 offline-package key hash, so restored offline-package records of an erased
-account remain until their 30-day retention ends. Journal compaction advances the coverage floor when old requests
+account remain until their 30-day retention ends: the API's daily retention
+deletes offline-package records that match no existing account 30 days after
+they were recorded. Journal compaction advances the coverage floor when old requests
 are discarded; increasing backup retention later cannot make those older
 backups safe to restore again. When `api`
 is running, restore requires `--stop-running`; it keeps the API offline until
