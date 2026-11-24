@@ -68,7 +68,11 @@ chosen source region, and enable `poi-overture` and/or `knowledge-overture` unde
 A refresh stages and checks an immutable release before replacing the active
 Places snapshot. Link rebuilding is a separate resumable workflow; an incomplete
 rebuild does not establish readiness for nearby-place publication. Failed work
-preserves the prior published data at the relevant boundary.
+preserves the prior published data at the relevant boundary. A rebuild resumes
+from the scoring candidates or staged links it recorded. When they are gone, as
+after restoring a backup taken during a rebuild, the next attempt starts a fresh
+rebuild from OSM extraction instead, and the published links stay in service
+until it publishes.
 
 The admin panel offers these operations under **Data → Overture**. **Full sync** runs the complete refresh. **Resume links**
 continues the installed release's durable rebuild; **Restart links from scratch**

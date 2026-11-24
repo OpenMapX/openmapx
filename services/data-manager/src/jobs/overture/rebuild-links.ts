@@ -269,6 +269,35 @@ async function resetForNewSource(
   );
 }
 
+/**
+ * Whether the workspace the state's phase would resume from is gone. Backups
+ * leave the candidates, components and staged links out, so a state restored
+ * in `score`, `assign` or `publish` can record work that is not there.
+ * Resuming would then publish too few links, or fail on every attempt. A crash
+ * never leaves fewer candidates than the state records, and the staged links
+ * are exactly the recorded count from the end of assignment until publication.
+ */
+async function workspaceMissing(
+  sql: postgres.Sql,
+  schema: string,
+  state: ConflationState,
+): Promise<boolean> {
+  if (state.phase === "score" || state.phase === "assign") {
+    if (!state.candidateCount) return false;
+    const [row] = await sql.unsafe<{ present: boolean }[]>(
+      `SELECT EXISTS (SELECT 1 FROM "${schema}".poi_conflation_candidate) AS present`,
+    );
+    return row?.present !== true;
+  }
+  if (state.phase === "publish") {
+    const [row] = await sql.unsafe<{ staged: string }[]>(
+      `SELECT COUNT(*)::TEXT AS staged FROM "${schema}".poi_conflation_link_next`,
+    );
+    return Number(row?.staged ?? 0) !== (state.stagedLinkCount ?? 0);
+  }
+  return false;
+}
+
 async function stateAfterTransition(sql: postgres.Sql, schema: string): Promise<ConflationState> {
   const state = await getOvertureConflationState(sql, schema);
   if (!state) throw new Error("Overture conflation state disappeared during phase transition");
@@ -417,11 +446,14 @@ export async function rebuildOvertureLinksUnlocked(
 
   try {
     await dependencies.preflight(sql, schema);
-    if (restart) {
+    const restored = !restart && (await workspaceMissing(sql, schema, state));
+    if (restart || restored) {
       opts.onProgress?.(
         opts.force === true
           ? "Explicit restart requested; discarding durable conflation workspace..."
-          : "OSM snapshot changed; restarting conflation from extraction...",
+          : restored
+            ? `The conflation workspace for phase ${state.phase} is missing, as after a restore; starting a fresh conflation run...`
+            : "OSM snapshot changed; restarting conflation from extraction...",
       );
       await resetForNewSource(sql, schema, state.attemptCount, sourceFingerprint);
       state = await stateAfterTransition(sql, schema);

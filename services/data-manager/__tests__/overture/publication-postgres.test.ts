@@ -3,6 +3,7 @@ import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/places/overtu
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  assignOvertureCandidates,
   cleanupOvertureConflationWorkspace,
   publishOvertureLinks,
 } from "../../src/jobs/overture/conflate.js";
@@ -334,6 +335,90 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     );
     expect(await linkedIds()).toEqual([{ osm_id: "2" }, { osm_id: "3" }]);
   }, 60_000);
+
+  // A backup leaves candidates, components and staged links out, while it
+  // keeps the published links and the state of the run it overlapped.
+  it.each([
+    {
+      phase: "score",
+      progress: `processed_count = 1, candidate_count = 1,
+        score_cursor_h3 = x'881f1d4887fffff'::BIGINT, score_cursor_type = 'node', score_cursor_id = 2`,
+    },
+    {
+      phase: "assign",
+      progress: `processed_count = 2, candidate_count = 2, component_count = 2,
+        assignment_cursor = 1, staged_link_count = 1`,
+    },
+    {
+      phase: "publish",
+      progress: `processed_count = 2, candidate_count = 2, component_count = 2,
+        assignment_cursor = 2, staged_link_count = 2`,
+    },
+  ])(
+    "starts a fresh conflation run when a restore left the $phase workspace empty",
+    async ({ phase, progress }) => {
+      await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+      await insertPlace("overture_places", "g1", "First");
+      await insertPlace("overture_places", "g2", "Second");
+      await insertLink("poi_conflation_link", 1, "g1");
+      await pg.sql.unsafe(
+        `INSERT INTO overture_places.conflation_state
+         (release, region, place_count, status, phase, attempt_count, source_fingerprint,
+          emitted_count, extracted_count, sources_catalogue, updated_at)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'running', $1, 1, 'snapshot',
+               2, 2, '[]', now() - interval '1 hour')`,
+        [phase],
+      );
+      await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET ${progress}`);
+      const scored: unknown[] = [];
+      const dependencies = {
+        fileExists: () => true,
+        fingerprint: () => "snapshot",
+        extract: vi.fn(async () => ({ emitted: 2, extracted: 2 })),
+        score: async (options: { resume?: unknown }) => {
+          scored.push(options.resume);
+          await insertLink("poi_conflation_candidate", 2, "g1");
+          await insertLink("poi_conflation_candidate", 3, "g2");
+          return {
+            candidates: 2,
+            processed: 2,
+            cursor: { h3: "881f1d4887fffff", osmType: "node", osmId: "3" },
+          };
+        },
+        assign: assignOvertureCandidates,
+        validateFusedQuality: async () => ({ applicableCases: 1, cases: [] }),
+        publish: publishOvertureLinks,
+        cleanup: cleanupOvertureConflationWorkspace,
+        preflight: async () => undefined,
+      };
+
+      await expect(
+        rebuildOvertureLinksUnlocked(
+          {
+            sql: pg.sql,
+            region: "europe/germany/berlin",
+            release: "2026-07-22.0",
+            dataDir: "/nonexistent",
+          },
+          dependencies as never,
+        ),
+      ).resolves.toEqual(expect.objectContaining({ status: "completed", linked: 2 }));
+      expect(dependencies.extract).toHaveBeenCalledTimes(1);
+      expect(scored).toEqual([undefined]);
+      expect(
+        await search.unsafe(
+          `SELECT osm_id::TEXT, gers_id FROM overture_places.poi_conflation_link ORDER BY osm_id`,
+        ),
+      ).toEqual([
+        { osm_id: "2", gers_id: "g1" },
+        { osm_id: "3", gers_id: "g2" },
+      ]);
+      expect(await getOvertureConflationState(pg.sql)).toEqual(
+        expect.objectContaining({ status: "completed", phase: "complete", attemptCount: 2 }),
+      );
+    },
+    60_000,
+  );
 
   it("indexes and analyzes the OSM POI snapshot before swapping it in", async () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));
