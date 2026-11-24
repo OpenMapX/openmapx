@@ -595,8 +595,8 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   });
 
   it("moves an unchanged OSM snapshot into a new Places release without copying it", async () => {
-    const live = "overture_reuse_test";
-    const staging = "overture_reuse_test__staging";
+    const live = "overture_places";
+    const staging = "overture_places__staging";
     await pg.sql.unsafe(buildSchemaDDL(live));
     await pg.sql.unsafe(buildSchemaDDL(staging));
     await pg.sql.unsafe(

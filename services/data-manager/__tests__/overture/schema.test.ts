@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assertValidOvertureSchema, buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 
@@ -48,6 +49,30 @@ describe("assertValidOvertureSchema", () => {
     expect(() => assertValidOvertureSchema("overture_Places")).toThrow(
       /Invalid Overture schema name/,
     );
+  });
+
+  it("accepts exactly the Overture Places names the database guard lets data-manager create", () => {
+    const script = readFileSync(
+      new URL("../../../postgis/scripts/sync-password.sh", import.meta.url),
+      "utf8",
+    );
+    const pattern = /data_manager_schemas constant text := '([^']+)';/.exec(script)?.[1];
+    if (!pattern) throw new Error("data_manager_schemas not found in the database guard");
+    const guard = new RegExp(pattern.replaceAll("\\$", "$"));
+    const accepted = ["overture_places", "overture_places__staging", "overture_places__previous"];
+    for (const name of accepted) {
+      expect(() => assertValidOvertureSchema(name)).not.toThrow();
+      expect(guard.test(name)).toBe(true);
+    }
+    for (const name of [
+      "overture_places_extra",
+      "overture_places__staging2",
+      "overture_embeddings",
+      "overture_reuse_test",
+      "overture_places__previous__staging",
+    ]) {
+      expect(() => assertValidOvertureSchema(name)).toThrow(/Invalid Overture schema name/);
+    }
   });
 });
 

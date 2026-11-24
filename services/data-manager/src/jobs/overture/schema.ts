@@ -1,8 +1,8 @@
 /**
  * Schema names that carry ODbL-licensed Overture themes (Buildings,
- * Transportation, Divisions, Base). These are explicitly rejected to enforce
- * CDLA-Permissive ↔ ODbL license isolation: any code in the `overture_places`
- * path must never inadvertently touch these schemas.
+ * Transportation, Divisions, Base). The name pattern already refuses them;
+ * they get their own message because touching one would break the
+ * CDLA-Permissive ↔ ODbL license isolation, not just name the wrong schema.
  */
 const ODBL_BLOCKED_SCHEMAS = new Set([
   "overture_buildings",
@@ -12,32 +12,25 @@ const ODBL_BLOCKED_SCHEMAS = new Set([
 ]);
 
 /**
- * Guards against operating on a non-Overture schema, an ODbL-licensed Overture
- * theme, or any name that is unsafe to interpolate into raw DDL SQL.
- *
- * Why strict: the name is interpolated directly into DDL identifiers
- * (`"${schema}".places`). Accepting arbitrary characters would permit
- * SQL-identifier injection via embedded quotes or other special chars.
- * The regex pins the shape to a single, safe form — mirrors `assertValidGtfsSchema`
- * from the GTFS importer.
- *
- * Allowed form: `overture_` followed by 1–55 lowercase letters, digits, or
- * underscores. The 55-char suffix cap keeps total length ≤ 63 (PostgreSQL's
- * identifier limit) and accommodates the `__staging` suffix appended internally.
+ * The Places schema, its staging schema and the one a publication retires.
+ * The database guard (`services/postgis/scripts/sync-password.sh`) allows
+ * data-manager to create exactly these Overture names, so the license
+ * isolation holds in the database as well as here. The name is interpolated
+ * into DDL identifiers (`"${schema}".places`), so nothing else may pass.
  */
-const OVERTURE_SCHEMA_RE = /^overture_[a-z0-9_]{1,55}$/;
+const OVERTURE_SCHEMA_RE = /^overture_places(__staging|__previous)?$/;
 
 export function assertValidOvertureSchema(name: string): void {
-  if (!OVERTURE_SCHEMA_RE.test(name)) {
-    throw new Error(
-      `Invalid Overture schema name "${name}": must match overture_[a-z0-9_]{1,55} ` +
-        `(lowercase letters, digits, underscores only; no hyphens, uppercase, or special chars)`,
-    );
-  }
   if (ODBL_BLOCKED_SCHEMAS.has(name)) {
     throw new Error(
       `Schema "${name}" is an ODbL-licensed Overture theme (Buildings/Transportation/Divisions/Base). ` +
         `The overture_places code path must not access it — CDLA↔ODbL isolation violation.`,
+    );
+  }
+  if (!OVERTURE_SCHEMA_RE.test(name)) {
+    throw new Error(
+      `Invalid Overture schema name "${name}": must be overture_places, ` +
+        `overture_places__staging or overture_places__previous`,
     );
   }
 }
