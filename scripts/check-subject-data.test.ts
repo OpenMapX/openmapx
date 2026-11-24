@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SUBJECT_DATA_CATALOGUE } from "../apps/api/src/privacy/catalogue";
 import { validateSubjectDataInventory } from "./check-subject-data";
 
 describe("subject-data policy gate", () => {
@@ -57,6 +58,42 @@ describe("subject-data policy gate", () => {
     expect(result.errors).toEqual([
       "direct user foreign key oauth_access_token.user_id is classified under auth-oauth-resources, but the catalogue locates it under auth-oauth-tokens",
       "direct user foreign key account_action_receipt.actor_id is classified under admin-audit-attribution, but the catalogue locates it under administrative-receipts",
+    ]);
+  });
+
+  it("locates the OAuth client and consent columns under the OAuth resources registration", () => {
+    const result = validateSubjectDataInventory({
+      directUserForeignKeys: ["oauth_client.user_id", "oauth_consent.user_id"],
+      directUserForeignKeyClassifications: {
+        "oauth_client.user_id": "auth-oauth-tokens",
+        "oauth_consent.user_id": "auth-oauth-tokens",
+      },
+      manifestSubjects: [],
+    });
+    expect(result.errors).toEqual([
+      "direct user foreign key oauth_client.user_id is classified under auth-oauth-tokens, but the catalogue locates it under auth-oauth-resources",
+      "direct user foreign key oauth_consent.user_id is classified under auth-oauth-tokens, but the catalogue locates it under auth-oauth-resources",
+    ]);
+  });
+
+  it("reports a database locator of an account id that names no known column", () => {
+    const registration = SUBJECT_DATA_CATALOGUE.find((item) => item.id === "auth-oauth-resources");
+    if (!registration) throw new Error("auth-oauth-resources is missing");
+    const result = validateSubjectDataInventory({
+      catalogue: [
+        {
+          ...registration,
+          locators: [
+            { type: "user_id", field: "oauth-client.user_id" },
+            { type: "user_id", field: "user.id" },
+            { type: "exact_identifier", field: "verification.identifier", format: "email" },
+          ],
+        },
+      ],
+      manifestSubjects: [],
+    });
+    expect(result.errors).toEqual([
+      "catalogue: auth-oauth-resources locates oauth-client.user_id, which is no known account column",
     ]);
   });
 

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { SUBJECT_DATA_CATALOGUE } from "../apps/api/src/privacy/catalogue";
+import type { SubjectDataRegistration, SubjectLocatorType } from "../packages/core/src/privacy";
 import { serviceManifestSchema } from "../packages/core/src/services/manifest-schema";
 import { integrationManifestSchema } from "../packages/integration-framework/src/manifest";
 
@@ -100,10 +101,21 @@ export interface ManifestSubjectFixture {
 }
 
 export interface SubjectDataInventoryOverrides {
+  catalogue?: readonly SubjectDataRegistration[];
   directUserForeignKeys?: string[];
   directUserForeignKeyClassifications?: Record<string, string>;
   manifestSubjects?: ManifestSubjectFixture[];
 }
+
+/** Locators whose field holds an account's id. */
+const ACCOUNT_ID_LOCATOR_TYPES = new Set<SubjectLocatorType>([
+  "user_id",
+  "actor_id",
+  "target_id",
+  "creator_id",
+  "updater_id",
+  "triggered_by",
+]);
 
 export interface SubjectDataInventoryResult {
   errors: string[];
@@ -168,9 +180,22 @@ export function validateSubjectDataInventory(
     (id, index, list) => list.indexOf(id) !== index,
   );
   for (const id of duplicateIds) errors.push(`catalogue: duplicate registration id ${id}`);
-  for (const registration of SUBJECT_DATA_CATALOGUE) {
+  const accountColumns = new Set([
+    ...Object.keys(DIRECT_USER_FK_CLASSIFICATIONS),
+    ...Object.keys(USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY),
+  ]);
+  for (const registration of overrides.catalogue ?? SUBJECT_DATA_CATALOGUE) {
     if (registration.strategy === "collector" && !registration.collectorId) {
       errors.push(`catalogue: collector registration ${registration.id} has no collectorId`);
+    }
+    // A database locator of an account id names a column of the inventory
+    // below, or the account's own key.
+    if (registration.source !== "openmapx-db") continue;
+    for (const { type, field } of registration.locators) {
+      if (ACCOUNT_ID_LOCATOR_TYPES.has(type) && field !== "user.id" && !accountColumns.has(field))
+        errors.push(
+          `catalogue: ${registration.id} locates ${field}, which is no known account column`,
+        );
     }
   }
 
@@ -228,7 +253,7 @@ export function validateSubjectDataInventory(
   // The registrations whose locators name each column; a column one of them
   // locates must be classified under it, not merely under some registration.
   const locatedBy = new Map<string, string[]>();
-  for (const registration of SUBJECT_DATA_CATALOGUE)
+  for (const registration of overrides.catalogue ?? SUBJECT_DATA_CATALOGUE)
     for (const { field } of registration.locators)
       locatedBy.set(field, [...(locatedBy.get(field) ?? []), registration.id]);
   for (const foreignKey of direct) {
