@@ -463,34 +463,40 @@ describe.skipIf(skipE2e)("data-manager runtime schemas in PostGIS", () => {
         schema: "osm_search",
         live: "snapshot",
         staging: "snapshot_next",
-        // Longer than the swap's deadlock_timeout (1 s), so the first wait
-        // ends in the deadlock, which the swap detects and loses.
-        lockTimeoutMs: 3000,
+        // Far longer than the test may run, so no attempt ends by timing
+        // out: the first can end only by losing the deadlock.
+        lockTimeoutMs: 120_000,
         retry: quickRetry,
       });
-      const swapFailure = swap.catch((error: unknown) => error);
-      const waitingForTable = async () => {
-        const [row] = await pg.sql.unsafe<{ waiting: boolean }[]>(
-          `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted
-             AND relation = 'osm_search.snapshot'::regclass) AS waiting`,
-        );
-        return row?.waiting === true;
+      const outcome = swap.then(
+        () => "published",
+        (error: unknown) => error,
+      );
+      const waitingFor = async (table: string) => {
+        for (let attempt = 0; ; attempt += 1) {
+          const [row] = await pg.sql.unsafe<{ waiting: boolean }[]>(
+            `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted
+               AND relation = $1::regclass) AS waiting`,
+            [table],
+          );
+          if (row?.waiting === true) return;
+          if (attempt > 100) throw new Error(`the swap never waited for ${table}`);
+          await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+        }
       };
-      for (let attempt = 0; !(await waitingForTable()); attempt += 1) {
-        if (attempt > 100) throw new Error("the swap never waited for the table");
-        await new Promise((resolveWait) => setTimeout(resolveWait, 20));
-      }
-      const asked = Date.now();
+      await waitingFor("osm_search.snapshot");
+      // The backup gets the fence only because the swap lost the deadlock
+      // and rolled back.
       await backup.unsafe(`LOCK TABLE osm_search.publication_fence IN ACCESS SHARE MODE`);
-      // The deadlock released the fence after about a second, not the 3 s timeout.
-      expect(Date.now() - asked).toBeLessThan(2500);
-      // The retry then waits for the backup, which now holds the fence, and times out.
-      expect(await swapFailure).toMatchObject({ code: "55P03" });
+      // The retry then waits for the fence, until the backup ends.
+      await waitingFor("osm_search.publication_fence");
+      await backup.unsafe(`COMMIT`);
+      expect(await outcome).toBe("published");
     } finally {
       await backup.unsafe(`ROLLBACK`).catch(() => undefined);
       backup.release();
     }
-    expect(await liveLabel()).toBe("live");
+    expect(await liveLabel()).toBe("next");
   });
 
   it("locks and replaces the fence when it swaps a single table", async () => {
