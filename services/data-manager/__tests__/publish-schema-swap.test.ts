@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { retryOnLockTimeout } from "../src/jobs/publish-schema-swap.js";
+import { isLockConflict, retryOnLockTimeout } from "../src/jobs/publish-schema-swap.js";
 
 const retry = { attempts: 3, backoffMs: 1 };
 
@@ -35,5 +35,17 @@ describe("retryOnLockTimeout", () => {
     const run = failingWith(["42P01"]);
     await expect(retryOnLockTimeout(retry, run.work)).rejects.toMatchObject({ code: "42P01" });
     expect(run.calls).toBe(1);
+  });
+});
+
+describe("isLockConflict", () => {
+  // A drop of retired data that ends on either is still being read and is
+  // logged as a warning, not as a failure.
+  it("counts lock timeouts and lost deadlocks, and nothing else", () => {
+    expect(isLockConflict({ code: "55P03" })).toBe(true);
+    expect(isLockConflict({ code: "40P01" })).toBe(true);
+    expect(isLockConflict({ code: "42P01" })).toBe(false);
+    expect(isLockConflict(new Error("no code"))).toBe(false);
+    expect(isLockConflict(null)).toBe(false);
   });
 });

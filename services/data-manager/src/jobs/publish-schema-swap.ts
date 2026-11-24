@@ -78,14 +78,6 @@ export function previousName(live: string): string {
   return previous;
 }
 
-export function isLockTimeout(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: unknown }).code === LOCK_NOT_AVAILABLE
-  );
-}
-
 /**
  * A lock wait that ended without the lock: a timeout, or a deadlock whose
  * victim this statement was. A backup takes its locks one table at a time,
@@ -93,7 +85,7 @@ export function isLockTimeout(error: unknown): boolean {
  * taking them. Either way PostgreSQL has rolled the whole transaction, or
  * savepoint, back, so it can run again.
  */
-function isLockConflict(error: unknown): boolean {
+export function isLockConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const code = (error as { code?: unknown }).code;
   return code === LOCK_NOT_AVAILABLE || code === DEADLOCK_DETECTED;
@@ -159,7 +151,7 @@ async function dropRetired(
     return true;
   } catch (error) {
     const logger = jobChildLogger({ publication: what });
-    if (isLockTimeout(error)) {
+    if (isLockConflict(error)) {
       logger.warn(`${what} is still being read; it stays until the next publication drops it`);
     } else {
       const code = (error as { code?: unknown })?.code;

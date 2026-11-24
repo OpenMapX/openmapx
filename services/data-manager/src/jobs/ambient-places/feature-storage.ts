@@ -2,7 +2,7 @@ import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 import { jobChildLogger } from "../../logger.js";
 import {
-  isLockTimeout,
+  isLockConflict,
   type LockRetry,
   PUBLICATION_LOCK_RETRY,
   PUBLICATION_LOCK_TIMEOUT_MS,
@@ -145,7 +145,7 @@ async function detach(connection: postgres.ReservedSql, name: string): Promise<v
   } catch (error) {
     // Another cleanup, such as one from an earlier version of this process,
     // may have completed the detach or dropped the table in the meantime.
-    if (isLockTimeout(error) || (await attachment(connection, name))) throw error;
+    if (isLockConflict(error) || (await attachment(connection, name))) throw error;
   }
 }
 
@@ -193,7 +193,7 @@ export async function dropRetiredFeatureStorage(
     return true;
   } catch (error) {
     const logger = jobChildLogger({ publication: "ambient_places" });
-    if (isLockTimeout(error)) {
+    if (isLockConflict(error)) {
       logger.warn("A retired ambient partition is still being read; the next publication drops it");
     } else {
       const code = (error as { code?: unknown })?.code;
