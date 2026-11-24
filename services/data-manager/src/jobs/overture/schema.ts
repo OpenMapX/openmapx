@@ -177,8 +177,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
   ` +
     (options.deferPlacesIndexes ? "" : buildPlacesIndexesDDL(schema)) +
     buildOsmPoisTableDDL(schema, "osm_pois") +
-    buildOsmPoisIndexesDDL(schema, "osm_pois") +
-    buildEmbeddingCacheDDL(schema)
+    buildOsmPoisIndexesDDL(schema, "osm_pois")
   );
 }
 
@@ -254,16 +253,25 @@ export function buildOsmPoisTableDDL(schema: string, table: OsmPoisTable): strin
 }
 
 /**
- * Returns the DDL for the `embedding_cache` table within a given schema.
- * Stores SHA-256 hashes of `model + "\\n" + text` alongside the embedding vector.
+ * The embedding cache's own schema. No publication swaps or drops it, because
+ * its key, the SHA-256 of `model + "\n" + text`, does not depend on the
+ * release. The database guard allows data-manager to create this name.
  */
-export function buildEmbeddingCacheDDL(schema: string): string {
+export const EMBEDDING_CACHE_SCHEMA = "overture_embeddings";
+
+/**
+ * Returns the DDL that creates the embedding cache unless it exists. Vectors
+ * are `real[]`: half the size of `double precision[]`, and cosine similarity
+ * between them moves by less than a millionth.
+ */
+export function buildEmbeddingCacheDDL(): string {
   return `
-    CREATE TABLE "${schema}".embedding_cache (
-      text_hash  TEXT PRIMARY KEY,
+    CREATE SCHEMA IF NOT EXISTS ${EMBEDDING_CACHE_SCHEMA};
+    CREATE TABLE IF NOT EXISTS ${EMBEDDING_CACHE_SCHEMA}.embedding_cache (
+      text_hash  TEXT CONSTRAINT embedding_cache_pkey PRIMARY KEY,
       model      TEXT NOT NULL,
-      embedding  DOUBLE PRECISION[] NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT now()
+      embedding  REAL[] NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `;
 }

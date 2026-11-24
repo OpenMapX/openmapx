@@ -5,6 +5,7 @@ import {
 } from "../src/jobs/notable-places/schema.js";
 import { NOTABLE_DISPLAY_LANGUAGES } from "../src/jobs/notable-places/sparql.js";
 import {
+  buildEmbeddingCacheDDL,
   buildOsmPoisIndexesDDL,
   buildOsmPoisTableDDL,
   buildSchemaDDL,
@@ -30,7 +31,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             buildNotablePlacesFinishDDL("notable_places__staging", NOTABLE_DISPLAY_LANGUAGES) +
             buildSchemaDDL("overture_places") +
             buildOsmPoisTableDDL("overture_places", "osm_pois__staging") +
-            buildOsmPoisIndexesDDL("overture_places", "osm_pois__staging"),
+            buildOsmPoisIndexesDDL("overture_places", "osm_pois__staging") +
+            buildEmbeddingCacheDDL(),
         );
         const objects = await pg.sql.unsafe<
           { schema: string; table: string; name: string; kind: keyof typeof SUFFIX }[]
@@ -49,7 +51,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
              JOIN pg_namespace n ON n.oid = t.relnamespace
             WHERE n.nspname = ANY($1::TEXT[]) AND c.contype <> 'n'
             ORDER BY 1, 2, 3`,
-          [["osm_search__staging", "notable_places__staging", "overture_places"]],
+          [
+            [
+              "osm_search__staging",
+              "notable_places__staging",
+              "overture_embeddings",
+              "overture_places",
+            ],
+          ],
         );
         const misnamed = objects.filter(
           ({ table, name, kind }) =>
@@ -88,6 +97,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "osm_search__staging.terms_normalized_term_idx",
           "osm_search__staging.terms_osm_type_osm_id_fkey",
           "osm_search__staging.terms_pkey",
+          "overture_embeddings.embedding_cache_pkey",
           "overture_places.conflation_state_attempt_count_check",
           "overture_places.conflation_state_phase_check",
           "overture_places.conflation_state_pkey",
@@ -95,7 +105,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "overture_places.conflation_state_singleton_check",
           "overture_places.conflation_state_sources_catalogue_check",
           "overture_places.conflation_state_status_check",
-          "overture_places.embedding_cache_pkey",
           "overture_places.osm_pois_category_idx",
           "overture_places.osm_pois_geom_check",
           "overture_places.osm_pois_geom_idx",

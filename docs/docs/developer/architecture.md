@@ -388,6 +388,13 @@ that table's readers, a second at a time. The conflation run is marked complete
 in the links' swap transaction, because the next-link table is empty after the
 swap and must never be published again.
 
+Conflation's optional embedding cache is not part of any publication. It lives
+in its own `overture_embeddings` schema, which data-manager creates on first
+use, so vectors fetched for one Overture release serve the next and a swap
+never waits for a cache write. Its key is the SHA-256 of the model name and
+the text, and vectors are stored as `real[]`. Concurrent builds may store the
+same text; the first vector stays. The cache has no eviction.
+
 Points in these schemas are `geometry(Point, 4326)` columns with a GiST index,
 so bounding-box and nearest-neighbour queries use the index; readers take
 coordinates with `ST_X`/`ST_Y` and measure distances by casting to

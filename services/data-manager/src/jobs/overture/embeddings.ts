@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import pMap from "p-map";
 import type postgres from "postgres";
+import { buildEmbeddingCacheDDL, EMBEDDING_CACHE_SCHEMA } from "./schema.js";
 
 export const DEFAULT_MODEL = "mxbai-embed-large";
 const DEFAULT_OLLAMA_URL = "http://openmapx-local-ai:11434";
@@ -15,24 +17,53 @@ function textHash(model: string, text: string): string {
   return createHash("sha256").update(`${model}\n${text}`).digest("hex");
 }
 
+const [SETUP_LOCK_NAMESPACE, SETUP_LOCK_KEY] = DATA_ADVISORY_LOCKS.overtureEmbeddingCacheSetup;
+
+/**
+ * Creates the cache's schema and table unless they exist. Two builds may get
+ * here at once, and `CREATE … IF NOT EXISTS` can still fail when another
+ * session creates the same name concurrently, so creation takes turns.
+ */
+export async function ensureEmbeddingCache(sql: postgres.Sql): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx.unsafe("SELECT pg_advisory_xact_lock($1, $2)", [SETUP_LOCK_NAMESPACE, SETUP_LOCK_KEY]);
+    await tx.unsafe(buildEmbeddingCacheDDL());
+  });
+}
+
+/**
+ * The cache in `overture_embeddings`, which it creates on first use. The
+ * schema is not part of any Overture publication, so the vectors outlive a
+ * release and its swap never waits for a cache write. Concurrent builds may
+ * store the same text; the first vector stays.
+ */
 export class SqlEmbeddingCache implements EmbeddingCache {
-  constructor(
-    private readonly sql: postgres.Sql,
-    private readonly schema = "overture_places",
-  ) {}
+  private ready: Promise<void> | undefined;
+
+  constructor(private readonly sql: postgres.Sql) {}
+
+  private ensureReady(): Promise<void> {
+    this.ready ??= ensureEmbeddingCache(this.sql).catch((error: unknown) => {
+      this.ready = undefined;
+      throw error;
+    });
+    return this.ready;
+  }
 
   async get(hash: string): Promise<number[] | null> {
+    await this.ensureReady();
     const rows = await this.sql.unsafe<{ embedding: number[] }[]>(
-      `SELECT embedding FROM "${this.schema}".embedding_cache WHERE text_hash = $1`,
+      `SELECT embedding FROM ${EMBEDDING_CACHE_SCHEMA}.embedding_cache WHERE text_hash = $1`,
       [hash],
     );
     return rows[0]?.embedding ?? null;
   }
 
   async set(hash: string, model: string, embedding: number[]): Promise<void> {
+    await this.ensureReady();
     await this.sql.unsafe(
-      `INSERT INTO "${this.schema}".embedding_cache (text_hash, model, embedding)
-       VALUES ($1, $2, $3::DOUBLE PRECISION[])
+      `INSERT INTO ${EMBEDDING_CACHE_SCHEMA}.embedding_cache (text_hash, model, embedding)
+       VALUES ($1, $2, $3::REAL[])
        ON CONFLICT (text_hash) DO NOTHING`,
       [hash, model, embedding],
     );

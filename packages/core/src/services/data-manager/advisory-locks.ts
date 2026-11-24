@@ -23,6 +23,8 @@ export const DATA_ADVISORY_LOCKS = {
   ambientPublication: 139399,
   /** One cleanup of retired ambient partitions at a time; others skip theirs. */
   ambientPartitionCleanup: [1_330_466_120, 4],
+  /** Creating the Overture embedding cache, which concurrent builds share. */
+  overtureEmbeddingCacheSetup: [1_330_466_120, 5],
   /** Offline package accounting: the global lock, then the seeds that hash a
    * principal and a request key into their own locks. */
   offlineAccountingGlobal: 606,
