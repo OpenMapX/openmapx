@@ -1,0 +1,460 @@
+{
+  "aliases": {
+    "upperFra": [
+      {
+        "id": "osm:way/26442131",
+        "ids": { "osm": "way/26442131", "wikidata": "Q46033" },
+        "label": "Frankfurt Airport",
+        "coordinates": [8.5622, 50.0379],
+        "type": "poi",
+        "rawCategory": "aeroway/aerodrome",
+        "searchMatch": {
+          "kind": "authoritative_code",
+          "value": "FRA",
+          "normalized": "fra",
+          "namespace": "iata"
+        },
+        "importance": 0.95,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/501",
+        "ids": { "osm": "node/501" },
+        "label": "Fachhochschule Rhein Aachen",
+        "coordinates": [6.0837, 50.7587],
+        "type": "poi",
+        "rawCategory": "amenity/university",
+        "searchMatch": { "kind": "generated_acronym", "value": "FRA", "normalized": "fra" },
+        "importance": 0.5,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/9007199254740993",
+        "ids": { "osm": "node/9007199254740993" },
+        "label": "Freiburg Rathaus",
+        "coordinates": [7.8494, 47.9959],
+        "type": "poi",
+        "rawCategory": "amenity/townhall",
+        "searchMatch": { "kind": "generated_acronym", "value": "FRA", "normalized": "fra" },
+        "importance": 0.4,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ],
+    "lowerFraAachen": [
+      {
+        "id": "osm:way/26442131",
+        "ids": { "osm": "way/26442131", "wikidata": "Q46033" },
+        "label": "Frankfurt Airport",
+        "coordinates": [8.5622, 50.0379],
+        "type": "poi",
+        "rawCategory": "aeroway/aerodrome",
+        "searchMatch": {
+          "kind": "authoritative_code",
+          "value": "FRA",
+          "normalized": "fra",
+          "namespace": "iata"
+        },
+        "importance": 0.95,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/501",
+        "ids": { "osm": "node/501" },
+        "label": "Fachhochschule Rhein Aachen",
+        "coordinates": [6.0837, 50.7587],
+        "type": "poi",
+        "rawCategory": "amenity/university",
+        "searchMatch": { "kind": "generated_acronym", "value": "FRA", "normalized": "fra" },
+        "importance": 0.5,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ],
+    "lowerFraNoProximity": [
+      {
+        "id": "osm:way/26442131",
+        "ids": { "osm": "way/26442131", "wikidata": "Q46033" },
+        "label": "Frankfurt Airport",
+        "coordinates": [8.5622, 50.0379],
+        "type": "poi",
+        "rawCategory": "aeroway/aerodrome",
+        "searchMatch": {
+          "kind": "authoritative_code",
+          "value": "FRA",
+          "normalized": "fra",
+          "namespace": "iata"
+        },
+        "importance": 0.95,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ],
+    "ukaAachen": [
+      {
+        "id": "osm:node/77",
+        "ids": { "osm": "node/77" },
+        "label": "Klinikum Aachen",
+        "coordinates": [6.0434, 50.7767],
+        "type": "poi",
+        "rawCategory": "amenity/hospital",
+        "searchMatch": {
+          "kind": "explicit_reference",
+          "value": "UKA",
+          "normalized": "uka",
+          "namespace": "ref"
+        },
+        "importance": 0.6,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/78",
+        "ids": { "osm": "node/78" },
+        "label": "Unterkunft Ahrweiler",
+        "coordinates": [7.1127, 50.5431],
+        "type": "poi",
+        "rawCategory": "tourism/hostel",
+        "searchMatch": {
+          "kind": "explicit_reference",
+          "value": "UKA 2",
+          "normalized": "uka 2",
+          "namespace": "ref"
+        },
+        "importance": 0.6,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ],
+    "ukaAugsburg": [
+      {
+        "id": "osm:node/78",
+        "ids": { "osm": "node/78" },
+        "label": "Unterkunft Ahrweiler",
+        "coordinates": [7.1127, 50.5431],
+        "type": "poi",
+        "rawCategory": "tourism/hostel",
+        "searchMatch": {
+          "kind": "explicit_reference",
+          "value": "UKA 2",
+          "normalized": "uka 2",
+          "namespace": "ref"
+        },
+        "importance": 0.6,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/77",
+        "ids": { "osm": "node/77" },
+        "label": "Klinikum Aachen",
+        "coordinates": [6.0434, 50.7767],
+        "type": "poi",
+        "rawCategory": "amenity/hospital",
+        "searchMatch": {
+          "kind": "explicit_reference",
+          "value": "UKA",
+          "normalized": "uka",
+          "namespace": "ref"
+        },
+        "importance": 0.6,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      },
+      {
+        "id": "osm:node/79",
+        "ids": { "osm": "node/79" },
+        "label": "Universitätsklinikum Augsburg",
+        "coordinates": [10.8406, 48.3836],
+        "type": "poi",
+        "rawCategory": "amenity/hospital",
+        "searchMatch": { "kind": "generated_acronym", "value": "UKA", "normalized": "uka" },
+        "importance": 0.6,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ],
+    "rwthPrefix": [
+      {
+        "id": "osm:relation/62428",
+        "ids": { "osm": "relation/62428", "wikidata": "Q273263" },
+        "label": "Rheinisch-Westfälische Technische Hochschule Aachen",
+        "coordinates": [6.0775, 50.7779],
+        "type": "poi",
+        "rawCategory": "amenity/university",
+        "searchMatch": {
+          "kind": "explicit_alias",
+          "value": "RWTH Aachen",
+          "normalized": "rwth aachen",
+          "namespace": "alt_name"
+        },
+        "importance": 0.85,
+        "provider": "search-osm-aliases",
+        "contributingProviders": ["search-osm-aliases"],
+        "contributors": "sha256:cafc9674e733d6a88f524a52bba9bf1ddefb9895b096ce87b9156b62ba6394df"
+      }
+    ]
+  },
+  "notable": {
+    "eiffelExact": [
+      {
+        "id": "wikidata:Q243",
+        "ids": { "wikidata": "Q243" },
+        "label": "Eiffel Tower",
+        "sublabel": "tower in Paris",
+        "coordinates": [2.2945, 48.8584],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Eiffel Tower", "normalized": "eiffel tower" },
+        "importance": 0.98,
+        "fame": 0.98,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ],
+    "eiffelSlip": [
+      {
+        "id": "wikidata:Q243",
+        "ids": { "wikidata": "Q243" },
+        "label": "Eiffel Tower",
+        "sublabel": "tower in Paris",
+        "coordinates": [2.2945, 48.8584],
+        "type": "poi",
+        "searchMatch": {
+          "kind": "near_name",
+          "value": "Eiffel Tower",
+          "normalized": "eiffel tower"
+        },
+        "importance": 0.98,
+        "fame": 0.98,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ],
+    "louvreParis": [
+      {
+        "id": "wikidata:Q19675",
+        "ids": { "wikidata": "Q19675" },
+        "label": "Louvre",
+        "sublabel": "art museum in Paris",
+        "coordinates": [2.3364, 48.8611],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Louvre", "normalized": "louvre" },
+        "importance": 0.99,
+        "fame": 0.99,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      },
+      {
+        "id": "wikidata:Q1001",
+        "ids": { "wikidata": "Q1001" },
+        "label": "Louvre Bar",
+        "coordinates": [13.3777, 52.5163],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Louvre Bar", "normalized": "louvre bar" },
+        "importance": 0.35,
+        "fame": 0.35,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ],
+    "louvreBerlin": [
+      {
+        "id": "wikidata:Q19675",
+        "ids": { "wikidata": "Q19675" },
+        "label": "Louvre",
+        "sublabel": "art museum in Paris",
+        "coordinates": [2.3364, 48.8611],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Louvre", "normalized": "louvre" },
+        "importance": 0.99,
+        "fame": 0.99,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      },
+      {
+        "id": "wikidata:Q1001",
+        "ids": { "wikidata": "Q1001" },
+        "label": "Louvre Bar",
+        "coordinates": [13.3777, 52.5163],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Louvre Bar", "normalized": "louvre bar" },
+        "importance": 0.35,
+        "fame": 0.35,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ],
+    "romBerlin": [
+      {
+        "id": "wikidata:Q1003",
+        "ids": { "wikidata": "Q1003" },
+        "label": "Romantikhaus",
+        "coordinates": [13.405, 52.52],
+        "type": "poi",
+        "searchMatch": { "kind": "name", "value": "Romantikhaus", "normalized": "romantikhaus" },
+        "importance": 0.5,
+        "fame": 0.5,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      },
+      {
+        "id": "wikidata:Q1002",
+        "ids": { "wikidata": "Q1002" },
+        "label": "Romanesque Hall",
+        "coordinates": [12.4539, 41.9022],
+        "type": "poi",
+        "searchMatch": {
+          "kind": "name",
+          "value": "Romanesque Hall",
+          "normalized": "romanesque hall"
+        },
+        "importance": 0.9,
+        "fame": 0.9,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ],
+    "romeNoProximity": [
+      {
+        "id": "wikidata:Q220",
+        "ids": { "wikidata": "Q220" },
+        "label": "Rome",
+        "coordinates": [12.4828, 41.8933],
+        "type": "region",
+        "rawCategory": "place/city",
+        "searchMatch": { "kind": "name", "value": "Rome", "normalized": "rome" },
+        "importance": 1,
+        "fame": 1,
+        "provider": "search-notable-places",
+        "contributingProviders": ["search-notable-places"],
+        "contributors": "sha256:6f9e1fcd606766c305676579fea8de9057ba3946c407702773515e56b9330678"
+      }
+    ]
+  },
+  "conflation": {
+    "fresh": {
+      "result": {
+        "candidates": 3,
+        "processed": 5,
+        "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+      },
+      "candidates": [
+        {
+          "osm_type": "node",
+          "osm_id": "11",
+          "gers_id": "gers-kittel",
+          "source_confidence": 0.9,
+          "match_confidence": 0.9982458394314367,
+          "distance_m": 2.6312408528447886,
+          "method": "spatial-name",
+          "evidence": {
+            "signals": ["close-band", "name-match"],
+            "nameSimilarity": 1,
+            "categoryCompatible": false
+          },
+          "release": "2026-01-01.0"
+        },
+        {
+          "osm_type": "node",
+          "osm_id": "13",
+          "gers_id": "gers-apotheke",
+          "source_confidence": 0.8,
+          "match_confidence": 0.9962639778744345,
+          "distance_m": 5.604033188348037,
+          "method": "spatial-name",
+          "evidence": {
+            "signals": ["close-band", "name-match"],
+            "nameSimilarity": 1,
+            "categoryCompatible": false
+          },
+          "release": "2026-01-01.0"
+        },
+        {
+          "osm_type": "node",
+          "osm_id": "14",
+          "gers_id": "gers-moss",
+          "source_confidence": 0.7,
+          "match_confidence": 0.8173140733726458,
+          "distance_m": 1.301617213758551,
+          "method": "spatial-name",
+          "evidence": {
+            "signals": ["close-band", "name-match"],
+            "nameSimilarity": 0.5454545454545454,
+            "categoryCompatible": false
+          },
+          "release": "2026-01-01.0"
+        }
+      ]
+    },
+    "keysetOrder": ["node/14", "node/11", "node/13", "node/15", "way/12"],
+    "resumed": [
+      {
+        "after": "node/11",
+        "result": {
+          "candidates": 1,
+          "processed": 3,
+          "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+        },
+        "candidates": ["node/13"]
+      },
+      {
+        "after": "way/12",
+        "result": {
+          "candidates": 0,
+          "processed": 0,
+          "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+        },
+        "candidates": []
+      },
+      {
+        "after": "node/13",
+        "result": {
+          "candidates": 0,
+          "processed": 2,
+          "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+        },
+        "candidates": []
+      },
+      {
+        "after": "node/14",
+        "result": {
+          "candidates": 2,
+          "processed": 4,
+          "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+        },
+        "candidates": ["node/11", "node/13"]
+      },
+      {
+        "after": "node/15",
+        "result": {
+          "candidates": 0,
+          "processed": 1,
+          "cursor": { "h3": "881fa0a045fffff", "osmType": "way", "osmId": "12" }
+        },
+        "candidates": []
+      }
+    ]
+  }
+}
