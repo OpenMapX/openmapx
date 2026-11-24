@@ -40,6 +40,7 @@ export const PUBLICATION_LOCK_RETRY: LockRetry = { attempts: 8, backoffMs: 1000 
 
 const MAX_BACKOFF_MS = 60_000;
 const LOCK_NOT_AVAILABLE = "55P03";
+const DEADLOCK_DETECTED = "40P01";
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const MAX_IDENTIFIER_LENGTH = 63;
 
@@ -85,21 +86,36 @@ export function isLockTimeout(error: unknown): boolean {
   );
 }
 
+/**
+ * A lock wait that ended without the lock: a timeout, or a deadlock whose
+ * victim this statement was. A backup takes its locks one table at a time,
+ * so a publication that holds the fence can meet a backup that is still
+ * taking them. Either way PostgreSQL has rolled the whole transaction, or
+ * savepoint, back, so it can run again.
+ */
+function isLockConflict(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === LOCK_NOT_AVAILABLE || code === DEADLOCK_DETECTED;
+}
+
 function backoff(retry: LockRetry, attempt: number): number {
   return Math.min(retry.backoffMs * 2 ** (attempt - 1), MAX_BACKOFF_MS);
 }
 
 /**
- * Runs `work` until it does not time out waiting for a lock, at most
- * `retry.attempts` times. The last error is rethrown unchanged, so a
- * transaction that rolled back stays recognisable as one.
+ * Runs `work` until it neither times out waiting for a lock nor loses a
+ * deadlock, at most `retry.attempts` times. `work` must keep every effect
+ * inside the transaction or savepoint that the failure rolls back. The last
+ * error is rethrown unchanged, so a transaction that rolled back stays
+ * recognisable as one.
  */
 export async function retryOnLockTimeout<T>(retry: LockRetry, work: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await work();
     } catch (error) {
-      if (!isLockTimeout(error) || attempt >= retry.attempts) throw error;
+      if (!isLockConflict(error) || attempt >= retry.attempts) throw error;
       try {
         await sleep(backoff(retry, attempt), undefined, { signal: dataWorkerSignal() });
       } catch {

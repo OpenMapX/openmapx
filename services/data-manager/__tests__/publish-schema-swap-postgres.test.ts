@@ -204,6 +204,52 @@ describe.skipIf(skipE2e)("schema publication by rename", () => {
     expect(await liveLabel()).toBe("live");
   });
 
+  it("retries a swap that lost a deadlock with a backup still taking its locks", async () => {
+    await stage("osm_search", "live");
+    await pg.sql.unsafe(
+      `CREATE TABLE osm_search.snapshot_next (label TEXT NOT NULL);
+       INSERT INTO osm_search.snapshot_next VALUES ('next')`,
+    );
+    // Like pg_dump in its lock phase: it holds the live table and asks for
+    // the fence next, while the swap holds the fence and waits for the table.
+    const backup = await reader.reserve();
+    try {
+      await backup.unsafe(`BEGIN ISOLATION LEVEL REPEATABLE READ`);
+      await backup.unsafe(`LOCK TABLE osm_search.snapshot IN ACCESS SHARE MODE`);
+      const swap = publishTableSwap(pg.sql, {
+        schema: "osm_search",
+        live: "snapshot",
+        staging: "snapshot_next",
+        // Longer than deadlock_timeout (1 s), so the first wait ends in the
+        // deadlock, which the swap that waited first detects and loses.
+        lockTimeoutMs: 3000,
+        retry: quickRetry,
+      });
+      const swapFailure = swap.catch((error: unknown) => error);
+      const waitingForTable = async () => {
+        const [row] = await pg.sql.unsafe<{ waiting: boolean }[]>(
+          `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted
+             AND relation = 'osm_search.snapshot'::regclass) AS waiting`,
+        );
+        return row?.waiting === true;
+      };
+      for (let attempt = 0; !(await waitingForTable()); attempt += 1) {
+        if (attempt > 100) throw new Error("the swap never waited for the table");
+        await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+      }
+      const asked = Date.now();
+      await backup.unsafe(`LOCK TABLE osm_search.publication_fence IN ACCESS SHARE MODE`);
+      // The deadlock released the fence after about a second, not the 3 s timeout.
+      expect(Date.now() - asked).toBeLessThan(2500);
+      // The retry then waits for the backup, which now holds the fence, and times out.
+      expect(await swapFailure).toMatchObject({ code: "55P03" });
+    } finally {
+      await backup.unsafe(`ROLLBACK`).catch(() => undefined);
+      backup.release();
+    }
+    expect(await liveLabel()).toBe("live");
+  });
+
   it("locks and replaces the fence when it swaps a single table", async () => {
     await stage("osm_search", "live");
     await pg.sql.unsafe(

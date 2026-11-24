@@ -10,7 +10,10 @@ export const PUBLICATION_FENCE = "publication_fence";
  * the fence it locked. A backup that took its snapshot before the publication
  * but reaches the fence only after it then fails when it reads the dropped
  * fence's key and check instead of writing an archive that names renamed
- * objects. Name lookups are left to the caller, which validates `schema`.
+ * objects. The primary key is what makes such a dump fail: `pg_dump` renders
+ * the dropped fence's index-backed constraint by OID, which is a cache lookup
+ * error. Keep it, even though no query uses it. Name lookups are left to the
+ * caller, which validates `schema`.
  */
 export function buildPublicationFenceDDL(schema: string): string {
   return `
