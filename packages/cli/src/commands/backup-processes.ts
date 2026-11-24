@@ -95,7 +95,7 @@ const PLATFORM_DATABASE_EXCLUSIONS: readonly string[] = [
  * roles, and a restore must keep them. The custom format compresses itself
  * and can be restored entry by entry, each table by its owner.
  */
-export function pgDumpCommand(serviceId: string, user: string, database: string): string[] {
+function pgDumpCommand(serviceId: string, user: string, database: string): string[] {
   return [
     "pg_dump",
     "--format=custom",

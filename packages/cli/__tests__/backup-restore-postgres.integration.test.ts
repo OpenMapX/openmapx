@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -50,7 +49,7 @@ import {
   buildSearchIndexSchemaDDL,
 } from "../../../services/data-manager/src/jobs/search-index/schema";
 import { restoreBackup } from "../src/commands/backup";
-import { pgDumpCommand, pgDumpToFile } from "../src/commands/backup-processes";
+import { pgDumpToFile } from "../src/commands/backup-processes";
 import { execPsql } from "../src/commands/users";
 import { databaseClientExec } from "../src/lib/database-session";
 
@@ -374,27 +373,19 @@ async function sha256(path: string): Promise<string> {
   return hash.digest("hex");
 }
 
-/** The backup's own dump, with what it leaves out of the platform database. */
-function dumpDatabase(path: string): Promise<void> {
-  return pgDumpToFile(
+async function createDatabaseBackup(name: string, includeScratch = false): Promise<void> {
+  const backupDir = join(fixture.infra, "backups", name);
+  mkdirSync(backupDir, { recursive: true });
+  const file = "postgis__openmapx-pgdata.dump";
+  const path = join(backupDir, file);
+  // The backup's own dump, with what it leaves out of the platform database.
+  await pgDumpToFile(
     { composeArgs: ["compose", "-f", fixture.composeFile], cwd: fixture.infra },
     "postgis",
     POSTGRES_USER,
     DATABASE,
     path,
   );
-}
-
-async function createDatabaseBackup(
-  name: string,
-  includeScratch = false,
-  dump: (path: string) => Promise<void> = dumpDatabase,
-): Promise<void> {
-  const backupDir = join(fixture.infra, "backups", name);
-  mkdirSync(backupDir, { recursive: true });
-  const file = "postgis__openmapx-pgdata.dump";
-  const path = join(backupDir, file);
-  await dump(path);
   const volumes: Array<Record<string, unknown>> = [
     {
       name: "openmapx-pgdata",
@@ -1401,8 +1392,9 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
         (SELECT count(*) FROM overture_places.osm_pois),
         (SELECT count(*) FROM ambient_places.features),
         (SELECT count(*) FROM ambient_places.generations),
-        (SELECT count(*) FROM ambient_places.planet_builds));`),
-    ).toBe(`1 ready 1 1 ${OVERTURE_RELEASE} 1 1 2 1`);
+        (SELECT count(*) FROM ambient_places.planet_builds),
+        (SELECT count(*) FROM pg_class WHERE relname = 'publication_fence'));`),
+    ).toBe(`1 ready 1 1 ${OVERTURE_RELEASE} 1 1 2 1 2`);
     // Conflation's workspace and the embedding cache come back empty.
     expect(
       await psql(`SELECT concat_ws(' ',
@@ -1425,70 +1417,39 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
     ).toBe("0 end");
   }, 180_000);
 
-  it("restores a backup that overlapped a publication as not published, never as empty", async () => {
+  it("never archives a data set a publication changed during the dump, and restores the last one published", async () => {
     await resetMigratedDatabase();
     await resetJournal(GOOD_KEY);
     const dataManager = await connectAs("openmapx_data_manager", DATA_MANAGER_PASSWORD);
     const superuser = await connectAs(POSTGRES_USER, "restore-fixture-password");
     const api = await connectAs("openmapx_api", API_PASSWORD);
-    try {
-      await buildSearchIndex(dataManager, "osm_search", "Alpha", "ready");
-      await ingestOverture(dataManager, "overture_places", OVERTURE_RELEASE);
-      const live = apiReaders(api);
-      expect(await live.suggest("Alpha")).toEqual(["Alpha"]);
-      expect(await live.cafes()).toEqual([`Cafe ${OVERTURE_RELEASE}`]);
-      // pg_dump copies table data in the order of schema and table names, so
-      // it copies this table before the search index's, after it has read
-      // every definition. The backup's own dump command runs with its output
-      // left unread, so it stops while it copies this table.
-      await psql(
-        `CREATE TABLE data_manager.aaa_restore_fixture_filler AS
-           SELECT md5(i::TEXT) || md5((i * 7)::TEXT) AS v FROM generate_series(1, 1000000) i`,
-        DATABASE,
-        "openmapx_api",
-      );
-      let release = () => {};
-      const released = new Promise<void>((resolveRelease) => {
-        release = resolveRelease;
-      });
-      const backup = createDatabaseBackup("overlap", false, async (path) => {
-        // execa reads a child's output even unbuffered; a plain pipe is not read until piped.
-        const dump = spawn(
-          "docker",
-          [
-            "compose",
-            "-f",
-            fixture.composeFile,
-            ...databaseClientExec("postgis"),
-            ...pgDumpCommand("postgis", POSTGRES_USER, DATABASE),
-          ],
-          { cwd: fixture.infra, stdio: ["ignore", "pipe", "pipe"] },
-        );
-        let stderr = "";
-        dump.stderr.on("data", (chunk: Buffer) => {
-          stderr += chunk.toString();
-        });
-        const exited = new Promise<number | null>((resolveExit) => dump.on("close", resolveExit));
-        await released;
-        await pipeline(dump.stdout, createWriteStream(path, { mode: 0o600 }));
-        const code = await exited;
-        if (code !== 0) throw new Error(`fixture pg_dump failed: ${stderr}`);
-      });
-      backup.catch(() => undefined);
-      try {
+    // pg_dump takes its snapshot first, then locks the tables it dumps in the
+    // order of their OIDs, and reads their definitions after that. A dump
+    // waiting for a gate the test holds has locked exactly the tables
+    // created before the gate.
+    const dumpWaitingAt = async (gate: string, name: string, during: () => Promise<void>) => {
+      let backup: Promise<void> = Promise.resolve();
+      await superuser.begin(async (tx) => {
+        await tx.unsafe(`LOCK TABLE public.${gate} IN ACCESS EXCLUSIVE MODE`);
+        backup = createDatabaseBackup(name);
+        backup.catch(() => undefined);
         await waitUntil(async () => {
-          const [dump] = await superuser.unsafe<{ query: string; wait: string | null }[]>(
-            `SELECT query, wait_event AS wait FROM pg_stat_activity WHERE application_name = 'pg_dump'`,
+          const [dump] = await superuser.unsafe<{ waiting: boolean }[]>(
+            `SELECT EXISTS (SELECT 1 FROM pg_locks l JOIN pg_stat_activity a USING (pid)
+               WHERE a.application_name = 'pg_dump' AND NOT l.granted
+                 AND l.relation = $1::REGCLASS) AS waiting`,
+            [`public.${gate}`],
           );
-          return (
-            dump?.wait === "ClientWrite" &&
-            dump.query.startsWith("COPY data_manager.aaa_restore_fixture_filler")
-          );
-        }, "pg_dump to stop while it copies the filler");
-
-        // A rebuilt search index starts and is published during the dump.
-        await buildSearchIndex(dataManager, "osm_search__staging", "Beta", "building");
-        await publishSchemaSwap(dataManager, {
+          return dump?.waiting === true;
+        }, `pg_dump to wait at ${gate}`);
+        await during();
+      });
+      // Wrapped, so that awaiting this function does not await the backup.
+      return { backup };
+    };
+    const publishSearchIndex = (name: string) =>
+      buildSearchIndex(dataManager, "osm_search__staging", name, "building").then(() =>
+        publishSchemaSwap(dataManager, {
           live: "osm_search",
           staging: "osm_search__staging",
           retry: FAST_RETRY,
@@ -1497,10 +1458,30 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
               `UPDATE osm_search.index_state SET status = 'ready', published_at = now() WHERE singleton = 1`,
             );
           },
-        });
+        }),
+      );
+    try {
+      await superuser.unsafe("CREATE TABLE public.restore_fixture_early_gate (id int)");
+      await buildSearchIndex(dataManager, "osm_search", "Alpha", "ready");
+      await ingestOverture(dataManager, "overture_places", OVERTURE_RELEASE);
+      const live = apiReaders(api);
+      expect(await live.suggest("Alpha")).toEqual(["Alpha"]);
+
+      // Published after the dump's snapshot and before the dump locks the
+      // fence: the dump then reads the replaced fence and fails.
+      const early = await dumpWaitingAt("restore_fixture_early_gate", "early", async () => {
+        await publishSearchIndex("Beta");
         expect(await live.suggest("Beta")).toEqual(["Beta"]);
-        // Activating an Overture release moves the OSM POI snapshot, which the
-        // dump holds, so it gives up and leaves the release in service.
+      });
+      await expect(early.backup).rejects.toThrow(
+        /pg_dump failed for postgis: .*cache lookup failed/s,
+      );
+
+      // While the dump holds the fences, publications wait for it and fail,
+      // and readers keep the published data. The gate follows every table.
+      await superuser.unsafe("CREATE TABLE public.restore_fixture_late_gate (id int)");
+      const late = await dumpWaitingAt("restore_fixture_late_gate", "late", async () => {
+        await expect(publishSearchIndex("Gamma")).rejects.toMatchObject({ code: "55P03" });
         await ingestOverture(dataManager, "overture_places__staging", NEXT_OVERTURE_RELEASE);
         await expect(
           activateOvertureStagingSchema(
@@ -1511,39 +1492,26 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
             FAST_RETRY,
           ),
         ).rejects.toMatchObject({ code: "55P03" });
+        expect(await live.suggest("Beta")).toEqual(["Beta"]);
         expect(await live.cafes()).toEqual([`Cafe ${OVERTURE_RELEASE}`]);
-      } finally {
-        release();
-      }
-      await backup;
+      });
+      await late.backup;
     } finally {
       await Promise.all([dataManager, superuser, api].map((client) => client.end({ timeout: 2 })));
     }
 
-    await restoreBackup({ rootDir: fixture.root, name: "overlap", stopRunning: true });
+    await restoreBackup({ rootDir: fixture.root, name: "late", stopRunning: true });
 
-    // The search index is restored as it was when the dump started its copy:
-    // the new tables, but none of their rows and no ready state.
-    expect(
-      await psql(`SELECT concat_ws(' ',
-        (SELECT count(*) FROM osm_search.places),
-        (SELECT count(*) FROM osm_search.index_state),
-        (SELECT release FROM overture_places.places),
-        (SELECT release FROM overture_places.conflation_state));`),
-    ).toBe(`0 0 ${OVERTURE_RELEASE} ${OVERTURE_RELEASE}`);
     const restored = await connectAs("openmapx_api", API_PASSWORD);
     try {
       const readers = apiReaders(restored);
-      expect(await readers.suggest("Alpha")).toEqual([]);
-      expect(await readers.suggest("Beta")).toEqual([]);
-      expect(await readers.aliasHealth()).toMatchObject({
-        status: "down",
-        error: "No ready OSM alias index is published",
-      });
+      expect(await readers.suggest("Beta")).toEqual(["Beta"]);
+      expect(await readers.suggest("Gamma")).toEqual([]);
+      expect(await readers.aliasHealth()).toMatchObject({ status: "up" });
       expect(await readers.cafes()).toEqual([`Cafe ${OVERTURE_RELEASE}`]);
       expect(await readers.overtureHealth()).toMatchObject({ status: "up" });
     } finally {
       await restored.end({ timeout: 2 });
     }
-  }, 180_000);
+  }, 120_000);
 });
