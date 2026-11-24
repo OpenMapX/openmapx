@@ -594,8 +594,8 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(buildSchemaDDL(staging));
     await pg.sql.unsafe(
       `INSERT INTO "${live}".osm_pois
-         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       VALUES ('node', 42, 'Reusable POI', 50.7753, 6.0839, '881f1d4887fffff', 'cafes', '{}')`,
+         (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       VALUES ('node', 42, 'Reusable POI', ST_Point(6.0839, 50.7753, 4326), '881f1d4887fffff', 'cafes', '{}')`,
     );
     await pg.sql.unsafe(
       `INSERT INTO "${live}".conflation_state

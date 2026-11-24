@@ -38,9 +38,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         [count],
       );
       await pg.sql.unsafe(
-        `INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-   SELECT 'node',i,'世界 Clinic '||i,CASE i%4 WHEN 0 THEN -33.86 WHEN 1 THEN 35.7 WHEN 2 THEN 40.71 ELSE -33.92 END,
-    CASE i%4 WHEN 0 THEN 151.2 WHEN 1 THEN 139.7 WHEN 2 THEN -74 ELSE 18.42 END,'amenity/hospital',
+        `INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+   SELECT 'node',i,'世界 Clinic '||i,ST_Point(
+    CASE i%4 WHEN 0 THEN 151.2 WHEN 1 THEN 139.7 WHEN 2 THEN -74 ELSE 18.42 END,
+    CASE i%4 WHEN 0 THEN -33.86 WHEN 1 THEN 35.7 WHEN 2 THEN 40.71 ELSE -33.92 END,4326),'amenity/hospital',
     CASE WHEN i=4 THEN '{"disused":"yes"}'::JSONB ELSE '{}'::JSONB END,0.8 FROM generate_series(1,$1) i`,
         [count],
       );

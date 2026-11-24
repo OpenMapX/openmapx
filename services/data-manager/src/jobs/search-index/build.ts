@@ -83,13 +83,14 @@ async function insertSearchPlaces(
   const importance = records.map((record) => record.importance);
   await sql.unsafe(
     `INSERT INTO osm_search__staging.places
-       (osm_type, osm_id, name, lat, lng, category, tags, importance)
-     SELECT r.osm_type,r.osm_id,r.name,r.lat,r.lng,r.category,r.tags::JSONB,r.importance
+       (osm_type, osm_id, name, geom, category, tags, importance)
+     SELECT r.osm_type,r.osm_id,r.name,ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),
+       r.category,r.tags::JSONB,r.importance
      FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
        $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::DOUBLE PRECISION[])
        AS r(osm_type,osm_id,name,lat,lng,category,tags,importance)
      ON CONFLICT (osm_type, osm_id) DO UPDATE SET
-       name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
+       name = EXCLUDED.name, geom = EXCLUDED.geom,
        category = EXCLUDED.category, tags = EXCLUDED.tags, importance = EXCLUDED.importance`,
     [osmTypes, osmIds, names, lats, lngs, categories, tags, importance],
   );
@@ -194,7 +195,7 @@ export async function buildOsmSearchIndex(
           (SELECT COUNT(*) FROM osm_search__staging.terms t LEFT JOIN osm_search__staging.places p
              USING (osm_type, osm_id) WHERE p.osm_id IS NULL)::TEXT AS orphans,
           ((SELECT COUNT(*) FROM osm_search__staging.places
-             WHERE lat NOT BETWEEN -90 AND 90 OR lng NOT BETWEEN -180 AND 180
+             WHERE ST_Y(geom) NOT BETWEEN -90 AND 90 OR ST_X(geom) NOT BETWEEN -180 AND 180
                 OR importance NOT BETWEEN 0 AND 1) +
            (SELECT COUNT(*) FROM osm_search__staging.terms
              WHERE kind NOT IN ('authoritative_code','explicit_reference','explicit_alias','generated_acronym')

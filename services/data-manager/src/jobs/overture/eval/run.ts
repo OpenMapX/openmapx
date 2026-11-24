@@ -96,7 +96,7 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
 
 async function loadOsmPois(): Promise<OsmPoiRow[]> {
   return sql<OsmPoiRow[]>`
-    SELECT osm_type, osm_id::TEXT AS osm_id, name, lat, lng, category,
+    SELECT osm_type, osm_id::TEXT AS osm_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, category,
       tags->>'addr:street' AS street,
       tags->>'addr:housenumber' AS housenumber,
       tags->>'addr:postcode' AS postcode,

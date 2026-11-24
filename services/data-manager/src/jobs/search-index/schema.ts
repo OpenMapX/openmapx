@@ -16,11 +16,8 @@ CREATE TABLE "${schema}".places (
   osm_type TEXT NOT NULL CONSTRAINT places_osm_type_check CHECK (osm_type IN ('node','way','relation')),
   osm_id BIGINT NOT NULL,
   name TEXT NOT NULL,
-  lat DOUBLE PRECISION NOT NULL CONSTRAINT places_lat_check CHECK (lat BETWEEN -90 AND 90),
-  lng DOUBLE PRECISION NOT NULL CONSTRAINT places_lng_check CHECK (lng BETWEEN -180 AND 180),
-  geom GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS (
-    ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography
-  ) STORED,
+  geom GEOMETRY(Point, 4326) NOT NULL CONSTRAINT places_geom_check
+    CHECK (ST_X(geom) BETWEEN -180 AND 180 AND ST_Y(geom) BETWEEN -90 AND 90),
   category TEXT,
   tags JSONB NOT NULL,
   importance DOUBLE PRECISION NOT NULL

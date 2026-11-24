@@ -312,14 +312,14 @@ async function seedSearchIndex(pg: PostgisFixture): Promise<void> {
   await pg.sql.unsafe(buildSearchIndexSchemaDDL("osm_search"));
   for (const place of SEARCH_PLACES) {
     await pg.sql.unsafe(
-      `INSERT INTO osm_search.places (osm_type, osm_id, name, lat, lng, category, tags, importance)
-       VALUES ($1, $2::BIGINT, $3, $4, $5, $6, $7::TEXT::JSONB, $8)`,
+      `INSERT INTO osm_search.places (osm_type, osm_id, name, geom, category, tags, importance)
+       VALUES ($1, $2::BIGINT, $3, ST_Point($4, $5, 4326), $6, $7::TEXT::JSONB, $8)`,
       [
         place.osmType,
-        String(place.osmId),
+        place.osmId,
         place.name,
-        place.lat,
         place.lng,
+        place.lat,
         place.category,
         JSON.stringify(place.tags),
         place.importance,
@@ -329,14 +329,7 @@ async function seedSearchIndex(pg: PostgisFixture): Promise<void> {
       await pg.sql.unsafe(
         `INSERT INTO osm_search.terms (osm_type, osm_id, normalized_term, display_value, kind, namespace)
          VALUES ($1, $2::BIGINT, $3, $4, $5, $6)`,
-        [
-          place.osmType,
-          String(place.osmId),
-          term.normalized,
-          term.display,
-          term.kind,
-          term.namespace,
-        ],
+        [place.osmType, place.osmId, term.normalized, term.display, term.kind, term.namespace],
       );
   }
   await pg.sql.unsafe(buildSearchIndexIndexesDDL("osm_search"));
@@ -351,8 +344,9 @@ async function seedNotablePlaces(pg: PostgisFixture): Promise<void> {
   await pg.sql.unsafe(buildNotablePlacesSchemaDDL("notable_places"));
   for (const place of NOTABLE_PLACES) {
     await pg.sql.unsafe(
-      `INSERT INTO notable_places.places (qid, kind, lat, lng, sitelinks, fame) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [place.qid, place.kind, place.lat, place.lng, place.sitelinks, place.fame],
+      `INSERT INTO notable_places.places (qid, kind, geom, sitelinks, fame)
+       VALUES ($1, $2, ST_Point($3, $4, 4326), $5, $6)`,
+      [place.qid, place.kind, place.lng, place.lat, place.sitelinks, place.fame],
     );
     for (const name of place.names)
       await pg.sql.unsafe(
@@ -391,9 +385,11 @@ async function seedOverture(pg: PostgisFixture, extraOsmPois: OsmPoi[] = []): Pr
     );
   const pois = [...OSM_POIS, ...extraOsmPois];
   await pg.sql.unsafe(
-    `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-     SELECT * FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
-       $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::TEXT[]::JSONB[])`,
+    `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
+     SELECT osm_type, osm_id, name, ST_Point(lng, lat, 4326), h3_r8, category, tags
+       FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
+         $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::TEXT[]::JSONB[])
+         AS poi (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)`,
     [
       pois.map((poi) => poi.osmType),
       pois.map((poi) => String(poi.osmId)),

@@ -8,7 +8,8 @@ describe("search-index schema", () => {
   it("builds the independent staging schema with constraints", () => {
     const ddl = buildSearchIndexSchemaDDL("osm_search__staging");
     expect(ddl).toContain('CREATE SCHEMA "osm_search__staging"');
-    expect(ddl).toContain("GEOGRAPHY(POINT, 4326)");
+    expect(ddl).toContain("geom GEOMETRY(Point, 4326) NOT NULL");
+    expect(ddl).not.toMatch(/\blat\b|\blng\b|GEOGRAPHY/);
     expect(ddl).toContain("authoritative_code");
     expect(ddl).toContain("current_fingerprint TEXT NOT NULL");
     expect(ddl).not.toContain("CREATE INDEX");

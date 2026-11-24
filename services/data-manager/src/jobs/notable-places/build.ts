@@ -92,9 +92,11 @@ interface NameRow {
 async function insertPlaces(sql: postgres.Sql, rows: PlaceRow[]): Promise<number> {
   if (rows.length === 0) return 0;
   const result = await sql.unsafe(
-    `INSERT INTO notable_places__staging.places (qid, kind, lat, lng, sitelinks, fame)
-     SELECT * FROM UNNEST($1::TEXT[], $2::TEXT[], $3::DOUBLE PRECISION[],
-       $4::DOUBLE PRECISION[], $5::INTEGER[], $6::DOUBLE PRECISION[])
+    `INSERT INTO notable_places__staging.places (qid, kind, geom, sitelinks, fame)
+     SELECT r.qid, r.kind, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326), r.sitelinks, r.fame
+       FROM UNNEST($1::TEXT[], $2::TEXT[], $3::DOUBLE PRECISION[],
+         $4::DOUBLE PRECISION[], $5::INTEGER[], $6::DOUBLE PRECISION[])
+         AS r (qid, kind, lat, lng, sitelinks, fame)
      ON CONFLICT (qid) DO NOTHING`,
     [
       rows.map((row) => row.qid),

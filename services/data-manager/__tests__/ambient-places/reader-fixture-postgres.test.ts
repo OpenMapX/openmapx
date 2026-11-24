@@ -76,11 +76,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
           VALUES(1,'aachen','fixture','fixture','fixture','fixture-file','regional','ready',4,now(),now(),now());
-          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
-          ('node',1,'Klinik',50.77,6.08,'amenity/hospital','{"name:en":"Clinic","name:de":"Klinik"}',0.8),
-          ('node',2,'Bäckerei',50.7702,6.0805,'shop/bakery','{}',0.6),
-          ('way',9007199254740993,'Dom',50.7748,6.0839,'amenity/place_of_worship','{"level":"1"}',0.9),
-          ('node',3,'Closed',50.77,6.08,'shop/bakery','{"disused":"yes"}',1);
+          INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+          ('node',1,'Klinik',ST_Point(6.08,50.77,4326),'amenity/hospital','{"name:en":"Clinic","name:de":"Klinik"}',0.8),
+          ('node',2,'Bäckerei',ST_Point(6.0805,50.7702,4326),'shop/bakery','{}',0.6),
+          ('way',9007199254740993,'Dom',ST_Point(6.0839,50.7748,4326),'amenity/place_of_worship','{"level":"1"}',0.9),
+          ('node',3,'Closed',ST_Point(6.08,50.77,4326),'shop/bakery','{"disused":"yes"}',1);
           INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES
           ('gers-clinic','Clinic',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','hospital',0.8,'open','[{"property":"/names/primary","dataset":"meta"}]','2026-10-01.0'),
           ('gers-cafe','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open','[{"property":"/names/common/de","dataset":"Microsoft"}]','2026-10-01.0');
@@ -97,10 +97,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.sql.unsafe(`UPDATE osm_search.index_state SET region='planet',place_count=7,epoch='world';
           DELETE FROM overture_places.places WHERE gers_id='gers-cafe';
           UPDATE overture_places.conflation_state SET region='planet',place_count=2;
-          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
-          ('node',11,'病院 East',0,179.99999,'amenity/hospital','{}',0.8),
-          ('node',12,'病院 West',0,-179.99999,'amenity/hospital','{}',0.8),
-          ('way',13,'東京病院',35.7,139.7,'amenity/hospital','{}',0.8);
+          INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+          ('node',11,'病院 East',ST_Point(179.99999,0,4326),'amenity/hospital','{}',0.8),
+          ('node',12,'病院 West',ST_Point(-179.99999,0,4326),'amenity/hospital','{}',0.8),
+          ('way',13,'東京病院',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8);
           INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
           ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff',0.9,'open','2026-10-01.0');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)

@@ -93,7 +93,7 @@ export async function buildAmbientPlaces(
         if (region.coverage === "germany") return buildGermanyPlaces(tx, region, osmState, options);
         const params = region.bounds;
         let osmRows: AmbientOsmRow[] = await tx.unsafe<AmbientOsmRow[]>(
-          `SELECT osm_type,osm_id::TEXT,name,lng,lat,category,tags,importance FROM osm_search.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326)::geography ORDER BY osm_type,osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
+          `SELECT osm_type,osm_id::TEXT,name,ST_X(geom) AS lng,ST_Y(geom) AS lat,category,tags,importance FROM osm_search.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY osm_type,osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
           params,
         );
         if (osmRows.length > AMBIENT_LIMITS.places)
@@ -166,7 +166,7 @@ export async function buildAmbientPlaces(
               return p ? [p] : [];
             });
             const linkRows = await tx.unsafe<{ id: string; gers_id: string }[]>(
-              `SELECT 'osm:'||l.osm_type||'/'||l.osm_id::TEXT AS id,l.gers_id FROM overture_places.poi_conflation_link l JOIN osm_search.places p USING(osm_type,osm_id) WHERE p.geom && ST_MakeEnvelope($1,$2,$3,$4,4326)::geography AND l.release=$5 UNION SELECT 'osm:'||l.osm_type||'/'||l.osm_id::TEXT AS id,l.gers_id FROM overture_places.poi_conflation_link l JOIN overture_places.places o USING(gers_id) WHERE o.geom && ST_MakeEnvelope($1,$2,$3,$4,4326) AND l.release=$5 LIMIT ${AMBIENT_LIMITS.places + 1}`,
+              `SELECT 'osm:'||l.osm_type||'/'||l.osm_id::TEXT AS id,l.gers_id FROM overture_places.poi_conflation_link l JOIN osm_search.places p USING(osm_type,osm_id) WHERE p.geom && ST_MakeEnvelope($1,$2,$3,$4,4326) AND l.release=$5 UNION SELECT 'osm:'||l.osm_type||'/'||l.osm_id::TEXT AS id,l.gers_id FROM overture_places.poi_conflation_link l JOIN overture_places.places o USING(gers_id) WHERE o.geom && ST_MakeEnvelope($1,$2,$3,$4,4326) AND l.release=$5 LIMIT ${AMBIENT_LIMITS.places + 1}`,
               [...params, state.release],
             );
             if (linkRows.length > AMBIENT_LIMITS.places)
@@ -212,7 +212,7 @@ export async function buildAmbientPlaces(
             const counterparts = await tx.unsafe<AmbientOsmRow[]>(
               `SELECT l.osm_type,l.osm_id::TEXT,
             CASE WHEN p.osm_id IS NOT NULL THEN p.name ELSE coalesce(nullif(raw.name,''),o.name) END AS name,
-            coalesce(p.lng,raw.lng) AS lng,coalesce(p.lat,raw.lat) AS lat,
+            ST_X(coalesce(p.geom,raw.geom)) AS lng,ST_Y(coalesce(p.geom,raw.geom)) AS lat,
             coalesce(p.category,raw.category) AS category,coalesce(p.tags,raw.tags,'{}'::JSONB) AS tags,coalesce(p.importance,0.5) AS importance
             FROM overture_places.places o JOIN overture_places.poi_conflation_link l USING(gers_id)
             LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id

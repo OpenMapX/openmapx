@@ -14,8 +14,8 @@ describe.skipIf(skipE2e)("search-index schema in PostGIS", () => {
       await pg.sql.unsafe(buildSearchIndexSchemaDDL("osm_search__staging"));
       await pg.sql.unsafe(
         `INSERT INTO osm_search__staging.places
-          (osm_type, osm_id, name, lat, lng, category, tags, importance)
-         VALUES ('node', 1, 'Example', 52.5, 13.4, 'place:city', '{}', 0.9)`,
+          (osm_type, osm_id, name, geom, category, tags, importance)
+         VALUES ('node', 1, 'Example', ST_Point(13.4, 52.5, 4326), 'place:city', '{}', 0.9)`,
       );
       await pg.sql.unsafe(
         `INSERT INTO osm_search__staging.terms

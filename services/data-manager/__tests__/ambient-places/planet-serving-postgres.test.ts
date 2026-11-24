@@ -30,9 +30,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       );
       await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
         VALUES('planet','fixture','fixture','fixture','fixture-file','world','ready',4,now(),now(),now());
-        INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
-        ('node',1,'病院 East',0,179.99999,'amenity/hospital','{}',0.8),('node',2,'病院 West',0,-179.99999,'amenity/hospital','{}',0.8),
-        ('node',3,'Polar hospital',86,0,'amenity/hospital','{}',0.8),('way',9007199254740993,'東京病院',35.7,139.7,'amenity/hospital','{}',0.8);
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+        ('node',1,'病院 East',ST_Point(179.99999,0,4326),'amenity/hospital','{}',0.8),('node',2,'病院 West',ST_Point(-179.99999,0,4326),'amenity/hospital','{}',0.8),
+        ('node',3,'Polar hospital',ST_Point(0,86,4326),'amenity/hospital','{}',0.8),('way',9007199254740993,'東京病院',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8);
         INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
         ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff',0.9,'open','2026-09-23.1');
         INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
@@ -107,11 +107,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       );
       await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
         VALUES('planet','fixture','fixture','fixture','fixture-file','world-dense','ready',10001,now(),now(),now());
-        INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-        SELECT 'node',i,'世界 Fixture Hospital '||i,
-          CASE i%5 WHEN 0 THEN 35.7 WHEN 1 THEN 40.71 WHEN 2 THEN -33.92 WHEN 3 THEN -33.86 ELSE -23.55 END,
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+        SELECT 'node',i,'世界 Fixture Hospital '||i,ST_Point(
           CASE i%5 WHEN 0 THEN 139.7 WHEN 1 THEN -74 WHEN 2 THEN 18.42 WHEN 3 THEN 151.2 ELSE -46.63 END,
-          'amenity/hospital','{}',0.8 FROM generate_series(1,10001) i`);
+          CASE i%5 WHEN 0 THEN 35.7 WHEN 1 THEN 40.71 WHEN 2 THEN -33.92 WHEN 3 THEN -33.86 ELSE -23.55 END,
+          4326),'amenity/hospital','{}',0.8 FROM generate_series(1,10001) i`);
       const started = performance.now();
       const first = await buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
         availableBytes,

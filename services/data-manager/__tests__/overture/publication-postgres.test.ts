@@ -77,8 +77,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     await insertPlace("overture_places", "old-place", "Old Café");
     await insertPlace("overture_places__staging", "new-place", "New Café");
     await pg.sql.unsafe(
-      `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       VALUES ('node', 42, 'Carried POI', 50.77, 6.08, '881f1d4887fffff', 'cafes', '{}')`,
+      `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       VALUES ('node', 42, 'Carried POI', ST_Point(6.08, 50.77, 4326), '881f1d4887fffff', 'cafes', '{}')`,
     );
     for (const [schema, release] of [
       ["overture_places", "2026-07-22.0"],
@@ -316,15 +316,15 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
   it("indexes and analyzes the OSM POI snapshot before swapping it in", async () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));
     await pg.sql.unsafe(
-      `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       VALUES ('node', 1, 'Old POI', 50.77, 6.08, '881f1d4887fffff', 'cafes', '{}')`,
+      `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       VALUES ('node', 1, 'Old POI', ST_Point(6.08, 50.77, 4326), '881f1d4887fffff', 'cafes', '{}')`,
     );
     // The staging table as the extraction creates and fills it.
     await pg.sql.unsafe(buildOsmPoisTableDDL("overture_places", "osm_pois__staging"));
     await pg.sql.unsafe(
       `INSERT INTO overture_places.osm_pois__staging
-         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       VALUES ('node', 2, 'New POI', 50.78, 6.09, '881f1d4887fffff', 'bars', '{}')`,
+         (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       VALUES ('node', 2, 'New POI', ST_Point(6.09, 50.78, 4326), '881f1d4887fffff', 'bars', '{}')`,
     );
 
     await publishOsmPoisSnapshot(pg.sql, "overture_places");
@@ -335,6 +335,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     expect(await relationNames("%osm_pois%")).toEqual([
       "osm_pois",
       "osm_pois_category_idx",
+      "osm_pois_geom_idx",
       "osm_pois_h3_r8_osm_type_osm_id_idx",
       "osm_pois_pkey",
     ]);

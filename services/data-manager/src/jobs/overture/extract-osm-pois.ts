@@ -404,20 +404,15 @@ async function insertOsmPois(
 
     await sql.unsafe(
       `INSERT INTO "${schema}"."${table}"
-         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       SELECT
-         UNNEST($1::TEXT[]),
-         UNNEST($2::BIGINT[]),
-         UNNEST($3::TEXT[]),
-         UNNEST($4::DOUBLE PRECISION[]),
-         UNNEST($5::DOUBLE PRECISION[]),
-         UNNEST($6::TEXT[]),
-         UNNEST($7::TEXT[]),
-         UNNEST($8::JSONB[])
+         (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       SELECT r.osm_type, r.osm_id, r.name, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326),
+              r.h3_r8, r.category, r.tags
+         FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
+           $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::JSONB[])
+           AS r (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
        ON CONFLICT (osm_type, osm_id) DO UPDATE SET
          name = EXCLUDED.name,
-         lat = EXCLUDED.lat,
-         lng = EXCLUDED.lng,
+         geom = EXCLUDED.geom,
          h3_r8 = EXCLUDED.h3_r8,
          category = EXCLUDED.category,
          tags = EXCLUDED.tags`,

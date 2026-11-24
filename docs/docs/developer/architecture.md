@@ -388,6 +388,13 @@ that table's readers, a second at a time. The conflation run is marked complete
 in the links' swap transaction, because the next-link table is empty after the
 swap and must never be published again.
 
+Points in these schemas are `geometry(Point, 4326)` columns with a GiST index,
+so bounding-box and nearest-neighbour queries use the index; readers take
+coordinates with `ST_X`/`ST_Y` and measure distances by casting to
+`geography`. Indexes and constraints are named `<table>_<columns>_<kind>`
+(`idx`, `key`, `pkey`, `fkey` or `check`), which lets a table swap rename them
+together with their table.
+
 ## The integration host lifecycle
 
 When `apps/api` boots, the host runs the same sequence it re-runs on every hot

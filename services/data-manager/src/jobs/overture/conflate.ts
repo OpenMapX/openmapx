@@ -470,7 +470,7 @@ export async function scoreOvertureCandidates(opts: {
   let candidateCount = opts.resume?.candidates ?? 0;
   while (true) {
     const osmRows: OsmRow[] = await sql.unsafe<OsmRow[]>(
-      `SELECT osm_type, osm_id, name, lat, lng, h3_r8, category,
+      `SELECT osm_type, osm_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8, category,
               tags->>'addr:street' AS street,
               tags->>'addr:housenumber' AS housenumber,
               tags->>'addr:postcode' AS postcode,

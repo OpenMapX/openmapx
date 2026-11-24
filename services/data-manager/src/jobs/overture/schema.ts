@@ -233,6 +233,7 @@ export function buildOsmPoisIndexesDDL(schema: string, table: OsmPoisTable): str
     CREATE INDEX "${table}_category_idx" ON "${schema}"."${table}" (category);
     CREATE INDEX "${table}_h3_r8_osm_type_osm_id_idx"
       ON "${schema}"."${table}" (h3_r8, osm_type, osm_id);
+    CREATE INDEX "${table}_geom_idx" ON "${schema}"."${table}" USING GIST (geom);
   `;
 }
 
@@ -248,12 +249,13 @@ export function buildOsmPoisTableDDL(schema: string, table: OsmPoisTable): strin
       osm_type  TEXT NOT NULL,
       osm_id    BIGINT NOT NULL,
       name      TEXT NOT NULL DEFAULT '',
-      lat       DOUBLE PRECISION NOT NULL,
-      lng       DOUBLE PRECISION NOT NULL,
+      geom      GEOMETRY(Point, 4326) NOT NULL,
       h3_r8     TEXT NOT NULL,
       category  TEXT,
       tags      JSONB,
-      CONSTRAINT "${table}_pkey" PRIMARY KEY (osm_type, osm_id)
+      CONSTRAINT "${table}_pkey" PRIMARY KEY (osm_type, osm_id),
+      CONSTRAINT "${table}_geom_check"
+        CHECK (ST_X(geom) BETWEEN -180 AND 180 AND ST_Y(geom) BETWEEN -90 AND 90)
     );
   `;
 }

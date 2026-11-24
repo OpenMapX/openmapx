@@ -25,8 +25,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
           VALUES('planet','fixture','fixture','fixture','fixture-file','world','ready',2,now(),now(),now());
-          INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
-          ('node',1,'Tokyo hospital',35.7,139.7,'amenity/hospital','{}',0.8),('node',2,'Lagos hospital',6.45,3.39,'amenity/hospital','{}',0.8)`);
+          INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+          ('node',1,'Tokyo hospital',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8),('node',2,'Lagos hospital',ST_Point(3.39,6.45,4326),'amenity/hospital','{}',0.8)`);
         const build = (onClaim?: () => void) =>
           buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, onClaim, {
             availableBytes,

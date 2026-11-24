@@ -70,20 +70,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "notable_places__staging.names_pkey",
           "notable_places__staging.names_qid_fkey",
           "notable_places__staging.places_fame_check",
+          "notable_places__staging.places_geom_check",
           "notable_places__staging.places_geom_idx",
           "notable_places__staging.places_kind_check",
-          "notable_places__staging.places_lat_check",
-          "notable_places__staging.places_lng_check",
           "notable_places__staging.places_pkey",
           "notable_places__staging.places_qid_check",
           "notable_places__staging.places_sitelinks_check",
           "osm_search__staging.index_state_pkey",
           "osm_search__staging.index_state_singleton_check",
           "osm_search__staging.index_state_status_check",
+          "osm_search__staging.places_geom_check",
           "osm_search__staging.places_geom_idx",
           "osm_search__staging.places_importance_check",
-          "osm_search__staging.places_lat_check",
-          "osm_search__staging.places_lng_check",
           "osm_search__staging.places_osm_type_check",
           "osm_search__staging.places_pkey",
           "osm_search__staging.terms_kind_check",
@@ -99,9 +97,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "overture_places.conflation_state_status_check",
           "overture_places.embedding_cache_pkey",
           "overture_places.osm_pois_category_idx",
+          "overture_places.osm_pois_geom_check",
+          "overture_places.osm_pois_geom_idx",
           "overture_places.osm_pois_h3_r8_osm_type_osm_id_idx",
           "overture_places.osm_pois_pkey",
           "overture_places.osm_pois__staging_category_idx",
+          "overture_places.osm_pois__staging_geom_check",
+          "overture_places.osm_pois__staging_geom_idx",
           "overture_places.osm_pois__staging_h3_r8_osm_type_osm_id_idx",
           "overture_places.osm_pois__staging_pkey",
           "overture_places.places_basic_category_idx",
@@ -127,6 +129,69 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "overture_places.poi_conflation_link_next_match_confidence_check",
           "overture_places.poi_conflation_link_next_pkey",
         ]);
+      } finally {
+        await pg.stop();
+      }
+    }, 120_000);
+
+    it("store points as indexed geometry(Point, 4326) without coordinate columns", async () => {
+      const pg = await startPostgis();
+      try {
+        await pg.sql.unsafe(
+          buildSearchIndexSchemaDDL("osm_search") +
+            buildSearchIndexIndexesDDL("osm_search") +
+            buildNotablePlacesSchemaDDL("notable_places") +
+            buildNotablePlacesFinishDDL("notable_places", NOTABLE_DISPLAY_LANGUAGES) +
+            buildSchemaDDL("overture_places"),
+        );
+        const points = await pg.sql.unsafe(
+          `SELECT f_table_schema AS schema, f_table_name AS table, f_geometry_column AS column,
+                  type, srid
+             FROM geometry_columns
+            WHERE f_table_schema IN ('osm_search', 'notable_places', 'overture_places')
+            ORDER BY 1, 2`,
+        );
+        expect(points).toEqual([
+          { schema: "notable_places", table: "places", column: "geom", type: "POINT", srid: 4326 },
+          { schema: "osm_search", table: "places", column: "geom", type: "POINT", srid: 4326 },
+          {
+            schema: "overture_places",
+            table: "osm_pois",
+            column: "geom",
+            type: "POINT",
+            srid: 4326,
+          },
+          { schema: "overture_places", table: "places", column: "geom", type: "POINT", srid: 4326 },
+        ]);
+        const leftovers = await pg.sql.unsafe(
+          `SELECT table_schema, table_name, column_name FROM information_schema.columns
+            WHERE table_schema IN ('osm_search', 'notable_places', 'overture_places')
+              AND (column_name IN ('lat', 'lng') OR udt_name = 'geography')`,
+        );
+        expect(leftovers).toEqual([]);
+        const gist = await pg.sql.unsafe<{ index: string }[]>(
+          `SELECT n.nspname || '.' || i.relname AS index
+             FROM pg_index x
+             JOIN pg_class i ON i.oid = x.indexrelid
+             JOIN pg_class t ON t.oid = x.indrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             JOIN pg_am am ON am.oid = i.relam
+            WHERE am.amname = 'gist' AND n.nspname IN ('osm_search', 'notable_places', 'overture_places')
+            ORDER BY 1`,
+        );
+        expect(gist.map((row) => row.index)).toEqual([
+          "notable_places.places_geom_idx",
+          "osm_search.places_geom_idx",
+          "overture_places.osm_pois_geom_idx",
+          "overture_places.places_geom_idx",
+        ]);
+        // Coordinates outside WGS 84 bounds are refused, as they were before.
+        await expect(
+          pg.sql.unsafe(
+            `INSERT INTO osm_search.places (osm_type, osm_id, name, geom, tags, importance)
+             VALUES ('node', 1, 'Off the map', ST_Point(13.4, 91, 4326), '{}', 0.5)`,
+          ),
+        ).rejects.toMatchObject({ code: "23514", constraint_name: "places_geom_check" });
       } finally {
         await pg.stop();
       }
