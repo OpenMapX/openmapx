@@ -1,9 +1,16 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { publishOvertureLinks } from "../../src/jobs/overture/conflate.js";
+import {
+  cleanupOvertureConflationWorkspace,
+  publishOvertureLinks,
+} from "../../src/jobs/overture/conflate.js";
 import { publishOsmPoisSnapshot } from "../../src/jobs/overture/extract-osm-pois.js";
 import { activateOvertureStagingSchema } from "../../src/jobs/overture/ingest.js";
+import {
+  getOvertureConflationState,
+  rebuildOvertureLinksUnlocked,
+} from "../../src/jobs/overture/rebuild-links.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontainer.js";
 
@@ -101,6 +108,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
         "overture_places",
         "overture_places__staging",
         "2026-09-10T12:00:00.000Z",
+        // Outlasts the 12-second reader without the production pauses.
+        { attempts: 10, backoffMs: 250 },
       );
       activation.catch(() => undefined);
       await waitUntil(async () => {
@@ -159,7 +168,9 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       await holder.unsafe(`SELECT count(*) FROM overture_places.poi_conflation_link`);
       const startedAt = Date.now();
       await expect(
-        publishOvertureLinks(pg.sql, "overture_places", { attempts: 2, backoffMs: 10 }),
+        publishOvertureLinks(pg.sql, "overture_places", {
+          retry: { attempts: 2, backoffMs: 10 },
+        }),
       ).rejects.toMatchObject({ code: "55P03" });
       expect(Date.now() - startedAt).toBeLessThan(5000);
       expect(await linkedIds()).toEqual([{ osm_id: "1" }]);
@@ -227,6 +238,79 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       notNull?.names.every((name) => /^poi_conflation_link_[a-z_]+_not_null$/.test(name)),
     ).toBe(true);
     expect(notNull?.names.some((name) => name.startsWith("poi_conflation_link_next_"))).toBe(false);
+  }, 60_000);
+
+  it("keeps the published links when a conflation run fails after its links were swapped in", async () => {
+    await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+    await insertPlace("overture_places", "g1", "First");
+    await insertPlace("overture_places", "g2", "Second");
+    await insertLink("poi_conflation_link", 1, "g1");
+    await pg.sql.unsafe(
+      `INSERT INTO overture_places.conflation_state
+         (release, region, place_count, status, sources_catalogue)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[]')`,
+    );
+    let failAfterSwap = true;
+    const dependencies = {
+      fileExists: () => true,
+      fingerprint: () => "snapshot",
+      extract: async () => ({ emitted: 2, extracted: 2 }),
+      score: async () => ({
+        candidates: 2,
+        processed: 2,
+        cursor: { h3: "881f1d4887fffff", osmType: "node", osmId: "3" },
+      }),
+      assign: async () => {
+        await insertLink("poi_conflation_link_next", 2, "g1");
+        await insertLink("poi_conflation_link_next", 3, "g2");
+        return { components: 2, assignmentCursor: 2, stagedLinks: 2 };
+      },
+      validateFusedQuality: async () => ({ applicableCases: 1, cases: [] }),
+      publish: async (...args: Parameters<typeof publishOvertureLinks>) => {
+        const published = await publishOvertureLinks(...args);
+        if (failAfterSwap) {
+          failAfterSwap = false;
+          throw new Error("injected failure after the swap committed");
+        }
+        return published;
+      },
+      cleanup: cleanupOvertureConflationWorkspace,
+      preflight: async () => undefined,
+    };
+    const options = {
+      sql: pg.sql,
+      region: "europe/germany/berlin",
+      release: "2026-07-22.0",
+      dataDir: "/nonexistent",
+    };
+    const linkedIds = () =>
+      search.unsafe<{ osm_id: string }[]>(
+        `SELECT osm_id::TEXT FROM overture_places.poi_conflation_link ORDER BY osm_id`,
+      );
+
+    await expect(rebuildOvertureLinksUnlocked(options, dependencies as never)).resolves.toEqual(
+      expect.objectContaining({
+        status: "failed",
+        error: "injected failure after the swap committed",
+      }),
+    );
+    expect(await linkedIds()).toEqual([{ osm_id: "2" }, { osm_id: "3" }]);
+
+    // The run completed with the swap, so a rerun does not publish again.
+    await expect(rebuildOvertureLinksUnlocked(options, dependencies as never)).resolves.toEqual({
+      status: "already_completed",
+      linked: 2,
+    });
+    expect(await linkedIds()).toEqual([{ osm_id: "2" }, { osm_id: "3" }]);
+    expect(await getOvertureConflationState(pg.sql)).toEqual(
+      expect.objectContaining({ status: "completed", phase: "complete", linkedCount: 2 }),
+    );
+
+    // The next snapshot is empty now, and assignment recorded two links.
+    await expect(publishOvertureLinks(pg.sql)).rejects.toThrow(
+      "The staged link snapshot holds 0 links but assignment recorded 2; refusing to publish it",
+    );
+    expect(await linkedIds()).toEqual([{ osm_id: "2" }, { osm_id: "3" }]);
   }, 60_000);
 
   it("indexes and analyzes the OSM POI snapshot before swapping it in", async () => {

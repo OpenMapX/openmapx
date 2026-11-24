@@ -67,7 +67,19 @@ function dependencies() {
     })),
     assign: vi.fn(async () => ({ components: 8, assignmentCursor: 8, stagedLinks: 7 })),
     validateFusedQuality: vi.fn(async () => ({ applicableCases: 1, cases: [] })),
-    publish: vi.fn(async () => ({ linked: 7 })),
+    // Like the real publication, completes the run inside the swap.
+    publish: vi.fn(
+      async (
+        transaction: postgres.TransactionSql,
+        _schema: string,
+        options?: {
+          complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+        },
+      ) => {
+        await options?.complete?.(transaction, 7);
+        return { linked: 7 };
+      },
+    ),
     cleanup: vi.fn(async () => undefined),
     preflight: vi.fn(async () => undefined),
   };
@@ -127,6 +139,7 @@ beforeEach(() => {
         linked_count: String(params[0]),
         staged_link_count: String(params[0]),
       };
+      return [{ singleton: 1 }];
     } else if (query.includes("workspace_cleaned_at = COALESCE")) {
       state = { ...state, workspace_cleaned_at: new Date() };
     } else if (query.includes("SET") && query.includes("status = 'failed'")) {

@@ -667,39 +667,58 @@ export async function assignOvertureCandidates(opts: {
   return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
 }
 
+export interface PublishOvertureLinksOptions {
+  /**
+   * Runs in the swap's transaction with the published link count. Recording
+   * the run as complete here commits it with the swap: once the next
+   * snapshot is published, it is empty, and a retried publication would
+   * otherwise swap that empty table in.
+   */
+  complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+  retry?: LockRetry;
+}
+
 /**
  * Atomically publishes the completely assigned next-link snapshot by renaming
  * it to the published table, and starts an empty next snapshot. No row is
  * copied or deleted, so the published table never carries a whole snapshot
- * of dead rows.
+ * of dead rows. A snapshot that does not hold the number of links assignment
+ * recorded is refused.
  */
 export async function publishOvertureLinks(
   sql: postgres.Sql,
   schema = "overture_places",
-  retry: LockRetry = PUBLICATION_LOCK_RETRY,
+  options: PublishOvertureLinksOptions = {},
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
+  let linked = 0;
   await publishTableSwap(sql, {
     schema,
     live: "poi_conflation_link",
     staging: "poi_conflation_link_next",
-    retry,
+    retry: options.retry ?? PUBLICATION_LOCK_RETRY,
     afterSwap: async (tx) => {
+      const counts = itemAt(
+        await tx.unsafe<{ linked: string; expected: string | null }[]>(
+          `SELECT (SELECT COUNT(*) FROM "${schema}".poi_conflation_link)::TEXT AS linked,
+                  (SELECT staged_link_count FROM "${schema}".conflation_state
+                    WHERE singleton = 1)::TEXT AS expected`,
+        ),
+        0,
+        "row from the published conflation link count query",
+      );
+      linked = Number(counts.linked);
+      if (counts.expected !== null && Number(counts.expected) !== linked)
+        throw new Error(
+          `The staged link snapshot holds ${linked} links but assignment recorded ` +
+            `${counts.expected}; refusing to publish it`,
+        );
+      await options.complete?.(tx, linked);
       await tx.unsafe(buildConflationLinkTableDDL(schema, "poi_conflation_link_next"));
     },
   });
-
-  const { linked } = itemAt(
-    await sql.unsafe<{ linked: string }[]>(
-      `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
-      [],
-    ),
-    0,
-    "row from the conflation link count query",
-  );
-  const linkedCount = Number(linked ?? 0);
-  return { linked: linkedCount };
+  return { linked };
 }
 
 /** Clears retry artifacts only after state has durably reached `completed`. */

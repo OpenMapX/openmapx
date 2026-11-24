@@ -118,7 +118,11 @@ function underLockTimeout<T>(
   });
 }
 
-/** Drops what a publication retired; returns false when its readers outlasted every attempt. */
+/**
+ * Drops what a publication retired; returns false when that failed. The
+ * publication has already committed and the next one drops the leftover
+ * first, so no error here, a cancelled job included, fails the publication.
+ */
 async function dropRetired(
   sql: postgres.Sql,
   statement: string,
@@ -134,10 +138,16 @@ async function dropRetired(
     );
     return true;
   } catch (error) {
-    if (!isLockTimeout(error)) throw error;
-    jobChildLogger({ publication: what }).warn(
-      `${what} is still being read; it stays until the next publication drops it`,
-    );
+    const logger = jobChildLogger({ publication: what });
+    if (isLockTimeout(error)) {
+      logger.warn(`${what} is still being read; it stays until the next publication drops it`);
+    } else {
+      const code = (error as { code?: unknown })?.code;
+      logger.error(
+        { code: typeof code === "string" ? code : undefined, err: (error as Error)?.message },
+        `Dropping ${what} failed; it stays until the next publication drops it`,
+      );
+    }
     return false;
   }
 }
@@ -168,8 +178,7 @@ async function analyzeSchema(sql: postgres.Sql, schema: string): Promise<void> {
       ORDER BY c.relname`,
     [schema],
   );
-  if (tables.length === 0) return;
-  await sql.unsafe(`ANALYZE ${tables.map(({ name }) => `"${schema}"."${name}"`).join(", ")}`);
+  for (const { name } of tables) await sql`ANALYZE ${sql(schema)}.${sql(name)}`;
 }
 
 /**
@@ -250,18 +259,16 @@ async function renameTable(
       WHERE conrelid = to_regclass($1) AND contype NOT IN ('p', 'u', 'x') ORDER BY conname`,
     [`"${schema}"."${from}"`],
   );
-  await tx.unsafe(`ALTER TABLE "${schema}"."${from}" RENAME TO "${to}"`);
+  await tx`ALTER TABLE ${tx(schema)}.${tx(from)} RENAME TO ${tx(to)}`;
   // Renaming an index also renames the constraint it backs.
   for (const { name } of indexes) {
     const renamed = renamedObject(name, from, to);
-    if (renamed) await tx.unsafe(`ALTER INDEX "${schema}"."${name}" RENAME TO "${renamed}"`);
+    if (renamed) await tx`ALTER INDEX ${tx(schema)}.${tx(name)} RENAME TO ${tx(renamed)}`;
   }
   for (const { name } of constraints) {
     const renamed = renamedObject(name, from, to);
     if (renamed)
-      await tx.unsafe(
-        `ALTER TABLE "${schema}"."${to}" RENAME CONSTRAINT "${name}" TO "${renamed}"`,
-      );
+      await tx`ALTER TABLE ${tx(schema)}.${tx(to)} RENAME CONSTRAINT ${tx(name)} TO ${tx(renamed)}`;
   }
 }
 

@@ -8,7 +8,11 @@ import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { osmFileIdentity } from "../osm-resources.js";
-import { PUBLICATION_LOCK_RETRY, publishSchemaSwap } from "../publish-schema-swap.js";
+import {
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  publishSchemaSwap,
+} from "../publish-schema-swap.js";
 import { extractSearchPlaces, type SearchPlaceRecord } from "./extract.js";
 import { createSearchIndexOperationLock, type SearchIndexOperationLock } from "./operation-lock.js";
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
@@ -34,6 +38,8 @@ export function validateSearchIndexCounts(counts: SearchIndexCounts): void {
 
 interface BuildDependencies {
   extract: typeof extractSearchPlaces;
+  /** How the publication retries a step that waited too long for a lock. */
+  publicationRetry: LockRetry;
 }
 
 export function deduplicateSearchPlaces(records: SearchPlaceRecord[]): SearchPlaceRecord[] {
@@ -209,7 +215,7 @@ export async function buildOsmSearchIndex(
       await publishSchemaSwap(opts.sql, {
         live: "osm_search",
         staging: "osm_search__staging",
-        retry: PUBLICATION_LOCK_RETRY,
+        retry: opts.dependencies?.publicationRetry ?? PUBLICATION_LOCK_RETRY,
         carryOver: async (transaction) => {
           await transaction.unsafe(
             `UPDATE osm_search.index_state

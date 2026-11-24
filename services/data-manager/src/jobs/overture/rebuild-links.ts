@@ -559,15 +559,24 @@ export async function rebuildOvertureLinksUnlocked(
       opts.onProgress?.(
         `Conflation attempt ${state.attemptCount}, phase publish: atomically activating links...`,
       );
-      const published = await dependencies.publish(sql, schema);
-      await sql.unsafe(
-        `UPDATE "${schema}".conflation_state
-         SET ${ACCUMULATE_PHASE_DURATION}, phase = 'complete', status = 'completed',
-             linked_count = $1, staged_link_count = $1, last_error = NULL,
-             completed_at = NOW(), phase_started_at = NULL, updated_at = NOW()
-         WHERE singleton = 1 AND status = 'running' AND attempt_count = $2 AND phase = 'publish'`,
-        [published.linked, state.attemptCount],
-      );
+      // The run completes in the swap's transaction: after the swap the next
+      // snapshot is empty, so a run left in `publish` would publish nothing.
+      await dependencies.publish(sql, schema, {
+        complete: async (tx, linked) => {
+          const completed = await tx.unsafe(
+            `UPDATE "${schema}".conflation_state
+             SET ${ACCUMULATE_PHASE_DURATION}, phase = 'complete', status = 'completed',
+                 linked_count = $1, staged_link_count = $1, last_error = NULL,
+                 completed_at = NOW(), phase_started_at = NULL, updated_at = NOW()
+             WHERE singleton = 1 AND status = 'running' AND attempt_count = $2
+               AND phase = 'publish'
+             RETURNING singleton`,
+            [linked, attemptCount],
+          );
+          if (completed.length === 0)
+            throw new Error("Another conflation attempt took over before the links were published");
+        },
+      });
       state = await stateAfterTransition(sql, schema);
       try {
         await finalizeWorkspace(sql, schema, state.attemptCount, dependencies.cleanup);

@@ -53,24 +53,39 @@ volume.
 
 ### Backups during data publications
 
-Backups and data publications no longer need mutual exclusion to keep the
-API working. When data-manager publishes a rebuilt search index, notable-places
-index or Overture release, it swaps schemas by renaming them, which takes no
-lock the dump holds. API searches move to the new data at once and never wait
-behind the dump, and the old schema is dropped after the dump has finished with
-it (see [the architecture](../developer/architecture.md)).
+Backups and data publications need no mutual exclusion to keep the API
+working: no data publication makes API searches wait behind a running backup
+(see [the architecture](../developer/architecture.md)). A rebuilt search index
+or notable-places index is swapped in by renaming schemas, which takes no lock
+the dump holds, so it publishes during a backup and searches move to the new
+data at once.
 
-A publication that commits while a dump runs does change that dump's copy of
-the data set it replaced. `pg_dump` reads each table by name with the snapshot
-it took when it started, and after the swap the name leads to the new tables.
-The archive then holds those tables as far as they existed when the dump
-started: empty if the rebuild began later, and without the final ready state
-otherwise. After a restore from such a backup, that data set shows as not
+Two Overture publications need a brief lock on a table the dump reads:
+activating a new release that carries the OSM POI snapshot over, and
+publishing the conflation links. Each waits at most a second per attempt, so
+searches are not held up, but while a backup holds that table they fail after
+about two minutes of retries and leave the published data unchanged. Run the
+Overture ingest or the conflation again after the backup; a failed activation
+rebuilds its staging schema from the downloaded release.
+
+A publication drops the old copy it replaced, the `<name>__previous` schema or
+table, once nothing reads it any more. When a backup still reads it after about
+two minutes of retries, the copy stays and the next publication of that data
+set drops it first; if the backup is still running then, that publication fails
+too and must run again later. Backups currently also dump the `__staging` and
+`__previous` schemas.
+
+A backup that overlaps a publication may hold an unpublished copy of the data
+set the publication replaced. `pg_dump` reads each table by name with the
+snapshot it took when it started, and after the swap the name leads to the new
+tables. The archive then holds those tables as far as they existed when the
+dump started: empty if the rebuild began later, and without the final ready
+state otherwise. After a restore from such a backup, that data set is not
 published and must be rebuilt as described in
-[Preparing data](../install/preparing-data.md). A dump that copies the data of a
-`__staging` schema fails if that schema is published while the dump runs.
-Avoid starting a rebuild during a backup when the backup's copy of the
-rebuilt data matters.
+[Preparing data](../install/preparing-data.md). The dump itself fails if a
+publication during it swaps in a table whose columns differ from the old one,
+or publishes a `__staging` schema whose data the dump copies; create the backup
+again afterwards.
 
 ## What gets skipped, and why
 

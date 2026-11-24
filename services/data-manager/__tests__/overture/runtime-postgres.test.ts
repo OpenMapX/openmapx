@@ -234,7 +234,19 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       }),
       assign: vi.fn(async () => ({ components: 1, assignmentCursor: 1, stagedLinks: 1 })),
       validateFusedQuality: vi.fn(async () => ({ applicableCases: 1, cases: [] })),
-      publish: vi.fn(async () => ({ linked: 1 })),
+      // Like the real publication, completes the run inside the swap.
+      publish: vi.fn(
+        async (
+          transaction: postgres.TransactionSql,
+          _schema: string,
+          options?: {
+            complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+          },
+        ) => {
+          await options?.complete?.(transaction, 1);
+          return { linked: 1 };
+        },
+      ),
       cleanup: vi.fn(async () => undefined),
       preflight: vi.fn(async () => undefined),
     };

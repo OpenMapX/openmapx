@@ -378,11 +378,15 @@ Renaming a schema takes no table lock, so it commits at once, and every later
 query resolves the live name to the new tables, prepared statements included.
 A second transaction drops `<live>__previous` once its last reader, such as a
 running backup, has finished. Each step waits at most one second for a lock and
-is retried with growing pauses. If the old schema is still being read after the
-last retry, it stays in place and the next publication drops it before it
-swaps. Overture's OSM POI snapshot and its conflation links are swapped the
-same way as single tables inside `overture_places`: renaming a table does take
-its lock, so those swaps wait for that table's readers, a second at a time.
+is retried with growing pauses. The publication has committed by then, so if
+the drop fails, for example because the old schema is still being read after
+the last retry, the schema stays in place, the failure is only logged, and the
+next publication drops it before it swaps. Overture's OSM POI snapshot and its
+conflation links are swapped the same way as single tables inside
+`overture_places`: renaming a table does take its lock, so those swaps wait for
+that table's readers, a second at a time. The conflation run is marked complete
+in the links' swap transaction, because the next-link table is empty after the
+swap and must never be published again.
 
 ## The integration host lifecycle
 
