@@ -31,7 +31,11 @@ import {
   tableExists,
 } from "./publication.js";
 import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError, ensureAmbientSchema } from "./schema.js";
-import { lockAmbientCountrySources } from "./source-locks.js";
+import {
+  assertAmbientSourcesUnchanged,
+  captureAmbientSources,
+  lockAmbientCountrySources,
+} from "./source-locks.js";
 
 async function lock(tx: postgres.TransactionSql) {
   const row = itemAt(
@@ -91,6 +95,9 @@ export async function buildAmbientPlaces(
           throw new Error("OSM search index must be ready");
         const osmPublished = fresh(osmState.published_at);
         if (region.coverage === "germany") return buildGermanyPlaces(tx, region, osmState, options);
+        // Unlike Germany, a regional build takes no source lock, so that it
+        // stays available while sources are prepared.
+        const sources = await captureAmbientSources(tx);
         const params = region.bounds;
         let osmRows: AmbientOsmRow[] = await tx.unsafe<AmbientOsmRow[]>(
           `SELECT osm_type,osm_id::TEXT,name,ST_X(geom) AS lng,ST_Y(geom) AS lat,category,tags,importance FROM osm_search.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY osm_type,osm_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
@@ -283,6 +290,7 @@ export async function buildAmbientPlaces(
         await insertAmbientGeneration(tx, manifest, "regional", "published");
         await insertAmbientFeatures(tx, manifest.generation, places);
         await activateAmbientGeneration(tx, manifest, { retry: options.lockRetry });
+        await assertAmbientSourcesUnchanged(tx, sources);
         return manifest;
       },
       "isolation level repeatable read",

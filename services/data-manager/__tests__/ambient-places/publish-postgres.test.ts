@@ -25,7 +25,10 @@ import {
   ensureAmbientSchema,
 } from "../../src/jobs/ambient-places/schema.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
-import { PUBLICATION_LOCK_TIMEOUT_MS } from "../../src/jobs/publish-schema-swap.js";
+import {
+  PUBLICATION_LOCK_TIMEOUT_MS,
+  publishSchemaSwap,
+} from "../../src/jobs/publish-schema-swap.js";
 import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
@@ -1032,6 +1035,104 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await probe.end({ timeout: 2 });
       }
     }, 120_000);
+
+    it.each([
+      {
+        source: "search index",
+        live: "osm_search",
+        // Read after the OSM places and before the links joined with them.
+        gate: "overture_places.conflation_state",
+        staging: buildSearchIndexSchemaDDL("osm_search__staging"),
+        rows: `INSERT INTO osm_search__staging.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','second','ready',now(),now(),now());
+          INSERT INTO osm_search__staging.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',2,'Bakery',ST_Point(6.0805,50.7702,4326),'shop/bakery','{}',0.6)`,
+      },
+      {
+        source: "Overture release",
+        live: "overture_places",
+        // Read after the Overture places.
+        gate: "overture_places.poi_conflation_link",
+        staging: buildSchemaDDL("overture_places__staging"),
+        rows: `INSERT INTO overture_places__staging.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES('gers-cafe','Cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','2026-11-01.0');
+          INSERT INTO overture_places__staging.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-11-01.0','aachen',1,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]')`,
+      },
+    ])(
+      "refuses to publish a regional build when the $source is republished while it reads",
+      async ({ live, gate, staging, rows }) => {
+        const gating = postgres(pg.connectionString, { max: 1 });
+        const publisher = postgres(pg.connectionString, { max: 1 });
+        try {
+          await seedRegionalSearchIndex("first");
+          await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+          await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES('gers-clinic','Clinic',ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.8,'open','2026-10-01.0');
+            INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
+            INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release) VALUES('node',1,'gers-clinic',1,0,'fixture','{}','2026-10-01.0')`);
+          const good = await buildAmbientPlaces(pg.sql, region);
+          await pg.sql.unsafe(`${staging}${rows}`);
+
+          // The gate holds a table the build reads later, so the build stops
+          // between two of its statements until the gate is released.
+          let open!: () => void;
+          const opened = new Promise<void>((resolve) => {
+            open = resolve;
+          });
+          let closed!: () => void;
+          const gateClosed = new Promise<void>((resolve) => {
+            closed = resolve;
+          });
+          const gated = gating.begin(async (tx) => {
+            await tx.unsafe(`LOCK TABLE ${gate} IN ACCESS EXCLUSIVE MODE`);
+            closed();
+            await opened;
+          });
+          await gateClosed;
+          const build = buildAmbientPlaces(pg.sql, region);
+          const outcome = build.then(
+            () => "published",
+            (error: Error) => error.message,
+          );
+          for (let waiting = false; !waiting; ) {
+            const [row] = await publisher.unsafe<{ waiting: boolean }[]>(
+              `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='relation' AND relation=to_regclass($1) AND NOT granted) AS waiting`,
+              [gate],
+            );
+            waiting = row?.waiting === true;
+            if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          // The swap commits while the build waits; it renames without
+          // waiting for the build. Its old tables stay while the build reads.
+          await publishSchemaSwap(publisher, {
+            live,
+            staging: `${live}__staging`,
+            retry: { attempts: 1, backoffMs: 1 },
+          });
+          open();
+          await gated;
+
+          expect(await outcome).toMatch(
+            /source data set was republished during the nearby-places build/,
+          );
+          expect((await readAmbientManifest(pg.sql))?.generation).toBe(good.generation);
+          expect(
+            await readAmbientTile(pg.sql, good.generation, tile.z, tile.x, tile.y),
+          ).not.toBeNull();
+          const [state] = await pg.sql.unsafe<{ error: string | null }[]>(
+            `SELECT last_build_error AS error FROM ambient_places.state`,
+          );
+          expect(state?.error).toMatch(/republished/);
+          const [generations] = await pg.sql.unsafe<{ n: number }[]>(
+            `SELECT count(*)::INT AS n FROM ambient_places.generations`,
+          );
+          expect(generations?.n).toBe(1);
+          // The next build reads one version of every source and publishes.
+          const next = await buildAmbientPlaces(pg.sql, region);
+          expect((await readAmbientManifest(pg.sql))?.generation).toBe(next.generation);
+        } finally {
+          await gating.end({ timeout: 2 });
+          await publisher.end({ timeout: 2 });
+        }
+      },
+      120_000,
+    );
 
     /**
      * The API's readers must return the same places whatever data-manager's

@@ -368,7 +368,24 @@ For regional/Germany publication, a repeatable-read transaction holds an advisor
 source candidates, applies the shared policy and writes insert batches of 500 places.
 Generation and feature insertion, count validation, attaching the generation's
 partition and the active/previous pointer swap commit together. Any
-regional/Germany failure rolls them all back. Planet publication uses the durable
+regional/Germany failure rolls them all back.
+
+Germany publication holds the shared OSM and Overture operation locks. A
+regional build takes no source lock, so that it stays available while sources
+are prepared. Source publications swap new tables in under the live names
+without waiting for it, and each later statement of the build would read the new
+ones. So a regional build records which source tables its snapshot reads
+(`osm_search.places`, and Overture's places, links and OSM POI snapshot) and
+checks them again just before it commits. When one of them was republished in
+between, the build fails with "A source data set was republished during the
+nearby-places build", rolls back and leaves the last good generation live. A
+failed regional build is not retried automatically: publish it again. While a
+regional build reads the conflation links or the OSM POI snapshot, it holds them
+as a backup does: publishing either one, or activating an Overture release, which
+moves the OSM POI snapshot, waits for the build a second at a time and fails
+after about two minutes. Each is retried as
+[Backup & restore](../administration/backup-and-restore.md#backups-during-data-publications)
+describes. Planet publication uses the durable
 batches and detached partitions described above. Concurrent writers fail
 without exposing a partial generation. There is no automatic background
 planet import or a live source-table query at map-render time.

@@ -11,11 +11,14 @@ export const DATA_ADVISORY_LOCKS = {
   /** Data admission against the configuration fence: taken exclusively by a
    * fence change and by durable execution admission, shared by other writers. */
   dataAdmission: [0x4f4d58, 2],
-  /** One Overture workflow at a time. Ambient publication takes it shared
-   * while it reads Overture's tables. */
+  /** One Overture workflow at a time. Germany and planet nearby-places
+   * builds take it shared while they read Overture's tables. A regional
+   * build takes no source lock; it refuses to publish when a source table
+   * was replaced while it read. */
   overture: [1_330_466_120, 1],
-  /** One search-index build at a time. Ambient publication takes it shared
-   * while it reads the index's source tables. */
+  /** One search-index build at a time. Germany and planet nearby-places
+   * builds take it shared while they read the index's tables; a regional
+   * build does not, as for `overture`. */
   searchIndex: [1_330_466_120, 2],
   /** One notable-places build at a time. */
   notablePlaces: [1_330_466_120, 3],
