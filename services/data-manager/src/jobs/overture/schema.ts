@@ -100,18 +100,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       imported_at       TIMESTAMPTZ DEFAULT NOW()
     );
 
-    CREATE TABLE "${schema}".poi_conflation_link (
-      osm_type          TEXT NOT NULL,
-      osm_id            BIGINT NOT NULL,
-      gers_id           TEXT NOT NULL UNIQUE REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
-      source_confidence DOUBLE PRECISION,
-      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
-      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
-      method            TEXT NOT NULL,
-      evidence          JSONB NOT NULL,
-      release           TEXT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id)
-    );
+    ${buildConflationLinkTableDDL(schema, "poi_conflation_link")}
 
     CREATE TABLE "${schema}".poi_conflation_candidate (
       osm_type          TEXT NOT NULL,
@@ -144,18 +133,8 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
     CREATE INDEX idx_conflation_component
       ON "${schema}".poi_conflation_component (component_id, osm_type, osm_id);
 
-    CREATE TABLE "${schema}".poi_conflation_link_next (
-      osm_type          TEXT NOT NULL,
-      osm_id            BIGINT NOT NULL,
-      gers_id           TEXT NOT NULL UNIQUE,
-      source_confidence DOUBLE PRECISION,
-      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
-      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
-      method            TEXT NOT NULL,
-      evidence          JSONB NOT NULL,
-      release           TEXT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id)
-    );
+    -- The next link snapshot; publication swaps it in by renaming.
+    ${buildConflationLinkTableDDL(schema, "poi_conflation_link_next")}
 
     CREATE TABLE "${schema}".conflation_state (
       singleton         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (singleton = 1),
@@ -200,6 +179,52 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
   );
 }
 
+export type ConflationLinkTable = "poi_conflation_link" | "poi_conflation_link_next";
+
+/**
+ * The published links and the next snapshot share one definition, so that
+ * publication can swap them by renaming. Constraint names follow the table
+ * name, which the swap relies on. There is no foreign key to `places`:
+ * dropping a table that has one locks `places` against its readers, which
+ * every link publication would then have to wait for. Links come from
+ * candidates, which do reference `places`, and a release's places are never
+ * deleted on their own: the whole schema is replaced together.
+ */
+export function buildConflationLinkTableDDL(schema: string, table: ConflationLinkTable): string {
+  assertValidOvertureSchema(schema);
+  return `
+    CREATE TABLE "${schema}"."${table}" (
+      osm_type          TEXT NOT NULL,
+      osm_id            BIGINT NOT NULL,
+      gers_id           TEXT NOT NULL UNIQUE,
+      source_confidence DOUBLE PRECISION,
+      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
+      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      method            TEXT NOT NULL,
+      evidence          JSONB NOT NULL,
+      release           TEXT NOT NULL,
+      PRIMARY KEY (osm_type, osm_id)
+    );
+  `;
+}
+
+export type OsmPoisTable = "osm_pois" | "osm_pois__staging";
+
+/**
+ * Indexes of the OSM POI snapshot, named after the table they are built on:
+ * the staging table is indexed before publication renames it and them.
+ */
+export function buildOsmPoisIndexesDDL(schema: string, table: OsmPoisTable): string {
+  assertValidOvertureSchema(schema);
+  return `
+    CREATE INDEX idx_${table}_category ON "${schema}"."${table}" (category);
+    CREATE INDEX idx_${table}_h3
+      ON "${schema}"."${table}" (h3_r8, osm_type, osm_id);
+    CREATE INDEX idx_${table}_geom
+      ON "${schema}"."${table}" USING GIST (ST_Point(lng, lat));
+  `;
+}
+
 /**
  * Returns the DDL for the `osm_pois` table within a given schema.
  * The parent schema is always freshly created by `buildSchemaDDL`; there is no
@@ -218,11 +243,7 @@ export function buildOsmPoisTableDDL(schema: string): string {
       tags      JSONB,
       PRIMARY KEY (osm_type, osm_id)
     );
-    CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category);
-    CREATE INDEX idx_osm_pois_h3
-      ON "${schema}".osm_pois (h3_r8, osm_type, osm_id);
-    CREATE INDEX idx_osm_pois_geom
-      ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat));
+    ${buildOsmPoisIndexesDDL(schema, "osm_pois")}
   `;
 }
 

@@ -367,7 +367,22 @@ The manager streams a selected PBF through Osmium into an
 `osm_search`. Publication epochs invalidate provider caches without key scans,
 and a failed rebuild leaves the previous live schema queryable. The
 `notable_places` schema follows the same staging-and-swap pattern, filled from
-a Wikidata SPARQL endpoint (CC0) instead of a PBF.
+a Wikidata SPARQL endpoint (CC0) instead of a PBF, and so does Overture's
+`overture_places`.
+
+A publication never makes the API's readers wait
+(`services/data-manager/src/jobs/publish-schema-swap.ts`). Indexes and
+`ANALYZE` run on the staging schema first. One transaction then renames the
+live schema to `<live>__previous` and the staging schema to the live name.
+Renaming a schema takes no table lock, so it commits at once, and every later
+query resolves the live name to the new tables, prepared statements included.
+A second transaction drops `<live>__previous` once its last reader, such as a
+running backup, has finished. Each step waits at most one second for a lock and
+is retried with growing pauses. If the old schema is still being read after the
+last retry, it stays in place and the next publication drops it before it
+swaps. Overture's OSM POI snapshot and its conflation links are swapped the
+same way as single tables inside `overture_places`: renaming a table does take
+its lock, so those swaps wait for that table's readers, a second at a time.
 
 ## The integration host lifecycle
 

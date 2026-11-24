@@ -51,6 +51,27 @@ or Compose project, verify that these targets match the deployment you intend to
 restore. A recorded volume name is not an automatic migration to a newly named
 volume.
 
+### Backups during data publications
+
+Backups and data publications no longer need mutual exclusion to keep the
+API working. When data-manager publishes a rebuilt search index, notable-places
+index or Overture release, it swaps schemas by renaming them, which takes no
+lock the dump holds. API searches move to the new data at once and never wait
+behind the dump, and the old schema is dropped after the dump has finished with
+it (see [the architecture](../developer/architecture.md)).
+
+A publication that commits while a dump runs does change that dump's copy of
+the data set it replaced. `pg_dump` reads each table by name with the snapshot
+it took when it started, and after the swap the name leads to the new tables.
+The archive then holds those tables as far as they existed when the dump
+started: empty if the rebuild began later, and without the final ready state
+otherwise. After a restore from such a backup, that data set shows as not
+published and must be rebuilt as described in
+[Preparing data](../install/preparing-data.md). A dump that copies the data of a
+`__staging` schema fails if that schema is published while the dump runs.
+Avoid starting a rebuild during a backup when the backup's copy of the
+rebuilt data matters.
+
 ## What gets skipped, and why
 
 Region-derived indexes are excluded when their

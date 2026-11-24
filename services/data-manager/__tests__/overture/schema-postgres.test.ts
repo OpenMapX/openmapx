@@ -105,13 +105,8 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
         FROM pg_constraint
         WHERE conrelid = 'overture_places.poi_conflation_link'::regclass AND contype = 'f'
       `);
-      expect(foreignKeys).toEqual([
-        {
-          definition:
-            "FOREIGN KEY (gers_id) REFERENCES overture_places.places(gers_id) ON DELETE CASCADE",
-          validated: true,
-        },
-      ]);
+      // Dropping a retired link table would otherwise lock places against its readers.
+      expect(foreignKeys).toEqual([]);
       // Places require both h3_r8 and typed SRID-4326 Point geometry; the release
       // state row requires a JSON-array sources_catalogue so uncredited data is refused.
       await expect(
@@ -160,13 +155,6 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
         VALUES ('node', 3, 'gers-a', 1, 0, 'fixture', '{}', 'fixture')
       `),
       ).rejects.toMatchObject({ code: "23505" });
-      await expect(
-        pg.sql.unsafe(`
-        INSERT INTO overture_places.poi_conflation_link
-          (osm_type, osm_id, gers_id, match_confidence, distance_m, method, evidence, release)
-        VALUES ('node', 3, 'missing', 1, 0, 'fixture', '{}', 'fixture')
-      `),
-      ).rejects.toMatchObject({ code: "23503" });
       expect(
         await pg.sql.unsafe(`
         SELECT l.osm_type, l.osm_id::text, p.name
@@ -175,12 +163,6 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
         WHERE l.gers_id = 'gers-a'
       `),
       ).toEqual([{ osm_type: "node", osm_id: "1", name: "Fixture A" }]);
-      await pg.sql.unsafe("DELETE FROM overture_places.places WHERE gers_id = 'gers-a'");
-      expect(
-        await pg.sql.unsafe(`
-        SELECT osm_id::text, gers_id FROM overture_places.poi_conflation_link
-      `),
-      ).toEqual([{ osm_id: "2", gers_id: "gers-b" }]);
     } finally {
       await pg.stop();
     }

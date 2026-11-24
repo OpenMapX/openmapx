@@ -7,13 +7,8 @@ import type {
 } from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
-import {
-  assertDataPublication,
-  cancellableTransaction,
-  dataWorkerSignal,
-  publishDataChange,
-  retainDataPublication,
-} from "../execution/worker-scope.js";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
+import { PUBLICATION_LOCK_RETRY, publishSchemaSwap } from "../publish-schema-swap.js";
 import {
   createNotablePlacesOperationLock,
   type SearchIndexOperationLock,
@@ -327,30 +322,20 @@ export async function buildNotablePlaces(
       placeCount -= Number(counts[0]?.unnamed ?? 0);
 
       progress("publish", "Publishing the validated snapshot");
-      const live = await opts.sql.unsafe<{ exists: boolean }[]>(
-        `SELECT to_regnamespace('notable_places') IS NOT NULL AS exists`,
-      );
-      await assertDataPublication();
-      await publishDataChange(() =>
-        cancellableTransaction(opts.sql, async (transaction) => {
+      await publishSchemaSwap(opts.sql, {
+        live: "notable_places",
+        staging: "notable_places__staging",
+        retry: PUBLICATION_LOCK_RETRY,
+        carryOver: async (transaction) => {
           await transaction.unsafe(
-            `UPDATE notable_places__staging.index_state
+            `UPDATE notable_places.index_state
               SET status='ready', place_count=$1, name_count=$2, published_at=NOW(),
                   updated_at=NOW(), last_error=NULL
             WHERE singleton=1`,
             [placeCount, nameCount],
           );
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
-          if (live[0]?.exists) {
-            await transaction.unsafe(
-              `ALTER SCHEMA notable_places RENAME TO notable_places__previous`,
-            );
-          }
-          await transaction.unsafe(`ALTER SCHEMA notable_places__staging RENAME TO notable_places`);
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
-        }),
-      );
-      await retainDataPublication();
+        },
+      });
       progress("complete", `Published ${placeCount} places and ${nameCount} names`);
       return { epoch, source: endpoint, minSitelinks, placeCount, nameCount };
     } catch (error) {

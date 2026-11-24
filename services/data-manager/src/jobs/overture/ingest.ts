@@ -4,11 +4,11 @@ import { assertSupportedOvertureContributors } from "@openmapx/core/places/overt
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import type postgres from "postgres";
 import {
-  assertDataPublication,
-  cancellableTransaction,
-  publishDataChange,
-  retainDataPublication,
-} from "../execution/worker-scope.js";
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  previousName,
+  publishSchemaSwap,
+} from "../publish-schema-swap.js";
 import { assertOverturePostgresCapacity, estimateOvertureIngestBytes } from "./capacity.js";
 import { duckDbSqlLiteral, runDuckDbScript } from "./duckdb.js";
 import { validateOvertureQuality } from "./eval/quality-gate.js";
@@ -104,55 +104,59 @@ export async function validateOvertureContributors(
 }
 
 /**
- * Atomically activates a fully validated Places schema. When a live schema is
- * present, its release-independent OSM snapshot is moved into the staging
- * schema and its extraction fingerprint is carried forward. This is an O(1)
- * catalog operation; no country-scale OSM table copy is performed.
+ * Activates a fully validated Places schema without making readers wait.
+ * When a live schema is present, its release-independent OSM snapshot moves
+ * into the new live schema and its extraction fingerprint is carried forward.
+ * Moving the table is a catalog operation; no country-scale OSM table copy is
+ * performed, but it waits for the snapshot's readers, at most a second per
+ * attempt.
  */
 export async function activateOvertureStagingSchema(
   sql: postgres.Sql,
   schema: string,
   stagingSchema: string,
   placesPublishedAt: string,
+  retry: LockRetry = PUBLICATION_LOCK_RETRY,
 ): Promise<void> {
   assertValidOvertureSchema(schema);
   assertValidOvertureSchema(stagingSchema);
-  const [existingOsmSnapshot] = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT to_regclass($1) IS NOT NULL AS exists`,
-    [`${schema}.osm_pois`],
-  );
-  await assertDataPublication();
-  await publishDataChange(() =>
-    cancellableTransaction(sql, async (tx) => {
-      if (existingOsmSnapshot?.exists) {
+  assertValidOvertureSchema(previousName(schema));
+  await publishSchemaSwap(sql, {
+    live: schema,
+    staging: stagingSchema,
+    retry,
+    carryOver: async (tx, previous) => {
+      const [existingOsmSnapshot] = previous
+        ? await tx.unsafe<{ exists: boolean }[]>(`SELECT to_regclass($1) IS NOT NULL AS exists`, [
+            `"${previous}".osm_pois`,
+          ])
+        : [];
+      if (previous && existingOsmSnapshot?.exists) {
         // `rebuildOvertureLinks` verifies this fingerprint against the current
         // on-disk PBF before reuse and restarts extraction if it changed.
-        await tx.unsafe(`DROP TABLE "${stagingSchema}".osm_pois CASCADE`);
-        await tx.unsafe(`ALTER TABLE "${schema}".osm_pois SET SCHEMA "${stagingSchema}"`);
+        await tx.unsafe(`DROP TABLE "${schema}".osm_pois CASCADE`);
+        await tx.unsafe(`ALTER TABLE "${previous}".osm_pois SET SCHEMA "${schema}"`);
         await tx.unsafe(
-          `UPDATE "${stagingSchema}".conflation_state AS target
+          `UPDATE "${schema}".conflation_state AS target
          SET phase = 'score', source_fingerprint = source.source_fingerprint,
              emitted_count = source.emitted_count, extracted_count = source.extracted_count,
              processed_count = 0, candidate_count = 0,
              score_cursor_h3 = NULL, score_cursor_type = '', score_cursor_id = 0
-         FROM "${schema}".conflation_state AS source
+         FROM "${previous}".conflation_state AS source
          WHERE target.singleton = 1 AND source.singleton = 1
            AND source.region = target.region
            AND source.source_fingerprint IS NOT NULL
            AND source.extracted_count IS NOT NULL`,
         );
       }
-      await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
       await tx.unsafe(
         `UPDATE "${schema}".conflation_state
        SET places_published_at = $1
        WHERE singleton = 1`,
         [placesPublishedAt],
       );
-    }),
-  );
-  await retainDataPublication();
+    },
+  });
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {

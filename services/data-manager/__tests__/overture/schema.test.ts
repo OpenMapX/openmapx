@@ -65,7 +65,7 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("PRIMARY KEY (osm_type, osm_id)");
     expect(ddl).toContain("gers_id           TEXT NOT NULL UNIQUE");
     expect(ddl).toContain('CREATE TABLE "overture_places".poi_conflation_candidate');
-    expect(ddl).toContain('CREATE TABLE "overture_places".poi_conflation_link_next');
+    expect(ddl).toContain('CREATE TABLE "overture_places"."poi_conflation_link_next"');
     expect(ddl).toContain('CREATE UNLOGGED TABLE "overture_places".poi_conflation_component');
     expect(ddl).toContain('CREATE TABLE "overture_places".conflation_state');
     expect(ddl).toContain("geom              GEOMETRY(Point, 4326) NOT NULL");
@@ -85,11 +85,13 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).not.toContain("opening_hours");
   });
 
-  it("keeps the active link unique constraint and cascade without a duplicate index", () => {
+  it("keeps the link unique constraint without a duplicate index or a foreign key that would lock places", () => {
     const ddl = buildSchemaDDL("overture_places");
-    expect(ddl).toContain(
-      'gers_id           TEXT NOT NULL UNIQUE REFERENCES "overture_places".places(gers_id) ON DELETE CASCADE',
-    );
+    for (const table of ["poi_conflation_link", "poi_conflation_link_next"]) {
+      const definition = ddl.slice(ddl.indexOf(`CREATE TABLE "overture_places"."${table}" (`));
+      expect(definition).toContain("gers_id           TEXT NOT NULL UNIQUE,");
+      expect(definition.slice(0, definition.indexOf(");"))).not.toContain("REFERENCES");
+    }
     expect(ddl).not.toMatch(
       /CREATE INDEX \w+ ON "overture_places"\.poi_conflation_link \(gers_id\)/,
     );

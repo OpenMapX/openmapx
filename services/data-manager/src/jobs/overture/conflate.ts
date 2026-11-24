@@ -1,8 +1,8 @@
 import {
-  assertDataPublication,
-  cancellableTransaction,
-  publishDataChange,
-} from "../execution/worker-scope.js";
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  publishTableSwap,
+} from "../publish-schema-swap.js";
 
 export { buildConflationComponents } from "./components.js";
 
@@ -36,7 +36,7 @@ import {
   SqlEmbeddingCache,
 } from "./embeddings.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
-import { assertValidOvertureSchema } from "./schema.js";
+import { assertValidOvertureSchema, buildConflationLinkTableDDL } from "./schema.js";
 
 // Overture confidence floor for conflation candidates. Calibrated to 0.5 (vs
 // the earlier provisional 0.7) by the precision sweep: 0.7 excluded ~99.8% of
@@ -667,27 +667,28 @@ export async function assignOvertureCandidates(opts: {
   return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
 }
 
-/** Atomically publishes the completely assigned next-link snapshot. */
+/**
+ * Atomically publishes the completely assigned next-link snapshot by renaming
+ * it to the published table, and starts an empty next snapshot. No row is
+ * copied or deleted, so the published table never carries a whole snapshot
+ * of dead rows.
+ */
 export async function publishOvertureLinks(
   sql: postgres.Sql,
   schema = "overture_places",
+  retry: LockRetry = PUBLICATION_LOCK_RETRY,
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
-  await assertDataPublication();
-  await publishDataChange(() =>
-    cancellableTransaction(sql, async (tx) => {
-      await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
-      await tx.unsafe(
-        `INSERT INTO "${schema}".poi_conflation_link
-         (osm_type, osm_id, gers_id, source_confidence, match_confidence,
-          distance_m, method, evidence, release)
-       SELECT osm_type, osm_id, gers_id, source_confidence, match_confidence,
-              distance_m, method, evidence, release
-       FROM "${schema}".poi_conflation_link_next`,
-      );
-    }),
-  );
+  await publishTableSwap(sql, {
+    schema,
+    live: "poi_conflation_link",
+    staging: "poi_conflation_link_next",
+    retry,
+    afterSwap: async (tx) => {
+      await tx.unsafe(buildConflationLinkTableDDL(schema, "poi_conflation_link_next"));
+    },
+  });
 
   const { linked } = itemAt(
     await sql.unsafe<{ linked: string }[]>(

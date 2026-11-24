@@ -1,12 +1,128 @@
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import postgres from "postgres";
 import { assert, describe, expect, it } from "vitest";
 import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { StateStore } from "../../src/state.js";
 import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
+
+async function waitUntil(check: () => Promise<boolean>, label: string, ms = 15_000) {
+  const deadline = Date.now() + ms;
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`);
+    await sleep(50);
+  }
+}
+
+describe.skipIf(skipE2e)("search-index publication beside a long reader", () => {
+  it("serves searches from the new snapshot while a backup-like reader holds the old one", async () => {
+    const pg = await startPostgis();
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-search-reader-"));
+    const reader = postgres(pg.connectionString, { max: 1 });
+    // The build's lock and transaction take both of the fixture's connections.
+    const probe = postgres(pg.connectionString, { max: 1 });
+    // The API's integration pool ends a statement after 5 seconds.
+    const search = postgres(pg.connectionString, {
+      max: 1,
+      connection: { statement_timeout: 5000 },
+    });
+    let holder: postgres.ReservedSql | undefined;
+    try {
+      const pbfPath = join(dataDir, "fixture.osm.pbf");
+      writeFileSync(pbfPath, "fixture");
+      const store = new StateStore(dataDir);
+      store.upsert({
+        type: "osm-pbf",
+        id: "europe/germany",
+        region: "europe/germany",
+        path: pbfPath,
+        sizeBytes: 7,
+        downloadedAt: new Date().toISOString(),
+      });
+      const runtimeState = { building: false, failure: null };
+      const build = (name: string, onProgress?: (stage: string) => void) =>
+        buildOsmSearchIndex({
+          region: "europe/germany",
+          dataDir,
+          store,
+          sql: pg.sql,
+          runtimeState,
+          onProgress: (progress) => onProgress?.(progress.stage),
+          dependencies: {
+            extract: async ({ onBatch }) => {
+              await onBatch([
+                {
+                  osmType: "node",
+                  osmId: "1",
+                  name,
+                  lat: 52.52,
+                  lng: 13.4,
+                  category: "place:city",
+                  tags: { name },
+                  importance: 0.9,
+                  terms: [],
+                },
+              ]);
+              return { emitted: 1, extracted: 1 };
+            },
+          },
+        });
+      const findName = () =>
+        search<{ name: string }[]>`SELECT name FROM osm_search.places WHERE osm_id = ${1}`;
+
+      await build("Old Name");
+      // A prepared statement planned against the old tables re-resolves its names.
+      expect(await findName()).toEqual([{ name: "Old Name" }]);
+
+      // Like pg_dump, the reader holds its lock on the live tables until its
+      // transaction ends.
+      holder = await reader.reserve();
+      await holder.unsafe(`BEGIN ISOLATION LEVEL REPEATABLE READ`);
+      expect(await holder.unsafe(`SELECT count(*)::TEXT AS count FROM osm_search.places`)).toEqual([
+        { count: "1" },
+      ]);
+
+      let publishing = false;
+      const second = build("New Name", (stage) => {
+        if (stage === "publish") publishing = true;
+      });
+      second.catch(() => undefined);
+      await waitUntil(async () => {
+        if (!publishing) return false;
+        const [state] = await probe.unsafe<{ waiting: boolean; staged: boolean }[]>(
+          `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted) AS waiting,
+                  to_regnamespace('osm_search__staging') IS NOT NULL AS staged`,
+        );
+        return Boolean(state?.waiting) || !state?.staged;
+      }, "the publication to swap or wait for a lock");
+      const swappedAt = Date.now();
+
+      const startedAt = Date.now();
+      expect(await findName()).toEqual([{ name: "New Name" }]);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+
+      // The reader holds the old tables for 12 seconds.
+      await sleep(Math.max(0, swappedAt + 12_000 - Date.now()));
+      await holder.unsafe(`COMMIT`);
+      await second;
+      const [previous] = await pg.sql.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regnamespace('osm_search__previous') IS NOT NULL AS exists`,
+      );
+      expect(previous?.exists).toBe(false);
+    } finally {
+      holder?.release();
+      await reader.end({ timeout: 2 });
+      await probe.end({ timeout: 2 });
+      await search.end({ timeout: 2 });
+      await pg.stop();
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, 90_000);
+});
 
 describe.skipIf(skipE2e)("atomic search-index publication", () => {
   it("publishes a complete snapshot and preserves it after a later failure", async () => {

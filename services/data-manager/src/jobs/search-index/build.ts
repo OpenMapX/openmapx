@@ -7,13 +7,8 @@ import type {
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
-import {
-  assertDataPublication,
-  cancellableTransaction,
-  publishDataChange,
-  retainDataPublication,
-} from "../execution/worker-scope.js";
 import { osmFileIdentity } from "../osm-resources.js";
+import { PUBLICATION_LOCK_RETRY, publishSchemaSwap } from "../publish-schema-swap.js";
 import { extractSearchPlaces, type SearchPlaceRecord } from "./extract.js";
 import { createSearchIndexOperationLock, type SearchIndexOperationLock } from "./operation-lock.js";
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
@@ -211,26 +206,19 @@ export async function buildOsmSearchIndex(
       placeCount = counts.places;
       termCount = counts.terms;
       progress("publish", "Publishing the validated search snapshot");
-      const live = await opts.sql.unsafe<{ exists: boolean }[]>(
-        `SELECT to_regnamespace('osm_search') IS NOT NULL AS exists`,
-      );
-      await assertDataPublication();
-      await publishDataChange(() =>
-        cancellableTransaction(opts.sql, async (transaction) => {
+      await publishSchemaSwap(opts.sql, {
+        live: "osm_search",
+        staging: "osm_search__staging",
+        retry: PUBLICATION_LOCK_RETRY,
+        carryOver: async (transaction) => {
           await transaction.unsafe(
-            `UPDATE osm_search__staging.index_state
+            `UPDATE osm_search.index_state
               SET status='ready', place_count=$1, term_count=$2, published_at=NOW(), updated_at=NOW(), last_error=NULL
             WHERE singleton=1`,
             [placeCount, termCount],
           );
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS osm_search__previous CASCADE`);
-          if (live[0]?.exists)
-            await transaction.unsafe(`ALTER SCHEMA osm_search RENAME TO osm_search__previous`);
-          await transaction.unsafe(`ALTER SCHEMA osm_search__staging RENAME TO osm_search`);
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS osm_search__previous CASCADE`);
-        }),
-      );
-      await retainDataPublication();
+        },
+      });
       progress("complete", `Published ${placeCount} places and ${termCount} terms`);
       return { region: opts.region, epoch, sourceFingerprint, placeCount, termCount };
     } catch (error) {
