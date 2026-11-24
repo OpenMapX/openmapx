@@ -125,10 +125,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           (await tile(pg, country.generation, 11.575, 48.137)).layer?.feature(0).properties.id,
         ).toBe("osm:way/9007199254740993");
         expect((await tile(pg, before.generation, 6.08, 50.77)).bytes).toEqual(beforeTile.bytes);
-        const [indexes] =
-          await pg.sql.unsafe(`SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='ambient_places' AND indexdef LIKE '%USING gist (generation,%') AS qualified,
-        EXISTS(SELECT 1 FROM geometry_columns WHERE f_table_schema='ambient_places') AS exposed`);
-        expect(indexes).toEqual({ qualified: true, exposed: false });
+        // The country generation is its own spatially indexed partition.
+        const partition = `features_${country.generation.replaceAll("-", "")}`;
+        const [indexes] = await pg.sql.unsafe(
+          `SELECT EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=to_regclass('ambient_places.'||$1) AND inhparent='ambient_places.features'::regclass) AS attached,
+          EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='ambient_places' AND tablename=$1 AND indexdef LIKE '%USING gist (geom)%') AS indexed`,
+          [partition],
+        );
+        expect(indexes).toEqual({ attached: true, indexed: true });
         await rollbackAmbientPlaces(pg.sql);
         expect((await readAmbientManifest(pg.sql))?.generation).toBe(before.generation);
         expect(

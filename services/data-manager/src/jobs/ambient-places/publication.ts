@@ -7,7 +7,13 @@ import {
 } from "@openmapx/core/ambient-places";
 import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
-import { retireAmbientGenerations } from "./planet-storage.js";
+import {
+  attachFeatureStorage,
+  createFeatureStorage,
+  type FeatureStorageLocking,
+  featureTable,
+  retireAmbientGenerations,
+} from "./feature-storage.js";
 
 export function fresh(value: Date | string | null): string {
   const date = value === null ? NaN : new Date(value).getTime();
@@ -41,14 +47,25 @@ export async function prepareAmbientGeneration(tx: postgres.TransactionSql): Pro
     );
   return randomUUID();
 }
+/** Records a new generation and creates its still unattached feature partition. */
+export async function insertAmbientGeneration(
+  tx: postgres.TransactionSql,
+  manifest: AmbientManifest,
+  storage: "regional" | "planet",
+  publicationStatus: "staging" | "published",
+): Promise<void> {
+  await tx.unsafe(
+    `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,$2::TEXT::JSONB,$3,$4)`,
+    [manifest.generation, JSON.stringify(manifest), storage, publicationStatus],
+  );
+  await createFeatureStorage(tx, manifest.generation);
+}
 export async function insertAmbientFeatures(
   tx: postgres.TransactionSql,
   generation: string,
   places: AmbientPlace[],
-  target = "ambient_places.features",
 ): Promise<void> {
-  if (target !== "ambient_places.features" && !/^ambient_places\.planet_[0-9a-f]{32}$/.test(target))
-    throw new Error("Invalid ambient feature store");
+  const target = featureTable(generation);
   for (let offset = 0; offset < places.length; offset += 500) {
     const rows = places.slice(offset, offset + 500).map((p) => ({
       id: p.id,
@@ -69,7 +86,7 @@ export async function insertAmbientFeatures(
     }));
     const result = await tx.unsafe(
       `INSERT INTO ${target}(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom,contributors,field_contributors,source_lineage)
-      SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857)),r.contributors,r.field_contributors,r.source_lineage
+      SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857),r.contributors,r.field_contributors,r.source_lineage
       FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION,contributors JSONB,field_contributors JSONB,source_lineage JSONB)`,
       [generation, JSON.stringify(rows)],
     );
@@ -77,15 +94,15 @@ export async function insertAmbientFeatures(
       throw new Error("Candidate feature insert count validation failed");
   }
 }
+/** Publishes a regional generation in its build's transaction. */
 export async function activateAmbientGeneration(
   tx: postgres.TransactionSql,
   manifest: AmbientManifest,
+  locking: FeatureStorageLocking = {},
 ): Promise<void> {
+  const table = featureTable(manifest.generation);
   const count = itemAt(
-    await tx.unsafe<{ count: string }[]>(
-      `SELECT count(*)::TEXT AS count FROM ambient_places.features WHERE generation=$1`,
-      [manifest.generation],
-    ),
+    await tx.unsafe<{ count: string }[]>(`SELECT count(*)::TEXT AS count FROM ${table}`),
     0,
     "row from the candidate feature count query",
   );
@@ -93,6 +110,8 @@ export async function activateAmbientGeneration(
     throw new Error("Candidate feature count validation failed");
   fresh(manifest.sources.osm.publishedAt);
   if (manifest.sources.overture) fresh(manifest.sources.overture.publishedAt);
+  await tx.unsafe(`ANALYZE ${table}`);
+  await attachFeatureStorage(tx, manifest.generation, locking);
   await tx.unsafe(`UPDATE ambient_places.generations SET manifest=$2::TEXT::JSONB WHERE id=$1`, [
     manifest.generation,
     JSON.stringify(manifest),

@@ -19,12 +19,14 @@ import {
 import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
 import { cancellableTransaction } from "../execution/worker-scope.js";
+import { dropRetiredFeatureStorage } from "./feature-storage.js";
 import { type AmbientBuildOptions, buildGermanyPlaces } from "./germany.js";
 import { buildPlanetPlaces } from "./planet-build.js";
 import {
   activateAmbientGeneration,
   fresh,
   insertAmbientFeatures,
+  insertAmbientGeneration,
   prepareAmbientGeneration,
   tableExists,
 } from "./publication.js";
@@ -53,7 +55,7 @@ export async function buildAmbientPlaces(
   const attempt = randomUUID();
   let startedAt: string | null = null;
   try {
-    return await cancellableTransaction(
+    const published = await cancellableTransaction(
       sql,
       async (tx) => {
         await lock(tx);
@@ -278,16 +280,15 @@ export async function buildAmbientPlaces(
             overture: overtureSource,
           },
         };
-        await tx.unsafe(
-          `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::TEXT::JSONB)`,
-          [manifest.generation, JSON.stringify(manifest)],
-        );
+        await insertAmbientGeneration(tx, manifest, "regional", "published");
         await insertAmbientFeatures(tx, manifest.generation, places);
-        await activateAmbientGeneration(tx, manifest);
+        await activateAmbientGeneration(tx, manifest, { retry: options.lockRetry });
         return manifest;
       },
       "isolation level repeatable read",
     );
+    await dropRetiredFeatureStorage(sql, { retry: options.lockRetry });
+    return published;
   } catch (error) {
     if (startedAt !== null) {
       // The candidate transaction has rolled back. Record its failure only if

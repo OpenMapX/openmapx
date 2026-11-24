@@ -252,13 +252,14 @@ the existing service controls. Committed pages survive; connection closure
 releases its source/writer locks. Inspect status before resuming, discarding or
 changing discovery. There is no separate candidate-cancellation endpoint.
 
-Each planet generation owns an indexed PostgreSQL partition with projected EWKB,
-canonical ID and GERS indexes. Indexes are maintained during committed pages.
+Each planet generation owns an indexed PostgreSQL partition with projected
+geometry, canonical ID and GERS indexes. Indexes are maintained during committed pages.
 Final validation checks durable source counts/signatures, then attaches the
-partition and switches discovery atomically with a one-second lock timeout.
+partition and switches discovery atomically. Each attach attempt waits at most
+one second for a lock and is retried with growing pauses.
 A contention failure leaves a resumable candidate and the last good map active.
 There is no planet-sized final count/index rebuild under the activation lock.
-Leased generations remain available; expired unreferenced planet partitions are
+Leased generations remain available; expired unreferenced partitions are
 dropped instead of cascading millions of row deletes. Active/previous generations
 and the seven-day-plus-one-minute tile lease retain their existing guarantees.
 Dateline tiles query the opposite edge through its spatial index and shift
@@ -365,22 +366,52 @@ serialized, malformed and non-object policy tags so closure and private-access
 checks cannot silently disappear.
 For regional/Germany publication, a repeatable-read transaction holds an advisory writer lock, reads bounded indexed
 source candidates, applies the shared policy and writes insert batches of 500 places.
-Generation and feature insertion, count validation and the active/previous pointer
-swap commit together. Any regional/Germany failure rolls them all back. Planet publication uses the durable batches and detached partitions described above. Concurrent writers fail
+Generation and feature insertion, count validation, attaching the generation's
+partition and the active/previous pointer swap commit together. Any
+regional/Germany failure rolls them all back. Planet publication uses the durable
+batches and detached partitions described above. Concurrent writers fail
 without exposing a partial generation. There is no automatic background
 planet import or a live source-table query at map-render time.
 
-Projected points are stored as EWKB bytes with a functional GiST index on
-`(generation, ST_GeomFromEWKB(geom))`. The standard PostgreSQL `btree_gist`
-extension supplies UUID indexing and is installed by schema initialization;
-the data-manager database role must be allowed to install it. The index qualifies
-both generation and geometry, including when multiple country versions are
-retained. Existing single-geometry indexing is replaced on initialization.
-EWKB keeps the internal generation store out of Martin's
-automatic spatial-table discovery: an unversioned table endpoint would otherwise
-bypass the API's generation and read budgets. Tile queries decode the indexed
-geometry before MVT encoding. Existing Martin sources and configuration are
-unchanged.
+Every generation, regional, Germany or planet, is one partition of
+`ambient_places.features`, which is partitioned by `LIST (generation)`. A build
+creates the partition as a standalone table, fills it and attaches it on
+publication. The partition's `CHECK` on its generation lets PostgreSQL attach it
+without a validation scan. Attaching takes `SHARE UPDATE EXCLUSIVE` on the parent
+table, which never conflicts with readers, so the API keeps serving tiles while a
+generation is published. `ambient_places.generations.storage` records whether a
+generation came from a `regional` or a `planet` build; `publication_status` is
+`staging` for an unfinished planet candidate and `published` otherwise. Both
+columns accept only these values.
+
+Projected points are stored as `geometry(Geometry, 3857)` with a GiST index on
+`geom` and a partial index on `gers_id` in every partition. A query for one
+generation reads only that generation's partition, so the indexes need no
+generation column. The API queries this one table through
+`PUBLISHED_AMBIENT_FEATURES` in `@openmapx/core`. Martin does not publish it:
+Martin serves only its configured sources, and its roles have no access to the
+`ambient_places` schema.
+
+Retiring a generation takes two steps. Its row is deleted inside the next
+publication's transaction, which stops every manifest, tile and GERS read of it.
+After that transaction commits, data-manager detaches the partition with
+`DETACH PARTITION … CONCURRENTLY` and drops the detached table. Neither statement
+makes readers of other generations wait. Each waits at most one second for a lock
+and is retried with growing pauses. When a long reader, such as a backup, still
+holds the feature table after the retries, the partition stays behind and the
+next publication drops it. The publication itself succeeds.
+
+Data-manager creates the `ambient_places` schema at runtime and records its
+layout version in `ambient_places.state.schema_version`. It never converts an
+older layout. If data-manager reports that the schema has another or no version,
+drop the schema and build nearby places again:
+
+```sql
+DROP SCHEMA ambient_places CASCADE;
+```
+
+This removes every published nearby-places generation. Discovery shows no nearby
+places until the next build publishes.
 
 Generation URLs never change their bytes when sources refresh. At most eight
 snapshots are retained. Unreferenced generations can be removed only after their
@@ -525,10 +556,12 @@ EWKB discovery safeguard):
 | Martin/PostGIS |      19.27 ms |     3.31 ms |  4.27 ms |
 | Martin/PMTiles |       5.55 ms |     1.42 ms |  2.87 ms |
 
-The final store uses the same projected points and MVT query with EWKB decoding
-and its functional spatial index; the table above does not measure that final
-storage representation. Its bounds, decoded tiles and details lookup are checked
-by the real PostGIS regression suite.
+The 2026-10-08 measurements in this section used an EWKB store with a functional
+spatial index. The current store keeps native `geometry(Geometry, 3857)` in one
+partition per generation and uses the same projected points and MVT query; no
+measurement in this section covers it. Its bounds, decoded tiles and details lookup are
+checked by the real PostGIS regression suite, which also compares the readers'
+output on a fixed fixture with the output recorded from the EWKB store.
 
 These are local fixture observations under concurrent development load, not
 production capacity estimates. They do not measure a full regional archive,

@@ -12,11 +12,19 @@ import postgres from "postgres";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
+import {
+  attachFeatureStorage,
+  dropRetiredFeatureStorage,
+  featureTable,
+} from "./feature-storage.js";
 import type { AmbientBuildOptions } from "./germany.js";
 import { planetOsmBatch, planetOvertureBatch } from "./planet-batches.js";
 import { capturePlanetSources, type PlanetCheckpoint, readPlanetStage } from "./planet-state.js";
-import { createPlanetStorage, planetTable } from "./planet-storage.js";
-import { insertAmbientFeatures, prepareAmbientGeneration } from "./publication.js";
+import {
+  insertAmbientFeatures,
+  insertAmbientGeneration,
+  prepareAmbientGeneration,
+} from "./publication.js";
 import { AMBIENT_WRITE_LOCK, AmbientPublicationBusyError, ensureAmbientSchema } from "./schema.js";
 
 export { readPlanetStage } from "./planet-state.js";
@@ -130,11 +138,7 @@ export async function buildPlanetPlaces(
         enabled: true,
         sources: source.sources,
       };
-      await tx.unsafe(
-        `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,$2::TEXT::JSONB,'planet','staging')`,
-        [generation, JSON.stringify(manifest)],
-      );
-      await createPlanetStorage(tx, generation);
+      await insertAmbientGeneration(tx, manifest, "planet", "staging");
       await tx.unsafe(
         `INSERT INTO ambient_places.planet_builds(generation,source_signature,status,checkpoint) VALUES($1,$2,'running',$3::TEXT::JSONB)`,
         [generation, source.signature, JSON.stringify(initial)],
@@ -144,6 +148,7 @@ export async function buildPlanetPlaces(
         [generation],
       );
     });
+    await dropRetiredFeatureStorage(sql, { retry: options.lockRetry });
     await onClaim?.();
     return runPlanet(connection, pid, manifest, source.signature, { ...initial }, options);
   });
@@ -154,7 +159,7 @@ export async function resumePlanetPlaces(
   onClaim?: () => void | Promise<void>,
   options: AmbientBuildOptions = {},
 ): Promise<AmbientManifest> {
-  planetTable(generation);
+  featureTable(generation);
   return withPlanetSession(sql, async (connection, pid) => {
     const [stage] = await connection.unsafe<
       {
@@ -204,7 +209,7 @@ async function runPlanet(
   options: AmbientBuildOptions,
 ): Promise<AmbientManifest> {
   const generation = manifest.generation;
-  const table = planetTable(generation);
+  const table = featureTable(generation);
   const available = options.availableBytes ?? freeBytesInPostgresContainer;
   const limit = planetPlaceLimit();
   try {
@@ -236,7 +241,7 @@ async function runPlanet(
           throw new Error(
             `Planet ambient output exceeds ${limit} places; size and configure capacity before retrying`,
           );
-        await insertAmbientFeatures(tx, generation, batch.places, table);
+        await insertAmbientFeatures(tx, generation, batch.places);
         await tx.unsafe(
           `UPDATE ambient_places.planet_builds SET checkpoint=$2::TEXT::JSONB,updated_at=clock_timestamp() WHERE generation=$1`,
           [generation, JSON.stringify(next)],
@@ -273,9 +278,7 @@ async function runPlanet(
     await options.onProgress?.(checkpoint);
     await planetTransaction(connection, pid, async (tx) => {
       await tx.unsafe(`SET LOCAL lock_timeout='1000ms'; SET LOCAL statement_timeout='120000ms'`);
-      await tx.unsafe(
-        `ALTER TABLE ambient_places.planet_features ATTACH PARTITION ${table} FOR VALUES IN ('${generation}')`,
-      );
+      await attachFeatureStorage(tx, generation, { retry: options.lockRetry });
       await tx.unsafe(
         `UPDATE ambient_places.generations SET manifest=$2::TEXT::JSONB,publication_status='published',published_at=clock_timestamp(),cache_lease_until=clock_timestamp()+interval '7 days 1 minute' WHERE id=$1`,
         [generation, JSON.stringify(manifest)],
@@ -315,7 +318,7 @@ async function runPlanet(
   }
 }
 export async function discardPlanetPlaces(sql: postgres.Sql, generation: string): Promise<void> {
-  const table = planetTable(generation);
+  const table = featureTable(generation);
   return withPlanetSession(sql, async (connection, pid) => {
     await planetTransaction(connection, pid, async (tx) => {
       const [row] = await tx.unsafe<{ publication_status: string }[]>(

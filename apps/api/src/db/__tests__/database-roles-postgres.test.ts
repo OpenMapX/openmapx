@@ -7,7 +7,14 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  ambientSchemaDDL,
+  attachFeatureStorage,
+  createFeatureStorage,
+  dropRetiredFeatureStorage,
+  featureTable,
+  retireAmbientGenerations,
+} from "../../../../../services/data-manager/src/jobs/ambient-places/feature-storage.js";
+import {
+  AMBIENT_SCHEMA_VERSION,
   ensureAmbientSchema,
 } from "../../../../../services/data-manager/src/jobs/ambient-places/schema.js";
 import {
@@ -222,18 +229,51 @@ integration("database roles", () => {
     await dataManager.unsafe("DROP SCHEMA overture_places__staging");
   });
 
-  it("ensureAmbientSchema succeeds under the guard", async () => {
+  it("ensureAmbientSchema and the partition lifecycle succeed under the guard", async () => {
     await ensureAmbientSchema(dataManager);
-    // A later build checks the same objects again.
-    await dataManager.unsafe(ambientSchemaDDL);
+    // Another data-manager process checks the version and creates nothing.
+    const second = connect("openmapx_data_manager", passwords.dataManager);
+    try {
+      await ensureAmbientSchema(second);
+    } finally {
+      await second.end({ timeout: 2 });
+    }
     expect(
       await superuser`
         SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner FROM pg_class c
         WHERE c.relnamespace = 'ambient_places'::regnamespace`,
     ).toEqual([{ owner: "openmapx_data_manager" }]);
-    expect(await api.unsafe("SELECT singleton, enabled FROM ambient_places.state")).toEqual([
-      { singleton: 1, enabled: true },
-    ]);
+    expect(
+      await api.unsafe("SELECT singleton, enabled, schema_version FROM ambient_places.state"),
+    ).toEqual([{ singleton: 1, enabled: true, schema_version: AMBIENT_SCHEMA_VERSION }]);
+    // A generation is created, filled, attached, retired, detached and dropped.
+    const generation = "00000000-0000-4000-8000-0000000000a1";
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe(
+        `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status,cache_lease_until) VALUES($1,'{}','regional','published',now()-interval '1 second')`,
+        [generation],
+      );
+      await createFeatureStorage(tx, generation);
+      await tx.unsafe(
+        `INSERT INTO ${featureTable(generation)}(generation,id,name,category,rank,min_zoom,tenant,sources,geom)
+         VALUES($1,'osm:node/1','Clinic','hospital',1,13,false,'osm',ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857))`,
+        [generation],
+      );
+      await attachFeatureStorage(tx, generation);
+    });
+    expect(
+      await api.unsafe(
+        "SELECT id, ST_SRID(geom) AS srid FROM ambient_places.features WHERE generation = $1",
+        [generation],
+      ),
+    ).toEqual([{ id: "osm:node/1", srid: 3857 }]);
+    await dataManager.begin((tx) => retireAmbientGenerations(tx));
+    expect(await dropRetiredFeatureStorage(dataManager)).toBe(true);
+    expect(
+      await superuser.unsafe("SELECT to_regclass($1) IS NULL AS dropped", [
+        featureTable(generation),
+      ]),
+    ).toEqual([{ dropped: true }]);
     await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
   });
 

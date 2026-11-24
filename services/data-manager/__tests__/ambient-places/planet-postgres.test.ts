@@ -79,7 +79,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(rows.some((r) => r.id === "osm:node/4" || r.id === "overture:g-closed")).toBe(false);
       expect((await readAmbientManifest(pg.sql))?.generation).toBe(result.generation);
       const [storage] = await pg.sql.unsafe(
-        `SELECT count(*)::INT AS partitions FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass`,
+        `SELECT count(*)::INT AS partitions FROM pg_inherits WHERE inhparent='ambient_places.features'::regclass`,
       );
       expect(storage?.partitions).toBe(1);
     }, 60000);
@@ -314,9 +314,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(rows.some((r) => r.id === first.generation)).toBe(false);
       const [partitions] = await pg.sql.unsafe(
-        "SELECT count(*)::INT AS n FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass",
+        "SELECT count(*)::INT AS n FROM pg_inherits WHERE inhparent='ambient_places.features'::regclass",
       );
       expect(partitions?.n).toBe(3);
+      // The retired generation's table is dropped, not only detached.
+      const [retired] = await pg.sql.unsafe("SELECT to_regclass($1) IS NULL AS dropped", [
+        `ambient_places.features_${first.generation.replaceAll("-", "")}`,
+      ]);
+      expect(retired?.dropped).toBe(true);
     }, 60000);
     it("requires complete matching planet sources and reports disk failure without switching active", async () => {
       await seed();

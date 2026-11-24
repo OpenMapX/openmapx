@@ -68,11 +68,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
         };
         await pg.sql.unsafe(
-          `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::JSONB)`,
+          `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,$2::JSONB,'regional','published')`,
           [unsupported.generation, JSON.stringify(unsupported)],
         );
         await pg.sql.unsafe(
-          `INSERT INTO ambient_places.features(generation,id,gers_id,name,category,rank,min_zoom,tenant,sources,geom) VALUES($1,'osm:node/1','gers-unsupported','Clinic','hospital',3079,13,false,'osm',ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857)))`,
+          `CREATE TABLE ambient_places.features_${unsupported.generation.replaceAll("-", "")} PARTITION OF ambient_places.features FOR VALUES IN ('${unsupported.generation}')`,
+        );
+        await pg.sql.unsafe(
+          `INSERT INTO ambient_places.features(generation,id,gers_id,name,category,rank,min_zoom,tenant,sources,geom) VALUES($1,'osm:node/1','gers-unsupported','Clinic','hospital',3079,13,false,'osm',ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857))`,
           [unsupported.generation],
         );
         expect(
@@ -237,10 +240,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const start = performance.now();
         const a = await buildAmbientPlaces(pg.sql, region);
         const initialBuildMs = performance.now() - start;
-        const [discovery] = await pg.sql.unsafe<{ exposed: boolean }[]>(
-          `SELECT EXISTS(SELECT 1 FROM geometry_columns WHERE f_table_schema='ambient_places' AND f_table_name='features') AS exposed`,
-        );
-        expect(discovery?.exposed).toBe(false);
+        expect(
+          await pg.sql.unsafe(
+            `SELECT type,srid FROM geometry_columns WHERE f_table_schema='ambient_places' AND f_table_name='features'`,
+          ),
+        ).toEqual([{ type: "GEOMETRY", srid: 3857 }]);
         expect(a).toMatchObject({
           placeCount: 1,
           sources: { osm: { epoch: "osm-one", count: 1 }, overture: null },
@@ -302,19 +306,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect((await readAmbientManifest(pg.sql))?.enabled).toBe(false);
         expect((await readAmbientPlaceByGers(pg.sql, "gers-b"))?.place.id).toBe("overture:gers-b");
         await setAmbientEnabled(pg.sql, true);
+        // Fails the activation after the new partition was filled and attached.
         await pg.sql.unsafe(
-          `CREATE FUNCTION ambient_places.reject_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture insertion failure'; END $$; CREATE TRIGGER reject_fixture BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION ambient_places.reject_fixture()`,
+          `CREATE FUNCTION ambient_places.reject_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture activation failure'; END $$; CREATE TRIGGER reject_fixture BEFORE UPDATE ON ambient_places.generations FOR EACH ROW EXECUTE FUNCTION ambient_places.reject_fixture()`,
         );
         await expect(buildAmbientPlaces(pg.sql, region)).rejects.toThrow(
-          /fixture insertion failure/,
+          /fixture activation failure/,
         );
         expect((await readAmbientManifest(pg.sql))?.generation).toBe(b.generation);
-        const [survivors] = await pg.sql.unsafe<{ count: number }[]>(
-          `SELECT count(*)::INT AS count FROM ambient_places.generations`,
+        const [survivors] = await pg.sql.unsafe<{ count: number; tables: number }[]>(
+          `SELECT (SELECT count(*)::INT FROM ambient_places.generations) AS count,
+            (SELECT count(*)::INT FROM pg_class WHERE relnamespace='ambient_places'::regnamespace AND relkind='r' AND relname LIKE 'features\\_%') AS tables`,
         );
-        expect(survivors?.count).toBe(2);
+        expect(survivors).toEqual({ count: 2, tables: 2 });
         await pg.sql.unsafe(
-          `DROP TRIGGER reject_fixture ON ambient_places.features; DROP FUNCTION ambient_places.reject_fixture()`,
+          `DROP TRIGGER reject_fixture ON ambient_places.generations; DROP FUNCTION ambient_places.reject_fixture()`,
         );
         await pg.sql.unsafe(
           `UPDATE overture_places.places SET sources='[{"dataset":"unknown-fixture"}]' WHERE gers_id='gers-b'`,

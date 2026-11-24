@@ -73,7 +73,7 @@ export function previousName(live: string): string {
   return previous;
 }
 
-function isLockTimeout(error: unknown): boolean {
+export function isLockTimeout(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&
@@ -90,7 +90,7 @@ function backoff(retry: LockRetry, attempt: number): number {
  * `retry.attempts` times. The last error is rethrown unchanged, so a
  * transaction that rolled back stays recognisable as one.
  */
-async function retryOnLockTimeout<T>(retry: LockRetry, work: () => Promise<T>): Promise<T> {
+export async function retryOnLockTimeout<T>(retry: LockRetry, work: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await work();

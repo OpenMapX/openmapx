@@ -17,11 +17,13 @@ import {
 import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
+import type { LockRetry } from "../publish-schema-swap.js";
 import { assertAmbientDiskCapacity } from "./capacity.js";
 import {
   activateAmbientGeneration,
   fresh,
   insertAmbientFeatures,
+  insertAmbientGeneration,
   prepareAmbientGeneration,
   tableExists,
 } from "./publication.js";
@@ -29,6 +31,8 @@ import {
 export interface AmbientBuildOptions {
   availableBytes?: () => Promise<number>;
   onProgress?: (progress: AmbientBuildProgress) => void | Promise<void>;
+  /** How often attaching or dropping a partition is retried when it times out waiting for a lock. */
+  lockRetry?: LockRetry;
 }
 interface OsmState {
   region: string;
@@ -129,10 +133,7 @@ export async function buildGermanyPlaces(
   }
   const available = options.availableBytes ?? freeBytesInPostgresContainer;
   assertAmbientDiskCapacity(await available(), inputCount);
-  await tx.unsafe(
-    `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::TEXT::JSONB)`,
-    [generation, JSON.stringify(manifest)],
-  );
+  await insertAmbientGeneration(tx, manifest, "regional", "published");
   const [west, south, east, north] = region.bounds;
   const inside = (p: AmbientPlace) =>
     p.coordinates[0] >= west &&
@@ -262,6 +263,6 @@ export async function buildGermanyPlaces(
     batches,
     placeCount: manifest.placeCount,
   });
-  await activateAmbientGeneration(tx, manifest);
+  await activateAmbientGeneration(tx, manifest, { retry: options.lockRetry });
   return manifest;
 }

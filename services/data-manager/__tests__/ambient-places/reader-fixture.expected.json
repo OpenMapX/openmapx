@@ -1,0 +1,321 @@
+{
+  "regional": {
+    "aachen": [
+      {
+        "properties": {
+          "id": "osm:node/1",
+          "gers_id": "gers-clinic",
+          "name": "Klinik",
+          "name_de": "Klinik",
+          "name_en": "Clinic",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm,overture",
+          "format_version": 2,
+          "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
+          "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
+        },
+        "geometry": [[[3401, 1424]]]
+      },
+      {
+        "properties": {
+          "id": "osm:node/2",
+          "name": "Bäckerei",
+          "category": "bakery",
+          "rank": 2059,
+          "min_zoom": 15,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[3773, 1188]]]
+      },
+      {
+        "properties": {
+          "id": "overture:gers-cafe",
+          "gers_id": "gers-cafe",
+          "name": "Cafe",
+          "name_de": "Kaffee",
+          "category": "cafe",
+          "rank": 2029,
+          "min_zoom": 15,
+          "tenant": false,
+          "sources": "overture",
+          "format_version": 2,
+          "_mapAttributions": "[{\"name\": \"Overture Maps\", \"sourceId\": \"overture\"}, {\"name\": \"Microsoft\", \"sourceId\": \"microsoft-places\"}]",
+          "field_contributors": "sha256:7ca20997a0351dcc1c2a784a8776de8a759addf064e9c2429fe230c33843f1b9",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"Microsoft\", \"property\": \"/names/common/de\"}]}"
+        },
+        "geometry": [[[4146, 1306]]]
+      }
+    ],
+    "aachenOverview": [
+      {
+        "properties": {
+          "id": "osm:node/1",
+          "gers_id": "gers-clinic",
+          "name": "Klinik",
+          "name_de": "Klinik",
+          "name_en": "Clinic",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm,overture",
+          "format_version": 2,
+          "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
+          "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
+        },
+        "geometry": [[[1449, 3250]]]
+      }
+    ],
+    "dom": [
+      {
+        "properties": {
+          "id": "osm:way/9007199254740993",
+          "name": "Dom",
+          "category": "place_of_worship",
+          "rank": 1089,
+          "min_zoom": 18,
+          "tenant": true,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[659, 3538]]]
+      }
+    ],
+    "tokyo": [],
+    "dateWest": [],
+    "dateEast": []
+  },
+  "planet": {
+    "aachen": [
+      {
+        "properties": {
+          "id": "osm:node/1",
+          "gers_id": "gers-clinic",
+          "name": "Klinik",
+          "name_de": "Klinik",
+          "name_en": "Clinic",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm,overture",
+          "format_version": 2,
+          "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
+          "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
+        },
+        "geometry": [[[3401, 1424]]]
+      },
+      {
+        "properties": {
+          "id": "osm:node/2",
+          "name": "Bäckerei",
+          "category": "bakery",
+          "rank": 2059,
+          "min_zoom": 15,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[3773, 1188]]]
+      }
+    ],
+    "aachenOverview": [
+      {
+        "properties": {
+          "id": "osm:node/1",
+          "gers_id": "gers-clinic",
+          "name": "Klinik",
+          "name_de": "Klinik",
+          "name_en": "Clinic",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm,overture",
+          "format_version": 2,
+          "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
+          "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
+        },
+        "geometry": [[[1449, 3250]]]
+      }
+    ],
+    "dom": [
+      {
+        "properties": {
+          "id": "osm:way/9007199254740993",
+          "name": "Dom",
+          "category": "place_of_worship",
+          "rank": 1089,
+          "min_zoom": 18,
+          "tenant": true,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[659, 3538]]]
+      }
+    ],
+    "tokyo": [
+      {
+        "properties": {
+          "id": "osm:way/13",
+          "gers_id": "g-tokyo",
+          "name": "東京病院",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm,overture",
+          "format_version": 2,
+          "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
+          "field_contributors": "sha256:14dcc4a9d30b510b39ee6aff40ce2abe0faa1ab59e5852c6afa758ede69ac2bd",
+          "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": []}"
+        },
+        "geometry": [[[2494, 1760]]]
+      }
+    ],
+    "dateWest": [
+      {
+        "properties": {
+          "id": "osm:node/11",
+          "name": "病院 East",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[-1, 0]]]
+      },
+      {
+        "properties": {
+          "id": "osm:node/12",
+          "name": "病院 West",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[1, 0]]]
+      }
+    ],
+    "dateEast": [
+      {
+        "properties": {
+          "id": "osm:node/11",
+          "name": "病院 East",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[4095, 0]]]
+      },
+      {
+        "properties": {
+          "id": "osm:node/12",
+          "name": "病院 West",
+          "category": "hospital",
+          "rank": 3079,
+          "min_zoom": 13,
+          "tenant": false,
+          "sources": "osm",
+          "format_version": 2,
+          "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
+          "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
+        },
+        "geometry": [[[4097, 0]]]
+      }
+    ]
+  },
+  "gers": {
+    "clinic": {
+      "storage": "planet",
+      "place": {
+        "id": "osm:node/1",
+        "gersId": "gers-clinic",
+        "name": "Klinik",
+        "names": { "de": "Klinik", "en": "Clinic" },
+        "coordinates": [6.079999999999999, 50.769999999999996],
+        "category": "hospital",
+        "rank": 3079,
+        "minZoom": 13,
+        "tenant": false,
+        "sources": "osm,overture",
+        "contributors": "sha256:a71d2a46a225bb40b7ccef62a30a47fc8d809cb565334dbc02eabb53d52db755",
+        "fieldContributors": "sha256:d6c4defaafe08e5634d671ae9edf603367caa548d9a174b64be68341489f110c",
+        "sourceLineage": {
+          "release": "2026-10-01.0",
+          "sources": [{ "dataset": "meta", "property": "/names/primary" }]
+        }
+      }
+    },
+    "cafe": {
+      "storage": "regional",
+      "place": {
+        "id": "overture:gers-cafe",
+        "gersId": "gers-cafe",
+        "name": "Cafe",
+        "names": { "de": "Kaffee" },
+        "coordinates": [6.081, 50.770099999999985],
+        "category": "cafe",
+        "rank": 2029,
+        "minZoom": 15,
+        "tenant": false,
+        "sources": "overture",
+        "contributors": "sha256:6eacd94aceb38c7ec5c16aa8f1fa4f094afaabf26a9e3d96bc7fc1ee2678c935",
+        "fieldContributors": "sha256:2240766204c4e51aa3d13be370d710c6afcdc4a5624e7d6c476af6dbe2e7f5cf",
+        "sourceLineage": {
+          "release": "2026-10-01.0",
+          "sources": [{ "dataset": "Microsoft", "property": "/names/common/de" }]
+        }
+      }
+    },
+    "tokyo": {
+      "storage": "planet",
+      "place": {
+        "id": "osm:way/13",
+        "gersId": "g-tokyo",
+        "name": "東京病院",
+        "names": {},
+        "coordinates": [139.7, 35.70000000000001],
+        "category": "hospital",
+        "rank": 3079,
+        "minZoom": 13,
+        "tenant": false,
+        "sources": "osm,overture",
+        "contributors": "sha256:a71d2a46a225bb40b7ccef62a30a47fc8d809cb565334dbc02eabb53d52db755",
+        "fieldContributors": "sha256:5759dc5c41e0120800ed619886e63bcbf6257db5f755f26d7cd573f429b0d9e8",
+        "sourceLineage": { "release": "2026-10-01.0", "sources": [] }
+      }
+    },
+    "missing": null
+  }
+}

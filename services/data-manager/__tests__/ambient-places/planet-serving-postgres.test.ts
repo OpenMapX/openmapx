@@ -136,15 +136,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       expect(layer.length).toBe(256);
       expect(bytes.length).toBeLessThanOrEqual(128 * 1024);
       const plan = await pg.sql.unsafe(
-        `EXPLAIN (FORMAT JSON) SELECT id FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
+        `EXPLAIN (FORMAT JSON) SELECT id FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1 AND geom && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
         [first.generation, z, x, y],
       );
       const planText = JSON.stringify(plan);
       expect(planText).toContain(first.generation.replaceAll("-", ""));
       expect(planText).not.toContain(second.generation.replaceAll("-", ""));
-      expect(planText).toContain("Index");
+      expect(planText).toContain(`features_${first.generation.replaceAll("-", "")}_geom_idx`);
       const [size] = await pg.sql.unsafe("SELECT pg_total_relation_size($1)::TEXT AS bytes", [
-        `ambient_places.planet_${first.generation.replaceAll("-", "")}`,
+        `ambient_places.features_${first.generation.replaceAll("-", "")}`,
       ]);
       assert.isDefined(size);
       const report = {

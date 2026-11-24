@@ -39,7 +39,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const { ensureAmbientSchema } = await import("../../src/jobs/ambient-places/schema.js");
         await ensureAmbientSchema(pg.sql);
         await pg.sql.unsafe(`CREATE FUNCTION ambient_places.hold_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(399401); RETURN NEW; END $$;
-        CREATE TRIGGER hold_fixture BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION ambient_places.hold_fixture()`);
+        CREATE TRIGGER hold_fixture BEFORE INSERT ON ambient_places.generations FOR EACH ROW EXECUTE FUNCTION ambient_places.hold_fixture()`);
         await barrier.unsafe(`SELECT pg_advisory_lock(399401)`);
         let competingStatus: number;
         let sameProcessStatus: number;
