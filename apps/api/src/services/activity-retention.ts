@@ -32,6 +32,16 @@ export function parseRequiredRetentionDays(
   return days;
 }
 
+/** How long administrator audit-log entries are kept, `AUDIT_LOG_RETENTION_DAYS` (default 365). */
+export function auditLogRetentionDays(env: Record<string, string | undefined> = process.env) {
+  return parseRequiredRetentionDays("AUDIT_LOG_RETENTION_DAYS", 365, env);
+}
+
+/** How long finished admin jobs are kept, `ADMIN_JOB_RETENTION_DAYS` (default 30). */
+export function adminJobRetentionDays(env: Record<string, string | undefined> = process.env) {
+  return parseRequiredRetentionDays("ADMIN_JOB_RETENTION_DAYS", 30, env);
+}
+
 /**
  * Delete admin audit log entries older than `days`. Returns the number of
  * rows pruned. Mirrors the health-history retention pattern so the audit

@@ -371,7 +371,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-audit-attribution",
-    version: 4,
+    version: 5,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -384,10 +384,12 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
+    // The API's daily retention deletes entries after AUDIT_LOG_RETENTION_DAYS
+    // (365 by default); the response report states the configured period.
     retention: {
       kind: "fixed-days",
-      days: 3650,
-      daysAfterClosure: 3650,
+      days: 365,
+      daysAfterClosure: 365,
       reasonCode: "accountability",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
@@ -431,7 +433,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-jobs-attribution",
-    version: 1,
+    version: 2,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -440,11 +442,14 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["legal-accountability", "support-and-operations"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
+    // The API's daily retention deletes finished jobs after
+    // ADMIN_JOB_RETENTION_DAYS (30 by default); the response report states the
+    // configured period.
     retention: {
       kind: "fixed-days",
-      days: 3650,
-      daysAfterClosure: 3650,
-      reasonCode: "accountability",
+      days: 30,
+      daysAfterClosure: 30,
+      reasonCode: "job-retention",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
@@ -454,7 +459,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "installed-component-attribution",
-    version: 1,
+    version: 2,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -466,12 +471,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["service-provisioning", "legal-accountability"],
     legalBases: ["contract", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
-    retention: {
-      kind: "fixed-days",
-      days: 3650,
-      daysAfterClosure: 3650,
-      reasonCode: "accountability",
-    },
+    // The attribution lives on the installed component's row: removing the
+    // component deletes it, and deleting the account clears it.
+    retention: { kind: "account-lifetime", daysAfterClosure: 30, reasonCode: "erasure-replay" },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "exclude", reasonCode: "administrative-record" },
@@ -526,7 +528,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "system-setting-attribution",
-    version: 1,
+    version: 2,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -535,12 +537,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["service-provisioning", "legal-accountability"],
     legalBases: ["contract", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
-    retention: {
-      kind: "fixed-days",
-      days: 3650,
-      daysAfterClosure: 3650,
-      reasonCode: "accountability",
-    },
+    // The attribution lives on the setting's row: the next change replaces
+    // it, and deleting the account clears it.
+    retention: { kind: "account-lifetime", daysAfterClosure: 30, reasonCode: "erasure-replay" },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "exclude", reasonCode: "operator-configuration" },
@@ -692,6 +691,37 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     article15: "include",
     portability: { decision: "exclude", reasonCode: "case-accountability" },
     secretPolicy: { mode: "redact", code: "protected-case-detail" },
+    rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
+  },
+  {
+    // What a staff member did on other people's privacy cases, and the case
+    // alerts sent to them. The case's subject stays out of the projection.
+    // Cases and their events are deleted together, after the configured case
+    // retention.
+    id: "privacy-case-handling-attribution",
+    version: 1,
+    category: "administrative-accountability",
+    source: "openmapx-db",
+    strategy: "collector",
+    collectorId: "openmapx-administration",
+    locators: [
+      { type: "actor_id", field: "data_subject_request.actor_user_id" },
+      { type: "actor_id", field: "data_subject_request_event.actor_user_id" },
+      { type: "user_id", field: "data_subject_request_notification.recipient_user_id" },
+    ],
+    purposes: ["legal-accountability"],
+    legalBases: ["legal-obligation"],
+    origin: { kind: "controller", descriptionCode: "administrative-record" },
+    retention: {
+      kind: "fixed-days",
+      days: 1095,
+      daysAfterClosure: 1095,
+      reasonCode: "case-accountability",
+    },
+    recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
+    article15: "include",
+    portability: { decision: "exclude", reasonCode: "legal-accountability" },
+    secretPolicy: { mode: "metadata", code: "audit-safe-projection" },
     rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
   },
   {

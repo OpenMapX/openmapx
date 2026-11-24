@@ -168,6 +168,24 @@ explicit, ownership-filtered OpenMapX projections and data from a connected
 managed Dawarich instance. Independent controllers, off-host systems and
 operator-held sources are never represented as searched.
 
+A staff member's own export lists what they did on other people's privacy
+cases (registering a case, verifying an identity, decisions, extensions, task
+resolutions and exports) and the case alerts sent to them, under
+`privacy-case-handling-attribution`. Each entry names only the event, its time,
+the request type and a pseudonymous case reference: the person a case concerns,
+the locator, reason codes and other case details stay out. The report states
+the configured periods of the audit log, finished admin jobs, application logs
+and privacy cases rather than the catalogue's defaults.
+
+Traffic and hazard reports are not part of any export. They are signed with a
+key whose private part stays in the reporting browser, and they are never
+linked to an account, so they cannot be found for a person; the privacy page
+describes them.
+
+A closed case also stays past its retention while a staff member who acted on
+it, or was alerted about it, has an active request, so that request's export
+still lists the staff member's handling of the case.
+
 Use the intake form for inaccessible or deleted accounts. Supply the exact
 locator and the actual receipt time; do not create a replacement account. Case
 updates use versions and idempotency keys; reload after a conflict rather than

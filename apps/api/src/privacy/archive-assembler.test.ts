@@ -28,6 +28,9 @@ const responseContext: PrivacyResponseContext = {
     privacySources: [],
     dsarCaseRetentionDays: 1095,
     backupRetentionDays: 30,
+    serverLogRetentionDays: 30,
+    auditLogRetentionDays: 365,
+    adminJobRetentionDays: 30,
   },
   reviewContact: "privacy@example.test (case r)",
   recipientSummary: {

@@ -2,7 +2,11 @@ import { messages } from "@openmapx/i18n";
 import { describe, expect, it } from "vitest";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { getCatalogueCopyWithFallbacks } from "./catalogue-copy.js";
-import { buildPrivacyResponseReport, type PrivacyResponseContext } from "./response-report.js";
+import {
+  buildPrivacyResponseReport,
+  CONFIGURED_RETENTION,
+  type PrivacyResponseContext,
+} from "./response-report.js";
 
 const context: PrivacyResponseContext = {
   request: {
@@ -37,6 +41,9 @@ const context: PrivacyResponseContext = {
     ],
     dsarCaseRetentionDays: 1095,
     backupRetentionDays: 14,
+    serverLogRetentionDays: 30,
+    auditLogRetentionDays: 365,
+    adminJobRetentionDays: 30,
   },
   reviewContact: "privacy@example.test (case request-123)",
   recipientSummary: {
@@ -173,6 +180,7 @@ describe("localized privacy response report", () => {
       "mobile-auth-handoffs",
       "application-logs",
       "redis-subject-controls",
+      "admin-jobs-attribution",
     ];
     for (const id of expected) {
       const registration = SUBJECT_DATA_CATALOGUE.find((entry) => entry.id === id);
@@ -195,6 +203,42 @@ describe("localized privacy response report", () => {
     expect(report.processingInformation.shortLivedCategories).not.toContain(
       "offline-package-ownership",
     );
+  });
+
+  it("states the retention this deployment configured, not the catalogue default", () => {
+    for (const id of Object.keys(CONFIGURED_RETENTION))
+      expect(SUBJECT_DATA_CATALOGUE.find((entry) => entry.id === id)?.retention.kind, id).toBe(
+        "fixed-days",
+      );
+    const configured = {
+      ...context,
+      deployment: {
+        ...context.deployment,
+        auditLogRetentionDays: 730,
+        adminJobRetentionDays: 60,
+        serverLogRetentionDays: 14,
+        dsarCaseRetentionDays: 400,
+        backupRetentionDays: 21,
+      },
+    };
+    const report = buildPrivacyResponseReport({ locale: "en", context: configured, sources: [] });
+    const retentionOf = (id: string) =>
+      report.processingInformation.sources.find((source) => source.id === id)?.retention;
+    expect(retentionOf("admin-audit-attribution")).toMatchObject({
+      days: 730,
+      daysAfterClosure: 730,
+    });
+    expect(retentionOf("admin-jobs-attribution")).toMatchObject({ days: 60 });
+    expect(retentionOf("application-logs")).toMatchObject({ days: 14 });
+    expect(retentionOf("privacy-case-records")).toMatchObject({ days: 400 });
+    expect(retentionOf("privacy-case-handling-attribution")).toMatchObject({ days: 400 });
+    expect(retentionOf("backup-retained-copies")).toMatchObject({ days: 21 });
+    // A 60-day job record no longer counts as short-lived; 14-day logs do.
+    expect(report.processingInformation.shortLivedCategories).not.toContain(
+      "admin-jobs-attribution",
+    );
+    expect(report.processingInformation.shortLivedCategories).toContain("application-logs");
+    expect(report.text).toContain("730 days from the applicable record event");
   });
 
   it("states the backup policy with the configured retention and the request contact", () => {

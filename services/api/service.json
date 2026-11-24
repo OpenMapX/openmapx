@@ -50,7 +50,7 @@
       "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
       "ERASURE_JOURNAL_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
-      "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-30}",
+      "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-}",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://openmapx-ops-agent:4300}",
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
       "DATA_MANAGER_URL": "${DATA_MANAGER_URL:-http://openmapx-data-manager:4000}",

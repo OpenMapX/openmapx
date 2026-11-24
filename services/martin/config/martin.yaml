@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/maplibre/martin/main/schemas/config.json
 #
-# Once `--config` is given Martin stops reading its environment shortcuts, so
-# the database connection is declared here, reusing service.json's
-# `DATABASE_URL`.
+# The database connection is declared here, from service.json's
+# `MARTIN_DATABASE_URL`. The variable is deliberately not named `DATABASE_URL`:
+# Martin 1.x warns at startup whenever that legacy variable is set, and
+# Martin 2 ignores it.
 
 # Martin's own default, matching the container's `expose: [3000]` / Traefik
 # proxy target in service.json.
@@ -12,7 +13,7 @@ postgres:
   # `$VAR` / `${VAR:-default}` expansion is a documented Martin config feature.
   # The URL logs in as `openmapx_tiles`, which the postgis entrypoint allows
   # to call the functions in the `tiles` schema and nothing else.
-  connection_string: $DATABASE_URL
+  connection_string: $MARTIN_DATABASE_URL
   # Martin publishes every table and function it can see unless told
   # otherwise, and the database holds OpenConditions' records, crowd claims
   # and operator-only data. Only the sources declared below are served.

@@ -55,6 +55,7 @@ export default function PrivacyContent({
   const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
   // Backup retention is a platform setting only the API reports.
   const backupRetentionDays = legal ? legal.backupRetentionDays : null;
+  const auditLogRetentionDays = legal ? legal.auditLogRetentionDays : null;
   const T = privacyTitles("en");
 
   return (
@@ -69,7 +70,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: November 24, 2026
+        Last updated: November 25, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -120,6 +121,12 @@ export default function PrivacyContent({
             <Typography>
               Publishing corrections you write to OpenStreetMap, if you use the contribution feature
               (see Section&nbsp;7)
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Passing on traffic and hazard reports you submit to OpenConditions, if you use that
+              feature (see Section&nbsp;8)
             </Typography>
           </li>
           <li>
@@ -638,7 +645,7 @@ export default function PrivacyContent({
               which kind of operation ran, whether it succeeded, how long it took and a random
               request id. No element, tag, name, coordinate, comment, note text, source, account
               name or token is recorded. Server logs follow the normal retention described in
-              Section&nbsp;13.
+              Section&nbsp;14.
             </Typography>
           </li>
         </ul>
@@ -655,6 +662,71 @@ export default function PrivacyContent({
           contribution is thereby transferred to recipients outside the European Economic Area
           (EEA), that transfer is based on your explicit consent pursuant to
           Art.&nbsp;49(1)(a)&nbsp;GDPR.
+        </Typography>
+      </Section>
+      <Section title={T.crowdReports}>
+        <Typography>
+          If this instance offers traffic and hazard reports, you can report a situation on the
+          road, such as an accident, a hazard or a closure, and confirm or deny a report others made
+          when you approach it. You can do so without an account. Reports go to the OpenConditions
+          service this instance&apos;s operator connects, which turns them into traffic messages for
+          everyone.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>A reporting identity on this device, not linked to your account.</strong> When
+              you first send a report or vote, your browser creates a key pair and keeps it in this
+              browser&apos;s local storage, together with a reporting permission that is valid for
+              about a day and renewed with your next report or vote after that. Every report and
+              vote is signed with the private key, which never leaves the browser. The key is never
+              connected to your OpenMapX account, and OpenMapX does not store reports in its own
+              database. It acts as a pseudonym: OpenConditions can tell that reports came from the
+              same device, but not from whom.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>What is sent.</strong> A report contains the kind of situation, the location
+              you chose for it, an optional severity, the time and the public key with its
+              signature. A vote contains the report it refers to, whether you confirm or deny it,
+              the time and the public key with its signature; since you are asked only when you
+              approach a report, a vote also shows that the device was near that place at that time.
+              OpenMapX&apos;s server forwards them without your IP address or browser details, so
+              OpenConditions sees only the server.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>What OpenConditions keeps.</strong> It stores the public key, when it was last
+              used and a reliability score derived from how earlier reports turned out. It keeps
+              your reports and votes linked to the key and uses that link to check whether the
+              reports of one device are plausible together and to limit abuse. A key that is not
+              used for 12 months is deleted together with its votes; its reports then stay only as
+              unlinked traffic information. A key that was blocked for abuse stays on the block list
+              while the block stands.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>What is published.</strong> The resulting traffic messages, with their
+              location, kind and time, are shown to all users and may be shared with other traffic
+              information services. They never carry the key.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ending the link.</strong> Clearing this browser&apos;s site data, or deleting
+              your account in this browser, deletes the key from the device. After that, nobody can
+              connect the reporting identity to you, and OpenConditions deletes it 12 months after
+              its last use.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          The legal basis is Art.&nbsp;6(1)(f) GDPR: our legitimate interest, and that of other road
+          users, in current and reliable information about traffic and hazards, including keeping
+          false and abusive reports out.
         </Typography>
       </Section>
       <Section title={T.thirdParty}>
@@ -926,6 +998,15 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
+              <strong>Traffic reporting key</strong> (<code>openconditions.contrib.deviceKey</code>,{" "}
+              <code>openconditions.contrib.grant</code>) — If you send a traffic or hazard report or
+              vote, the reporting key pair and its current reporting permission are kept in
+              localStorage (see Section&nbsp;8). They stay until you clear this browser&apos;s site
+              data or delete your account in it.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Service Worker cache</strong> — A Service Worker caches static assets (HTML,
               CSS, JavaScript), online map tiles, and versioned offline-package glyph assets using
               the browser&apos;s Cache Storage API. Offline map archives are stored in IndexedDB or
@@ -1153,6 +1234,18 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
+              <strong>Administrator activity log</strong> — records of what administrators did, such
+              as changing an account&apos;s role, blocking or deleting an account, or changing
+              settings, with the administrator&apos;s IP address and browser, are deleted after{" "}
+              {auditLogRetentionDays !== null
+                ? `${auditLogRetentionDays} days`
+                : "the period the operator configures (365 days by default)"}
+              . Deleting an account removes it from the entries that name it, together with the IP
+              address and browser recorded for its own actions.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Records of disclosures to recipients</strong> — deleted three years after the
               disclosure.
             </Typography>
@@ -1206,6 +1299,14 @@ export default function PrivacyContent({
             <Typography>
               <strong>Contribution submission state</strong> — locks expire after two minutes,
               successful outcome records after 24 hours; neither contains contribution content.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Traffic and hazard reports</strong> — the reporting identity is deleted by
+              OpenConditions 12 months after its last use, together with its votes; its reports stay
+              only as unlinked traffic information (see Section&nbsp;8). The key on your device
+              stays until you clear this browser&apos;s site data or delete your account in it.
             </Typography>
           </li>
           <li>

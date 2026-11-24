@@ -11,6 +11,13 @@ const retentionSettings = {
     min: 30,
     max: 3650,
   },
+  serverLog: {
+    key: "legalServerLogRetentionDays",
+    env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
+    fallback: 30,
+    min: 1,
+    max: 3650,
+  },
 } as const;
 
 /** Match the published settings' environment > database > default precedence. */
@@ -29,6 +36,8 @@ export async function privacyRetention(
         .limit(1);
   const value = Number(env || rows[0]?.value || setting.fallback);
   if (!Number.isSafeInteger(value) || value < setting.min || value > setting.max)
-    throw new Error("Invalid privacy retention configuration");
+    throw new Error(
+      `Invalid privacy retention configuration: ${setting.env} (setting ${setting.key}) must be an integer between ${setting.min} and ${setting.max}`,
+    );
   return value;
 }

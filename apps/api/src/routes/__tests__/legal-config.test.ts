@@ -89,6 +89,7 @@ describe("GET /legal-config", () => {
       deploymentJurisdiction: "",
       privacySources: [],
       backupRetentionDays: 30,
+      auditLogRetentionDays: 365,
     });
   });
 
@@ -126,6 +127,7 @@ describe("GET /legal-config", () => {
       deploymentJurisdiction: "",
       privacySources: [],
       backupRetentionDays: 30,
+      auditLogRetentionDays: 365,
     });
   });
 
@@ -206,5 +208,11 @@ describe("GET /legal-config", () => {
     vi.stubEnv("BACKUP_RETENTION_DAYS", "14");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().backupRetentionDays).toBe(14);
+  });
+
+  it("publishes the configured audit-log retention for the privacy page", async () => {
+    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", "730");
+    const res = await app.inject({ method: "GET", url: "/legal-config" });
+    expect(res.json().auditLogRetentionDays).toBe(730);
   });
 });

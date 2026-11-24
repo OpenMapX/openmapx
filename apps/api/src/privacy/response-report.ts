@@ -25,6 +25,9 @@ export interface PrivacyResponseContext {
     privacySources: PrivacySource[];
     dsarCaseRetentionDays: number;
     backupRetentionDays: number;
+    serverLogRetentionDays: number;
+    auditLogRetentionDays: number;
+    adminJobRetentionDays: number;
   };
   reviewContact: string;
   recipientSummary: {
@@ -85,14 +88,46 @@ function reportRights(kind: PrivacyRequestKind): { access: boolean; portability:
  * expired between receipt and collection. */
 const SHORT_LIVED_RETENTION_DAYS = 30;
 
-function retentionDays(rule: (typeof SUBJECT_DATA_CATALOGUE)[number]["retention"]): number | null {
+type Registration = (typeof SUBJECT_DATA_CATALOGUE)[number];
+type RetentionRule = Registration["retention"];
+
+/**
+ * Registrations whose period an operator configures. The catalogue holds the
+ * default; the report states the period this deployment actually enforces.
+ */
+export const CONFIGURED_RETENTION: Readonly<
+  Record<string, (deployment: PrivacyResponseContext["deployment"]) => number>
+> = {
+  "admin-audit-attribution": (deployment) => deployment.auditLogRetentionDays,
+  "admin-jobs-attribution": (deployment) => deployment.adminJobRetentionDays,
+  "application-logs": (deployment) => deployment.serverLogRetentionDays,
+  "privacy-case-records": (deployment) => deployment.dsarCaseRetentionDays,
+  "privacy-case-handling-attribution": (deployment) => deployment.dsarCaseRetentionDays,
+  "backup-retained-copies": (deployment) => deployment.backupRetentionDays,
+};
+
+function effectiveRetention(
+  registration: Registration,
+  deployment: PrivacyResponseContext["deployment"],
+): RetentionRule {
+  const configured = CONFIGURED_RETENTION[registration.id];
+  const rule = registration.retention;
+  if (!configured || rule.kind !== "fixed-days") return rule;
+  const days = configured(deployment);
+  return { ...rule, days, daysAfterClosure: days };
+}
+
+function retentionDays(rule: RetentionRule): number | null {
   if (rule.kind === "fixed-days") return rule.days;
   if (rule.kind === "ephemeral") return rule.hours / 24;
   return null;
 }
 
-function isShortLived(registration: (typeof SUBJECT_DATA_CATALOGUE)[number]): boolean {
-  const days = retentionDays(registration.retention);
+function isShortLived(
+  registration: Registration,
+  deployment: PrivacyResponseContext["deployment"],
+): boolean {
+  const days = retentionDays(effectiveRetention(registration, deployment));
   return (
     registration.strategy !== "not_personal" &&
     // Retained backups have their own statement in the report.
@@ -107,10 +142,7 @@ function codeLabel(t: ReportTranslator, group: string, code: string): string {
   return t.has(key) ? t(key) : t("recordedCode", { code });
 }
 
-function retentionText(
-  t: ReportTranslator,
-  rule: (typeof SUBJECT_DATA_CATALOGUE)[number]["retention"],
-): string {
+function retentionText(t: ReportTranslator, rule: RetentionRule): string {
   const trigger = rule.reasonCode
     ? codeLabel(t, "retentionReasons", rule.reasonCode)
     : t("notRecorded");
@@ -186,7 +218,9 @@ export function buildPrivacyResponseReport(input: {
   const scopedRegistrations = SUBJECT_DATA_CATALOGUE.filter(
     (registration) => rights.access || registration.portability.decision === "include",
   );
-  const shortLived = scopedRegistrations.filter(isShortLived);
+  const shortLived = scopedRegistrations.filter((registration) =>
+    isShortLived(registration, context.deployment),
+  );
   lines.push("", t("shortLivedHeading"), t("shortLivedIntro"));
   for (const registration of shortLived) {
     const copy = getCatalogueCopyWithFallbacks(locale, registration.id);
@@ -195,7 +229,7 @@ export function buildPrivacyResponseReport(input: {
       t("shortLivedRow", {
         id: registration.id,
         category: copy.copy.category,
-        retention: retentionText(t, registration.retention),
+        retention: retentionText(t, effectiveRetention(registration, context.deployment)),
       }),
     );
   }
@@ -223,7 +257,7 @@ export function buildPrivacyResponseReport(input: {
       purposes: registration.purposes,
       legalBases: registration.legalBases,
       origin: registration.origin,
-      retention: registration.retention,
+      retention: effectiveRetention(registration, context.deployment),
       recipients: registration.recipients,
       article15: registration.article15,
       portability: registration.portability,

@@ -55,6 +55,7 @@ export default function PrivacyContentDe({
   const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
   // Backup retention is a platform setting only the API reports.
   const backupRetentionDays = legal ? legal.backupRetentionDays : null;
+  const auditLogRetentionDays = legal ? legal.auditLogRetentionDays : null;
   const T = privacyTitles("de");
 
   return (
@@ -69,7 +70,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 24. November 2026
+        Zuletzt aktualisiert: 25. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -122,6 +123,12 @@ export default function PrivacyContentDe({
             <Typography>
               Veröffentlichung der von Ihnen verfassten Korrekturen bei OpenStreetMap, sofern Sie
               die Beitragsfunktion nutzen (siehe Abschnitt&nbsp;7)
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Weitergabe Ihrer Verkehrs- und Gefahrenmeldungen an OpenConditions, sofern Sie diese
+              Funktion nutzen (siehe Abschnitt&nbsp;8)
             </Typography>
           </li>
           <li>
@@ -681,7 +688,7 @@ export default function PrivacyContentDe({
               erfasst nur, welche Art von Vorgang ausgeführt wurde, ob er erfolgreich war, wie lange
               er gedauert hat und eine zufällige Anfrage-ID. Objekte, Tags, Namen, Koordinaten,
               Kommentare, Hinweistexte, Quellen, Kontonamen oder Token werden nicht erfasst. Für
-              Server-Protokolle gilt die übliche Speicherdauer aus Abschnitt&nbsp;13.
+              Server-Protokolle gilt die übliche Speicherdauer aus Abschnitt&nbsp;14.
             </Typography>
           </li>
         </ul>
@@ -699,6 +706,78 @@ export default function PrivacyContentDe({
           dauerhafter Bearbeitungshistorie ist. Soweit Ihr Beitrag dadurch an Empfänger außerhalb
           des Europäischen Wirtschaftsraums (EWR) übermittelt wird, stützt sich diese Übermittlung
           auf Ihre ausdrückliche Einwilligung nach Art.&nbsp;49 Abs.&nbsp;1 lit.&nbsp;a DSGVO.
+        </Typography>
+      </Section>
+      <Section title={T.crowdReports}>
+        <Typography>
+          Wenn diese Instanz Verkehrs- und Gefahrenmeldungen anbietet, können Sie eine Lage auf der
+          Straße melden, etwa einen Unfall, eine Gefahr oder eine Sperrung, und eine Meldung anderer
+          bestätigen oder verneinen, wenn Sie sich ihr nähern. Ein Konto ist dafür nicht nötig.
+          Meldungen gehen an den OpenConditions-Dienst, den der Betreiber dieser Instanz anbindet,
+          und werden dort zu Verkehrsmeldungen für alle.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>
+                Eine Meldeidentität auf diesem Gerät, nicht mit Ihrem Konto verknüpft.
+              </strong>{" "}
+              Wenn Sie zum ersten Mal eine Meldung oder Rückmeldung senden, erzeugt Ihr Browser ein
+              Schlüsselpaar und bewahrt es im lokalen Speicher dieses Browsers auf, zusammen mit
+              einer Meldeberechtigung, die etwa einen Tag gilt und danach mit Ihrer nächsten Meldung
+              oder Rückmeldung erneuert wird. Jede Meldung und jede Rückmeldung wird mit dem
+              privaten Schlüssel signiert, der den Browser nie verlässt. Der Schlüssel wird nie mit
+              Ihrem OpenMapX-Konto verbunden, und OpenMapX speichert Meldungen nicht in seiner
+              eigenen Datenbank. Er wirkt als Pseudonym: OpenConditions kann erkennen, dass
+              Meldungen vom selben Gerät stammen, aber nicht, von wem.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Was übermittelt wird.</strong> Eine Meldung enthält die Art der Lage, den von
+              Ihnen gewählten Ort, optional die Schwere, den Zeitpunkt sowie den öffentlichen
+              Schlüssel mit Signatur. Eine Rückmeldung enthält die Meldung, auf die sie sich
+              bezieht, ob Sie sie bestätigen oder verneinen, den Zeitpunkt sowie den öffentlichen
+              Schlüssel mit Signatur; da Sie nur gefragt werden, wenn Sie sich einer Meldung nähern,
+              zeigt eine Rückmeldung auch, dass das Gerät zu dieser Zeit in der Nähe dieses Orts
+              war. Der Server von OpenMapX leitet sie ohne Ihre IP-Adresse und ohne Browserangaben
+              weiter; OpenConditions sieht nur den Server.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Was OpenConditions speichert.</strong> Gespeichert werden der öffentliche
+              Schlüssel, wann er zuletzt genutzt wurde, und ein Zuverlässigkeitswert, der sich
+              daraus ergibt, wie frühere Meldungen ausgegangen sind. Ihre Meldungen und
+              Rückmeldungen bleiben mit dem Schlüssel verknüpft; über diese Verknüpfung wird
+              geprüft, ob die Meldungen eines Geräts zusammen plausibel sind, und Missbrauch
+              begrenzt. Ein Schlüssel, der 12&nbsp;Monate nicht genutzt wird, wird mit seinen
+              Rückmeldungen gelöscht; seine Meldungen bleiben dann nur als nicht verknüpfte
+              Verkehrsinformationen. Ein wegen Missbrauchs gesperrter Schlüssel bleibt auf der
+              Sperrliste, solange die Sperre besteht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Was veröffentlicht wird.</strong> Die daraus entstehenden Verkehrsmeldungen
+              mit Ort, Art und Zeitpunkt werden allen Nutzenden angezeigt und können an andere
+              Verkehrsinformationsdienste weitergegeben werden. Den Schlüssel enthalten sie nie.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Die Verknüpfung beenden.</strong> Wenn Sie die Websitedaten dieses Browsers
+              löschen oder Ihr Konto in diesem Browser löschen, wird der Schlüssel vom Gerät
+              entfernt. Danach kann niemand die Meldeidentität mehr mit Ihnen verbinden, und
+              OpenConditions löscht sie 12&nbsp;Monate nach ihrer letzten Nutzung.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO: unser berechtigtes
+          Interesse und das anderer Verkehrsteilnehmender an aktuellen und verlässlichen
+          Informationen über Verkehr und Gefahren, einschließlich der Abwehr falscher und
+          missbräuchlicher Meldungen.
         </Typography>
       </Section>
       <Section title={T.thirdParty}>
@@ -987,6 +1066,17 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
+              <strong>Schlüssel für Verkehrsmeldungen</strong> (
+              <code>openconditions.contrib.deviceKey</code>,{" "}
+              <code>openconditions.contrib.grant</code>) &mdash; Wenn Sie eine Verkehrs- oder
+              Gefahrenmeldung oder eine Rückmeldung senden, werden das Schlüsselpaar und die
+              aktuelle Meldeberechtigung im localStorage gespeichert (siehe Abschnitt&nbsp;8). Sie
+              bleiben, bis Sie die Websitedaten dieses Browsers löschen oder Ihr Konto in diesem
+              Browser löschen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Service-Worker-Cache</strong> &mdash; Ein Service Worker speichert statische
               Ressourcen (HTML, CSS, JavaScript), Online-Kartenkacheln und versionierte
               Glyphen-Ressourcen für Offline-Pakete über die Cache-Storage-API des Browsers
@@ -1237,6 +1327,19 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
+              <strong>Protokoll administrativer Tätigkeiten</strong> — Aufzeichnungen darüber, was
+              Administratorinnen und Administratoren getan haben, etwa die Rolle eines Kontos
+              geändert, ein Konto gesperrt oder gelöscht oder Einstellungen geändert, mit IP-Adresse
+              und Browser der handelnden Person, werden nach{" "}
+              {auditLogRetentionDays !== null
+                ? `${auditLogRetentionDays} Tagen`
+                : "der vom Betreiber eingestellten Frist (standardmäßig 365 Tage)"}{" "}
+              gelöscht. Das Löschen eines Kontos entfernt es aus den Einträgen, die es nennen,
+              zusammen mit IP-Adresse und Browser, die zu seinen eigenen Handlungen erfasst wurden.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Aufzeichnungen über Offenlegungen an Empfänger</strong> — werden drei Jahre
               nach der Offenlegung gelöscht.
             </Typography>
@@ -1295,6 +1398,16 @@ export default function PrivacyContentDe({
               <strong>Betriebsdaten zu Beiträgen</strong> &mdash; Sperren verfallen nach zwei
               Minuten, erfolgreiche Ergebnisdatensätze nach 24&nbsp;Stunden; beide enthalten keine
               Beitragsinhalte.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Verkehrs- und Gefahrenmeldungen</strong> &mdash; die Meldeidentität wird von
+              OpenConditions 12&nbsp;Monate nach ihrer letzten Nutzung zusammen mit ihren
+              Rückmeldungen gelöscht; ihre Meldungen bleiben nur als nicht verknüpfte
+              Verkehrsinformationen erhalten (siehe Abschnitt&nbsp;8). Der Schlüssel auf Ihrem Gerät
+              bleibt, bis Sie die Websitedaten dieses Browsers löschen oder Ihr Konto in diesem
+              Browser löschen.
             </Typography>
           </li>
           <li>

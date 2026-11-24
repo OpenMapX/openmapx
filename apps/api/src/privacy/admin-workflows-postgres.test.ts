@@ -697,4 +697,60 @@ suite("privacy case administration on PostgreSQL", () => {
       await server.close();
     }
   });
+
+  it("exports the case actions a staff member took, without the person the case concerns", async () => {
+    const subjectEmail = `handled-${randomUUID()}@example.test`;
+    const created = await service().create({
+      channel: "email",
+      kind: "access",
+      subject: { locatorType: "email", locator: subjectEmail, accountState: "unknown" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await service().verifyIdentity({
+      requestId: created.id,
+      version: created.version,
+      reasonCode: "letter-signature-checked",
+      actorId: ACTOR,
+      idempotencyKey: `verify-handled-${created.id}`,
+    });
+    // The staff member's own self-service request is theirs as its subject,
+    // not as its handler.
+    const own = await service().create({
+      channel: "self_service",
+      kind: "portability",
+      userId: ACTOR,
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const { streamOpenMapxRegistrationRecords } = await import("./openmapx-collectors");
+    const { stableRecordId } = await import("./collectors");
+    const records = [];
+    for await (const row of streamOpenMapxRegistrationRecords("privacy-case-handling-attribution", {
+      userId: ACTOR,
+      cutoffAt: new Date(now.getTime() + 60_000),
+      database: fixture.db,
+    }))
+      records.push(row);
+    const caseRef = (id: string) => stableRecordId("privacy-identifier", id);
+    const handled = records.filter((row) => row.data.caseRef === caseRef(created.id));
+    expect(handled.map((row) => row.data.eventType ?? row.data.template).sort()).toEqual([
+      "admin_new_request",
+      "received",
+      "state_in_progress",
+    ]);
+    for (const row of handled.filter((record) => record.data.eventType))
+      expect(row.data).toMatchObject({ actor: "subject", caseKind: "access" });
+    // Only the alert about the self-service request is the handler's; its
+    // events are the subject's own.
+    expect(
+      records.filter((row) => row.data.caseRef === caseRef(own.id)).map((row) => row.data.template),
+    ).toEqual(["admin_new_request"]);
+    const exported = JSON.stringify(records);
+    expect(exported).not.toContain(subjectEmail);
+    expect(exported).not.toContain(created.id);
+    expect(exported).not.toContain("letter-signature-checked");
+  });
 });
