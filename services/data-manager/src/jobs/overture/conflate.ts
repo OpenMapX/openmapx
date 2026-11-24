@@ -481,12 +481,12 @@ export async function scoreOvertureCandidates(opts: {
               COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
               COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
               COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
-       FROM "${schema}".osm_pois
+       FROM "${schema}".osm_pois AS poi
        WHERE ($1::BIGINT IS NULL
-          OR h3_r8 > $1::BIGINT
-          OR (h3_r8 = $1::BIGINT AND osm_type > $2)
-          OR (h3_r8 = $1::BIGINT AND osm_type = $2 AND osm_id > $3::BIGINT))
-       ORDER BY h3_r8, osm_type, osm_id
+          OR (poi.h3_r8, poi.osm_type, poi.osm_id) > ($1::BIGINT, $2::TEXT, $3::BIGINT))
+       -- Qualified, because a bare h3_r8 would name the text output column.
+       -- The row comparison walks the (h3_r8, osm_type, osm_id) index in order.
+       ORDER BY poi.h3_r8, poi.osm_type, poi.osm_id
        LIMIT $4`,
       [
         cursorCell === null ? null : h3CellToBigint(cursorCell),

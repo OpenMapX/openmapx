@@ -589,14 +589,37 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         // Resuming from the first page's cursor scores exactly the rest.
         const first = cursors[0];
         if (!first) throw new Error("missing cursor");
+        const pages: [string, unknown[]][] = [];
+        const recording = {
+          unsafe: (query: string, params?: unknown[]) => {
+            if (query.includes("osm_pois")) pages.push([query, params ?? []]);
+            return pg.sql.unsafe(query, params as never[]);
+          },
+        } as unknown as typeof pg.sql;
         const rest = await scoreOvertureCandidates({
-          sql: pg.sql,
+          sql: recording,
           region: "germany",
           release: RELEASE,
           resume: { cursor: first, processed: 0, candidates: 0 },
         });
         expect(rest.processed).toBe(total - 2_000);
         expect(rest.cursor).toEqual(cursors.at(-1));
+        // A page orders by the bigint cell, not by its text, and can walk the
+        // keyset index in order.
+        const [pageQuery, pageParams] = pages[0] ?? ["", []];
+        const plan = await pg.sql.begin(async (tx) => {
+          await tx.unsafe(`SET LOCAL enable_seqscan = off`);
+          await tx.unsafe(`SET LOCAL enable_bitmapscan = off`);
+          await tx.unsafe(`SET LOCAL enable_sort = off`);
+          return tx.unsafe<{ "QUERY PLAN": string }[]>(
+            `EXPLAIN ${pageQuery}`,
+            pageParams as never[],
+          );
+        });
+        const text = plan.map((row) => row["QUERY PLAN"]).join("\n");
+        expect(text).toContain("Index Scan using osm_pois_h3_r8_osm_type_osm_id_idx");
+        expect(text).not.toContain("Sort");
+        expect(text).not.toContain("(h3_r8)::text");
       } finally {
         await pg.stop();
       }
