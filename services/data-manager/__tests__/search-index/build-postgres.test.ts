@@ -284,7 +284,7 @@ describe.skipIf(skipE2e)("atomic search-index publication", () => {
               if (stage === "index") {
                 // A real duplicate-name failure in production's index DDL.
                 await pg.sql.unsafe(
-                  `CREATE INDEX idx_osm_search_terms_exact ON osm_search__staging.terms (normalized_term)`,
+                  `CREATE INDEX terms_normalized_term_idx ON osm_search__staging.terms (normalized_term)`,
                 );
               }
               if (stage === "validate") {

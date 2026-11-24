@@ -26,13 +26,24 @@ describe.skipIf(skipE2e)("search-index schema in PostGIS", () => {
       const indexes = await pg.sql.unsafe<{ indexname: string }[]>(
         `SELECT indexname FROM pg_indexes WHERE schemaname='osm_search__staging'`,
       );
-      expect(indexes.map((row) => row.indexname)).toEqual(
-        expect.arrayContaining([
-          "idx_osm_search_terms_exact",
-          "idx_osm_search_terms_prefix",
-          "idx_osm_search_places_geom",
-        ]),
-      );
+      expect(indexes.map((row) => row.indexname).sort()).toEqual([
+        "index_state_pkey",
+        "places_geom_idx",
+        "places_pkey",
+        "terms_normalized_term_idx",
+        "terms_pkey",
+      ]);
+      // The provider's exact-or-prefix predicate uses the one pattern index.
+      await pg.sql.unsafe(`ANALYZE osm_search__staging.terms`);
+      const plan = await pg.sql.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL enable_seqscan = off`);
+        return tx.unsafe<{ "QUERY PLAN": string }[]>(
+          `EXPLAIN SELECT * FROM osm_search__staging.terms
+            WHERE normalized_term = 'ex' OR normalized_term LIKE 'ex' || '%'`,
+        );
+      });
+      const text = plan.map((row) => row["QUERY PLAN"]).join("\n");
+      expect(text).toContain("terms_normalized_term_idx");
     } finally {
       await pg.stop();
     }

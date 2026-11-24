@@ -58,13 +58,13 @@ export interface BuildOvertureSchemaOptions {
 export function buildPlacesIndexesDDL(schema: string): string {
   assertValidOvertureSchema(schema);
   return `
-    CREATE INDEX idx_overture_geom ON "${schema}".places USING GIST (geom);
-    CREATE INDEX idx_overture_h3   ON "${schema}".places (h3_r8);
-    CREATE INDEX idx_overture_basic_category ON "${schema}".places (basic_category);
-    CREATE INDEX idx_overture_taxonomy_primary ON "${schema}".places (taxonomy_primary);
-    CREATE INDEX idx_overture_taxonomy_hierarchy
+    CREATE INDEX places_geom_idx ON "${schema}".places USING GIST (geom);
+    CREATE INDEX places_h3_r8_idx ON "${schema}".places (h3_r8);
+    CREATE INDEX places_basic_category_idx ON "${schema}".places (basic_category);
+    CREATE INDEX places_taxonomy_primary_idx ON "${schema}".places (taxonomy_primary);
+    CREATE INDEX places_taxonomy_hierarchy_idx
       ON "${schema}".places USING GIN (taxonomy_hierarchy);
-    CREATE INDEX idx_overture_taxonomy_alternates
+    CREATE INDEX places_taxonomy_alternates_idx
       ON "${schema}".places USING GIN (taxonomy_alternates);
   `;
 }
@@ -77,7 +77,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
     CREATE SCHEMA "${schema}";
 
     CREATE TABLE "${schema}".places (
-      gers_id           TEXT PRIMARY KEY,
+      gers_id           TEXT CONSTRAINT places_pkey PRIMARY KEY,
       name              TEXT NOT NULL DEFAULT '',
       names             JSONB,
       basic_category    TEXT,
@@ -105,19 +105,23 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
     CREATE TABLE "${schema}".poi_conflation_candidate (
       osm_type          TEXT NOT NULL,
       osm_id            BIGINT NOT NULL,
-      gers_id           TEXT NOT NULL REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
+      gers_id           TEXT NOT NULL,
       source_confidence DOUBLE PRECISION,
-      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
-      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      match_confidence  DOUBLE PRECISION NOT NULL
+        CONSTRAINT poi_conflation_candidate_match_confidence_check
+        CHECK (match_confidence BETWEEN 0 AND 1),
+      distance_m        DOUBLE PRECISION NOT NULL
+        CONSTRAINT poi_conflation_candidate_distance_m_check CHECK (distance_m >= 0),
       method            TEXT NOT NULL,
       evidence          JSONB NOT NULL,
       release           TEXT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id, gers_id)
+      CONSTRAINT poi_conflation_candidate_pkey PRIMARY KEY (osm_type, osm_id, gers_id),
+      CONSTRAINT poi_conflation_candidate_gers_id_fkey FOREIGN KEY (gers_id)
+        REFERENCES "${schema}".places (gers_id) ON DELETE CASCADE
     );
 
-    CREATE INDEX idx_candidate_osm
-      ON "${schema}".poi_conflation_candidate (osm_type, osm_id);
-    CREATE INDEX idx_candidate_gers
+    -- The primary key serves lookups by (osm_type, osm_id).
+    CREATE INDEX poi_conflation_candidate_gers_id_idx
       ON "${schema}".poi_conflation_candidate (gers_id);
 
     -- Durable assignment workspace. Candidate scoring and exact assignment are
@@ -127,29 +131,33 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       osm_type          TEXT NOT NULL,
       osm_id            BIGINT NOT NULL,
       component_id      BIGINT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id)
+      CONSTRAINT poi_conflation_component_pkey PRIMARY KEY (osm_type, osm_id)
     );
 
-    CREATE INDEX idx_conflation_component
+    CREATE INDEX poi_conflation_component_component_id_osm_type_osm_id_idx
       ON "${schema}".poi_conflation_component (component_id, osm_type, osm_id);
 
     -- The next link snapshot; publication swaps it in by renaming.
     ${buildConflationLinkTableDDL(schema, "poi_conflation_link_next")}
 
     CREATE TABLE "${schema}".conflation_state (
-      singleton         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (singleton = 1),
+      singleton         SMALLINT DEFAULT 1
+        CONSTRAINT conflation_state_singleton_check CHECK (singleton = 1),
       release           TEXT NOT NULL,
       region            TEXT NOT NULL,
-      place_count       BIGINT NOT NULL CHECK (place_count > 0),
-      sources_catalogue JSONB NOT NULL CHECK (jsonb_typeof(sources_catalogue) = 'array'),
+      place_count       BIGINT NOT NULL
+        CONSTRAINT conflation_state_place_count_check CHECK (place_count > 0),
+      sources_catalogue JSONB NOT NULL CONSTRAINT conflation_state_sources_catalogue_check
+        CHECK (jsonb_typeof(sources_catalogue) = 'array'),
       places_published_at TIMESTAMPTZ,
-      status            TEXT NOT NULL CHECK (
+      status            TEXT NOT NULL CONSTRAINT conflation_state_status_check CHECK (
         status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')
       ),
-      phase             TEXT NOT NULL DEFAULT 'extract' CHECK (
+      phase             TEXT NOT NULL DEFAULT 'extract' CONSTRAINT conflation_state_phase_check CHECK (
         phase IN ('extract', 'score', 'assign', 'publish', 'complete')
       ),
-      attempt_count     INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+      attempt_count     INTEGER NOT NULL DEFAULT 0
+        CONSTRAINT conflation_state_attempt_count_check CHECK (attempt_count >= 0),
       source_fingerprint TEXT,
       emitted_count     BIGINT,
       extracted_count   BIGINT,
@@ -170,11 +178,13 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       completed_at      TIMESTAMPTZ,
       workspace_cleaned_at TIMESTAMPTZ,
       release_files_pruned_at TIMESTAMPTZ,
-      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT conflation_state_pkey PRIMARY KEY (singleton)
     );
   ` +
     (options.deferPlacesIndexes ? "" : buildPlacesIndexesDDL(schema)) +
-    buildOsmPoisTableDDL(schema) +
+    buildOsmPoisTableDDL(schema, "osm_pois") +
+    buildOsmPoisIndexesDDL(schema, "osm_pois") +
     buildEmbeddingCacheDDL(schema)
   );
 }
@@ -196,14 +206,17 @@ export function buildConflationLinkTableDDL(schema: string, table: ConflationLin
     CREATE TABLE "${schema}"."${table}" (
       osm_type          TEXT NOT NULL,
       osm_id            BIGINT NOT NULL,
-      gers_id           TEXT NOT NULL UNIQUE,
+      gers_id           TEXT NOT NULL,
       source_confidence DOUBLE PRECISION,
-      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
-      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      match_confidence  DOUBLE PRECISION NOT NULL,
+      distance_m        DOUBLE PRECISION NOT NULL,
       method            TEXT NOT NULL,
       evidence          JSONB NOT NULL,
       release           TEXT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id)
+      CONSTRAINT "${table}_pkey" PRIMARY KEY (osm_type, osm_id),
+      CONSTRAINT "${table}_gers_id_key" UNIQUE (gers_id),
+      CONSTRAINT "${table}_match_confidence_check" CHECK (match_confidence BETWEEN 0 AND 1),
+      CONSTRAINT "${table}_distance_m_check" CHECK (distance_m >= 0)
     );
   `;
 }
@@ -217,22 +230,21 @@ export type OsmPoisTable = "osm_pois" | "osm_pois__staging";
 export function buildOsmPoisIndexesDDL(schema: string, table: OsmPoisTable): string {
   assertValidOvertureSchema(schema);
   return `
-    CREATE INDEX idx_${table}_category ON "${schema}"."${table}" (category);
-    CREATE INDEX idx_${table}_h3
+    CREATE INDEX "${table}_category_idx" ON "${schema}"."${table}" (category);
+    CREATE INDEX "${table}_h3_r8_osm_type_osm_id_idx"
       ON "${schema}"."${table}" (h3_r8, osm_type, osm_id);
-    CREATE INDEX idx_${table}_geom
-      ON "${schema}"."${table}" USING GIST (ST_Point(lng, lat));
   `;
 }
 
 /**
- * Returns the DDL for the `osm_pois` table within a given schema.
- * The parent schema is always freshly created by `buildSchemaDDL`; there is no
- * legacy-table mutation path.
+ * Returns the DDL for an OSM POI snapshot table, without its indexes. The live
+ * table and the staging table that extraction fills share this definition, and
+ * their constraint names follow the table name, which the swap relies on.
  */
-export function buildOsmPoisTableDDL(schema: string): string {
+export function buildOsmPoisTableDDL(schema: string, table: OsmPoisTable): string {
+  assertValidOvertureSchema(schema);
   return `
-    CREATE TABLE "${schema}".osm_pois (
+    CREATE TABLE "${schema}"."${table}" (
       osm_type  TEXT NOT NULL,
       osm_id    BIGINT NOT NULL,
       name      TEXT NOT NULL DEFAULT '',
@@ -241,9 +253,8 @@ export function buildOsmPoisTableDDL(schema: string): string {
       h3_r8     TEXT NOT NULL,
       category  TEXT,
       tags      JSONB,
-      PRIMARY KEY (osm_type, osm_id)
+      CONSTRAINT "${table}_pkey" PRIMARY KEY (osm_type, osm_id)
     );
-    ${buildOsmPoisIndexesDDL(schema, "osm_pois")}
   `;
 }
 

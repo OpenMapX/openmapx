@@ -11,7 +11,7 @@ import {
   getOvertureConflationState,
   rebuildOvertureLinksUnlocked,
 } from "../../src/jobs/overture/rebuild-links.js";
-import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
+import { buildOsmPoisTableDDL, buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
@@ -320,13 +320,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
        VALUES ('node', 1, 'Old POI', 50.77, 6.08, '881f1d4887fffff', 'cafes', '{}')`,
     );
     // The staging table as the extraction creates and fills it.
-    await pg.sql.unsafe(
-      `CREATE TABLE overture_places.osm_pois__staging
-         (LIKE overture_places.osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
-    );
-    await pg.sql.unsafe(
-      `ALTER TABLE overture_places.osm_pois__staging ADD PRIMARY KEY (osm_type, osm_id)`,
-    );
+    await pg.sql.unsafe(buildOsmPoisTableDDL("overture_places", "osm_pois__staging"));
     await pg.sql.unsafe(
       `INSERT INTO overture_places.osm_pois__staging
          (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
@@ -339,10 +333,9 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       { name: "New POI" },
     ]);
     expect(await relationNames("%osm_pois%")).toEqual([
-      "idx_osm_pois_category",
-      "idx_osm_pois_geom",
-      "idx_osm_pois_h3",
       "osm_pois",
+      "osm_pois_category_idx",
+      "osm_pois_h3_r8_osm_type_osm_id_idx",
       "osm_pois_pkey",
     ]);
     const [stats] = await pg.sql.unsafe<{ analyzed: boolean }[]>(

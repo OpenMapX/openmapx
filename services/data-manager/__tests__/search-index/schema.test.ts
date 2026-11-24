@@ -11,7 +11,7 @@ describe("search-index schema", () => {
     expect(ddl).toContain("GEOGRAPHY(POINT, 4326)");
     expect(ddl).toContain("authoritative_code");
     expect(ddl).toContain("current_fingerprint TEXT NOT NULL");
-    expect(ddl).not.toContain("CREATE INDEX idx_osm_search_terms_prefix");
+    expect(ddl).not.toContain("CREATE INDEX");
   });
 
   it("rejects arbitrary schema names", () => {
@@ -20,7 +20,13 @@ describe("search-index schema", () => {
 
   it("builds bulk-load indexes separately", () => {
     const ddl = buildSearchIndexIndexesDDL("osm_search__staging");
-    expect(ddl).toContain("text_pattern_ops");
-    expect(ddl).toContain("USING GIST (geom)");
+    expect(ddl).toContain(
+      'CREATE INDEX terms_normalized_term_idx ON "osm_search__staging".terms (normalized_term text_pattern_ops)',
+    );
+    expect(ddl).toContain(
+      'CREATE INDEX places_geom_idx ON "osm_search__staging".places USING GIST (geom)',
+    );
+    // The text_pattern_ops index serves exact lookups too.
+    expect(ddl.match(/CREATE INDEX/g)).toHaveLength(2);
   });
 });

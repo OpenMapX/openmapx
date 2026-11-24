@@ -62,8 +62,8 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("source_confidence DOUBLE PRECISION");
     expect(ddl).toContain("match_confidence  DOUBLE PRECISION NOT NULL");
     expect(ddl).toContain("evidence          JSONB NOT NULL");
-    expect(ddl).toContain("PRIMARY KEY (osm_type, osm_id)");
-    expect(ddl).toContain("gers_id           TEXT NOT NULL UNIQUE");
+    expect(ddl).toContain('CONSTRAINT "poi_conflation_link_pkey" PRIMARY KEY (osm_type, osm_id)');
+    expect(ddl).toContain('CONSTRAINT "poi_conflation_link_gers_id_key" UNIQUE (gers_id)');
     expect(ddl).toContain('CREATE TABLE "overture_places".poi_conflation_candidate');
     expect(ddl).toContain('CREATE TABLE "overture_places"."poi_conflation_link_next"');
     expect(ddl).toContain('CREATE UNLOGGED TABLE "overture_places".poi_conflation_component');
@@ -71,7 +71,8 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("geom              GEOMETRY(Point, 4326) NOT NULL");
     expect(ddl).toContain("h3_r8             TEXT NOT NULL");
     expect(ddl).toContain(
-      "sources_catalogue JSONB NOT NULL CHECK (jsonb_typeof(sources_catalogue) = 'array')",
+      "sources_catalogue JSONB NOT NULL CONSTRAINT conflation_state_sources_catalogue_check\n" +
+        "        CHECK (jsonb_typeof(sources_catalogue) = 'array')",
     );
     expect(ddl).toContain("phase             TEXT NOT NULL DEFAULT 'extract'");
     expect(ddl).toContain("phase_durations_ms JSONB NOT NULL");
@@ -79,7 +80,7 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("release_files_pruned_at TIMESTAMPTZ");
     expect(ddl).toContain("'waiting_for_osm'");
     expect(ddl).toContain("h3_r8     TEXT NOT NULL");
-    expect(ddl.match(/sources_catalogue/g)).toHaveLength(2);
+    expect(ddl.match(/\bsources_catalogue\b/g)).toHaveLength(2);
     expect(ddl).not.toContain("confidence DOUBLE PRECISION NOT NULL");
     expect(ddl).not.toContain("openmapx_category");
     expect(ddl).not.toContain("opening_hours");
@@ -89,7 +90,7 @@ describe("current Overture taxonomy schema", () => {
     const ddl = buildSchemaDDL("overture_places");
     for (const table of ["poi_conflation_link", "poi_conflation_link_next"]) {
       const definition = ddl.slice(ddl.indexOf(`CREATE TABLE "overture_places"."${table}" (`));
-      expect(definition).toContain("gers_id           TEXT NOT NULL UNIQUE,");
+      expect(definition).toContain(`CONSTRAINT "${table}_gers_id_key" UNIQUE (gers_id),`);
       expect(definition.slice(0, definition.indexOf(");"))).not.toContain("REFERENCES");
     }
     expect(ddl).not.toMatch(
@@ -100,7 +101,8 @@ describe("current Overture taxonomy schema", () => {
   it("can defer Places indexes until after a bulk ingest", () => {
     const ddl = buildSchemaDDL("overture_places", { deferPlacesIndexes: true });
     expect(ddl).toContain('CREATE TABLE "overture_places".places');
-    expect(ddl).not.toContain("idx_overture_geom");
-    expect(ddl).not.toContain("idx_overture_taxonomy_hierarchy");
+    expect(ddl).not.toContain("places_geom_idx");
+    expect(ddl).not.toContain("places_taxonomy_hierarchy_idx");
+    expect(ddl).toContain("osm_pois_h3_r8_osm_type_osm_id_idx");
   });
 });

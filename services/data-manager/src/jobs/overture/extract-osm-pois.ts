@@ -15,7 +15,11 @@ import {
   publishTableSwap,
 } from "../publish-schema-swap.js";
 import { assertValidRegion } from "./pull.js";
-import { assertValidOvertureSchema, buildOsmPoisIndexesDDL } from "./schema.js";
+import {
+  assertValidOvertureSchema,
+  buildOsmPoisIndexesDDL,
+  buildOsmPoisTableDDL,
+} from "./schema.js";
 
 export type { OsmFilter };
 
@@ -224,13 +228,7 @@ export async function extractOsmPois(
       const stagingTable = "osm_pois__staging";
       opts.onProgress?.("Preparing a fresh OSM POI staging table...");
       await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
-      await sql.unsafe(
-        `CREATE TABLE "${schema}"."${stagingTable}"
-       (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
-      );
-      await sql.unsafe(
-        `ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`,
-      );
+      await sql.unsafe(buildOsmPoisTableDDL(schema, stagingTable));
 
       // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
       // the database pipeline: a country-sized intermediate is gigabytes and does
