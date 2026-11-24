@@ -80,6 +80,7 @@
     "services/data-manager/__tests__/notable-places/build-postgres.test.ts",
     "services/data-manager/__tests__/offline-package-postgres-accounting.test.ts",
     "services/data-manager/__tests__/database-session-postgres.test.ts",
+    "services/data-manager/__tests__/overture/embedding-cache-postgres.test.ts",
     "services/data-manager/__tests__/overture/global-conflation-postgres.test.ts",
     "services/data-manager/__tests__/overture/runtime-postgres.test.ts",
     "services/data-manager/__tests__/overture/recovery-postgres.test.ts",
