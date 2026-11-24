@@ -273,29 +273,27 @@ async function resetForNewSource(
  * Whether the workspace the state's phase would resume from is gone. Backups
  * leave the candidates, components and staged links out, so a state restored
  * in `score`, `assign` or `publish` can record work that is not there.
- * Resuming would then publish too few links, or fail on every attempt. A crash
- * never leaves fewer candidates than the state records, and the staged links
- * are exactly the recorded count from the end of assignment until publication.
+ * Resuming would then publish too few links, or fail on every attempt. Only a
+ * workspace that is empty while the state recorded rows counts as gone: any
+ * other mismatch is a fault that publication refuses, which a fresh run would
+ * only repeat.
  */
 async function workspaceMissing(
   sql: postgres.Sql,
   schema: string,
   state: ConflationState,
 ): Promise<boolean> {
-  if (state.phase === "score" || state.phase === "assign") {
-    if (!state.candidateCount) return false;
-    const [row] = await sql.unsafe<{ present: boolean }[]>(
-      `SELECT EXISTS (SELECT 1 FROM "${schema}".poi_conflation_candidate) AS present`,
-    );
-    return row?.present !== true;
-  }
-  if (state.phase === "publish") {
-    const [row] = await sql.unsafe<{ staged: string }[]>(
-      `SELECT COUNT(*)::TEXT AS staged FROM "${schema}".poi_conflation_link_next`,
-    );
-    return Number(row?.staged ?? 0) !== (state.stagedLinkCount ?? 0);
-  }
-  return false;
+  const table =
+    state.phase === "score" || state.phase === "assign"
+      ? { name: "poi_conflation_candidate", recorded: state.candidateCount }
+      : state.phase === "publish"
+        ? { name: "poi_conflation_link_next", recorded: state.stagedLinkCount }
+        : null;
+  if (!table?.recorded) return false;
+  const [row] = await sql.unsafe<{ present: boolean }[]>(
+    `SELECT EXISTS (SELECT 1 FROM "${schema}".${table.name}) AS present`,
+  );
+  return row?.present !== true;
 }
 
 async function stateAfterTransition(sql: postgres.Sql, schema: string): Promise<ConflationState> {

@@ -336,27 +336,78 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     expect(await linkedIds()).toEqual([{ osm_id: "2" }, { osm_id: "3" }]);
   }, 60_000);
 
+  const scoredCursor = {
+    cursor: { h3: "881f1d4887fffff", osmType: "node", osmId: "2" },
+    processed: 1,
+    candidates: 1,
+  };
+
   // A backup leaves candidates, components and staged links out, while it
-  // keeps the published links and the state of the run it overlapped.
+  // keeps the published links and the state of the run it overlapped. A run
+  // whose workspace is in place resumes where it stopped.
   it.each([
     {
       phase: "score",
+      workspace: "missing",
       progress: `processed_count = 1, candidate_count = 1,
         score_cursor_h3 = x'881f1d4887fffff'::BIGINT, score_cursor_type = 'node', score_cursor_id = 2`,
+      rows: [] as [string, number, string][],
+      restarts: true,
+      scored: [undefined] as unknown[],
     },
     {
       phase: "assign",
+      workspace: "missing",
       progress: `processed_count = 2, candidate_count = 2, component_count = 2,
         assignment_cursor = 1, staged_link_count = 1`,
+      rows: [],
+      restarts: true,
+      scored: [undefined],
     },
     {
       phase: "publish",
+      workspace: "missing",
       progress: `processed_count = 2, candidate_count = 2, component_count = 2,
         assignment_cursor = 2, staged_link_count = 2`,
+      rows: [],
+      restarts: true,
+      scored: [undefined],
+    },
+    {
+      phase: "score",
+      workspace: "present",
+      progress: `processed_count = 1, candidate_count = 1,
+        score_cursor_h3 = x'881f1d4887fffff'::BIGINT, score_cursor_type = 'node', score_cursor_id = 2`,
+      rows: [["poi_conflation_candidate", 2, "g1"]],
+      restarts: false,
+      scored: [scoredCursor],
+    },
+    {
+      phase: "assign",
+      workspace: "present",
+      progress: "processed_count = 2, candidate_count = 2",
+      rows: [
+        ["poi_conflation_candidate", 2, "g1"],
+        ["poi_conflation_candidate", 3, "g2"],
+      ],
+      restarts: false,
+      scored: [],
+    },
+    {
+      phase: "publish",
+      workspace: "present",
+      progress: `processed_count = 2, candidate_count = 2, component_count = 2,
+        assignment_cursor = 2, staged_link_count = 2`,
+      rows: [
+        ["poi_conflation_link_next", 2, "g1"],
+        ["poi_conflation_link_next", 3, "g2"],
+      ],
+      restarts: false,
+      scored: [],
     },
   ])(
-    "starts a fresh conflation run when a restore left the $phase workspace empty",
-    async ({ phase, progress }) => {
+    "resumes conflation in $phase only when its workspace is $workspace and restarts otherwise",
+    async ({ phase, progress, rows, restarts, scored: expectedScores }) => {
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await insertPlace("overture_places", "g1", "First");
       await insertPlace("overture_places", "g2", "Second");
@@ -370,6 +421,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
         [phase],
       );
       await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET ${progress}`);
+      for (const [table, osmId, gersId] of rows) await insertLink(table, osmId, gersId);
       const scored: unknown[] = [];
       const dependencies = {
         fileExists: () => true,
@@ -377,8 +429,13 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
         extract: vi.fn(async () => ({ emitted: 2, extracted: 2 })),
         score: async (options: { resume?: unknown }) => {
           scored.push(options.resume);
-          await insertLink("poi_conflation_candidate", 2, "g1");
-          await insertLink("poi_conflation_candidate", 3, "g2");
+          await pg.sql.unsafe(
+            `INSERT INTO overture_places.poi_conflation_candidate
+               (osm_type, osm_id, gers_id, match_confidence, distance_m, method, evidence, release)
+             VALUES ('node', 2, 'g1', 0.9, 3, 'name', '{}', 'test'),
+                    ('node', 3, 'g2', 0.9, 3, 'name', '{}', 'test')
+             ON CONFLICT DO NOTHING`,
+          );
           return {
             candidates: 2,
             processed: 2,
@@ -403,8 +460,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
           dependencies as never,
         ),
       ).resolves.toEqual(expect.objectContaining({ status: "completed", linked: 2 }));
-      expect(dependencies.extract).toHaveBeenCalledTimes(1);
-      expect(scored).toEqual([undefined]);
+      expect(dependencies.extract).toHaveBeenCalledTimes(restarts ? 1 : 0);
+      expect(scored).toEqual(expectedScores);
       expect(
         await search.unsafe(
           `SELECT osm_id::TEXT, gers_id FROM overture_places.poi_conflation_link ORDER BY osm_id`,
@@ -419,6 +476,53 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     },
     60_000,
   );
+
+  it("refuses, rather than restarts, staged links that only partly match the recorded count", async () => {
+    await pg.sql.unsafe(buildSchemaDDL("overture_places"));
+    await insertPlace("overture_places", "g1", "First");
+    await insertPlace("overture_places", "g2", "Second");
+    await insertLink("poi_conflation_link", 1, "g1");
+    await insertLink("poi_conflation_link_next", 2, "g1");
+    await pg.sql.unsafe(
+      `INSERT INTO overture_places.conflation_state
+         (release, region, place_count, status, phase, attempt_count, source_fingerprint,
+          emitted_count, extracted_count, candidate_count, staged_link_count, sources_catalogue)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'failed', 'publish', 1, 'snapshot',
+               2, 2, 2, 2, '[]')`,
+    );
+    const extract = vi.fn(async () => ({ emitted: 2, extracted: 2 }));
+    await expect(
+      rebuildOvertureLinksUnlocked(
+        {
+          sql: pg.sql,
+          region: "europe/germany/berlin",
+          release: "2026-07-22.0",
+          dataDir: "/nonexistent",
+        },
+        {
+          fileExists: () => true,
+          fingerprint: () => "snapshot",
+          extract,
+          score: vi.fn(),
+          assign: vi.fn(),
+          validateFusedQuality: vi.fn(),
+          publish: publishOvertureLinks,
+          cleanup: cleanupOvertureConflationWorkspace,
+          preflight: async () => undefined,
+        } as never,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        status: "failed",
+        phase: "publish",
+        error: expect.stringContaining("refusing to publish it"),
+      }),
+    );
+    expect(extract).not.toHaveBeenCalled();
+    expect(
+      await search.unsafe(`SELECT osm_id::TEXT FROM overture_places.poi_conflation_link`),
+    ).toEqual([{ osm_id: "1" }]);
+  }, 60_000);
 
   it("indexes and analyzes the OSM POI snapshot before swapping it in", async () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));

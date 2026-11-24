@@ -104,8 +104,7 @@ beforeEach(() => {
     }
     if (query.includes("SELECT release, region, place_count")) return [state];
     // The workspace a resumed phase reads is in place.
-    if (query.includes("poi_conflation_candidate) AS present")) return [{ present: true }];
-    if (query.includes("AS staged FROM")) return [{ staged: state.staged_link_count }];
+    if (query.includes(") AS present")) return [{ present: true }];
     if (query.includes("phase = 'score', phase_started_at")) {
       state = {
         ...state,
