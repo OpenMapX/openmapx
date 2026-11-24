@@ -29,15 +29,8 @@ import {
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 const TRAFFIC_FLOW = join(import.meta.dirname, "fixtures", "openconditions-traffic-flow.sql");
-/** What OpenConditions' migration grants the tile function's role: the
- * tables and functions `conditions.segment_flow` reads, and nothing else. */
-const TILE_CONTRACT = `
-  GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
-  GRANT SELECT ON conditions.road_segment, conditions.segment_speed, conditions.source,
-    conditions.public_license_policy TO openmapx_tiles_owner;
-  GRANT EXECUTE ON FUNCTION conditions.segment_flow(integer, integer, integer, json),
-    conditions.flow_public_licenses(text[]), conditions.flow_osm_credit() TO openmapx_tiles_owner;
-`;
+/** What `conditions.grant_consumer_roles()` grants the tile function's role:
+ * the tables `conditions.segment_flow` reads, and nothing else. */
 const TILE_CONTRACT_TABLES = ["public_license_policy", "road_segment", "segment_speed", "source"];
 const passwords = productionPostgisPasswords();
 
@@ -697,7 +690,7 @@ integration("code planted for another role", () => {
     // OpenConditions installed after PostGIS started, as its own role with
     // the documented search path, with its real tile function, the functions
     // and tables it reads, a table holding credentials, and the grants its
-    // migration gives the tile function's role.
+    // ingest service gives the tile function's role after migrating.
     await roles.superuser.unsafe(`
       CREATE ROLE openconditions_fixture LOGIN PASSWORD '${passwords.openConditions}';
       ALTER ROLE openconditions_fixture SET search_path = conditions, extensions;
@@ -715,18 +708,19 @@ integration("code planted for another role", () => {
         INSERT INTO conditions.source
           (id, domain, format, product, access_mode, tier, operator, license, attribution,
            cadence_sec, freshness_window_sec)
-        VALUES ('open', 'traffic', 'json', 'flow', 'open', 'a', 'Fixture', 'ODbL-1.0', 'Fixture', 60, 600);
+        VALUES ('open', 'traffic', 'json', 'flow', 'bulk', 'authoritative', 'Fixture', 'ODbL-1.0',
+          'Fixture', 60, 600);
         INSERT INTO conditions.segment_speed
           (segment_id, current_kph, free_flow_kph, speed_ratio, los, confidence, contributing,
            permission_licenses, updated_at)
-        VALUES ('s1', 30, 50, 0.6, 'moderate', 'high', ARRAY['open'], ARRAY['ODbL-1.0'], now());
+        VALUES ('s1', 30, 50, 0.6, 'heavy', 'measured', ARRAY['open'], ARRAY['ODbL-1.0'], now());
         INSERT INTO conditions.public_license_policy VALUES ('ODbL-1.0');
         CREATE TABLE conditions.oauth_grant (
           source_id text PRIMARY KEY, refresh_token text NOT NULL, access_token text,
           access_token_expires_at timestamptz);
         INSERT INTO conditions.oauth_grant VALUES ('open', 'refresh-secret', 'access-secret', now());
       `);
-      await openConditions.unsafe(TILE_CONTRACT);
+      await openConditions`SELECT conditions.grant_consumer_roles()`;
     } finally {
       await openConditions.end();
     }
