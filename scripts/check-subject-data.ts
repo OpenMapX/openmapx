@@ -12,25 +12,25 @@ const CATALOGUE_IDS = new Set(SUBJECT_DATA_CATALOGUE.map((item) => item.id));
  * of the live PostgreSQL inventory in user-erasure-postgres.test.ts. */
 export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "account.user_id": "auth-accounts",
-  "account_action_receipt.actor_id": "admin-audit-attribution",
-  "account_action_receipt.target_id": "admin-audit-attribution",
+  "account_action_receipt.actor_id": "administrative-receipts",
+  "account_action_receipt.target_id": "administrative-receipts",
   "account_mail_outbox.user_id": "auth-verifications",
   "data_disclosure_event.user_id": "disclosure-events",
   "admin_audit_log.actor_id": "admin-audit-attribution",
-  "auth_policy_application.actor_id": "admin-audit-attribution",
+  "auth_policy_application.actor_id": "administrative-receipts",
   "auth_policy_state.activated_by": "admin-audit-attribution",
   "admin_job.created_by": "admin-jobs-attribution",
   "installed_extension.installed_by": "installed-component-attribution",
   "installed_integration.installed_by": "installed-component-attribution",
-  "integration_application_receipt.actor_id": "admin-audit-attribution",
+  "integration_application_receipt.actor_id": "administrative-receipts",
   "integration_secret.updated_by": "secret-update-attribution",
   "labeled_place.user_id": "labeled-places",
   "mangrove_keypair.user_id": "mangrove-keypairs",
   "mobile_auth_handoff.user_id": "mobile-auth-handoffs",
-  "oauth_access_token.user_id": "auth-oauth-resources",
+  "oauth_access_token.user_id": "auth-oauth-tokens",
   "oauth_client.user_id": "auth-oauth-resources",
   "oauth_consent.user_id": "auth-oauth-resources",
-  "oauth_refresh_token.user_id": "auth-oauth-resources",
+  "oauth_refresh_token.user_id": "auth-oauth-tokens",
   "parked_location.user_id": "parked-locations",
   "platform_configuration_preview.actor_id": "platform-configuration-previews",
   "passkey.user_id": "auth-passkeys",
@@ -101,6 +101,7 @@ export interface ManifestSubjectFixture {
 
 export interface SubjectDataInventoryOverrides {
   directUserForeignKeys?: string[];
+  directUserForeignKeyClassifications?: Record<string, string>;
   manifestSubjects?: ManifestSubjectFixture[];
 }
 
@@ -222,13 +223,26 @@ export function validateSubjectDataInventory(
   }
 
   const direct = overrides.directUserForeignKeys ?? collectDirectUserForeignKeys();
+  const classifications =
+    overrides.directUserForeignKeyClassifications ?? DIRECT_USER_FK_CLASSIFICATIONS;
+  // The registrations whose locators name each column; a column one of them
+  // locates must be classified under it, not merely under some registration.
+  const locatedBy = new Map<string, string[]>();
+  for (const registration of SUBJECT_DATA_CATALOGUE)
+    for (const { field } of registration.locators)
+      locatedBy.set(field, [...(locatedBy.get(field) ?? []), registration.id]);
   for (const foreignKey of direct) {
-    const registrationId = DIRECT_USER_FK_CLASSIFICATIONS[foreignKey];
+    const registrationId = classifications[foreignKey];
+    const owners = locatedBy.get(foreignKey);
     if (!registrationId) {
       errors.push(`direct user foreign key ${foreignKey} has no erasure/catalogue classification`);
     } else if (!CATALOGUE_IDS.has(registrationId)) {
       errors.push(
         `direct user foreign key ${foreignKey} references missing registration ${registrationId}`,
+      );
+    } else if (owners && !owners.includes(registrationId)) {
+      errors.push(
+        `direct user foreign key ${foreignKey} is classified under ${registrationId}, but the catalogue locates it under ${owners.join(", ")}`,
       );
     }
   }
