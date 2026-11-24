@@ -52,6 +52,60 @@ wait "$owned"
 finish "$?"
 `;
 
+/** The service whose database holds the platform's data, data-manager's among it. */
+const PLATFORM_DATABASE_SERVICE = "postgis";
+
+/**
+ * Data-manager data that a platform database backup leaves out. None of it is
+ * served, and data-manager rebuilds it from published data.
+ * - Unpublished builds (`__staging`) and replaced copies (`__previous`) go
+ *   with their schemas or tables. A dump therefore never reads one, so a
+ *   publication that renames or drops one during the dump neither fails the
+ *   dump nor waits for it. The component proposals exist only while
+ *   conflation assigns.
+ * - Ambient planet candidates are filled across many transactions and take
+ *   their partition's name only when they are published.
+ * - Overture conflation's workspace and the embedding cache keep their tables
+ *   and lose their rows. Conflation starts afresh after a restore taken during
+ *   a run.
+ */
+const PLATFORM_DATABASE_EXCLUSIONS: readonly string[] = [
+  ...["osm_search", "notable_places", "overture_places"].flatMap((schema) => [
+    `--exclude-schema=${schema}__staging`,
+    `--exclude-schema=${schema}__previous`,
+  ]),
+  ...[
+    "overture_places.osm_pois__staging",
+    "overture_places.osm_pois__previous",
+    "overture_places.poi_conflation_link__previous",
+    "overture_places.poi_conflation_proposal",
+    "ambient_places.candidate_*",
+  ].map((table) => `--exclude-table=${table}`),
+  ...[
+    "overture_places.poi_conflation_candidate",
+    "overture_places.poi_conflation_component",
+    "overture_places.poi_conflation_link_next",
+    "overture_embeddings.*",
+  ].map((table) => `--exclude-table-data=${table}`),
+];
+
+/**
+ * The `pg_dump` command for a service's database. Owners and grants stay in
+ * the archive: the platform database separates the API's and data-manager's
+ * roles, and a restore must keep them. The custom format compresses itself
+ * and can be restored entry by entry, each table by its owner.
+ */
+export function pgDumpCommand(serviceId: string, user: string, database: string): string[] {
+  return [
+    "pg_dump",
+    "--format=custom",
+    ...(serviceId === PLATFORM_DATABASE_SERVICE ? PLATFORM_DATABASE_EXCLUSIONS : []),
+    "-U",
+    user,
+    database,
+  ];
+}
+
 /** Stream a custom-format archive without buffering it; client exit alone is not a dump receipt. */
 export async function pgDumpToFile(
   ctx: BackupComposeContext,
@@ -81,15 +135,7 @@ export async function pgDumpToFile(
       PG_SUPERVISOR,
       "openmapx-backup-pg-dump",
       token,
-      // Owners and grants stay in the archive: the platform database
-      // separates the API's and data-manager's roles, and a restore must keep
-      // them. The custom format compresses itself and can be restored entry
-      // by entry, each table by its owner.
-      "pg_dump",
-      "--format=custom",
-      "-U",
-      user,
-      database,
+      ...pgDumpCommand(serviceId, user, database),
     ],
     { ...options, cwd: ctx.cwd, reject: false, buffer: false, stdin: "pipe" },
   );

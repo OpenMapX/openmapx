@@ -51,6 +51,43 @@ or Compose project, verify that these targets match the deployment you intend to
 restore. A recorded volume name is not an automatic migration to a newly named
 volume.
 
+### Rebuildable data the database dump leaves out
+
+The `postgis` dump keeps every data set data-manager has published: the search
+index, notable places, Overture places with their conflation links, conflation
+state and OSM POI snapshot, and every published nearby-places generation. It
+leaves out what data-manager rebuilds from those and never serves:
+
+- unpublished builds and the copies a publication replaced: the
+  `osm_search__staging`, `notable_places__staging` and
+  `overture_places__staging` schemas, the same three with `__previous`, and in
+  `overture_places` the `osm_pois__staging`, `osm_pois__previous` and
+  `poi_conflation_link__previous` tables, together with
+  `poi_conflation_proposal`, which exists only while conflation assigns links;
+- nearby places' unfinished planet candidates, the `ambient_places.candidate_*`
+  tables;
+- the rows of Overture conflation's workspace (`poi_conflation_candidate`,
+  `poi_conflation_component` and `poi_conflation_link_next` in
+  `overture_places`) and of the embedding cache in `overture_embeddings`. Their
+  tables are restored empty.
+
+These parts are only a build's work in progress and can be large. Leaving them
+out also means that a backup never reads a schema or table that a publication
+renames or drops while the backup runs.
+
+After a restore, nothing that was published needs rebuilding, apart from a data
+set whose publication overlapped the backup (see below). Work that was in
+progress when the backup was taken starts again:
+
+- An Overture conflation that was running starts again from OSM extraction at
+  its next attempt; the restored links stay in service until it publishes.
+- A planet build of nearby places that was running is restored without its
+  candidate. **Resume planet build** starts that generation again from its first
+  page, and **Discard candidate** removes it. See
+  [Ambient places publication](../developer/ambient-places-publication.md).
+- An interrupted search index, notable-places or Overture build is not in the
+  backup at all; run it again.
+
 ### Backups during data publications
 
 Backups and data publications need no mutual exclusion to keep the API
@@ -58,22 +95,19 @@ working: no data publication makes API searches wait behind a running backup
 (see [the architecture](../developer/architecture.md)). A rebuilt search index
 or notable-places index is swapped in by renaming schemas, which takes no lock
 the dump holds, so it publishes during a backup and searches move to the new
-data at once.
+data at once. Some publications do wait for a running backup, a second at a
+time, and fail or defer work when it outlasts their retries:
 
-Two Overture publications need a brief lock on a table the dump reads:
-activating a new release that carries the OSM POI snapshot over, and
-publishing the conflation links. Each waits at most a second per attempt, so
-searches are not held up, but while a backup holds that table they fail after
-about two minutes of retries and leave the published data unchanged. Run the
-Overture ingest or the conflation again after the backup; a failed activation
-rebuilds its staging schema from the downloaded release.
-
-A publication drops the old copy it replaced, the `<name>__previous` schema or
-table, once nothing reads it any more. When a backup still reads it after about
-two minutes of retries, the copy stays and the next publication of that data
-set drops it first; if the backup is still running then, that publication fails
-too and must run again later. Backups currently also dump the `__staging` and
-`__previous` schemas.
+| Operation during a backup                                                                                       | Waits for the backup?                                                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Publishing a search index or notable-places index                                                               | No. Dropping the replaced copy, `<name>__previous`, waits about two minutes, then the copy stays and the next publication of that data set drops it first. If the same backup still reads it then, that next publication fails and must run again later. |
+| Activating an Overture release, which carries the OSM POI snapshot over                                         | Yes. It fails after about two minutes and leaves the published release unchanged. Run the ingest again after the backup; it rebuilds its staging schema from the downloaded release.                                                                     |
+| Publishing an OSM POI snapshot or the conflation links                                                          | Yes. It fails after about two minutes and leaves the published data unchanged. Run the conflation again after the backup.                                                                                                                                |
+| Emptying the conflation workspace (starting to score, starting to assign, or cleaning up after a completed run) | Yes, until the backup ends. The dump keeps the workspace tables' definitions and so reads them, and conflation waits for them without a time limit.                                                                                                      |
+| Publishing nearby places, regional, Germany or planet, including a planet candidate's final attach              | No. Backups leave planet candidates out, so the rename and attach of a candidate do not wait.                                                                                                                                                            |
+| Discarding a planet candidate                                                                                   | No                                                                                                                                                                                                                                                       |
+| Dropping retired nearby-places generations after a publication                                                  | Up to about five seconds. The table then stays and the next publication drops it; the publication itself succeeds.                                                                                                                                       |
+| Enabling, disabling or rolling back nearby places                                                               | No                                                                                                                                                                                                                                                       |
 
 A backup that overlaps a publication may hold an unpublished copy of the data
 set the publication replaced. `pg_dump` reads each table by name with the
@@ -81,11 +115,20 @@ snapshot it took when it started, and after the swap the name leads to the new
 tables. The archive then holds those tables as far as they existed when the
 dump started: empty if the rebuild began later, and without the final ready
 state otherwise. After a restore from such a backup, that data set is not
-published and must be rebuilt as described in
-[Preparing data](../install/preparing-data.md). The dump itself fails if a
-publication during it swaps in a table whose columns differ from the old one,
-or publishes a `__staging` schema whose data the dump copies; create the backup
-again afterwards.
+published: its search provider returns nothing and its health check reports
+that no index is published. Rebuild it as described in
+[Preparing data](../install/preparing-data.md). An Overture release cannot be
+published while a backup reads it (see the table), so a backup always holds a
+complete Overture release.
+
+A publication that commits in the first seconds of a backup, while `pg_dump`
+still reads the tables' definitions, can make the dump fail. It can also leave
+an archive whose restore fails, because the archive names the replaced
+`<name>__previous` schema; such a restore stops before it replaces the live
+database. The dump also fails if a publication during it swaps in a table whose
+columns differ from the old one. In either case, create the backup again.
+Avoid starting rebuilds as a scheduled backup starts, and test a restore of the
+backups you rely on.
 
 ## What gets skipped, and why
 

@@ -287,6 +287,48 @@ it("writes pg_dump's custom-format archive unchanged after confirmed completion"
   expect(commands.find((args) => args.includes("pg_dump"))).toContain("--format=custom");
 });
 
+it("leaves rebuildable data-manager data out of the platform database's dump only", async () => {
+  await createBackup({ rootDir: root, name: "scope" });
+  await pgDumpToFile(
+    { cwd: root, composeArgs: ["compose"] },
+    "dawarich-postgis",
+    "postgres",
+    "dawarich",
+    join(root, "timeline.dump"),
+  );
+  const dumps = readFileSync(join(root, "commands"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[])
+    .filter((args) => args.includes("pg_dump"))
+    .map((args) => args.slice(args.indexOf("pg_dump")));
+  expect(dumps).toEqual([
+    [
+      "pg_dump",
+      "--format=custom",
+      "--exclude-schema=osm_search__staging",
+      "--exclude-schema=osm_search__previous",
+      "--exclude-schema=notable_places__staging",
+      "--exclude-schema=notable_places__previous",
+      "--exclude-schema=overture_places__staging",
+      "--exclude-schema=overture_places__previous",
+      "--exclude-table=overture_places.osm_pois__staging",
+      "--exclude-table=overture_places.osm_pois__previous",
+      "--exclude-table=overture_places.poi_conflation_link__previous",
+      "--exclude-table=overture_places.poi_conflation_proposal",
+      "--exclude-table=ambient_places.candidate_*",
+      "--exclude-table-data=overture_places.poi_conflation_candidate",
+      "--exclude-table-data=overture_places.poi_conflation_component",
+      "--exclude-table-data=overture_places.poi_conflation_link_next",
+      "--exclude-table-data=overture_embeddings.*",
+      "-U",
+      "postgres",
+      "synthetic",
+    ],
+    ["pg_dump", "--format=custom", "-U", "postgres", "dawarich"],
+  ]);
+});
+
 it("gives the tar writer an init process and a non-recreating backup bind", async () => {
   const manifestPath = join(root, "services/postgis/service.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
