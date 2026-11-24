@@ -413,9 +413,11 @@ holds up its attach or discard. A regional or Germany build creates its
 partition and attaches it in one transaction, under its partition name.
 
 A planet build restored from a backup therefore has its `generations` and
-`planet_builds` rows but no candidate table. **Resume planet build** then creates
-an empty candidate and starts that generation again from its first page;
-**Discard candidate** removes the rows.
+`planet_builds` rows but no candidate table. A restore also gives every source
+table a new identity, which the source signature pins, so such a build can never
+be resumed. **Resume planet build** refuses it with a message to discard it and
+build again; **Discard candidate** removes the rows, and a new planet build can
+then start.
 
 Data-manager creates the `ambient_places` schema at runtime and records its
 layout version in `ambient_places.state.schema_version`. It never converts an

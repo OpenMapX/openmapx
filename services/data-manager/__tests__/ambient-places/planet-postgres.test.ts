@@ -173,7 +173,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(counts).toEqual({ n: 2000, unique: 2000 });
     }, 60000);
-    it("stages a candidate under its own name and rebuilds or discards one restored without its table", async () => {
+    it("stages a candidate under its own name, and refuses to resume one restored from a backup but discards it", async () => {
       await seed(2001);
       const interrupt = () =>
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
@@ -204,8 +204,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         `candidate_${hex}_pkey`,
       ]);
 
-      // A backup leaves the candidate's table out and keeps its checkpoint.
-      await pg.sql.unsafe(`DROP TABLE ambient_places.candidate_${hex}`);
       const result = await publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
         availableBytes: ample,
       });
@@ -228,13 +226,34 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         `SELECT b.generation FROM ambient_places.planet_builds b JOIN ambient_places.generations g ON g.id=b.generation WHERE g.publication_status='staging'`,
       );
       assert.isDefined(restored);
+      // A restore from a backup: the backup left the candidate's table out,
+      // and pg_restore recreates every source table under a new OID.
+      const [before] = await pg.sql.unsafe(`SELECT 'osm_search.places'::regclass::OID AS oid`);
       await pg.sql.unsafe(
-        `DROP TABLE ambient_places.candidate_${String(restored.generation).replaceAll("-", "")}`,
+        `DROP TABLE ambient_places.candidate_${String(restored.generation).replaceAll("-", "")};
+         ALTER SCHEMA osm_search RENAME TO osm_search_dumped;
+         ${buildSearchIndexSchemaDDL("osm_search")}${buildSearchIndexIndexesDDL("osm_search")}
+         INSERT INTO osm_search.index_state SELECT * FROM osm_search_dumped.index_state;
+         INSERT INTO osm_search.places SELECT * FROM osm_search_dumped.places;
+         DROP SCHEMA osm_search_dumped CASCADE`,
       );
+      const [after] = await pg.sql.unsafe(`SELECT 'osm_search.places'::regclass::OID AS oid`);
+      expect(after?.oid).not.toBe(before?.oid);
+      await expect(
+        publisher.resumePlanetPlaces(pg.sql, restored.generation, undefined, {
+          availableBytes: ample,
+        }),
+      ).rejects.toThrow(/rows are not in the database.*discard it and build again/);
+      expect(await readPlanetStage(pg.sql)).toMatchObject({ generation: restored.generation });
       await publisher.discardPlanetPlaces(pg.sql, restored.generation);
       expect(await readPlanetStage(pg.sql)).toBeNull();
       expect(await relations("candidate_%")).toEqual([]);
       expect((await readAmbientManifest(pg.sql))?.generation).toBe(stage.generation);
+      const rebuilt = await publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+        availableBytes: ample,
+      });
+      expect(rebuilt.placeCount).toBe(2000);
+      expect((await readAmbientManifest(pg.sql))?.generation).toBe(rebuilt.generation);
     }, 60000);
     it("refuses resume after a same-release link revision, then discards only unpublished storage", async () => {
       await seed();

@@ -14,7 +14,6 @@ import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
 import {
   attachFeatureStorage,
-  createFeatureStorage,
   dropRetiredFeatureStorage,
   featureTable,
 } from "./feature-storage.js";
@@ -179,32 +178,38 @@ export async function resumePlanetPlaces(
       throw new Error("Planet attribution format changed; discard and rebuild the candidate");
     if (stage.manifest.policyVersion !== AMBIENT_POLICY_VERSION)
       throw new Error("Planet policy changed; discard and rebuild the candidate");
+    // Backups leave candidate tables out, so a build restored from one has its
+    // rows in `generations` and `planet_builds` but no candidate. A restore
+    // also gives every source table a new OID, which the source signature
+    // pins, so such a build can never be resumed; only Discard clears it.
+    const [candidate] = await connection.unsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass($1) IS NOT NULL AS exists`,
+      [featureTable(generation, "candidate")],
+    );
+    if (!candidate?.exists)
+      throw new Error(
+        "This planet candidate's rows are not in the database, for example after a restore from a backup; discard it and build again",
+      );
     const source = await capturePlanetSources(connection);
     if (source.signature !== stage.source_signature)
       throw new Error("Planet sources changed; discard and rebuild the candidate");
-    // Backups leave candidate tables out, so a restored build has its
-    // checkpoint but none of its rows; it starts again from the beginning.
-    let checkpoint = stage.checkpoint;
-    await planetTransaction(connection, pid, async (tx) => {
-      const [candidate] = await tx.unsafe<{ exists: boolean }[]>(
-        `SELECT to_regclass($1) IS NOT NULL AS exists`,
-        [featureTable(generation, "candidate")],
-      );
-      if (!candidate?.exists) {
-        await createFeatureStorage(tx, generation, "candidate");
-        checkpoint = { ...initial };
-      }
-      await tx.unsafe(
-        `UPDATE ambient_places.planet_builds SET status='running',error=NULL,checkpoint=$2::TEXT::JSONB,updated_at=clock_timestamp() WHERE generation=$1`,
-        [generation, JSON.stringify(checkpoint)],
-      );
-    });
+    await connection.unsafe(
+      `UPDATE ambient_places.planet_builds SET status='running',error=NULL,updated_at=clock_timestamp() WHERE generation=$1`,
+      [generation],
+    );
     await connection.unsafe(
       `UPDATE ambient_places.state SET last_build_id=$1,last_build_finished_at=NULL,last_build_error=NULL WHERE singleton=1`,
       [generation],
     );
     await onClaim?.();
-    return runPlanet(connection, pid, stage.manifest, stage.source_signature, checkpoint, options);
+    return runPlanet(
+      connection,
+      pid,
+      stage.manifest,
+      stage.source_signature,
+      stage.checkpoint,
+      options,
+    );
   });
 }
 async function runPlanet(

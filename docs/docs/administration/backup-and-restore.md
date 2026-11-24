@@ -83,8 +83,9 @@ progress when the backup was taken starts again:
 - An Overture conflation that was running starts again from OSM extraction at
   its next attempt; the restored links stay in service until it publishes.
 - A planet build of nearby places that was running is restored without its
-  candidate. **Resume planet build** starts that generation again from its first
-  page, and **Discard candidate** removes it. See
+  candidate. It cannot be resumed: **Resume planet build** refuses it and says
+  to discard it. Use **Discard candidate**, then publish the planet snapshot
+  again. See
   [Ambient places publication](../developer/ambient-places-publication.md).
 - An interrupted search index, notable-places or Overture build is not in the
   backup at all; run it again.
