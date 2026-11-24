@@ -79,7 +79,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { buildSchemaDDL } = await import("../../src/jobs/overture/schema");
       await fixture.sql.unsafe(buildSchemaDDL("overture_places"));
       await fixture.sql.unsafe(
-        `INSERT INTO overture_places.places (gers_id, geom, h3_r8, release) VALUES ('published-place', ST_SetSRID(ST_MakePoint(13,52),4326), '881f1d4887fffff', '2026-10-21.0')`,
+        `INSERT INTO overture_places.places (gers_id, geom, h3_r8, release) VALUES ('published-place', ST_SetSRID(ST_MakePoint(13,52),4326), x'881f1d4887fffff'::BIGINT, '2026-10-21.0')`,
       );
       await fixture.sql.unsafe(
         `INSERT INTO overture_places.conflation_state (release,region,place_count,status,sources_catalogue) VALUES ('2026-10-21.0','europe/germany',1,'pending','[{"sourceId":"overture","name":"Overture Maps"}]')`,

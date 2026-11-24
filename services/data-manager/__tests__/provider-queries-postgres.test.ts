@@ -14,6 +14,7 @@ import {
   type ConflationScoreCursor,
   scoreOvertureCandidates,
 } from "../src/jobs/overture/conflate.js";
+import { h3CellToBigint } from "../src/jobs/overture/h3.js";
 import { buildSchemaDDL } from "../src/jobs/overture/schema.js";
 import {
   buildSearchIndexIndexesDDL,
@@ -371,13 +372,13 @@ async function seedOverture(pg: PostgisFixture, extraOsmPois: OsmPoi[] = []): Pr
   for (const place of OVERTURE_PLACES)
     await pg.sql.unsafe(
       `INSERT INTO overture_places.places (gers_id, name, geom, h3_r8, basic_category, confidence, release)
-       VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7, $8)`,
+       VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5::BIGINT, $6, $7, $8)`,
       [
         place.gersId,
         place.name,
         place.lng,
         place.lat,
-        latLngToCell(place.lat, place.lng, 8),
+        h3CellToBigint(latLngToCell(place.lat, place.lng, 8)),
         place.basicCategory,
         place.confidence,
         RELEASE,
@@ -388,7 +389,7 @@ async function seedOverture(pg: PostgisFixture, extraOsmPois: OsmPoi[] = []): Pr
     `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
      SELECT osm_type, osm_id, name, ST_Point(lng, lat, 4326), h3_r8, category, tags
        FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
-         $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::TEXT[]::JSONB[])
+         $5::DOUBLE PRECISION[], $6::BIGINT[], $7::TEXT[], $8::TEXT[]::JSONB[])
          AS poi (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)`,
     [
       pois.map((poi) => poi.osmType),
@@ -396,7 +397,7 @@ async function seedOverture(pg: PostgisFixture, extraOsmPois: OsmPoi[] = []): Pr
       pois.map((poi) => poi.name),
       pois.map((poi) => poi.lat),
       pois.map((poi) => poi.lng),
-      pois.map((poi) => latLngToCell(poi.lat, poi.lng, 8)),
+      pois.map((poi) => h3CellToBigint(latLngToCell(poi.lat, poi.lng, 8))),
       pois.map((poi) => poi.category),
       pois.map((poi) => JSON.stringify(poi.tags)),
     ],

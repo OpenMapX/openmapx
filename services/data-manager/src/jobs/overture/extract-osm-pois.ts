@@ -14,6 +14,7 @@ import {
   PUBLICATION_LOCK_RETRY,
   publishTableSwap,
 } from "../publish-schema-swap.js";
+import { h3CellToBigint } from "./h3.js";
 import { assertValidRegion } from "./pull.js";
 import {
   assertValidOvertureSchema,
@@ -398,7 +399,7 @@ async function insertOsmPois(
     const names = batch.map((r) => r.name);
     const lats = batch.map((r) => r.lat);
     const lngs = batch.map((r) => r.lng);
-    const h3Cells = batch.map((r) => r.h3R8);
+    const h3Cells = batch.map((r) => h3CellToBigint(r.h3R8));
     const categories = batch.map((r) => r.category ?? null);
     const tags = batch.map((r) => JSON.stringify(r.tags));
 
@@ -408,7 +409,7 @@ async function insertOsmPois(
        SELECT r.osm_type, r.osm_id, r.name, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326),
               r.h3_r8, r.category, r.tags
          FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
-           $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::JSONB[])
+           $5::DOUBLE PRECISION[], $6::BIGINT[], $7::TEXT[], $8::JSONB[])
            AS r (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
        ON CONFLICT (osm_type, osm_id) DO UPDATE SET
          name = EXCLUDED.name,

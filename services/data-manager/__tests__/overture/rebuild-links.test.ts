@@ -210,7 +210,8 @@ describe("rebuildOvertureLinks", () => {
       extracted_count: "10",
       processed_count: "4",
       candidate_count: "3",
-      score_cursor_h3: "881f1d4887fffff",
+      // The database stores the cell as a bigint and returns it as text.
+      score_cursor_h3: "613036919424548863",
       score_cursor_type: "node",
       score_cursor_id: "42",
     });

@@ -35,6 +35,7 @@ import {
   ensureEmbeddingModel,
   SqlEmbeddingCache,
 } from "./embeddings.js";
+import { h3CellFromBigint, h3CellToBigint } from "./h3.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildConflationLinkTableDDL } from "./schema.js";
 
@@ -295,6 +296,7 @@ interface PlaceRow {
   name: string;
   lat: number;
   lng: number;
+  /** The cell's bigint as decimal text. */
   h3_r8: string;
   basic_category: string | null;
   taxonomy_primary: string | null;
@@ -313,6 +315,7 @@ interface OsmRow {
   name: string;
   lat: number;
   lng: number;
+  /** The cell's bigint as decimal text. */
   h3_r8: string;
   category: string | null;
   street: string | null;
@@ -336,7 +339,7 @@ function placeRowToPoint(row: PlaceRow): OverturePlacePoint {
     name: row.name,
     lat: Number(row.lat),
     lng: Number(row.lng),
-    h3_r8: row.h3_r8,
+    h3_r8: h3CellFromBigint(row.h3_r8),
     category: overtureTaxonomyToOpenMapX({
       basicCategory: row.basic_category,
       primary: row.taxonomy_primary,
@@ -359,7 +362,7 @@ function osmRowToPoint(row: OsmRow): OsmPoiPoint {
     name: row.name,
     lat: Number(row.lat),
     lng: Number(row.lng),
-    h3_r8: row.h3_r8,
+    h3_r8: h3CellFromBigint(row.h3_r8),
     category: row.category ?? undefined,
     addressKey: osmAddressKey(row.street, row.housenumber, row.postcode) ?? undefined,
     wikidata: row.wikidata ?? undefined,
@@ -409,6 +412,7 @@ async function insertLinkRows(
 }
 
 export interface ConflationScoreCursor {
+  /** The last scored POI's cell in h3-js hexadecimal form. */
   h3: string | null;
   osmType: string;
   osmId: string;
@@ -470,7 +474,7 @@ export async function scoreOvertureCandidates(opts: {
   let candidateCount = opts.resume?.candidates ?? 0;
   while (true) {
     const osmRows: OsmRow[] = await sql.unsafe<OsmRow[]>(
-      `SELECT osm_type, osm_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8, category,
+      `SELECT osm_type, osm_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8::TEXT, category,
               tags->>'addr:street' AS street,
               tags->>'addr:housenumber' AS housenumber,
               tags->>'addr:postcode' AS postcode,
@@ -478,29 +482,34 @@ export async function scoreOvertureCandidates(opts: {
               COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
               COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
        FROM "${schema}".osm_pois
-       WHERE ($1::TEXT IS NULL
-          OR h3_r8 > $1
-          OR (h3_r8 = $1 AND osm_type > $2)
-          OR (h3_r8 = $1 AND osm_type = $2 AND osm_id > $3::BIGINT))
+       WHERE ($1::BIGINT IS NULL
+          OR h3_r8 > $1::BIGINT
+          OR (h3_r8 = $1::BIGINT AND osm_type > $2)
+          OR (h3_r8 = $1::BIGINT AND osm_type = $2 AND osm_id > $3::BIGINT))
        ORDER BY h3_r8, osm_type, osm_id
        LIMIT $4`,
-      [cursorCell, cursorType, cursorId, OSM_PAGE_SIZE],
+      [
+        cursorCell === null ? null : h3CellToBigint(cursorCell),
+        cursorType,
+        cursorId,
+        OSM_PAGE_SIZE,
+      ],
     );
     if (osmRows.length === 0) break;
 
     const osmPois: OsmPoiPoint[] = osmRows.map(osmRowToPoint);
     const cells: string[] = [...new Set(osmPois.flatMap((poi) => gridDisk(ensureH3(poi), 1)))];
     const placeRows: PlaceRow[] = await sql.unsafe<PlaceRow[]>(
-      `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8,
+      `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8::TEXT,
               basic_category, taxonomy_primary, taxonomy_hierarchy, taxonomy_alternates,
               addresses, brand->>'wikidata' AS wikidata, phones,
               (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               confidence
        FROM "${schema}".places
-       WHERE h3_r8 = ANY($1::TEXT[])
+       WHERE h3_r8 = ANY($1::BIGINT[])
          AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE}) LIMIT 50001`,
-      [cells],
+      [cells.map(h3CellToBigint)],
     );
     if (placeRows.length > 50_000)
       throw new Error("Candidate neighborhood exceeds 50000 places; investigate dense source data");
@@ -516,7 +525,7 @@ export async function scoreOvertureCandidates(opts: {
     candidateCount += candidates.length;
     const last: OsmRow | undefined = osmRows[osmRows.length - 1];
     if (!last) break;
-    cursorCell = last.h3_r8;
+    cursorCell = h3CellFromBigint(last.h3_r8);
     cursorType = last.osm_type;
     cursorId = last.osm_id;
     await opts.onCheckpoint?.(processed, candidateCount, {

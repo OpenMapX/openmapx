@@ -178,7 +178,7 @@ RUN set -eux; \
     cmp "${tmp_dir}/h3.duckdb_extension" "${ext_dir}/v${DUCKDB_VERSION}/${ext_arch}/h3.duckdb_extension"; \
     rm -rf "$tmp_dir"; \
     chmod -R a+rX /opt/duckdb; \
-    duckdb -bail -c "SET extension_directories=['${ext_dir}']; SET autoinstall_known_extensions=false; SET autoload_known_extensions=false; LOAD httpfs; LOAD spatial; LOAD postgres; LOAD h3; SELECT CASE WHEN h3_latlng_to_cell_string(52.52, 13.405, 8) = '881f1d4895fffff' THEN 'ok' ELSE error('h3 mismatch') END;"
+    duckdb -bail -c "SET extension_directories=['${ext_dir}']; SET autoinstall_known_extensions=false; SET autoload_known_extensions=false; LOAD httpfs; LOAD spatial; LOAD postgres; LOAD h3; SELECT CASE WHEN CAST(h3_latlng_to_cell(52.52, 13.405, 8) AS BIGINT) = 613036919439228927 THEN 'ok' ELSE error('h3 mismatch') END;"
 ENV OVERTURE_DUCKDB_EXTENSION_DIR=/opt/duckdb/extensions
 
 ENV NODE_ENV=production

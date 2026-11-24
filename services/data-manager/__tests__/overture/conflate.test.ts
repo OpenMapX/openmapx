@@ -285,7 +285,8 @@ it("filters conflation candidates to open/null operating_status and skips empty 
             name: "Cafe Test",
             lat: BASE_LAT,
             lng: BASE_LNG,
-            h3_r8: "881f1d4817fffff",
+            // 881f1d4817fffff, stored as a bigint and selected as text.
+            h3_r8: "613036919307108351",
             category: "cafes",
             street: null,
             housenumber: null,
@@ -313,4 +314,5 @@ it("filters conflation candidates to open/null operating_status and skips empty 
   expect(placeQuery).toBeDefined();
   expect(placeQuery).toContain("(operating_status IS NULL OR operating_status = 'open')");
   expect(placeQuery).toContain("unnest(websites) WITH ORDINALITY");
+  expect(placeQuery).toContain("h3_r8 = ANY($1::BIGINT[])");
 });

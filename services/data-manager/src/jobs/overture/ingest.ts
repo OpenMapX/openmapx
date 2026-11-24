@@ -60,7 +60,10 @@ export function buildOvertureIngestSql(opts: {
     // an unexpected CRS fails at bind time before ST_SetCRS relabels it to
     // EPSG:4326 for the typed PostGIS geometry(Point, 4326) column.
     `  ST_SetCRS(geometry::GEOMETRY('OGC:CRS84'), 'EPSG:4326') AS geom,`,
-    `  h3_latlng_to_cell_string(ST_Y(geometry), ST_X(geometry), 8) AS h3_r8,`,
+    // h3_latlng_to_cell returns a UBIGINT. A valid cell's top bit is reserved
+    // and always 0, so it is below 2^63 and the cast to the bigint column
+    // cannot overflow; an out-of-range value would fail the cast loudly.
+    `  CAST(h3_latlng_to_cell(ST_Y(geometry), ST_X(geometry), 8) AS BIGINT) AS h3_r8,`,
     `  to_json(addresses) AS addresses,`,
     `  addresses[1].country AS country_code,`,
     `  websites,`,

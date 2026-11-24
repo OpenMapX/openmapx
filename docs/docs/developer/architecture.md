@@ -391,7 +391,10 @@ swap and must never be published again.
 Points in these schemas are `geometry(Point, 4326)` columns with a GiST index,
 so bounding-box and nearest-neighbour queries use the index; readers take
 coordinates with `ST_X`/`ST_Y` and measure distances by casting to
-`geography`. Indexes and constraints are named `<table>_<columns>_<kind>`
+`geography`. H3 cells are stored as `bigint`: a cell index's top bit is
+reserved and always 0, so the value fits, and data-manager converts at the
+database boundary from and to the hexadecimal form h3-js uses. Indexes and
+constraints are named `<table>_<columns>_<kind>`
 (`idx`, `key`, `pkey`, `fkey` or `check`), which lets a table swap rename them
 together with their table.
 

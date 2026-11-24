@@ -82,8 +82,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ('way',9007199254740993,'Dom',ST_Point(6.0839,50.7748,4326),'amenity/place_of_worship','{"level":"1"}',0.9),
           ('node',3,'Closed',ST_Point(6.08,50.77,4326),'shop/bakery','{"disused":"yes"}',1);
           INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES
-          ('gers-clinic','Clinic',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','hospital',0.8,'open','[{"property":"/names/primary","dataset":"meta"}]','2026-10-01.0'),
-          ('gers-cafe','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open','[{"property":"/names/common/de","dataset":"Microsoft"}]','2026-10-01.0');
+          ('gers-clinic','Clinic',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.8,'open','[{"property":"/names/primary","dataset":"meta"}]','2026-10-01.0'),
+          ('gers-cafe','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','[{"property":"/names/common/de","dataset":"Microsoft"}]','2026-10-01.0');
           INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
           VALUES(1,'2026-10-01.0','aachen',2,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"},{"sourceId":"meta-places","name":"Meta"},{"sourceId":"microsoft-places","name":"Microsoft"}]');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release)
@@ -102,7 +102,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ('node',12,'病院 West',ST_Point(-179.99999,0,4326),'amenity/hospital','{}',0.8),
           ('way',13,'東京病院',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8);
           INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
-          ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff',0.9,'open','2026-10-01.0');
+          ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,0.9,'open','2026-10-01.0');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
           VALUES('way',13,'g-tokyo',1,0,'fixture','{}','2026-10-01.0')`);
         const planet = await buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {

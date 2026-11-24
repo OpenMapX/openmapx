@@ -45,9 +45,9 @@ export function assertValidOvertureSchema(name: string): void {
 /**
  * Returns the raw SQL DDL string for the overture_places schema and its tables.
  * All columns follow design §5. Notable choices:
- *   - h3_r8 is TEXT (the 15-char hex H3 cell index) — H3 cell values are
- *     unsigned 64-bit integers that overflow signed int8; hex string storage
- *     sidesteps the conversion and is adequate for equality/grouping blocking.
+ *   - h3_r8 is BIGINT: the top bit of an H3 cell index is reserved and always
+ *     0, so every valid cell fits a signed bigint (8 bytes, compared as an
+ *     integer instead of through a text collation). See `./h3.ts`.
  *   - geom is GEOMETRY(POINT,4326) (not geography) for lower-cost bbox/&& ops.
  */
 export interface BuildOvertureSchemaOptions {
@@ -85,7 +85,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       taxonomy_hierarchy TEXT[],
       taxonomy_alternates TEXT[],
       geom              GEOMETRY(Point, 4326) NOT NULL,
-      h3_r8             TEXT NOT NULL,
+      h3_r8             BIGINT NOT NULL,
       addresses         JSONB,
       country_code      TEXT,
       websites          TEXT[],
@@ -167,7 +167,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       assignment_cursor BIGINT,
       staged_link_count BIGINT,
       linked_count      BIGINT,
-      score_cursor_h3   TEXT,
+      score_cursor_h3   BIGINT,
       score_cursor_type TEXT,
       score_cursor_id   BIGINT,
       phase_durations_ms JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -250,7 +250,7 @@ export function buildOsmPoisTableDDL(schema: string, table: OsmPoisTable): strin
       osm_id    BIGINT NOT NULL,
       name      TEXT NOT NULL DEFAULT '',
       geom      GEOMETRY(Point, 4326) NOT NULL,
-      h3_r8     TEXT NOT NULL,
+      h3_r8     BIGINT NOT NULL,
       category  TEXT,
       tags      JSONB,
       CONSTRAINT "${table}_pkey" PRIMARY KEY (osm_type, osm_id),

@@ -12,6 +12,7 @@ import {
 } from "./conflate.js";
 import { validateFusedOvertureQuality } from "./eval/quality-gate.js";
 import { extractOsmPois } from "./extract-osm-pois.js";
+import { h3CellFromBigint, h3CellToBigint } from "./h3.js";
 import { withOvertureOperationLock } from "./operation-lock.js";
 import { assertValidRegion } from "./pull.js";
 import { assertValidOvertureSchema } from "./schema.js";
@@ -155,13 +156,18 @@ const STATE_COLUMNS = `release, region, place_count::TEXT, status, phase, attemp
   source_fingerprint, emitted_count::TEXT, extracted_count::TEXT,
   processed_count::TEXT, candidate_count::TEXT, component_count::TEXT,
   assignment_cursor::TEXT, staged_link_count::TEXT, linked_count::TEXT,
-  score_cursor_h3, score_cursor_type, score_cursor_id::TEXT,
+  score_cursor_h3::TEXT, score_cursor_type, score_cursor_id::TEXT,
   phase_durations_ms, last_error, started_at, attempt_started_at,
   phase_started_at, completed_at, workspace_cleaned_at,
   release_files_pruned_at, updated_at`;
 
 function numeric(value: string | null): number | null {
   return value === null ? null : Number(value);
+}
+
+/** The cursor cell is stored as a bigint and reported in h3-js hexadecimal form. */
+function cursorCellParameter(cell: string | null): string | null {
+  return cell === null ? null : h3CellToBigint(cell);
 }
 
 function timestamp(value: Date | string, column: string): Date;
@@ -192,7 +198,7 @@ function mapState(row: StateRow): ConflationState {
     assignmentCursor: numeric(row.assignment_cursor),
     stagedLinkCount: numeric(row.staged_link_count),
     linkedCount: numeric(row.linked_count),
-    scoreCursorH3: row.score_cursor_h3,
+    scoreCursorH3: row.score_cursor_h3 === null ? null : h3CellFromBigint(row.score_cursor_h3),
     scoreCursorType: row.score_cursor_type,
     scoreCursorId: numeric(row.score_cursor_id),
     phaseDurationsMs: row.phase_durations_ms ?? {},
@@ -481,10 +487,17 @@ export async function rebuildOvertureLinksUnlocked(
           await sql.unsafe(
             `UPDATE "${schema}".conflation_state
              SET processed_count = $1, candidate_count = $2,
-                 score_cursor_h3 = $3, score_cursor_type = $4, score_cursor_id = $5::BIGINT,
+                 score_cursor_h3 = $3::BIGINT, score_cursor_type = $4, score_cursor_id = $5::BIGINT,
                  updated_at = NOW()
              WHERE singleton = 1 AND status = 'running' AND attempt_count = $6 AND phase = 'score'`,
-            [processed, candidates, cursor.h3, cursor.osmType, cursor.osmId, attemptCount],
+            [
+              processed,
+              candidates,
+              cursorCellParameter(cursor.h3),
+              cursor.osmType,
+              cursor.osmId,
+              attemptCount,
+            ],
           );
         },
       });
@@ -492,14 +505,14 @@ export async function rebuildOvertureLinksUnlocked(
         `UPDATE "${schema}".conflation_state
          SET ${ACCUMULATE_PHASE_DURATION}, phase = 'assign', phase_started_at = NOW(),
              processed_count = $1, candidate_count = $2,
-             score_cursor_h3 = $3, score_cursor_type = $4, score_cursor_id = $5::BIGINT,
+             score_cursor_h3 = $3::BIGINT, score_cursor_type = $4, score_cursor_id = $5::BIGINT,
              component_count = NULL, assignment_cursor = 0, staged_link_count = 0,
              updated_at = NOW()
          WHERE singleton = 1 AND status = 'running' AND attempt_count = $6 AND phase = 'score'`,
         [
           score.processed,
           score.candidates,
-          score.cursor.h3,
+          cursorCellParameter(score.cursor.h3),
           score.cursor.osmType,
           score.cursor.osmId,
           state.attemptCount,

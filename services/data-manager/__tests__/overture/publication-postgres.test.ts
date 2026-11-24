@@ -48,7 +48,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
   async function insertPlace(schema: string, gersId: string, name: string): Promise<void> {
     await pg.sql.unsafe(
       `INSERT INTO "${schema}".places (gers_id, name, geom, h3_r8, release)
-       VALUES ($1, $2, ST_SetSRID(ST_MakePoint(6.08, 50.77), 4326), '881f1d4887fffff', 'test')`,
+       VALUES ($1, $2, ST_SetSRID(ST_MakePoint(6.08, 50.77), 4326), x'881f1d4887fffff'::BIGINT, 'test')`,
       [gersId, name],
     );
   }
@@ -78,7 +78,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     await insertPlace("overture_places__staging", "new-place", "New Café");
     await pg.sql.unsafe(
       `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
-       VALUES ('node', 42, 'Carried POI', ST_Point(6.08, 50.77, 4326), '881f1d4887fffff', 'cafes', '{}')`,
+       VALUES ('node', 42, 'Carried POI', ST_Point(6.08, 50.77, 4326), x'881f1d4887fffff'::BIGINT, 'cafes', '{}')`,
     );
     for (const [schema, release] of [
       ["overture_places", "2026-07-22.0"],
@@ -317,14 +317,14 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));
     await pg.sql.unsafe(
       `INSERT INTO overture_places.osm_pois (osm_type, osm_id, name, geom, h3_r8, category, tags)
-       VALUES ('node', 1, 'Old POI', ST_Point(6.08, 50.77, 4326), '881f1d4887fffff', 'cafes', '{}')`,
+       VALUES ('node', 1, 'Old POI', ST_Point(6.08, 50.77, 4326), x'881f1d4887fffff'::BIGINT, 'cafes', '{}')`,
     );
     // The staging table as the extraction creates and fills it.
     await pg.sql.unsafe(buildOsmPoisTableDDL("overture_places", "osm_pois__staging"));
     await pg.sql.unsafe(
       `INSERT INTO overture_places.osm_pois__staging
          (osm_type, osm_id, name, geom, h3_r8, category, tags)
-       VALUES ('node', 2, 'New POI', ST_Point(6.09, 50.78, 4326), '881f1d4887fffff', 'bars', '{}')`,
+       VALUES ('node', 2, 'New POI', ST_Point(6.09, 50.78, 4326), x'881f1d4887fffff'::BIGINT, 'bars', '{}')`,
     );
 
     await publishOsmPoisSnapshot(pg.sql, "overture_places");

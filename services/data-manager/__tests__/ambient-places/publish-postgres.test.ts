@@ -85,7 +85,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(await readAmbientPlaceByGers(pg.sql, "gers-unsupported")).toBeNull();
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(
-          `INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES('gers-receipt','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open','[{"property":"/names/primary","dataset":"meta"},{"property":"/names/common/de","dataset":"Microsoft"},{"property":"/phones","dataset":"Foursquare"}]','2026-10-01.0')`,
+          `INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES('gers-receipt','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','[{"property":"/names/primary","dataset":"meta"},{"property":"/names/common/de","dataset":"Microsoft"},{"property":"/phones","dataset":"Foursquare"}]','2026-10-01.0')`,
         );
         await pg.sql.unsafe(
           `INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete',$1::TEXT::JSONB)`,
@@ -128,7 +128,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             jsonb_build_object('sourceId','meta-places','name','Meta','notes',repeat('n',8000))
           );
           INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,sources,release)
-          SELECT 'dense-'||lpad(i::TEXT,5,'0'),'Cafe '||i,ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open',
+          SELECT 'dense-'||lpad(i::TEXT,5,'0'),'Cafe '||i,ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open',
             jsonb_build_array(jsonb_build_object('property','/names/primary','dataset','meta','record_id',repeat('x',10000)||i)),
             '2026-10-01.0' FROM generate_series(1,300) i`);
         const distinct = await buildAmbientPlaces(pg.sql, region);
@@ -170,7 +170,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','retained','ready',now(),now(),now());
           INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',1,'Clinic',ST_Point(6.08,50.77,4326),'amenity/hospital','{}',0.8);
-          INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES('gers-retained','Retained cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open','2026-10-01.0');
+          INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES('gers-retained','Retained cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','2026-10-01.0');
           INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]')`);
         const a = await buildAmbientPlaces(pg.sql, region);
         const bytes = await readAmbientTile(pg.sql, a.generation, tile.z, tile.x, tile.y);
@@ -257,9 +257,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(ambientLayer(bytes).length).toBe(1);
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES
-        ('gers-a','Clinic',ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','hospital',0.8,'open','2026-10-01.0'),
-        ('gers-b','Cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'881f1d4887fffff','cafe',0.8,'open','2026-10-01.0'),
-        ('gers-closed','Closed',ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','cafe',0.8,'permanently_closed','2026-10-01.0');
+        ('gers-a','Clinic',ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.8,'open','2026-10-01.0'),
+        ('gers-b','Cafe',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'open','2026-10-01.0'),
+        ('gers-closed','Closed',ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.8,'permanently_closed','2026-10-01.0');
         INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','europe/germany',3,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release) VALUES('node',9007199254740993,'gers-a',0.8,1,0,'fixture','{}','2026-10-01.0')`);
         const b = await buildAmbientPlaces(pg.sql, region);
@@ -368,7 +368,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ('node',3,'Upper-floor clinic',ST_Point(5.8999,50.77,4326),'amenity/hospital','{"level":"1"}',0.8)`);
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','aachen',4,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
-          INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) SELECT 'boundary-'||i,'Clinic '||i,ST_SetSRID(ST_MakePoint(5.9001,50.77),4326),'881f1d4887fffff','hospital',0.8,'open','2026-10-01.0' FROM generate_series(1,4) i;
+          INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release) SELECT 'boundary-'||i,'Clinic '||i,ST_SetSRID(ST_MakePoint(5.9001,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.8,'open','2026-10-01.0' FROM generate_series(1,4) i;
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release) SELECT 'node',i,'boundary-'||i,0.8,1,14,'fixture','{}','2026-10-01.0' FROM generate_series(1,3) i`);
         const a = await buildAmbientPlaces(pg.sql, region);
         const rows = await pg.sql.unsafe<{ id: string }[]>(
@@ -408,7 +408,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',1,'Inside Clinic',ST_Point(5.9001,50.77,4326),'amenity/hospital','{}',0.8)`);
           await pg.sql.unsafe(buildSchemaDDL("overture_places"));
           await pg.sql.unsafe(
-            `INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES('boundary-gers','Excluded outside name','{"common":{"de":"Excluded outside locale"}}',ST_SetSRID(ST_MakePoint(5.8999,50.77),4326),'881f1d4887fffff','cafe',0.1,'permanently_closed','[{"property":"/phones","dataset":"Foursquare"}]','2026-10-01.0')`,
+            `INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,sources,release) VALUES('boundary-gers','Excluded outside name','{"common":{"de":"Excluded outside locale"}}',ST_SetSRID(ST_MakePoint(5.8999,50.77),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.1,'permanently_closed','[{"property":"/phones","dataset":"Foursquare"}]','2026-10-01.0')`,
           );
           await pg.sql.unsafe(
             `INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue) VALUES(1,'2026-10-01.0','aachen',1,now(),'completed','complete',$1::TEXT::JSONB)`,
