@@ -551,6 +551,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     it("counts Overture places on the box and none just outside it", async () => {
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       const [concept] = openMapXCategoryToOvertureConcepts(baseline.category);
+      if (!concept) throw new Error(`no Overture concept for ${baseline.category}`);
       for (const [name, lng, lat] of positions) {
         await pg.sql.unsafe(
           `INSERT INTO overture_places.places (gers_id, name, basic_category, geom, h3_r8, release)
