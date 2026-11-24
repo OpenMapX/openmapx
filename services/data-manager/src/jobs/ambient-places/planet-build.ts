@@ -148,8 +148,8 @@ export async function buildPlanetPlaces(
         [generation],
       );
     });
-    await dropRetiredFeatureStorage(sql, { retry: options.lockRetry });
     await onClaim?.();
+    await dropRetiredFeatureStorage(sql, { retry: options.cleanupRetry });
     return runPlanet(connection, pid, manifest, source.signature, { ...initial }, options);
   });
 }

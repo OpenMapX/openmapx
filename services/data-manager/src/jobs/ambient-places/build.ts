@@ -287,7 +287,7 @@ export async function buildAmbientPlaces(
       },
       "isolation level repeatable read",
     );
-    await dropRetiredFeatureStorage(sql, { retry: options.lockRetry });
+    await dropRetiredFeatureStorage(sql, { retry: options.cleanupRetry });
     return published;
   } catch (error) {
     if (startedAt !== null) {

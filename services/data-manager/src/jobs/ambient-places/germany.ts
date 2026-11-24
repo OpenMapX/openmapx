@@ -31,8 +31,10 @@ import {
 export interface AmbientBuildOptions {
   availableBytes?: () => Promise<number>;
   onProgress?: (progress: AmbientBuildProgress) => void | Promise<void>;
-  /** How often attaching or dropping a partition is retried when it times out waiting for a lock. */
+  /** How often attaching a partition is retried when it times out waiting for a lock. */
   lockRetry?: LockRetry;
+  /** How long dropping retired partitions after the publication may wait for readers. */
+  cleanupRetry?: LockRetry;
 }
 interface OsmState {
   region: string;

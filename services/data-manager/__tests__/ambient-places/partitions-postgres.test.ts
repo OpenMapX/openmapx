@@ -2,6 +2,7 @@ import { readAmbientTile } from "@openmapx/core/ambient-places-server";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 import { buildAmbientPlaces } from "../../src/jobs/ambient-places/build.js";
+import { dropRetiredFeatureStorage } from "../../src/jobs/ambient-places/feature-storage.js";
 import { PUBLICATION_LOCK_TIMEOUT_MS } from "../../src/jobs/publish-schema-swap.js";
 import {
   buildSearchIndexIndexesDDL,
@@ -105,7 +106,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await readingActive;
         const startedD = performance.now();
         const d = buildAmbientPlaces(pg.sql, region, undefined, {
-          lockRetry: { attempts: 10, backoffMs: 250 },
+          cleanupRetry: { attempts: 10, backoffMs: 250 },
         });
         const firstProbes = await whileRunning(d);
         // Dropping the expired partition waited for the reader to finish.
@@ -145,10 +146,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await released;
         });
         await holdingAll;
-        const e = buildAmbientPlaces(pg.sql, region, undefined, {
-          lockRetry: { attempts: 2, backoffMs: 100 },
-        });
+        // With the default cleanup budget the job ends within seconds.
+        const startedE = performance.now();
+        const e = buildAmbientPlaces(pg.sql, region);
         const secondProbes = await whileRunning(e);
+        expect(performance.now() - startedE).toBeLessThan(10_000);
         expect(Math.max(...secondProbes)).toBeLessThan(PUBLICATION_LOCK_TIMEOUT_MS);
         // The publication succeeds; the retired generation is no longer
         // served, and its table waits for the reader to finish.
@@ -161,6 +163,22 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await buildAmbientPlaces(pg.sql, region);
         expect(await exists(b.generation)).toBe(false);
         expect(await partitions()).not.toContain(partition(b.generation));
+
+        // Two cleanups at once: one does the work, the other leaves it to it,
+        // and neither reports a failure.
+        await pg.sql.unsafe(`DELETE FROM ambient_places.generations WHERE id=$1`, [c.generation]);
+        const cleanups = postgres(pg.connectionString, { max: 2 });
+        try {
+          expect(
+            await Promise.all([
+              dropRetiredFeatureStorage(cleanups),
+              dropRetiredFeatureStorage(cleanups),
+            ]),
+          ).toEqual([true, true]);
+        } finally {
+          await cleanups.end({ timeout: 2 });
+        }
+        expect(await exists(c.generation)).toBe(false);
       } finally {
         await reader.end({ timeout: 2 });
         await probe.end({ timeout: 2 });

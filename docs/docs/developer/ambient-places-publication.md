@@ -395,11 +395,17 @@ Martin serves only its configured sources, and its roles have no access to the
 Retiring a generation takes two steps. Its row is deleted inside the next
 publication's transaction, which stops every manifest, tile and GERS read of it.
 After that transaction commits, data-manager detaches the partition with
-`DETACH PARTITION … CONCURRENTLY` and drops the detached table. Neither statement
-makes readers of other generations wait. Each waits at most one second for a lock
-and is retried with growing pauses. When a long reader, such as a backup, still
-holds the feature table after the retries, the partition stays behind and the
-next publication drops it. The publication itself succeeds.
+`DETACH PARTITION … CONCURRENTLY` and drops the detached table. A planet build
+answers its admission request before this step. Neither statement makes readers
+of other generations wait. Each waits at most one second for a lock and is tried
+three times within about five seconds. When a long reader, such as a backup,
+still holds the feature table after that, the partition stays behind and the next
+publication drops it. The publication itself succeeds, and its job ends.
+
+A planet candidate's table exists from the start of its build, so a backup that
+starts during the build also reads it. The candidate's final attach then waits
+for that backup, at most one second per attempt, and fails after its retries.
+The last good map stays active and the candidate can be resumed after the backup.
 
 Data-manager creates the `ambient_places` schema at runtime and records its
 layout version in `ambient_places.state.schema_version`. It never converts an

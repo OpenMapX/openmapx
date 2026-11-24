@@ -72,6 +72,7 @@
     "services/data-manager/__tests__/ambient-places/germany-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/partitions-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/planet-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/planet-retirement-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/planet-serving-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/publish-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/reader-fixture-postgres.test.ts",

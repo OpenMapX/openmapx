@@ -1,3 +1,4 @@
+import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import type postgres from "postgres";
 import { jobChildLogger } from "../../logger.js";
 import {
@@ -12,16 +13,25 @@ import {
  * Each generation's features live in one partition of `ambient_places.features`.
  * A build creates it as a standalone table and fills it; publication attaches
  * it, which takes SHARE UPDATE EXCLUSIVE on the parent and so never waits for
- * readers. Retiring a generation deletes its row first, which stops every
- * read of it, then detaches the partition concurrently and drops it. Neither
- * step queues readers behind it, and each waits for a lock at most
- * `lockTimeoutMs` per attempt.
+ * readers of the parent (it does wait for readers of the new table itself,
+ * such as a backup that started after a planet candidate was created).
+ * Retiring a generation deletes its row first, which stops every read of it,
+ * then detaches the partition concurrently and drops it. Neither step queues
+ * readers behind it, and each waits for a lock at most `lockTimeoutMs` per
+ * attempt.
  */
 
 export interface FeatureStorageLocking {
   lockTimeoutMs?: number;
   retry?: LockRetry;
 }
+
+/**
+ * Dropping retired partitions after a publication committed is only tidying:
+ * the next publication tries again. So it waits for a long reader, such as a
+ * backup, for a few seconds at most instead of holding the job open.
+ */
+export const RETIRED_STORAGE_CLEANUP_RETRY: LockRetry = { attempts: 3, backoffMs: 500 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PARTITION = /^features_[0-9a-f]{32}$/;
@@ -91,35 +101,59 @@ export async function retireAmbientGenerations(tx: postgres.TransactionSql): Pro
   );
 }
 
-async function detach(connection: postgres.ReservedSql, name: string): Promise<void> {
+async function attachment(
+  connection: postgres.ReservedSql,
+  name: string,
+): Promise<{ pending: boolean } | undefined> {
   const [attached] = await connection.unsafe<{ pending: boolean }[]>(
     `SELECT inhdetachpending AS pending FROM pg_inherits WHERE inhrelid=to_regclass($1)`,
     [`ambient_places.${name}`],
   );
+  return attached;
+}
+
+async function detach(connection: postgres.ReservedSql, name: string): Promise<void> {
+  const attached = await attachment(connection, name);
   if (!attached) return;
-  // A detach that timed out waiting for older readers stays pending until finalized.
-  await connection.unsafe(
-    `ALTER TABLE ambient_places.features DETACH PARTITION ambient_places.${name} ${attached.pending ? "FINALIZE" : "CONCURRENTLY"}`,
-  );
+  try {
+    // A detach that timed out waiting for older readers stays pending until finalized.
+    await connection.unsafe(
+      `ALTER TABLE ambient_places.features DETACH PARTITION ambient_places.${name} ${attached.pending ? "FINALIZE" : "CONCURRENTLY"}`,
+    );
+  } catch (error) {
+    // Another cleanup, such as one from an earlier version of this process,
+    // may have completed the detach or dropped the table in the meantime.
+    if (isLockTimeout(error) || (await attachment(connection, name))) throw error;
+  }
 }
 
 /**
  * Drops the partitions of generations that no longer have a row: retired
  * ones, and those a failed earlier attempt left behind. It runs outside any
- * transaction, as a concurrent detach requires. Returns false when a reader
+ * transaction, as a concurrent detach requires, and waits for readers only
+ * within `retry` (by default a few seconds). Returns false when a reader
  * outlasted the retries or another error stopped it; the next publication
- * tries again, so no error here fails the publication.
+ * tries again, so no error here fails the publication. A cleanup that finds
+ * another one running leaves the work to it.
  */
 export async function dropRetiredFeatureStorage(
   sql: postgres.Sql,
   locking: FeatureStorageLocking = {},
 ): Promise<boolean> {
   const timeout = lockTimeout(locking);
-  const retry = locking.retry ?? PUBLICATION_LOCK_RETRY;
+  const retry = locking.retry ?? RETIRED_STORAGE_CLEANUP_RETRY;
+  const [namespace, key] = DATA_ADVISORY_LOCKS.ambientPartitionCleanup;
   let connection: postgres.ReservedSql | undefined;
+  let locked = false;
   try {
     connection = await sql.reserve();
     const reserved = connection;
+    const [claim] = await reserved.unsafe<{ locked: boolean }[]>(
+      `SELECT pg_try_advisory_lock($1,$2) AS locked`,
+      [namespace, key],
+    );
+    locked = claim?.locked === true;
+    if (!locked) return true;
     await reserved.unsafe(`SET lock_timeout='${timeout}'`);
     const orphans = await reserved.unsafe<{ name: string }[]>(
       `SELECT c.relname AS name FROM pg_class c LEFT JOIN pg_inherits i ON i.inhrelid=c.oid
@@ -130,7 +164,9 @@ export async function dropRetiredFeatureStorage(
     for (const { name } of orphans) {
       if (!PARTITION.test(name)) throw new Error(`Unexpected ambient partition "${name}"`);
       await retryOnLockTimeout(retry, () => detach(reserved, name));
-      await retryOnLockTimeout(retry, () => reserved.unsafe(`DROP TABLE ambient_places.${name}`));
+      await retryOnLockTimeout(retry, () =>
+        reserved.unsafe(`DROP TABLE IF EXISTS ambient_places.${name}`),
+      );
     }
     return true;
   } catch (error) {
@@ -148,6 +184,10 @@ export async function dropRetiredFeatureStorage(
   } finally {
     if (connection) {
       await connection.unsafe(`RESET lock_timeout`).catch(() => undefined);
+      if (locked)
+        await connection
+          .unsafe(`SELECT pg_advisory_unlock($1,$2)`, [namespace, key])
+          .catch(() => undefined);
       connection.release();
     }
   }

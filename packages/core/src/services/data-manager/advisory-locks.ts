@@ -21,6 +21,8 @@ export const DATA_ADVISORY_LOCKS = {
   notablePlaces: [1_330_466_120, 3],
   /** Ambient publication: its writer exclusively, readers of its schema shared. */
   ambientPublication: 139399,
+  /** One cleanup of retired ambient partitions at a time; others skip theirs. */
+  ambientPartitionCleanup: [1_330_466_120, 4],
   /** Offline package accounting: the global lock, then the seeds that hash a
    * principal and a request key into their own locks. */
   offlineAccountingGlobal: 606,
