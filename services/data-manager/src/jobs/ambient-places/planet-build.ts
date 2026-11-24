@@ -14,6 +14,7 @@ import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import { assertPlanetDiskCapacity, planetPlaceLimit } from "./capacity.js";
 import {
   attachFeatureStorage,
+  createFeatureStorage,
   dropRetiredFeatureStorage,
   featureTable,
 } from "./feature-storage.js";
@@ -181,23 +182,29 @@ export async function resumePlanetPlaces(
     const source = await capturePlanetSources(connection);
     if (source.signature !== stage.source_signature)
       throw new Error("Planet sources changed; discard and rebuild the candidate");
-    await connection.unsafe(
-      `UPDATE ambient_places.planet_builds SET status='running',error=NULL,updated_at=clock_timestamp() WHERE generation=$1`,
-      [generation],
-    );
+    // Backups leave candidate tables out, so a restored build has its
+    // checkpoint but none of its rows; it starts again from the beginning.
+    let checkpoint = stage.checkpoint;
+    await planetTransaction(connection, pid, async (tx) => {
+      const [candidate] = await tx.unsafe<{ exists: boolean }[]>(
+        `SELECT to_regclass($1) IS NOT NULL AS exists`,
+        [featureTable(generation, "candidate")],
+      );
+      if (!candidate?.exists) {
+        await createFeatureStorage(tx, generation, "candidate");
+        checkpoint = { ...initial };
+      }
+      await tx.unsafe(
+        `UPDATE ambient_places.planet_builds SET status='running',error=NULL,checkpoint=$2::TEXT::JSONB,updated_at=clock_timestamp() WHERE generation=$1`,
+        [generation, JSON.stringify(checkpoint)],
+      );
+    });
     await connection.unsafe(
       `UPDATE ambient_places.state SET last_build_id=$1,last_build_finished_at=NULL,last_build_error=NULL WHERE singleton=1`,
       [generation],
     );
     await onClaim?.();
-    return runPlanet(
-      connection,
-      pid,
-      stage.manifest,
-      stage.source_signature,
-      stage.checkpoint,
-      options,
-    );
+    return runPlanet(connection, pid, stage.manifest, stage.source_signature, checkpoint, options);
   });
 }
 async function runPlanet(
@@ -209,7 +216,7 @@ async function runPlanet(
   options: AmbientBuildOptions,
 ): Promise<AmbientManifest> {
   const generation = manifest.generation;
-  const table = featureTable(generation);
+  const table = featureTable(generation, "candidate");
   const available = options.availableBytes ?? freeBytesInPostgresContainer;
   const limit = planetPlaceLimit();
   try {
@@ -241,7 +248,7 @@ async function runPlanet(
           throw new Error(
             `Planet ambient output exceeds ${limit} places; size and configure capacity before retrying`,
           );
-        await insertAmbientFeatures(tx, generation, batch.places);
+        await insertAmbientFeatures(tx, generation, batch.places, "candidate");
         await tx.unsafe(
           `UPDATE ambient_places.planet_builds SET checkpoint=$2::TEXT::JSONB,updated_at=clock_timestamp() WHERE generation=$1`,
           [generation, JSON.stringify(next)],
@@ -278,7 +285,7 @@ async function runPlanet(
     await options.onProgress?.(checkpoint);
     await planetTransaction(connection, pid, async (tx) => {
       await tx.unsafe(`SET LOCAL lock_timeout='1000ms'; SET LOCAL statement_timeout='120000ms'`);
-      await attachFeatureStorage(tx, generation, { retry: options.lockRetry });
+      await attachFeatureStorage(tx, generation, { retry: options.lockRetry, from: "candidate" });
       await tx.unsafe(
         `UPDATE ambient_places.generations SET manifest=$2::TEXT::JSONB,publication_status='published',published_at=clock_timestamp(),cache_lease_until=clock_timestamp()+interval '7 days 1 minute' WHERE id=$1`,
         [generation, JSON.stringify(manifest)],
@@ -318,7 +325,7 @@ async function runPlanet(
   }
 }
 export async function discardPlanetPlaces(sql: postgres.Sql, generation: string): Promise<void> {
-  const table = featureTable(generation);
+  const table = featureTable(generation, "candidate");
   return withPlanetSession(sql, async (connection, pid) => {
     await planetTransaction(connection, pid, async (tx) => {
       const [row] = await tx.unsafe<{ publication_status: string }[]>(
@@ -327,7 +334,8 @@ export async function discardPlanetPlaces(sql: postgres.Sql, generation: string)
       );
       if (!row || row.publication_status !== "staging")
         throw new Error("Only an unpublished planet candidate can be discarded");
-      await tx.unsafe(`SET LOCAL lock_timeout='1000ms'; DROP TABLE ${table}`);
+      // A restored candidate has no table: backups leave it out.
+      await tx.unsafe(`SET LOCAL lock_timeout='1000ms'; DROP TABLE IF EXISTS ${table}`);
       await tx.unsafe(`DELETE FROM ambient_places.generations WHERE id=$1`, [generation]);
       await tx.unsafe(
         `UPDATE ambient_places.state SET last_build_error=NULL WHERE singleton=1 AND last_build_id=$1`,

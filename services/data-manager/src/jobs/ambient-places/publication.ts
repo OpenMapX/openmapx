@@ -10,6 +10,7 @@ import type postgres from "postgres";
 import {
   attachFeatureStorage,
   createFeatureStorage,
+  type FeatureStorage,
   type FeatureStorageLocking,
   featureTable,
   retireAmbientGenerations,
@@ -47,7 +48,11 @@ export async function prepareAmbientGeneration(tx: postgres.TransactionSql): Pro
     );
   return randomUUID();
 }
-/** Records a new generation and creates its still unattached feature partition. */
+/**
+ * Records a new generation and creates its still unattached feature table: a
+ * candidate for a generation staged across transactions, otherwise the
+ * partition its transaction attaches.
+ */
 export async function insertAmbientGeneration(
   tx: postgres.TransactionSql,
   manifest: AmbientManifest,
@@ -58,14 +63,19 @@ export async function insertAmbientGeneration(
     `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,$2::TEXT::JSONB,$3,$4)`,
     [manifest.generation, JSON.stringify(manifest), storage, publicationStatus],
   );
-  await createFeatureStorage(tx, manifest.generation);
+  await createFeatureStorage(
+    tx,
+    manifest.generation,
+    publicationStatus === "staging" ? "candidate" : "partition",
+  );
 }
 export async function insertAmbientFeatures(
   tx: postgres.TransactionSql,
   generation: string,
   places: AmbientPlace[],
+  storage: FeatureStorage = "partition",
 ): Promise<void> {
-  const target = featureTable(generation);
+  const target = featureTable(generation, storage);
   for (let offset = 0; offset < places.length; offset += 500) {
     const rows = places.slice(offset, offset + 500).map((p) => ({
       id: p.id,

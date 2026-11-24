@@ -6,6 +6,7 @@ import {
   type LockRetry,
   PUBLICATION_LOCK_RETRY,
   PUBLICATION_LOCK_TIMEOUT_MS,
+  renameTable,
   retryOnLockTimeout,
 } from "../publish-schema-swap.js";
 
@@ -13,8 +14,12 @@ import {
  * Each generation's features live in one partition of `ambient_places.features`.
  * A build creates it as a standalone table and fills it; publication attaches
  * it, which takes SHARE UPDATE EXCLUSIVE on the parent and so never waits for
- * readers of the parent (it does wait for readers of the new table itself,
- * such as a backup that started after a planet candidate was created).
+ * readers of the parent. A planet build fills its table across many
+ * transactions, so the table is staged as `candidate_<hex>` and takes its
+ * partition name `features_<hex>` only in the attaching transaction. Backups
+ * leave out every `candidate_*` table by that name, so none reads one and the
+ * attach does not wait for a backup. A regional build creates and attaches its
+ * partition in one transaction, under the partition name from the start.
  * Retiring a generation deletes its row first, which stops every read of it,
  * then detaches the partition concurrently and drops it. Neither step queues
  * readers behind it, and each waits for a lock at most `lockTimeoutMs` per
@@ -25,6 +30,9 @@ export interface FeatureStorageLocking {
   lockTimeoutMs?: number;
   retry?: LockRetry;
 }
+
+/** A generation's table before publication: its partition, or a planet candidate. */
+export type FeatureStorage = "partition" | "candidate";
 
 /**
  * Dropping retired partitions after a publication committed is only tidying:
@@ -37,14 +45,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PARTITION = /^features_[0-9a-f]{32}$/;
 
 /** Identifiers derive only from a validated UUID, never an operator-supplied path. */
-function partitionName(generation: string): string {
+function storageName(generation: string, storage: FeatureStorage = "partition"): string {
   if (!UUID.test(generation)) throw new Error("Invalid ambient generation");
-  return `features_${generation.replaceAll("-", "").toLowerCase()}`;
+  const prefix = storage === "candidate" ? "candidate" : "features";
+  return `${prefix}_${generation.replaceAll("-", "").toLowerCase()}`;
 }
 
 /** The schema-qualified table that holds one generation's features. */
-export function featureTable(generation: string): string {
-  return `ambient_places.${partitionName(generation)}`;
+export function featureTable(generation: string, storage: FeatureStorage = "partition"): string {
+  return `ambient_places.${storageName(generation, storage)}`;
 }
 
 function lockTimeout(locking: FeatureStorageLocking): string {
@@ -54,32 +63,45 @@ function lockTimeout(locking: FeatureStorageLocking): string {
 }
 
 /**
- * Creates the generation's unattached partition. Its CHECK lets the later
- * attach skip the validation scan. Indexes are maintained while it is filled.
+ * Creates the generation's unattached table. Its CHECK lets the later attach
+ * skip the validation scan. Indexes are maintained while it is filled; their
+ * names and the constraints' follow the table's name.
  */
 export async function createFeatureStorage(
   tx: postgres.TransactionSql,
   generation: string,
+  storage: FeatureStorage = "partition",
 ): Promise<void> {
-  const name = partitionName(generation);
+  const name = storageName(generation, storage);
   await tx.unsafe(`CREATE TABLE ambient_places.${name} (LIKE ambient_places.features INCLUDING DEFAULTS INCLUDING CONSTRAINTS INCLUDING INDEXES);
     ALTER TABLE ambient_places.${name} ADD CONSTRAINT ${name}_generation_check CHECK(generation='${generation}'::UUID)`);
 }
 
-/** Attaches the generation's partition inside the publication's transaction. */
+export interface AttachFeatureStorageOptions extends FeatureStorageLocking {
+  /** The table to attach; a candidate first takes the partition's name. */
+  from?: FeatureStorage;
+}
+
+/**
+ * Attaches the generation's partition inside the publication's transaction.
+ * Renaming a candidate, its indexes and its constraints locks only that new
+ * table, which nothing but its build reads.
+ */
 export async function attachFeatureStorage(
   tx: postgres.TransactionSql,
   generation: string,
-  locking: FeatureStorageLocking = {},
+  options: AttachFeatureStorageOptions = {},
 ): Promise<void> {
-  const name = partitionName(generation);
-  const timeout = lockTimeout(locking);
-  await retryOnLockTimeout(locking.retry ?? PUBLICATION_LOCK_RETRY, () =>
+  const name = storageName(generation);
+  const timeout = lockTimeout(options);
+  await retryOnLockTimeout(options.retry ?? PUBLICATION_LOCK_RETRY, () =>
     tx.savepoint(async (savepoint) => {
       const [setting] = await savepoint.unsafe<{ previous: string }[]>(
         `SELECT current_setting('lock_timeout') AS previous`,
       );
       await savepoint.unsafe(`SELECT set_config('lock_timeout',$1,true)`, [timeout]);
+      if (options.from === "candidate")
+        await renameTable(savepoint, "ambient_places", storageName(generation, "candidate"), name);
       await savepoint.unsafe(
         `ALTER TABLE ambient_places.features ATTACH PARTITION ambient_places.${name} FOR VALUES IN ('${generation}')`,
       );

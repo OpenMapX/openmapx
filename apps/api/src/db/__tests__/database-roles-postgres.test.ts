@@ -261,18 +261,49 @@ integration("database roles", () => {
       );
       await attachFeatureStorage(tx, generation);
     });
+    // A planet candidate is staged under its own name and renamed as it is attached.
+    const candidate = "00000000-0000-4000-8000-0000000000b1";
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe(
+        `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,'{}','planet','staging')`,
+        [candidate],
+      );
+      await createFeatureStorage(tx, candidate, "candidate");
+      await tx.unsafe(
+        `INSERT INTO ${featureTable(candidate, "candidate")}(generation,id,name,category,rank,min_zoom,tenant,sources,geom)
+         VALUES($1,'osm:node/2','Pharmacy','pharmacy',1,13,false,'osm',ST_Transform(ST_SetSRID(ST_MakePoint(6.09,50.78),4326),3857))`,
+        [candidate],
+      );
+    });
+    await dataManager.begin(async (tx) => {
+      await attachFeatureStorage(tx, candidate, { from: "candidate" });
+      await tx.unsafe(
+        `UPDATE ambient_places.generations SET publication_status='published',cache_lease_until=now()-interval '1 second' WHERE id=$1`,
+        [candidate],
+      );
+    });
     expect(
       await api.unsafe(
-        "SELECT id, ST_SRID(geom) AS srid FROM ambient_places.features WHERE generation = $1",
-        [generation],
+        "SELECT id, ST_SRID(geom) AS srid FROM ambient_places.features WHERE generation IN ($1, $2) ORDER BY id",
+        [generation, candidate],
       ),
-    ).toEqual([{ id: "osm:node/1", srid: 3857 }]);
+    ).toEqual([
+      { id: "osm:node/1", srid: 3857 },
+      { id: "osm:node/2", srid: 3857 },
+    ]);
+    expect(
+      await superuser.unsafe(
+        "SELECT to_regclass($1) IS NULL AS renamed, to_regclass($2) IS NOT NULL AS attached",
+        [featureTable(candidate, "candidate"), featureTable(candidate)],
+      ),
+    ).toEqual([{ renamed: true, attached: true }]);
     await dataManager.begin((tx) => retireAmbientGenerations(tx));
     expect(await dropRetiredFeatureStorage(dataManager)).toBe(true);
     expect(
-      await superuser.unsafe("SELECT to_regclass($1) IS NULL AS dropped", [
-        featureTable(generation),
-      ]),
+      await superuser.unsafe(
+        "SELECT to_regclass($1) IS NULL AND to_regclass($2) IS NULL AS dropped",
+        [featureTable(generation), featureTable(candidate)],
+      ),
     ).toEqual([{ dropped: true }]);
     await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
   });

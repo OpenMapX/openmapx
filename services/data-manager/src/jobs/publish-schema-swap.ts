@@ -239,9 +239,9 @@ function renamedObject(name: string, from: string, to: string): string | null {
 
 /**
  * Renames a table together with the indexes and constraints named after it,
- * so that its successor can take their names.
+ * so that its successor can take their names. It locks only that table.
  */
-async function renameTable(
+export async function renameTable(
   tx: postgres.TransactionSql,
   schema: string,
   from: string,

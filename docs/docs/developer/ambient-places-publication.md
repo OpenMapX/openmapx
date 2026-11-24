@@ -376,7 +376,7 @@ planet import or a live source-table query at map-render time.
 Every generation, regional, Germany or planet, is one partition of
 `ambient_places.features`, which is partitioned by `LIST (generation)`. A build
 creates the partition as a standalone table, fills it and attaches it on
-publication. The partition's `CHECK` on its generation lets PostgreSQL attach it
+publication; a planet build stages it under a candidate name, described below. The partition's `CHECK` on its generation lets PostgreSQL attach it
 without a validation scan. Attaching takes `SHARE UPDATE EXCLUSIVE` on the parent
 table, which never conflicts with readers, so the API keeps serving tiles while a
 generation is published. `ambient_places.generations.storage` records whether a
@@ -402,10 +402,20 @@ three times within about five seconds. When a long reader, such as a backup,
 still holds the feature table after that, the partition stays behind and the next
 publication drops it. The publication itself succeeds, and its job ends.
 
-A planet candidate's table exists from the start of its build, so a backup that
-starts during the build also reads it. The candidate's final attach then waits
-for that backup, at most one second per attempt, and fails after its retries.
-The last good map stays active and the candidate can be resumed after the backup.
+A planet candidate's table exists from the start of its build and is filled
+across many transactions, so it is named `ambient_places.candidate_<hex>` until
+it is published. The attaching transaction renames it, its indexes and its
+constraints to the partition's `features_<hex>` names and attaches it. Renaming
+locks only that new table, which nothing but its build reads, so the attach still
+never waits for readers of `ambient_places.features`. Backups leave every
+`candidate_*` table out by that name, so a backup neither reads a candidate nor
+holds up its attach or discard. A regional or Germany build creates its
+partition and attaches it in one transaction, under its partition name.
+
+A planet build restored from a backup therefore has its `generations` and
+`planet_builds` rows but no candidate table. **Resume planet build** then creates
+an empty candidate and starts that generation again from its first page;
+**Discard candidate** removes the rows.
 
 Data-manager creates the `ambient_places` schema at runtime and records its
 layout version in `ambient_places.state.schema_version`. It never converts an
