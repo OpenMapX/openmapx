@@ -11,7 +11,8 @@ import type { BetterAuthPlugin } from "better-auth";
  * - Social sign-in looks an account up by provider and provider account id and
  *   fails when it finds two; the unique index lets the database refuse the
  *   second one instead of an application check with a race window.
- * - Pruning expired sessions and OAuth tokens selects by expiry.
+ * - Pruning expired sessions, OAuth tokens and client assertions selects by
+ *   expiry.
  * - A WebAuthn credential id is globally unique.
  */
 export function schemaIndexes() {
@@ -39,6 +40,10 @@ export function schemaIndexes() {
       oauthRefreshToken: {
         fields: {},
         indexes: [{ name: "oauth_refresh_token_expires_at_idx", fields: ["expiresAt"] }],
+      },
+      oauthClientAssertion: {
+        fields: {},
+        indexes: [{ name: "oauth_client_assertion_expires_at_idx", fields: ["expiresAt"] }],
       },
       passkey: {
         fields: {},

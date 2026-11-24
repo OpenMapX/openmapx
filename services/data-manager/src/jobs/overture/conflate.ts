@@ -1,8 +1,8 @@
 import {
-  assertDataPublication,
-  cancellableTransaction,
-  publishDataChange,
-} from "../execution/worker-scope.js";
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  publishTableSwap,
+} from "../publish-schema-swap.js";
 
 export { buildConflationComponents } from "./components.js";
 
@@ -35,8 +35,9 @@ import {
   ensureEmbeddingModel,
   SqlEmbeddingCache,
 } from "./embeddings.js";
+import { h3CellFromBigint, h3CellToBigint } from "./h3.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
-import { assertValidOvertureSchema } from "./schema.js";
+import { assertValidOvertureSchema, buildConflationLinkTableDDL } from "./schema.js";
 
 // Overture confidence floor for conflation candidates. Calibrated to 0.5 (vs
 // the earlier provisional 0.7) by the precision sweep: 0.7 excluded ~99.8% of
@@ -295,6 +296,7 @@ interface PlaceRow {
   name: string;
   lat: number;
   lng: number;
+  /** The cell's bigint as decimal text. */
   h3_r8: string;
   basic_category: string | null;
   taxonomy_primary: string | null;
@@ -313,6 +315,7 @@ interface OsmRow {
   name: string;
   lat: number;
   lng: number;
+  /** The cell's bigint as decimal text. */
   h3_r8: string;
   category: string | null;
   street: string | null;
@@ -336,7 +339,7 @@ function placeRowToPoint(row: PlaceRow): OverturePlacePoint {
     name: row.name,
     lat: Number(row.lat),
     lng: Number(row.lng),
-    h3_r8: row.h3_r8,
+    h3_r8: h3CellFromBigint(row.h3_r8),
     category: overtureTaxonomyToOpenMapX({
       basicCategory: row.basic_category,
       primary: row.taxonomy_primary,
@@ -359,7 +362,7 @@ function osmRowToPoint(row: OsmRow): OsmPoiPoint {
     name: row.name,
     lat: Number(row.lat),
     lng: Number(row.lng),
-    h3_r8: row.h3_r8,
+    h3_r8: h3CellFromBigint(row.h3_r8),
     category: row.category ?? undefined,
     addressKey: osmAddressKey(row.street, row.housenumber, row.postcode) ?? undefined,
     wikidata: row.wikidata ?? undefined,
@@ -409,6 +412,7 @@ async function insertLinkRows(
 }
 
 export interface ConflationScoreCursor {
+  /** The last scored POI's cell in h3-js hexadecimal form. */
   h3: string | null;
   osmType: string;
   osmId: string;
@@ -470,37 +474,42 @@ export async function scoreOvertureCandidates(opts: {
   let candidateCount = opts.resume?.candidates ?? 0;
   while (true) {
     const osmRows: OsmRow[] = await sql.unsafe<OsmRow[]>(
-      `SELECT osm_type, osm_id, name, lat, lng, h3_r8, category,
+      `SELECT osm_type, osm_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8::TEXT, category,
               tags->>'addr:street' AS street,
               tags->>'addr:housenumber' AS housenumber,
               tags->>'addr:postcode' AS postcode,
               COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
               COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
               COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
-       FROM "${schema}".osm_pois
-       WHERE ($1::TEXT IS NULL
-          OR h3_r8 > $1
-          OR (h3_r8 = $1 AND osm_type > $2)
-          OR (h3_r8 = $1 AND osm_type = $2 AND osm_id > $3::BIGINT))
-       ORDER BY h3_r8, osm_type, osm_id
+       FROM "${schema}".osm_pois AS poi
+       WHERE ($1::BIGINT IS NULL
+          OR (poi.h3_r8, poi.osm_type, poi.osm_id) > ($1::BIGINT, $2::TEXT, $3::BIGINT))
+       -- Qualified, because a bare h3_r8 would name the text output column.
+       -- The row comparison walks the (h3_r8, osm_type, osm_id) index in order.
+       ORDER BY poi.h3_r8, poi.osm_type, poi.osm_id
        LIMIT $4`,
-      [cursorCell, cursorType, cursorId, OSM_PAGE_SIZE],
+      [
+        cursorCell === null ? null : h3CellToBigint(cursorCell),
+        cursorType,
+        cursorId,
+        OSM_PAGE_SIZE,
+      ],
     );
     if (osmRows.length === 0) break;
 
     const osmPois: OsmPoiPoint[] = osmRows.map(osmRowToPoint);
     const cells: string[] = [...new Set(osmPois.flatMap((poi) => gridDisk(ensureH3(poi), 1)))];
     const placeRows: PlaceRow[] = await sql.unsafe<PlaceRow[]>(
-      `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8,
+      `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8::TEXT,
               basic_category, taxonomy_primary, taxonomy_hierarchy, taxonomy_alternates,
               addresses, brand->>'wikidata' AS wikidata, phones,
               (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               confidence
        FROM "${schema}".places
-       WHERE h3_r8 = ANY($1::TEXT[])
+       WHERE h3_r8 = ANY($1::BIGINT[])
          AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE}) LIMIT 50001`,
-      [cells],
+      [cells.map(h3CellToBigint)],
     );
     if (placeRows.length > 50_000)
       throw new Error("Candidate neighborhood exceeds 50000 places; investigate dense source data");
@@ -516,7 +525,7 @@ export async function scoreOvertureCandidates(opts: {
     candidateCount += candidates.length;
     const last: OsmRow | undefined = osmRows[osmRows.length - 1];
     if (!last) break;
-    cursorCell = last.h3_r8;
+    cursorCell = h3CellFromBigint(last.h3_r8);
     cursorType = last.osm_type;
     cursorId = last.osm_id;
     await opts.onCheckpoint?.(processed, candidateCount, {
@@ -667,38 +676,58 @@ export async function assignOvertureCandidates(opts: {
   return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
 }
 
-/** Atomically publishes the completely assigned next-link snapshot. */
+export interface PublishOvertureLinksOptions {
+  /**
+   * Runs in the swap's transaction with the published link count. Recording
+   * the run as complete here commits it with the swap: once the next
+   * snapshot is published, it is empty, and a retried publication would
+   * otherwise swap that empty table in.
+   */
+  complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+  retry?: LockRetry;
+}
+
+/**
+ * Atomically publishes the completely assigned next-link snapshot by renaming
+ * it to the published table, and starts an empty next snapshot. No row is
+ * copied or deleted, so the published table never carries a whole snapshot
+ * of dead rows. A snapshot that does not hold the number of links assignment
+ * recorded is refused.
+ */
 export async function publishOvertureLinks(
   sql: postgres.Sql,
   schema = "overture_places",
+  options: PublishOvertureLinksOptions = {},
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
-  await assertDataPublication();
-  await publishDataChange(() =>
-    cancellableTransaction(sql, async (tx) => {
-      await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
-      await tx.unsafe(
-        `INSERT INTO "${schema}".poi_conflation_link
-         (osm_type, osm_id, gers_id, source_confidence, match_confidence,
-          distance_m, method, evidence, release)
-       SELECT osm_type, osm_id, gers_id, source_confidence, match_confidence,
-              distance_m, method, evidence, release
-       FROM "${schema}".poi_conflation_link_next`,
+  let linked = 0;
+  await publishTableSwap(sql, {
+    schema,
+    live: "poi_conflation_link",
+    staging: "poi_conflation_link_next",
+    retry: options.retry ?? PUBLICATION_LOCK_RETRY,
+    afterSwap: async (tx) => {
+      const counts = itemAt(
+        await tx.unsafe<{ linked: string; expected: string | null }[]>(
+          `SELECT (SELECT COUNT(*) FROM "${schema}".poi_conflation_link)::TEXT AS linked,
+                  (SELECT staged_link_count FROM "${schema}".conflation_state
+                    WHERE singleton = 1)::TEXT AS expected`,
+        ),
+        0,
+        "row from the published conflation link count query",
       );
-    }),
-  );
-
-  const { linked } = itemAt(
-    await sql.unsafe<{ linked: string }[]>(
-      `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
-      [],
-    ),
-    0,
-    "row from the conflation link count query",
-  );
-  const linkedCount = Number(linked ?? 0);
-  return { linked: linkedCount };
+      linked = Number(counts.linked);
+      if (counts.expected !== null && Number(counts.expected) !== linked)
+        throw new Error(
+          `The staged link snapshot holds ${linked} links but assignment recorded ` +
+            `${counts.expected}; refusing to publish it`,
+        );
+      await options.complete?.(tx, linked);
+      await tx.unsafe(buildConflationLinkTableDDL(schema, "poi_conflation_link_next"));
+    },
+  });
+  return { linked };
 }
 
 /** Clears retry artifacts only after state has durably reached `completed`. */

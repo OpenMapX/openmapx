@@ -7,13 +7,12 @@ import type {
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
-import {
-  assertDataPublication,
-  cancellableTransaction,
-  publishDataChange,
-  retainDataPublication,
-} from "../execution/worker-scope.js";
 import { osmFileIdentity } from "../osm-resources.js";
+import {
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  publishSchemaSwap,
+} from "../publish-schema-swap.js";
 import { extractSearchPlaces, type SearchPlaceRecord } from "./extract.js";
 import { createSearchIndexOperationLock, type SearchIndexOperationLock } from "./operation-lock.js";
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
@@ -39,6 +38,8 @@ export function validateSearchIndexCounts(counts: SearchIndexCounts): void {
 
 interface BuildDependencies {
   extract: typeof extractSearchPlaces;
+  /** How the publication retries a step that waited too long for a lock. */
+  publicationRetry: LockRetry;
 }
 
 export function deduplicateSearchPlaces(records: SearchPlaceRecord[]): SearchPlaceRecord[] {
@@ -82,13 +83,14 @@ async function insertSearchPlaces(
   const importance = records.map((record) => record.importance);
   await sql.unsafe(
     `INSERT INTO osm_search__staging.places
-       (osm_type, osm_id, name, lat, lng, category, tags, importance)
-     SELECT r.osm_type,r.osm_id,r.name,r.lat,r.lng,r.category,r.tags::JSONB,r.importance
+       (osm_type, osm_id, name, geom, category, tags, importance)
+     SELECT r.osm_type,r.osm_id,r.name,ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),
+       r.category,r.tags::JSONB,r.importance
      FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
        $5::DOUBLE PRECISION[], $6::TEXT[], $7::TEXT[], $8::DOUBLE PRECISION[])
        AS r(osm_type,osm_id,name,lat,lng,category,tags,importance)
      ON CONFLICT (osm_type, osm_id) DO UPDATE SET
-       name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
+       name = EXCLUDED.name, geom = EXCLUDED.geom,
        category = EXCLUDED.category, tags = EXCLUDED.tags, importance = EXCLUDED.importance`,
     [osmTypes, osmIds, names, lats, lngs, categories, tags, importance],
   );
@@ -193,7 +195,7 @@ export async function buildOsmSearchIndex(
           (SELECT COUNT(*) FROM osm_search__staging.terms t LEFT JOIN osm_search__staging.places p
              USING (osm_type, osm_id) WHERE p.osm_id IS NULL)::TEXT AS orphans,
           ((SELECT COUNT(*) FROM osm_search__staging.places
-             WHERE lat NOT BETWEEN -90 AND 90 OR lng NOT BETWEEN -180 AND 180
+             WHERE ST_Y(geom) NOT BETWEEN -90 AND 90 OR ST_X(geom) NOT BETWEEN -180 AND 180
                 OR importance NOT BETWEEN 0 AND 1) +
            (SELECT COUNT(*) FROM osm_search__staging.terms
              WHERE kind NOT IN ('authoritative_code','explicit_reference','explicit_alias','generated_acronym')
@@ -211,26 +213,19 @@ export async function buildOsmSearchIndex(
       placeCount = counts.places;
       termCount = counts.terms;
       progress("publish", "Publishing the validated search snapshot");
-      const live = await opts.sql.unsafe<{ exists: boolean }[]>(
-        `SELECT to_regnamespace('osm_search') IS NOT NULL AS exists`,
-      );
-      await assertDataPublication();
-      await publishDataChange(() =>
-        cancellableTransaction(opts.sql, async (transaction) => {
+      await publishSchemaSwap(opts.sql, {
+        live: "osm_search",
+        staging: "osm_search__staging",
+        retry: opts.dependencies?.publicationRetry ?? PUBLICATION_LOCK_RETRY,
+        carryOver: async (transaction) => {
           await transaction.unsafe(
-            `UPDATE osm_search__staging.index_state
+            `UPDATE osm_search.index_state
               SET status='ready', place_count=$1, term_count=$2, published_at=NOW(), updated_at=NOW(), last_error=NULL
             WHERE singleton=1`,
             [placeCount, termCount],
           );
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS osm_search__previous CASCADE`);
-          if (live[0]?.exists)
-            await transaction.unsafe(`ALTER SCHEMA osm_search RENAME TO osm_search__previous`);
-          await transaction.unsafe(`ALTER SCHEMA osm_search__staging RENAME TO osm_search`);
-          await transaction.unsafe(`DROP SCHEMA IF EXISTS osm_search__previous CASCADE`);
-        }),
-      );
-      await retainDataPublication();
+        },
+      });
       progress("complete", `Published ${placeCount} places and ${termCount} terms`);
       return { region: opts.region, epoch, sourceFingerprint, placeCount, termCount };
     } catch (error) {

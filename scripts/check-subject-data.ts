@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { SUBJECT_DATA_CATALOGUE } from "../apps/api/src/privacy/catalogue";
+import type { SubjectDataRegistration, SubjectLocatorType } from "../packages/core/src/privacy";
 import { serviceManifestSchema } from "../packages/core/src/services/manifest-schema";
 import { integrationManifestSchema } from "../packages/integration-framework/src/manifest";
 
@@ -12,25 +13,25 @@ const CATALOGUE_IDS = new Set(SUBJECT_DATA_CATALOGUE.map((item) => item.id));
  * of the live PostgreSQL inventory in user-erasure-postgres.test.ts. */
 export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "account.user_id": "auth-accounts",
-  "account_action_receipt.actor_id": "admin-audit-attribution",
-  "account_action_receipt.target_id": "admin-audit-attribution",
+  "account_action_receipt.actor_id": "administrative-receipts",
+  "account_action_receipt.target_id": "administrative-receipts",
   "account_mail_outbox.user_id": "auth-verifications",
   "data_disclosure_event.user_id": "disclosure-events",
   "admin_audit_log.actor_id": "admin-audit-attribution",
-  "auth_policy_application.actor_id": "admin-audit-attribution",
+  "auth_policy_application.actor_id": "administrative-receipts",
   "auth_policy_state.activated_by": "admin-audit-attribution",
   "admin_job.created_by": "admin-jobs-attribution",
   "installed_extension.installed_by": "installed-component-attribution",
   "installed_integration.installed_by": "installed-component-attribution",
-  "integration_application_receipt.actor_id": "admin-audit-attribution",
+  "integration_application_receipt.actor_id": "administrative-receipts",
   "integration_secret.updated_by": "secret-update-attribution",
   "labeled_place.user_id": "labeled-places",
   "mangrove_keypair.user_id": "mangrove-keypairs",
   "mobile_auth_handoff.user_id": "mobile-auth-handoffs",
-  "oauth_access_token.user_id": "auth-oauth-resources",
+  "oauth_access_token.user_id": "auth-oauth-tokens",
   "oauth_client.user_id": "auth-oauth-resources",
   "oauth_consent.user_id": "auth-oauth-resources",
-  "oauth_refresh_token.user_id": "auth-oauth-resources",
+  "oauth_refresh_token.user_id": "auth-oauth-tokens",
   "parked_location.user_id": "parked-locations",
   "platform_configuration_preview.actor_id": "platform-configuration-previews",
   "passkey.user_id": "auth-passkeys",
@@ -100,9 +101,21 @@ export interface ManifestSubjectFixture {
 }
 
 export interface SubjectDataInventoryOverrides {
+  catalogue?: readonly SubjectDataRegistration[];
   directUserForeignKeys?: string[];
+  directUserForeignKeyClassifications?: Record<string, string>;
   manifestSubjects?: ManifestSubjectFixture[];
 }
+
+/** Locators whose field holds an account's id. */
+const ACCOUNT_ID_LOCATOR_TYPES = new Set<SubjectLocatorType>([
+  "user_id",
+  "actor_id",
+  "target_id",
+  "creator_id",
+  "updater_id",
+  "triggered_by",
+]);
 
 export interface SubjectDataInventoryResult {
   errors: string[];
@@ -167,9 +180,22 @@ export function validateSubjectDataInventory(
     (id, index, list) => list.indexOf(id) !== index,
   );
   for (const id of duplicateIds) errors.push(`catalogue: duplicate registration id ${id}`);
-  for (const registration of SUBJECT_DATA_CATALOGUE) {
+  const accountColumns = new Set([
+    ...Object.keys(DIRECT_USER_FK_CLASSIFICATIONS),
+    ...Object.keys(USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY),
+  ]);
+  for (const registration of overrides.catalogue ?? SUBJECT_DATA_CATALOGUE) {
     if (registration.strategy === "collector" && !registration.collectorId) {
       errors.push(`catalogue: collector registration ${registration.id} has no collectorId`);
+    }
+    // A database locator of an account id names a column of the inventory
+    // below, or the account's own key.
+    if (registration.source !== "openmapx-db") continue;
+    for (const { type, field } of registration.locators) {
+      if (ACCOUNT_ID_LOCATOR_TYPES.has(type) && field !== "user.id" && !accountColumns.has(field))
+        errors.push(
+          `catalogue: ${registration.id} locates ${field}, which is no known account column`,
+        );
     }
   }
 
@@ -222,13 +248,26 @@ export function validateSubjectDataInventory(
   }
 
   const direct = overrides.directUserForeignKeys ?? collectDirectUserForeignKeys();
+  const classifications =
+    overrides.directUserForeignKeyClassifications ?? DIRECT_USER_FK_CLASSIFICATIONS;
+  // The registrations whose locators name each column; a column one of them
+  // locates must be classified under it, not merely under some registration.
+  const locatedBy = new Map<string, string[]>();
+  for (const registration of overrides.catalogue ?? SUBJECT_DATA_CATALOGUE)
+    for (const { field } of registration.locators)
+      locatedBy.set(field, [...(locatedBy.get(field) ?? []), registration.id]);
   for (const foreignKey of direct) {
-    const registrationId = DIRECT_USER_FK_CLASSIFICATIONS[foreignKey];
+    const registrationId = classifications[foreignKey];
+    const owners = locatedBy.get(foreignKey);
     if (!registrationId) {
       errors.push(`direct user foreign key ${foreignKey} has no erasure/catalogue classification`);
     } else if (!CATALOGUE_IDS.has(registrationId)) {
       errors.push(
         `direct user foreign key ${foreignKey} references missing registration ${registrationId}`,
+      );
+    } else if (owners && !owners.includes(registrationId)) {
+      errors.push(
+        `direct user foreign key ${foreignKey} is classified under ${registrationId}, but the catalogue locates it under ${owners.join(", ")}`,
       );
     }
   }

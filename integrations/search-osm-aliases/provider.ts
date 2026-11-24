@@ -51,7 +51,8 @@ const OSM_ATTRIBUTION: Attribution = {
 };
 
 const SEARCH_SQL = `
-SELECT p.osm_type, p.osm_id::TEXT AS osm_id, p.name, p.lat, p.lng, p.category,
+SELECT p.osm_type, p.osm_id::TEXT AS osm_id, p.name, ST_Y(p.geom) AS lat, ST_X(p.geom) AS lng,
+       p.category,
        p.tags, p.importance, t.display_value, t.normalized_term, t.kind, t.namespace
 FROM osm_search.terms AS t
 JOIN osm_search.places AS p USING (osm_type, osm_id)
@@ -63,7 +64,7 @@ WHERE (t.normalized_term = $1
        OR p.importance >= 0.8
        OR ($4::DOUBLE PRECISION IS NOT NULL AND $5::DOUBLE PRECISION IS NOT NULL
            AND ST_DWithin(
-             p.geom,
+             p.geom::geography,
              ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
              100000
            )))
@@ -77,7 +78,7 @@ ORDER BY
   p.importance DESC,
   CASE WHEN $4::DOUBLE PRECISION IS NULL OR $5::DOUBLE PRECISION IS NULL THEN 0
        ELSE ST_Distance(
-         p.geom,
+         p.geom::geography,
          ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography
        )
   END ASC,

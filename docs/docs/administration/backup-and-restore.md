@@ -51,6 +51,95 @@ or Compose project, verify that these targets match the deployment you intend to
 restore. A recorded volume name is not an automatic migration to a newly named
 volume.
 
+### Rebuildable data the database dump leaves out
+
+The `postgis` dump keeps every data set data-manager has published: the search
+index, notable places, Overture places with their conflation links, conflation
+state and OSM POI snapshot, and every published nearby-places generation. It
+leaves out what data-manager rebuilds from those and never serves:
+
+- unpublished builds and the copies a publication replaced: the
+  `osm_search__staging`, `notable_places__staging` and
+  `overture_places__staging` schemas, the same three with `__previous`, and in
+  `overture_places` the `osm_pois__staging`, `osm_pois__previous` and
+  `poi_conflation_link__previous` tables, together with
+  `poi_conflation_proposal`, which exists only while conflation assigns links;
+- nearby places' unfinished planet candidates, the `ambient_places.candidate_*`
+  tables;
+- the rows of Overture conflation's workspace (`poi_conflation_candidate`,
+  `poi_conflation_component` and `poi_conflation_link_next` in
+  `overture_places`) and of the embedding cache in `overture_embeddings`. Their
+  tables are restored empty.
+
+These parts are only a build's work in progress and can be large. The
+unpublished and replaced schemas, the leftover tables and the proposal table
+are left out entirely, not only their rows: a dump locks every table whose
+definition it keeps until it ends, and a leftover it held would hold up the next
+publication of that data set.
+
+After a restore, nothing that was published needs rebuilding. Work that was in
+progress when the backup was taken starts again:
+
+- An Overture conflation that was running starts again from OSM extraction at
+  its next attempt; the restored links stay in service until it publishes.
+- A planet build of nearby places that was running is restored without its
+  candidate. It cannot be resumed: **Resume planet build** refuses it and says
+  to discard it. Use **Discard candidate**, then publish the planet snapshot
+  again. See
+  [Ambient places publication](../developer/ambient-places-publication.md).
+- An interrupted search index, notable-places or Overture build is not in the
+  backup at all; run it again.
+
+### Backups during data publications
+
+No publication makes API readers wait during a backup. Outside a backup,
+publishing the OSM POI snapshot or the conflation links renames that table, so
+its readers can wait up to a second per attempt (see
+[the architecture](../developer/architecture.md)).
+Publications of the search index, notable places and Overture places do wait
+for a running backup. Each of these data sets has a `publication_fence` table
+that only backups and publications use. `pg_dump` holds it from the moment it
+locks its tables, in the first moments of the backup, until it ends, and a
+publication locks it before it changes anything, waiting at most a second per
+attempt. After about two minutes of retries the publication fails and leaves the
+data set as it was last published.
+
+So no publication changes a data set under a running backup, and a backup
+always holds each data set as it was last published: complete, never empty and
+never half replaced, and it can always be restored. A publication that commits
+after the dump started but before the dump reached the fence, a window in the
+first moments of a backup, makes the dump fail instead, because the publication
+replaced the fence the dump then reads. Create the backup again. A backup that
+starts while an Overture release, OSM POI snapshot or set of conflation links
+is being published can also fail with "deadlock detected". That failure is
+reported and leaves no archive; create the backup again. When the publication
+is the side PostgreSQL stops instead, it retries like any other publication
+that waited for a backup.
+
+| Operation during a backup                                                                                                         | What happens                                                                                                                                                                                                                                                                | Retried                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Publishing a search index                                                                                                         | Fails after about two minutes. The build drops its staging schema; the published index stays searchable.                                                                                                                                                                    | Not automatically. Run `pnpm openmapx data search-index build <region>` again after the backup.                                                                                                                                                                                                                                                                 |
+| Publishing notable places                                                                                                         | Fails after about two minutes; the published index stays searchable.                                                                                                                                                                                                        | At the next scheduled refresh (`NOTABLE_PLACES_REFRESH_CRON`, monthly by default), or when data-manager starts without a published index. Run `pnpm openmapx data notable-places build` to retry sooner.                                                                                                                                                        |
+| Activating an Overture release                                                                                                    | Fails after about two minutes; the published release stays in service.                                                                                                                                                                                                      | With `OVERTURE_ENABLED`, the next scheduled sync (`OVERTURE_SYNC_CRON`, weekly by default) still finds the newer release and runs again; it rebuilds the staging schema. Run `pnpm openmapx data overture-sync` sooner.                                                                                                                                         |
+| Publishing an OSM POI snapshot or the conflation links                                                                            | Fails after about two minutes; the published snapshot and links stay in service.                                                                                                                                                                                            | With `OVERTURE_ENABLED`, the conflation retry (`OVERTURE_CONFLATION_RETRY_CRON`, every 15 minutes by default, and once when data-manager starts) resumes the run from the phase it recorded. A failed OSM POI snapshot publication is still in that phase, so its retry extracts the POIs from the OSM file again, which takes as long as the first extraction. |
+| Emptying the conflation workspace (starting to score, starting to assign, restarting a run, or cleaning up after a completed run) | Waits until the backup ends. The dump keeps the workspace tables' definitions and so holds them, and conflation waits for them without a time limit. No reader uses these tables.                                                                                           | Not needed                                                                                                                                                                                                                                                                                                                                                      |
+| Publishing nearby places, regional, Germany or planet, including a planet candidate's final attach                                | Does not wait. Each generation is a new partition the backup does not read, and backups leave planet candidates out.                                                                                                                                                        | Not needed                                                                                                                                                                                                                                                                                                                                                      |
+| Discarding a planet candidate                                                                                                     | Does not wait.                                                                                                                                                                                                                                                              | Not needed                                                                                                                                                                                                                                                                                                                                                      |
+| Dropping retired nearby-places generations after a publication                                                                    | Waits up to about five seconds, then leaves the table; the publication itself succeeds. A drop in the first moments of a backup, before the dump has locked that table, makes the backup fail instead, because the dump no longer finds the table. Create the backup again. | By the next nearby-places publication.                                                                                                                                                                                                                                                                                                                          |
+| Enabling, disabling or rolling back nearby places                                                                                 | Does not wait.                                                                                                                                                                                                                                                              | Not needed                                                                                                                                                                                                                                                                                                                                                      |
+
+Long backups therefore delay data refreshes. Schedule backups so that they do
+not overlap planned rebuilds, in particular an Overture conflation's OSM POI
+extraction, or run a failed rebuild again afterwards.
+
+A regional nearby-places build holds the conflation links and the OSM POI
+snapshot while it reads them, for the build's duration only. Publishing either of them, or
+activating an Overture release, during such a build waits for it and fails after
+about two minutes; each is retried as the table above describes. A regional
+build in turn refuses to publish when the search index or an Overture data set
+was republished while it read, and leaves the last good generation live. It is
+not retried automatically; publish it again.
+
 ## What gets skipped, and why
 
 Region-derived indexes are excluded when their
@@ -97,6 +186,11 @@ wc -c < infra/docker/secrets/secrets-key   # prints 43
 The new file belongs to the user who runs `cp`, whoever owned the backup copy.
 A stored secret the current key cannot open is marked as unreadable in the
 admin settings.
+
+When OpenConditions is installed, the vault holds its secrets key
+`OPENCONDITIONS_SECRETS_KEY` encrypted under this key file, so both keys
+belong in the recovery set (see
+[Community extensions](./community-extensions.md#configuring-the-openconditions-services)).
 
 For erasure-safe restore, retain both
 `infra/docker/data/erasure/journal.jsonl` and

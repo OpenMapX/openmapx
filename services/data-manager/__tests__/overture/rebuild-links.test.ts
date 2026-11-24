@@ -67,7 +67,19 @@ function dependencies() {
     })),
     assign: vi.fn(async () => ({ components: 8, assignmentCursor: 8, stagedLinks: 7 })),
     validateFusedQuality: vi.fn(async () => ({ applicableCases: 1, cases: [] })),
-    publish: vi.fn(async () => ({ linked: 7 })),
+    // Like the real publication, completes the run inside the swap.
+    publish: vi.fn(
+      async (
+        transaction: postgres.TransactionSql,
+        _schema: string,
+        options?: {
+          complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+        },
+      ) => {
+        await options?.complete?.(transaction, 7);
+        return { linked: 7 };
+      },
+    ),
     cleanup: vi.fn(async () => undefined),
     preflight: vi.fn(async () => undefined),
   };
@@ -91,6 +103,8 @@ beforeEach(() => {
       return [state];
     }
     if (query.includes("SELECT release, region, place_count")) return [state];
+    // The workspace a resumed phase reads is in place.
+    if (query.includes(") AS present")) return [{ present: true }];
     if (query.includes("phase = 'score', phase_started_at")) {
       state = {
         ...state,
@@ -127,6 +141,7 @@ beforeEach(() => {
         linked_count: String(params[0]),
         staged_link_count: String(params[0]),
       };
+      return [{ singleton: 1 }];
     } else if (query.includes("workspace_cleaned_at = COALESCE")) {
       state = { ...state, workspace_cleaned_at: new Date() };
     } else if (query.includes("SET") && query.includes("status = 'failed'")) {
@@ -197,7 +212,8 @@ describe("rebuildOvertureLinks", () => {
       extracted_count: "10",
       processed_count: "4",
       candidate_count: "3",
-      score_cursor_h3: "881f1d4887fffff",
+      // The database stores the cell as a bigint and returns it as text.
+      score_cursor_h3: "613036919424548863",
       score_cursor_type: "node",
       score_cursor_id: "42",
     });

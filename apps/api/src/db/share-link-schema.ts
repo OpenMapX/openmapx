@@ -53,6 +53,9 @@ export const shareLink = pgTable(
       foreignColumns: [user.id],
     }).onDelete("cascade"),
     index("share_link_user_id_idx").on(table.userId),
+    index("share_link_expires_at_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.expiresAt} is not null`),
     check("share_link_target_type_check", sql`${table.targetType} in ('list','route')`),
     check("share_link_mode_check", sql`${table.mode} in ('live','snapshot')`),
     // A route share is always a frozen snapshot with no target; a list share

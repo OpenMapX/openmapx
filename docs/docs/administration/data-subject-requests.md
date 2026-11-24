@@ -128,6 +128,32 @@ the first request; an incomplete configuration answers exports with
 health, export failures (`privacy_export_failures`) and overdue cases. Case
 retention cleanup runs hourly.
 
+Once a day, at startup and then every 24 hours, the API also deletes the
+records whose period the catalogue declares:
+
+| Records                                                                                  | Deleted                          |
+| ---------------------------------------------------------------------------------------- | -------------------------------- |
+| Sessions with their sign-in assurance, and administrator confirmations (`auth-sessions`) | 30 days after they expire        |
+| OAuth access and refresh tokens (`auth-oauth-tokens`)                                    | 30 days after they expire        |
+| OAuth client assertions (`oauth-client-assertions`, not personal)                        | 30 days after they expire        |
+| Disclosure records (`disclosure-events`)                                                 | 1,095 days after the disclosure  |
+| Account, sign-in policy and integration receipts (`administrative-receipts`)             | 365 days after they were made    |
+| Share links with an expiry date (`share-links`)                                          | 30 days after they expire        |
+| Parked locations with a parking time limit (`parked-locations`)                          | 30 days after the limit passes   |
+| Offline-package records that match no existing account                                   | 30 days after they were recorded |
+
+It deletes in batches of at most 500 rows and at most 200 batches per table and
+run, so a backlog clears over several days without long locks. The newest
+receipt for each integration and for each account stays whatever its age: the
+integration page shows it as the last application. Offline-package records are
+matched against every account only when one is older than 30 days; the scan
+then walks all old records, 500 keyed hashes per batch, to the end. Records
+under an earlier principal key count as orphaned too, so rotating the key
+deletes them 30 days after they were recorded, and the package files of a
+deleted record stay on disk until the Data Manager evicts or invalidates them. A record a
+retention hold of an open case covers stays until the case closes. A failure is
+logged as `Declared retention prune failed` and retried the next day.
+
 ## Intake
 
 The API records receipt time, locale, time zone, request type and a response

@@ -100,7 +100,7 @@ describe("localized privacy response report", () => {
       "public networks",
       "off-host-backup",
       "30 days",
-      "security retention period",
+      "expiry of the session or confirmation",
       "Omitted after review",
       "Performance of the service contract",
       "An authorized caseworker recorded a source-specific limitation",
@@ -169,8 +169,8 @@ describe("localized privacy response report", () => {
     const expected = [
       "auth-sessions",
       "auth-verifications",
+      "auth-oauth-tokens",
       "mobile-auth-handoffs",
-      "offline-package-ownership",
       "application-logs",
       "redis-subject-controls",
     ];
@@ -190,6 +190,11 @@ describe("localized privacy response report", () => {
       expect.arrayContaining(expected),
     );
     expect(report.processingInformation.shortLivedCategories).toHaveLength(expected.length);
+    // Offline-package records live as long as the account; only the rows of a
+    // deleted account follow a 30-day rule.
+    expect(report.processingInformation.shortLivedCategories).not.toContain(
+      "offline-package-ownership",
+    );
   });
 
   it("states the backup policy with the configured retention and the request contact", () => {

@@ -44,8 +44,10 @@ drain or let current package preparations finish, atomically replace the file
 with another canonical generated value, then recreate `api`. Existing
 content-addressed artifact URLs remain usable, but old job-status ownership and
 retention-accounting identities cannot be resumed through the new principal;
-users prepare again to acquire new ownership records. Ordinary compose render
-does not rotate this key.
+users prepare again to acquire new ownership records. The records under the old
+key then match no account, so the API's daily retention deletes them 30 days
+after they were recorded; the same happens when a restored database meets a
+newly generated key. Ordinary compose render does not rotate this key.
 
 ### `secrets-key` (generated, API only)
 

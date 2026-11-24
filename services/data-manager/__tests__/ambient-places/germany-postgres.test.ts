@@ -27,8 +27,8 @@ async function seed(pg: PostgisFixture) {
   );
   await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,place_count,started_at,published_at,updated_at)
     VALUES(1,'europe/germany','fixture','fixture','fixture','country-one','ready',1,now(),now(),now());
-    INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-    VALUES('node',1,'Aachen clinic',50.77,6.08,'amenity/hospital','{}',0.8)`);
+    INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+    VALUES('node',1,'Aachen clinic',ST_Point(6.08,50.77,4326),'amenity/hospital','{}',0.8)`);
 }
 async function tile(pg: PostgisFixture, generation: string, lng: number, lat: number) {
   const z = 16;
@@ -53,17 +53,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await pg.sql.unsafe(buildSchemaDDL("overture_places"));
           await pg.sql.unsafe(`UPDATE osm_search.index_state SET ambient_source_version=1;
           INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release)
-          SELECT 'g-legacy-'||i,'Overture copy '||i,'hospital',ST_SetSRID(ST_MakePoint(6.08+i/1000.0,50.77),4326),'881f1d4887fffff',0.9,'open','2026-09-23.1' FROM generate_series(200,203) i;
+          SELECT 'g-legacy-'||i,'Overture copy '||i,'hospital',ST_SetSRID(ST_MakePoint(6.08+i/1000.0,50.77),4326),x'881f1d4887fffff'::BIGINT,0.9,'open','2026-09-23.1' FROM generate_series(200,203) i;
           UPDATE overture_places.places SET geom=ST_SetSRID(ST_MakePoint(6.08,50.77),4326);
           INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,sources_catalogue)
           VALUES('2026-09-23.1','europe/germany',4,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
           INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
           SELECT 'way',i,'g-legacy-'||i,1,0,'fixture','{}','2026-09-23.1' FROM generate_series(200,203) i;
-          INSERT INTO overture_places.osm_pois(osm_type,osm_id,name,lat,lng,h3_r8,category,tags) VALUES
-          ('way',200,'Private authoritative',50.77,6.08,'fixture','amenity/hospital','{"access":"private"}'),
-          ('way',201,'Disused authoritative',50.77,6.08,'fixture','amenity/hospital','{"disused":"yes"}'),
-          ('way',202,'Tenant authoritative',50.771,6.085,'fixture','amenity/hospital','{"level":"1"}'),
-          ('way',203,'Outside authoritative',50.77,5.7,'fixture','amenity/hospital','{}')`);
+          INSERT INTO overture_places.osm_pois(osm_type,osm_id,name,geom,h3_r8,category,tags) VALUES
+          ('way',200,'Private authoritative',ST_Point(6.08,50.77,4326),0,'amenity/hospital','{"access":"private"}'),
+          ('way',201,'Disused authoritative',ST_Point(6.08,50.77,4326),0,'amenity/hospital','{"disused":"yes"}'),
+          ('way',202,'Tenant authoritative',ST_Point(6.085,50.771,4326),0,'amenity/hospital','{"level":"1"}'),
+          ('way',203,'Outside authoritative',ST_Point(5.7,50.77,4326),0,'amenity/hospital','{}')`);
           const result = await buildAmbientPlaces(pg.sql, region, undefined, {
             availableBytes: ampleSpace,
           });
@@ -90,11 +90,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await seed(pg);
         const before = await buildAmbientPlaces(pg.sql, regional);
         const beforeTile = await tile(pg, before.generation, 6.08, 50.77);
-        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-        SELECT 'node',id,'Clinic '||id,CASE WHEN id%2=0 THEN 52.52 ELSE 50.77 END,
-        CASE WHEN id%2=0 THEN 13.405 ELSE 6.08 END,'amenity/hospital','{}',0.8 FROM generate_series(2,100000) AS id;
-        INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-        VALUES('way',9007199254740993,'Munich clinic',48.137,11.575,'amenity/hospital','{}',0.8);
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+        SELECT 'node',id,'Clinic '||id,CASE WHEN id%2=0 THEN ST_Point(13.405,52.52,4326) ELSE ST_Point(6.08,50.77,4326) END,
+        'amenity/hospital','{}',0.8 FROM generate_series(2,100000) AS id;
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+        VALUES('way',9007199254740993,'Munich clinic',ST_Point(11.575,48.137,4326),'amenity/hospital','{}',0.8);
         UPDATE osm_search.index_state SET place_count=100001`);
         const progress: { processed: number; batches: number; placeCount: number }[] = [];
         const country = await buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
@@ -125,10 +125,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           (await tile(pg, country.generation, 11.575, 48.137)).layer?.feature(0).properties.id,
         ).toBe("osm:way/9007199254740993");
         expect((await tile(pg, before.generation, 6.08, 50.77)).bytes).toEqual(beforeTile.bytes);
-        const [indexes] =
-          await pg.sql.unsafe(`SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='ambient_places' AND indexdef LIKE '%USING gist (generation,%') AS qualified,
-        EXISTS(SELECT 1 FROM geometry_columns WHERE f_table_schema='ambient_places') AS exposed`);
-        expect(indexes).toEqual({ qualified: true, exposed: false });
+        // The country generation is its own spatially indexed partition.
+        const partition = `features_${country.generation.replaceAll("-", "")}`;
+        const [indexes] = await pg.sql.unsafe(
+          `SELECT EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=to_regclass('ambient_places.'||$1) AND inhparent='ambient_places.features'::regclass) AS attached,
+          EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='ambient_places' AND tablename=$1 AND indexdef LIKE '%USING gist (geom)%') AS indexed`,
+          [partition],
+        );
+        expect(indexes).toEqual({ attached: true, indexed: true });
         await rollbackAmbientPlaces(pg.sql);
         expect((await readAmbientManifest(pg.sql))?.generation).toBe(before.generation);
         expect(
@@ -144,15 +148,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       try {
         await seed(pg);
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
-        ('way',2,'Outside authoritative',50,5.79,'amenity/hospital','{}',1),
-        ('relation',3,'Closed authoritative',52.52,13.4,'shop/bakery','{"disused":"yes"}',1);
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
+        ('way',2,'Outside authoritative',ST_Point(5.79,50,4326),'amenity/hospital','{}',1),
+        ('relation',3,'Closed authoritative',ST_Point(13.4,52.52,4326),'shop/bakery','{"disused":"yes"}',1);
         UPDATE osm_search.index_state SET place_count=3;
         INSERT INTO overture_places.places(gers_id,name,names,geom,h3_r8,basic_category,confidence,operating_status,release) VALUES
-        ('gers-a','Translated clinic','{"common":{"en":"Translated clinic"}}',ST_SetSRID(ST_MakePoint(5.79,50),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1'),
-        ('gers-b','Outside counterpart',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1'),
-        ('gers-c','Closed counterpart',NULL,ST_SetSRID(ST_MakePoint(13.4,52.52),4326),'881f1d4887fffff','bakery',0.9,'open','2026-09-23.1'),
-        ('gers-d','Missing-index clinic',NULL,ST_SetSRID(ST_MakePoint(11.575,48.137),4326),'881f1d4887fffff','hospital',0.9,'open','2026-09-23.1');
+        ('gers-a','Translated clinic','{"common":{"en":"Translated clinic"}}',ST_SetSRID(ST_MakePoint(5.79,50),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.9,'open','2026-09-23.1'),
+        ('gers-b','Outside counterpart',NULL,ST_SetSRID(ST_MakePoint(6.08,50.77),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.9,'open','2026-09-23.1'),
+        ('gers-c','Closed counterpart',NULL,ST_SetSRID(ST_MakePoint(13.4,52.52),4326),x'881f1d4887fffff'::BIGINT,'bakery',0.9,'open','2026-09-23.1'),
+        ('gers-d','Missing-index clinic',NULL,ST_SetSRID(ST_MakePoint(11.575,48.137),4326),x'881f1d4887fffff'::BIGINT,'hospital',0.9,'open','2026-09-23.1');
         INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
         VALUES(1,'2026-09-23.1','europe/germany',4,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,source_confidence,match_confidence,distance_m,method,evidence,release)
@@ -195,7 +199,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
         VALUES(1,'2026-09-23.1','europe/germany/nordrhein-westfalen',1,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');
         INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release)
-        VALUES('gers','Cafe',ST_SetSRID(ST_MakePoint(13,52),4326),'881f1d4887fffff','cafe',0.9,'open','wrong-release')`);
+        VALUES('gers','Cafe',ST_SetSRID(ST_MakePoint(13,52),4326),x'881f1d4887fffff'::BIGINT,'cafe',0.9,'open','wrong-release')`);
         await expect(
           buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
             availableBytes: ampleSpace,
@@ -224,8 +228,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             availableBytes: async () => 0,
           }),
         ).rejects.toThrow(/disk/i);
-        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-          SELECT 'node',id,'Clinic '||id,52.52,13.405,'amenity/hospital','{}',0.8 FROM generate_series(2,50001) AS id;
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+          SELECT 'node',id,'Clinic '||id,ST_Point(13.405,52.52,4326),'amenity/hospital','{}',0.8 FROM generate_series(2,50001) AS id;
           UPDATE osm_search.index_state SET place_count=50001`);
         let checks = 0;
         let processed = 0;
@@ -256,8 +260,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const pg = await startPostgis();
       try {
         await seed(pg);
-        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-          SELECT 'node',id,'Original clinic '||id,52.52,13.405,'amenity/hospital','{}',0.8 FROM generate_series(2,2001) AS id;
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+          SELECT 'node',id,'Original clinic '||id,ST_Point(13.405,52.52,4326),'amenity/hospital','{}',0.8 FROM generate_series(2,2001) AS id;
           UPDATE osm_search.index_state SET place_count=2001`);
         let changed = false;
         const country = await buildAmbientPlaces(pg.sql, AMBIENT_GERMANY_REGION, undefined, {
@@ -326,11 +330,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await seed(pg);
         const before = await buildAmbientPlaces(pg.sql, regional);
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-          VALUES('node',2,'Closed cafe',52.52,13.405,'amenity/cafe','{"disused":"yes"}',1);
+        await pg.sql.unsafe(`INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+          VALUES('node',2,'Closed cafe',ST_Point(13.405,52.52,4326),'amenity/cafe','{"disused":"yes"}',1);
           UPDATE osm_search.index_state SET place_count=2;
           INSERT INTO overture_places.places(gers_id,name,geom,h3_r8,basic_category,confidence,operating_status,release)
-          SELECT 'gers-'||lpad(id::TEXT,5,'0'),'Cafe '||id,ST_SetSRID(ST_MakePoint(13.405,52.52),4326),'881f1d4895fffff','cafe',0.9,'open','2026-09-23.1' FROM generate_series(1,2101) AS id;
+          SELECT 'gers-'||lpad(id::TEXT,5,'0'),'Cafe '||id,ST_SetSRID(ST_MakePoint(13.405,52.52),4326),x'881f1d4895fffff'::BIGINT,'cafe',0.9,'open','2026-09-23.1' FROM generate_series(1,2101) AS id;
           UPDATE overture_places.places SET sources='[{"dataset":"unsupported-country-source"}]' WHERE gers_id='gers-02101';
           INSERT INTO overture_places.conflation_state(singleton,release,region,place_count,places_published_at,status,phase,sources_catalogue)
           VALUES(1,'2026-09-23.1','europe/germany',2101,now(),'completed','complete','[{"sourceId":"overture","name":"Overture Maps"}]');

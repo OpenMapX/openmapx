@@ -2,10 +2,14 @@
 /**
  * Checks that the committed API migrations match the schema code:
  *
- * 1. `drizzle-kit check` validates the migration metadata (journal and snapshots).
- * 2. `drizzle-kit generate` against the committed folder must write nothing, so
- *    the latest snapshot matches the schema code. Anything it writes is left in
- *    place for inspection, and uncommitted changes in the folder also fail.
+ * 1. `drizzle-kit check` validates the migration metadata (journal and snapshots)
+ *    and must report "Everything's fine".
+ * 2. `drizzle-kit generate` against the committed folder must report "No schema
+ *    changes, nothing to migrate" and write nothing, so the latest snapshot
+ *    matches the schema code. Anything it writes is left in place for
+ *    inspection, and uncommitted changes in the folder also fail. Neither step
+ *    may print an error or ask for a terminal: drizzle-kit exits 0 when it
+ *    cannot ask a question or load the schema code.
  * 3. While the journal holds only the baseline and the custom migration, a
  *    baseline regenerated from the schema code into an empty temporary folder
  *    must have a `0000_baseline.sql` byte-identical to the committed one and a
@@ -56,6 +60,64 @@ export function baselineComparison(journal) {
   };
 }
 
+/**
+ * @typedef {{ status: number | null, error?: string, output: string }} StepResult
+ * What one command of the gate did: its exit, any failure to run it, and its
+ * combined output.
+ */
+
+/**
+ * Why the committed migrations do not match the schema code, or nothing when
+ * they do. drizzle-kit exits 0 and writes nothing both when it needs an
+ * interactive prompt it cannot show without a terminal and when the schema
+ * code fails to load, so its exit code and an unchanged folder prove nothing
+ * alone: it must also say that nothing changed.
+ *
+ * @param {{ check: StepResult, generate: StepResult, status: StepResult }} steps
+ * @returns {string[]}
+ */
+export function driftProblems(steps) {
+  const problems = [];
+  const named = [
+    ["drizzle-kit check", steps.check],
+    ["drizzle-kit generate", steps.generate],
+    [`git status --porcelain -- ${MIGRATIONS}`, steps.status],
+  ];
+  for (const [name, step] of named) {
+    if (step.error) problems.push(`${name} did not run: ${step.error}`);
+    else if (step.status !== 0) problems.push(`${name} exited with ${step.status ?? "a signal"}`);
+  }
+  for (const [name, step] of named.slice(0, 2)) {
+    for (const line of step.output.split("\n")) {
+      if (/Error|TTY/.test(line)) problems.push(`${name} reported: ${line.trim()}`);
+    }
+  }
+  if (!steps.check.output.includes("Everything's fine"))
+    problems.push(`drizzle-kit check did not report "Everything's fine"`);
+  if (!steps.generate.output.includes("No schema changes, nothing to migrate"))
+    problems.push('drizzle-kit generate did not report "No schema changes, nothing to migrate"');
+  const changed = steps.status.output.split("\n").filter((line) => line.trim() !== "");
+  if (changed.length > 0)
+    problems.push(
+      `${MIGRATIONS} differs from what drizzle-kit generates, or holds uncommitted changes:\n${changed.join("\n")}`,
+    );
+  return problems;
+}
+
+/** @returns {StepResult} */
+function run(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: TIMEOUT_MS,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  return result.error
+    ? { status: result.status, error: result.error.message, output }
+    : { status: result.status, output };
+}
+
 function drizzleKit(args) {
   const result = spawnSync("pnpm", ["--filter", "@openmapx/api", "exec", "drizzle-kit", ...args], {
     cwd: ROOT,
@@ -69,15 +131,6 @@ function drizzleKit(args) {
 function fail(message) {
   console.error(message);
   process.exit(1);
-}
-
-function changedMigrationFiles() {
-  const result = spawnSync("git", ["status", "--porcelain", "--", MIGRATIONS], {
-    cwd: ROOT,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) throw new Error(`git status failed: ${result.stderr}`);
-  return result.stdout.trim();
 }
 
 function snapshotWithoutIds(path) {
@@ -119,14 +172,15 @@ if (import.meta.main) {
     JSON.parse(readFileSync(join(ROOT, MIGRATIONS, "meta", "_journal.json"), "utf8")),
   );
   const remedy = comparison.applies ? REGENERATE : ADD_MIGRATION;
-  if (!drizzleKit(["check"])) fail(`drizzle-kit check failed for the API migrations.\n${remedy}`);
-  if (!drizzleKit(["generate"]))
-    fail(`drizzle-kit generate failed for the API migrations.\n${remedy}`);
-  const changed = changedMigrationFiles();
-  if (changed)
-    fail(
-      `${MIGRATIONS} differs from what drizzle-kit generates, or holds uncommitted changes:\n${changed}\n${remedy}`,
-    );
+  const kit = ["--filter", "@openmapx/api", "exec", "drizzle-kit"];
+  const check = run("pnpm", [...kit, "check"]);
+  const generate = run("pnpm", [...kit, "generate"]);
+  const status = run("git", ["status", "--porcelain", "--", MIGRATIONS]);
+  const problems = driftProblems({ check, generate, status });
+  if (problems.length > 0) {
+    console.error(`${check.output}${generate.output}`);
+    fail(`${problems.map((problem) => `✗ ${problem}`).join("\n")}\n${remedy}`);
+  }
   if (comparison.applies) {
     const mismatch = compareRegeneratedBaseline();
     if (mismatch) fail(`${mismatch}\n${REGENERATE}`);

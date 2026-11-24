@@ -94,7 +94,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           taxonomy_alternates, geom, h3_r8, sources, release)
        VALUES
          ('gers-join', 'Join Cafe', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff',
+          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), x'881f1d4887fffff'::BIGINT,
           '[{"property":"","dataset":"meta"}]', '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
@@ -153,9 +153,9 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           taxonomy_alternates, geom, h3_r8, release)
        VALUES
          ('gers-nearby', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff', '2026-07-22.0'),
+          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), x'881f1d4887fffff'::BIGINT, '2026-07-22.0'),
          ('gers-far', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), '881f1d4887ffffe', '2026-07-22.0')`,
+          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), x'881f1d4887ffffe'::BIGINT, '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
@@ -186,7 +186,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
             120,
             RADIANS(90)
           )::geometry,
-          '881f1d4887ffffd', '2026-07-22.0')`,
+          x'881f1d4887ffffd'::BIGINT, '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
@@ -234,7 +234,19 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       }),
       assign: vi.fn(async () => ({ components: 1, assignmentCursor: 1, stagedLinks: 1 })),
       validateFusedQuality: vi.fn(async () => ({ applicableCases: 1, cases: [] })),
-      publish: vi.fn(async () => ({ linked: 1 })),
+      // Like the real publication, completes the run inside the swap.
+      publish: vi.fn(
+        async (
+          transaction: postgres.TransactionSql,
+          _schema: string,
+          options?: {
+            complete?: (tx: postgres.TransactionSql, linked: number) => Promise<void>;
+          },
+        ) => {
+          await options?.complete?.(transaction, 1);
+          return { linked: 1 };
+        },
+      ),
       cleanup: vi.fn(async () => undefined),
       preflight: vi.fn(async () => undefined),
     };
@@ -268,8 +280,15 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           phase: "complete",
           attemptCount: 2,
           workspaceCleanedAt: expect.any(Date),
+          // Stored as a bigint, reported as the cell scoring returned.
+          scoreCursorH3: "881f1d4887fffff",
         }),
       );
+      const [storedCursor] = await dataManagerSql.unsafe<{ type: string; value: string }[]>(
+        `SELECT pg_typeof(score_cursor_h3)::TEXT AS type, score_cursor_h3::TEXT AS value
+           FROM overture_places.conflation_state`,
+      );
+      expect(storedCursor).toEqual({ type: "bigint", value: "613036919424548863" });
 
       await expect(
         retentionModule.finalizeOvertureReleaseFiles({
@@ -576,14 +595,14 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   });
 
   it("moves an unchanged OSM snapshot into a new Places release without copying it", async () => {
-    const live = "overture_reuse_test";
-    const staging = "overture_reuse_test__staging";
+    const live = "overture_places";
+    const staging = "overture_places__staging";
     await pg.sql.unsafe(buildSchemaDDL(live));
     await pg.sql.unsafe(buildSchemaDDL(staging));
     await pg.sql.unsafe(
       `INSERT INTO "${live}".osm_pois
-         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       VALUES ('node', 42, 'Reusable POI', 50.7753, 6.0839, '881f1d4887fffff', 'cafes', '{}')`,
+         (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       VALUES ('node', 42, 'Reusable POI', ST_Point(6.0839, 50.7753, 4326), x'881f1d4887fffff'::BIGINT, 'cafes', '{}')`,
     );
     await pg.sql.unsafe(
       `INSERT INTO "${live}".conflation_state

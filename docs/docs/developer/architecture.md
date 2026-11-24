@@ -367,7 +367,50 @@ The manager streams a selected PBF through Osmium into an
 `osm_search`. Publication epochs invalidate provider caches without key scans,
 and a failed rebuild leaves the previous live schema queryable. The
 `notable_places` schema follows the same staging-and-swap pattern, filled from
-a Wikidata SPARQL endpoint (CC0) instead of a PBF.
+a Wikidata SPARQL endpoint (CC0) instead of a PBF, and so does Overture's
+`overture_places`.
+
+A publication never makes the API's readers wait
+(`services/data-manager/src/jobs/publish-schema-swap.ts`). Indexes and
+`ANALYZE` run on the staging schema first. One transaction then locks the live
+schema's `publication_fence` table, renames the live schema to
+`<live>__previous` and the staging schema to the live name, and drops the old
+fence. Renaming a schema takes no table lock, and every later query resolves the
+live name to the new tables, prepared statements included. No reader queries
+the fence, but `pg_dump` holds it for a whole backup, so a publication waits for
+a running backup instead of renaming tables under it, and a backup always holds
+each data set as last published (see
+[Backup & restore](../administration/backup-and-restore.md)). A dump that
+started just before a publication but reaches the fence after it fails when it
+reads the dropped fence. A second transaction drops `<live>__previous` once its
+last reader has finished. Each step waits at most one second for a lock and
+is retried with growing pauses. The publication has committed by then, so if
+the drop fails, for example because the old schema is still being read after
+the last retry, the schema stays in place, the failure is only logged, and the
+next publication drops it before it swaps. Overture's OSM POI snapshot and its
+conflation links are swapped the same way as single tables inside
+`overture_places`: renaming a table does take its lock, so those swaps wait for
+that table's readers, a second at a time. They lock the schema's fence first
+and replace it in the same transaction. The conflation run is marked complete
+in the links' swap transaction, because the next-link table is empty after the
+swap and must never be published again.
+
+Conflation's optional embedding cache is not part of any publication. It lives
+in its own `overture_embeddings` schema, which data-manager creates on first
+use, so vectors fetched for one Overture release serve the next and a swap
+never waits for a cache write. Its key is the SHA-256 of the model name and
+the text, and vectors are stored as `real[]`. Concurrent builds may store the
+same text; the first vector stays. The cache has no eviction.
+
+Points in these schemas are `geometry(Point, 4326)` columns with a GiST index,
+so bounding-box and nearest-neighbour queries use the index; readers take
+coordinates with `ST_X`/`ST_Y` and measure distances by casting to
+`geography`. H3 cells are stored as `bigint`: a cell index's top bit is
+reserved and always 0, so the value fits, and data-manager converts at the
+database boundary from and to the hexadecimal form h3-js uses. Indexes and
+constraints are named `<table>_<columns>_<kind>`
+(`idx`, `key`, `pkey`, `fkey` or `check`), which lets a table swap rename them
+together with their table.
 
 ## The integration host lifecycle
 

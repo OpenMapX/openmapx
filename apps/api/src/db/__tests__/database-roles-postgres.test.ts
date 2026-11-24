@@ -7,9 +7,18 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  ambientSchemaDDL,
+  attachFeatureStorage,
+  createFeatureStorage,
+  dropRetiredFeatureStorage,
+  featureTable,
+  retireAmbientGenerations,
+} from "../../../../../services/data-manager/src/jobs/ambient-places/feature-storage.js";
+import {
+  AMBIENT_SCHEMA_VERSION,
   ensureAmbientSchema,
 } from "../../../../../services/data-manager/src/jobs/ambient-places/schema.js";
+import { buildPublicationFenceDDL } from "../../../../../services/data-manager/src/jobs/publication-fence.js";
+import { publishSchemaSwap } from "../../../../../services/data-manager/src/jobs/publish-schema-swap.js";
 import {
   connectProductionPostgis,
   API_MIGRATIONS as MIGRATIONS,
@@ -20,15 +29,8 @@ import {
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 const TRAFFIC_FLOW = join(import.meta.dirname, "fixtures", "openconditions-traffic-flow.sql");
-/** What OpenConditions' migration grants the tile function's role: the
- * tables and functions `conditions.segment_flow` reads, and nothing else. */
-const TILE_CONTRACT = `
-  GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
-  GRANT SELECT ON conditions.road_segment, conditions.segment_speed, conditions.source,
-    conditions.public_license_policy TO openmapx_tiles_owner;
-  GRANT EXECUTE ON FUNCTION conditions.segment_flow(integer, integer, integer, json),
-    conditions.flow_public_licenses(text[]), conditions.flow_osm_credit() TO openmapx_tiles_owner;
-`;
+/** What `conditions.grant_consumer_roles()` grants the tile function's role:
+ * the tables `conditions.segment_flow` reads, and nothing else. */
 const TILE_CONTRACT_TABLES = ["public_license_policy", "road_segment", "segment_speed", "source"];
 const passwords = productionPostgisPasswords();
 
@@ -222,18 +224,82 @@ integration("database roles", () => {
     await dataManager.unsafe("DROP SCHEMA overture_places__staging");
   });
 
-  it("ensureAmbientSchema succeeds under the guard", async () => {
+  it("ensureAmbientSchema and the partition lifecycle succeed under the guard", async () => {
     await ensureAmbientSchema(dataManager);
-    // A later build checks the same objects again.
-    await dataManager.unsafe(ambientSchemaDDL);
+    // Another data-manager process checks the version and creates nothing.
+    const second = connect("openmapx_data_manager", passwords.dataManager);
+    try {
+      await ensureAmbientSchema(second);
+    } finally {
+      await second.end({ timeout: 2 });
+    }
     expect(
       await superuser`
         SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner FROM pg_class c
         WHERE c.relnamespace = 'ambient_places'::regnamespace`,
     ).toEqual([{ owner: "openmapx_data_manager" }]);
-    expect(await api.unsafe("SELECT singleton, enabled FROM ambient_places.state")).toEqual([
-      { singleton: 1, enabled: true },
+    expect(
+      await api.unsafe("SELECT singleton, enabled, schema_version FROM ambient_places.state"),
+    ).toEqual([{ singleton: 1, enabled: true, schema_version: AMBIENT_SCHEMA_VERSION }]);
+    // A generation is created, filled, attached, retired, detached and dropped.
+    const generation = "00000000-0000-4000-8000-0000000000a1";
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe(
+        `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status,cache_lease_until) VALUES($1,'{}','regional','published',now()-interval '1 second')`,
+        [generation],
+      );
+      await createFeatureStorage(tx, generation);
+      await tx.unsafe(
+        `INSERT INTO ${featureTable(generation)}(generation,id,name,category,rank,min_zoom,tenant,sources,geom)
+         VALUES($1,'osm:node/1','Clinic','hospital',1,13,false,'osm',ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857))`,
+        [generation],
+      );
+      await attachFeatureStorage(tx, generation);
+    });
+    // A planet candidate is staged under its own name and renamed as it is attached.
+    const candidate = "00000000-0000-4000-8000-0000000000b1";
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe(
+        `INSERT INTO ambient_places.generations(id,manifest,storage,publication_status) VALUES($1,'{}','planet','staging')`,
+        [candidate],
+      );
+      await createFeatureStorage(tx, candidate, "candidate");
+      await tx.unsafe(
+        `INSERT INTO ${featureTable(candidate, "candidate")}(generation,id,name,category,rank,min_zoom,tenant,sources,geom)
+         VALUES($1,'osm:node/2','Pharmacy','pharmacy',1,13,false,'osm',ST_Transform(ST_SetSRID(ST_MakePoint(6.09,50.78),4326),3857))`,
+        [candidate],
+      );
+    });
+    await dataManager.begin(async (tx) => {
+      await attachFeatureStorage(tx, candidate, { from: "candidate" });
+      await tx.unsafe(
+        `UPDATE ambient_places.generations SET publication_status='published',cache_lease_until=now()-interval '1 second' WHERE id=$1`,
+        [candidate],
+      );
+    });
+    expect(
+      await api.unsafe(
+        "SELECT id, ST_SRID(geom) AS srid FROM ambient_places.features WHERE generation IN ($1, $2) ORDER BY id",
+        [generation, candidate],
+      ),
+    ).toEqual([
+      { id: "osm:node/1", srid: 3857 },
+      { id: "osm:node/2", srid: 3857 },
     ]);
+    expect(
+      await superuser.unsafe(
+        "SELECT to_regclass($1) IS NULL AS renamed, to_regclass($2) IS NOT NULL AS attached",
+        [featureTable(candidate, "candidate"), featureTable(candidate)],
+      ),
+    ).toEqual([{ renamed: true, attached: true }]);
+    await dataManager.begin((tx) => retireAmbientGenerations(tx));
+    expect(await dropRetiredFeatureStorage(dataManager)).toBe(true);
+    expect(
+      await superuser.unsafe(
+        "SELECT to_regclass($1) IS NULL AND to_regclass($2) IS NULL AS dropped",
+        [featureTable(generation), featureTable(candidate)],
+      ),
+    ).toEqual([{ dropped: true }]);
     await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
   });
 
@@ -295,6 +361,7 @@ integration("database roles", () => {
       await dataManager.unsafe(`
         DROP SCHEMA IF EXISTS "${schema}" CASCADE;
         CREATE SCHEMA "${schema}";
+        ${buildPublicationFenceDDL(schema)}
         CREATE TABLE "${schema}".places (name text NOT NULL, geom geometry(Point, 4326));
         CREATE INDEX ON "${schema}".places USING gin (name gin_trgm_ops);
         INSERT INTO "${schema}".places VALUES ('${label}', ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));
@@ -308,10 +375,11 @@ integration("database roles", () => {
     expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "first" }]);
 
     await build("osm_search__staging", "second");
-    await dataManager.begin(async (tx) => {
-      await tx.unsafe("ALTER SCHEMA osm_search RENAME TO osm_search__previous");
-      await tx.unsafe("ALTER SCHEMA osm_search__staging RENAME TO osm_search");
-      await tx.unsafe("DROP SCHEMA osm_search__previous CASCADE");
+    // The publication locks the live fence, renames both schemas, drops the old fence and schema.
+    await publishSchemaSwap(dataManager, {
+      live: "osm_search",
+      staging: "osm_search__staging",
+      retry: { attempts: 2, backoffMs: 10 },
     });
     expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "second" }]);
     expect(await api.unsafe("SELECT name FROM osm_search.names")).toEqual([{ name: "second" }]);
@@ -622,7 +690,7 @@ integration("code planted for another role", () => {
     // OpenConditions installed after PostGIS started, as its own role with
     // the documented search path, with its real tile function, the functions
     // and tables it reads, a table holding credentials, and the grants its
-    // migration gives the tile function's role.
+    // ingest service gives the tile function's role after migrating.
     await roles.superuser.unsafe(`
       CREATE ROLE openconditions_fixture LOGIN PASSWORD '${passwords.openConditions}';
       ALTER ROLE openconditions_fixture SET search_path = conditions, extensions;
@@ -640,18 +708,19 @@ integration("code planted for another role", () => {
         INSERT INTO conditions.source
           (id, domain, format, product, access_mode, tier, operator, license, attribution,
            cadence_sec, freshness_window_sec)
-        VALUES ('open', 'traffic', 'json', 'flow', 'open', 'a', 'Fixture', 'ODbL-1.0', 'Fixture', 60, 600);
+        VALUES ('open', 'traffic', 'json', 'flow', 'bulk', 'authoritative', 'Fixture', 'ODbL-1.0',
+          'Fixture', 60, 600);
         INSERT INTO conditions.segment_speed
           (segment_id, current_kph, free_flow_kph, speed_ratio, los, confidence, contributing,
            permission_licenses, updated_at)
-        VALUES ('s1', 30, 50, 0.6, 'moderate', 'high', ARRAY['open'], ARRAY['ODbL-1.0'], now());
+        VALUES ('s1', 30, 50, 0.6, 'heavy', 'measured', ARRAY['open'], ARRAY['ODbL-1.0'], now());
         INSERT INTO conditions.public_license_policy VALUES ('ODbL-1.0');
         CREATE TABLE conditions.oauth_grant (
           source_id text PRIMARY KEY, refresh_token text NOT NULL, access_token text,
           access_token_expires_at timestamptz);
         INSERT INTO conditions.oauth_grant VALUES ('open', 'refresh-secret', 'access-secret', now());
       `);
-      await openConditions.unsafe(TILE_CONTRACT);
+      await openConditions`SELECT conditions.grant_consumer_roles()`;
     } finally {
       await openConditions.end();
     }

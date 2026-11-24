@@ -374,10 +374,10 @@ echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} rea
 # hence `extensions` on the search path. Martin itself asks for the PostGIS
 # version unqualified when it connects, so its login searches `extensions`
 # too; neither searches public. PostGIS grants the owner role nothing in
-# `conditions`: OpenConditions' own migration grants it exactly the tables and
-# functions `conditions.segment_flow` reads, so tiles render as soon as
-# OpenConditions has migrated, and its credentials and crowd data stay
-# unreadable. A restore keeps the grants.
+# `conditions`: OpenConditions' ingest service grants it, after every
+# migrate, exactly the tables and functions `conditions.segment_flow` reads,
+# so tiles render as soon as OpenConditions has migrated, and its credentials
+# and crowd data stay unreadable. A restore keeps the grants.
 # Without MARTIN_DB_PASSWORD the tile server cannot log in.
 if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
   ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}

@@ -398,7 +398,11 @@ regeneration cannot be migrated and fails with
 `schema "data_manager" already exists`, the baseline's first statement;
 recreate it. `pnpm check-drizzle-drift`, part of `pnpm check:policy`, runs
 `drizzle-kit check` and `drizzle-kit generate` and fails when generation writes
-anything or the folder holds uncommitted changes. While the journal holds only
+anything or the folder holds uncommitted changes. drizzle-kit exits 0 without
+writing anything when it would ask a question, such as whether a column was
+renamed, or cannot load the schema, so the gate also requires both commands'
+"no change" messages ("Everything's fine" and "No schema changes, nothing to
+migrate") and fails on any output line with `Error` or `TTY`. While the journal holds only
 `0000_baseline` and `0001_database_objects`, it also regenerates the baseline
 into a temporary folder and fails unless `0000_baseline.sql` is byte-identical
 to the committed file and its snapshot differs only in `id` and `prevId`, so a

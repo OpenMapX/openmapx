@@ -17,11 +17,13 @@ import {
 import { itemAt } from "@openmapx/core/item-at";
 import type postgres from "postgres";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
+import type { LockRetry } from "../publish-schema-swap.js";
 import { assertAmbientDiskCapacity } from "./capacity.js";
 import {
   activateAmbientGeneration,
   fresh,
   insertAmbientFeatures,
+  insertAmbientGeneration,
   prepareAmbientGeneration,
   tableExists,
 } from "./publication.js";
@@ -29,6 +31,10 @@ import {
 export interface AmbientBuildOptions {
   availableBytes?: () => Promise<number>;
   onProgress?: (progress: AmbientBuildProgress) => void | Promise<void>;
+  /** How often attaching a partition is retried when it times out waiting for a lock. */
+  lockRetry?: LockRetry;
+  /** How long dropping retired partitions after the publication may wait for readers. */
+  cleanupRetry?: LockRetry;
 }
 interface OsmState {
   region: string;
@@ -129,10 +135,7 @@ export async function buildGermanyPlaces(
   }
   const available = options.availableBytes ?? freeBytesInPostgresContainer;
   assertAmbientDiskCapacity(await available(), inputCount);
-  await tx.unsafe(
-    `INSERT INTO ambient_places.generations(id,manifest) VALUES($1,$2::TEXT::JSONB)`,
-    [generation, JSON.stringify(manifest)],
-  );
+  await insertAmbientGeneration(tx, manifest, "regional", "published");
   const [west, south, east, north] = region.bounds;
   const inside = (p: AmbientPlace) =>
     p.coordinates[0] >= west &&
@@ -159,7 +162,7 @@ export async function buildGermanyPlaces(
   let osmId = "0";
   for (;;) {
     const rows = await tx.unsafe<AmbientOsmRow[]>(
-      `SELECT osm_type,osm_id::TEXT,name,lng,lat,category,tags,importance FROM osm_search.places WHERE (osm_type,osm_id)>($1,$2::BIGINT) ORDER BY osm_type,osm_search.places.osm_id LIMIT ${AMBIENT_LIMITS.countryBatch}`,
+      `SELECT osm_type,osm_id::TEXT,name,ST_X(geom) AS lng,ST_Y(geom) AS lat,category,tags,importance FROM osm_search.places WHERE (osm_type,osm_id)>($1,$2::BIGINT) ORDER BY osm_type,osm_search.places.osm_id LIMIT ${AMBIENT_LIMITS.countryBatch}`,
       [osmType, osmId],
     );
     if (!rows.length) break;
@@ -218,7 +221,7 @@ export async function buildGermanyPlaces(
         })[]
       >(
         `SELECT ${OVERTURE_COLUMNS},l.osm_type,l.osm_id::TEXT,p.osm_id::TEXT AS indexed_osm_id,
-        CASE WHEN raw.osm_id IS NULL THEN NULL ELSE jsonb_build_object('osm_type',raw.osm_type,'osm_id',raw.osm_id::TEXT,'name',raw.name,'lng',raw.lng,'lat',raw.lat,'category',raw.category,'tags',coalesce(raw.tags,'{}'::JSONB),'importance',0.5) END AS linked_osm
+        CASE WHEN raw.osm_id IS NULL THEN NULL ELSE jsonb_build_object('osm_type',raw.osm_type,'osm_id',raw.osm_id::TEXT,'name',raw.name,'lng',ST_X(raw.geom),'lat',ST_Y(raw.geom),'category',raw.category,'tags',coalesce(raw.tags,'{}'::JSONB),'importance',0.5) END AS linked_osm
         FROM (SELECT * FROM overture_places.places WHERE gers_id>$1 ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.countryBatch}) o
         LEFT JOIN overture_places.poi_conflation_link l ON l.gers_id=o.gers_id AND l.release=$2
         LEFT JOIN osm_search.places p ON p.osm_type=l.osm_type AND p.osm_id=l.osm_id
@@ -262,6 +265,6 @@ export async function buildGermanyPlaces(
     batches,
     placeCount: manifest.placeCount,
   });
-  await activateAmbientGeneration(tx, manifest);
+  await activateAmbientGeneration(tx, manifest, { retry: options.lockRetry });
   return manifest;
 }

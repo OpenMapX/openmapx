@@ -64,8 +64,9 @@ describe("buildOvertureIngestSql", () => {
     expect(query).toContain("LOAD h3;");
     expect(query).toContain("ST_SetCRS(geometry::GEOMETRY('OGC:CRS84'), 'EPSG:4326') AS geom,");
     expect(query).toContain(
-      "h3_latlng_to_cell_string(ST_Y(geometry), ST_X(geometry), 8) AS h3_r8,",
+      "CAST(h3_latlng_to_cell(ST_Y(geometry), ST_X(geometry), 8) AS BIGINT) AS h3_r8,",
     );
+    expect(query).not.toContain("h3_latlng_to_cell_string");
     expect(query).not.toContain("sources_catalogue");
     expect(query).not.toContain("ALTER TABLE");
     expect(query).toContain('INSERT INTO pg."overture_places__staging".places');

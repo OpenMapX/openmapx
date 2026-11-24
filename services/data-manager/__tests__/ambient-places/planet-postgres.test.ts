@@ -6,6 +6,7 @@ import {
 } from "@openmapx/core/ambient-places-server";
 import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import * as publisher from "../../src/jobs/ambient-places/build.js";
+import { readPlanetStage } from "../../src/jobs/ambient-places/planet-state.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import {
   buildSearchIndexIndexesDDL,
@@ -38,9 +39,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         [count],
       );
       await pg.sql.unsafe(
-        `INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance)
-   SELECT 'node',i,'世界 Clinic '||i,CASE i%4 WHEN 0 THEN -33.86 WHEN 1 THEN 35.7 WHEN 2 THEN 40.71 ELSE -33.92 END,
-    CASE i%4 WHEN 0 THEN 151.2 WHEN 1 THEN 139.7 WHEN 2 THEN -74 ELSE 18.42 END,'amenity/hospital',
+        `INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
+   SELECT 'node',i,'世界 Clinic '||i,ST_Point(
+    CASE i%4 WHEN 0 THEN 151.2 WHEN 1 THEN 139.7 WHEN 2 THEN -74 ELSE 18.42 END,
+    CASE i%4 WHEN 0 THEN -33.86 WHEN 1 THEN 35.7 WHEN 2 THEN 40.71 ELSE -33.92 END,4326),'amenity/hospital',
     CASE WHEN i=4 THEN '{"disused":"yes"}'::JSONB ELSE '{}'::JSONB END,0.8 FROM generate_series(1,$1) i`,
         [count],
       );
@@ -49,9 +51,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await seed();
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
-   ('g-tokyo','Tokyo Clinic','{"common":{"en":"Tokyo Clinic"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff',0.9,'open','2026-09-23.1'),
-   ('g-closed','Closed partner',NULL,'hospital',ST_SetSRID(ST_MakePoint(151.2,-33.86),4326),'88be0e222bfffff',0.9,'open','2026-09-23.1'),
-   ('g-brazil','Café São Paulo',NULL,'cafe',ST_SetSRID(ST_MakePoint(-46.63,-23.55),4326),'88a8100c39fffff',0.9,'open','2026-09-23.1');
+   ('g-tokyo','Tokyo Clinic','{"common":{"en":"Tokyo Clinic"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,0.9,'open','2026-09-23.1'),
+   ('g-closed','Closed partner',NULL,'hospital',ST_SetSRID(ST_MakePoint(151.2,-33.86),4326),x'88be0e222bfffff'::BIGINT,0.9,'open','2026-09-23.1'),
+   ('g-brazil','Café São Paulo',NULL,'cafe',ST_SetSRID(ST_MakePoint(-46.63,-23.55),4326),x'88a8100c39fffff'::BIGINT,0.9,'open','2026-09-23.1');
    INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
    VALUES('2026-09-23.1','planet',3,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]');
    INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
@@ -79,7 +81,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(rows.some((r) => r.id === "osm:node/4" || r.id === "overture:g-closed")).toBe(false);
       expect((await readAmbientManifest(pg.sql))?.generation).toBe(result.generation);
       const [storage] = await pg.sql.unsafe(
-        `SELECT count(*)::INT AS partitions FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass`,
+        `SELECT count(*)::INT AS partitions FROM pg_inherits WHERE inhparent='ambient_places.features'::regclass`,
       );
       expect(storage?.partitions).toBe(1);
     }, 60000);
@@ -93,7 +95,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(
           `INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,h3_r8,confidence,operating_status,sources,release)
-        VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff',$1,$2,'[{"property":"/names/primary","dataset":"meta"}]','2026-09-23.1')`,
+        VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,$1,$2,'[{"property":"/names/primary","dataset":"meta"}]','2026-09-23.1')`,
           [confidence, status],
         );
         await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
@@ -171,10 +173,92 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(counts).toEqual({ n: 2000, unique: 2000 });
     }, 60000);
+    it("stages a candidate under its own name, and refuses to resume one restored from a backup but discards it", async () => {
+      await seed(2001);
+      const interrupt = () =>
+        publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+          availableBytes: ample,
+          onProgress: async (p) => {
+            if (p.processed === 2000) throw new Error("stop after committed page");
+          },
+        });
+      const relations = async (pattern: string) =>
+        (
+          await pg.sql.unsafe<{ name: string }[]>(
+            `SELECT relname AS name FROM pg_class WHERE relnamespace='ambient_places'::regnamespace AND relname LIKE $1
+             UNION ALL SELECT conname FROM pg_constraint WHERE connamespace='ambient_places'::regnamespace AND conname LIKE $1
+             ORDER BY 1`,
+            [pattern],
+          )
+        ).map(({ name }) => name);
+      await expect(interrupt()).rejects.toThrow("stop after committed page");
+      const [stage] = await pg.sql.unsafe(`SELECT generation FROM ambient_places.planet_builds`);
+      assert.isDefined(stage);
+      const hex = String(stage.generation).replaceAll("-", "");
+      expect(await relations(`%${hex}%`)).toEqual([
+        `candidate_${hex}`,
+        `candidate_${hex}_generation_check`,
+        `candidate_${hex}_geom_idx`,
+        `candidate_${hex}_gers_id_idx`,
+        `candidate_${hex}_pkey`,
+        `candidate_${hex}_pkey`,
+      ]);
+
+      const result = await publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
+        availableBytes: ample,
+      });
+      expect(result).toMatchObject({ generation: stage.generation, placeCount: 2000 });
+      const [counts] = await pg.sql.unsafe(
+        `SELECT count(*)::INT AS n,count(DISTINCT id)::INT AS unique FROM ${PUBLISHED_AMBIENT_FEATURES} f`,
+      );
+      expect(counts).toEqual({ n: 2000, unique: 2000 });
+      expect(await relations(`%${hex}%`)).toEqual([
+        `features_${hex}`,
+        `features_${hex}_generation_check`,
+        `features_${hex}_geom_idx`,
+        `features_${hex}_gers_id_idx`,
+        `features_${hex}_pkey`,
+        `features_${hex}_pkey`,
+      ]);
+
+      await expect(interrupt()).rejects.toThrow("stop after committed page");
+      const [restored] = await pg.sql.unsafe(
+        `SELECT b.generation FROM ambient_places.planet_builds b JOIN ambient_places.generations g ON g.id=b.generation WHERE g.publication_status='staging'`,
+      );
+      assert.isDefined(restored);
+      // A restore from a backup: the backup left the candidate's table out,
+      // and pg_restore recreates every source table under a new OID.
+      const [before] = await pg.sql.unsafe(`SELECT 'osm_search.places'::regclass::OID AS oid`);
+      await pg.sql.unsafe(
+        `DROP TABLE ambient_places.candidate_${String(restored.generation).replaceAll("-", "")};
+         ALTER SCHEMA osm_search RENAME TO osm_search_dumped;
+         ${buildSearchIndexSchemaDDL("osm_search")}${buildSearchIndexIndexesDDL("osm_search")}
+         INSERT INTO osm_search.index_state SELECT * FROM osm_search_dumped.index_state;
+         INSERT INTO osm_search.places SELECT * FROM osm_search_dumped.places;
+         DROP SCHEMA osm_search_dumped CASCADE`,
+      );
+      const [after] = await pg.sql.unsafe(`SELECT 'osm_search.places'::regclass::OID AS oid`);
+      expect(after?.oid).not.toBe(before?.oid);
+      await expect(
+        publisher.resumePlanetPlaces(pg.sql, restored.generation, undefined, {
+          availableBytes: ample,
+        }),
+      ).rejects.toThrow(/rows are not in the database.*discard it and build again/);
+      expect(await readPlanetStage(pg.sql)).toMatchObject({ generation: restored.generation });
+      await publisher.discardPlanetPlaces(pg.sql, restored.generation);
+      expect(await readPlanetStage(pg.sql)).toBeNull();
+      expect(await relations("candidate_%")).toEqual([]);
+      expect((await readAmbientManifest(pg.sql))?.generation).toBe(stage.generation);
+      const rebuilt = await publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
+        availableBytes: ample,
+      });
+      expect(rebuilt.placeCount).toBe(2000);
+      expect((await readAmbientManifest(pg.sql))?.generation).toBe(rebuilt.generation);
+    }, 60000);
     it("refuses resume after a same-release link revision, then discards only unpublished storage", async () => {
       await seed();
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,release) VALUES('g','Tokyo','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'882f5a3247fffff','2026-09-23.1');
+      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,release) VALUES('g','Tokyo','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,'2026-09-23.1');
    INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue) VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]')`);
       await expect(
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
@@ -314,9 +398,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(rows.some((r) => r.id === first.generation)).toBe(false);
       const [partitions] = await pg.sql.unsafe(
-        "SELECT count(*)::INT AS n FROM pg_inherits WHERE inhparent='ambient_places.planet_features'::regclass",
+        "SELECT count(*)::INT AS n FROM pg_inherits WHERE inhparent='ambient_places.features'::regclass",
       );
       expect(partitions?.n).toBe(3);
+      // The retired generation's table is dropped, not only detached.
+      const [retired] = await pg.sql.unsafe("SELECT to_regclass($1) IS NULL AS dropped", [
+        `ambient_places.features_${first.generation.replaceAll("-", "")}`,
+      ]);
+      expect(retired?.dropped).toBe(true);
     }, 60000);
     it("requires complete matching planet sources and reports disk failure without switching active", async () => {
       await seed();

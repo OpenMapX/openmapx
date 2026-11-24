@@ -125,12 +125,13 @@ async function queryFusedCase(
   const { west, south, east, north } = baseline.bbox;
   const [osmRows, overtureRows, linkRows] = await Promise.all([
     sql.unsafe<FusedOsmRow[]>(
-      `SELECT osm_type, osm_id::TEXT, name, lat, lng, category,
+      `SELECT osm_type, osm_id::TEXT, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, category,
               COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
               COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website,
               CONCAT_WS(' ', tags->>'addr:street', tags->>'addr:housenumber') AS address
        FROM "${schema}".osm_pois
-       WHERE lng BETWEEN $1 AND $3 AND lat BETWEEN $2 AND $4 AND category = $5`,
+       -- Exact on the box's edges, where a bounding-box overlap rounds to float4.
+       WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326)) AND category = $5`,
       [west, south, east, north, baseline.category],
     ),
     sql.unsafe<FusedOvertureRow[]>(
@@ -139,7 +140,7 @@ async function queryFusedCase(
               (SELECT BTRIM(v) FROM unnest(websites) WITH ORDINALITY AS t(v, ord) WHERE BTRIM(v) <> '' ORDER BY ord LIMIT 1) AS website,
               NULLIF(BTRIM(addresses->0->>'freeform'), '') AS address
        FROM "${schema}".places
-       WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+       WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          AND (operating_status IS NULL OR operating_status = 'open')
          AND (confidence IS NULL OR confidence >= $6)
          AND (
@@ -156,7 +157,7 @@ async function queryFusedCase(
       `SELECT link.osm_type, link.osm_id::TEXT, link.gers_id
        FROM "${schema}".poi_conflation_link_next AS link
        JOIN "${schema}".osm_pois AS osm USING (osm_type, osm_id)
-       WHERE osm.lng BETWEEN $1 AND $3 AND osm.lat BETWEEN $2 AND $4
+       WHERE ST_Intersects(osm.geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          AND osm.category = $5`,
       [west, south, east, north, baseline.category],
     ),
@@ -204,7 +205,7 @@ async function queryCase(
   const rows = await sql.unsafe<{ gers_id: string }[]>(
     `SELECT gers_id
      FROM "${schema}".places
-     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+     WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
        AND (operating_status IS NULL OR operating_status = 'open')
        AND (confidence IS NULL OR confidence >= $6)
        AND (

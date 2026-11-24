@@ -7,18 +7,37 @@ import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import type postgres from "postgres";
 import { osmPbfName } from "../download-osm.js";
-import {
-  assertDataPublication,
-  cancellableTransaction,
-  dataWorkerSignal,
-  publishDataChange,
-  retainDataPublication,
-} from "../execution/worker-scope.js";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 import { withOsmiumLocationIndex } from "../osm-resources.js";
+import {
+  type LockRetry,
+  PUBLICATION_LOCK_RETRY,
+  publishTableSwap,
+} from "../publish-schema-swap.js";
+import { h3CellToBigint } from "./h3.js";
 import { assertValidRegion } from "./pull.js";
-import { assertValidOvertureSchema } from "./schema.js";
+import {
+  assertValidOvertureSchema,
+  buildOsmPoisIndexesDDL,
+  buildOsmPoisTableDDL,
+} from "./schema.js";
 
 export type { OsmFilter };
+
+/**
+ * Indexes the filled `osm_pois__staging` table and swaps it in for
+ * `osm_pois`. The indexes are built before the swap, so the table lock the
+ * rename takes is held only for the rename.
+ */
+export async function publishOsmPoisSnapshot(
+  sql: postgres.Sql,
+  schema: string,
+  retry: LockRetry = PUBLICATION_LOCK_RETRY,
+): Promise<void> {
+  assertValidOvertureSchema(schema);
+  await sql.unsafe(buildOsmPoisIndexesDDL(schema, "osm_pois__staging"));
+  await publishTableSwap(sql, { schema, live: "osm_pois", staging: "osm_pois__staging", retry });
+}
 
 const osmTagMap = new Map<string, string>(
   Object.entries(CATEGORY_FILTERS).flatMap(([catId, filters]) =>
@@ -210,13 +229,7 @@ export async function extractOsmPois(
       const stagingTable = "osm_pois__staging";
       opts.onProgress?.("Preparing a fresh OSM POI staging table...");
       await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
-      await sql.unsafe(
-        `CREATE TABLE "${schema}"."${stagingTable}"
-       (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
-      );
-      await sql.unsafe(
-        `ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`,
-      );
+      await sql.unsafe(buildOsmPoisTableDDL(schema, stagingTable));
 
       // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
       // the database pipeline: a country-sized intermediate is gigabytes and does
@@ -295,28 +308,9 @@ export async function extractOsmPois(
       const extracted = Number(uniqueCountText ?? 0);
       opts.onProgress?.(
         `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
-          "publishing the staged snapshot...",
+          "indexing and publishing the staged snapshot...",
       );
-      await assertDataPublication();
-      await publishDataChange(() =>
-        cancellableTransaction(sql, async (tx) => {
-          await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
-          await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
-          await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
-          await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
-          await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
-          await tx.unsafe(
-            `CREATE INDEX idx_osm_pois_h3
-         ON "${schema}".osm_pois (h3_r8, osm_type, osm_id)`,
-          );
-          await tx.unsafe(
-            `CREATE INDEX idx_osm_pois_geom
-         ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat))`,
-          );
-          await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
-        }),
-      );
-      await retainDataPublication();
+      await publishOsmPoisSnapshot(sql, schema);
       opts.onProgress?.(
         `Published ${extracted} unique OSM POIs to ${schema}.osm_pois ` +
           `(${emitted} geometries emitted).`,
@@ -405,26 +399,21 @@ async function insertOsmPois(
     const names = batch.map((r) => r.name);
     const lats = batch.map((r) => r.lat);
     const lngs = batch.map((r) => r.lng);
-    const h3Cells = batch.map((r) => r.h3R8);
+    const h3Cells = batch.map((r) => h3CellToBigint(r.h3R8));
     const categories = batch.map((r) => r.category ?? null);
     const tags = batch.map((r) => JSON.stringify(r.tags));
 
     await sql.unsafe(
       `INSERT INTO "${schema}"."${table}"
-         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
-       SELECT
-         UNNEST($1::TEXT[]),
-         UNNEST($2::BIGINT[]),
-         UNNEST($3::TEXT[]),
-         UNNEST($4::DOUBLE PRECISION[]),
-         UNNEST($5::DOUBLE PRECISION[]),
-         UNNEST($6::TEXT[]),
-         UNNEST($7::TEXT[]),
-         UNNEST($8::JSONB[])
+         (osm_type, osm_id, name, geom, h3_r8, category, tags)
+       SELECT r.osm_type, r.osm_id, r.name, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326),
+              r.h3_r8, r.category, r.tags
+         FROM UNNEST($1::TEXT[], $2::BIGINT[], $3::TEXT[], $4::DOUBLE PRECISION[],
+           $5::DOUBLE PRECISION[], $6::BIGINT[], $7::TEXT[], $8::JSONB[])
+           AS r (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
        ON CONFLICT (osm_type, osm_id) DO UPDATE SET
          name = EXCLUDED.name,
-         lat = EXCLUDED.lat,
-         lng = EXCLUDED.lng,
+         geom = EXCLUDED.geom,
          h3_r8 = EXCLUDED.h3_r8,
          category = EXCLUDED.category,
          tags = EXCLUDED.tags`,

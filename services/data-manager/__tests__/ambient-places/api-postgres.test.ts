@@ -34,12 +34,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
         );
         await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','admission','ready',now(),now(),now());
-        INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES('node',1,'Clinic',50.77,6.08,'amenity/hospital','{}',0.8)`);
+        INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',1,'Clinic',ST_Point(6.08,50.77,4326),'amenity/hospital','{}',0.8)`);
         // Initialize the dedicated schema without accepting a publication.
         const { ensureAmbientSchema } = await import("../../src/jobs/ambient-places/schema.js");
         await ensureAmbientSchema(pg.sql);
         await pg.sql.unsafe(`CREATE FUNCTION ambient_places.hold_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(399401); RETURN NEW; END $$;
-        CREATE TRIGGER hold_fixture BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION ambient_places.hold_fixture()`);
+        CREATE TRIGGER hold_fixture BEFORE INSERT ON ambient_places.generations FOR EACH ROW EXECUTE FUNCTION ambient_places.hold_fixture()`);
         await barrier.unsafe(`SELECT pg_advisory_lock(399401)`);
         let competingStatus: number;
         let sameProcessStatus: number;

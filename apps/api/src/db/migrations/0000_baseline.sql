@@ -1002,6 +1002,7 @@ CREATE UNIQUE INDEX "account_provider_id_account_id_key" ON "account" USING btre
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "account_action_receipt_actor_id_created_at_idx" ON "account_action_receipt" USING btree ("actor_id","created_at");--> statement-breakpoint
 CREATE INDEX "account_action_receipt_target_id_created_at_idx" ON "account_action_receipt" USING btree ("target_id","created_at");--> statement-breakpoint
+CREATE INDEX "account_action_receipt_created_at_idx" ON "account_action_receipt" USING btree ("created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "account_mail_outbox_request_key_kind_key" ON "account_mail_outbox" USING btree ("request_key","kind");--> statement-breakpoint
 CREATE INDEX "account_mail_outbox_state_created_at_idx" ON "account_mail_outbox" USING btree ("state","created_at");--> statement-breakpoint
 CREATE INDEX "account_mail_outbox_user_id_idx" ON "account_mail_outbox" USING btree ("user_id");--> statement-breakpoint
@@ -1020,6 +1021,7 @@ CREATE UNIQUE INDEX "admin_job_active_system_maintenance_key" ON "admin_job" USI
 CREATE UNIQUE INDEX "admin_job_log_job_id_source_event_id_key" ON "admin_job_log" USING btree ("job_id","source_event_id") WHERE "admin_job_log"."source_event_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "app_logs_created_at_idx" ON "app_logs" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "auth_policy_application_actor_id_idx" ON "auth_policy_application" USING btree ("actor_id");--> statement-breakpoint
+CREATE INDEX "auth_policy_application_created_at_idx" ON "auth_policy_application" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "auth_policy_state_activated_by_idx" ON "auth_policy_state" USING btree ("activated_by");--> statement-breakpoint
 CREATE INDEX "configuration_migration_preview_actor_id_kind_idx" ON "configuration_migration_preview" USING btree ("actor_id","kind");--> statement-breakpoint
 CREATE INDEX "configuration_migration_preview_expires_at_idx" ON "configuration_migration_preview" USING btree ("expires_at");--> statement-breakpoint
@@ -1071,6 +1073,7 @@ CREATE INDEX "oauthAccessToken_userId_idx" ON "oauth_access_token" USING btree (
 CREATE INDEX "oauthAccessToken_authorizationCodeId_idx" ON "oauth_access_token" USING btree ("authorization_code_id");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_refreshId_idx" ON "oauth_access_token" USING btree ("refresh_id");--> statement-breakpoint
 CREATE INDEX "oauthClient_userId_idx" ON "oauth_client" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "oauth_client_assertion_expires_at_idx" ON "oauth_client_assertion" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "oauthClientResource_clientId_resourceId_uidx" ON "oauth_client_resource" USING btree ("client_id","resource_id");--> statement-breakpoint
 CREATE INDEX "oauthClientResource_clientId_idx" ON "oauth_client_resource" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthClientResource_resourceId_idx" ON "oauth_client_resource" USING btree ("resource_id");--> statement-breakpoint
@@ -1082,6 +1085,7 @@ CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauth_refresh_token" USING bt
 CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
 CREATE INDEX "parked_location_vehicle_id_idx" ON "parked_location" USING btree ("vehicle_id");--> statement-breakpoint
+CREATE INDEX "parked_location_expires_at_idx" ON "parked_location" USING btree ("expires_at") WHERE "parked_location"."expires_at" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "passkey_credential_id_key" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "passkey_userId_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_credentialID_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
@@ -1094,6 +1098,7 @@ CREATE INDEX "session_expires_at_idx" ON "session" USING btree ("expires_at");--
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_auth_assurance_user_id_authenticated_at_idx" ON "session_auth_assurance" USING btree ("user_id","authenticated_at");--> statement-breakpoint
 CREATE INDEX "share_link_user_id_idx" ON "share_link" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "share_link_expires_at_idx" ON "share_link" USING btree ("expires_at") WHERE "share_link"."expires_at" is not null;--> statement-breakpoint
 CREATE INDEX "system_secret_updated_by_idx" ON "system_secret" USING btree ("updated_by");--> statement-breakpoint
 CREATE INDEX "system_settings_updated_by_idx" ON "system_settings" USING btree ("updated_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "transit_credential_preview_actor_id_operation_key_key" ON "transit_credential_preview" USING btree ("actor_id","operation_key");--> statement-breakpoint
@@ -1102,4 +1107,5 @@ CREATE INDEX "twoFactor_secret_idx" ON "two_factor" USING btree ("secret");--> s
 CREATE INDEX "twoFactor_userId_idx" ON "two_factor" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
 CREATE INDEX "integration_application_receipt_integration_id_created_at_idx" ON "integration_application_receipt" USING btree ("integration_id","created_at");--> statement-breakpoint
-CREATE INDEX "integration_application_receipt_actor_id_idx" ON "integration_application_receipt" USING btree ("actor_id");
+CREATE INDEX "integration_application_receipt_actor_id_idx" ON "integration_application_receipt" USING btree ("actor_id");--> statement-breakpoint
+CREATE INDEX "integration_application_receipt_created_at_idx" ON "integration_application_receipt" USING btree ("created_at");

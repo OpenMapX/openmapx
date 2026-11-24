@@ -33,14 +33,12 @@ export function validAmbientTile(generation: string, z: number, x: number, y: nu
     y < 2 ** z
   );
 }
-/** The features of every published generation, from both of data-manager's
- * tables. The API writes the query itself: data-manager defines no view, as a
- * view would run its author's query with the reader's rights. */
+/** The features of every published generation. Data-manager partitions its
+ * one feature table by generation, so a query for one generation reads one
+ * partition. The API writes the query itself: data-manager defines no view, as
+ * a view would run its author's query with the reader's rights. */
 export const PUBLISHED_AMBIENT_FEATURES = `(
   SELECT f.* FROM ambient_places.features f
-    JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published'
-  UNION ALL
-  SELECT f.* FROM ambient_places.planet_features f
     JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published'
 )`;
 
@@ -95,7 +93,7 @@ export async function readAmbientPlaceByGers(
     >(
       `SELECT generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
         contributors AS "_mapAttributions",field_contributors,source_lineage,
-        ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
+        ST_X(ST_Transform(geom,4326)) AS lng,ST_Y(ST_Transform(geom,4326)) AS lat
         FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=ANY($1::UUID[]) AND gers_id=$2
         ORDER BY array_position($1::UUID[],generation),id COLLATE "C" LIMIT 1`,
       [generations, gers],
@@ -135,13 +133,13 @@ export async function readAmbientTile(
     const rows = await tx.unsafe<{ tile: Buffer }[]>(
       `
       WITH spatial AS (
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_GeomFromEWKB(geom) AS geom
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},geom
         FROM ${PUBLISHED_AMBIENT_FEATURES} f
-        WHERE generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
+        WHERE generation=$1 AND min_zoom<=$2 AND geom && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
         UNION ALL
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_Translate(ST_GeomFromEWKB(geom),-$5::FLOAT8,0) AS geom
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_Translate(geom,-$5::FLOAT8,0) AS geom
         FROM ${PUBLISHED_AMBIENT_FEATURES} f
-        WHERE $5::FLOAT8<>0 AND generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_Translate(ST_TileEnvelope($2,$3,$4,margin=>64.0/4096),$5::FLOAT8,0)
+        WHERE $5::FLOAT8<>0 AND generation=$1 AND min_zoom<=$2 AND geom && ST_Translate(ST_TileEnvelope($2,$3,$4,margin=>64.0/4096),$5::FLOAT8,0)
       ), candidates AS MATERIALIZED (
         SELECT * FROM spatial ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
       ), lineage_ranked AS (

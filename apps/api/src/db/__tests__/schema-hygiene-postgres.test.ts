@@ -353,6 +353,15 @@ integration("schema hygiene", () => {
         'jobs_operation_key_idx',
         'admin_action_reauthentication_expires_at_idx',
         'data_disclosure_event_occurred_at_idx',
+        'session_expires_at_idx',
+        'oauth_access_token_expires_at_idx',
+        'oauth_refresh_token_expires_at_idx',
+        'oauth_client_assertion_expires_at_idx',
+        'account_action_receipt_created_at_idx',
+        'integration_application_receipt_created_at_idx',
+        'auth_policy_application_created_at_idx',
+        'share_link_expires_at_idx',
+        'parked_location_expires_at_idx',
         'health_history_checked_at_idx',
         'mangrove_keypair_wrap_user_id_idx',
         'admin_audit_log_target_type_target_id_idx',
@@ -360,7 +369,21 @@ integration("schema hygiene", () => {
         'admin_job_status_idx'
       ) ORDER BY 1`;
     expect(Object.fromEntries(indexes.map((row) => [row.name, row.definition]))).toEqual({
+      // The declared retention deletes by expiry or creation time in batches.
+      account_action_receipt_created_at_idx: expect.stringContaining("(created_at)"),
       admin_action_reauthentication_expires_at_idx: expect.stringContaining("(expires_at)"),
+      auth_policy_application_created_at_idx: expect.stringContaining("(created_at)"),
+      integration_application_receipt_created_at_idx: expect.stringContaining("(created_at)"),
+      oauth_access_token_expires_at_idx: expect.stringContaining("(expires_at)"),
+      oauth_client_assertion_expires_at_idx: expect.stringContaining("(expires_at)"),
+      oauth_refresh_token_expires_at_idx: expect.stringContaining("(expires_at)"),
+      parked_location_expires_at_idx: expect.stringMatching(
+        /\(expires_at\) WHERE \(expires_at IS NOT NULL\)$/,
+      ),
+      session_expires_at_idx: expect.stringContaining("(expires_at)"),
+      share_link_expires_at_idx: expect.stringMatching(
+        /\(expires_at\) WHERE \(expires_at IS NOT NULL\)$/,
+      ),
       admin_audit_log_target_type_target_id_idx: expect.stringContaining(
         "(target_type, target_id)",
       ),

@@ -501,12 +501,31 @@ installation does not prove that their database and feed credentials are valid.
    separate values with `openssl rand -hex 32`. `OPENCONDITIONS_SECRETS_KEY`
    encrypts the OAuth grants and private keys OpenConditions stores in the
    database: generate one value with `openssl rand -hex 32` (64 hexadecimal
-   characters) and set the same value on every OpenConditions service that
-   declares it, on its **Credentials** page. Keep a copy outside the server:
-   the encrypted values in a database backup cannot be read without it.
+   characters) for **openconditions-ingest**, and copy that same value, never a
+   newly generated one, into the **Credentials** of every other OpenConditions
+   service that declares it: the contributions service and, when enabled, the
+   heavy-feeds process `openconditions-ingest-heavy`. A federation service
+   started from its own compose file gets the copy as a mounted file, as
+   OpenConditions'
+   [federation guide](https://github.com/openconditions/openconditions/blob/main/docs/federation-onboarding.md)
+   shows. The first ingest process to start seals its key in
+   `conditions.secrets_key_check`, and every other service refuses to start
+   with a different key, with an error naming that table; start the ingest
+   service first. A lost key means deleting the sealed rows and logging in to
+   every OAuth feed again; see OpenConditions'
+   [secrets encrypted at rest](https://github.com/openconditions/openconditions#secrets-encrypted-at-rest).
+   OpenMapX's vault stores the key in `public.service_secret`, encrypted with
+   OpenMapX's secrets key file `infra/docker/secrets/secrets-key`, so a full
+   database backup holds it, encrypted, next to the values it protects. Such a
+   backup is safe for them only while that key file stays out of it. Keep both
+   keys, the OpenConditions secrets key and OpenMapX's `secrets-key`, in your
+   recovery set (see
+   [Backup & restore](./backup-and-restore.md#what-gets-skipped-and-why)).
    A role is created once, as the superuser, in the `postgis` container. A
    service that creates its own schemas needs `CREATE` on the database; it then
-   owns those schemas. Give each role a search path of its own schemas and
+   owns those schemas. The ingest service checks that right at every start,
+   since it runs `CREATE SCHEMA IF NOT EXISTS conditions` each time, so do not
+   revoke it after installation. Give each role a search path of its own schemas and
    `extensions`, where PostGIS lives; leave out `public`, which the API's role
    owns. Create both OpenConditions roles before the ingest service first
    starts:
@@ -523,18 +542,37 @@ installation does not prove that their database and feed credentials are valid.
    ALTER ROLE openconditions_contributions SET search_path = conditions, extensions;
    ```
 
-   Grant nothing in `conditions` yourself. Only the ingest service migrates:
-   it creates the `conditions` schema and owns it, and its migration grants
-   `openconditions_contributions` exactly what the contributions service uses,
-   and `openmapx_tiles_owner`, the role Martin's traffic tiles run as, read
-   access to `road_segment`, `segment_speed`, `source` and
-   `public_license_policy` and the use of `segment_flow`,
-   `flow_public_licenses` and `flow_osm_credit`. The migration grants only to
-   roles that exist when it runs, which is why both roles come first. The
-   contributions service waits until the ingest service has migrated. No
-   OpenMapX role can read OpenConditions' credentials or crowd reports. The
-   roles live outside the database, so a backup restore keeps their grants
-   only while the roles still exist, and those roles must be able to log in.
+   Grant nothing in `conditions` yourself. Only the ingest service migrates,
+   with its heavy-feeds process when that is enabled: it creates the
+   `conditions` schema and owns it. At every start, after
+   migrating, it grants `openconditions_contributions` exactly what the
+   contributions service uses, and `openmapx_tiles_owner`, the role Martin's
+   traffic tiles run as, read access to `road_segment`, `segment_speed`,
+   `source` and `public_license_policy` and the use of `segment_flow`,
+   `flow_public_licenses` and `flow_osm_credit`. It grants only roles that
+   exist; create both first, so the contributions service finds its grants on
+   its first start. A role created later, or dropped and created again, gets
+   its grants once the ingest service restarts. The optional heavy-feeds
+   process and federation service connect with the ingest service's role and
+   `DATABASE_URL`, never with a role of their own. The contributions service
+   waits until the ingest service has migrated, for at most
+   `OPENCONDITIONS_SCHEMA_WAIT_TIMEOUT_MS` (five minutes by default), and then
+   stops; after that it waits for the sealed key check. While a first
+   migration takes longer than about three minutes, it reports unhealthy, and
+   it recovers once the migration finishes. No OpenMapX role can read
+   OpenConditions' credentials or crowd reports. The roles live outside the
+   database, so a backup restore keeps their grants only while the roles still
+   exist, and those roles must be able to log in. After restoring into a
+   cluster where you had to create the roles again, restart the ingest
+   service, which grants them again.
+
+   A `conditions` schema created by an OpenConditions build from before its
+   migration baseline is not upgraded: the ingest service's migrations fail
+   with "relation already exists". Drop the `conditions` schema before the
+   first start of a release with the baseline; the old history table
+   `drizzle.__drizzle_migrations_oc` is no longer read and can be dropped too.
+   See OpenConditions'
+   [release note](https://github.com/openconditions/openconditions/blob/main/docs/release-notes/database-baseline.md).
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and

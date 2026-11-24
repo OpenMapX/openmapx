@@ -69,7 +69,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: November 22, 2026
+        Last updated: November 24, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -1127,7 +1127,41 @@ export default function PrivacyContent({
             <Typography>
               <strong>Vehicles and parked location</strong> — retained until you clear the parked
               location, delete the vehicle, or delete your account. Deleting a vehicle also deletes
-              where it was parked.
+              where it was parked. A parked location with a parking time limit is deleted 30 days
+              after the limit passes.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Share links</strong> — retained until you revoke the link or delete your
+              account. A link with an expiry date is deleted 30 days after it expires.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Sessions, sign-in confirmations and tokens of connected apps</strong> —
+              deleted 30 days after they expire.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Receipts of administrative changes</strong> — records that an administrator
+              changed an account, the sign-in policy or an integration are deleted one year after
+              the change. The newest receipt for each integration and for each account is kept until
+              a newer one replaces it.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Records of disclosures to recipients</strong> — deleted three years after the
+              disclosure.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Offline package records</strong> — retained until the package is removed or
+              you delete your account. Records of a deleted account that a backup restore brings
+              back are deleted 30 days after they were recorded.
             </Typography>
           </li>
           <li>
@@ -1206,6 +1240,11 @@ export default function PrivacyContent({
             </Typography>
           </li>
         </ul>
+        <Typography sx={{ mt: 1 }}>
+          While a data-protection request about you is open, your sessions, tokens, share links,
+          parked locations, receipts and disclosure records that existed when you made it are kept
+          until the request is closed, even if their period ends sooner.
+        </Typography>
       </Section>
       <Section title={T.security}>
         <Typography>

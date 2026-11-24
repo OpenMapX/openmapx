@@ -70,7 +70,7 @@ export const MIN_NOTABLE_QUERY_LENGTH = 3;
  * place near the map still makes it next to a world-famous one far away.
  */
 const MATCHED_PLACES = `
-SELECT p.qid, p.kind, p.lat, p.lng, p.fame, p.iata, p.icao, m.name AS matched, m.normalized,
+SELECT p.qid, p.kind, ST_Y(p.geom) AS lat, ST_X(p.geom) AS lng, p.fame, p.iata, p.icao, m.name AS matched, m.normalized,
        COALESCE(own.name, mul.name, en.name, m.name) AS label,
        ARRAY(SELECT other.name FROM notable_places.labels AS other
               WHERE other.qid = p.qid
@@ -99,7 +99,7 @@ ${MATCHED_PLACES}
           p.fame + CASE
             WHEN $4::DOUBLE PRECISION IS NULL OR $5::DOUBLE PRECISION IS NULL THEN 0
             ELSE 0.5 / (1 + ST_Distance(
-              p.geom, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography) / 50000)
+              p.geom::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography) / 50000)
           END DESC,
           p.qid
  LIMIT $2`;

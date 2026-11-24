@@ -100,6 +100,9 @@ export const parkedLocation = pgTable(
       .on(table.userId, table.vehicleId)
       .nullsNotDistinct(),
     index("parked_location_vehicle_id_idx").on(table.vehicleId),
+    index("parked_location_expires_at_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.expiresAt} is not null`),
     check("parked_location_source_check", sql`${table.source} in ('device','manual','arrival')`),
   ],
 );

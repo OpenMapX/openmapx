@@ -3875,23 +3875,25 @@
       "retentionReasons": {
         "account-content": "Löschung des Inhalts oder Kontoschließung",
         "accountability": "Erstellung des Nachweisdatensatzes",
-        "administrative-record": "Erstellung des Verwaltungsdatensatzes",
+        "assertion-expiry": "Ablauf der Client-Assertion",
         "backup-retention": "Rotation der aufbewahrten Sicherung",
         "case-accountability": "Abschluss oder Schließung des Datenschutzfalls",
         "challenge-expiry": "Ausgabe der Authentifizierungsabfrage",
         "connection-revocation": "Widerruf der Verlaufsverbindung",
         "control-expiry": "Erstellung oder Aktualisierung der Sicherheitskontrolle",
-        "current-state": "Erstellung des aktuellen Standortzustands",
         "erasure-replay": "Kontoschließung oder Löschungsverarbeitung",
         "handoff-expiry": "Erstellung der mobilen Übergabe",
         "key-revocation": "Widerruf des Veröffentlichungsschlüssels",
+        "link-expiry": "Widerruf oder Löschung des veröffentlichten Links; ein Link mit Ablaufdatum wird 30 Tage nach seinem Ablauf gelöscht",
         "log-retention": "Erstellung des Betriebsprotokolls",
-        "offline-job-retention": "Abschluss des Offline-Paketauftrags",
+        "offline-package-retention": "Entfernen des Pakets oder Kontoschließung; Datensätze eines gelöschten Kontos, die eine Wiederherstellung aus einer Sicherung zurückbringt, werden 30 Tage nach ihrer Erfassung gelöscht",
+        "parking-expiry": "Entfernen der Parkposition; eine Parkposition mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht",
         "processor-retention": "Beendigung des verbundenen Auftragsverarbeiterdienstes",
         "public-dataset": "Veröffentlichung der Version des öffentlichen Datensatzes",
         "recipient-accountability": "Erfassung des Empfängerereignisses",
-        "revocation": "Widerruf oder Löschung des veröffentlichten Links",
-        "security-retention": "Sicherheitsaufbewahrungsfrist"
+        "receipt-retention": "Erstellung des Belegs; der neueste Beleg je Integration und je Konto bleibt erhalten, bis ein neuerer ihn ersetzt",
+        "session-expiry": "Ablauf der Sitzung oder Bestätigung",
+        "token-expiry": "Ablauf des Tokens"
       },
       "snapshotLimitations": "Die Antwort gibt die zum genannten Stichtag verfügbaren Quellen des Verantwortlichen und seiner Auftragsverarbeiter wieder. Spätere Änderungen sowie nicht verfügbare oder abgelaufene Quellen werden unten ausgewiesen.",
       "shortLivedHeading": "Kurzlebige Daten",
@@ -3973,10 +3975,40 @@
           "category": "Sitzungen und Sicherheitsdaten",
           "purpose": "Sitzungen schützen und Missbrauch untersuchen",
           "source": "Beim Anmelden erzeugt",
-          "retention": "Kurze Sicherheitsaufbewahrung",
+          "retention": "30 Tage nach Ablauf der Sitzung oder Bestätigung gelöscht",
           "safeRepresentation": "Lebenszyklus-, IP- und User-Agent-Metadaten; Sitzungstokens fehlen",
           "portabilityExclusion": "Sicherheitsmetadaten sind nicht portabel",
           "rightsOfOthers": "Details anderer Geräte können minimiert werden"
+        },
+        "auth-oauth-tokens": {
+          "category": "Tokens verbundener Apps",
+          "purpose": "Von Ihnen autorisierten Apps den Zugriff auf Ihr Konto ermöglichen und diesen Zugriff schützen",
+          "source": "Beim Autorisieren einer App ausgestellt",
+          "retention": "30 Tage nach Ablauf des Tokens gelöscht"
+        },
+        "administrative-receipts": {
+          "category": "Belege administrativer Änderungen",
+          "purpose": "Verhindern, dass eine administrative Änderung doppelt angewendet wird, und sie nachweisen",
+          "source": "Erfasst, wenn eine Administratorin oder ein Administrator ein Konto, die Anmelderichtlinie oder eine Integration ändert",
+          "retention": "Ein Jahr nach der Änderung gelöscht; der neueste Beleg je Integration und je Konto bleibt erhalten, bis ein neuerer ihn ersetzt"
+        },
+        "oauth-client-assertions": {
+          "category": "Aufzeichnungen von OAuth-Client-Assertions",
+          "purpose": "Eine wiederholt verwendete Client-Assertion ablehnen",
+          "source": "Erfasst, wenn sich ein OAuth-Client authentifiziert",
+          "retention": "30 Tage nach Ablauf der Assertion gelöscht"
+        },
+        "share-links": {
+          "retention": "Bis Sie den Link widerrufen oder Ihr Konto löschen; ein Link mit Ablaufdatum wird 30 Tage nach seinem Ablauf gelöscht"
+        },
+        "parked-locations": {
+          "retention": "Bis Sie die Parkposition entfernen oder Ihr Konto löschen; eine Parkposition mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht"
+        },
+        "disclosure-events": {
+          "retention": "Drei Jahre nach der Offenlegung gelöscht"
+        },
+        "offline-package-ownership": {
+          "retention": "Bis das Paket entfernt oder Ihr Konto gelöscht wird; Datensätze eines gelöschten Kontos, die eine Wiederherstellung aus einer Sicherung zurückbringt, werden 30 Tage nach ihrer Erfassung gelöscht"
         },
         "saved-lists": {
           "category": "Gespeicherte Listen",
