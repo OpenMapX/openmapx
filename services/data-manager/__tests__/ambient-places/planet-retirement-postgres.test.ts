@@ -9,7 +9,11 @@ import {
 } from "../../src/jobs/search-index/schema.js";
 import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
-const PROBE_TIMEOUT_MS = 500;
+// Long enough not to trip on a loaded runner. A retirement that locks the
+// whole feature store still fails this test: it holds the probes queued
+// behind it past this, or it gives up on its one-second lock wait and fails
+// the build.
+const PROBE_TIMEOUT_MS = 1000;
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "planet retirement beside a long reader",
