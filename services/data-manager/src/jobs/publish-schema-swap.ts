@@ -8,17 +8,21 @@ import {
   publishDataChange,
   retainDataPublication,
 } from "./execution/worker-scope.js";
+import { buildPublicationFenceDDL, PUBLICATION_FENCE } from "./publication-fence.js";
 
 /**
  * Publishing rebuilt data must never make the API's readers wait. A reader,
  * such as a backup, can hold the live tables for hours, and every statement
  * that asks for a lock behind it queues the readers that come after it. So a
- * publication only renames: renaming a schema takes no table lock, so the
- * swap commits at once and every later query resolves the live name to the
- * new tables. The old tables are dropped afterwards, once their last reader
- * has finished; until then they sit under a name no reader uses. Each step
- * waits at most `lockTimeoutMs` for a lock, so it can never queue readers for
- * longer than that, and is retried with growing pauses.
+ * publication only renames: renaming a schema takes no lock on its tables,
+ * and every later query resolves the live name to the new tables. The old
+ * tables are dropped afterwards, once their last reader has finished; until
+ * then they sit under a name no reader uses. Before renaming, a publication
+ * locks the schema's `publication_fence` (see `./publication-fence.ts`), which
+ * no reader touches but a running backup holds, so a publication never
+ * renames tables under a backup. Each step waits at most `lockTimeoutMs` for
+ * a lock, so it can never queue readers for longer than that, and is retried
+ * with growing pauses.
  */
 
 export interface LockRetry {
@@ -183,9 +187,10 @@ async function analyzeSchema(sql: postgres.Sql, schema: string): Promise<void> {
 
 /**
  * Replaces the live schema with a fully built staging schema. The staging
- * schema's indexes must already exist; its tables are analyzed here. One
- * transaction renames live to `<live>__previous` and staging to live; a
- * second, after the publication is recorded, drops `<live>__previous`. When
+ * schema's indexes and its fence must already exist; its tables are analyzed
+ * here. One transaction locks the live fence, renames live to
+ * `<live>__previous` and staging to live and drops the old fence; a second,
+ * after the publication is recorded, drops `<live>__previous`. When
  * readers outlast that second step, the old schema stays and the next
  * publication drops it before it swaps.
  */
@@ -205,13 +210,20 @@ export async function publishSchemaSwap(
   await publishDataChange(() =>
     retryOnLockTimeout(retry, () =>
       underLockTimeout(sql, lockTimeoutMs, async (tx) => {
-        const [current] = await tx.unsafe<{ exists: boolean }[]>(
-          `SELECT to_regnamespace($1) IS NOT NULL AS exists`,
-          [live],
+        const [current] = await tx.unsafe<{ exists: boolean; fenced: boolean }[]>(
+          `SELECT to_regnamespace($1) IS NOT NULL AS exists, to_regclass($2) IS NOT NULL AS fenced`,
+          [live, `"${staging}".${PUBLICATION_FENCE}`],
         );
-        if (current?.exists) await tx.unsafe(`ALTER SCHEMA "${live}" RENAME TO "${previous}"`);
+        if (!current?.fenced)
+          throw new Error(`The staging schema "${staging}" has no ${PUBLICATION_FENCE} table`);
+        if (current.exists) {
+          // Waits for a running backup, which holds the fence, before anything is renamed.
+          await tx.unsafe(`LOCK TABLE "${live}".${PUBLICATION_FENCE} IN ACCESS EXCLUSIVE MODE`);
+          await tx.unsafe(`ALTER SCHEMA "${live}" RENAME TO "${previous}"`);
+        }
         await tx.unsafe(`ALTER SCHEMA "${staging}" RENAME TO "${live}"`);
-        await carryOver?.(tx, current?.exists ? previous : null);
+        if (current.exists) await tx.unsafe(`DROP TABLE "${previous}".${PUBLICATION_FENCE}`);
+        await carryOver?.(tx, current.exists ? previous : null);
       }),
     ),
   );
@@ -277,6 +289,7 @@ export async function renameTable(
  * schema, as `publishSchemaSwap` does for a schema. Renaming a table takes
  * its lock, so the swap waits for readers at most `lockTimeoutMs` per
  * attempt. Indexes and constraints named after a table move with its name.
+ * The schema's fence is locked first and replaced in the same transaction.
  */
 export async function publishTableSwap(
   sql: postgres.Sql,
@@ -295,6 +308,8 @@ export async function publishTableSwap(
   await publishDataChange(() =>
     retryOnLockTimeout(retry, () =>
       underLockTimeout(sql, lockTimeoutMs, async (tx) => {
+        // Waits for a running backup, which holds the fence, before anything is renamed.
+        await tx.unsafe(`LOCK TABLE "${schema}".${PUBLICATION_FENCE} IN ACCESS EXCLUSIVE MODE`);
         const [current] = await tx.unsafe<{ exists: boolean }[]>(
           `SELECT to_regclass($1) IS NOT NULL AS exists`,
           [`"${schema}"."${live}"`],
@@ -302,6 +317,9 @@ export async function publishTableSwap(
         if (current?.exists) await renameTable(tx, schema, live, previous);
         await renameTable(tx, schema, staging, live);
         await afterSwap?.(tx);
+        await tx.unsafe(
+          `DROP TABLE "${schema}".${PUBLICATION_FENCE}; ${buildPublicationFenceDDL(schema)}`,
+        );
       }),
     ),
   );

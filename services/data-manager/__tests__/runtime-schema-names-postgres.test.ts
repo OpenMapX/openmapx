@@ -85,6 +85,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "notable_places__staging.places_pkey",
           "notable_places__staging.places_qid_check",
           "notable_places__staging.places_sitelinks_check",
+          "notable_places__staging.publication_fence_pkey",
+          "notable_places__staging.publication_fence_singleton_check",
           "osm_search__staging.index_state_pkey",
           "osm_search__staging.index_state_singleton_check",
           "osm_search__staging.index_state_status_check",
@@ -93,6 +95,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "osm_search__staging.places_importance_check",
           "osm_search__staging.places_osm_type_check",
           "osm_search__staging.places_pkey",
+          "osm_search__staging.publication_fence_pkey",
+          "osm_search__staging.publication_fence_singleton_check",
           "osm_search__staging.terms_kind_check",
           "osm_search__staging.terms_normalized_term_idx",
           "osm_search__staging.terms_osm_type_osm_id_fkey",
@@ -137,6 +141,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "overture_places.poi_conflation_link_next_gers_id_key",
           "overture_places.poi_conflation_link_next_match_confidence_check",
           "overture_places.poi_conflation_link_next_pkey",
+          "overture_places.publication_fence_pkey",
+          "overture_places.publication_fence_singleton_check",
         ]);
       } finally {
         await pg.stop();

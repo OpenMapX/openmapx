@@ -1,3 +1,5 @@
+import { buildPublicationFenceDDL } from "../publication-fence.js";
+
 export type NotablePlacesSchema = "notable_places" | "notable_places__staging";
 
 export function assertValidNotablePlacesSchema(
@@ -13,6 +15,7 @@ export function buildNotablePlacesSchemaDDL(schema: NotablePlacesSchema): string
   return `
 DROP SCHEMA IF EXISTS "${schema}" CASCADE;
 CREATE SCHEMA "${schema}";
+${buildPublicationFenceDDL(schema)}
 
 CREATE TABLE "${schema}".places (
   qid TEXT CONSTRAINT places_qid_check CHECK (qid ~ '^Q[0-9]+$'),

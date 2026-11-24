@@ -1,3 +1,5 @@
+import { buildPublicationFenceDDL } from "../publication-fence.js";
+
 export type SearchIndexSchema = "osm_search" | "osm_search__staging";
 
 export function assertValidSearchIndexSchema(schema: string): asserts schema is SearchIndexSchema {
@@ -11,6 +13,7 @@ export function buildSearchIndexSchemaDDL(schema: SearchIndexSchema): string {
   return `
 DROP SCHEMA IF EXISTS "${schema}" CASCADE;
 CREATE SCHEMA "${schema}";
+${buildPublicationFenceDDL(schema)}
 
 CREATE TABLE "${schema}".places (
   osm_type TEXT NOT NULL CONSTRAINT places_osm_type_check CHECK (osm_type IN ('node','way','relation')),

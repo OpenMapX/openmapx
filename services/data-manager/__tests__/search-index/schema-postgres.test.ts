@@ -30,6 +30,7 @@ describe.skipIf(skipE2e)("search-index schema in PostGIS", () => {
         "index_state_pkey",
         "places_geom_idx",
         "places_pkey",
+        "publication_fence_pkey",
         "terms_normalized_term_idx",
         "terms_pkey",
       ]);

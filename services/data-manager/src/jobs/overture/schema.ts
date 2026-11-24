@@ -1,3 +1,5 @@
+import { buildPublicationFenceDDL } from "../publication-fence.js";
+
 /**
  * Schema names that carry ODbL-licensed Overture themes (Buildings,
  * Transportation, Divisions, Base). The name pattern already refuses them;
@@ -68,6 +70,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
     `
     DROP SCHEMA IF EXISTS "${schema}" CASCADE;
     CREATE SCHEMA "${schema}";
+    ${buildPublicationFenceDDL(schema)}
 
     CREATE TABLE "${schema}".places (
       gers_id           TEXT CONSTRAINT places_pkey PRIMARY KEY,

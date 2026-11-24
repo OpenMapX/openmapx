@@ -17,6 +17,8 @@ import {
   AMBIENT_SCHEMA_VERSION,
   ensureAmbientSchema,
 } from "../../../../../services/data-manager/src/jobs/ambient-places/schema.js";
+import { buildPublicationFenceDDL } from "../../../../../services/data-manager/src/jobs/publication-fence.js";
+import { publishSchemaSwap } from "../../../../../services/data-manager/src/jobs/publish-schema-swap.js";
 import {
   connectProductionPostgis,
   API_MIGRATIONS as MIGRATIONS,
@@ -366,6 +368,7 @@ integration("database roles", () => {
       await dataManager.unsafe(`
         DROP SCHEMA IF EXISTS "${schema}" CASCADE;
         CREATE SCHEMA "${schema}";
+        ${buildPublicationFenceDDL(schema)}
         CREATE TABLE "${schema}".places (name text NOT NULL, geom geometry(Point, 4326));
         CREATE INDEX ON "${schema}".places USING gin (name gin_trgm_ops);
         INSERT INTO "${schema}".places VALUES ('${label}', ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));
@@ -379,10 +382,11 @@ integration("database roles", () => {
     expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "first" }]);
 
     await build("osm_search__staging", "second");
-    await dataManager.begin(async (tx) => {
-      await tx.unsafe("ALTER SCHEMA osm_search RENAME TO osm_search__previous");
-      await tx.unsafe("ALTER SCHEMA osm_search__staging RENAME TO osm_search");
-      await tx.unsafe("DROP SCHEMA osm_search__previous CASCADE");
+    // The publication locks the live fence, renames both schemas, drops the old fence and schema.
+    await publishSchemaSwap(dataManager, {
+      live: "osm_search",
+      staging: "osm_search__staging",
+      retry: { attempts: 2, backoffMs: 10 },
     });
     expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "second" }]);
     expect(await api.unsafe("SELECT name FROM osm_search.names")).toEqual([{ name: "second" }]);

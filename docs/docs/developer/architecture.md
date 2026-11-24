@@ -372,19 +372,26 @@ a Wikidata SPARQL endpoint (CC0) instead of a PBF, and so does Overture's
 
 A publication never makes the API's readers wait
 (`services/data-manager/src/jobs/publish-schema-swap.ts`). Indexes and
-`ANALYZE` run on the staging schema first. One transaction then renames the
-live schema to `<live>__previous` and the staging schema to the live name.
-Renaming a schema takes no table lock, so it commits at once, and every later
-query resolves the live name to the new tables, prepared statements included.
-A second transaction drops `<live>__previous` once its last reader, such as a
-running backup, has finished. Each step waits at most one second for a lock and
+`ANALYZE` run on the staging schema first. One transaction then locks the live
+schema's `publication_fence` table, renames the live schema to
+`<live>__previous` and the staging schema to the live name, and drops the old
+fence. Renaming a schema takes no table lock, and every later query resolves the
+live name to the new tables, prepared statements included. No reader queries
+the fence, but `pg_dump` holds it for a whole backup, so a publication waits for
+a running backup instead of renaming tables under it, and a backup always holds
+each data set as last published (see
+[Backup & restore](../administration/backup-and-restore.md)). A dump that
+started just before a publication but reaches the fence after it fails when it
+reads the dropped fence. A second transaction drops `<live>__previous` once its
+last reader has finished. Each step waits at most one second for a lock and
 is retried with growing pauses. The publication has committed by then, so if
 the drop fails, for example because the old schema is still being read after
 the last retry, the schema stays in place, the failure is only logged, and the
 next publication drops it before it swaps. Overture's OSM POI snapshot and its
 conflation links are swapped the same way as single tables inside
 `overture_places`: renaming a table does take its lock, so those swaps wait for
-that table's readers, a second at a time. The conflation run is marked complete
+that table's readers, a second at a time. They lock the schema's fence first
+and replace it in the same transaction. The conflation run is marked complete
 in the links' swap transaction, because the next-link table is empty after the
 swap and must never be published again.
 

@@ -71,12 +71,13 @@ leaves out what data-manager rebuilds from those and never serves:
   `overture_places`) and of the embedding cache in `overture_embeddings`. Their
   tables are restored empty.
 
-These parts are only a build's work in progress and can be large. Leaving them
-out also means that a backup never reads a schema or table that a publication
-renames or drops while the backup runs.
+These parts are only a build's work in progress and can be large. The
+unpublished and replaced schemas, the leftover tables and the proposal table
+are left out entirely, not only their rows: a dump locks every table whose
+definition it keeps until it ends, and a leftover it held would hold up the next
+publication of that data set.
 
-After a restore, nothing that was published needs rebuilding, apart from a data
-set whose publication overlapped the backup (see below). Work that was in
+After a restore, nothing that was published needs rebuilding. Work that was in
 progress when the backup was taken starts again:
 
 - An Overture conflation that was running starts again from OSM extraction at
@@ -90,45 +91,36 @@ progress when the backup was taken starts again:
 
 ### Backups during data publications
 
-Backups and data publications need no mutual exclusion to keep the API
-working: no data publication makes API searches wait behind a running backup
-(see [the architecture](../developer/architecture.md)). A rebuilt search index
-or notable-places index is swapped in by renaming schemas, which takes no lock
-the dump holds, so it publishes during a backup and searches move to the new
-data at once. Some publications do wait for a running backup, a second at a
-time, and fail or defer work when it outlasts their retries:
+A running backup never makes API readers wait: no data publication takes a lock
+that readers need (see [the architecture](../developer/architecture.md)).
+Publications of the search index, notable places and Overture places do wait
+for a running backup. Each of these data sets has a `publication_fence` table
+that only backups and publications use. `pg_dump` holds it from the moment it
+starts until it ends, and a publication locks it before it changes anything,
+waiting at most a second per attempt. After about two minutes of retries the
+publication fails and leaves the data set as it was last published.
 
-| Operation during a backup                                                                                       | Waits for the backup?                                                                                                                                                                                                                                    |
-| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Publishing a search index or notable-places index                                                               | No. Dropping the replaced copy, `<name>__previous`, waits about two minutes, then the copy stays and the next publication of that data set drops it first. If the same backup still reads it then, that next publication fails and must run again later. |
-| Activating an Overture release, which carries the OSM POI snapshot over                                         | Yes. It fails after about two minutes and leaves the published release unchanged. Run the ingest again after the backup; it rebuilds its staging schema from the downloaded release.                                                                     |
-| Publishing an OSM POI snapshot or the conflation links                                                          | Yes. It fails after about two minutes and leaves the published data unchanged. Run the conflation again after the backup.                                                                                                                                |
-| Emptying the conflation workspace (starting to score, starting to assign, or cleaning up after a completed run) | Yes, until the backup ends. The dump keeps the workspace tables' definitions and so reads them, and conflation waits for them without a time limit.                                                                                                      |
-| Publishing nearby places, regional, Germany or planet, including a planet candidate's final attach              | No. Backups leave planet candidates out, so the rename and attach of a candidate do not wait.                                                                                                                                                            |
-| Discarding a planet candidate                                                                                   | No                                                                                                                                                                                                                                                       |
-| Dropping retired nearby-places generations after a publication                                                  | Up to about five seconds. The table then stays and the next publication drops it; the publication itself succeeds.                                                                                                                                       |
-| Enabling, disabling or rolling back nearby places                                                               | No                                                                                                                                                                                                                                                       |
+So no publication changes a data set under a running backup, and a backup
+always holds each data set as it was last published: complete, never empty and
+never half replaced, and it can always be restored. A publication that commits
+after the dump started but before the dump reached the fence, a window in the
+first moments of a backup, makes the dump fail instead, because the publication
+replaced the fence the dump then reads. Create the backup again.
 
-A backup that overlaps a publication may hold an unpublished copy of the data
-set the publication replaced. `pg_dump` reads each table by name with the
-snapshot it took when it started, and after the swap the name leads to the new
-tables. The archive then holds those tables as far as they existed when the
-dump started: empty if the rebuild began later, and without the final ready
-state otherwise. After a restore from such a backup, that data set is not
-published: its search provider returns nothing and its health check reports
-that no index is published. Rebuild it as described in
-[Preparing data](../install/preparing-data.md). An Overture release cannot be
-published while a backup reads it (see the table), so a backup always holds a
-complete Overture release.
+| Operation during a backup                                                                                       | What happens                                                                                                                                                                      | Retried                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Publishing a search index                                                                                       | Fails after about two minutes. The build drops its staging schema; the published index stays searchable.                                                                          | Not automatically. Run `pnpm openmapx data search-index build <region>` again after the backup.                                                                                                                         |
+| Publishing notable places                                                                                       | Fails after about two minutes; the published index stays searchable.                                                                                                              | At the next scheduled refresh (`NOTABLE_PLACES_REFRESH_CRON`, monthly by default), or when data-manager starts without a published index. Run `pnpm openmapx data notable-places build` to retry sooner.                |
+| Activating an Overture release                                                                                  | Fails after about two minutes; the published release stays in service.                                                                                                            | With `OVERTURE_ENABLED`, the next scheduled sync (`OVERTURE_SYNC_CRON`, weekly by default) still finds the newer release and runs again; it rebuilds the staging schema. Run `pnpm openmapx data overture-sync` sooner. |
+| Publishing an OSM POI snapshot or the conflation links                                                          | Fails after about two minutes; the published snapshot and links stay in service.                                                                                                  | With `OVERTURE_ENABLED`, the conflation retry (`OVERTURE_CONFLATION_RETRY_CRON`, every 15 minutes by default, and once when data-manager starts) resumes the run from the phase it recorded.                            |
+| Emptying the conflation workspace (starting to score, starting to assign, or cleaning up after a completed run) | Waits until the backup ends. The dump keeps the workspace tables' definitions and so holds them, and conflation waits for them without a time limit. No reader uses these tables. | Not needed                                                                                                                                                                                                              |
+| Publishing nearby places, regional, Germany or planet, including a planet candidate's final attach              | Does not wait. Each generation is a new partition the backup does not read, and backups leave planet candidates out.                                                              | Not needed                                                                                                                                                                                                              |
+| Discarding a planet candidate                                                                                   | Does not wait.                                                                                                                                                                    | Not needed                                                                                                                                                                                                              |
+| Dropping retired nearby-places generations after a publication                                                  | Waits up to about five seconds, then leaves the table; the publication itself succeeds.                                                                                           | By the next nearby-places publication.                                                                                                                                                                                  |
+| Enabling, disabling or rolling back nearby places                                                               | Does not wait.                                                                                                                                                                    | Not needed                                                                                                                                                                                                              |
 
-A publication that commits in the first seconds of a backup, while `pg_dump`
-still reads the tables' definitions, can make the dump fail. It can also leave
-an archive whose restore fails, because the archive names the replaced
-`<name>__previous` schema; such a restore stops before it replaces the live
-database. The dump also fails if a publication during it swaps in a table whose
-columns differ from the old one. In either case, create the backup again.
-Avoid starting rebuilds as a scheduled backup starts, and test a restore of the
-backups you rely on.
+Long backups therefore delay data refreshes. Schedule backups so that they do
+not overlap planned rebuilds, or run a failed rebuild again afterwards.
 
 ## What gets skipped, and why
 

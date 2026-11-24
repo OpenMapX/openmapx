@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { publishSchemaSwap } from "../src/jobs/publish-schema-swap.js";
+import { buildPublicationFenceDDL } from "../src/jobs/publication-fence.js";
+import { publishSchemaSwap, publishTableSwap } from "../src/jobs/publish-schema-swap.js";
 import { type PostgisFixture, startPostgis } from "./helpers/postgis-testcontainer.js";
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
@@ -23,6 +24,7 @@ describe.skipIf(skipE2e)("schema publication by rename", () => {
   async function stage(schema: string, label: string): Promise<void> {
     await pg.sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await pg.sql.unsafe(`CREATE SCHEMA "${schema}"`);
+    await pg.sql.unsafe(buildPublicationFenceDDL(schema));
     await pg.sql.unsafe(`CREATE TABLE "${schema}".snapshot (label TEXT NOT NULL)`);
     await pg.sql.unsafe(`INSERT INTO "${schema}".snapshot VALUES ($1)`, [label]);
   }
@@ -124,5 +126,106 @@ describe.skipIf(skipE2e)("schema publication by rename", () => {
       `SELECT reltuples >= 0 AS analyzed FROM pg_class WHERE oid = 'osm_search.snapshot'::regclass`,
     );
     expect(stats?.analyzed).toBe(true);
+  });
+
+  async function fenceOid(schema: string): Promise<string | null> {
+    const [row] = await pg.sql.unsafe<{ oid: string | null }[]>(
+      `SELECT to_regclass($1)::OID::TEXT AS oid`,
+      [`"${schema}".publication_fence`],
+    );
+    return row?.oid ?? null;
+  }
+
+  // A backup holds ACCESS SHARE on every table it dumps, the fence among them.
+  async function withBackupLikeHolder(tables: string[], run: () => Promise<void>): Promise<void> {
+    const holder = await reader.reserve();
+    try {
+      await holder.unsafe(`BEGIN ISOLATION LEVEL REPEATABLE READ`);
+      for (const table of tables) await holder.unsafe(`LOCK TABLE ${table} IN ACCESS SHARE MODE`);
+      await run();
+    } finally {
+      await holder.unsafe(`ROLLBACK`).catch(() => undefined);
+      holder.release();
+    }
+  }
+
+  it("waits for a backup that holds the fence, fails, and leaves the live schema readable", async () => {
+    await pg.sql.unsafe(`DROP SCHEMA IF EXISTS osm_search__previous CASCADE`);
+    await stage("osm_search", "live");
+    await stage("osm_search__staging", "staged");
+    const probe = postgres(pg.connectionString, {
+      max: 1,
+      connection: { statement_timeout: 500 },
+    });
+    try {
+      await withBackupLikeHolder(["osm_search.publication_fence"], async () => {
+        const publication = publishSchemaSwap(pg.sql, {
+          live: "osm_search",
+          staging: "osm_search__staging",
+          retry: quickRetry,
+        });
+        // Readers never touch the fence, so the waiting publication queues nobody.
+        await expect(probe.unsafe(`SELECT label FROM osm_search.snapshot`)).resolves.toEqual([
+          { label: "live" },
+        ]);
+        await expect(publication).rejects.toMatchObject({ code: "55P03" });
+      });
+    } finally {
+      await probe.end({ timeout: 2 });
+    }
+    expect(await liveLabel()).toBe("live");
+    expect(await schemas()).toEqual(["osm_search", "osm_search__staging"]);
+
+    // Once the backup has ended, the publication goes through and replaces the fence.
+    const fence = await fenceOid("osm_search");
+    const staged = await fenceOid("osm_search__staging");
+    await publishSchemaSwap(pg.sql, {
+      live: "osm_search",
+      staging: "osm_search__staging",
+      retry: quickRetry,
+    });
+    expect(await liveLabel()).toBe("staged");
+    expect(await fenceOid("osm_search")).toBe(staged);
+    expect(fence).not.toBe(staged);
+    expect(await schemas()).toEqual(["osm_search"]);
+  });
+
+  it("refuses a staging schema without a fence", async () => {
+    await stage("osm_search", "live");
+    await stage("osm_search__staging", "unfenced");
+    await pg.sql.unsafe(`DROP TABLE osm_search__staging.publication_fence`);
+    await expect(
+      publishSchemaSwap(pg.sql, {
+        live: "osm_search",
+        staging: "osm_search__staging",
+        retry: quickRetry,
+      }),
+    ).rejects.toThrow('The staging schema "osm_search__staging" has no publication_fence table');
+    expect(await liveLabel()).toBe("live");
+  });
+
+  it("locks and replaces the fence when it swaps a single table", async () => {
+    await stage("osm_search", "live");
+    await pg.sql.unsafe(
+      `CREATE TABLE osm_search.snapshot_next (label TEXT NOT NULL);
+       INSERT INTO osm_search.snapshot_next VALUES ('next')`,
+    );
+    const swap = () =>
+      publishTableSwap(pg.sql, {
+        schema: "osm_search",
+        live: "snapshot",
+        staging: "snapshot_next",
+        retry: quickRetry,
+      });
+    await withBackupLikeHolder(["osm_search.publication_fence"], async () => {
+      await expect(swap()).rejects.toMatchObject({ code: "55P03" });
+    });
+    expect(await liveLabel()).toBe("live");
+    const fence = await fenceOid("osm_search");
+    await swap();
+    expect(await liveLabel()).toBe("next");
+    const replaced = await fenceOid("osm_search");
+    expect(replaced).not.toBeNull();
+    expect(replaced).not.toBe(fence);
   });
 });
