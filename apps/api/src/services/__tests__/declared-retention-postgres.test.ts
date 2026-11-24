@@ -290,6 +290,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("deletes administrative receipts after one year", async () => {
       const [owner, held] = [await account(), await account()];
+      const integrationId = `retention-${randomUUID()}`;
       const insertReceipts = async (actorId: string, days: number) => {
         const key = randomUUID();
         accountReceipts.push(key);
@@ -305,7 +306,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await db.insert(integrationApplicationReceipt).values({
           operationId: key,
           actorId,
-          integrationId: "retention-fixture",
+          integrationId,
           capability: "fixture",
           candidateId: randomUUID(),
           intentDigest: "fixture",
@@ -355,6 +356,79 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .where(inArray(authPolicyApplication.key, keys)),
         ),
       ).toEqual(expected);
+    });
+
+    it("keeps the newest receipt for each integration and each account whatever its age", async () => {
+      const [actor, target, heldTarget] = [await account(), await account(), await account()];
+      const integrationId = `retention-${randomUUID()}`;
+      const insertIntegrationReceipt = async (days: number) => {
+        const key = randomUUID();
+        integrationReceipts.push(key);
+        await db.insert(integrationApplicationReceipt).values({
+          operationId: key,
+          actorId: actor,
+          integrationId,
+          capability: "fixture",
+          candidateId: randomUUID(),
+          intentDigest: "fixture",
+          savedBindingRevision: "fixture",
+          result: {} as never,
+          createdAt: daysAgo(days),
+        });
+        return key;
+      };
+      const insertAccountReceipt = async (targetId: string, days: number) => {
+        const key = randomUUID();
+        accountReceipts.push(key);
+        await db.insert(accountActionReceipt).values({
+          key,
+          actorId: actor,
+          targetId,
+          action: "role",
+          intentDigest: "fixture",
+          createdAt: daysAgo(days),
+        });
+        return key;
+      };
+      const olderIntegration = await insertIntegrationReceipt(500);
+      const newestIntegration = await insertIntegrationReceipt(400);
+      const olderAccount = await insertAccountReceipt(target, 500);
+      const newestAccount = await insertAccountReceipt(target, 400);
+      // Held only through its target: the actor has no open request.
+      const heldThroughTarget = await insertAccountReceipt(heldTarget, 500);
+      const newestForHeldTarget = await insertAccountReceipt(heldTarget, 400);
+      await createHold(heldTarget);
+
+      await prune();
+
+      expect(
+        await remaining(
+          db
+            .select({ id: integrationApplicationReceipt.operationId })
+            .from(integrationApplicationReceipt)
+            .where(
+              inArray(integrationApplicationReceipt.operationId, [
+                olderIntegration,
+                newestIntegration,
+              ]),
+            ),
+        ),
+      ).toEqual([newestIntegration]);
+      expect(
+        await remaining(
+          db
+            .select({ id: accountActionReceipt.key })
+            .from(accountActionReceipt)
+            .where(
+              inArray(accountActionReceipt.key, [
+                olderAccount,
+                newestAccount,
+                heldThroughTarget,
+                newestForHeldTarget,
+              ]),
+            ),
+        ),
+      ).toEqual([newestAccount, heldThroughTarget, newestForHeldTarget].sort());
     });
 
     it("deletes share links and parked locations 30 days after they expire", async () => {
@@ -507,6 +581,48 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .from(dataManagerOfflinePackageJobOwners)
         .where(eq(dataManagerOfflinePackageJobOwners.principal, erased));
       expect(after.length).toBe(before.length);
+
+      // An unreadable key file fails the run visibly and deletes nothing.
+      const unreadable = new Error("Offline package principal key is unreadable");
+      const failed = await pruneDeclaredRetention({
+        offlinePrincipalKey: async () => {
+          throw unreadable;
+        },
+      }).catch((error: unknown) => error);
+      expect(failed).toBeInstanceOf(AggregateError);
+      expect((failed as AggregateError).errors).toContain(unreadable);
+      const afterFailure = await db
+        .select({ id: dataManagerOfflinePackageJobOwners.jobId })
+        .from(dataManagerOfflinePackageJobOwners)
+        .where(eq(dataManagerOfflinePackageJobOwners.principal, erased));
+      expect(afterFailure.length).toBe(before.length);
+    });
+
+    it("reaches every orphaned offline-package row however many live principals sort before it", async () => {
+      const live = await Promise.all(
+        [1, 2, 3, 4, 5].map(async () =>
+          deriveOfflinePackagePrincipal(await account(), principalKey),
+        ),
+      );
+      const erased = randomBytes(32).toString("hex");
+      offlinePrincipals.push(...live, erased);
+      for (const principal of [...live, erased])
+        await db.insert(dataManagerOfflinePackageArtifactReferences).values({
+          principal,
+          packageId: `pkg-${randomUUID()}`,
+          byteLength: 1,
+          retainedAt: daysAgo(40),
+        });
+
+      // One principal per page and a single batch per table for the other
+      // rules: the orphan scan still walks to the end.
+      await prune({ batchSize: 1, maxBatches: 1 });
+
+      const principals = await db
+        .select({ principal: dataManagerOfflinePackageArtifactReferences.principal })
+        .from(dataManagerOfflinePackageArtifactReferences)
+        .where(inArray(dataManagerOfflinePackageArtifactReferences.principal, [...live, erased]));
+      expect(principals.map((row) => row.principal).sort()).toEqual([...live].sort());
     });
 
     it("deletes in bounded batches and stops after the batch limit", async () => {

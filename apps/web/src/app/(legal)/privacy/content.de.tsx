@@ -1255,7 +1255,8 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Belege administrativer Änderungen</strong> — Aufzeichnungen darüber, dass eine
               Administratorin oder ein Administrator ein Konto, die Anmelderichtlinie oder eine
-              Integration geändert hat, werden ein Jahr nach der Änderung gelöscht.
+              Integration geändert hat, werden ein Jahr nach der Änderung gelöscht. Der neueste
+              Beleg je Integration und je Konto bleibt erhalten, bis ein neuerer ihn ersetzt.
             </Typography>
           </li>
           <li>
@@ -1266,9 +1267,10 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Datensätze zu Offline-Paketen</strong> — werden mit Ihrem Konto gelöscht.
-              Datensätze, die eine Wiederherstellung aus einer Sicherung für ein gelöschtes Konto
-              zurückbringt, werden 30&nbsp;Tage nach ihrer Erfassung gelöscht.
+              <strong>Datensätze zu Offline-Paketen</strong> — werden aufbewahrt, bis das Paket
+              entfernt wird oder Sie Ihr Konto löschen. Datensätze eines gelöschten Kontos, die eine
+              Wiederherstellung aus einer Sicherung zurückbringt, werden 30&nbsp;Tage nach ihrer
+              Erfassung gelöscht.
             </Typography>
           </li>
           <li>

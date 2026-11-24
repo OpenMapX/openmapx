@@ -3875,7 +3875,6 @@
       "retentionReasons": {
         "account-content": "Löschung des Inhalts oder Kontoschließung",
         "accountability": "Erstellung des Nachweisdatensatzes",
-        "administrative-record": "Erstellung des Verwaltungsdatensatzes",
         "assertion-expiry": "Ablauf der Client-Assertion",
         "backup-retention": "Rotation der aufbewahrten Sicherung",
         "case-accountability": "Abschluss oder Schließung des Datenschutzfalls",
@@ -3887,12 +3886,12 @@
         "key-revocation": "Widerruf des Veröffentlichungsschlüssels",
         "link-expiry": "Widerruf oder Löschung des veröffentlichten Links; ein Link mit Ablaufdatum wird 30 Tage nach seinem Ablauf gelöscht",
         "log-retention": "Erstellung des Betriebsprotokolls",
-        "offline-job-retention": "Abschluss des Offline-Paketauftrags",
-        "parking-expiry": "Entfernen des Parkplatzes; ein Parkplatz mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht",
+        "offline-package-retention": "Entfernen des Pakets oder Kontoschließung; Datensätze eines gelöschten Kontos, die eine Wiederherstellung aus einer Sicherung zurückbringt, werden 30 Tage nach ihrer Erfassung gelöscht",
+        "parking-expiry": "Entfernen der Parkposition; eine Parkposition mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht",
         "processor-retention": "Beendigung des verbundenen Auftragsverarbeiterdienstes",
         "public-dataset": "Veröffentlichung der Version des öffentlichen Datensatzes",
         "recipient-accountability": "Erfassung des Empfängerereignisses",
-        "revocation": "Widerruf oder Löschung des veröffentlichten Links",
+        "receipt-retention": "Erstellung des Belegs; der neueste Beleg je Integration und je Konto bleibt erhalten, bis ein neuerer ihn ersetzt",
         "session-expiry": "Ablauf der Sitzung oder Bestätigung",
         "token-expiry": "Ablauf des Tokens"
       },
@@ -3991,7 +3990,7 @@
           "category": "Belege administrativer Änderungen",
           "purpose": "Verhindern, dass eine administrative Änderung doppelt angewendet wird, und sie nachweisen",
           "source": "Erfasst, wenn eine Administratorin oder ein Administrator ein Konto, die Anmelderichtlinie oder eine Integration ändert",
-          "retention": "Ein Jahr nach der Änderung gelöscht"
+          "retention": "Ein Jahr nach der Änderung gelöscht; der neueste Beleg je Integration und je Konto bleibt erhalten, bis ein neuerer ihn ersetzt"
         },
         "oauth-client-assertions": {
           "category": "Aufzeichnungen von OAuth-Client-Assertions",
@@ -4003,13 +4002,13 @@
           "retention": "Bis Sie den Link widerrufen oder Ihr Konto löschen; ein Link mit Ablaufdatum wird 30 Tage nach seinem Ablauf gelöscht"
         },
         "parked-locations": {
-          "retention": "Bis Sie ihn entfernen oder Ihr Konto löschen; ein Parkplatz mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht"
+          "retention": "Bis Sie die Parkposition entfernen oder Ihr Konto löschen; eine Parkposition mit Parkzeitbegrenzung wird 30 Tage nach deren Ablauf gelöscht"
         },
         "disclosure-events": {
           "retention": "Drei Jahre nach der Offenlegung gelöscht"
         },
         "offline-package-ownership": {
-          "retention": "Mit Ihrem Konto gelöscht; Datensätze, die eine Wiederherstellung aus einer Sicherung für ein gelöschtes Konto zurückbringt, werden 30 Tage nach ihrer Erfassung gelöscht"
+          "retention": "Bis das Paket entfernt oder Ihr Konto gelöscht wird; Datensätze eines gelöschten Kontos, die eine Wiederherstellung aus einer Sicherung zurückbringt, werden 30 Tage nach ihrer Erfassung gelöscht"
         },
         "saved-lists": {
           "category": "Gespeicherte Listen",

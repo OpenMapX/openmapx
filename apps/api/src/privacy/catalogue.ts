@@ -53,13 +53,15 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "auth-sessions",
-    version: 2,
+    version: 3,
     category: "authentication",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-authentication",
     locators: [
       { type: "user_id", field: "session.user_id" },
+      // How the session was signed in to; deleted with its session.
+      { type: "user_id", field: "session_auth_assurance.user_id" },
       { type: "actor_id", field: "admin_action_reauthentication.actor_id" },
     ],
     purposes: ["authentication", "security-and-abuse-prevention"],
@@ -409,12 +411,14 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
-    // The API's daily retention deletes them one year after they were made.
+    // The API's daily retention deletes them one year after they were made,
+    // except the newest receipt for each integration and for each account,
+    // which stays until a newer one replaces it.
     retention: {
       kind: "fixed-days",
       days: 365,
       daysAfterClosure: 365,
-      reasonCode: "administrative-record",
+      reasonCode: "receipt-retention",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
@@ -567,7 +571,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "offline-package-ownership",
-    version: 2,
+    version: 3,
     category: "offline-data",
     source: "openmapx-db",
     strategy: "collector",
@@ -587,16 +591,18 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["navigation", "service-provisioning"],
     legalBases: ["contract"],
     origin: { kind: "subject", descriptionCode: "subject-requested" },
-    // Deleting an account removes these rows at once. Only the API holds the
-    // key that derives the principal, so a restore that replays an erasure
-    // leaves the restored rows to this retention period: the API's daily
-    // retention deletes rows that match no existing account 30 days after
-    // they were recorded.
+    // Kept while the account exists: data-manager deletes a job's owner rows
+    // with the finished job and a retained package's reference when it evicts
+    // or invalidates the package. Deleting an account removes its rows at
+    // once. Only the API holds the key that derives the principal, so a
+    // restore that replays an erasure, or a new principal key, leaves rows
+    // that match no existing account; the API's daily retention deletes those
+    // 30 days after they were recorded. The package files are data-manager's
+    // area extracts and name no account.
     retention: {
-      kind: "fixed-days",
-      days: 30,
+      kind: "account-lifetime",
       daysAfterClosure: 30,
-      reasonCode: "offline-job-retention",
+      reasonCode: "offline-package-retention",
     },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",

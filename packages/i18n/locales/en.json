@@ -3875,7 +3875,6 @@
       "retentionReasons": {
         "account-content": "content deletion or account closure",
         "accountability": "creation of the accountability record",
-        "administrative-record": "creation of the administrative record",
         "assertion-expiry": "expiry of the client assertion",
         "backup-retention": "rotation of the retained backup",
         "case-accountability": "completion or closure of the privacy case",
@@ -3887,12 +3886,12 @@
         "key-revocation": "revocation of the publication key",
         "link-expiry": "revocation or deletion of the published link; a link with an expiry date is deleted 30 days after it expires",
         "log-retention": "creation of the operational log record",
-        "offline-job-retention": "completion of the offline package job",
+        "offline-package-retention": "removal of the package or account closure; records of a deleted account that a backup restore brings back are deleted 30 days after they were recorded",
         "parking-expiry": "clearing of the parked location; a location with a parking time limit is deleted 30 days after the limit passes",
         "processor-retention": "termination of the connected processor service",
         "public-dataset": "publication of the public dataset version",
         "recipient-accountability": "recording of the recipient event",
-        "revocation": "revocation or deletion of the published link",
+        "receipt-retention": "creation of the receipt; the newest receipt for each integration and for each account stays until a newer one replaces it",
         "session-expiry": "expiry of the session or confirmation",
         "token-expiry": "expiry of the token"
       },
@@ -3991,7 +3990,7 @@
           "category": "Receipts of administrative changes",
           "purpose": "Prevent an administrative change from being applied twice and account for it",
           "source": "Recorded when an administrator changes an account, the sign-in policy or an integration",
-          "retention": "Deleted one year after the change"
+          "retention": "Deleted one year after the change; the newest receipt for each integration and for each account stays until a newer one replaces it"
         },
         "oauth-client-assertions": {
           "category": "OAuth client assertion records",
@@ -4009,7 +4008,7 @@
           "retention": "Deleted three years after the disclosure"
         },
         "offline-package-ownership": {
-          "retention": "Deleted with your account; records a backup restore brings back for a deleted account are deleted 30 days after they were recorded"
+          "retention": "Until the package is removed or your account is deleted; records of a deleted account that a backup restore brings back are deleted 30 days after they were recorded"
         },
         "saved-lists": {
           "category": "Saved lists",

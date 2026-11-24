@@ -1,5 +1,5 @@
-import { and, asc, gt, inArray, isNotNull, lt, type SQL, sql } from "drizzle-orm";
-import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
+import { and, asc, gt, inArray, isNotNull, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { type AnyPgColumn, alias, type PgTable } from "drizzle-orm/pg-core";
 import { db as defaultDb } from "../db/index.js";
 import {
   accountActionReceipt,
@@ -26,16 +26,12 @@ import { offlinePackagePrincipalKey } from "./user-erasure.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/**
- * The periods the privacy catalogue declares for these records. Each is
- * counted from the record's expiry, or its creation where it has none.
- */
-export const DECLARED_RETENTION_DAYS = {
-  afterExpiry: 30,
-  disclosureEvents: 1095,
-  administrativeReceipts: 365,
-  orphanedOfflinePackageRows: 30,
-} as const;
+/** Days after expiry for sessions, tokens, assertions, share links and parked locations. */
+const AFTER_EXPIRY_DAYS = 30;
+const DISCLOSURE_EVENT_DAYS = 1095;
+const ADMINISTRATIVE_RECEIPT_DAYS = 365;
+/** Days after they were recorded for offline-package rows of a deleted account. */
+const ORPHANED_OFFLINE_PACKAGE_DAYS = 30;
 
 const DEFAULT_BATCH_SIZE = 500;
 const DEFAULT_MAX_BATCHES = 200;
@@ -47,20 +43,27 @@ interface RetentionRule {
   name: string;
   table: PgTable;
   key: AnyPgColumn;
-  /** Rows past their period that no privacy case holds. */
-  due: (now: number) => SQL | undefined;
+  /** The catalogue registration that declares the period. */
+  registrationId: string;
+  /** Days after the rule's time column at which a row is due. */
+  days: number;
+  /** Rows older than `cutoff` that are due and no privacy case holds. */
+  due: (cutoff: Date) => SQL | undefined;
 }
 
-const before = (now: number, days: number) => new Date(now - days * MS_PER_DAY);
+const newerIntegrationReceipt = alias(integrationApplicationReceipt, "newer_receipt");
+const newerAccountReceipt = alias(accountActionReceipt, "newer_receipt");
 
 const RULES: readonly RetentionRule[] = [
   {
     name: "session",
     table: session,
     key: session.id,
-    due: (now) =>
+    registrationId: "auth-sessions",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
-        lt(session.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(session.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "auth-sessions",
           candidateTimestamp: session.createdAt,
@@ -72,9 +75,11 @@ const RULES: readonly RetentionRule[] = [
     name: "admin_action_reauthentication",
     table: adminActionReauthentication,
     key: adminActionReauthentication.id,
-    due: (now) =>
+    registrationId: "auth-sessions",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
-        lt(adminActionReauthentication.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(adminActionReauthentication.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "auth-sessions",
           candidateTimestamp: adminActionReauthentication.createdAt,
@@ -88,9 +93,11 @@ const RULES: readonly RetentionRule[] = [
     name: "oauth_refresh_token",
     table: oauthRefreshToken,
     key: oauthRefreshToken.id,
-    due: (now) =>
+    registrationId: "auth-oauth-tokens",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
-        lt(oauthRefreshToken.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(oauthRefreshToken.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "auth-oauth-tokens",
           candidateTimestamp: oauthRefreshToken.createdAt,
@@ -102,9 +109,11 @@ const RULES: readonly RetentionRule[] = [
     name: "oauth_access_token",
     table: oauthAccessToken,
     key: oauthAccessToken.id,
-    due: (now) =>
+    registrationId: "auth-oauth-tokens",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
-        lt(oauthAccessToken.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(oauthAccessToken.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "auth-oauth-tokens",
           candidateTimestamp: oauthAccessToken.createdAt,
@@ -117,16 +126,19 @@ const RULES: readonly RetentionRule[] = [
     name: "oauth_client_assertion",
     table: oauthClientAssertion,
     key: oauthClientAssertion.id,
-    due: (now) =>
-      lt(oauthClientAssertion.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+    registrationId: "oauth-client-assertions",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) => lt(oauthClientAssertion.expiresAt, cutoff),
   },
   {
     name: "data_disclosure_event",
     table: dataDisclosureEvent,
     key: dataDisclosureEvent.id,
-    due: (now) =>
+    registrationId: "disclosure-events",
+    days: DISCLOSURE_EVENT_DAYS,
+    due: (cutoff) =>
       and(
-        lt(dataDisclosureEvent.occurredAt, before(now, DECLARED_RETENTION_DAYS.disclosureEvents)),
+        lt(dataDisclosureEvent.occurredAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "disclosure-events",
           candidateTimestamp: dataDisclosureEvent.occurredAt,
@@ -134,15 +146,25 @@ const RULES: readonly RetentionRule[] = [
         }),
       ),
   },
+  // The newest receipt naming an account stays whatever its age, as the
+  // record of the last administrative change to that account.
   {
     name: "account_action_receipt",
     table: accountActionReceipt,
     key: accountActionReceipt.key,
-    due: (now) =>
+    registrationId: "administrative-receipts",
+    days: ADMINISTRATIVE_RECEIPT_DAYS,
+    due: (cutoff) =>
       and(
-        lt(
-          accountActionReceipt.createdAt,
-          before(now, DECLARED_RETENTION_DAYS.administrativeReceipts),
+        lt(accountActionReceipt.createdAt, cutoff),
+        or(
+          isNull(accountActionReceipt.targetId),
+          sql`exists (
+            select 1 from ${accountActionReceipt} as ${newerAccountReceipt}
+            where ${newerAccountReceipt.targetId} = ${accountActionReceipt.targetId}
+              and (${newerAccountReceipt.createdAt}, ${newerAccountReceipt.key})
+                > (${accountActionReceipt.createdAt}, ${accountActionReceipt.key})
+          )`,
         ),
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
@@ -151,16 +173,23 @@ const RULES: readonly RetentionRule[] = [
         }),
       ),
   },
+  // The admin page shows an integration's newest receipt as its last
+  // application, so that one stays whatever its age.
   {
     name: "integration_application_receipt",
     table: integrationApplicationReceipt,
     key: integrationApplicationReceipt.operationId,
-    due: (now) =>
+    registrationId: "administrative-receipts",
+    days: ADMINISTRATIVE_RECEIPT_DAYS,
+    due: (cutoff) =>
       and(
-        lt(
-          integrationApplicationReceipt.createdAt,
-          before(now, DECLARED_RETENTION_DAYS.administrativeReceipts),
-        ),
+        lt(integrationApplicationReceipt.createdAt, cutoff),
+        sql`exists (
+          select 1 from ${integrationApplicationReceipt} as ${newerIntegrationReceipt}
+          where ${newerIntegrationReceipt.integrationId} = ${integrationApplicationReceipt.integrationId}
+            and (${newerIntegrationReceipt.createdAt}, ${newerIntegrationReceipt.operationId})
+              > (${integrationApplicationReceipt.createdAt}, ${integrationApplicationReceipt.operationId})
+        )`,
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
           candidateTimestamp: integrationApplicationReceipt.createdAt,
@@ -172,12 +201,11 @@ const RULES: readonly RetentionRule[] = [
     name: "auth_policy_application",
     table: authPolicyApplication,
     key: authPolicyApplication.key,
-    due: (now) =>
+    registrationId: "administrative-receipts",
+    days: ADMINISTRATIVE_RECEIPT_DAYS,
+    due: (cutoff) =>
       and(
-        lt(
-          authPolicyApplication.createdAt,
-          before(now, DECLARED_RETENTION_DAYS.administrativeReceipts),
-        ),
+        lt(authPolicyApplication.createdAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
           candidateTimestamp: authPolicyApplication.createdAt,
@@ -191,10 +219,12 @@ const RULES: readonly RetentionRule[] = [
     name: "share_link",
     table: shareLink,
     key: shareLink.id,
-    due: (now) =>
+    registrationId: "share-links",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
         isNotNull(shareLink.expiresAt),
-        lt(shareLink.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(shareLink.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "share-links",
           candidateTimestamp: shareLink.createdAt,
@@ -206,10 +236,12 @@ const RULES: readonly RetentionRule[] = [
     name: "parked_location",
     table: parkedLocation,
     key: parkedLocation.id,
-    due: (now) =>
+    registrationId: "parked-locations",
+    days: AFTER_EXPIRY_DAYS,
+    due: (cutoff) =>
       and(
         isNotNull(parkedLocation.expiresAt),
-        lt(parkedLocation.expiresAt, before(now, DECLARED_RETENTION_DAYS.afterExpiry)),
+        lt(parkedLocation.expiresAt, cutoff),
         preservationAllowsDeletion({
           registrationId: "parked-locations",
           candidateTimestamp: parkedLocation.savedAt,
@@ -218,6 +250,30 @@ const RULES: readonly RetentionRule[] = [
       ),
   },
 ];
+
+/**
+ * Every period this module enforces, with the catalogue registration that
+ * declares it, so a test can hold the two together.
+ */
+export const DECLARED_RETENTION_PERIODS: readonly {
+  table: string;
+  registrationId: string;
+  days: number;
+}[] = [
+  ...RULES.map(({ name, registrationId, days }) => ({ table: name, registrationId, days })),
+  {
+    table: "offline_package_job_owners",
+    registrationId: "offline-package-ownership",
+    days: ORPHANED_OFFLINE_PACKAGE_DAYS,
+  },
+  {
+    table: "offline_package_artifact_references",
+    registrationId: "offline-package-ownership",
+    days: ORPHANED_OFFLINE_PACKAGE_DAYS,
+  },
+];
+
+const before = (now: number, days: number) => new Date(now - days * MS_PER_DAY);
 
 interface BatchOptions {
   database: Database;
@@ -233,12 +289,13 @@ interface BatchOptions {
  * its rows before the delete reads them.
  */
 async function deleteDueRows(rule: RetentionRule, now: number, options: BatchOptions) {
+  const cutoff = before(now, rule.days);
   let deleted = 0;
   for (let batch = 0; batch < options.maxBatches; batch += 1) {
     const rows = await withPreservationRetentionLock(options.database, (tx) =>
       tx.execute(sql`
         delete from ${rule.table} where ${rule.key} in (
-          select ${rule.key} from ${rule.table} where ${rule.due(now)}
+          select ${rule.key} from ${rule.table} where ${rule.due(cutoff)}
           limit ${options.batchSize} for update skip locked
         ) returning 1`),
     );
@@ -246,6 +303,19 @@ async function deleteDueRows(rule: RetentionRule, now: number, options: BatchOpt
     if (rows.length < options.batchSize) break;
   }
   return deleted;
+}
+
+/** Whether any offline-package row is old enough to be deleted if orphaned. */
+async function hasOfflinePackageCandidates(database: Database, cutoff: Date) {
+  const [row] = await database.execute<{ due: boolean }>(sql`
+    select exists (
+      select 1 from ${dataManagerOfflinePackageJobOwners}
+      where ${lt(dataManagerOfflinePackageJobOwners.createdAt, cutoff)}
+    ) or exists (
+      select 1 from ${dataManagerOfflinePackageArtifactReferences}
+      where ${lt(dataManagerOfflinePackageArtifactReferences.retainedAt, cutoff)}
+    ) as due`);
+  return row?.due === true;
 }
 
 /** Every principal the key derives for an existing account. */
@@ -267,11 +337,11 @@ async function livePrincipals(database: Database, key: Buffer, pageSize: number)
 }
 
 /**
- * Delete offline-package rows older than their period whose principal belongs
- * to no existing account. Deleting an account removes its rows at once; these
- * are the rows a restore brought back for an account its erasure replay
- * deleted, since only the API holds the key that derives the principal. A
- * privacy case cannot hold them: its account no longer exists.
+ * Delete the rows of one offline-package table that are older than `cutoff`
+ * and whose principal belongs to no existing account. It walks the old rows'
+ * distinct principals in key order, one page of `pageSize` principals per
+ * statement, until it reaches the end, so every orphan is reached however
+ * many live principals sort before it; each delete is bounded by one page.
  */
 async function deleteOrphanedOfflinePackageRows(
   table:
@@ -279,32 +349,70 @@ async function deleteOrphanedOfflinePackageRows(
     | typeof dataManagerOfflinePackageArtifactReferences,
   recordedAt: AnyPgColumn,
   live: ReadonlySet<string>,
-  now: number,
-  options: BatchOptions,
+  cutoff: Date,
+  database: Database,
+  pageSize: number,
 ) {
-  const cutoff = before(now, DECLARED_RETENTION_DAYS.orphanedOfflinePackageRows);
   let deleted = 0;
   let after = "";
-  for (let batch = 0; batch < options.maxBatches; batch += 1) {
-    const page = await options.database
+  for (;;) {
+    const page = await database
       .selectDistinct({ principal: table.principal })
       .from(table)
       .where(and(lt(recordedAt, cutoff), gt(table.principal, after)))
       .orderBy(asc(table.principal))
-      .limit(options.batchSize);
+      .limit(pageSize);
     const orphaned = page.map((row) => row.principal).filter((principal) => !live.has(principal));
     if (orphaned.length > 0) {
-      const rows = await options.database
+      const rows = await database
         .delete(table)
         .where(and(inArray(table.principal, orphaned), lt(recordedAt, cutoff)))
         .returning({ principal: table.principal });
       deleted += rows.length;
     }
     const last = page.at(-1);
-    if (!last || page.length < options.batchSize) break;
+    if (!last || page.length < pageSize) return deleted;
     after = last.principal;
   }
-  return deleted;
+}
+
+/**
+ * Delete offline-package rows of accounts that no longer exist, 30 days after
+ * they were recorded. Deleting an account removes its rows at once; these are
+ * the rows a restore brought back for an account its erasure replay deleted,
+ * since only the API holds the key that derives the principal, and the rows
+ * of every account under an earlier key. A privacy case cannot hold them: its
+ * account no longer exists. The package files themselves are data-manager's
+ * and name no account.
+ */
+async function deleteOrphanedOfflinePackages(
+  database: Database,
+  key: Buffer,
+  now: number,
+  pageSize: number,
+): Promise<Record<string, number>> {
+  const cutoff = before(now, ORPHANED_OFFLINE_PACKAGE_DAYS);
+  if (!(await hasOfflinePackageCandidates(database, cutoff)))
+    return { offline_package_job_owners: 0, offline_package_artifact_references: 0 };
+  const live = await livePrincipals(database, key, pageSize);
+  return {
+    offline_package_job_owners: await deleteOrphanedOfflinePackageRows(
+      dataManagerOfflinePackageJobOwners,
+      dataManagerOfflinePackageJobOwners.createdAt,
+      live,
+      cutoff,
+      database,
+      pageSize,
+    ),
+    offline_package_artifact_references: await deleteOrphanedOfflinePackageRows(
+      dataManagerOfflinePackageArtifactReferences,
+      dataManagerOfflinePackageArtifactReferences.retainedAt,
+      live,
+      cutoff,
+      database,
+      pageSize,
+    ),
+  };
 }
 
 /**
@@ -341,23 +449,11 @@ export async function pruneDeclaredRetention(
   }
   try {
     const key = await (options.offlinePrincipalKey ?? offlinePackagePrincipalKey)();
-    if (key) {
-      const live = await livePrincipals(batch.database, key, batch.batchSize);
-      deleted.offline_package_job_owners = await deleteOrphanedOfflinePackageRows(
-        dataManagerOfflinePackageJobOwners,
-        dataManagerOfflinePackageJobOwners.createdAt,
-        live,
-        now,
-        batch,
+    if (key)
+      Object.assign(
+        deleted,
+        await deleteOrphanedOfflinePackages(batch.database, key, now, batch.batchSize),
       );
-      deleted.offline_package_artifact_references = await deleteOrphanedOfflinePackageRows(
-        dataManagerOfflinePackageArtifactReferences,
-        dataManagerOfflinePackageArtifactReferences.retainedAt,
-        live,
-        now,
-        batch,
-      );
-    }
   } catch (error) {
     failures.push(error);
   }

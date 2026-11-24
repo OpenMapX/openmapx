@@ -437,6 +437,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(archiveText).toContain("Controller acceptance subject");
         expect(archiveText).toContain("Subject hiking list");
         expect(archiveText).toContain("Acceptance Route Processor");
+        // How the subject's session was signed in to, without the session id.
+        expect(archiveText).toContain("originIndependentPasswordLogin");
+        expect(archiveText).not.toContain(SESSION_ID);
         for (const forbidden of [
           "FOREIGN-ADJACENT-RECORD",
           "FOREIGN-SAVED-LIST",

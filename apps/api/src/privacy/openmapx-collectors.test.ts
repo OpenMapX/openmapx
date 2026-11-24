@@ -1,7 +1,64 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { streamDrizzleRows, streamOpenMapxRegistrationRecords } from "./openmapx-collectors.js";
 
+// A collector registration of the OpenMapX database that no projection reads.
+vi.mock("./catalogue.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./catalogue.js")>();
+  return {
+    ...actual,
+    getSubjectDataRegistration: (id: string) =>
+      id === "unprojected-records"
+        ? { ...actual.getSubjectDataRegistration("saved-lists"), id }
+        : actual.getSubjectDataRegistration(id),
+  };
+});
+
 describe("OpenMapX subject collectors", () => {
+  const projectionReached = new Error("projection reached the database");
+  // Every property of this database stands for a projection's first query.
+  const database = new Proxy(
+    {},
+    {
+      get: () => {
+        throw projectionReached;
+      },
+    },
+  ) as never;
+
+  it.each(
+    SUBJECT_DATA_CATALOGUE.filter(
+      (registration) =>
+        registration.source === "openmapx-db" && registration.strategy === "collector",
+    ).map((registration) => registration.id),
+  )("has a projection for the catalogue registration %s", async (registrationId) => {
+    const read = async () => {
+      for await (const _record of streamOpenMapxRegistrationRecords(registrationId, {
+        userId: "u1",
+        cutoffAt: new Date("2024-01-01T00:00:00Z"),
+        database,
+        offlinePrincipalKey: Buffer.alloc(32, 1),
+        requestId: "request-1",
+      }));
+    };
+    await read().catch((error: unknown) => {
+      if (error !== projectionReached) throw error;
+    });
+  });
+
+  it("refuses a registration of its database that no projection reads", async () => {
+    const read = async () => {
+      for await (const _record of streamOpenMapxRegistrationRecords("unprojected-records", {
+        userId: "u1",
+        cutoffAt: new Date("2024-01-01T00:00:00Z"),
+        database,
+      }));
+    };
+    await expect(read()).rejects.toThrow(
+      "No OpenMapX collector projection for registration unprojected-records",
+    );
+  });
+
   it("reads database projections through bounded cursor pages and closes on cancellation", async () => {
     let closed = false;
     const cursor = (async function* () {

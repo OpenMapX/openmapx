@@ -39,6 +39,7 @@ import {
   savedPlace,
   serviceSecret,
   session,
+  sessionAuthAssurance,
   shareLink,
   systemSecret,
   systemSettings,
@@ -338,6 +339,31 @@ export async function* streamOpenMapxRegistrationRecords(
         {
           policyCodes: ["session-token-redacted"],
           map: ({ id, ...row }) => ({ sessionDigest: pseudonymousIdentifier(id), ...row }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            sessionId: sessionAuthAssurance.sessionId,
+            method: sessionAuthAssurance.method,
+            originIndependentPasswordLogin: sessionAuthAssurance.originIndependentPasswordLogin,
+            authenticatedAt: sessionAuthAssurance.authenticatedAt,
+            createdAt: sessionAuthAssurance.createdAt,
+          })
+          .from(sessionAuthAssurance)
+          .where(
+            and(
+              eq(sessionAuthAssurance.userId, context.userId),
+              lte(sessionAuthAssurance.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(sessionAuthAssurance.sessionId)),
+        {
+          policyCodes: ["session-token-redacted"],
+          map: ({ sessionId, ...row }) => ({
+            sessionDigest: pseudonymousIdentifier(sessionId),
+            ...row,
+          }),
         },
       );
       yield* emit(
@@ -1280,6 +1306,10 @@ export async function* streamOpenMapxRegistrationRecords(
       );
       return;
     default:
+      // A registration this database holds but no projection reads would
+      // make an export look complete while it leaves the records out.
+      if (registration.source === "openmapx-db")
+        throw new Error(`No OpenMapX collector projection for registration ${registrationId}`);
       return;
   }
 }

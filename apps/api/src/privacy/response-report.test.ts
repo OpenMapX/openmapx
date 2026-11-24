@@ -171,7 +171,6 @@ describe("localized privacy response report", () => {
       "auth-verifications",
       "auth-oauth-tokens",
       "mobile-auth-handoffs",
-      "offline-package-ownership",
       "application-logs",
       "redis-subject-controls",
     ];
@@ -191,6 +190,11 @@ describe("localized privacy response report", () => {
       expect.arrayContaining(expected),
     );
     expect(report.processingInformation.shortLivedCategories).toHaveLength(expected.length);
+    // Offline-package records live as long as the account; only the rows of a
+    // deleted account follow a 30-day rule.
+    expect(report.processingInformation.shortLivedCategories).not.toContain(
+      "offline-package-ownership",
+    );
   });
 
   it("states the backup policy with the configured retention and the request contact", () => {

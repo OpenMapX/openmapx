@@ -1147,7 +1147,8 @@ export default function PrivacyContent({
             <Typography>
               <strong>Receipts of administrative changes</strong> — records that an administrator
               changed an account, the sign-in policy or an integration are deleted one year after
-              the change.
+              the change. The newest receipt for each integration and for each account is kept until
+              a newer one replaces it.
             </Typography>
           </li>
           <li>
@@ -1158,9 +1159,9 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Offline package records</strong> — deleted with your account. Records that a
-              backup restore brings back for a deleted account are deleted 30 days after they were
-              recorded.
+              <strong>Offline package records</strong> — retained until the package is removed or
+              you delete your account. Records of a deleted account that a backup restore brings
+              back are deleted 30 days after they were recorded.
             </Typography>
           </li>
           <li>
