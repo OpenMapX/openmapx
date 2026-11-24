@@ -339,6 +339,12 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       "osm_pois_h3_r8_osm_type_osm_id_idx",
       "osm_pois_pkey",
     ]);
+    const constraints = await pg.sql.unsafe<{ name: string }[]>(
+      `SELECT conname AS name FROM pg_constraint
+        WHERE conrelid = 'overture_places.osm_pois'::regclass AND contype IN ('c', 'p')
+        ORDER BY 1`,
+    );
+    expect(constraints.map(({ name }) => name)).toEqual(["osm_pois_geom_check", "osm_pois_pkey"]);
     const [stats] = await pg.sql.unsafe<{ analyzed: boolean }[]>(
       `SELECT reltuples >= 0 AS analyzed FROM pg_class
         WHERE oid = 'overture_places.osm_pois'::regclass`,

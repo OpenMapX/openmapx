@@ -618,6 +618,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const text = plan.map((row) => row["QUERY PLAN"]).join("\n");
         expect(text).toContain("Index Scan using osm_pois_h3_r8_osm_type_osm_id_idx");
+        // The cursor bounds the scan; a filter would walk the index from its start.
+        expect(text).toMatch(/Index Cond: \(ROW\(h3_r8, osm_type, osm_id\) > ROW\(/);
         expect(text).not.toContain("Sort");
         expect(text).not.toContain("(h3_r8)::text");
       } finally {

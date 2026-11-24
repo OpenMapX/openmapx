@@ -130,7 +130,8 @@ async function queryFusedCase(
               COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website,
               CONCAT_WS(' ', tags->>'addr:street', tags->>'addr:housenumber') AS address
        FROM "${schema}".osm_pois
-       WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326) AND category = $5`,
+       -- Exact on the box's edges, where a bounding-box overlap rounds to float4.
+       WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326)) AND category = $5`,
       [west, south, east, north, baseline.category],
     ),
     sql.unsafe<FusedOvertureRow[]>(
@@ -156,7 +157,7 @@ async function queryFusedCase(
       `SELECT link.osm_type, link.osm_id::TEXT, link.gers_id
        FROM "${schema}".poi_conflation_link_next AS link
        JOIN "${schema}".osm_pois AS osm USING (osm_type, osm_id)
-       WHERE osm.geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+       WHERE ST_Intersects(osm.geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          AND osm.category = $5`,
       [west, south, east, north, baseline.category],
     ),
