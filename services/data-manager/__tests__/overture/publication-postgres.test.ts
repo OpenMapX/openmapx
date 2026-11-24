@@ -351,7 +351,7 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       workspace: "missing",
       progress: `processed_count = 1, candidate_count = 1,
         score_cursor_h3 = x'881f1d4887fffff'::BIGINT, score_cursor_type = 'node', score_cursor_id = 2`,
-      rows: [] as [string, number, string][],
+      rows: [],
       restarts: true,
       scored: [undefined] as unknown[],
     },
@@ -421,7 +421,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
         [phase],
       );
       await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET ${progress}`);
-      for (const [table, osmId, gersId] of rows) await insertLink(table, osmId, gersId);
+      for (const [table, osmId, gersId] of rows as [string, number, string][])
+        await insertLink(table, osmId, gersId);
       const scored: unknown[] = [];
       const dependencies = {
         fileExists: () => true,
