@@ -141,7 +141,7 @@ function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
 a backup holding any other object of a role that cannot log in, so code that
 runs as the tile owner can leave nothing behind for a restoring superuser.
 The tile owner reads in `conditions` only the tables and functions
-OpenConditions' migration grants it; PostGIS grants it nothing there (see
+OpenConditions' ingest service grants it; PostGIS grants it nothing there (see
 [Martin overlays](../guides/map-tiles.md#martin-overlays)). PostGIS also
 revokes from every role but the superuser the right to create large objects,
 which no event trigger sees and nothing in OpenMapX or OpenConditions uses.

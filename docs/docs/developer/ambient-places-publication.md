@@ -381,7 +381,7 @@ between, the build fails with "A source data set was republished during the
 nearby-places build", rolls back and leaves the last good generation live. A
 failed regional build is not retried automatically: publish it again. While a
 regional build reads the conflation links or the OSM POI snapshot, it holds them
-as a backup does: publishing either one, or activating an Overture release, which
+for the build's duration only: publishing either one, or activating an Overture release, which
 moves the OSM POI snapshot, waits for the build a second at a time and fails
 after about two minutes. Each is retried as
 [Backup & restore](../administration/backup-and-restore.md#backups-during-data-publications)

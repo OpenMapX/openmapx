@@ -133,7 +133,7 @@ not overlap planned rebuilds, in particular an Overture conflation's OSM POI
 extraction, or run a failed rebuild again afterwards.
 
 A regional nearby-places build holds the conflation links and the OSM POI
-snapshot while it reads them, as a backup does. Publishing either of them, or
+snapshot while it reads them, for the build's duration only. Publishing either of them, or
 activating an Overture release, during such a build waits for it and fails after
 about two minutes; each is retried as the table above describes. A regional
 build in turn refuses to publish when the search index or an Overture data set
@@ -186,6 +186,11 @@ wc -c < infra/docker/secrets/secrets-key   # prints 43
 The new file belongs to the user who runs `cp`, whoever owned the backup copy.
 A stored secret the current key cannot open is marked as unreadable in the
 admin settings.
+
+When OpenConditions is installed, the vault holds its secrets key
+`OPENCONDITIONS_SECRETS_KEY` encrypted under this key file, so both keys
+belong in the recovery set (see
+[Community extensions](./community-extensions.md#configuring-the-openconditions-services)).
 
 For erasure-safe restore, retain both
 `infra/docker/data/erasure/journal.jsonl` and

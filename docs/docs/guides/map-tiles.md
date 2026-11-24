@@ -304,14 +304,17 @@ The functions in `tiles` run as `openmapx_tiles_owner`, a role that cannot log
 in, is no superuser and only reads. The traffic-flow function calls
 OpenConditions' `conditions.segment_flow`, which reads OpenConditions' tables
 through OpenConditions' own helper functions. OpenMapX grants
-`openmapx_tiles_owner` nothing in `conditions`. OpenConditions' migration
-grants it exactly what the tile function reads: `SELECT` on `road_segment`,
-`segment_speed`, `source` and `public_license_policy`, and `EXECUTE` on
-`segment_flow`, `flow_public_licenses` and `flow_osm_credit`. Traffic tiles
-therefore render as soon as OpenConditions has migrated, with no PostGIS
-restart, the role never writes, and it cannot read OpenConditions' credentials
-or crowd reports. A backup restore keeps the grants. If an OpenConditions
-release does not grant them, a traffic tile request fails with
+`openmapx_tiles_owner` nothing in `conditions`. OpenConditions' ingest
+service grants it, at every start after migrating, exactly what the tile
+function reads: `SELECT` on `road_segment`, `segment_speed`, `source` and
+`public_license_policy`, and `EXECUTE` on `segment_flow`,
+`flow_public_licenses` and `flow_osm_credit`. Traffic tiles therefore render
+as soon as OpenConditions has migrated, with no PostGIS restart, the role
+never writes, and it cannot read OpenConditions' credentials or crowd
+reports. A backup restore keeps the grants while the role exists; after a
+restore into a cluster whose roles had to be created again, restarting the
+ingest service grants them again. If an OpenConditions release does not grant
+them, a traffic tile request fails with
 `permission denied for schema conditions` (or for one of its tables) in
 Martin's log, and no code runs with more rights; see
 [Community extensions](../administration/community-extensions.md#configuring-the-openconditions-services).
